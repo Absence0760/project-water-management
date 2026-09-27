@@ -3,13 +3,16 @@
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { api, hasTeamRole, type ProjectSummary, type Team } from '$lib/api';
+	import { api, hasTeamRole, type PortfolioProject, type ProjectSummary, type Team } from '$lib/api';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { loadOnce, peek, prefetch } from '$lib/components/common/lazy';
 	import GetStarted from '$lib/components/projects/GetStarted.svelte';
+	import NeedsAttention from '$lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
+	import { needsAttention } from '$lib/components/projects/outcomes';
+	import { statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
 	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
 	import {
 		filterProjects,
@@ -17,6 +20,7 @@
 		ownerOptions,
 		parseOwner,
 		parseSort,
+		SORT_LABELS,
 		sortProjects,
 		type OwnerFilter,
 		type SortKey
@@ -103,9 +107,26 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	// The portfolio's figures per project (GET /projects/outcomes): the outcome
+	// columns and the Needs attention strip. They load beside the list, which
+	// shows first; a failure leaves the list working and says so.
+	let outcomes = $state.raw<Map<string, PortfolioProject> | null>(null);
+	let outcomesFailed = $state(false);
+	let outcomesRequest = 0;
+	function loadOutcomes() {
+		const request = ++outcomesRequest;
+		outcomes = null;
+		outcomesFailed = false;
+		api.projects
+			.outcomes()
+			.then((rows) => request === outcomesRequest && (outcomes = new Map(rows.map((r) => [r.id, r]))))
+			.catch(() => request === outcomesRequest && (outcomesFailed = true));
+	}
+
 	async function load() {
 		loading = true;
 		loadError = null;
+		loadOutcomes();
 		try {
 			const [p, t] = await Promise.allSettled([api.projects.list(), api.teams.list()]);
 			if (p.status === 'rejected') throw p.reason;
@@ -136,7 +157,40 @@
 	});
 
 	const options = $derived(ownerOptions(projects, teams));
-	const visible = $derived(sortProjects(filterProjects(projects, { owner, query }), sort));
+	const filtered = $derived(filterProjects(projects, { owner, query }));
+	const visible = $derived(sortProjects(filtered, sort, outcomes ?? undefined));
+	const flagged = $derived(outcomes ? needsAttention(filtered, outcomes, base) : []);
+	// The header's one line: how the catchments in view are doing.
+	const inView = $derived(outcomes ? filtered.map((p) => outcomes!.get(p.id)).filter((o): o is PortfolioProject => !!o) : []);
+	const summaryLine = $derived(statusSummary(statusCounts(inView)));
+	/** A filter link that keeps the sort and the search. */
+	const hrefWith = (next: { owner?: OwnerFilter; sort?: SortKey }) => {
+		const o = next.owner ?? owner;
+		const so = next.sort ?? sort;
+		const q = query.trim();
+		const qs = new URLSearchParams({ ...(o === 'all' ? {} : { owner: o }), ...(so === 'updated' ? {} : { sort: so }), ...(q ? { q } : {}) }).toString();
+		return qs ? `?${qs}` : `${base}/`;
+	};
+
+	// A dashboard on a wide screen (issue #17): the list's card takes at most
+	// the height left in the window, measured (its top and what sits below it),
+	// and scrolls inside, so the page itself doesn't; a short list just ends.
+	let fillEl: HTMLDivElement | undefined = $state();
+	let fillTop = $state(0);
+	let fillBelow = $state(0);
+	$effect(() => {
+		if (!fillEl) return;
+		const measure = () => {
+			if (!fillEl) return;
+			const r = fillEl.getBoundingClientRect();
+			fillTop = r.top + window.scrollY;
+			fillBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(document.body);
+		return () => ro.disconnect();
+	});
 	const groups = $derived(owner === 'all' ? groupProjects(visible, teams) : []);
 	const ownerLabel = $derived(options.find((o) => o.value === owner)?.label ?? 'All projects');
 	const selectedTeam = $derived(owner.startsWith('team:') ? teams.find((t) => `team:${t.id}` === owner) : undefined);
@@ -213,11 +267,17 @@
 
 <svelte:head><title>Projects · Water Management</title></svelte:head>
 
-<main class="page projects-page">
+<main class="page projects-page" data-outcomes-ready={outcomes !== null || outcomesFailed ? 'true' : 'false'}>
 	<div class="page-head">
 		<div>
 			<h1>Projects</h1>
-			<p class="muted sub">Each project models one catchment: its river network, units, dams and data.</p>
+			<p class="muted sub" data-testid="projects-context">
+				{#if !loading && projects.length}
+					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· EWR, last 30 days: {summaryLine}{/if}
+				{:else}
+					Each project models one catchment: its river network, units, dams and data.
+				{/if}
+			</p>
 		</div>
 		<div class="head-actions">
 			<button
@@ -251,60 +311,63 @@
 		{#if projects.length === 0}
 			<GetStarted oncreate={openCreate} hasTeams={addableTeams.length > 0} />
 		{:else}
-			<div class="layout">
-				<nav class="owners" aria-label="Filter by owner">
-					<ul>
-						{#each options as o (o.value)}
-							<li>
-								<a
-									href="?{new URLSearchParams({ ...(o.value === 'all' ? {} : { owner: o.value }), ...(sort === 'name' ? { sort } : {}), ...(query.trim() ? { q: query.trim() } : {}) })}"
-									aria-current={owner === o.value ? 'true' : undefined}
-									data-sveltekit-noscroll
-									data-sveltekit-keepfocus
-								>
-									<span class="label">{o.label}</span>
-									<span class="count">{o.count}</span>
-								</a>
-							</li>
-						{/each}
-					</ul>
-					<a class="manage" href="{base}/teams">Manage teams</a>
-				</nav>
-
-				<div class="main">
-					<div class="filters" role="search">
-						<div class="search">
-							<label class="visually-hidden" for="pj-q">Search projects</label>
-							<input
-								id="pj-q"
-								type="search"
-								placeholder="Search by name, description or team"
-								autocomplete="off"
-								bind:value={query}
-								oninput={() => setParams({ q: query })}
-							/>
-						</div>
-						<div class="owner-select">
-							<label class="visually-hidden" for="pj-owner">Show</label>
-							<select
-								id="pj-owner"
-								value={owner}
-								onchange={(e) => setParams({ owner: e.currentTarget.value as OwnerFilter })}
+			<nav class="owners" aria-label="Filter by owner">
+				<ul>
+					{#each options as o (o.value)}
+						<li>
+							<a
+								href={hrefWith({ owner: o.value })}
+								aria-current={owner === o.value ? 'true' : undefined}
+								data-sveltekit-noscroll
+								data-sveltekit-keepfocus
 							>
-								{#each options as o (o.value)}<option value={o.value}>{o.label} ({o.count})</option>{/each}
-							</select>
-						</div>
-						<div class="sort">
-							<label for="pj-sort">Sort</label>
-							<select id="pj-sort" value={sort} onchange={(e) => setParams({ sort: e.currentTarget.value as SortKey })}>
-								<option value="updated">Recently updated</option>
-								<option value="name">Name (A–Z)</option>
-							</select>
-						</div>
+								<span class="label">{o.label}</span>
+								<span class="count">{o.count}</span>
+							</a>
+						</li>
+					{/each}
+				</ul>
+				<a class="manage" href="{base}/teams">Manage teams</a>
+			</nav>
+
+			<NeedsAttention
+				{flagged}
+				loading={outcomes === null && !outcomesFailed}
+				failed={outcomesFailed}
+				shown={filtered.length}
+				allHref={hrefWith({ sort: 'attention' })}
+			/>
+
+			<div class="list-card" bind:this={fillEl} style:--fill-top="{fillTop}px" style:--fill-below="{fillBelow}px">
+				<div class="filters" role="search">
+					<div class="search">
+						<label class="visually-hidden" for="pj-q">Search projects</label>
+						<input
+							id="pj-q"
+							type="search"
+							placeholder="Search by name, description or team"
+							autocomplete="off"
+							bind:value={query}
+							oninput={() => setParams({ q: query })}
+						/>
 					</div>
+					<div class="owner-select">
+						<label class="visually-hidden" for="pj-owner">Show</label>
+						<select id="pj-owner" value={owner} onchange={(e) => setParams({ owner: e.currentTarget.value as OwnerFilter })}>
+							{#each options as o (o.value)}<option value={o.value}>{o.label} ({o.count})</option>{/each}
+						</select>
+					</div>
+					<div class="sort">
+						<label for="pj-sort">Sort</label>
+						<select id="pj-sort" value={sort} onchange={(e) => setParams({ sort: e.currentTarget.value as SortKey })}>
+							{#each Object.entries(SORT_LABELS) as [k, label] (k)}<option value={k}>{label}</option>{/each}
+						</select>
+					</div>
+				</div>
 
-					<p class="visually-hidden" role="status">{visible.length} project{visible.length === 1 ? '' : 's'} shown</p>
+				<p class="visually-hidden" role="status">{visible.length} project{visible.length === 1 ? '' : 's'} shown</p>
 
+				<div class="groups">
 					{#if visible.length === 0}
 						<div class="none">
 							{#if query.trim()}
@@ -337,17 +400,31 @@
 										<a class="team-link" href="{base}/teams/{g.teamId}">Team members & settings</a>
 									{/if}
 								</div>
-								<ProjectTable projects={g.projects} caption={g.label} showTeam={g.key === 'shared'} oncopy={openCopy} ondelete={remove} />
+								{@render table(g.projects, g.label, g.key === 'shared')}
 							</section>
 						{/each}
 					{:else}
-						<ProjectTable projects={visible} caption={ownerLabel} showTeam={owner === 'shared'} oncopy={openCopy} ondelete={remove} />
+						{@render table(visible, ownerLabel, owner === 'shared')}
 					{/if}
 				</div>
 			</div>
 		{/if}
 	</LoadState>
 </main>
+
+{#snippet table(rows: ProjectSummary[], caption: string, showTeam: boolean)}
+	<ProjectTable
+		projects={rows}
+		{caption}
+		{showTeam}
+		{outcomes}
+		{outcomesFailed}
+		{sort}
+		onsort={(key) => setParams({ sort: key })}
+		oncopy={openCopy}
+		ondelete={remove}
+	/>
+{/snippet}
 
 <Dialog bind:open={createOpen} title="New project">
 	<form id="create-form" onsubmit={create}>
@@ -465,10 +542,11 @@
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 1rem;
-		margin-bottom: 1.25rem;
+		margin-bottom: 0.9rem;
 	}
 	.head-actions {
 		display: flex;
+		flex: none;
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		justify-content: flex-end;
@@ -486,45 +564,43 @@
 	.small {
 		font-size: 0.85rem;
 	}
-	.layout {
-		display: grid;
-		grid-template-columns: 240px minmax(0, 1fr);
-		gap: 1.5rem;
-		align-items: start;
-	}
+	/* The owner filter: chips over the list, grouped as the list is (issue #17). */
 	.owners {
-		position: sticky;
-		top: calc(var(--header-h) + 1rem);
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem 0.75rem;
+		margin-bottom: 0.75rem;
 	}
 	.owners ul {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 		list-style: none;
 		margin: 0;
 		padding: 0;
 	}
 	.owners li a {
-		display: flex;
+		display: inline-flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		padding: 0.45rem 0.65rem;
-		border-radius: var(--radius-sm);
+		gap: 0.45rem;
+		min-height: 32px;
+		padding: 0.2rem 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--surface);
 		color: var(--text-2);
-		border-left: 3px solid transparent;
 	}
 	.owners li a:hover {
-		background: var(--surface-2);
+		border-color: var(--border-strong);
 		color: var(--text);
 		text-decoration: none;
 	}
 	.owners li a[aria-current='true'] {
 		background: var(--accent-soft);
+		border-color: var(--accent);
 		color: var(--text);
 		font-weight: 600;
-		border-left-color: var(--accent);
-	}
-	.owners .label {
-		min-width: 0;
-		overflow-wrap: anywhere;
 	}
 	.count {
 		font-size: 0.75rem;
@@ -533,16 +609,19 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.manage {
-		display: inline-block;
-		margin: 0.75rem 0.65rem 0;
 		font-size: 0.85rem;
+	}
+	.list-card {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
 	}
 	.filters {
 		display: flex;
 		gap: 0.75rem;
 		align-items: center;
 		flex-wrap: wrap;
-		margin-bottom: 1rem;
+		margin-bottom: 0.75rem;
 	}
 	.search {
 		flex: 1;
@@ -565,15 +644,25 @@
 	.owner-select {
 		display: none;
 	}
-	.group + .group {
-		margin-top: 1.5rem;
+	/* Positioned, so the visually hidden captions and counts (position:
+	   absolute) are clipped by its scroll box: without it they sat at their
+	   static place far down the list and scrolled the whole page. */
+	.groups {
+		position: relative;
+		min-height: 0;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+		background: var(--surface);
 	}
 	.group-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: baseline;
 		gap: 0.5rem;
-		margin-bottom: 0.5rem;
+		padding: 0.55rem 0.6rem 0.4rem;
+	}
+	.group + .group {
+		border-top: 1px solid var(--border-strong);
 	}
 	.group-head h2 {
 		font-size: 0.95rem;
@@ -590,17 +679,24 @@
 	.none {
 		padding: 2rem 1rem;
 		text-align: center;
-		border: 1px dashed var(--border-strong);
-		border-radius: var(--radius);
-		background: var(--surface);
 	}
-	/* The owner list beside the table while the page has room for both (its own
-	   width: it sits beside the app sidebar on wide screens, issue #17). */
-	@container projects-page (max-width: 868px) {
-		.layout {
-			grid-template-columns: minmax(0, 1fr);
+	/* Wide and tall enough: the card fits the window from where it starts, and
+	   the groups scroll inside it with each table's header row stuck. */
+	@media (min-width: 900px) and (min-height: 620px) {
+		.page:has(.list-card) {
+			padding-bottom: 1rem;
 		}
-		.owners {
+		.list-card {
+			max-height: max(320px, calc(100vh - var(--fill-top, 0px) - var(--fill-below, 0px)));
+		}
+		.groups {
+			overflow: auto;
+		}
+	}
+	/* A narrow page (a phone, or the app frame on a small window): the owner
+	   filter as a select beside the search, not a row of chips. */
+	@container projects-page (max-width: 600px) {
+		.owners ul {
 			display: none;
 		}
 		.owner-select {

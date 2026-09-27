@@ -1,19 +1,29 @@
 <script lang="ts">
-	// One group of projects as a table. On phones the Team / Data / Last run /
-	// Updated columns fold into a meta line under the name so nothing scrolls
-	// sideways. Data freshness (dataUntil) is a badge: stale or missing data is
-	// flagged, and editors get an "Add data" shortcut into the upload dialog.
-	// A click anywhere on a row opens the project (the name link stretches over
-	// the row; see .name::after).
+	// One group of projects as a compact table (issue #17, docs/ui.md § Project
+	// list): each row says how the catchment is doing, from the portfolio's
+	// figures (GET /projects/outcomes): the EWR status, units short this week,
+	// the lowest dam, data freshness and the last run. A click anywhere on a
+	// row opens the project (the name link stretches over the row, .name::after).
+	// Add data is the one row button; Copy and Delete sit in a ⋯ menu. The
+	// table answers to its own width: Lowest dam and Last run fold into the
+	// line under the name at 1100 px, every outcome column at 730 px.
 	import { base } from '$app/paths';
-	import { hasRole, type ProjectSummary } from '$lib/api';
-	import { fmtDate } from '$lib/format/number';
-	import { dataFreshness } from './freshness';
+	import { hasRole, type PortfolioProject, type ProjectSummary } from '$lib/api';
+	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	import { curtailmentHref, damText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { dataFreshness, daysSince } from './freshness';
+	import type { SortKey } from './grouping';
+	import type { Outcomes } from './outcomes';
 
 	let {
 		projects,
 		caption,
 		showTeam = true,
+		outcomes,
+		outcomesFailed = false,
+		sort,
+		onsort,
 		oncopy,
 		ondelete
 	}: {
@@ -21,6 +31,11 @@
 		/** Accessible table name (the group heading's text). */
 		caption: string;
 		showTeam?: boolean;
+		/** The figures per project; null while they load. */
+		outcomes: Outcomes | null;
+		outcomesFailed?: boolean;
+		sort: SortKey;
+		onsort: (key: SortKey) => void;
 		oncopy: (p: ProjectSummary) => void;
 		ondelete: (p: ProjectSummary) => void;
 	} = $props();
@@ -33,7 +48,85 @@
 	// Opens the workspace with the upload dialog (the workspace reads ?add=data).
 	const addDataHref = (p: ProjectSummary) => `${base}/projects/${p.id}?add=data`;
 	const now = new Date();
+
+	/** "today", "yesterday", "3 days ago", "5 months ago". */
+	function ago(iso: string): string {
+		const d = daysSince(fmtDate(iso), now);
+		if (d <= 0) return 'today';
+		if (d === 1) return 'yesterday';
+		if (d < 60) return `${d} days ago`;
+		if (d < 730) return `${Math.floor(d / 30.44)} months ago`;
+		return `${Math.floor(d / 365.25)} years ago`;
+	}
+
+	/** Why a row has no figures: still loading, the request failed, or none for this role. */
+	const noFigures = (p: ProjectSummary) =>
+		outcomes === null ? (outcomesFailed ? 'Figures unavailable' : 'Loading…') : hasRole(p.role, 'viewer') ? 'No figures' : 'Not shown to your role';
+
+	const sourceShort = (o: PortfolioProject) =>
+		o.source === 'published' ? 'Published' : o.source === 'run' ? 'Latest run' : null;
+
+	// ---- The ⋯ menu: one open at a time, drawn fixed over the scrolling list.
+	let menuFor = $state<string | null>(null);
+	let menuPos = $state<{ top?: number; bottom?: number; right: number }>({ right: 0 });
+	let trigger: HTMLButtonElement | null = null;
+	let menuEl: HTMLUListElement | undefined = $state();
+
+	function toggleMenu(p: ProjectSummary, el: HTMLButtonElement) {
+		if (menuFor === p.id) return closeMenu();
+		trigger = el;
+		const r = el.getBoundingClientRect();
+		const right = Math.max(8, window.innerWidth - r.right);
+		// Opens upward when there's no room for its two items below.
+		menuPos = window.innerHeight - r.bottom < 110 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right };
+		menuFor = p.id;
+	}
+	function closeMenu(refocus = false) {
+		menuFor = null;
+		if (refocus) trigger?.focus();
+	}
+	$effect(() => {
+		if (!menuFor) return;
+		const onDoc = (e: PointerEvent) => {
+			const t = e.target as Node;
+			if (!menuEl?.contains(t) && !trigger?.contains(t)) closeMenu();
+		};
+		// The menu is fixed: close it rather than leave it behind when the list scrolls.
+		const onScroll = (e: Event) => {
+			if (!menuEl?.contains(e.target as Node)) closeMenu();
+		};
+		const onResize = () => closeMenu();
+		document.addEventListener('pointerdown', onDoc);
+		document.addEventListener('scroll', onScroll, true);
+		window.addEventListener('resize', onResize);
+		return () => {
+			document.removeEventListener('pointerdown', onDoc);
+			document.removeEventListener('scroll', onScroll, true);
+			window.removeEventListener('resize', onResize);
+		};
+	});
+	function onMenuKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && menuFor) {
+			e.stopPropagation();
+			closeMenu(true);
+		}
+	}
+	function onMenuFocusOut(e: FocusEvent) {
+		const to = e.relatedTarget as Node | null;
+		if (menuFor && !menuEl?.contains(to) && !trigger?.contains(to)) closeMenu();
+	}
+
+	const SORTABLE: { key: SortKey; label: string; cls: string; col: string }[] = [
+		{ key: 'status', label: 'EWR, last 30 days', cls: 'wide', col: 'c-ewr' },
+		{ key: 'farms', label: 'Units short', cls: 'wide', col: 'c-units' },
+		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' }
+	];
 </script>
+
+{#snippet freshBadge(p: ProjectSummary)}
+	{@const f = dataFreshness(p.dataUntil, now)}
+	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
+{/snippet}
 
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
@@ -47,131 +140,187 @@
 	{/if}
 {/snippet}
 
-{#snippet fresh(p: ProjectSummary)}
-	{@const f = dataFreshness(p.dataUntil, now)}
-	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
+{#snippet units(o: PortfolioProject)}
+	{@const t = farmsShortText(o)}
+	{#if t}
+		{#if o.farmsShort7 && o.sourceRunId}<a class="lift short" href={curtailmentHref(o, base)}>{t}</a>{:else}{t}{/if}
+	{:else}
+		<span class="muted">{o.source === 'published' ? 'Unknown' : 'Not published'}</span>
+	{/if}
+{/snippet}
+
+{#snippet dam(o: PortfolioProject)}
+	{#if o.damsKnown}{damText(o)}{:else}<span class="muted">Not published</span>{/if}
 {/snippet}
 
 <div class="pt">
-<div class="table-wrap">
 	<table class="data projects">
 		<caption class="visually-hidden">{caption}</caption>
 		<thead>
 			<tr>
-				<th scope="col">Catchment</th>
-				{#if showTeam}<th scope="col" class="wide xwide c-team">Team</th>{/if}
-				<th scope="col" class="wide c-role">Your role</th>
-				<th scope="col" class="wide c-data">Data and runs</th>
-				<th scope="col" class="wide xwide num c-upd">Updated</th>
+				<th scope="col" aria-sort={sort === 'name' ? 'ascending' : undefined}>
+					<button type="button" class="sort" onclick={() => onsort('name')}>Catchment{#if sort === 'name'}<span aria-hidden="true"> ↑</span>{/if}</button>
+				</th>
+				{#each SORTABLE as c (c.key)}
+					<th scope="col" class="{c.cls} {c.col}" aria-sort={sort === c.key ? 'ascending' : undefined}>
+						<button type="button" class="sort" onclick={() => onsort(c.key)}>{c.label}{#if sort === c.key}<span aria-hidden="true"> ↑</span>{/if}</button>
+					</th>
+				{/each}
+				<th scope="col" class="wide c-data"><span class="sort">Data</span></th>
+				<th scope="col" class="wide xwide c-run" aria-sort={sort === 'run' ? 'descending' : undefined}>
+					<button type="button" class="sort" onclick={() => onsort('run')}>Last run{#if sort === 'run'}<span aria-hidden="true"> ↓</span>{/if}</button>
+				</th>
 				<th scope="col" class="c-act"><span class="visually-hidden">Actions</span></th>
 			</tr>
 		</thead>
 		<tbody>
 			{#each projects as p (p.id)}
+				{@const o = outcomes?.get(p.id)}
 				<tr>
-					<!-- Named by the project name alone, not the description under it. -->
+					<!-- Named by the project name alone, not the lines under it. -->
 					<th scope="row" aria-label={p.name}>
 						<a class="name" href="{base}/projects/{p.id}">{p.name}</a>
-						{#if showTeam}<span class="team-sub">{teamLabel(p)}</span>{/if}
+						<span class="meta meta-who">
+							{#if showTeam}
+								{#if p.team?.name}<a class="lift team" href="{base}/teams/{p.team.id}">{p.team.name}</a>{:else}<span>{teamLabel(p)}</span>{/if}
+								<span aria-hidden="true">·</span>
+							{/if}
+							<span class="role" data-testid="project-role">{p.role}</span>
+							<span aria-hidden="true">·</span>
+							<span title={fmtDate(p.updatedAt, true)}>updated {fmtDate(p.updatedAt)}</span>
+						</span>
 						{#if p.description}<span class="desc">{p.description}</span>{/if}
-						<span class="meta">
-							<span class="meta-line">
-								{#if showTeam}{teamLabel(p)} ·{/if}
-								<span class="role">{p.role}</span> · updated {fmtDate(p.updatedAt)}
-							</span>
-							<span class="meta-line">
-								{@render fresh(p)}
-								{@render lastRun(p)}
-							</span>
+						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
+						<span class="meta meta-narrow">
+							{#if o}<StatusPill p={o} />{:else}<span class="muted">{noFigures(p)}</span>{/if}
+							{#if o}<span class="line">{#if !farmsShortText(o)}Units short:{' '}{/if}{@render units(o)}</span>{/if}
+						</span>
+						<span class="meta meta-narrow">
+							{@render freshBadge(p)}
+							{#if o?.behindData}<span class="badge badge-warn flag">Newer rain not in the figures</span>{/if}
+						</span>
+						<span class="meta meta-mid">
+							{@render lastRun(p)}
+							{#if o}<span class="line">Lowest dam: {@render dam(o)}</span>{/if}
 						</span>
 					</th>
-					{#if showTeam}<td class="wide xwide">
-						{#if p.team}
-							{#if p.team.name}
-								<a class="team" href="{base}/teams/{p.team.id}">{p.team.name}</a>
-							{:else}
-								<span class="muted" title="You have access through direct sharing">Another team</span>
-							{/if}
-						{:else}
-							<span class="muted">{teamLabel(p)}</span>
-						{/if}
-					</td>{/if}
-					<td class="wide"><span class="badge" class:badge-owner={p.role === 'owner'}>{p.role}</span></td>
-					<td class="wide status">
-						{@render fresh(p)}
-						{@render lastRun(p)}
+					<td class="wide c-ewr">
+						{#if o}
+							<StatusPill p={o} />
+							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if o.figuresUntil}{' '}· to {fmtDay(o.figuresUntil)}{/if}</span>{/if}
+						{:else}<span class="muted">{noFigures(p)}</span>{/if}
 					</td>
-					<td class="wide xwide num" title={fmtDate(p.updatedAt, true)}>{fmtDate(p.updatedAt)}</td>
-					<td class="actions"><div class="act">
-						<a class="btn btn-sm open" href="{base}/projects/{p.id}">Open</a>
-						{#if hasRole(p.role, 'editor')}
-							<a class="btn btn-sm" href={addDataHref(p)} aria-label="Add data to {p.name}">Add data</a>
+					<td class="wide c-units">{#if o}{@render units(o)}{:else}<span class="muted">–</span>{/if}</td>
+					<td class="wide xwide c-dam">{#if o}{@render dam(o)}{:else}<span class="muted">–</span>{/if}</td>
+					<td class="wide c-data">
+						{@render freshBadge(p)}
+						{#if o?.behindData}<span class="badge badge-warn flag">Newer rain not in the figures</span>{/if}
+						{#if o && o.feeds.total}<span class="sub" class:warn={o.feeds.failing > 0}>{feedsText(o)}</span>{/if}
+					</td>
+					<td class="wide xwide c-run">
+						{#if p.lastRunAt}
+							<span class="lift" title="Newest run: {fmtDate(p.lastRunAt, true)}">{ago(p.lastRunAt)}</span>
+							{#if p.publishedAt}
+								<span class="sub lift" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {ago(p.publishedAt)}</span>
+							{:else}<span class="sub">{fmtDate(p.lastRunAt)}</span>{/if}
+						{:else if hasRole(p.role, 'viewer')}<span class="muted">Not run yet</span>{/if}
+					</td>
+					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+					<td class="actions" onkeydown={onMenuKeydown} onfocusout={onMenuFocusOut}>
+						<div class="act">
+							{#if hasRole(p.role, 'editor')}
+								<a class="btn btn-sm" href={addDataHref(p)} aria-label="Add data to {p.name}">Add data</a>
+							{/if}
+							<button
+								type="button"
+								class="btn btn-sm more"
+								aria-label="More actions for {p.name}"
+								aria-expanded={menuFor === p.id}
+								aria-controls="pm-{p.id}"
+								onclick={(e) => toggleMenu(p, e.currentTarget)}><span aria-hidden="true">⋯</span></button
+							>
+						</div>
+						{#if menuFor === p.id}
+							<ul
+								class="menu"
+								id="pm-{p.id}"
+								bind:this={menuEl}
+								style:top={menuPos.top != null ? `${menuPos.top}px` : undefined}
+								style:bottom={menuPos.bottom != null ? `${menuPos.bottom}px` : undefined}
+								style:right="{menuPos.right}px"
+							>
+								<li>
+									<button type="button" class="item" aria-label="Copy {p.name}" onclick={() => (closeMenu(), oncopy(p))}>Copy…</button>
+								</li>
+								{#if hasRole(p.role, 'owner')}
+									<li>
+										<button type="button" class="item item-danger" aria-label="Delete {p.name}" onclick={() => (closeMenu(), ondelete(p))}
+											>Delete…</button
+										>
+									</li>
+								{/if}
+							</ul>
 						{/if}
-						<button type="button" class="btn btn-sm" onclick={() => oncopy(p)} aria-label="Copy {p.name}">Copy</button>
-						{#if hasRole(p.role, 'owner')}
-							<button type="button" class="btn btn-sm btn-danger" onclick={() => ondelete(p)} aria-label="Delete {p.name}">
-								Delete
-							</button>
-						{/if}
-					</div></td>
+					</td>
 				</tr>
 			{/each}
 		</tbody>
 	</table>
 </div>
-</div>
 
 <style>
-	/* Fixed right-hand columns so tables in consecutive groups line up. */
+	.pt {
+		container-type: inline-size;
+	}
+	/* Fixed columns so the tables of consecutive groups line up. */
 	.projects {
 		table-layout: fixed;
 	}
-	.c-team {
-		width: 200px;
+	.c-ewr {
+		width: 215px;
 	}
-	.c-role {
-		width: 100px;
+	.c-units {
+		width: 150px;
+	}
+	.c-dam {
+		width: 140px;
 	}
 	.c-data {
 		width: 165px;
 	}
-	.c-upd {
-		width: 105px;
+	.c-run {
+		width: 120px;
 	}
 	.c-act {
-		width: 250px;
+		width: 128px;
 	}
-	.status {
-		white-space: nowrap;
+	.projects td,
+	.projects th {
+		vertical-align: top;
 	}
-	.run {
-		display: block;
-		margin-top: 0.2rem;
-		font-size: 0.8rem;
-		color: var(--text-muted);
-	}
-	.meta .run {
-		display: inline;
-		margin: 0;
-	}
-	.team-sub {
-		display: none;
-		font-weight: 400;
-		font-size: 0.83rem;
-		color: var(--text-2);
-	}
-	.fresh {
-		text-transform: none;
-		font-weight: 500;
-		white-space: nowrap;
-	}
-	.projects tbody th {
-		padding-top: 0.6rem;
-		padding-bottom: 0.6rem;
+	.projects tbody th,
+	.projects td {
+		padding-top: 0.5rem;
+		padding-bottom: 0.5rem;
 	}
 	.projects td {
-		overflow: hidden;
-		text-overflow: ellipsis;
+		overflow-wrap: anywhere;
+	}
+	.sort {
+		display: inline-flex;
+		align-items: center;
+		background: none;
+		border: 0;
+		padding: 0;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		text-align: inherit;
+		min-height: 24px;
+		white-space: nowrap;
+	}
+	button.sort:hover {
+		color: var(--accent);
 	}
 	.name {
 		font-weight: 600;
@@ -179,10 +328,9 @@
 	}
 	/* The whole row opens the project: the name link's box stretches over the
 	   row (a "stretched link"), so a click anywhere on it is a real link click
-	   (Ctrl/Cmd-click and middle-click open a new tab, the status bar shows the
-	   address) while the keyboard and screen readers still meet one named link
-	   per row, not a clickable row. The row's own links and buttons, and the
-	   badges whose title explains them, sit above the stretch. */
+	   (Ctrl/Cmd-click and middle-click open a new tab) while the keyboard and
+	   screen readers meet one named link per row. The row's own links, buttons
+	   and titled figures sit above the stretch (.lift, .act, .fresh). */
 	.projects tbody tr {
 		position: relative;
 		cursor: pointer;
@@ -192,40 +340,26 @@
 		position: absolute;
 		inset: 0;
 	}
-	.team,
+	.lift,
 	.act,
 	.fresh,
 	.run[title] {
 		position: relative;
 		z-index: 1;
 	}
-	.desc {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
-		margin-top: 0.15rem;
-		max-width: 72ch;
-		color: var(--text-2);
-		font-weight: 400;
-		font-size: 0.83rem;
-	}
 	.meta {
-		display: none;
-		margin-top: 0.2rem;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.15rem 0.4rem;
+		margin-top: 0.15rem;
 		color: var(--text-muted);
 		font-weight: 400;
 		font-size: 0.8rem;
 	}
-	.meta-line {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.2rem 0.45rem;
-	}
-	.meta-line + .meta-line {
-		margin-top: 0.3rem;
+	.meta-narrow,
+	.meta-mid {
+		display: none;
 	}
 	.role {
 		text-transform: capitalize;
@@ -236,54 +370,115 @@
 	.team:hover {
 		color: var(--accent);
 	}
+	.desc {
+		display: -webkit-box;
+		-webkit-line-clamp: 1;
+		line-clamp: 1;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		margin-top: 0.1rem;
+		max-width: 72ch;
+		color: var(--text-2);
+		font-weight: 400;
+		font-size: 0.83rem;
+	}
+	.sub {
+		display: block;
+		margin-top: 0.2rem;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+	.sub.warn {
+		color: var(--warning);
+	}
+	.fresh,
+	.flag {
+		text-transform: none;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+	.flag {
+		display: inline-block;
+		margin-top: 0.25rem;
+		white-space: normal;
+	}
+	.run {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+	.short {
+		font-weight: 600;
+		color: var(--danger);
+	}
 	.actions {
 		text-align: right;
-		white-space: nowrap;
-		width: 1%;
 	}
 	.act {
 		display: flex;
 		justify-content: flex-end;
 		gap: 0.25rem;
 	}
-	/* The table answers to its own width, not the window's (it sits beside the
-	   app sidebar and the owner list, issue #17): Updated, Team and Open go
-	   first when space runs short (the sort still uses Updated; the team moves
-	   under the name; the name opens the project). */
-	.pt {
-		container-type: inline-size;
+	.more {
+		min-width: 2rem;
+		justify-content: center;
+		font-weight: 700;
+		letter-spacing: 0.05em;
 	}
-	@container (max-width: 910px) {
-		.xwide,
-		.open {
+	/* The ⋯ menu: fixed, so the list's scrolling box never clips it. */
+	.menu {
+		position: fixed;
+		z-index: 50;
+		list-style: none;
+		margin: 0;
+		padding: 0.25rem;
+		min-width: 9rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: var(--shadow), 0 6px 18px rgb(0 0 0 / 0.14);
+		text-align: left;
+		cursor: default;
+	}
+	.item {
+		display: block;
+		width: 100%;
+		min-height: 32px;
+		padding: 0.35rem 0.6rem;
+		border: 0;
+		border-radius: var(--radius-sm);
+		background: none;
+		color: var(--text);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.item:hover,
+	.item:focus-visible {
+		background: var(--surface-2);
+	}
+	.item-danger {
+		color: var(--danger);
+	}
+	/* Mid width (the app sidebar and a 1280 px window): Lowest dam and Last run
+	   fold into a line under the name. */
+	@container (max-width: 1100px) {
+		.xwide {
 			display: none;
 		}
-		.team-sub {
-			display: block;
-		}
-		.c-act {
-			width: 190px;
+		.meta-mid {
+			display: flex;
 		}
 	}
+	/* Narrow (a phone): every figure moves under the name; the row keeps Add data and ⋯. */
 	@container (max-width: 730px) {
-		.wide,
-		.open {
+		.wide {
 			display: none;
 		}
-		.meta {
-			display: block;
+		.meta-narrow {
+			display: flex;
 		}
-		/* The meta line carries the team on phones. */
-		.team-sub {
-			display: none;
-		}
-		/* Keep the fixed layout: the name column takes what the buttons leave. */
 		.c-act {
 			width: 6.5rem;
-		}
-		.actions {
-			vertical-align: top;
-			padding-top: 0.6rem;
 		}
 		.act {
 			flex-direction: column;
@@ -292,6 +487,7 @@
 		}
 		.act .btn {
 			justify-content: center;
+			min-height: var(--tap);
 		}
 	}
 </style>

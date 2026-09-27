@@ -19,6 +19,7 @@
 // catchments in several zones gets each row right, and a South African one
 // isn't a day behind from 22:00 to 24:00 UTC.
 import type { Db } from '../db/tx.js';
+import { appliedThresholds } from '../teams/settings.js';
 import { localDate } from '../projects/timeZone.js';
 import { feedHealth, type HealthInput } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
@@ -76,6 +77,8 @@ export interface PortfolioRow {
 	name: string;
 	role: PortfolioProject['role'];
 	time_zone: string;
+	/** The project's team's settings (055), when the user is in that team; null for a personal project or someone else's team. */
+	team_settings: unknown;
 	data_until: string | null;
 	last_run_at: Date | null;
 	last_run_id: string | null;
@@ -114,11 +117,16 @@ const RUN_UNTIL = `LEAST(r.end_date, GREATEST(r.start_date, COALESCE(
 // The run had an outlet EWR: some month of the pragmatic EWR above 0.
 const EWR_SET = `EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(r.inputs->'settings'->'ewrPragmaticM3PerDay', '[]'::jsonb)) v WHERE v::float8 > 0)`;
 
-const PORTFOLIO_SQL = `
-	WITH proj AS (
-		SELECT p.id, p.name, p.time_zone, app_project_role(p.id) AS role FROM project p WHERE p.team_id = $1
-	)
-	SELECT pr.id, pr.name, pr.role, pr.time_zone,
+// Which projects: one team's (the portfolio), or every project the user can
+// see (the project list, GET /projects/outcomes), each with its team's
+// settings when the user may read the team (a member), for its thresholds.
+const TEAM_PROJECTS = `SELECT p.id, p.name, p.time_zone, app_project_role(p.id) AS role, NULL::jsonb AS team_settings FROM project p WHERE p.team_id = $1`;
+const MY_PROJECTS = `SELECT p.id, p.name, p.time_zone, app_project_role(p.id) AS role, t.settings AS team_settings
+	FROM project p LEFT JOIN team t ON t.id = p.team_id`;
+
+const portfolioSql = (projects: string) => `
+	WITH proj AS (${projects})
+	SELECT pr.id, pr.name, pr.role, pr.time_zone, pr.team_settings,
 		to_char((SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
 			WHERE ts.project_id = pr.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0), 'YYYY-MM-DD') AS data_until,
 		lr.created_at AS last_run_at, lr.id AS last_run_id, pub.run_id AS pub_run_id,
@@ -179,6 +187,8 @@ const PORTFOLIO_SQL = `
 	-- nor does an applicant (contributor, 044), who ranks below viewer too.
 	WHERE pr.role >= 'viewer'::project_role
 	ORDER BY pr.name, pr.id`;
+const PORTFOLIO_SQL = portfolioSql(TEAM_PROJECTS);
+const MY_OUTCOMES_SQL = portfolioSql(MY_PROJECTS);
 
 const iso = (d: Date | null) => (d ? d.toISOString() : null);
 
@@ -238,4 +248,20 @@ export function toPortfolioProject(r: PortfolioRow, now: Date, thresholds: EwrTh
 export async function loadPortfolio(db: Db, teamId: string, now: Date, thresholds: EwrThresholds = EWR_THRESHOLDS): Promise<PortfolioProject[]> {
 	const { rows } = await db.query<PortfolioRow>(PORTFOLIO_SQL, [teamId]);
 	return rows.map((r) => toPortfolioProject(r, now, thresholds));
+}
+
+/**
+ * The same figures for every project the user can see (RLS), in one query:
+ * the project list's outcome columns (GET /projects/outcomes, issue #17).
+ * Each status is judged by its own team's thresholds, or the defaults for a
+ * personal project and for a project shared from a team the user isn't in
+ * (they can't read that team's settings; its portfolio isn't theirs to see).
+ * Farmers' and applicants' projects are left out, as on the portfolio.
+ */
+export async function loadMyOutcomes(db: Db, now: Date): Promise<PortfolioProject[]> {
+	const { rows } = await db.query<PortfolioRow>(MY_OUTCOMES_SQL);
+	return rows.map((r) => {
+		const { source: _source, ...cutoffs } = appliedThresholds(r.team_settings);
+		return toPortfolioProject(r, now, cutoffs);
+	});
 }

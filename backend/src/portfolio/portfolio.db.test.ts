@@ -6,7 +6,7 @@ import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { utcToday } from '../feeds/fetch.js';
-import { loadPortfolio, type PortfolioProject } from './portfolio.js';
+import { loadMyOutcomes, loadPortfolio, type PortfolioProject } from './portfolio.js';
 import { localDate } from '../projects/timeZone.js';
 import { ageDays, ewrStatus } from './status.js';
 
@@ -52,6 +52,7 @@ async function run(u: User, pid: string) {
 }
 const portfolio = async (u: User, team = teamId) => u.call('GET', `/teams/${team}/portfolio`);
 const byId = (rows: PortfolioProject[], id: string) => rows.find((r) => r.id === id);
+const outcomes = async (u: User) => u.call('GET', '/projects/outcomes');
 
 beforeAll(async () => {
 	[admin, teamViewer, farmer, stranger] = (await Promise.all(['PfAdmin', 'PfViewer', 'PfFarmer', 'PfStranger'].map((n) => signUp(n)))) as [User, User, User, User];
@@ -338,5 +339,88 @@ describe('the team’s thresholds (D11, 055_team_settings)', () => {
 		} finally {
 			await setThresholds(stranger, otherTeamId, null);
 		}
+	});
+});
+
+// The project list's outcome columns (issue #17, docs/api.md § Projects): the
+// same figures for every project the user can see, personal ones included.
+describe('GET /projects/outcomes', () => {
+	const ids = (rows: PortfolioProject[]) => rows.map((r) => r.id);
+
+	it('lists every project you can see, personal and team alike, and nobody else’s', async () => {
+		const res = await outcomes(admin);
+		expect(res.status).toBe(200);
+		const mine = ids(res.body.projects);
+		expect(mine).toEqual(expect.arrayContaining([published, runOnly, empty, personal]));
+		expect(mine).not.toContain(strangersProject);
+		// Positive control: the stranger sees their own team's project through the same route.
+		expect(ids((await outcomes(stranger)).body.projects)).toContain(strangersProject);
+		expect(ids((await outcomes(stranger)).body.projects)).not.toContain(personal);
+		// A team viewer sees the team's projects, not the admin's personal one.
+		const viewer = ids((await outcomes(teamViewer)).body.projects);
+		expect(viewer).toEqual(expect.arrayContaining([published, runOnly, empty]));
+		expect(viewer).not.toContain(personal);
+	});
+
+	it('gives a team project the same figures as the team portfolio', async () => {
+		const [list, team] = await Promise.all([outcomes(teamViewer), portfolio(teamViewer)]);
+		for (const row of team.body.projects as PortfolioProject[]) expect(byId(list.body.projects, row.id)).toEqual(row);
+	});
+
+	it('judges a team project by its team’s thresholds and a personal one by the defaults', async () => {
+		const pid = await makeProject(admin, 'Golf personal thresholds', null);
+		await run(admin, pid);
+		const before = byId((await outcomes(admin)).body.projects, pid)!;
+		expect(before.ewr.status).not.toBe('unknown');
+		expect(before.ewr.status).toBe(ewrStatus(before.ewr.daysNotMet30!, before.ewr.days30!));
+		// Team thresholds under which nothing is green: team rows follow, the personal one doesn't.
+		expect((await admin.call('PATCH', `/teams/${teamId}`, { settings: { portfolio: { thresholds: { green: 0, amber: 100 } } } })).status).toBe(200);
+		try {
+			const rows = (await outcomes(admin)).body.projects as PortfolioProject[];
+			expect(byId(rows, pid)!.ewr).toEqual(before.ewr);
+			const teamRows = (await portfolio(admin)).body.projects as PortfolioProject[];
+			for (const t of teamRows) expect(byId(rows, t.id)!.ewr).toEqual(t.ewr);
+			expect(teamRows.some((t) => t.ewr.status === 'amber')).toBe(true);
+		} finally {
+			await admin.call('PATCH', `/teams/${teamId}`, { settings: { portfolio: { thresholds: null } } });
+		}
+	});
+
+	it('a project shared directly from a team you aren’t in is judged by the defaults (you can’t read that team)', async () => {
+		const [outsider] = (await Promise.all(['PfOutsider'].map((n) => signUp(n)))) as [User];
+		const pid = await makeProject(admin, 'Hotel shared out', teamId);
+		const runId = await run(admin, pid);
+		// The outlet met its EWR every day (arranged as the schema owner: the judging is under test, not the engine).
+		await asOwner(`UPDATE run_series SET "values" = array_fill(0::float8, ARRAY[cardinality("values")]) WHERE run_id = $1 AND node_id IS NULL AND key = 'ewr_shortfall'`, [runId]);
+		expect((await admin.call('POST', `/projects/${pid}/members`, { email: outsider.email, role: 'viewer' })).status).toBe(201);
+		// Team thresholds under which nothing is green.
+		expect((await admin.call('PATCH', `/teams/${teamId}`, { settings: { portfolio: { thresholds: { green: 0, amber: 100 } } } })).status).toBe(200);
+		try {
+			const rows = (await outcomes(outsider)).body.projects as PortfolioProject[];
+			expect(ids(rows)).toEqual([pid]);
+			expect(rows[0]).toMatchObject({ role: 'viewer', ewr: { status: 'green', daysNotMet30: 0, days30: 30 } });
+			// Positive control: a team member sees the team's judgement of the same figures.
+			expect(byId((await outcomes(admin)).body.projects, pid)!.ewr).toMatchObject({ status: 'amber', daysNotMet30: 0, days30: 30 });
+		} finally {
+			await admin.call('PATCH', `/teams/${teamId}`, { settings: { portfolio: { thresholds: null } } });
+		}
+	});
+
+	it('leaves out a project where you are a farmer or an applicant, and keeps it for a viewer', async () => {
+		// The farmer and applicant were added to `published` above.
+		expect(ids((await outcomes(farmer)).body.projects)).not.toContain(published);
+		expect(await withUser(farmer.id, (db) => loadMyOutcomes(db, new Date()))).toEqual([]);
+		// Positive control: the same project reaches the team viewer.
+		expect(ids((await outcomes(teamViewer)).body.projects)).toContain(published);
+	});
+
+	it('reads every project in one query', async () => {
+		let queries = 0;
+		const rows = await withUser(admin.id, (db) => {
+			const counting = { query: (...args: unknown[]) => (queries++, (db.query as (...a: unknown[]) => unknown)(...args)) } as unknown as Db;
+			return loadMyOutcomes(counting, new Date());
+		});
+		expect(rows.length).toBeGreaterThanOrEqual(4);
+		expect(queries).toBe(1);
 	});
 });

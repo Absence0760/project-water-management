@@ -1,9 +1,9 @@
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import { addMember, createProject, createRun, nominateRun, putModel, putSeries, register, sampleModel, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-
-const row = (page: Page, name: string) =>
-	page.getByRole('row').filter({ has: page.getByRole('rowheader', { name, exact: true }) });
+import { expectNoViolations } from '../support/a11y.ts';
+import { API_URL } from '../support/env.ts';
+import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -34,12 +34,13 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await expect(page.getByRole('row')).toHaveCount(4); // header + 3
 
 	// Copy A (with a model, so the copy is meaningful) as D.
-	// The name opens the project (the row's Open button folds away when the table is narrow).
+	// The name opens the project.
 	const href = await row(page, 'Example Valley — baseline').getByRole('link', { name: 'Example Valley — baseline', exact: true }).getAttribute('href');
 	const idA = href!.split('/').pop()!;
 	const model = sampleModel();
 	await putModel(page.request, idA, model);
 
+	await openRowMenu(page, 'Example Valley — baseline');
 	await row(page, 'Example Valley — baseline').getByRole('button', { name: 'Copy Example Valley — baseline' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Copy project' });
 	await expect(dialog.getByLabel('Name of the copy')).toHaveValue('Example Valley — baseline (copy)');
@@ -53,6 +54,8 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await row(page, 'Example Valley — new orchard').getByRole('link', { name: 'Example Valley — new orchard', exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Example Valley — new orchard' })).toBeVisible();
 	await expect(page).not.toHaveURL(new RegExp(idA));
+	// The model's facts are on the Project page (issue #17).
+	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
 	await expect(stat('Outflow gauge')).toHaveText('Outflow gauge');
 	await expect(stat('Units')).toHaveText(/^2\s*\+ 1 gauge$/);
@@ -60,6 +63,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 
 	// Delete one (confirm dialog accepted).
 	page.once('dialog', (d) => void d.accept());
+	await openRowMenu(page, 'Example Valley — drought');
 	await row(page, 'Example Valley — drought').getByRole('button', { name: 'Delete Example Valley — drought' }).click();
 	await expect(row(page, 'Example Valley — drought')).toHaveCount(0);
 	await expect(page.getByRole('row')).toHaveCount(4);
@@ -76,20 +80,22 @@ test('clicking anywhere on a project row opens it, and its buttons still work', 
 	const project = await createProject(page.context().request, 'Example Ridge');
 	await page.goto('/');
 	const r = row(page, 'Example Ridge');
+	await openRowMenu(page, 'Example Ridge');
 	await r.getByRole('button', { name: 'Copy Example Ridge' }).click();
 	await expect(page.getByRole('dialog')).toBeVisible();
 	await page.keyboard.press('Escape');
 	await expect(page).toHaveURL(/\/$/);
-	// Click where a user would, on the plain role cell away from the name: the
+	// Click where a user would, on a plain cell away from the name: the
 	// stretched name link lies over it (Playwright's own click refuses a
 	// covered element, so click the screen point).
-	await clickAt(page, r.getByRole('cell', { name: 'owner', exact: true }));
+	await expect(r.locator('td.c-units')).toHaveText('Not published');
+	await clickAt(page, r.locator('td.c-units'));
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Example Ridge' })).toBeVisible();
 	// On a phone the row folds into the name cell; tapping its meta line opens it too.
 	await page.setViewportSize({ width: 390, height: 800 });
 	await page.goto('/');
-	await clickAt(page, row(page, 'Example Ridge').locator('.meta'));
+	await clickAt(page, row(page, 'Example Ridge').locator('.meta-who'));
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
 });
 
@@ -98,6 +104,7 @@ test('cancelling the delete confirmation keeps the project', async ({ page, owne
 	await createProject(page.request, 'Keep me');
 	await page.goto('/');
 	page.once('dialog', (d) => void d.dismiss());
+	await openRowMenu(page, 'Keep me');
 	await row(page, 'Keep me').getByRole('button', { name: 'Delete Keep me' }).click();
 	await page.reload();
 	await expect(row(page, 'Keep me')).toBeVisible();
@@ -113,6 +120,7 @@ test('deleting a project with a nominated evidence run is refused, and the dialo
 	await page.goto('/');
 
 	page.once('dialog', (d) => void d.accept());
+	await openRowMenu(page, 'Licence evidence');
 	await row(page, 'Licence evidence').getByRole('button', { name: 'Delete Licence evidence' }).click();
 	const dialog = page.getByRole('dialog', { name: "This project can't be deleted" });
 	await expect(dialog).toBeVisible();
@@ -145,19 +153,23 @@ test('the list shows the role the user has on each project', async ({ page, owne
 	await other.dispose();
 
 	await page.goto('/');
-	const roleCell = (name: string, role: string) => row(page, name).getByRole('cell', { name: role, exact: true });
-	await expect(roleCell('My own catchment', 'owner')).toBeVisible();
-	await expect(roleCell('Colleague catchment', 'editor')).toBeVisible();
-	await expect(roleCell('Colleague reference', 'viewer')).toBeVisible();
+	const role = (name: string) => row(page, name).getByTestId('project-role');
+	await expect(role('My own catchment')).toHaveText('owner');
+	await expect(role('Colleague catchment')).toHaveText('editor');
+	await expect(role('Colleague reference')).toHaveText('viewer');
 
 	// Own projects are grouped under Personal, the colleague's under Shared with me.
 	const group = (name: string) => page.getByRole('region', { name });
 	await expect(group('Personal').getByRole('rowheader', { name: 'My own catchment' })).toBeVisible();
 	await expect(group('Shared with me').getByRole('row')).toHaveCount(3); // header + 2
 
-	// Only owners get a Delete button; anyone may copy.
+	// Only owners get Delete in the ⋯ menu; anyone may copy.
+	await openRowMenu(page, 'My own catchment');
 	await expect(row(page, 'My own catchment').getByRole('button', { name: /^Delete/ })).toBeVisible();
+	await openRowMenu(page, 'Colleague catchment');
+	await expect(row(page, 'My own catchment').getByRole('button', { name: /^Delete/ })).toHaveCount(0); // one menu at a time
 	await expect(row(page, 'Colleague catchment').getByRole('button', { name: /^Delete/ })).toHaveCount(0);
+	await openRowMenu(page, 'Colleague reference');
 	await expect(row(page, 'Colleague reference').getByRole('button', { name: /^Delete/ })).toHaveCount(0);
 	await expect(row(page, 'Colleague reference').getByRole('button', { name: 'Copy Colleague reference' })).toBeVisible();
 });
@@ -177,11 +189,11 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await page.goto('/');
 	const emptyRow = row(page, 'Freshness — empty');
 	await expect(emptyRow).toContainText('no rain yet');
-	await expect(emptyRow).toContainText('not run yet');
 	const staleRow = row(page, 'Freshness — stale');
-	const status = staleRow.getByRole('cell').filter({ hasText: /^rain / });
-	await expect(status.getByTitle('Recorded rain runs to 2020-10-30')).toHaveText(/^rain \d+ years old$/);
-	await expect(status).toContainText(/last run \d{4}-\d{2}-\d{2}/);
+	await expect(staleRow.locator('td.c-data').getByTitle('Recorded rain runs to 2020-10-30')).toHaveText(/^rain \d+ years old$/);
+	// The last run and its age, the date under it.
+	await expect(staleRow.locator('td.c-run')).toHaveText(/^\s*today\s+\d{4}-\d{2}-\d{2}\s*$/);
+	await expect(emptyRow.locator('td.c-run')).toHaveText('Not run yet');
 
 	// "Add data" opens the workspace with the upload dialog requested.
 	const add = emptyRow.getByRole('link', { name: 'Add data to Freshness — empty' });
@@ -219,5 +231,195 @@ test.describe('data age under a skewed time zone', () => {
 		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(
 			'Rain up to 28 Jan 2022 · 10 days ago (older than 7 days)'
 		);
+	});
+});
+
+// ---- Outcomes, Needs attention, filters and scale (issue #17) --------------
+
+interface Outcome {
+	id: string;
+	ewr: { status: 'green' | 'amber' | 'red' | 'unknown'; daysNotMet30: number | null; days30: number | null };
+}
+const LABEL = { red: 'Red', amber: 'Amber', green: 'Green' } as const;
+/** What the pill says for a known status: the portfolio's words. */
+const pillText = (o: Outcome) =>
+	o.ewr.status === 'unknown'
+		? null
+		: o.ewr.daysNotMet30
+			? `${LABEL[o.ewr.status]}: EWR not met ${o.ewr.daysNotMet30} of ${o.ewr.days30} days`
+			: `${LABEL[o.ewr.status]}: EWR met all ${o.ewr.days30} days`;
+
+async function publish(request: APIRequestContext, projectId: string) {
+	const runId = await createRun(request, projectId, 'Baseline');
+	const res = await request.post(`${API_URL}/projects/${projectId}/publication`, { data: { runId } });
+	expect(res.status(), await res.text()).toBe(201);
+}
+const team = async (request: APIRequestContext, name: string) =>
+	(await (await request.post(`${API_URL}/teams`, { data: { name } })).json()).team as { id: string };
+const toTeam = async (request: APIRequestContext, id: string, teamId: string) =>
+	expect((await request.patch(`${API_URL}/projects/${id}`, { data: { teamId } })).status()).toBe(200);
+
+test('each row says how its catchment is doing, from the portfolio’s figures, and Needs attention flags the stale ones', async ({ page, owner }) => {
+	void owner;
+	const pub = await seedRunnableProject(page.request, 'Outcome published');
+	await publish(page.request, pub.id);
+	const draft = await seedRunnableProject(page.request, 'Outcome draft');
+	await createRun(page.request, draft.id, 'Draft');
+	await createProject(page.request, 'Outcome empty');
+	const figures = (await (await page.request.get(`${API_URL}/projects/outcomes`)).json()).projects as Outcome[];
+	const pubFig = figures.find((f) => f.id === pub.id)!;
+	expect(pubFig.ewr.status).not.toBe('unknown');
+
+	await page.goto('/');
+	await outcomesReady(page);
+	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · EWR, last 30 days: .+$/);
+
+	// Published: the status in words, where it comes from, units short and the lowest dam.
+	const pr = row(page, 'Outcome published');
+	await expect(pr.locator('td.c-ewr')).toContainText(pillText(pubFig)!);
+	await expect(pr.locator('td.c-ewr')).toContainText('Published · to 28 Jan 2022');
+	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ units? short this week\s*$/);
+	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ %\s*$/);
+	await expect(pr.locator('td.c-run')).toContainText('published today');
+
+	// Run, not published: the EWR from the run; unit figures wait for a publication.
+	const dr = row(page, 'Outcome draft');
+	await expect(dr.locator('td.c-ewr')).toContainText('Latest run · to 28 Jan 2022');
+	await expect(dr.locator('td.c-units')).toHaveText('Not published');
+	await expect(dr.locator('td.c-dam')).toHaveText('Not published');
+	await expect(row(page, 'Outcome empty').locator('td.c-ewr')).toHaveText('Unknown: no run yet');
+
+	// Both runs' figures end in 2022: stale, so both are flagged, with the reason in words.
+	const strip = page.getByRole('region', { name: 'Needs attention' });
+	await expect(strip.getByTestId('attention-count')).toHaveText('2 of 3');
+	await expect(strip.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Outcome draft' }) }).first()).toContainText(/Figures [\d,]+ days old/);
+	await expect(strip.getByRole('link', { name: 'Outcome empty' })).toHaveCount(0);
+
+	// "Sort the list by it" puts them first, in the URL; Back undoes it.
+	await strip.getByRole('link', { name: 'Sort the list by it' }).click();
+	await expect(page).toHaveURL(/[?&]sort=attention/);
+	await expect(page.getByLabel('Sort')).toHaveValue('attention');
+	await expect(page.getByRole('rowheader').last()).toHaveAccessibleName('Outcome empty');
+	await page.goBack();
+	await expect(page).not.toHaveURL(/sort=/);
+	await expect(page.getByLabel('Sort')).toHaveValue('updated');
+});
+
+test('owner chips, search and sort live in the URL; old links still work', async ({ page, owner }) => {
+	void owner;
+	const t = await team(page.request, 'Chip Valley WUA');
+	const inTeam = await createProject(page.request, 'Chip team catchment');
+	await toTeam(page.request, inTeam.id, t.id);
+	await createProject(page.request, 'Chip personal catchment');
+
+	await page.goto('/');
+	const chips = page.getByRole('navigation', { name: 'Filter by owner' });
+	await expect(chips.getByRole('link', { name: /^All projects 2$/ })).toHaveAttribute('aria-current', 'true');
+	await chips.getByRole('link', { name: /^Chip Valley WUA 1$/ }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]owner=team(%3A|:)${t.id}`));
+	await expect(page.getByRole('rowheader')).toHaveCount(1);
+	await expect(page.getByRole('rowheader', { name: 'Chip team catchment' })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('rowheader')).toHaveCount(2);
+
+	// A column heading sorts (worst EWR first), and says so.
+	await outcomesReady(page);
+	const ewrHead = page.getByRole('columnheader', { name: /^EWR, last 30 days/ }).first();
+	await ewrHead.getByRole('button').click();
+	await expect(page).toHaveURL(/[?&]sort=status/);
+	await expect(page.getByRole('columnheader', { name: /^EWR, last 30 days/ }).first()).toHaveAttribute('aria-sort', 'ascending');
+	await page.reload();
+	await expect(page.getByLabel('Sort')).toHaveValue('status');
+
+	// Old links: ?sort=name and ?owner=personal from before the redesign.
+	await page.goto('/?owner=personal&sort=name');
+	await expect(chips.getByRole('link', { name: /^Personal 1$/ })).toHaveAttribute('aria-current', 'true');
+	await expect(page.getByLabel('Sort')).toHaveValue('name');
+	await expect(page.getByRole('rowheader')).toHaveCount(1);
+	await expect(page.getByRole('rowheader', { name: 'Chip personal catchment' })).toBeVisible();
+	await page.getByLabel('Search projects').fill('nothing like this');
+	await expect(page.getByText('No projects in Personal match “nothing like this”.')).toBeVisible();
+	await expect(page).toHaveURL(/[?&]q=nothing/);
+});
+
+test('the ⋯ menu works from the keyboard and gives focus back; a viewer gets Copy and no Add data', async ({ page, owner, signIn }) => {
+	void owner;
+	const p = await createProject(page.request, 'Menu catchment');
+	await page.goto('/');
+	const more = row(page, 'Menu catchment').getByRole('button', { name: 'More actions for Menu catchment' });
+	await more.focus();
+	await page.keyboard.press('Enter');
+	await expect(more).toHaveAttribute('aria-expanded', 'true');
+	await page.keyboard.press('Tab');
+	await expect(row(page, 'Menu catchment').getByRole('button', { name: 'Copy Menu catchment' })).toBeFocused();
+	await page.keyboard.press('Escape');
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(more).toBeFocused();
+	// A click elsewhere closes it too.
+	await more.click();
+	await expect(more).toHaveAttribute('aria-expanded', 'true');
+	await page.getByRole('heading', { level: 1, name: 'Projects' }).click();
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+
+	const viewer = await signIn('Menu viewer');
+	await addMember(page.request, p.id, viewer.user.email, 'viewer');
+	await viewer.page.goto('/');
+	const vr = row(viewer.page, 'Menu catchment');
+	await expect(vr.getByRole('link', { name: /^Add data/ })).toHaveCount(0);
+	await openRowMenu(viewer.page, 'Menu catchment');
+	await expect(vr.getByRole('button', { name: 'Copy Menu catchment' })).toBeVisible();
+	await expect(vr.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
+});
+
+test.describe('fifty projects', () => {
+	test.setTimeout(120_000);
+
+	test('fit the window: the list scrolls inside its card, the page doesn’t; the phone stacks with no sideways scroll; no a11y violations', async ({ page, owner }) => {
+		void owner;
+		const t = await team(page.request, 'Big Valley Water Users Association');
+		const pub = await seedRunnableProject(page.request, 'Big published catchment');
+		await publish(page.request, pub.id);
+		const made = await Promise.all(Array.from({ length: 49 }, (_, i) => createProject(page.request, `Big scoping catchment ${String(i + 1).padStart(2, '0')}`)));
+		await Promise.all(made.filter((_, i) => i % 2).map((p) => toTeam(page.request, p.id, t.id)));
+
+		for (const size of [
+			{ width: 1440, height: 960 },
+			{ width: 1280, height: 800 }
+		]) {
+			await page.setViewportSize(size);
+			await page.goto('/');
+			await outcomesReady(page);
+			await expect(page.getByRole('rowheader')).toHaveCount(50);
+			const m = await page.evaluate(() => {
+				const groups = document.querySelector('.groups')!;
+				const card = document.querySelector('.list-card')!.getBoundingClientRect();
+				return { page: document.documentElement.scrollHeight - innerHeight, inner: groups.scrollHeight - groups.clientHeight, gap: innerHeight - card.bottom };
+			});
+			expect(m.page, `page scroll at ${size.width}`).toBeLessThanOrEqual(0);
+			expect(m.inner, `list scrolls inside at ${size.width}`).toBeGreaterThan(0);
+			// The card reaches the window's bottom, less the page's 1rem gutter.
+			expect(m.gap).toBeGreaterThanOrEqual(0);
+			expect(m.gap).toBeLessThanOrEqual(24);
+			await expect(page.getByRole('region', { name: 'Needs attention' })).toBeInViewport();
+		}
+		await expectNoViolations(page);
+		// With a menu open, too.
+		await openRowMenu(page, 'Big published catchment');
+		await expectNoViolations(page);
+		await page.keyboard.press('Escape');
+
+		await page.getByLabel('Search projects').fill('Big scoping catchment 49');
+		await expect(page.getByRole('rowheader')).toHaveCount(1);
+		await expect(page.getByRole('rowheader', { name: 'Big scoping catchment 49' })).toBeVisible();
+		await expect(page.getByRole('status').filter({ hasText: /projects? shown/ })).toHaveText('1 project shown');
+
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto('/');
+		await outcomesReady(page);
+		expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0);
+		// The figures move under the name on a phone; the owner filter is a select.
+		await expect(row(page, 'Big published catchment').locator('.meta-narrow').first()).toBeVisible();
+		await expect(page.getByLabel('Show')).toBeVisible();
+		await expectNoViolations(page);
 	});
 });

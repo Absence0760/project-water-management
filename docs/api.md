@@ -204,6 +204,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects` | – | `{ projects: ProjectSummary[] }` (most recently updated first) | – |
+| GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
 | PATCH | `/projects/:id` | `{ name?, description?, timeZone?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
@@ -212,6 +213,17 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
 - `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
+- `GET /projects/outcomes` (issue #17) feeds the project list's outcome
+  columns and its *Needs attention* strip: one `PortfolioProject` (the
+  [portfolio](#portfolio)'s row, same fields and rules) per project you can
+  see, personal, team and shared alike, read in **one query** under RLS
+  (`loadMyOutcomes`, `portfolio/portfolio.ts`, sharing the portfolio's SQL).
+  Each `ewr.status` is judged by its team's thresholds when you're in that
+  team, so a team project's row equals its portfolio row; a personal project,
+  and one shared with you directly from a team you aren't in (you can't read
+  that team's settings), is judged by the defaults (5 %, 20 %). A project
+  where your role is `farmer` or `contributor` is left out, as on the
+  portfolio. Sorted by name.
 - `project` (`GET`/`PATCH /projects/:id`, create, import, copy) is a
   `ProjectSummary` plus `settings`, `rerunQueuedFor` and `timeZone`: an
   IANA zone name (058_project_time_zone, `Africa/Johannesburg` by default)

@@ -105,6 +105,14 @@ section it belongs to, with the example that taught it.
   page's top gutter and ends as far from the bottom
   (`max-height: calc(100vh - 2 × gutter)`); the end-of-page reading space goes
   on the text column (`help-pages.spec.ts` checks the page and the column).
+- **Position the box that scrolls.** A list that scrolls inside its card
+  must be `position: relative` (or otherwise positioned) when anything
+  inside it is absolutely positioned. The Projects list fitted its card to
+  the window yet the page still scrolled 1,200 px with fifty projects: each
+  group's visually hidden `<caption>` (`position: absolute`) had no
+  positioned ancestor inside the scroller, so it sat at its static place far
+  down the list, outside the clip, and the measured "space below" fed the
+  overflow back into the fit. Test the fit with the big case, not the seed.
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once
@@ -327,7 +335,10 @@ window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
 cards in a narrow column), `history/HistoryTab.svelte` (a timeline: rows
 beside the picked entry with Newer/Older, filters in the URL, whole entries
-on a phone).
+on a phone), and `routes/+page.svelte` with
+`projects/ProjectTable.svelte` (the Projects list: a Needs attention strip,
+owner chips, outcome columns that fold under the name as the table narrows,
+a fixed-position ⋯ row menu that a scrolling list can't clip).
 
 Interaction details that bit:
 

@@ -48,8 +48,12 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await colleague.page.goto('/');
 	const group = colleague.page.getByRole('region', { name: 'Breede Hydrology' });
 	const row = group.getByRole('row').filter({ has: colleague.page.getByRole('rowheader', { name: 'Upper Breede — baseline' }) });
-	await expect(row.getByRole('cell', { name: 'editor', exact: true })).toBeVisible();
+	await expect(row.getByTestId('project-role')).toHaveText('editor');
+	// Copy and Delete sit in the row's ⋯ menu; only an owner gets Delete.
+	await row.getByRole('button', { name: /^More actions for / }).click();
+	await expect(row.getByRole('button', { name: /^Copy / })).toBeVisible();
 	await expect(row.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
+	await colleague.page.keyboard.press('Escape');
 
 	// Filter by team and search both narrow the list (and live in the URL).
 	await colleague.page.getByRole('navigation', { name: 'Filter by owner' }).getByRole('link', { name: /Breede Hydrology/ }).click();
@@ -116,8 +120,12 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await reviewer.page.goto('/');
 	const group = reviewer.page.getByRole('region', { name: 'Review Board' });
 	const row = group.getByRole('row').filter({ has: reviewer.page.getByRole('rowheader', { name: 'Reviewed catchment' }) });
-	await expect(row.getByRole('cell', { name: 'viewer', exact: true })).toBeVisible();
+	await expect(row.getByTestId('project-role')).toHaveText('viewer');
+	// Copy and Delete sit in the row's ⋯ menu; only an owner gets Delete.
+	await row.getByRole('button', { name: /^More actions for / }).click();
+	await expect(row.getByRole('button', { name: /^Copy / })).toBeVisible();
 	await expect(row.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
+	await reviewer.page.keyboard.press('Escape');
 
 	// The team page doesn't offer to add a project, and neither does New project.
 	await reviewer.page.goto(`/teams/${team.id}`);

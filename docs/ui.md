@@ -766,10 +766,12 @@ pending invitations, the confirm-email banner) render through
 
 ## Project list
 
-`/` lists your projects, grouped by owner (personal, each team, shared with
-you), with a search box, an owner filter and a sort, all kept in the URL. Its
-header has **Import b023 workbook**, **Import project file (.json)** and
-**New project**. Both import buttons open the same dialog; the button only
+`/` (`routes/+page.svelte`, issue #17) answers "which of my catchments need
+me?" on the first screen, then lists every project you can see. Its header
+has the title, one line with the count and the EWR status of the catchments
+in view ("50 catchments · EWR, last 30 days: 2 red, 1 amber, 18 green"),
+and **Import b023 workbook**, **Import project file (.json)** and **New
+project**. Both import buttons open the same dialog; the button only
 sets its wording and what the file picker offers, and the picked file's type
 decides how it's read, so a workbook picked from the JSON button still works.
 Two buttons rather than one "Import…": the client looks for a named workbook
@@ -779,22 +781,76 @@ on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
-**Layout answers to the space it has, not the window** (container queries,
-since the app sidebar takes 240 px from 900 px). The owner list sits beside
-the tables while the page's content box is wider than 868 px
-(`routes/+page.svelte`, container `projects-page`), and above them
-narrower. Each table (`ProjectTable.svelte`, container on its wrapper) drops
-its Team and Updated columns and the **Open** button at 910 px or narrower
-(the team moves under the name; the sort still uses Updated; the name opens
-the project), and at 730 px or narrower folds role, freshness, last run and
-the date into a meta line under the name, with the row's buttons stacked.
+**Figures.** Each row carries the [portfolio](#portfolio-teamsidportfolio)'s
+figures for its project, from `GET /projects/outcomes` ([api.md §
+Projects](./api.md#projects)), which covers personal and shared projects as
+well as team ones and loads beside the list (the rows show first, with
+"Loading…" in the figure cells; a failed request says "Figures unavailable"
+and the list still works). The wording comes from the portfolio's helpers
+(`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same on
+both pages. Columns: **Catchment** (the name, then owner/team for *Shared
+with me*, your role and the updated date, and the description on one
+line), **EWR, last 30 days** (the pill in words and colour, and *Published*
+or *Latest run* with the figures' last day), **Units short** ("2 of 12 units
+short this week", a link to that run's curtailment on Units & supply;
+*Not published* until a run is published), **Lowest dam**, **Data** (the
+rain freshness badge, *Newer rain not in the figures*, the feeds' health)
+and **Last run** (its age, then the date or when it was published). A
+project where your role is farmer or applicant has no figures ("Not shown
+to your role").
+
+**Needs attention** (`projects/NeedsAttention.svelte`, rules in
+`projects/outcomes.ts` `attention`): the catchments in view to look at
+first, most urgent first: a red EWR, units short this week, alerts firing,
+an amber EWR, failing or stale feeds, newer rain than the figures, figures
+over 7 days old (the portfolio's *stale*). Up to four cards (two a row on a
+mid-width page, three stacked on a phone), each naming its reasons in words
+with the colour only repeating them; the count says "3 of 50", and **Show
+all N, most urgent first** (or **Sort the list by it**) sets
+`?sort=attention`. With nothing flagged it says so in one line; a catchment
+that hasn't run is not flagged.
+
+**Filter, search, sort, all in the URL.** The owner filter is a row of chips
+(All projects, Personal, each team, Shared with me, with counts, and
+**Manage teams**), or a select when the page is 600 px or narrower. Search
+matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
+updated* (the default), *Needs attention first*, *EWR status* (worst
+first), *Units short*, *Lowest dam*, *Last run* (newest first), *Name*,
+from the Sort select or a column heading (`aria-sort`); an outcome sort puts
+rows without figures last. Old links (`?owner=`, `?sort=name`, `?new=1`)
+still work. With *All projects* the list is grouped (Personal, each team
+with its **Portfolio** and **Team members & settings** links, Shared with
+me), one table per group with the same fixed columns.
+
+**Fits the window** from 900 × 620 up, like the portfolio: the list's card
+takes at most the height left below the strip (its top and what sits below
+it, measured by a `ResizeObserver` on `body`), the groups scroll inside it
+with each table's header stuck, and the page keeps a 1 rem gutter and
+doesn't scroll; a short list just ends. `.groups` is `position: relative`
+so its visually hidden captions stay inside the scroll box (without it they
+scrolled the whole page, ui-playbook § 2). On a phone the page scrolls.
+
+**Layout answers to the space it has, not the window** (container queries).
+Each table (`ProjectTable.svelte`, container on its wrapper) folds Lowest
+dam and Last run into a line under the name at 1100 px or narrower (a
+1280 px window beside the app sidebar), and at 730 px every figure: the
+pill, units short, the freshness badge, the last run and the lowest dam
+stack under the name, with Add data and ⋯ stacked on the right.
 
 **A click anywhere on a project's row opens it.** The name link stretches
 over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:
 Ctrl/Cmd-click or a middle click opens a new tab, and the keyboard and screen
-readers still meet one named link per row. The row's Team link, its Add data,
-Copy and Delete buttons, and the freshness and last-run badges (whose tooltips
-explain them) sit above the stretch and keep doing their own thing.
+readers still meet one named link per row. The row's team link, units-short
+link, Add data, the ⋯ button, and the freshness and run figures (whose
+tooltips explain them) sit above the stretch and keep doing their own thing.
+
+**Row actions.** **Add data** (editors and owners) opens the workspace with
+the upload dialog (`?add=data`). The **⋯** button ("More actions for
+*name*") opens a small disclosure menu with **Copy…** (anyone) and
+**Delete…** (owners); it's drawn `position: fixed` so the scrolling list
+never clips it, opens upward near the window's bottom, and closes on
+Escape (focus back on ⋯), a click outside, focus leaving, a scroll or a
+resize. One menu is open at a time.
 
 **Delete** asks for confirmation, then deletes. A project that has nominated
 an evidence run is kept for good (issue #43, [data-model.md](./data-model.md)
@@ -806,6 +862,10 @@ be read and reproduced, and that a nomination can be replaced but not
 withdrawn; it links to the run (**Open the evidence run**, the Runs tab) and
 offers **Copy project**, which opens the copy dialog for a fresh start
 without the runs and their nominations.
+
+`e2e/tests/projects.spec.ts` covers the figures, the strip, the URL round
+trips and Back, the menu from the keyboard, a viewer, and fifty projects
+(the fit at 1440 × 960 and 1280 × 800, the phone, and a11y scans).
 
 ### Import a project file
 

@@ -57,7 +57,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
 	compareTabHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte'] },
-	curtailmentHref: { why: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'routes/teams/[id]/portfolio/+page.svelte'] },
+	curtailmentHref: { why: 'BUILDER: "{base}/projects/…" (portfolio.ts; the team page wraps it under the same name)', in: ['routes/teams/[id]/+page.svelte', 'routes/teams/[id]/portfolio/+page.svelte', 'lib/components/projects/ProjectTable.svelte'] },
 	historyHref: { why: 'BUILDER: compare/attribution.ts "/projects/" + encoded project id + "?tab=history"', in: ['lib/components/compare/CompareView.svelte'] },
 	// Local builders and constants in the component itself: a literal "?", "#" or "{base}/" head.
 	tabHref: { why: 'routes/projects/[id]: "?tab=<TabId>" or the current pathname', in: ['routes/projects/[id]/+page.svelte'] },
@@ -90,6 +90,9 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
 	'more.href': { why: 'SupplyByFarm / FlowVsReserve prop: OverviewTab passes riverHref / supplyHref', in: ['lib/components/overview/FlowVsReserve.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
 	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
+	'r.href': { why: 'projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`${base}/projects/…`) or absent', in: ['lib/components/projects/NeedsAttention.svelte'] },
+	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },
+	hrefWith: { why: 'projects list page: "?" + URLSearchParams(owner, sort, q), or `${base}/`', in: ['routes/+page.svelte'] },
 	'it.href': { why: 'NeedsAttention: attention.ts items built from runHref / supplyHref / farmDrawerHref or "?tab=…" literals', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'it.also.href': { why: 'NeedsAttention: attention.ts, farmDrawerHref', in: ['lib/components/overview/NeedsAttention.svelte'] },
 	'c.href': { why: 'RunSummaryView: credibility.ts "#res-…" anchors', in: ['lib/components/runs/RunSummaryView.svelte'] },

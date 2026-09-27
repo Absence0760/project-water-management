@@ -982,6 +982,16 @@
 //             the other is rendered, never both). Nothing to trim that the
 //             page doesn't show. The earlier raise's parallel-page headroom
 //             is spent; this leaves ~3 KB. No new dependency.
+// 2026-09-27  total 1004 → 1009 KB (measured 1006, +6 on main's 1000 @ 14117da1);
+//             largest chunk (34 KB) and largest tab chunk (57 KB) unchanged.
+//             The Projects list (issue #17): outcome columns from the
+//             portfolio (EWR pill, units short, lowest dam, last run and its
+//             age), a Needs attention strip, owner chips, the ⋯ row menu,
+//             outcome sorts and the window fit. The home page is the first
+//             screen after sign-in, so these stay in its chunk rather than
+//             paying split overhead; it now shares portfolio.ts and
+//             StatusPill with the teams pages. No new dependency. Headroom
+//             ~3 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -992,7 +1002,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1018,
+	totalCodeKb: 1024,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

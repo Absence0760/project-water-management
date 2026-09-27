@@ -216,12 +216,21 @@ export const GUIDES: Guide[] = [
 				]
 			},
 			{
+				heading: 'Reading the Projects page',
+				blocks: [
+					{
+						type: 'p',
+						text: 'Each row says how its catchment is doing, from its published run (or its latest run when none is published): the EWR over the last 30 days in words, the units short this week, the lowest dam, how old the rain data is and when it last ran. **Needs attention** at the top lists the catchments to look at first (a red or amber EWR, units short, alerts firing, failing feeds, newer rain than the figures, figures over a week old), each with its reasons. The chips filter by owner, and **Sort** or a column heading orders the list; both stay in the page’s address.'
+					}
+				]
+			},
+			{
 				heading: 'A copy for a what-if',
 				blocks: [
 					{
 						type: 'steps',
 						items: [
-							'On the Projects page, choose **Copy** on the project’s row, and name the copy. The model and the data are copied; runs are not.',
+							'On the Projects page, open the **⋯** menu on the project’s row, choose **Copy…** and name the copy. The model and the data are copied; runs are not.',
 							'Name it after the change you plan, for example “Raise dam 3 by 20 %”.',
 							'Make the change in the copy and run it. The original and its runs are untouched.',
 							'Compare the copy’s run with the original’s. See [[guide:compare-runs|Compare runs and try what-ifs]].'

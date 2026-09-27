@@ -173,7 +173,7 @@ test('a new user builds a catchment, runs it, and adds more catchments', async (
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	for (const name of ['Catchment D', 'Catchment E', 'Catchment F']) {
-		await expect(projectRow(page, name).getByRole('cell', { name: 'owner', exact: true })).toBeVisible();
+		await expect(projectRow(page, name).getByTestId('project-role')).toHaveText('owner');
 	}
 	await expect(page.getByRole('row')).toHaveCount(4);
 

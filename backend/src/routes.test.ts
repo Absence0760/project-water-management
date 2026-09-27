@@ -201,6 +201,9 @@ describe('route auth inventory', () => {
 	it('inventories the portfolio route as auth-gated', () => {
 		expect(routes).toContain('GET /teams/:id/portfolio');
 		expect(PUBLIC.has('GET /teams/:id/portfolio')).toBe(false);
+		// The same figures for the project list (issue #17), for the signed-in user only.
+		expect(routes).toContain('GET /projects/outcomes');
+		expect(PUBLIC.has('GET /projects/outcomes')).toBe(false);
 	});
 
 	// The change history (WP-2.4): auth-gated like every project route.

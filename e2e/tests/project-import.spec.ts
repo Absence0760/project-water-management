@@ -73,7 +73,7 @@ test('imports an example catchment into a team and runs it', async ({ page, owne
 	await expect(row(page, 'Droëvlei — imported')).toBeVisible();
 	await expect(group.getByRole('rowheader', { name: 'Droëvlei — imported' })).toBeVisible();
 
-	// Open it (the name opens the project; the Open button hides when the table is narrow beside the sidebar): the workspace shows the imported catchment and its run.
+	// Open it (the name opens the project): the workspace shows the imported catchment and its run.
 	await row(page, 'Droëvlei — imported').getByRole('link', { name: 'Droëvlei — imported', exact: true }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Droëvlei — imported' })).toBeVisible();
 	// The Project page's import record (issue #17) names the project file; a file has no unmapped report, and this one no notes.
