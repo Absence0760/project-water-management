@@ -190,6 +190,56 @@ describe('POST /projects/:id/yield/:jobId/cancel', () => {
 	});
 });
 
+describe('GET /projects/:id/yield/jobs', () => {
+	it("lists a dam's pending yield jobs with their target to any viewer; another project's member sees nothing", async () => {
+		const owner = await signUp('YieldJobsOwner');
+		const viewer = await signUp('YieldJobsViewer');
+		const other = await signUp('YieldJobsOther');
+		const c = await catchment(owner);
+		await catchment(other, 'Other'); // a member of a project, just not this one
+		await member(owner, c.projectId, viewer, 'viewer');
+		const jobId = (await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'curve', params: { assurance: 0.9 } })).body.jobId;
+
+		// Positive control: a viewer who didn't queue it sees it, with what it is for.
+		const seen = await viewer.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}&runId=${c.runId}`);
+		expect(seen.status).toBe(200);
+		expect(seen.body.jobs).toHaveLength(1);
+		expect(seen.body.jobs[0]).toMatchObject({
+			id: jobId,
+			kind: 'yield',
+			status: 'queued',
+			target: { nodeId: c.dam.id, runId: c.runId, scenarioId: null, kind: 'curve', params: { assurance: 0.9, pattern: 'constant' } }
+		});
+		expect(seen.body.jobs[0]).not.toHaveProperty('payload');
+		// Running, with its progress.
+		const [claimed] = (await asOwner(
+			`UPDATE job SET status = 'running', attempts = 1, locked_until = now() + interval '1 minute', lease_token = gen_random_uuid(), started_at = now()
+			 WHERE id = $1 RETURNING lease_token`,
+			[jobId]
+		)) as [{ lease_token: string }];
+		await asOwner('SELECT app_job_progress($1, $2, 40)', [jobId, claimed.lease_token]);
+		expect((await viewer.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}`)).body.jobs[0]).toMatchObject({ id: jobId, status: 'running', progress: 40 });
+
+		// Another dam, another run, a scenario: not this one's.
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.outlet.id}`)).body.jobs).toEqual([]);
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}&runId=${crypto.randomUUID()}`)).body.jobs).toEqual([]);
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}&scenarioId=${crypto.randomUUID()}`)).body.jobs).toEqual([]);
+
+		// Negative: another project's member gets 404, and RLS hides the row from them.
+		expect((await other.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}`)).status).toBe(404);
+		expect((await withUser(other.id, (db) => db.query('SELECT id FROM job WHERE id = $1', [jobId]))).rows).toEqual([]);
+
+		// Bad queries.
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs`)).status).toBe(400);
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=x`)).status).toBe(400);
+		expect((await owner.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}&runId=${c.runId}&scenarioId=${crypto.randomUUID()}`)).status).toBe(400);
+
+		// Finished jobs drop off the list.
+		await asOwner(`UPDATE job SET status = 'dead', finished_at = now(), locked_until = NULL, lease_token = NULL WHERE id = $1`, [jobId]);
+		expect((await viewer.call('GET', `/projects/${c.projectId}/yield/jobs?nodeId=${c.dam.id}`)).body.jobs).toEqual([]);
+	});
+});
+
 describe('yield_result RLS', () => {
 	it('a viewer reads results but may not queue or write one; an outsider sees nothing', async () => {
 		const owner = await signUp('YieldRlsOwner');

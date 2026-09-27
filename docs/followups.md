@@ -2370,14 +2370,14 @@ from the WP:
       in this tree yet, and one yield takes about a second in the job.
       Trigger: WP-1.17's worker lands; the engine's `firmYield` is pure and
       ready for it.
-- [ ] **A job started elsewhere.** The Yield panel follows only the jobs it
-      queued itself; open it in another tab (or reload) mid-job and it shows
-      the last stored result, not the running job. `GET /jobs` has no
-      payload, so it can't say which dam a job is for. Durable fix: return
-      `nodeId` and the target for `yield` jobs (a column, not the payload),
-      or a `GET /yield/jobs?nodeId=` that reads the payload under RLS.
-      Trigger: a user reports a "lost" calculation, or WP-3.11 queues yields
-      from the assessment.
+- [x] **A job started elsewhere.** The Yield panel followed only the jobs it
+      queued itself, so after a reload or in another tab mid-job it showed
+      the last stored result. Fixed: `GET /projects/:id/yield/jobs?nodeId=`
+      (api.md § Yield) lists a dam's pending yield jobs with their target,
+      read from the job payload under RLS (viewers may already SELECT a job,
+      so no migration and no mirrored column; `GET /jobs` stays
+      payload-free for the other kinds), and the panel picks one up on open
+      and follows it to the end (e2e `yield.spec.ts`).
 - [ ] **A resized dam's shape** (pending the hydrologist). The storage–yield
       curve scales a dam's full-supply area with its capacity (constant mean
       depth) and keeps its initial and minimum levels as fractions. A real

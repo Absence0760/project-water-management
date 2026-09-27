@@ -1385,7 +1385,10 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   `GET /jobs` every 1.5 s: Queued, Running with its % (and a progress bar),
   then the results; Failed with the server's reason (never database text);
   Cancelled. **Cancel** stops a waiting job at once and a running curve at
-  its next point.
+  its next point. On open (and on each change of run or dam) the panel also
+  asks `GET /yield/jobs` for this dam's pending jobs, so it picks up and
+  follows one it didn't queue: another tab's, a colleague's, or its own
+  before a reload (a running one first, then the newest waiting one).
 - **Results**: the newest firm yield as a definition list (the yield in
   m³/day and a year, the dam's capacity, the pattern, failure days and
   years at that draft, who worked it out and the engine version); the
@@ -1393,9 +1396,8 @@ background `yield` job ([api.md § Yield](./api.md#yield), [model.md §2.13](./m
   table (capacity, yield per day and year, failed water years; the dam's own
   capacity marked "this dam"). A curve whose yield falls somewhere as the dam
   grows carries a warning saying why that can be real.
-- Not yet: the instant in-browser preview through the preview worker, and
-  finding a job started in another tab (the panel follows only the jobs it
-  started) ([followups.md](./followups.md)).
+- Not yet: the instant in-browser preview through the preview worker
+  ([followups.md](./followups.md)).
 
 ## Crops & demand
 

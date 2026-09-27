@@ -639,6 +639,10 @@ describe('jobs and yield client', () => {
 		expect(await createApi('', list).yield.list('p', { scenarioId: 's', nodeId: 'n' })).toEqual([{ id: 'y' }]);
 		expect(call(list).url).toBe('/projects/p/yield?scenarioId=s&nodeId=n');
 
+		const jobs = mockFetch(200, { jobs: [{ id: 'j' }] });
+		expect(await createApi('', jobs).yield.jobs('p', { nodeId: 'n', runId: 'r' })).toEqual([{ id: 'j' }]);
+		expect(call(jobs).url).toBe('/projects/p/yield/jobs?nodeId=n&runId=r');
+
 		const cancel = mockFetch(200, { status: 'dead', cancelled: true });
 		expect(await createApi('', cancel).yield.cancel('p', 'j/1')).toEqual({ status: 'dead', cancelled: true });
 		expect(call(cancel)).toEqual({ url: '/projects/p/yield/j%2F1/cancel', method: 'POST', body: undefined });

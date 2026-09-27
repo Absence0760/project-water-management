@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { YieldPoint } from '@water-management/engine';
-import type { JobMeta, RunMeta, YieldResult } from '$lib/api';
-import { assuranceLabel, curveChart, jobStatus, latestResults, modelRuns, patternLabel, type CurveResult } from './yield';
+import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
+import { assuranceLabel, curveChart, jobStatus, jobToFollow, latestResults, modelRuns, patternLabel, type CurveResult } from './yield';
 
 const job = (over: Partial<JobMeta>): JobMeta => ({
 	id: 'j',
@@ -32,6 +32,20 @@ const point = (capacityM3: number, yieldM3Day: number): YieldPoint => ({
 
 const params = { pattern: 'constant' as const, assurance: 1, tolerance: 0.001, points: 11 };
 const base = { runId: 'r', scenarioId: null, nodeId: 'n', jobId: null, params, engineVersion: '0.34.0', createdBy: 'A', createdAt: '2026-09-26T10:00:00Z' };
+
+describe('jobToFollow', () => {
+	const pending = (id: string, status: JobMeta['status']): YieldJob => ({
+		...job({ id, status }),
+		target: { nodeId: 'n', runId: 'r', scenarioId: null, kind: 'firm', params: { pattern: 'constant', assurance: 1, tolerance: 0.001, points: 11 } }
+	});
+	it('prefers a running job, then the newest waiting one, then one waiting to retry', () => {
+		expect(jobToFollow([])).toBeNull();
+		expect(jobToFollow([pending('q2', 'queued'), pending('r', 'running'), pending('f', 'failed')])?.id).toBe('r');
+		expect(jobToFollow([pending('f', 'failed'), pending('q2', 'queued'), pending('q1', 'queued')])?.id).toBe('q2');
+		expect(jobToFollow([pending('f', 'failed')])?.id).toBe('f');
+		expect(jobToFollow([pending('d', 'done'), pending('x', 'dead')])).toBeNull();
+	});
+});
 
 describe('jobStatus', () => {
 	it('says what the job is doing, with its progress, and nothing once done', () => {

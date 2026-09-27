@@ -26,7 +26,8 @@ export interface JobMeta {
 	progress: number | null;
 }
 
-const JOB_META = `j.id, j.kind, j.status, j.attempts, j.max_attempts AS "maxAttempts", j.run_after AS "runAfter",
+/** JobMeta's columns, over `job j JOIN app_user u ON u.id = j.acting_user_id`. */
+export const JOB_META = `j.id, j.kind, j.status, j.attempts, j.max_attempts AS "maxAttempts", j.run_after AS "runAfter",
 	j.created_at AS "createdAt", j.started_at AS "startedAt", j.finished_at AS "finishedAt", j.last_error AS error,
 	u.display_name AS "createdBy", j.progress`;
 

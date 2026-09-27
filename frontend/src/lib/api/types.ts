@@ -1463,6 +1463,11 @@ export interface YieldRequest {
 	params?: Partial<YieldParams>;
 }
 
+/** A pending yield job and what it is for (GET /projects/:id/yield/jobs). */
+export interface YieldJob extends JobMeta {
+	target: { nodeId: string; runId: string | null; scenarioId: string | null; kind: 'firm' | 'curve'; params: YieldParams };
+}
+
 /** A stored firm yield or storage–yield curve (GET /projects/:id/yield, 040_yield). */
 export interface YieldResult {
 	id: string;

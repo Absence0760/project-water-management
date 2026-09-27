@@ -3,7 +3,7 @@
 // latest curve, and the storage–yield chart's data.
 import type { YieldPoint } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
-import type { JobMeta, RunMeta, YieldResult } from '$lib/api';
+import type { JobMeta, RunMeta, YieldJob, YieldResult } from '$lib/api';
 import { fmtNum } from '$lib/format/number';
 
 /** Assurance choices: the firm yield, then the levels South African planning quotes (1 in 50, 1 in 20, 1 in 10, 1 in 5 years). */
@@ -38,6 +38,19 @@ export function jobStatus(job: JobMeta | null): { text: string; busy: boolean; f
 		case 'done':
 			return null;
 	}
+}
+
+/**
+ * The pending job the panel should follow when it opens (one queued in
+ * another tab, before a reload, or by a colleague): a running one first,
+ * then a waiting one, then one waiting to retry. The API lists newest first.
+ */
+export function jobToFollow(jobs: readonly YieldJob[]): YieldJob | null {
+	for (const s of ['running', 'queued', 'failed'] as const) {
+		const j = jobs.find((x) => x.status === s);
+		if (j) return j;
+	}
+	return null;
 }
 
 export type FirmResult = YieldResult & { points: { point: YieldPoint } };

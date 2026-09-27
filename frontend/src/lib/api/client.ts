@@ -98,6 +98,7 @@ import type {
 	SweepRequest,
 	Outlook,
 	OutlookRequest,
+	YieldJob,
 	YieldRequest,
 	YieldResult
 } from './types';
@@ -654,6 +655,11 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			list: (id: string, q: { runId?: string; scenarioId?: string; nodeId?: string; jobId?: string }) => {
 				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
 				return request<{ results: YieldResult[] }>('GET', `${p(id)}/yield?${qs}`).then((r) => r.results);
+			},
+			/** A dam's pending yield jobs, by anyone, newest first: the panel follows one it didn't queue. */
+			jobs: (id: string, q: { nodeId: string; runId?: string; scenarioId?: string }) => {
+				const qs = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v ? [[k, v]] : [])));
+				return request<{ jobs: YieldJob[] }>('GET', `${p(id)}/yield/jobs?${qs}`).then((r) => r.jobs);
 			},
 			/** Stop a yield job: a waiting one at once, a running one at its next progress report. */
 			cancel: (id: string, jobId: string) => request<{ status: JobMeta['status']; cancelled: boolean }>('POST', `${p(id)}/yield/${enc(jobId)}/cancel`)
