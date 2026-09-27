@@ -164,9 +164,16 @@ collected as a checklist in issue #46; tick it there as they answer.
         catchment, and is there any data on pumping volumes, distances from
         the river or aquifer tests? Confirm the method (a lagged linear
         reservoir with capture share d and time constant k, not a Glover/Hunt
-        kernel) and the values; depletion the river can't give is dropped,
-        not carried over. If the calibration record was measured while they
+        kernel) and the values. If the calibration record was measured while they
         pumped, calibrate with them in the model (model.md §2.7d).
+        **Changed in engine 1.7.0, pending the hydrologist's confirmation:**
+        depletion the river can't give was dropped; it is now carried over as
+        a deficit, taken off the first flow back and never written off
+        (bounded by the depletion generated; the run warns with what is still
+        owed at its end). Drafted from the hydrologist persona's review of
+        this issue (item 15), not the real hydrologist: confirm it, or say
+        whether to cap the carry-over (the review's option: d × the water
+        year's pumping).
       - WP-3.9 individual boreholes (engine 0.36.0): confirm the supply order
         (primary direct, then dam-target, then the dam and river, then
         supplemental, then emergency), what a dam-target borehole does in each

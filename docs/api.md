@@ -1263,8 +1263,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   warn; their warnings are in `summary.warnings`.
 - Boreholes (engine ≥ 0.23.0): a farm or user with boreholes has
   `avgGroundwaterM3Day` and `avgBaseflowDepletionM3Day` on its summary, the
-  run series `groundwater_used`, `baseflow_depletion`, `depletion_unmet` and
-  `depletion_store` (m³), and `summary.waterBalance` rows gain
+  run series `groundwater_used`, `baseflow_depletion`, `depletion_deficit`
+  (engine ≥ 1.7.0, the depletion still owed to the river; `depletion_unmet`
+  before it) and `depletion_store` (m³), and `summary.waterBalance` rows gain
   `groundwaterM3` and `streamDepletionM3`. `summary.verification.checks` has
   a `groundwater` check on every run (it passes trivially without boreholes).
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:

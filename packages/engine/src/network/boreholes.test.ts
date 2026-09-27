@@ -130,14 +130,61 @@ describe('boreholes (WP-1.34)', () => {
 		expect(sum(dep) + store.at(-1)!).toBeCloseTo(0.5 * pumped, 6);
 	});
 
-	it('depletion never takes the river below 0: the unmet part is reported and warned about', () => {
+	it('depletion never takes the river below 0: what it cannot give is owed, reported and warned about at the end', () => {
 		// The farm takes the whole river, and pumps the rest; d = 1: nothing is left to deplete.
 		const o = run(input({ boreholeCapacityM3Day: 5000, boreholeRule: 'supplemental', streamDepletionFrac: 1 }, 3000, 2), [1000, 1000]);
 		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
 		expect(col(o, 'A', 'baseflow_depletion')).toEqual([0, 0]);
-		expect(col(o, 'A', 'depletion_unmet')).toEqual([2000, 2000]);
+		expect(col(o, 'A', 'depletion_deficit')).toEqual([2000, 4000]);
+		expect(o.series.some((s) => s.key === 'depletion_unmet')).toBe(false);
 		expect(col(o, null, 'simulated_outflow')).toEqual([0, 0]);
-		expect(o.summary.warnings.some((w) => w.startsWith('stream depletion of 4000 m³ over the run could not be taken from the river'))).toBe(true);
+		expect(o.summary.warnings.some((w) => w.startsWith('stream depletion of 4000 m³ is still owed to the river at the end of the run') && w.includes('A 4000 m³'))).toBe(true);
+	});
+
+	it('the deficit carries over and comes off the first flow that returns (engine 1.7.0, hydrologist review item 15)', () => {
+		// Dry days 0–2: the farm takes all 1000 and pumps 2000 (d = 0.5, no lag): 1000 owed a day.
+		// Day 3: 10 000 in the river, the farm takes 3000 of it and pumps nothing: the 3000 owed comes off the 7000 left.
+		// Day 4: 5000 − 3000 = 2000 left, owed 0: nothing taken.
+		const o = run(input({ boreholeCapacityM3Day: 5000, boreholeRule: 'supplemental', streamDepletionFrac: 0.5 }, 3000, 5), [1000, 1000, 1000, 10_000, 5000]);
+		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+		expect(col(o, 'A', 'depletion_deficit')).toEqual([1000, 2000, 3000, 0, 0]);
+		expect(col(o, 'A', 'baseflow_depletion')).toEqual([0, 0, 0, 3000, 0]);
+		expect(col(o, null, 'simulated_outflow')).toEqual([0, 0, 0, 4000, 2000]);
+		// Repaid in full: no end-of-run warning.
+		expect(o.summary.warnings.some((w) => w.includes('still owed to the river'))).toBe(false);
+		// Partly repaid: 2500 left on day 3 covers 2500 of the 3000 owed.
+		const part = run(input({ boreholeCapacityM3Day: 5000, boreholeRule: 'supplemental', streamDepletionFrac: 0.5 }, 3000, 4), [1000, 1000, 1000, 5500]);
+		expect(part.summary.verification!.passed, JSON.stringify(part.summary.verification)).toBe(true);
+		expect(col(part, 'A', 'baseflow_depletion')).toEqual([0, 0, 0, 2500]);
+		expect(col(part, 'A', 'depletion_deficit')).toEqual([1000, 2000, 3000, 500]);
+		expect(part.summary.warnings.some((w) => w.startsWith('stream depletion of 500 m³ is still owed'))).toBe(true);
+	});
+
+	it('mass balance: depletion taken from the river + the deficit owed at the end = depletion generated, and + the lag store = d × pumped', () => {
+		// A year of flow switching between dry spells and wet days, with a lag, so the deficit builds and is repaid several times.
+		const days = 365;
+		const natural = Array.from({ length: days }, (_, t) => (t % 60 < 40 ? 500 : 20_000 * ((t % 7) + 1) / 7));
+		const d = 0.7;
+		const o = run(input({ boreholeCapacityM3Day: 4000, boreholeRule: 'supplemental', streamDepletionFrac: d, streamDepletionLagDays: 15 }, 3000, days), natural);
+		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
+		const pumped = sum(col(o, 'A', 'groundwater_used'));
+		const taken = sum(col(o, 'A', 'baseflow_depletion'));
+		const owed = col(o, 'A', 'depletion_deficit');
+		const store = col(o, 'A', 'depletion_store');
+		expect(Math.max(...owed)).toBeGreaterThan(0);
+		// Generated (fallen due) = d × pumped − what is still in the lag store.
+		const generated = d * pumped - store.at(-1)!;
+		expect(taken + owed.at(-1)!).toBeCloseTo(generated, 6);
+		// The deficit is never more than the depletion generated so far: it can't grow without limit.
+		let gen = 0;
+		const gw = col(o, 'A', 'groundwater_used');
+		for (let t = 0; t < days; t++) {
+			gen += d * gw[t]!;
+			expect(owed[t]!).toBeLessThanOrEqual(gen - store[t]! + 1e-6);
+		}
+		// A deficit only on a day the river had nothing left below the farm.
+		const out = col(o, null, 'simulated_outflow');
+		for (let t = 0; t < days; t++) if (owed[t]! > 1e-9) expect(out[t]!).toBeLessThan(1e-9);
 	});
 
 	it('a farm with boreholes shows less deficit, and the outlet shows the depletion', () => {
@@ -148,9 +195,9 @@ describe('boreholes (WP-1.34)', () => {
 		expect(withSame.summary.farms[0]!.avgDeficitM3Day).toBeLessThan(without.summary.farms[0]!.avgDeficitM3Day);
 		// Wet enough that the farm is served from the river: no pumping, no depletion.
 		expect(col(withB, 'A', 'groundwater_used')).toEqual([0, 0, 0]);
-		// Dry: pumped 1000 a day, 300 of which the river can't give (it's all taken): unmet.
+		// Dry: pumped 1000 a day, 300 of which the river can't give (it's all taken): owed, and it adds up.
 		expect(col(withSame, 'A', 'groundwater_used')).toEqual([1000, 1000, 1000]);
-		expect(col(withSame, 'A', 'depletion_unmet')).toEqual([300, 300, 300]);
+		expect(col(withSame, 'A', 'depletion_deficit')).toEqual([300, 600, 900]);
 	});
 
 	it('an other water user can have boreholes too', () => {
@@ -159,10 +206,12 @@ describe('boreholes (WP-1.34)', () => {
 		i.model.nodes.find((n) => n.id === 'A')!.downstreamNodeId = 'U';
 		const o = run(i, [1000, 3000]);
 		expect(o.summary.verification!.passed, JSON.stringify(o.summary.verification)).toBe(true);
-		// Day 0: 1000 from the river, 500 pumped, 250 depletion — but the river below has 0 left: unmet.
+		// Day 0: 1000 from the river, 500 pumped, 250 depletion — but the river below has 0 left: owed.
+		// Day 1: 3000 − 1500 = 1500 left, so the 250 owed comes off it.
 		expect(col(o, 'U', 'groundwater_used')).toEqual([500, 0]);
 		expect(col(o, 'U', 'supplied')).toEqual([1500, 1500]);
-		expect(col(o, 'U', 'depletion_unmet')).toEqual([250, 0]);
+		expect(col(o, 'U', 'depletion_deficit')).toEqual([250, 0]);
+		expect(col(o, 'U', 'baseflow_depletion')).toEqual([0, 250]);
 		expect(o.summary.users![0]!.avgGroundwaterM3Day).toBe(250);
 	});
 

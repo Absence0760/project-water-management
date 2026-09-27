@@ -93,7 +93,7 @@ describe('boreholes (WP-1.34)', () => {
 		const summary = (await u.call('GET', `/projects/${projectId}/runs/${run.body.run.id}`)).body.run.summary;
 		expect(summary.verification.passed).toBe(true);
 		expect(summary.farms[0].avgGroundwaterM3Day).toBeGreaterThan(0);
-		const want = ['groundwater_used', 'baseflow_depletion', 'depletion_store', 'depletion_unmet'];
+		const want = ['groundwater_used', 'baseflow_depletion', 'depletion_store', 'depletion_deficit'];
 		expect(await seriesKeys(u, projectId, run.body.run.id, farm.id, want)).toEqual(want);
 
 		const bad = async (m: object, pattern: RegExp) => {

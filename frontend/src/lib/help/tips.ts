@@ -198,7 +198,7 @@ export const TIPS: HelpTipText[] = [
 		term: 'Stream depletion',
 		short: 'The river flow a borehole’s pumping captures: a share of the pumped volume, taken from the river below after a lag.',
 		category: 'network',
-		fields: ['node.streamDepletionFrac', 'node.streamDepletionLagDays', 'run.baseflow_depletion', 'run.depletion_unmet', 'run.depletion_store', 'summary.avgBaseflowDepletionM3Day']
+		fields: ['node.streamDepletionFrac', 'node.streamDepletionLagDays', 'run.baseflow_depletion', 'run.depletion_unmet', 'run.depletion_deficit', 'run.depletion_store', 'summary.avgBaseflowDepletionM3Day']
 	},
 	{
 		id: 'land-cover',

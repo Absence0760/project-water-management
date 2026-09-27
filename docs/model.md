@@ -2225,8 +2225,8 @@ drought:       as supplemental while Q[t−1] < trigger × dam capacity, else GW
 G  = Gs + GW                                 (supplied; the dam or river gives only Gs, so P = avail − Gs)
 T  = β(1 − e) × G                            (the losses of pumped water return too)
 Sd = Sd[t−1] + d × GW;   due = α × Sd;   Sd ← Sd − due,   α = 1 − e^(−1/k)  (α = 1 when k = 0)
-Dep = MIN(due, R + S + T + seepage)          taken from the flow leaving the node
-unmet = due − Dep                            reported (series depletion_unmet) and warned about
+Dep = MIN(Dd[t−1] + due, R + S + T + seepage)   taken from the flow leaving the node
+Dd  = Dd[t−1] + due − Dep                    the deficit still owed (series depletion_deficit, engine ≥ 1.7.0)
 U  = R + S + T + seepage − Dep
 ```
 
@@ -2266,14 +2266,28 @@ node, not an analytical Glover/Hunt solution and not the GR4J routing store.**
   depletion from the river at the node worked identically for both runoff
   models, keeps natural flow
   natural, and puts the loss where the EWR is checked.
-- *Volume is conserved.* Over the run d × Σ GW = Σ Dep + Σ unmet + Sd at the
-  end: depletion keeps going for a while after pumping stops, and the store's
-  content at the end is depletion still to come. `checkGroundwater` asserts
-  this and every day's recursion.
-- *The river never goes negative.* Depletion due on a day with no flow left
-  at the node is unmet: in reality the aquifer's storage (or a losing reach)
-  supplies it. It is not carried over, which slightly understates depletion
-  in a dry spell; the run warns with the volume and the nodes.
+- *Volume is conserved.* Over the run Σ due (the depletion generated) = Σ Dep
+  (taken from the river) + Dd at the end (still owed), and d × Σ GW = Σ due +
+  Sd at the end: depletion keeps going for a while after pumping stops, and
+  the store's content at the end is depletion still to come.
+  `checkGroundwater` asserts both and every day's recursion.
+- *The river never goes negative, and the deficit is carried over (engine ≥
+  1.7.0, hydrologist persona review of issue #46, item 15; pending the
+  hydrologist).* Depletion due on a day with no flow left at the node is owed:
+  the deficit Dd, which comes off the first flow at the node, before any new
+  depletion, and persists until repaid. When a reach is dry the pumped
+  aquifer's drawdown doesn't vanish; it is repaid from the stream when flow
+  returns (a losing reach), which is the low-flow recovery the EWR depends
+  on, so carrying it over errs toward the EWR. **Bound:** the deficit is part
+  of the depletion generated, never more (Dd ≤ Σ due so far ≤ d × Σ GW), so it
+  can't grow beyond what was pumped; it is never written off. The outstanding
+  deficit is reported daily (`depletion_deficit`, m³) and the run warns with
+  the volume still owed at its end, per node. Before 1.7.0 the unmet part was
+  dropped (series `depletion_unmet`, m³/day, on older runs), which understated
+  depletion after a dry spell. The review's optional cap (d × the water
+  year's pumping) is not applied: a cap would drop volume again, and for an
+  ephemeral reach the capture share d < 1 already stands for the part of the
+  drawdown met from aquifer storage and evaporation capture.
 
 **Double counting and calibration.** A gauge or logger record measured while
 the boreholes pumped already carries their depletion. Because calibration
@@ -2293,7 +2307,8 @@ of the node's net impact (e = H + I + J − U, §2.7b) and of any EWR charge.
 share (§2.11) and the curtailment supply cut count it too.
 
 **Outputs** (only on nodes with boreholes): `groundwater_used`,
-`baseflow_depletion`, `depletion_unmet`, `depletion_store` (m³);
+`baseflow_depletion`, `depletion_deficit` (engine ≥ 1.7.0; `depletion_unmet`
+before), `depletion_store` (m³);
 `FarmSummary` / `UserSummary` `avgGroundwaterM3Day` and
 `avgBaseflowDepletionM3Day`; the water balance's `groundwaterM3` and
 `streamDepletionM3`.
@@ -2364,8 +2379,9 @@ partial year the whole cap). Once a unit reaches its cap it pumps nothing until
 warns, naming the boreholes that reached a cap.
 
 **Depletion.** Unchanged in method: Σ d × pumped enters the node's lag store
-and is taken from the flow leaving the node, capped at that flow, the unmet
-part reported (`depletion_unmet`) and warned about. Water pumped into the dam
+and is taken from the flow leaving the node, capped at that flow, the rest
+owed as the deficit (`depletion_deficit`, engine ≥ 1.7.0) and taken off the
+first flow back. Water pumped into the dam
 depletes the river like any other pumping.
 
 **Annual use, the caps and GN 538.** `RunSummary.groundwaterAnnualUse` holds,
@@ -4838,7 +4854,9 @@ can store one per base run. The state holds:
   index, resultant flow and index);
 - per node, in model order: the dam storage the day before (before any
   storage reset on the day), the soil-water store in m³ over the cropped
-  area (§2.3 step 4), the stream-depletion lag store (§2.7d), whether the
+  area (§2.3 step 4), the stream-depletion lag store and, from engine
+  1.7.0, the depletion deficit still owed (`depletionDeficitM3`, left out
+  when 0; §2.7d), whether the
   river pump was on the day before (the trigger rule, §2.7e) and each
   pumping unit's volume so far this water year (the annual caps; a
   resumed run clears them on 1 October as an uninterrupted one does);
