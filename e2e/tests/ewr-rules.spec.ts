@@ -115,8 +115,11 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expect(summary.getByText(/^The Reserve rules were met in 91\.7% of months at the outlet \(33 of 36\)\./)).toBeVisible();
 	await expect(summary.getByText('Days below the pragmatic EWR')).toBeVisible();
 
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Reserve compliance' }).click();
+	// "by month of the year" opens the panel, on River & reserve for this run (issue #17).
+	await summary.getByRole('link', { name: 'by month of the year' }).click();
+	await expect(page).toHaveURL(/[?&]tab=river&run=[^#]+#res-reserve$/);
 	const panel = page.getByRole('region', { name: /^Reserve compliance by month/ });
+	await expect(panel.getByRole('heading', { name: /^Reserve compliance by month/ })).toBeFocused();
 	await expect(panel.getByRole('status').filter({ hasText: 'Met in' })).toHaveText('Outlet (Outflow gauge): Met in 33 of 36 months (91.7%); not met in 3.');
 	await expect(panel.getByText('Source: Synthetic rule table for tests')).toBeVisible();
 	// Three years of each month: the run says the percentiles rest on few years.
@@ -129,7 +132,8 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expect(each.getByRole('row')).toHaveCount(37);
 	await expect(each.getByRole('row', { name: /^Jan 2020 .* not met$/ })).toBeVisible();
 	await expectNoViolations(page);
-	// The run's warnings say the same about the short record.
+	// The run's warnings, back on Runs & results, say the same about the short record.
+	await page.goBack();
 	await expect(page.getByRole('status').filter({ hasText: /to check before relying on this run/ })).toContainText('EWR rule table at the outlet (Outflow gauge)');
 });
 
@@ -192,8 +196,7 @@ test('two EWR sites each get a Reserve heat map, low flows and high flows (engin
 		ewrRules: [withParts(null), withParts(upperGauge.id)]
 	});
 	await createRun(page.request, project.id, 'Two sites');
-	await page.goto(`/projects/${project.id}?tab=runs`);
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Reserve compliance' }).click();
+	await page.goto(`/projects/${project.id}?tab=river`);
 	const panel = page.getByRole('region', { name: /^Reserve compliance by month/ });
 	const site = panel.getByLabel('EWR site');
 	await expect(site.locator('option')).toHaveText(['Outlet (Outflow gauge)', 'Upper gauge']);

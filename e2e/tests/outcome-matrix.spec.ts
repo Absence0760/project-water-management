@@ -122,8 +122,8 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	const saved = await getJson<{ project: { settings: { outcomes: unknown } } }>(page.request, `/projects/${project.id}`);
 	expect(saved.project.settings.outcomes).toEqual({ yearClassMethod: 'terciles', riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null });
 
-	// The Runs tab: no sweep yet, then one, queued until the worker runs it.
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	// River & reserve: no sweep yet, then one, queued until the worker runs it.
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('outcome-matrix');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
 	await expect(panel.getByTestId('outcome-empty')).toHaveText('No demand sweep on this run yet.');
@@ -198,7 +198,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 		riskCutoffs: { reserveMonthsMet: null, daysBelowEwr: { lower: 0.15, increasing: 0.4 } },
 		siteNodeId: null
 	});
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	await expect(panel).toHaveAttribute('data-state', 'complete');
 	await expect(panel.getByTestId('cutoffs-pending')).toHaveCount(0);
 	const recoloured = expectedMatrix(natural.values, sweep.members, { lower: 0.15, increasing: 0.4 });
@@ -212,7 +212,7 @@ test('an editor sets terciles, runs a demand sweep, and the matrix shows each le
 	// A viewer: the same matrix, no run button.
 	const viewer = await signIn('Outcome viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await viewer.page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const theirs = viewer.page.getByTestId('outcome-matrix');
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
 	await expect(theirs.getByTestId('outcome-table').locator('tbody th')).toHaveText(['100 %', '85 %', '70 %']);
@@ -262,7 +262,7 @@ test('the matrix reads the Reserve rule table at a chosen gauge, saved for the p
 	await updateSettings(page.request, project.id, { ewrRules: [flatTable(gauge.id, flows[Math.floor(flows.length / 2)]!)] });
 	const runId = await createRun(page.request, project.id, 'Base');
 
-	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const panel = page.getByTestId('outcome-matrix');
 	await expect(panel).toHaveAttribute('data-state', 'empty');
 	const site = panel.getByLabel('Reserve site');
@@ -317,7 +317,7 @@ test('the matrix reads the Reserve rule table at a chosen gauge, saved for the p
 	// A viewer reads the same site and matrix, and can't change the site.
 	const viewer = await signIn('Outcome site viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
-	await viewer.page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+	await viewer.page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
 	const theirs = viewer.page.getByTestId('outcome-matrix');
 	await expect(theirs).toHaveAttribute('data-state', 'complete');
 	await expect(theirs.getByLabel('Reserve site').locator('option:checked')).toHaveText('Gauge: Upper gauge');

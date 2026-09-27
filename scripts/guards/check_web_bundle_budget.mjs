@@ -814,6 +814,18 @@
 //             reserveDaysByWaterYear). No page chunk or largest chunk moves;
 //             no new dependency. Headroom ~4 KB; the bundle-weight trim
 //             under way should bring this back down.
+// 2026-09-26  total 959 → 967 KB (measured 963; main @ 7c2ae71 measured
+//             955, +8). Issue #17, River & reserve: a new lazy workspace tab
+//             (RiverTab, 6.5 KB + 0.8 KB CSS: the header and run picker,
+//             four KPI tiles, the fitted first screen, and EwrHeatmap moved
+//             in from Runs & results). The Runs & results chunks shrink
+//             4.7 KB as the River & Reserve group moves out, but the modules
+//             the two tabs now share (ewr/heatmap.ts, its CSS, the tab
+//             labels) split into small chunks of their own, ~3 KB of gzip
+//             and import overhead. The workspace page chunk 41.6 → 41.96 KB
+//             (the tab's loader and label, the Summary's River & reserve
+//             links); the largest-chunk ceiling is unchanged. No new
+//             dependency. Headroom ~4 KB.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -824,7 +836,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 959,
+	totalCodeKb: 967,
 	largestChunkKb: 42,
 	largestWorkerKb: 32,
 	largestSpreadsheetWorkerKb: 32,

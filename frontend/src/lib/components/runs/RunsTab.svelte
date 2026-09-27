@@ -11,7 +11,6 @@
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import EwrAgreementTable from '$lib/components/ewr/EwrAgreementTable.svelte';
-import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import AgreementTable from '$lib/components/series/AgreementTable.svelte';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
@@ -36,11 +35,9 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
 	import { publishedRunIds } from './publication';
-	// Reserve compliance (engine ≥ 0.21.0) is its own chunk: only runs with a rule table load it.
-	const loadAssurancePanel = () => import('./EwrAssurancePanel.svelte');
-	// Assurance of supply and the water account (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
+	import { riverAnchor, riverHref } from '$lib/components/river/links';
+	// Assurance of supply (engine ≥ 0.32.0, WP-3.4): lazy, like the other results panels.
 	const loadSupplyAssurancePanel = () => import('$lib/components/reliability/AssurancePanel.svelte');
-	const loadWaterAccountPanel = () => import('$lib/components/reliability/WaterAccountPanel.svelte');
 	// The WR2012 report (only for a run that has one) and the evidence panel are their own chunks
 	// too, so the Runs chunk stays within its 41 KB budget as panels are added.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
@@ -51,10 +48,8 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	const loadPublicationPanel = () => import('./PublicationPanel.svelte');
 	// The plausibility checks (engine ≥ 0.25.0) are their own chunk too: tables and a chart most visits never scroll to.
 	const loadPlausibilityPanel = () => import('./PlausibilityPanel.svelte');
-	// Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9): their own chunk, fetched when a run is shown.
-	const loadUncertaintyPanel = () => import('$lib/components/uncertainty/UncertaintyPanel.svelte');
-	// The outcome matrix (issue #53 R4): a demand sweep of this run by class of water year; its own chunk.
-	const loadOutcomePanel = () => import('$lib/components/outcomes/OutcomeMatrixPanel.svelte');
+	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix and the
+	// water account moved to River & reserve (issue #17, river/RiverTab.svelte); this page links there.
 	// "Changes since this run" and "Restore these inputs" (WP-2.4): their own chunk, like the evidence panel.
 	const loadRunInputsPanel = () => import('$lib/components/history/RunInputsPanel.svelte');
 	// A forecast run's forecast days (WP-2.12): their own chunk, only forecast runs load it.
@@ -71,8 +66,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		canRun,
 		modelDirty,
 		onRunsChange,
-		onInputsRestored,
-		onProjectChange
+		onInputsRestored
 	}: {
 		projectId: string;
 		project: Project;
@@ -86,8 +80,6 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		onRunsChange?: (runs: RunMeta[]) => void;
 		/** "Restore these inputs" changed the saved settings and model: the page reloads them. */
 		onInputsRestored?: () => Promise<void>;
-		/** A panel saved a project setting (the outcome matrix's Reserve site): the page takes the new project. */
-		onProjectChange?: (p: Project) => void;
 	} = $props();
 
 	let runs = $state<RunMeta[]>(untrack(() => initialRuns ?? []));
@@ -159,6 +151,13 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		}
 	}
 	onMount(() => {
+		// A link to a panel that moved to River & reserve (#res-reserve, #res-ewr, …, issue #17):
+		// there instead, for the same run, replacing this entry so Back skips it.
+		const hash = page.url.hash.slice(1);
+		if (riverAnchor(hash)) {
+			goto(riverHref(page.url.searchParams.get('run'), hash), { replaceState: true, noScroll: true });
+			return;
+		}
 		load();
 		loadPublication();
 	});
@@ -228,7 +227,7 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 		if (!detail || fragmentShown) return;
 		fragmentShown = true;
 		const hash = untrack(() => page.url.hash.slice(1));
-		if (!hash.startsWith('res-')) return;
+		if (!hash.startsWith('res-') || riverAnchor(hash)) return;
 		tick().then(() => {
 			const el = destroyed ? null : document.getElementById(hash);
 			if (!el) return;
@@ -574,7 +573,14 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} {nodeOrder} startDate={detail.run.startDate} endDate={detail.run.endDate} />
+					<RunSummaryView
+						summary={detail.run.summary}
+						days={runDays(detail.run)}
+						{nodeOrder}
+						startDate={detail.run.startDate}
+						endDate={detail.run.endDate}
+						reserveHref={riverHref(detail.run.id, 'res-reserve')}
+					/>
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -594,61 +600,12 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 				{damCapacity}
 				forecastFrom={summary.forecast?.from ?? null}
 			>
-				{#snippet riverLead()}
-					{#if summary.ewrAssurance?.length}
-						<div class="panel" id="res-reserve">
-							<Lazy load={loadAssurancePanel}>
-								{#snippet children(EwrAssurancePanel)}
-									<EwrAssurancePanel sites={summary.ewrAssurance ?? []} />
-								{/snippet}
-							</Lazy>
-						</div>
-					{/if}
-				{/snippet}
-				{#snippet riverTail()}
-					<div class="panel" id="res-ewr-grid">
-						{#if summary.ewrCompliance}
-							<EwrHeatmap compliance={summary.ewrCompliance} />
-						{:else}
-							<h3>EWR compliance by month</h3>
-							<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
-						{/if}
-					</div>
-					<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify. -->
-					<div class="panel" id="res-uncertainty">
-						<Lazy load={loadUncertaintyPanel}>
-							{#snippet children(UncertaintyPanel)}
-								{#key shownRunId}
-									<UncertaintyPanel {projectId} runId={shownRunId} runEngineVersion={shownRun.engineVersion} canEdit={canRun} />
-								{/key}
-							{/snippet}
-						</Lazy>
-					</div>
-					<div class="panel" id="res-outcomes">
-						<Lazy load={loadOutcomePanel}>
-							{#snippet children(OutcomeMatrixPanel)}
-								{#key shownRunId}
-									<OutcomeMatrixPanel
-										{projectId}
-										run={shownRun}
-										hasNaturalFlow={runSeries.some((r) => r.nodeId === null && r.key === 'natural_flow')}
-										outcomes={project.settings.outcomes}
-										nodes={editor.model.nodes}
-										ewrRules={project.settings.ewrRules}
-										{onProjectChange}
-										canEdit={canRun}
-									/>
-								{/key}
-							{/snippet}
-						</Lazy>
-					</div>
-					<div class="panel" id="res-water-account">
-						<Lazy load={loadWaterAccountPanel}>
-							{#snippet children(WaterAccountPanel)}
-								<WaterAccountPanel assurance={summary.supplyAssurance} engineVersion={shownRun.engineVersion} />
-							{/snippet}
-						</Lazy>
-					</div>
+				{#snippet river()}
+					<!-- The group's panels are on their own page now (issue #17): one link, keeping the run. -->
+					<p class="panel river-link" id="res-river">
+						<span>EWR against outflow, Reserve compliance, EWR by month, the uncertainty bands, the outcome matrix and the water account for this run are on River &amp; reserve.</span>
+						<a class="btn btn-sm" href={riverHref(shownRunId)}>River &amp; reserve for this run <span aria-hidden="true">→</span></a>
+					</p>
 				{/snippet}
 				{#snippet farmsLead()}
 					<section class="panel" id="res-curtailment">
@@ -801,6 +758,17 @@ import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 {/if}
 
 <style>
+	/* Where the River & Reserve group was: one row linking to its page. */
+	.river-link {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--text-muted);
+	}
 	.head-acts {
 		display: flex;
 		align-items: center;

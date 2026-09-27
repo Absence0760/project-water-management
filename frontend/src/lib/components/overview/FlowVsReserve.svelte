@@ -7,6 +7,7 @@
 	// through the Runs tab's cache, so opening the run there next draws at once.
 	// With `fill` the chart takes the height its panel is given (the Summary's
 	// first screen fits the window, issue #17 A1) instead of a fixed one.
+	// River & reserve shows the same chart, larger (river/RiverTab.svelte).
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -23,7 +24,8 @@
 		runId,
 		refs,
 		forecastFrom = null,
-		fill = false
+		fill = false,
+		more = null
 	}: {
 		projectId: string;
 		runId: string;
@@ -33,6 +35,8 @@
 		forecastFrom?: string | null;
 		/** Fill the panel's height (its parent sizes it). */
 		fill?: boolean;
+		/** A link beside the heading (the Summary's "More on River & reserve"). */
+		more?: { href: string; label: string } | null;
 	} = $props();
 
 	const SLOTS = [
@@ -112,7 +116,10 @@
 </script>
 
 <section class="panel flow" class:fill aria-labelledby="flow-h" aria-busy={loading}>
-	<h2 id="flow-h">Flow vs reserve</h2>
+	<div class="head">
+		<h2 id="flow-h">Flow vs reserve</h2>
+		{#if more}<a class="small" href={more.href}>{more.label}</a>{/if}
+	</div>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
@@ -140,8 +147,22 @@
 </section>
 
 <style>
-	.flow h2 {
+	.head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
 		margin: 0 0 0.25rem;
+	}
+	/* A 24 px target (WCAG 2.5.8). */
+	.head a {
+		display: inline-flex;
+		align-items: center;
+		min-height: 24px;
+	}
+	.flow h2 {
+		margin: 0;
 		font-size: 1.05rem;
 	}
 	.flow.fill {

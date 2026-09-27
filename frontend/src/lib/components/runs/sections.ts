@@ -15,7 +15,7 @@ export interface ResultGroup {
 	sections: ResultSection[];
 }
 
-type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'ewrAssurance' | 'plausibility' | 'forecast'>;
+type SectionInput = Pick<RunSummary, 'farms' | 'runoff' | 'wr2012' | 'plausibility' | 'forecast'>;
 
 export function resultGroups(summary: SectionInput): ResultGroup[] {
 	return [
@@ -26,19 +26,11 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			sections: [{ id: 'res-summary', label: 'Summary' }, ...(summary.forecast ? [{ id: 'res-forecast', label: 'Forecast' }] : [])]
 		},
 		{
+			// Its panels (Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the
+			// outcome matrix, the water account) moved to the River & reserve page (issue #17,
+			// river/RiverTab.svelte); the group keeps its place as one row linking there.
 			label: 'River & Reserve',
-			sections: [
-				// Reserve compliance by month: only when the project has a rule table (engine ≥ 0.21.0).
-				...(summary.ewrAssurance?.length ? [{ id: 'res-reserve', label: 'Reserve compliance' }] : []),
-				{ id: 'res-ewr', label: 'EWR vs outflow' },
-				{ id: 'res-ewr-grid', label: 'EWR by month' },
-				// The 5–95 % range on the EWR and Reserve findings (issue #4 phase 9): every run, beside the findings it qualifies.
-				{ id: 'res-uncertainty', label: 'Uncertainty bands' },
-				// The run's inputs at a few demand levels by class of water year (issue #53 R4): every run; a scenario or forecast run says it can't.
-				{ id: 'res-outcomes', label: 'Outcome matrix' },
-				// Where the water went per water year (engine ≥ 0.32.0, WP-3.4); older runs say it wasn't computed.
-				{ id: 'res-water-account', label: 'Water account' }
-			]
+			sections: [{ id: 'res-river', label: 'On River & reserve' }]
 		},
 		{
 			label: 'Farms & users',
