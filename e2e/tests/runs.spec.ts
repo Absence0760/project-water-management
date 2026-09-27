@@ -247,6 +247,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'EWR vs observed',
 		'Plausibility checks',
 		'Notes & evidence',
+		'Validation',
 		'Publication',
 		'Self-checks',
 		'Explore outputs'

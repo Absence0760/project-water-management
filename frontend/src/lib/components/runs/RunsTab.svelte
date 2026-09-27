@@ -26,6 +26,7 @@
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
+	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { currentNomination, evidenceLine, modelDriftWarning } from './evidence';
 	import { movedHref, resultGroups } from './sections';
@@ -705,6 +706,10 @@
 							<RunInputsPanel {projectId} run={shownRun} canEdit={canRun} {modelDirty} onRestored={onInputsRestored} />
 						{/key}
 					</section>
+					<!-- The report's validation statement (WP-3.13), folded shut; its body loads when opened. -->
+					<div class="panel" id="res-validation">
+						<ValidationPanel {summary} engineVersion={shownRun.engineVersion} legacy={shownRun.legacy} />
+					</div>
 					<section class="panel" id="res-publication">
 						{#if publicationError}
 							<div class="alert alert-error" role="alert">

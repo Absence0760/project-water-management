@@ -2562,10 +2562,11 @@ Left, each with its trigger:
       `pack_id` column with a check that exactly one target is set. A
       scenario is signed through its run (`model_run.scenario_id`), and the
       works statement words itself for a scenario.
-- [ ] **Validation statement panel on the run and the scenario** (WP-3.13
-      UI). It is printed on the report only; the Runs tab and the scenario
-      view link to the report. Trigger: the first hydrologist or assessor
-      review that asks for it on screen.
+- [x] **Validation statement panel on the run and the scenario** (WP-3.13
+      UI; done 2026-09-27, issue #17): the report's `ValidationStatement`,
+      folded shut, in the run's Record group (`#res-validation`) and under
+      the scenario's comparison (`liability/ValidationPanel.svelte`, its
+      body a lazy chunk; ui.md § Runs & results, § Scenarios).
 - [ ] **MFA on sign-off** (Step 4, with SSO/MFA for assessors). Until then a
       sign-off is as strong as the signer's password.
 - [x] **Sign-offs in the POPIA data export** (WP-1.13; export done

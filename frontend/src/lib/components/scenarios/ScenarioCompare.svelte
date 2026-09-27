@@ -5,6 +5,7 @@
 	// the farms, and the per-node daily overlay (issue #8's CompareOverlay and
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
+	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
 	import { base } from '$app/paths';
 	import { compareSearch, compareTabHref } from '$lib/components/compare/picker';
 	import { untrack } from 'svelte';
@@ -13,6 +14,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
+	import ValidationPanel from '$lib/components/liability/ValidationPanel.svelte';
 	import { fmtDate } from '$lib/format/number';
 
 	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
@@ -112,6 +114,9 @@
 						{#snippet children(CompareOverlay)}<CompareOverlay data={data!} />{/snippet}
 					</Lazy>
 				</section>
+				<div class="validation">
+					<ValidationPanel summary={data.b.run.summary} engineVersion={data.b.run.engineVersion} legacy={data.b.run.legacy} />
+				</div>
 			{/if}
 		</LoadState>
 	{/if}
@@ -125,5 +130,10 @@
 	h3 {
 		font-size: 1rem;
 		margin: 1rem 0 0.5rem;
+	}
+	.validation {
+		margin-top: 1rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
 	}
 </style>

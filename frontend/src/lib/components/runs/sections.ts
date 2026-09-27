@@ -47,10 +47,12 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			]
 		},
 		{
-			// The run's written explanation, its evidence nomination and its publication: sign-off, after the results.
+			// The run's written explanation, its evidence nomination, its validation statement and its publication: sign-off, after the results.
 			label: 'Record',
 			sections: [
 				{ id: 'res-notes', label: 'Notes & evidence' },
+				// The report's validation statement (WP-3.13), collapsed: every run.
+				{ id: 'res-validation', label: 'Validation' },
 				// Whether the run is the published baseline, publishing it, and the WUA's notice (WP-2.3): every run.
 				{ id: 'res-publication', label: 'Publication' }
 			]

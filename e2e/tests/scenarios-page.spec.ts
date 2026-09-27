@@ -232,3 +232,35 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await expectNoViolations(page);
 	});
 }
+
+test('a run scenario shows its run’s validation statement under the comparison, folded shut, and passes axe at desktop and phone', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Scenario validation');
+	const runId = await createRun(page.request, project.id, 'Baseline');
+	const upper = (project.model.nodes as { id: string; name: string }[]).find((n) => n.name === 'Upper farm')!.id;
+	const scenarioId = await createScenario(page.request, project.id, {
+		name: 'Bigger upper dam',
+		baseRunId: runId,
+		ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 180_000 }]
+	});
+	const ran = await page.request.post(`${API_URL}/projects/${project.id}/scenarios/${scenarioId}/runs`, { data: {} });
+	expect(ran.ok()).toBe(true);
+	await openScenarios(page, project.id, `&scenario=${scenarioId}`);
+
+	const compare = page.getByRole('region', { name: 'Scenario against its base' });
+	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
+	const panel = compare.getByRole('region', { name: 'Validation statement' });
+	await expect(panel.getByText(/^Engine \d+\.\d+\.\d+: its checks/)).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Known limitations' })).toHaveCount(0);
+
+	await panel.getByRole('heading', { name: 'Validation statement' }).click();
+	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', 'Known limitations']);
+	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	await expectNoViolations(page);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(panel.getByRole('heading', { level: 4, name: 'Known limitations' })).toBeVisible();
+	await expectNoSidewaysScroll(page);
+	await expectNoViolations(page);
+});

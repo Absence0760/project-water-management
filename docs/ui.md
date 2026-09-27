@@ -2777,8 +2777,15 @@ read it before.
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
      observed, plausibility checks.
-  3. **Record**: notes & evidence (with the run's inputs), publication:
-     sign-off, after the results.
+  3. **Record**: notes & evidence (with the run's inputs), the validation
+     statement, publication: sign-off, after the results. The **validation
+     statement** (`#res-validation`, menu entry **Validation**;
+     `liability/ValidationPanel.svelte`) is the report's own
+     `ValidationStatement.svelte` (§ Report), folded shut in a `<details>`:
+     closed it shows its heading and "Engine x.y.z: its checks, …"; opened, the
+     statement loads as its own chunk, its headings (Calibration, Data
+     quality, Known limitations) one level under the panel's. Nothing is
+     computed twice: both call the engine's `validationStatement`.
   4. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
 
   The menu names the same groups. The river's panels (Reserve compliance,
@@ -3632,7 +3639,9 @@ them scenarios).
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
   [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab; for an
   applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
-  edited since that run.
+  edited since that run. Under the comparison, the scenario run's
+  **Validation statement**, folded shut (the same `ValidationPanel` as a
+  run's Record group, § Runs & results).
 - **Runs tab.** A scenario's run is tagged **Scenario**; a run a scenario is
   based on is tagged **Scenario base** and has no ✕ (it is cited: kept, no
   delete or unpin, `RunMeta.citedBy`). The runs list reloads after a
@@ -4011,7 +4020,8 @@ exists, says so with a link to Runs & results.
     NSE / PBIAS / KGE / log-NSE with Moriasi ratings and the monthly-flows
     caveat, the flagged data-quality years and checks, and the **known
     limitations** table (ID, limitation, where it stands) generated from
-    engine-audit.md.
+    engine-audit.md. The same component is on screen, folded shut, in a
+    run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, self-declared registration, date, scope, the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,

@@ -155,3 +155,30 @@ for (const colorScheme of ['light', 'dark'] as const) {
 		await expectNoViolations(page);
 	});
 }
+
+test('the validation statement sits in the Record group, folded shut; opened, it is the report’s, and passes axe at desktop and phone', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedRunnableProject(page.request, 'Runs validation');
+	await createRun(page.request, project.id, 'Validated');
+	await openRuns(page, project.id);
+	const menu = page.getByRole('navigation', { name: 'Result sections' });
+	await expect(menu.getByRole('link', { name: 'Validation', exact: true })).toHaveAttribute('href', '#res-validation');
+
+	const panel = page.locator('#res-validation').getByRole('region', { name: 'Validation statement' });
+	await expect(panel).toHaveCount(1);
+	// Shut by default: the heading and its one-line gist, not the statement (it loads when opened).
+	await expect(panel.getByText(/^Engine \d+\.\d+\.\d+: its checks/)).toBeVisible();
+	await expect(panel.getByRole('heading', { name: 'Known limitations' })).toHaveCount(0);
+
+	await panel.getByRole('heading', { name: 'Validation statement' }).click();
+	// The report's statement, its headings one level under the panel's.
+	await expect(panel.getByRole('heading', { level: 4 })).toHaveText(['Calibration', 'Data quality', 'Known limitations']);
+	await expect(panel.getByText('Engine version', { exact: true })).toBeVisible();
+	await expect(panel.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
+	await expectNoViolations(page);
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(panel.getByRole('heading', { level: 4, name: 'Known limitations' })).toBeVisible();
+	await expectNoViolations(page);
+});

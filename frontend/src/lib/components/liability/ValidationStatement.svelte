@@ -1,12 +1,25 @@
 <script lang="ts">
 	// The validation statement of a run (WP-3.13, model.md §2.10f): the
 	// engine's validationStatement() over the stored summary, so it needs no
-	// request. Printed in the report; the known limitations are generated from
-	// docs/engine-audit.md.
+	// request. Printed in the report, and on screen in ValidationPanel (the
+	// run's Record group, the scenario view); the known limitations are
+	// generated from docs/engine-audit.md.
 	import { validationStatement, type RunSummary } from '@water-management/engine';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 
-	let { summary, engineVersion, legacy }: { summary: RunSummary; engineVersion: string; legacy: boolean } = $props();
+	let {
+		summary,
+		engineVersion,
+		legacy,
+		headingLevel = 3
+	}: {
+		summary: RunSummary;
+		engineVersion: string;
+		legacy: boolean;
+		/** The level of its own headings (Calibration, Data quality, Known limitations): one below the heading it sits under. */
+		headingLevel?: 3 | 4;
+	} = $props();
+	const h = $derived(`h${headingLevel}`);
 
 	const v = $derived(validationStatement({ summary, engineVersion, legacy }));
 	const uid = `vs-${Math.random().toString(36).slice(2, 9)}`;
@@ -44,7 +57,7 @@
 		<p class="alert alert-warning">Legacy runoff model (b023 workbook, removed in engine 1.0.0): it does not conserve water at the event scale (audit H1). Not evidence.</p>
 	{/if}
 
-	<h3 id="{uid}-cal">Calibration</h3>
+	<svelte:element this={h} id="{uid}-cal">Calibration</svelte:element>
 	{#if v.calibration}
 		<p class="muted small">
 			{fmtNum(v.calibration.days)} days with an observed flow{v.calibration.windowStart
@@ -66,7 +79,7 @@
 		<p>Not calibrated: the run had no observed flow inside its calibration window.</p>
 	{/if}
 
-	<h3>Data quality</h3>
+	<svelte:element this={h}>Data quality</svelte:element>
 	{#if v.flaggedYears.length}
 		<p>Water years whose catchment rain reads far below CHIRPS:</p>
 		<ul>
@@ -81,7 +94,7 @@
 		<p>No data-quality check fired on this run’s inputs.</p>
 	{/if}
 
-	<h3 id="{uid}-lim">Known limitations</h3>
+	<svelte:element this={h} id="{uid}-lim">Known limitations</svelte:element>
 	<p class="muted small">
 		The engine audit’s open items (docs/engine-audit.md), each still waiting on a hydrologist’s or assessor’s judgement. They apply to every run of
 		this engine version.
@@ -110,7 +123,7 @@
 	dd {
 		margin: 0;
 	}
-	h3 {
+	.validation > :global(:is(h3, h4)) {
 		margin: 1.25rem 0 0.5rem;
 	}
 	.note {
