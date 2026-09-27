@@ -79,6 +79,18 @@ describe('liveHttp: where it may go', () => {
 		expect(await http.text(CHC)).toBe('ok');
 	});
 
+	it('gives every hop the one 20 s deadline: a single abort signal, set before the first request and shared by the redirect after it', async () => {
+		const timeout = vi.spyOn(AbortSignal, 'timeout');
+		const f = vi.fn<F>().mockResolvedValueOnce(redirect('/products/b.tif')).mockResolvedValueOnce(new Response('ok', { status: 200 }));
+		await liveHttp(f as never).text(CHC);
+		expect(timeout).toHaveBeenCalledTimes(1);
+		expect(timeout).toHaveBeenCalledWith(20_000);
+		const signals = f.mock.calls.map(([, init]) => init.signal);
+		expect(signals[0]).toBe(timeout.mock.results[0]!.value);
+		expect(signals[1]).toBe(signals[0]);
+		timeout.mockRestore();
+	});
+
 	it('never lets fetch follow redirects on its own', async () => {
 		const f = vi.fn(async () => new Response('ok', { status: 200 }));
 		await liveHttp(f).text(CHC);

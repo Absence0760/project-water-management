@@ -1211,7 +1211,10 @@ Read-only links to the current publication for people outside the project
 - **RLS.** SELECT, INSERT (as yourself) and UPDATE: owner. `water_app` has
   `UPDATE` on `revoked_at` / `revoked_by` only and no `DELETE` (the
   catalogue test's column-only and keep-forever lists): a link is revoked,
-  never removed, and goes with its project.
+  never removed, and goes with its project. The `share_link_revoke_final`
+  trigger (065) makes a revocation permanent: once `revoked_at` is set,
+  neither it nor `revoked_by` changes, except `revoked_by` going `NULL` when
+  that account is deleted.
 - `app_share_view(p_hash)` (`SECURITY DEFINER`, `VOLATILE`): for a live link
   of a project with a current publication, one row of `project_name,
   published_at, published_by (display name), catchment_view (allowlisted
@@ -1791,6 +1794,22 @@ name no runoff model, ran the legacy model and stays readable, badged and
 never re-run, and a scenario op is hashed (`ops_sha256`), so an op on a
 retired settings path stays stored and the engine refuses it with a reason
 ([scenarios.md](./scenarios.md)). No table, column, policy or grant changes.
+
+### Account deletion reaches every key (066_account_fk_clears.sql)
+
+Deleting an account ([security.md § Personal information](./security.md#personal-information-popia))
+does what `catalogue.db.test.ts` `APP_USER_ON_DELETE` says for every key
+(`auth/personal-data.security.db.test.ts` sweeps it). 066 redefines four
+functions and changes no table, policy or grant:
+
+- `scenario_sweep_complete` and `seasonal_outlook_complete` pass an update
+  that only clears `created_by` (the key's SET NULL; water_app has no UPDATE
+  on the column), so an account that asked for a sweep or an outlook can be
+  deleted;
+- `alert_rule_check` lets `created_by` go to NULL once that account no longer
+  exists, instead of putting the old creator back;
+- `app_user_pseudonymise` removes the person from `report.email_to` (a
+  `uuid[]` with no key) on reports someone else asked for.
 
 ### Data feeds (018_feeds.sql, 027_feed_schedule.sql, 029_feed_fetch.sql, 032_series_provenance.sql)
 

@@ -133,6 +133,9 @@ export async function reportByJob(db: Db, projectId: string, jobId: string): Pro
 
 /** Reports this user asked for in the project in the last hour (the on-demand rate limit). */
 export async function recentReportCount(db: Db, projectId: string): Promise<number> {
+	// Count and insert one request at a time per user and project (the lock is
+	// held to commit), so a burst of requests can't all pass the cap together.
+	await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('report_cap:' || $1::text || ':' || app_current_user_id()::text, 0))`, [projectId]);
 	const { rows } = await db.query<{ n: number }>(
 		`SELECT count(*)::int AS n FROM report WHERE project_id = $1 AND requested_by = app_current_user_id()
 		   AND schedule_id IS NULL AND created_at > now() - interval '1 hour'`,

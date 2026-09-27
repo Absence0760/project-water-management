@@ -189,6 +189,8 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const schedule = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Count and insert one schedule at a time per project, so concurrent adds can't pass the cap together.
+			await db.query(`SELECT pg_advisory_xact_lock(hashtextextended('report_schedule_cap:' || $1::text, 0))`, [id]);
 			const { rows: n } = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM report_schedule WHERE project_id = $1', [id]);
 			if ((n[0]?.n ?? 0) >= MAX_SCHEDULES) throw new ApiError(409, `a project can have at most ${MAX_SCHEDULES} report schedules`);
 			const recipients = await checkRecipients(db, id, body.recipients);
