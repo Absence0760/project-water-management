@@ -8,12 +8,18 @@
 //   GET /auth/me                               the layout's session check
 //   GET /projects/<project>                    the project
 //   GET /projects/<project>/series             the input series' coverage
-//   GET /projects/<project>/runs/<run>[/…]     the run and anything under it (its series,
-//                                              days, uncertainty, model input): all of that
-//                                              one run, read as the requester under RLS
+//   GET /projects/<project>/runs/<run>         the run
+//   GET /projects/<project>/runs/<run>/series  one of its series
+//   GET /projects/<project>/runs/<run>/day     the self-checks' day trace
+//   GET /projects/<project>/runs/<run>/signoffs  the sign-off section
 //
-// Every other method, project, run or route (another project, the run list,
-// members, exports, teams, compare, any write) answers 403. RLS still applies
+// Every other method, project, run or route answers 403: another project,
+// the run list, members, teams, compare, any write, and the run's other
+// reads the report doesn't make (its CSV exports, the workbook's bulk series,
+// reproduction, allocation comparison, model input, ensembles, changes
+// since). A new read the report
+// page starts making is added to RUN_READS, and to the render-session sweep
+// in render-session.security.db.test.ts, on purpose. RLS still applies
 // underneath: the session is the requesting user's, so it can never see more
 // than they can.
 export interface RenderScope {
@@ -22,7 +28,9 @@ export interface RenderScope {
 }
 
 const UUID = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
-const PROJECT_READ = new RegExp(`^/projects/(${UUID})(?:/series|/runs/(${UUID})(?:/[A-Za-z0-9_/-]*)?)?/?$`);
+/** The run's sub-resources the report page reads (frontend/src/routes/projects/[id]/report/+page.svelte). */
+const RUN_READS = ['series', 'day', 'signoffs'];
+const PROJECT_READ = new RegExp(`^/projects/(${UUID})(?:/series|/runs/(${UUID})(?:/(?:${RUN_READS.join('|')}))?)?/?$`);
 
 /** Whether a render session scoped to `scope` may make this request. */
 export function scopeAllows(scope: RenderScope, method: string, path: string): boolean {

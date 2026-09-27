@@ -2192,8 +2192,10 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
 - **The render session** (`POST /auth/render-session`) is for the renderer,
   not people: it exchanges a single-use, 5-minute render token (issued by the
   worker as the requester) for a 10-minute session that may only `GET`
-  `/auth/me`, `/projects/:id`, `/projects/:id/series` and
-  `/projects/:id/runs/:runId[/…]` of the one project and run; everything else
+  `/auth/me`, `/projects/:id`, `/projects/:id/series`,
+  `/projects/:id/runs/:runId` and its `/series`, `/day` and `/signoffs` (the
+  report page's reads) of the one project and run; everything else, the
+  run's CSV exports, reproduction and allocation comparison included,
   answers `403 this session can only read one report`
   ([security.md § Render tokens](./security.md#render-tokens)).
 
