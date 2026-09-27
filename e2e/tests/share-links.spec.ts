@@ -1,5 +1,5 @@
 // Read-only share links (WP-2.3 phase 2, docs/ui.md § Share links): an owner
-// makes a link on the Overview tab and copies it; someone signed out opens it
+// makes a link on the Project page and copies it; someone signed out opens it
 // on a phone and sees the catchment's reserve status and the WUA's notice, the
 // token gone from the address bar; the owner withdraws it and the link shows
 // the dead-link state. A catchment with too few farms gets no flow chart.
@@ -42,7 +42,7 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await publish(page.request, project.id);
 	await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
 
-	await page.goto(`/projects/${project.id}`);
+	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: 'Share links' });
 	await expect(panel.getByText('No share links yet.')).toBeVisible();
 	const form = panel.getByRole('form', { name: 'Make a share link' });

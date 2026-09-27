@@ -74,7 +74,7 @@ async function expectReportLists(notes: Locator, unmapped: Locator) {
 	);
 }
 
-/** The project's Overview shows the import record: file, date and importer, then both lists behind their disclosures. */
+/** The project's Project page (issue #17) shows the import record: file, date and importer, then both lists behind their disclosures. */
 async function expectImportRecord(page: Page, importedBy: string) {
 	const record = page.getByRole('region', { name: 'Import record' });
 	await expect(record.getByRole('paragraph').first()).toHaveText(
@@ -103,6 +103,8 @@ async function importAndOpen(page: Page) {
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'synthetic_b023' })).toBeVisible();
+	// The import record is on the Project page (issue #17).
+	await page.goto(`${page.url().split('?')[0]}?tab=project`);
 }
 
 test('imports the synthetic workbook with a first run, and the project opens with results', async ({ page, owner }) => {
@@ -152,7 +154,8 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	await done.getByRole('link', { name: 'Open project' }).click();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Synthetic — from the workbook' })).toBeVisible();
 
-	// The Overview keeps what the importer flagged: the same notes and unmapped report, each list closed at first.
+	// The Project page keeps what the importer flagged: the same notes and unmapped report, each list closed at first.
+	await page.goto(`${page.url().split('?')[0]}?tab=project`);
 	await expectImportRecord(page, owner.displayName);
 
 	await page.goto(`${page.url().split('?')[0]}?tab=runs`);
@@ -234,9 +237,11 @@ test('names from the workbook are shown as text, never as HTML', async ({ page, 
 	await expect(page.locator('dialog img')).toHaveCount(0);
 	expect(await page.evaluate(() => document.body.dataset.xss)).toBeUndefined();
 
-	// Stored with the project and shown again on its Overview: still text.
+	// Stored with the project and shown again on its Project page: still text.
 	await dialog.getByRole('button', { name: 'Import', exact: true }).click();
 	await page.getByRole('dialog', { name: 'Project imported' }).getByRole('link', { name: 'Open project' }).click();
+	await expect(page.getByTestId('project-name').first()).toBeVisible();
+	await page.goto(`${page.url().split('?')[0]}?tab=project`);
 	const record = page.getByRole('region', { name: 'Import record' });
 	const stored = record.getByRole('region', { name: /^Unmapped report/ });
 	await stored.getByText(/^Show the \d+ items$/).click();
@@ -262,7 +267,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 			await expectNoViolations(page);
 		});
 
-		test('the Overview import record has no violations, open or closed', async ({ page, owner }) => {
+		test('the Project page import record has no violations, open or closed', async ({ page, owner }) => {
 			await importAndOpen(page);
 			await expect(page.getByRole('region', { name: 'Import record' }).getByText('Show the 16 notes')).toBeVisible();
 			await expectNoViolations(page);
@@ -292,7 +297,7 @@ test.describe('phone', () => {
 		await expectNoViolations(page);
 	});
 
-	test('the Overview import record fits the width, the wide table scrolling inside its own box', async ({ page, owner }) => {
+	test('the Project page import record fits the width, the wide table scrolling inside its own box', async ({ page, owner }) => {
 		await importAndOpen(page);
 		const record = await expectImportRecord(page, owner.displayName);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);

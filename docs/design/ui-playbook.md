@@ -44,8 +44,12 @@ section it belongs to, with the example that taught it.
 5. **Old links keep working.** `?tab=` values, overlay params and `#res-…`
    fragments are in emails, bookmarks, help and other pages. When a view
    moves, redirect its old URL (the Runs tab redirects moved `#res-…`
-   anchors to River & reserve and Units & supply) and grep the app, the
-   help guides, `docs/` and `backend/src/alerts` for links to repoint.
+   anchors to River & reserve and Units & supply; the Summary sends its
+   panels' heading ids, `#members-h` and the rest, to the Project page) and
+   grep the app, the help guides, `docs/` and `backend/src/alerts` for links
+   to repoint. Grep the prose too: "on the Summary tab" in History's
+   restore notes and the team pages' empty states pointed at panels that
+   had moved.
 6. **One piece, one push**, with its tests and docs, and say exactly which
    tests ran (CI is off while Actions billing is paused).
 
