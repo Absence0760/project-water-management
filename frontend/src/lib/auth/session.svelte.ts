@@ -15,8 +15,15 @@ export const GUEST_PATHS = ['/login', '/register', '/forgot-password'];
  */
 export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alerts/unsubscribe'];
 
+/**
+ * The public landing page's own address (issue #57): prerendered static HTML
+ * for crawlers and link previews, reachable either way. A signed-out visitor
+ * to `/` sees the same page there (isLandingRoot); a signed-in one, the projects.
+ */
+export const LANDING_PATH = '/welcome';
+
 /** Routes reachable without signing in. */
-export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS];
+export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS, LANDING_PATH];
 
 function strip(pathname: string, base: string): string {
 	return pathname.startsWith(base) ? pathname.slice(base.length) || '/' : pathname;
@@ -27,6 +34,11 @@ export function isPublicPath(pathname: string, base = ''): boolean {
 	return matches(PUBLIC_PATHS, strip(pathname, base));
 }
 
+/** `/` for a signed-out visitor: the landing page instead of a sign-in redirect. */
+export function isLandingRoot(pathname: string, base: string, signedIn: boolean): boolean {
+	return !signedIn && strip(pathname, base) === '/';
+}
+
 export function isGuestPath(pathname: string, base = ''): boolean {
 	return matches(GUEST_PATHS, strip(pathname, base));
 }
@@ -34,6 +46,7 @@ export function isGuestPath(pathname: string, base = ''): boolean {
 /**
  * What the root layout's guard does with a route: render it, send a
  * signed-out visitor to /login, or move a signed-in user off a sign-in page.
+ * A signed-out `/` shows the landing page (the root layout renders it there).
  * An emailed invitation (/register?invite=…) stays open to a signed-in user:
  * the page explains whose invitation it is instead of silently sending them on.
  */
@@ -43,7 +56,7 @@ export function routeAccess(
 	signedIn: boolean,
 	search?: URLSearchParams
 ): 'show' | 'login' | 'leave' {
-	if (!signedIn) return isPublicPath(pathname, base) ? 'show' : 'login';
+	if (!signedIn) return isPublicPath(pathname, base) || isLandingRoot(pathname, base, false) ? 'show' : 'login';
 	if (strip(pathname, base) === '/register' && search?.has('invite')) return 'show';
 	return isGuestPath(pathname, base) ? 'leave' : 'show';
 }

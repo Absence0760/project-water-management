@@ -38,7 +38,8 @@ sides share.
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
   query's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
-  `index.html`; `ssr = false`, `prerender = false`), Vite, TypeScript, uPlot
+  `index.html`; `ssr = false`, `prerender = false`, except the public landing
+  page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
   charts, vitest. No spreadsheet library ships: the `.xlsx` run export
   writes its own OOXML (`lib/spreadsheet/export/writer.ts`) and the b023
   import reads workbooks with its own streaming reader
@@ -133,6 +134,7 @@ pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release and scripts/ingest
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
+pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
 pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
 pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
                              # packages/engine/src/languages.ts); check:i18n checks every language
@@ -266,7 +268,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).
 - **Svelte 5 runes** (`$state`, `$derived`, `$effect`, `$props`).
 - **i18n messages (WP-2.5).** Farmer-facing strings (farm view, sign-in
-  pages, account and alert pages, `/share`) are their English, written at the
+  pages, account and alert pages, `/share`, the landing page) are their English, written at the
   call: `t('Your dam')`, `tRich(…)`, `tn(DAYS, n)`; a message kept in a table
   or variable is `msg('…')`, a counted word `plural({ one, other })`, and a
   file's messages sit under an `// i18n-section:` marker. Farmer emails come

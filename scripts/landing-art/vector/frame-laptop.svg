@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1036" viewBox="0 0 1600 1036">
+  <title>A thin laptop outline. The screen is a hole, 1440 × 900 at (80, 44): the screenshot is composited under the frame.</title>
+  <!-- The lid, a brand-navy stroke round a dark bezel, cut out where the screen is (even-odd). -->
+  <path id="lid" fill-rule="evenodd" fill="#0e1a26" stroke="#102a43" stroke-width="4"
+    d="M82 16 H1518 A30 30 0 0 1 1548 46 V942 A30 30 0 0 1 1518 972 H82 A30 30 0 0 1 52 942 V46 A30 30 0 0 1 82 16 Z
+       M80 44 V944 H1520 V44 Z"/>
+  <circle id="camera" cx="800" cy="30" r="4" fill="#2b3b4c"/>
+  <!-- The base, seen edge on, with the thumb notch. -->
+  <path id="base" d="M0 976 H1600 V990 C1600 1010 1584 1024 1560 1024 H40 C16 1024 0 1010 0 990 Z" fill="#c9d2dc" stroke="#102a43" stroke-width="4"/>
+  <path id="notch" d="M700 978 H900 C900 990 890 996 878 996 H722 C710 996 700 990 700 978 Z" fill="#a9b4c0"/>
+</svg>

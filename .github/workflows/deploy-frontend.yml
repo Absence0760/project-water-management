@@ -111,7 +111,13 @@ jobs:
       # overridden from a repo variable here: an unset variable would expand
       # to an empty env var and silently beat the .env.production value.
       # scripts/guards/check_env_isolation.mjs pins that file to `/api`.
+      # SITE_ORIGIN: the prerendered landing page's link-preview tags
+      # (og:url, og:image, canonical) need the site's absolute address
+      # (frontend/svelte.config.js, kit.prerender.origin). REQUIRED_CONFIG
+      # above already refuses a run without PUBLIC_SITE_URL.
       - name: Build frontend
+        env:
+          SITE_ORIGIN: ${{ vars.PUBLIC_SITE_URL }}
         run: pnpm build:frontend
 
       # The CloudFront CSP header allows inline scripts only because SvelteKit's

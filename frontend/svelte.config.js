@@ -32,6 +32,11 @@ const config = {
 		// (infra/security_headers.tf); the deploy refuses a build without it
 		// (infra/scripts/check-csp.mjs).
 		csp: { mode: 'hash', directives: { 'script-src': ['self'] } },
+		// The one prerendered page, the landing page at /welcome (issue #57),
+		// writes absolute URLs into its link-preview tags (og:url, og:image,
+		// the canonical link) from the site's origin: the deploy's
+		// PUBLIC_SITE_URL (deploy-frontend.yml), else the local dev site.
+		prerender: { origin: process.env.SITE_ORIGIN || 'http://localhost:7777' },
 	},
 };
 

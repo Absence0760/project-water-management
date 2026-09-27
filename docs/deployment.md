@@ -305,6 +305,12 @@ variables and secrets:
 `PUBLIC_API_URL` is not a GitHub variable: the build reads `/api` from the
 committed `frontend/.env.production`.
 
+`PUBLIC_SITE_URL` also reaches the frontend build as `SITE_ORIGIN`
+(`deploy-frontend.yml`): the prerendered landing page (`/welcome`, issue #57)
+writes its canonical link, `og:url` and `og:image` as absolute URLs from it
+(`kit.prerender.origin`, `frontend/svelte.config.js`). CloudFront serves
+`/welcome` from `welcome.html` (`spa_rewrite`).
+
 ### State of the Terraform before the first deploy
 
 Written and tested (plan-only, mocked providers), **nothing applied**:
