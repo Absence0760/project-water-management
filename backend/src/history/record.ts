@@ -181,6 +181,7 @@ export type AuditKind =
 	| 'series.merged'
 	| 'series.deleted'
 	| 'series.labelled'
+	| 'series.site_changed'
 	| 'series.held'
 	| 'run.created'
 	| 'run.changed'

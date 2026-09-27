@@ -346,10 +346,15 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[newId, body.name, src.description, JSON.stringify(remapSettingNodeIds(src.settings ?? {}, ids)), teamId, src.time_zone]
 			);
 			await saveModel(db, newId, copied);
+			// A gauge record's site (084_gauge_records) follows its gauge to the copy's id; one whose
+			// node has left the model has nothing to follow, so it keeps no site in the copy.
+			const [from, to] = [[...ids.keys()], [...ids.values()]];
 			await db.query(
-				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary)
-				 SELECT $2, kind, name, unit, start_date, "values", product, product_version, day_boundary FROM time_series WHERE project_id = $1`,
-				[srcId, newId]
+				`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id)
+				 SELECT $2, t.kind, t.name, t.unit, t.start_date, t."values", t.product, t.product_version, t.day_boundary, m.new_id
+				 FROM time_series t LEFT JOIN unnest($3::uuid[], $4::uuid[]) AS m(old_id, new_id) ON m.old_id = t.site_node_id
+				 WHERE t.project_id = $1`,
+				[srcId, newId, from, to]
 			);
 			// Notes don't copy (docs/data-model.md § Notes): a copy diverges, and a
 			// note is its author's words about the original; RLS inserts a note only

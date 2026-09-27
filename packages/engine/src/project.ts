@@ -1149,6 +1149,12 @@ export interface SeriesMeta {
 	productVersion?: string | null;
 	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
 	rebuilding?: boolean;
+	/**
+	 * A flow record's site (084_gauge_records, engine ≥ 1.3.0): the gauge node
+	 * it was measured at; null / absent = the outlet. Only the plausibility
+	 * checks read a gauge's record.
+	 */
+	siteNodeId?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1163,7 +1169,7 @@ export interface ModelInput {
 	 * Keyed by SeriesKind; only the first series of each kind is used. A gauge
 	 * node's own observed records (engine ≥ 1.3.0) are keyed GaugeSeriesKey.
 	 */
-	series: Partial<Record<SeriesKind | GaugeSeriesKey, DailySeries>>;
+	series: Partial<Record<SeriesKind, DailySeries>> & { [key: GaugeSeriesKey]: DailySeries };
 }
 
 /** One daily output series. nodeId null = catchment level. */

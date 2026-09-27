@@ -102,7 +102,7 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
-	product, product_version AS "productVersion", day_boundary AS "dayBoundary",
+	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
 
@@ -261,6 +261,8 @@ export interface SeriesMetaRow {
 	product: string | null;
 	productVersion: string | null;
 	dayBoundary: string | null;
+	/** The gauge node a flow record was measured at (084_gauge_records); null = the outlet. */
+	siteNodeId: string | null;
 	rebuilding: boolean;
 }
 
