@@ -3,7 +3,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { lockSeries, recordAudit, recordSeriesRevision, seriesSubject, valuesSha256, type SeriesRow } from '../history/record.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
 import { z } from 'zod';
@@ -203,7 +203,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			const existing = rows[0];
 			if (!existing) throw new ApiError(404, 'not found');
 			const revisionId = await recordSeriesRevision(db, id, existing, 'delete');
-			await db.query('DELETE FROM time_series WHERE project_id = $1 AND id = $2', [id, seriesId]);
+			mustChange(await db.query('DELETE FROM time_series WHERE project_id = $1 AND id = $2', [id, seriesId]));
 			// The range and hash of the values that went.
 			await recordAudit(db, id, 'series.deleted', { ...seriesSubject(existing, null, existing), revisionId });
 			return c.body(null, 204);

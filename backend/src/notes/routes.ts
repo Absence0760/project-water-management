@@ -11,7 +11,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
-import { ApiError, notFound } from '../http/errors.js';
+import { ApiError, mustChange, notFound } from '../http/errors.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 
 /** Longest note body (the 037 CHECK). */
@@ -225,7 +225,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 			const role = await requireRole(db, id, 'farmer');
 			const note = await loadNote(db, id, noteId);
 			if (note.author_id !== userId) throw ApiError.coded(403, 'note_author_only', 'only the author may edit a note');
-			await db.query('UPDATE note SET body = $3 WHERE id = $1 AND project_id = $2', [noteId, id, body.body]);
+			mustChange(await db.query('UPDATE note SET body = $3 WHERE id = $1 AND project_id = $2', [noteId, id, body.body]));
 			return c.json({ note: toNote(await loadNote(db, id, noteId), userId, role) });
 		});
 	})
@@ -238,7 +238,7 @@ export const noteRoutes = new Hono<AuthEnv>()
 			const own = note.author_id === userId;
 			if (!own && rank[role] < rank.editor) throw ApiError.coded(403, 'note_delete_denied', 'only the author or an editor may delete a note');
 			// No RETURNING: a deleted note is no longer visible to its author (unless an editor).
-			await db.query('UPDATE note SET deleted_at = now() WHERE id = $1 AND project_id = $2', [noteId, id]);
+			mustChange(await db.query('UPDATE note SET deleted_at = now() WHERE id = $1 AND project_id = $2', [noteId, id]));
 			// Never the body: the log says whose note, about what, and that it was hidden.
 			await recordAudit(db, id, 'note.deleted', {
 				noteId,

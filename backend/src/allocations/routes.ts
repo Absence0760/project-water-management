@@ -18,7 +18,7 @@ import { attachment, collectCsv, csvRow, exportFilename } from '../export/csv.js
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
 import {
 	AUTHORISATIONS,
@@ -299,7 +299,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				values.push(v);
 				sets.push(`${col} = $${values.length}`);
 			}
-			if (sets.length) await db.query(`UPDATE allocation SET ${sets.join(', ')} WHERE project_id = $1 AND id = $2`, values);
+			if (sets.length) mustChange(await db.query(`UPDATE allocation SET ${sets.join(', ')} WHERE project_id = $1 AND id = $2`, values));
 			if (body.holder !== undefined) await setHolder(db, id, aid, body.holder);
 			// Which fields changed, never the holder's name (the history is readable by viewers).
 			await recordAudit(db, id, 'allocation.changed', { allocationId: aid, registrationNo: before.registrationNo, fields: Object.keys(body) });
@@ -312,7 +312,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			const before = await loadAllocation(db, id, aid);
-			await db.query('DELETE FROM allocation WHERE project_id = $1 AND id = $2', [id, aid]);
+			mustChange(await db.query('DELETE FROM allocation WHERE project_id = $1 AND id = $2', [id, aid]));
 			await recordAudit(db, id, 'allocation.deleted', { allocationId: aid, registrationNo: before.registrationNo, nodeId: before.nodeId });
 			return c.body(null, 204);
 		});
@@ -407,7 +407,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				[id, sourceId]
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
-			await db.query('DELETE FROM allocation_source WHERE project_id = $1 AND id = $2', [id, sourceId]);
+			mustChange(await db.query('DELETE FROM allocation_source WHERE project_id = $1 AND id = $2', [id, sourceId]));
 			await recordAudit(db, id, 'allocation.import_deleted', { sourceId, fileName: rows[0].fileName, rows: rows[0].rows });
 			return c.body(null, 204);
 		});

@@ -1,7 +1,8 @@
 <script lang="ts">
 	// The standard result views of one run: hydrograph, flow-duration curve,
-	// EWR vs outflow, a farm's dam storage and supply, and an explorer for any
-	// stored series. Each series is fetched once, on demand (see cache.ts).
+	// a farm's dam storage and supply, and an explorer for any stored series
+	// (EWR vs outflow moved to River & reserve with the rest of its group,
+	// issue #17: river/RiverTab.svelte). Each series is fetched once, on demand (see cache.ts).
 	// It also lays out the results below the summary in the groups of
 	// sections.ts, with a heading per group: the parent slots its own panels
 	// into each group, since the flow charts share one unit switch.
@@ -13,7 +14,7 @@
 	import type { ChartSeries } from '$lib/components/charts/series';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
+	import { CATCHMENT_FLOW_KEYS, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { storagePct, SUPPLY_TARGET, toDisplayUnit } from './results';
@@ -26,8 +27,7 @@
 		nodeNames,
 		nodeOrder,
 		damCapacity,
-		riverLead,
-		riverTail,
+		river,
 		farmsLead,
 		modelTail,
 		record,
@@ -42,10 +42,8 @@
 		nodeOrder: ReadonlyMap<string, number>;
 		/** nodeId → dam capacity (m³) from the current model. */
 		damCapacity: ReadonlyMap<string, number>;
-		/** Full-width panels opening River & Reserve, before EWR vs outflow (Reserve compliance). */
-		riverLead?: Snippet;
-		/** …and after it (EWR by month, the uncertainty bands). */
-		riverTail?: Snippet;
+		/** Under River & Reserve: the link to the River & reserve page, where that group's panels now are. */
+		river?: Snippet;
 		/** Opening Farms & users, before farm detail (curtailment). */
 		farmsLead?: Snippet;
 		/** Model quality, after the hydrograph and the flow-duration curve (calibration, runoff model, WR2012, EWR vs observed, plausibility). */
@@ -66,8 +64,6 @@
 	let flowUnit = $state<'m³/s' | 'm³/day'>('m³/s');
 	let hydroLog = $state(false);
 	let fdcLog = $state(true);
-	// Log by default: the EWR is a low-flow question and floods dwarf it on a linear axis.
-	let ewrLog = $state(true);
 
 	// --- catchment series -----------------------------------------------------
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
@@ -127,7 +123,6 @@
 			q: (onObserved ? table.onObservedDays! : table.wholeRun).map((r) => ({ ...r, label: labels[FDC_RECORDS.indexOf(r.record)]! }))
 		};
 	});
-	const ewrSeries = $derived(ewrChartSeries(catchment, conv));
 
 	// --- one farm ------------------------------------------------------------------
 	const farmOptions = $derived(
@@ -193,31 +188,7 @@
 
 <div class="charts">
 	<h2 class="group-h wide">River &amp; Reserve</h2>
-	{#if riverLead}<div class="wide slot">{@render riverLead()}</div>{/if}
-
-	<section class="panel wide" id="res-ewr" aria-labelledby="ewr-h">
-		<h3 id="ewr-h" class="visually-hidden">EWR against outflow</h3>
-		{#if catchLoading && !ewrSeries.length}
-			<div class="chart-ph" style:height="330px" role="status">Loading…</div>
-		{:else}
-			<LineChart
-				title="EWR vs simulated outflow"
-				unit={flowUnit}
-				height={260}
-				series={ewrSeries}
-				logToggle
-				bind:log={ewrLog}
-				recentDays={RECENT}
-				recentLabel="Last 3 years"
-				toolbar={unitToggle}
-				{band}
-				caption="Days the outflow dips below the dashed EWR line count as EWR not met."
-			/>
-		{/if}
-	</section>
-
-
-	{#if riverTail}<div class="wide slot">{@render riverTail()}</div>{/if}
+	{#if river}<div class="wide slot">{@render river()}</div>{/if}
 
 	<h2 class="group-h wide">Units &amp; users</h2>
 	{#if farmsLead}<div class="wide slot">{@render farmsLead()}</div>{/if}

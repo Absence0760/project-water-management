@@ -15,7 +15,7 @@ import { parseToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isValidTimeZone, nextFireAt } from './due.js';
@@ -219,11 +219,12 @@ export const reportRoutes = new Hono<AuthEnv>()
 			const next = { ...cur[0], ...Object.fromEntries(Object.entries(body).filter(([, v]) => v !== undefined)) } as typeof cur[0];
 			const t = timing(next);
 			// Saving makes the saver the schedule's acting user (the trigger), whatever changed.
-			await db.query(
+			const changed = await db.query(
 				`UPDATE report_schedule SET frequency = $3, weekday = $4, month_day = $5, hour = $6, timezone = $7, enabled = $8
 				 WHERE id = $1 AND project_id = $2`,
 				[sid, id, next.frequency, t.weekday, t.monthDay, next.hour, next.timezone, next.enabled]
 			);
+			mustChange(changed);
 			if (body.recipients) await setRecipients(db, sid, await checkRecipients(db, id, body.recipients));
 			const updated = (await listSchedules(db, id, sid))[0]!;
 			await recordAudit(db, id, 'report_schedule.configured', scheduleSubject(sid, 'changed', next, body.recipients?.length));

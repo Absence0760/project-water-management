@@ -10,7 +10,7 @@ import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { saveModel } from '../model/store.js';
 import { ModelBody, modelProblems } from '../model/validate.js';
@@ -200,7 +200,7 @@ async function restoreInputs(
 	if (problems.length) throw new ApiError(409, "this version can't be restored: its model doesn't pass today's checks", problems);
 	const change = await beginModelChange(db, projectId);
 	await saveModel(db, projectId, parsed.data);
-	await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(target.settings ?? {})]);
+	mustChange(await db.query('UPDATE project SET settings = $2, updated_at = now() WHERE id = $1', [projectId, JSON.stringify(target.settings ?? {})]));
 	await recordDroppedLinks(db, projectId, change, 'restore');
 	const revision = await recordModelRevision(db, projectId, { source: 'restore', before: change.before, ...o });
 	// Nothing to restore: the transaction rolls back, so nothing was written.

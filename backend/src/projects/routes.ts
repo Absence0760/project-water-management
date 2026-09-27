@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser } from '../db/tx.js';
-import { ApiError } from '../http/errors.js';
+import { ApiError, mustChange } from '../http/errors.js';
 import {
 	beginSettingsChange,
 	farmLinks,
@@ -262,7 +262,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
 				await checkOutcomeSite(db, id, site, (settings as { ewrRules?: unknown }).ewrRules);
 			}
-			await db.query(
+			const changed = await db.query(
 				`UPDATE project SET
 					name = COALESCE($2, name),
 					description = COALESCE($3, description),
@@ -274,6 +274,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
 					body.teamId !== undefined, body.teamId ?? null, onlyRunPolicy(body, current.settings, settings), body.timeZone ?? null]
 			);
+			mustChange(changed);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
 			const fields = [
 				body.name !== undefined && body.name !== current.name && 'name',
@@ -308,7 +309,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 			);
 			if (evidence[0]) throw evidenceKept(evidence[0]);
 			try {
-				await db.query('DELETE FROM project WHERE id = $1', [id]);
+				mustChange(await db.query('DELETE FROM project WHERE id = $1', [id]));
 			} catch (err) {
 				// A nomination that landed after the check above.
 				if ((err as { code?: string }).code === PG_RESTRICT) throw evidenceKept(null);

@@ -100,11 +100,10 @@ describe('formatting', () => {
 });
 
 describe('resultSections', () => {
-	it('lists Reserve compliance only when the run has a rule table, opening the river group', () => {
+	it('no longer lists Reserve compliance on Runs & results: it moved to River & reserve (issue #17)', () => {
 		const base = { farms: [], runoff: undefined, wr2012: undefined };
 		expect(resultSections(base).map((s) => s.id)).not.toContain('res-reserve');
-		const ids = resultSections({ ...base, ewrAssurance: [site(() => 1)] }).map((s) => s.id);
-		expect(ids.slice(ids.indexOf('res-reserve'), ids.indexOf('res-reserve') + 3)).toEqual(['res-reserve', 'res-ewr', 'res-ewr-grid']);
+		expect(resultSections({ ...base, ewrAssurance: [site(() => 1)] } as typeof base).map((s) => s.id)).not.toContain('res-reserve');
 	});
 });
 
