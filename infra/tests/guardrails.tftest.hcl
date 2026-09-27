@@ -514,6 +514,23 @@ run "rejects_short_jwt_secret" {
   expect_failures = [aws_lambda_function.backend]
 }
 
+run "rejects_dev_placeholder_jwt_secret" {
+  command = plan
+
+  # Long enough, so only the placeholder check can refuse it.
+  override_data {
+    target = data.sops_file.prod
+    values = {
+      data = {
+        auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
+        db_app_password = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  }
+
+  expect_failures = [aws_lambda_function.backend]
+}
+
 run "rejects_non_alphanumeric_db_password" {
   command = plan
 

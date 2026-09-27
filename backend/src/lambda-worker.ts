@@ -24,6 +24,7 @@
 //
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { Context, ScheduledEvent, SQSEvent, SQSRecord } from 'aws-lambda';
+import { assertLambdaEnv } from './config/production.js';
 import { runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
 import { acceptMailEvent } from './mail/suppression.js';
@@ -60,6 +61,9 @@ export function metricLine(r: TickResult, now = Date.now()): string {
 		AlertMailsFailed: r.alerts.failed
 	});
 }
+
+// Refuse to start with a local default (config/production.ts).
+assertLambdaEnv('worker');
 
 const isSqs = (event: unknown): event is SQSEvent => Array.isArray((event as SQSEvent | undefined)?.Records);
 

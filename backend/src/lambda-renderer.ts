@@ -20,9 +20,13 @@
 //
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';
+import { assertLambdaEnv } from './config/production.js';
 import { type RenderResult, type RenderResultMessage, parseRenderRequest, sendToQueue } from './jobs/transport.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from './reports/render.js';
 import { putPdf, reportKey } from './reports/storage.js';
+
+// Refuse to start with a local default (config/production.ts).
+assertLambdaEnv('renderer');
 
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 	const failures: SQSBatchResponse['batchItemFailures'] = [];

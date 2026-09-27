@@ -22,10 +22,14 @@
 // (lambda-fetcher.test.ts bundles it to check).
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
+import { assertLambdaEnv } from './config/production.js';
 import { FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchRequest, type FetchResult, runFetch } from './feeds/fetch.js';
 import { type FeedHttp, feedHttp } from './feeds/http.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
+
+// Refuse to start with a local default, FEED_SOURCE=fixtures above all (config/production.ts).
+assertLambdaEnv('fetcher');
 
 /** Time kept back from the Lambda's remaining time to send the answer. */
 export const FETCH_SEND_MARGIN_MS = 15_000;

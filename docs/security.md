@@ -1580,6 +1580,25 @@ readable by anyone. The rules:
   dev), so the Lambda entry point (`lambda.ts`, `assertEdgeSecret`) refuses to
   start without a secret of at least 32 characters: a deploy missing it fails
   loudly instead of opening the Function URL (`app.security.test.ts`).
+- **Production configuration fails closed** (`backend/src/config/production.ts`).
+  Every setting falls back to the local stack when unset (`STORAGE=local`,
+  `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
+  localhost links), so a Lambda missing one would quietly serve synthetic data
+  or email localhost links rather than fail. All five entry points (`lambda.ts`,
+  `lambda-worker.ts`, `lambda-fetcher.ts`, `lambda-renderer.ts`,
+  `lambda-migrate.ts`) call `assertLambdaEnv(role)` at init: in Lambda (the
+  runtime always sets the reserved `AWS_LAMBDA_FUNCTION_NAME`) they refuse to
+  start on a missing or local-default setting, a `dev-only-`/`test-only-`
+  placeholder anywhere (the committed dev JWT secret), a non-https or localhost
+  URL, a `DATABASE_URL` without `sslmode=verify-full` or with a short (dev)
+  password, `VITEST`, or no explicit `ALERTS_ENABLED` on the worker. The error
+  names settings, never values. `config/production.security.test.ts` bundles
+  each entry point and fails on any `process.env` read that `SETTINGS` doesn't
+  classify, checks each Lambda's Terraform environment block sets every
+  required setting, sweeps every `backend/.env.development` value, and starts
+  each entry point with a production-shaped env (the positive control).
+  Terraform also refuses a placeholder `auth_jwt_secret` at plan time
+  (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
 - **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
   default 1000 per 5 minutes) covering the whole site and `/api/*`.
