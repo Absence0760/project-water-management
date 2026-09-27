@@ -19,6 +19,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
+	import { attributionSummary, historyHref, lineAuthors } from '$lib/components/compare/attribution';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
@@ -574,7 +575,13 @@
 						<h2 id="changes-h">What changed</h2>
 						<span class="muted small">{data.changes.length} difference{data.changes.length === 1 ? '' : 's'} in the inputs</span>
 					</div>
-					<ChangesList changes={data.changes} />
+					{#if data.attribution}
+						<p class="muted small" data-testid="changes-attribution">
+							{attributionSummary(data.attribution)}
+							{#if data.attribution.revisions.length}<a href={historyHref(data.b.project.id)}>Open the history</a>{/if}
+						</p>
+					{/if}
+					<ChangesList changes={data.changes} authors={lineAuthors(data.changes, data.attribution)} />
 				</section>
 
 				<section class="panel" aria-labelledby="headline-h">

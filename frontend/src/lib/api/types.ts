@@ -760,8 +760,24 @@ export interface RunCompareResponse {
 	b: CompareSide;
 	comparison: RunComparison;
 	changes: InputChange[];
+	/**
+	 * Who changed the inputs between the runs (issue #42): two runs of one
+	 * project, A before B, neither a scenario run; otherwise null (absent
+	 * from an older API).
+	 */
+	attribution?: CompareAttribution | null;
 	/** Catchment series both runs stored with the same unit. */
 	catchmentSeries: { key: string; label: string; unit: string }[];
+}
+
+/** The revisions made between two compared runs, and which of them set each line of `changes`. */
+export interface CompareAttribution {
+	/** Newest first, without the baseline. */
+	revisions: HistoryRevision[];
+	/** More were made than listed: the oldest are left out. */
+	truncated: boolean;
+	/** changedBy[i]: the id of the revision that set changes[i]; null when no recorded revision did (series lines never are). */
+	changedBy: (string | null)[];
 }
 
 /** A scenario's place in its workflow (024_scenarios). Ops, owned nodes and base change only while `draft`. */

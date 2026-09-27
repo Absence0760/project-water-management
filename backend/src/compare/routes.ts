@@ -4,6 +4,7 @@
 import {
 	compareRuns,
 	diffInputs,
+	type InputChange,
 	type RunInputsSnapshot,
 	type StoredSeriesValues,
 	type RunSummary
@@ -12,6 +13,8 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { withUser, type Db } from '../db/tx.js';
+import { attributeChanges } from '../history/attribute.js';
+import { revisionsBetween, type RevisionItem } from '../history/routes.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { listNominations, runEvidence, type RunEvidence } from '../runs/evidence.js';
@@ -140,6 +143,39 @@ function differingKinds(a: RunInputsSnapshot, b: RunInputsSnapshot): string[] {
 	});
 }
 
+/**
+ * Who changed the inputs between the two runs (issue #42): the project's
+ * revisions after run A ran and up to when run B ran, and for each line of
+ * `changes` the id of the revision that set it (history/attribute.ts), or
+ * null. Only for two runs of one project, A before B, neither a scenario
+ * run (a scenario run's inputs are its scenario on a base run, not a state
+ * the project was in); otherwise null.
+ */
+export interface CompareAttribution {
+	revisions: RevisionItem[];
+	/** More revisions than listed: the oldest are left out. */
+	truncated: boolean;
+	/** changedBy[i]: the revision (in `revisions`) that set changes[i]; null when none recorded did. */
+	changedBy: (string | null)[];
+}
+
+async function attribution(
+	db: Db,
+	a: Awaited<ReturnType<typeof loadSide>>,
+	b: Awaited<ReturnType<typeof loadSide>>,
+	changes: InputChange[]
+): Promise<CompareAttribution | null> {
+	if (a.project.id !== b.project.id || a.scenario || b.scenario || a.run.scenarioId || b.run.scenarioId) return null;
+	// Ordered in SQL: created_at to the microsecond (a JS Date keeps milliseconds).
+	const { rows } = await db.query<{ forward: boolean }>(
+		`SELECT (SELECT created_at FROM model_run WHERE id = $1) < (SELECT created_at FROM model_run WHERE id = $2) AS forward`,
+		[a.run.id, b.run.id]
+	);
+	if (!rows[0]?.forward) return null;
+	const { revisions, truncated } = await revisionsBetween(db, a.project.id, a.run.id, b.run.id);
+	return { revisions, truncated, changedBy: attributeChanges(changes, revisions) };
+}
+
 export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 	const q = z.object({ a: RunRef, b: RunRef }).parse(c.req.query());
 	return withUser(c.get('userId'), async (db) => {
@@ -149,11 +185,13 @@ export const compareRoutes = new Hono<AuthEnv>().get('/runs', async (c) => {
 		const inB = new Map(b.catchmentSeries.map((s) => [s.key, s]));
 		const catchmentSeries = a.catchmentSeries.filter((s) => inB.get(s.key)?.unit === s.unit);
 		const kinds = differingKinds(a.run.inputs, b.run.inputs);
+		const changes = diffInputs(a.run.inputs, b.run.inputs, { a: await storedValues(db, a.run.id, kinds), b: await storedValues(db, b.run.id, kinds) });
 		return c.json({
 			a: { project: a.project, run: a.run, scenario: a.scenario },
 			b: { project: b.project, run: b.run, scenario: b.scenario },
 			comparison: compareRuns(a.run, b.run),
-			changes: diffInputs(a.run.inputs, b.run.inputs, { a: await storedValues(db, a.run.id, kinds), b: await storedValues(db, b.run.id, kinds) }),
+			changes,
+			attribution: await attribution(db, a, b, changes),
 			catchmentSeries
 		});
 	});

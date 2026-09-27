@@ -3,7 +3,7 @@
 // earlier value back. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, createRun, putSeries, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeForm, saveModelChanges } from '../support/network.ts';
@@ -100,6 +100,31 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 	await expect(page.getByText('This run’s inputs are restored.')).toBeVisible();
 	await expect(since.getByText('The saved inputs are the ones this run used.')).toBeVisible();
 	await expect(await openCapacity(page, project.id)).toHaveValue('150,000');
+});
+
+test('the compare page and the Project page say who changed an input between two runs, and when (issue #42)', async ({ page, owner, signIn }) => {
+	const project = await seedRunnableProject(page.request, 'History attribution');
+	const baseline = await createRun(page.request, project.id, 'Baseline');
+	// Another member raises the dam, with a reason.
+	const editor = await signIn('Dam editor');
+	await addMember(page.request, project.id, editor.user.email, 'editor');
+	const raised = { ...project.model, nodes: project.model.nodes.map((n) => (n.name === 'Upper farm' ? { ...n, damCapacityM3: 180_000 } : n)) };
+	await putModel(editor.page.request, project.id, { ...raised, reason: 'Licence application' } as typeof raised);
+	const after = await createRun(page.request, project.id, 'Raised');
+
+	await page.goto(`/compare?a=${project.id}:${baseline}&b=${project.id}:${after}`);
+	const changes = page.getByRole('region', { name: 'What changed' });
+	await expect(changes.getByTestId('changes-attribution')).toHaveText(/1 saved change to the model or settings between the runs, by Dam editor\./);
+	const line = changes.getByRole('listitem').filter({ hasText: 'Upper farm: dam capacity 150,000 m³ → 180,000 m³' });
+	await expect(line).toContainText(/Changed by Dam editor on \d{4}-\d{2}-\d{2} \d{2}:\d{2} · “Licence application”/);
+	await expectNoViolations(page);
+
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const recent = page.getByRole('region', { name: 'Recent changes' });
+	await expect(recent.getByRole('listitem').first()).toContainText('Model changed: Upper farm: dam capacity 150,000 m³ → 180,000 m³');
+	await expect(recent.getByRole('listitem').first()).toContainText('Dam editor ·');
+	await expect(recent.getByRole('listitem').first()).toContainText('“Licence application”');
+	void owner;
 });
 
 test("a series merge in History restores the series' earlier values, and the restore can be undone", async ({ page, owner }) => {

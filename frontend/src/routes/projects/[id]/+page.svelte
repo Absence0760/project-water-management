@@ -723,6 +723,7 @@
 								{runs}
 								{canEdit}
 								{isOwner}
+								canSeeHistory={shownIds.includes('history')}
 								currentUserId={session.user?.id ?? ''}
 								{onProjectChange}
 								{onLeftProject}

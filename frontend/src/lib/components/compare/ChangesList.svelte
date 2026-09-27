@@ -1,8 +1,18 @@
 <script lang="ts">
-	// "What changed" between the two runs' inputs (engine diffInputs).
+	// "What changed" between the two runs' inputs (engine diffInputs), and
+	// on the compare page who changed each line and when (issue #42).
 	import type { InputChange, InputChangeArea } from '@water-management/engine';
+	import type { HistoryRevision } from '$lib/api/types';
+	import { byline } from './attribution';
 
-	let { changes }: { changes: InputChange[] } = $props();
+	let {
+		changes,
+		authors = []
+	}: {
+		changes: InputChange[];
+		/** authors[i]: the saved change that set changes[i] (compare/attribution.ts lineAuthors); null or absent for none. */
+		authors?: (HistoryRevision | null)[];
+	} = $props();
 
 	const AREAS: { area: InputChangeArea; label: string }[] = [
 		{ area: 'network', label: 'Network' },
@@ -14,7 +24,10 @@
 	const KIND = { added: 'Added', removed: 'Removed', changed: 'Changed' } as const;
 
 	const groups = $derived(
-		AREAS.map((g) => ({ ...g, items: changes.filter((c) => c.area === g.area) })).filter((g) => g.items.length)
+		AREAS.map((g) => ({
+			...g,
+			items: changes.map((c, i) => ({ c, by: authors[i] ?? null })).filter(({ c }) => c.area === g.area)
+		})).filter((g) => g.items.length)
 	);
 </script>
 
@@ -29,8 +42,8 @@
 			<section aria-label={g.label}>
 				<h3>{g.label} <span class="count">({g.items.length})</span></h3>
 				<ul>
-					{#each g.items as c, i (i)}
-						<li><span class="kind {c.kind}">{KIND[c.kind]}</span> {c.text}</li>
+					{#each g.items as { c, by }, i (i)}
+						<li><span class="kind {c.kind}">{KIND[c.kind]}</span> {c.text}{#if by}<span class="by">{byline(by)}{by.reason ? ` · “${by.reason}”` : ''}</span>{/if}</li>
 					{/each}
 				</ul>
 			</section>
@@ -72,6 +85,12 @@
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
 		color: var(--text-2);
+	}
+	.by {
+		display: block;
+		margin-left: 4.6rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
 	}
 	.added {
 		color: var(--success);

@@ -171,6 +171,27 @@ async function historyPage(db: Db, projectId: string, q: z.infer<typeof HistoryQ
 	return { items: page.map(toItem), next: more && last ? `${last.ts}|${last.type}|${last.id}` : null };
 }
 
+/**
+ * The revisions made between two runs of a project (after the earlier ran,
+ * up to and including when the later ran: a run's created_at is its
+ * transaction's, and it read the inputs saved before it), newest first,
+ * without the baseline. At most HISTORY_PAGE_MAX; `truncated` when there
+ * were more (the oldest are left out). For the compare page (issue #42).
+ */
+export async function revisionsBetween(db: Db, projectId: string, earlierRunId: string, laterRunId: string): Promise<{ revisions: RevisionItem[]; truncated: boolean }> {
+	const { rows } = await db.query<ItemRow>(
+		`SELECT 'revision' AS type, r.id, ${TS.replace('created_at', 'r.created_at')} AS ts, r.change_set, u.display_name AS actor,
+			r.source AS kind, r.reason, r.changes, NULL::jsonb AS subject, r.restored_from, r.restored_from_run
+		 FROM model_revision r LEFT JOIN app_user u ON u.id = r.created_by
+		 WHERE r.project_id = $1 AND r.source <> 'baseline'
+			AND r.created_at > (SELECT created_at FROM model_run WHERE project_id = $1 AND id = $2)
+			AND r.created_at <= (SELECT created_at FROM model_run WHERE project_id = $1 AND id = $3)
+		 ORDER BY r.created_at DESC, r.id DESC LIMIT $4`,
+		[projectId, earlierRunId, laterRunId, HISTORY_PAGE_MAX + 1]
+	);
+	return { revisions: rows.slice(0, HISTORY_PAGE_MAX).map(toItem) as RevisionItem[], truncated: rows.length > HISTORY_PAGE_MAX };
+}
+
 /** The current inputs as a revision would store them, and what restoring `target` would change. */
 async function restorePreview(db: Db, projectId: string, target: InputsSnapshot): Promise<InputChange[]> {
 	return describeChange(await inputsSnapshot(db, projectId), normalise(target));
