@@ -5,7 +5,7 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmIndex, type FarmProjection, type FarmView, type RestrictionLevel } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmIndex, type FarmProjection, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -61,8 +61,7 @@ interface CurrentFarmRow {
 	published_by_name: string | null;
 	restriction_level: RestrictionLevel;
 	restriction_pct: string | null;
-	notice_en: string | null;
-	notice_af: string | null;
+	notice: NoticeText;
 	next_expected_on: string | null;
 	catchment_view: StoredCatchmentView;
 	view: FarmProjection | null;
@@ -72,7 +71,7 @@ interface CurrentFarmRow {
 export async function currentFor(db: Db, projectId: string, nodeId: string): Promise<CurrentFarmRow | null> {
 	const { rows } = await db.query<CurrentFarmRow>(
 		`SELECT p.run_id, p.published_at, u.display_name AS published_by_name, p.restriction_level, p.restriction_pct,
-			p.notice_en, p.notice_af, p.next_expected_on, p.catchment_view, f.view
+			p.notice, p.next_expected_on, p.catchment_view, f.view
 		 FROM run_publication p
 		 LEFT JOIN app_user u ON u.id = p.published_by
 		 LEFT JOIN publication_farm f ON f.publication_id = p.id AND f.node_id = $2
@@ -140,9 +139,8 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					restriction: {
 						level: cur.restriction_level,
 						pct: cur.restriction_pct === null ? null : Number(cur.restriction_pct),
-						// Both, as the WUA wrote them: the page picks the reader's language (design §7).
-						noticeEn: cur.notice_en,
-						noticeAf: cur.notice_af
+						// Every language the WUA wrote it in: the page picks the reader's (design §7).
+						notice: cur.notice
 					},
 					nextExpectedOn: cur.next_expected_on
 				},
