@@ -661,6 +661,8 @@ export const af: Catalogue = {
 	'753da152': 'Verkeerde e-pos of wagwoord.',
 	// Too many sign-in attempts for this address. Try again in {wait}, or reset your password.
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
+	// Too many accounts were made from your network. Try again in {wait}.
+	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
@@ -671,6 +673,8 @@ export const af: Catalogue = {
 	'fccf74a7': 'Jou e-posadres is reeds bevestig.',
 	// A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.
 	'1f0dc36b': '’n Bevestigings-e-pos is ’n oomblik gelede gestuur. Kyk in jou inkassie, of probeer oor ’n minuut weer.',
+	// Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.
+	'e35608b7': 'Te veel bevestigings-e-posse is vandag na hierdie adres gestuur. Kyk in jou inkassie, of probeer môre weer.',
 	// This invitation is invalid or has expired.
 	'a2aa61f9': 'Hierdie uitnodiging is ongeldig of het verval.',
 	// You can add notes only to your own farm.
@@ -689,6 +693,8 @@ export const af: Catalogue = {
 	'e5a8dee0': 'Jy het waarskuwings-e-posse minder as ’n dag gelede weer aangeskakel, en jou e-posadres is weer geweier. Kyk die adres na en probeer môre weer.',
 	// Something in what you sent can’t be saved (a hidden control character, or a number far too large). Check what you entered and try again.
 	'f3414d07': 'Iets in wat jy gestuur het, kan nie gestoor word nie (’n verborge beheerkarakter, of ’n getal wat heeltemal te groot is). Kyk na wat jy ingevul het en probeer weer.',
+	// This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.
+	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
 	// {n} minute / {n} minutes
 	'a60f17d2': { one: '{n} minuut', other: '{n} minute' },
 	// Couldn’t reach the server. Check your connection and try again.
