@@ -86,4 +86,12 @@ describe('routeAccess', () => {
 		expect(isPublicPath('/app/welcome', '/app')).toBe(true);
 		expect(routeAccess('/welcomes', '', false)).toBe('login');
 	});
+
+	it('opens the legal pages to anyone, signed in or out', () => {
+		for (const p of ['/privacy', '/terms']) {
+			expect(routeAccess(p, '', false)).toBe('show');
+			expect(routeAccess(p, '', true)).toBe('show');
+		}
+		expect(routeAccess('/privacyx', '', false)).toBe('login');
+	});
 });

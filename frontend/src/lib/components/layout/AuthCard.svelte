@@ -30,8 +30,16 @@
 		title,
 		subtitle,
 		children,
-		footer
-	}: { title: string; subtitle?: string; children: Snippet; footer?: Snippet } = $props();
+		footer,
+		legal = true
+	}: {
+		title: string;
+		subtitle?: string;
+		children: Snippet;
+		footer?: Snippet;
+		/** The Privacy notice and Terms of use links under the form; the sign-up page names them in its own sentence instead. */
+		legal?: boolean;
+	} = $props();
 </script>
 
 <div class="auth">
@@ -51,6 +59,12 @@
 			{#if subtitle}<p class="muted intro">{subtitle}</p>{/if}
 			{@render children()}
 			{#if footer}<div class="footer">{@render footer()}</div>{/if}
+			{#if legal}
+				<nav class="legal" aria-label={t('Legal')}>
+					<a href="{base}/privacy">{t('Privacy notice')}</a>
+					<a href="{base}/terms">{t('Terms of use')}</a>
+				</nav>
+			{/if}
 		</div>
 	</main>
 
@@ -213,11 +227,21 @@
 		font-size: 0.95rem;
 	}
 	.footer {
-		margin-top: 1.5rem;
-		padding-top: 1.25rem;
+		margin-top: 1.25rem;
+		padding-top: 1rem;
 		border-top: 1px solid var(--border);
 		font-size: 0.9rem;
 		color: var(--text-2);
+	}
+	.legal {
+		display: flex;
+		gap: 1.25rem;
+		margin-top: 0.75rem;
+		font-size: 0.8rem;
+	}
+	.legal a {
+		color: var(--text-muted);
+		text-decoration: underline;
 	}
 	/* Sits in running text: underline so it isn't told apart by colour alone. */
 	.footer :global(a) {

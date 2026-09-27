@@ -1,9 +1,12 @@
 // Import a project.json (produced by scripts/wbt-import/extract_project.py from
 // a WBT workbook) as a new project owned by an existing or new user.
 //
-//   pnpm import:project <project.json> --email you@example.com [--name "…"] [--password …] [--run]
+//   pnpm import:project <project.json> --email you@example.com [--name "…"] [--password …] [--run] [--skip-existing]
 //
 // With --password, the user is created if missing (local demo seeding only).
+// With --skip-existing, a project the user already owns under the same name
+// is left as it is and nothing is imported (so `pnpm seed:demo` can run again
+// without making copies).
 // Runs through the same RLS-bound path and validation as POST /projects/import
 // (src/projects/import.ts).
 import { config } from 'dotenv';
@@ -11,7 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { hashPassword } from '../src/auth/password.js';
 import { closePool } from '../src/db/pool.js';
-import { actAsUser, withoutUser } from '../src/db/tx.js';
+import { actAsUser, withoutUser, withUser } from '../src/db/tx.js';
 // The same validation and transaction as POST /projects/import.
 import { importProjectFile, parseProjectFile } from '../src/projects/import.js';
 
@@ -61,6 +64,37 @@ export async function importProjectData(raw: unknown, email: string, opts: Impor
 	return projectId;
 }
 
+/**
+ * The id of a project the user with this email owns under this exact name, or
+ * null (no such user, or no such project). The oldest, if there are several.
+ */
+export async function findOwnedProject(email: string, name: string): Promise<string | null> {
+	const userId = await withoutUser(
+		async (db) => (await db.query<{ id: string }>('SELECT id FROM app_auth_account($1)', [email.toLowerCase()])).rows[0]?.id ?? null
+	);
+	if (!userId) return null;
+	return withUser(userId, async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`SELECT p.id FROM project p JOIN project_member m ON m.project_id = p.id
+			 WHERE m.user_id = $1 AND m.role = 'owner' AND p.name = $2 ORDER BY p.created_at LIMIT 1`,
+			[userId, name]
+		);
+		return rows[0]?.id ?? null;
+	});
+}
+
+/** The CLI: import, or with --skip-existing leave an owned project of the same name alone. */
+async function main(file: string, email: string, opts: ImportOptions & { skipExisting?: boolean }): Promise<string> {
+	if (opts.skipExisting) {
+		const raw = JSON.parse(await readFile(file, 'utf8')) as { name?: unknown };
+		const name = opts.name ?? (typeof raw.name === 'string' ? raw.name : undefined);
+		const existing = name ? await findOwnedProject(email, name) : null;
+		if (existing) return `✓ ${name} already exists for ${email} (project ${existing}): skipped`;
+		return `imported project ${await importProjectData(raw, email, opts)}`;
+	}
+	return `imported project ${await importProject(file, email, opts)}`;
+}
+
 /** An import failure as the CLI prints it: the message plus any listed problems. */
 function describe(err: unknown): string {
 	const e = err as { message?: string; details?: unknown; issues?: unknown };
@@ -76,15 +110,21 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	config({ path: ['.env.development.local', '.env.development'] });
 	const { values, positionals } = parseArgs({
 		allowPositionals: true,
-		options: { email: { type: 'string' }, name: { type: 'string' }, password: { type: 'string' }, run: { type: 'boolean' } }
+		options: {
+			email: { type: 'string' },
+			name: { type: 'string' },
+			password: { type: 'string' },
+			run: { type: 'boolean' },
+			'skip-existing': { type: 'boolean' }
+		}
 	});
 	const file = positionals[0];
 	if (!file || !values.email) {
-		console.error('usage: import-project <project.json> --email <email> [--name <name>] [--password <pw>] [--run]');
+		console.error('usage: import-project <project.json> --email <email> [--name <name>] [--password <pw>] [--run] [--skip-existing]');
 		process.exit(1);
 	}
-	importProject(file, values.email, { name: values.name, password: values.password, run: values.run })
-		.then((id) => console.log(`imported project ${id}`))
+	main(file, values.email, { name: values.name, password: values.password, run: values.run, skipExisting: values['skip-existing'] })
+		.then((line) => console.log(line))
 		.catch((err) => {
 			console.error(describe(err));
 			process.exitCode = 1;

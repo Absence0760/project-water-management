@@ -1,3 +1,4 @@
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import pg from 'pg';
 import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
@@ -21,7 +22,7 @@ export async function signUp(name = 'User', { verified = true }: { verified?: bo
 	const res = await app.request('/auth/register', {
 		method: 'POST',
 		headers: { 'content-type': 'application/json', origin: ORIGIN },
-		body: JSON.stringify({ email, password, displayName: name })
+		body: JSON.stringify({ email, password, displayName: name, acceptTerms: LEGAL_VERSION })
 	});
 	if (res.status !== 202) throw new Error(`register failed: ${res.status} ${await res.text()}`);
 	let cookie: string;

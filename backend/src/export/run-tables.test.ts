@@ -916,7 +916,7 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(Number(oct[12])).toBeCloseTo(0.35, 9);
 		// Natural ~0.56 m³/s all year stays above the 0.5 m³/s peak: one event a year from 1 October; the first
 		// October's flow (40 %) is below it, so water year 2000 is not met.
-		expect(lines).toContain('High flow,Synthetic freshet,starts in,Oct,peak (m³/s),0.5,days at peak,3,per water year,1');
+		expect(lines).toContain('High flow,Synthetic freshet,peaks in,Oct,peak (m³/s),0.5,event days,3,per water year,1');
 		expect(lines).toContain('Water years met,1,of,2,that had it naturally,Met (%),50,Water years assessed,2');
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});

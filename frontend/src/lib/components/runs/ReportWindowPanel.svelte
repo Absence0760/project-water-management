@@ -26,7 +26,7 @@
 		type WindowChoice,
 		type WindowPreset
 	} from './reportWindow';
-	import type { CropArea, CropDef, NetworkNode, Transfer } from '@water-management/engine';
+	import type { CropArea, CropDef, DemandObject, NetworkNode, Transfer } from '@water-management/engine';
 	import { curtailmentSeriesKeys, missingSeries, prepareWindowed, type RunNetwork, type SeriesKey, type Stored } from './windowedCurtailment';
 
 	let {
@@ -60,7 +60,9 @@
 					// Crops with their own irrigation efficiency (engine ≥ 0.43.0) set a farm's consumptive share.
 					crops: (run.model.crops as CropDef[] | undefined) ?? [],
 					cropAreas: (run.model.cropAreas as CropArea[] | undefined) ?? [],
-					apanMm: (run.settings?.apanMm as number[] | undefined) ?? []
+					apanMm: (run.settings?.apanMm as number[] | undefined) ?? [],
+					// Demand objects (engine ≥ 1.7.0) set their unit's consumptive share from its return flow.
+					demandObjects: (run.model.demandObjects as DemandObject[] | undefined) ?? []
 				}
 			: network
 	);

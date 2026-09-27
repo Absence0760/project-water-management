@@ -220,9 +220,9 @@
 				<thead>
 					<tr>
 						<th scope="col">Component</th>
-						<th scope="col">Starts in</th>
+						<th scope="col">Peaks in</th>
 						<th scope="col" class="num">Peak <span class="u">m³/s</span></th>
-						<th scope="col" class="num">Days</th>
+						<th scope="col" class="num">Event days</th>
 						<th scope="col" class="num">Per year</th>
 						<th scope="col">Result</th>
 					</tr>

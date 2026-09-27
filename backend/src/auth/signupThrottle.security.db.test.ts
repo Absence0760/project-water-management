@@ -13,6 +13,7 @@
 // The throttle is off for the rest of the suite (SIGNUP_THROTTLE=off in
 // __tests__/setup.ts); each test here turns it on. Time is moved in the
 // database (window_start), never by sleeping. Every "cannot" has a positive control.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app.js';
 import { anon, asOwner, signUp } from '../__tests__/helpers.js';
@@ -21,13 +22,13 @@ import { SIGNUP_THROTTLE } from './signupThrottle.js';
 
 const fresh = (name = 'new') => `${name}-${crypto.randomUUID()}@example.com`;
 /** Sign up from the tests' one anonymous browser (no shared secret configured: the fixed local key). */
-const register = (email: string) => anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New' });
+const register = (email: string) => anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'New', acceptTerms: LEGAL_VERSION });
 /** Sign up through `edge`, an app made in the test, with these headers. */
 const registerVia = (email: string, headers: Record<string, string>) =>
 	edge!.request('/auth/register', {
 		method: 'POST',
 		headers: { origin: 'http://localhost:7777', 'content-type': 'application/json', ...headers },
-		body: JSON.stringify({ email, password: 'correct horse', displayName: 'New' })
+		body: JSON.stringify({ email, password: 'correct horse', displayName: 'New', acceptTerms: LEGAL_VERSION })
 	});
 const statusOf = async (r: { status: number } | Promise<{ status: number }>) => (await r).status;
 

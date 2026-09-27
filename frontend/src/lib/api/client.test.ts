@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError, createApi, scenarioProblems } from './client';
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 function mockFetch(status: number, body?: unknown, raw?: string) {
 	return vi.fn(async () =>
@@ -434,13 +435,14 @@ describe('teams client', () => {
 		expect(r.member).toBeUndefined();
 	});
 
-	it('register sends inviteToken only when there is one', async () => {
+	it('register sends inviteToken only when there is one, and always the terms version it accepts', async () => {
 		const f = mockFetch(201, { user: { id: 'u' } });
 		const api = createApi('', f);
 		await api.auth.register('a@b.c', 'longenough', 'A');
 		await api.auth.register('a@b.c', 'longenough', 'A', 'tok');
-		expect(call(f, 0).body).toEqual({ email: 'a@b.c', password: 'longenough', displayName: 'A' });
-		expect(call(f, 1).body).toEqual({ email: 'a@b.c', password: 'longenough', displayName: 'A', inviteToken: 'tok' });
+		const base = { email: 'a@b.c', password: 'longenough', displayName: 'A', acceptTerms: LEGAL_VERSION };
+		expect(call(f, 0).body).toEqual(base);
+		expect(call(f, 1).body).toEqual({ ...base, inviteToken: 'tok' });
 	});
 
 	it('deletes teams and members (204)', async () => {

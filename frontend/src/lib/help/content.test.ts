@@ -4,6 +4,7 @@ import {
 	type CalibrationStats,
 	type CropArea,
 	type CropDef,
+	type DemandObject,
 	type FarmSummary,
 	type NetworkNode,
 	type RunSummary,
@@ -41,7 +42,12 @@ const SUMMARY: Record<keyof FarmSummary, true> = {
 	nodeId: true, name: true, avgDemandM3Day: true, avgSuppliedM3Day: true, avgDeficitM3Day: true,
 	fractionSupplied: true, avgEwrShortfallM3Day: true, daysEwrNotMet: true, avgCropRequirementM3Day: true,
 	avgGroundwaterM3Day: true, avgBaseflowDepletionM3Day: true, avgGroundwaterToDamM3Day: true, flowShare: true,
-	avgRiverAbstractionM3Day: true, damEndM3: true, damAgoM3: true, damLowM3: true, damLowDate: true, damDaysAtMin: true
+	avgRiverAbstractionM3Day: true, damEndM3: true, damAgoM3: true, damLowM3: true, damLowDate: true, damDaysAtMin: true,
+	demandObjects: true
+};
+const DEMAND_OBJECT: Record<keyof DemandObject, true> = {
+	id: true, nodeId: true, name: true, category: true, sizing: true, monthlyM3Day: true, count: true, litresPerUnitDay: true, lossPct: true,
+	monthlyFactor: true, returnPct: true, priority: true, destination: true, enabled: true, note: true
 };
 const CATCHMENT: Record<keyof RunSummary['catchment'], true> = {
 	meanNaturalFlowM3Day: true, meanSimulatedOutflowM3Day: true, runoffCoefficient: true, ewrDaysNotMet: true,
@@ -101,6 +107,7 @@ const VALID: Record<string, Set<string>> = {
 	crop: new Set(Object.keys(CROP)),
 	cropArea: new Set(Object.keys(CROP_AREA)),
 	transfer: new Set(Object.keys(TRANSFER)),
+	demandObject: new Set(Object.keys(DEMAND_OBJECT)),
 	settings: new Set(Object.keys(settings)),
 	calibration: new Set(Object.keys(settings.calibration)),
 	series: new Set(SERIES_KINDS),

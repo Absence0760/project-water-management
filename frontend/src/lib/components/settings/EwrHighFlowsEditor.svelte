@@ -1,7 +1,7 @@
 <!--
 	A rule table's high-flow components (engine ≥ 0.33.0, docs/model.md §2.9d):
-	freshets and floods, each a name, the months it may start in, a peak
-	(m³/s), a duration (days) and the events required per water year. Rows
+	freshets and floods, each a name, the months it may peak in, a peak
+	(m³/s), an event duration (days, rise to recession) and the events required per water year. Rows
 	are edited in place, pasted from a spreadsheet, or read from a CSV file.
 	Part of EwrRuleTablesEditor.svelte's chunk; helpers in ./ewrRules.ts.
 -->
@@ -75,7 +75,7 @@
 <fieldset class="plain" aria-describedby="{uid}-status">
 	<legend>High flows: freshets and floods</legend>
 	<p class="hint">
-		Each component is an unbroken run of days at or above its peak, starting in one of its months, required that many times each water year. A
+		Each component is a flood that reaches its peak in one of its months and lasts its duration from rise to recession (counted as at least half the duration at or above half the peak), required that many times each water year. A
 		year is asked for no more events than the site’s natural flow had, so a dry year that would have had no flood is not failed for it.
 	</p>
 	{#if value.length}
@@ -85,9 +85,9 @@
 				<thead>
 					<tr>
 						<th scope="col">Name</th>
-						<th scope="col">Starts in</th>
+						<th scope="col">Peaks in</th>
 						<th scope="col" class="num">Peak <span class="u">m³/s</span></th>
-						<th scope="col" class="num">Days at peak</th>
+						<th scope="col" class="num">Event days</th>
 						<th scope="col" class="num">Per year</th>
 						{#if !readonly}<th scope="col"><span class="sr-only">Remove</span></th>{/if}
 					</tr>
@@ -98,7 +98,7 @@
 							<td><input aria-label="High flow {k + 1} name" readonly={readonly} maxlength="100" placeholder="Class II freshet" bind:value={e.label} /></td>
 							<td>
 								<input
-									aria-label="High flow {k + 1} months it may start in"
+									aria-label="High flow {k + 1} months it may peak in"
 									readonly={readonly}
 									value={monthsText[k] ?? describeMonths(e.months)}
 									oninput={(ev) => setMonths(k, ev.currentTarget.value)}
@@ -107,7 +107,7 @@
 								/>
 							</td>
 							<td><NumberInput label="High flow {k + 1} peak, m³/s" min={0} nullable disabled={readonly} value={Number.isFinite(e.peakM3s) ? e.peakM3s : null} onchange={(v) => (e.peakM3s = v ?? NaN)} /></td>
-							<td><NumberInput label="High flow {k + 1} days at or above the peak" min={1} max={90} step={1} nullable disabled={readonly} value={e.durationDays} onchange={(v) => (e.durationDays = v ?? NaN)} /></td>
+							<td><NumberInput label="High flow {k + 1} event duration, days" min={1} max={90} step={1} nullable disabled={readonly} value={e.durationDays} onchange={(v) => (e.durationDays = v ?? NaN)} /></td>
 							<td><NumberInput label="High flow {k + 1} events per water year" min={1} max={12} step={1} nullable disabled={readonly} value={e.perYear} onchange={(v) => (e.perYear = v ?? NaN)} /></td>
 							{#if !readonly}
 								<td><button type="button" class="btn btn-sm btn-ghost" onclick={() => remove(k)} aria-label="Remove high flow {k + 1}">Remove</button></td>
@@ -131,7 +131,7 @@
 			<textarea
 				id="{uid}-paste"
 				rows="3"
-				placeholder={'One per row: name, months, peak (m³/s), days at peak, events per year. A heading row is skipped.'}
+				placeholder={'One per row: name, months, peak (m³/s), event days, events per year. A heading row is skipped.'}
 				bind:value={paste}
 				aria-describedby="{uid}-status"
 			></textarea>

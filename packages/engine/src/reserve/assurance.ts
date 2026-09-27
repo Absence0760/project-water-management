@@ -611,11 +611,33 @@ export function completeWaterYears(startDate: string, blocks: readonly MonthBloc
 }
 
 /**
+ * The level, as a fraction of a high-flow component's peak, that bounds an
+ * event (engine ≥ 1.9.0, docs/model.md §2.9d). A Reserve's freshet or flood
+ * is a hydrograph: a peak (daily mean, m³/s) and an event duration from the
+ * rise to the end of the recession, not days held at the peak. Taken as a
+ * triangle of base `duration`, it spends `duration × (1 − level)` days at or
+ * above `level × peak`, so a flow that has an event of that peak and duration
+ * stays at or above half the peak for at least half the duration.
+ */
+export const EWR_HIGH_FLOW_EVENT_LEVEL = 0.5;
+
+/** Days a high-flow event must stay at or above `EWR_HIGH_FLOW_EVENT_LEVEL × peak`: ⌈duration × (1 − level)⌉, at least 1. */
+export function highFlowEventMinDays(durationDays: number): number {
+	return Math.max(1, Math.ceil(durationDays * (1 - EWR_HIGH_FLOW_EVENT_LEVEL) - 1e-9));
+}
+
+/**
  * Events of a high-flow component in days [from, from + days) of a daily
- * series (m³/day): maximal runs of days with the mean flow at or above the
- * peak (m³/s; relative tolerance 1e-9), at least `durationDays` long, whose
- * first day falls in one of `months`. A run is cut at the window's ends, so
- * each water year counts its own events.
+ * series (m³/day), engine ≥ 1.9.0: maximal runs of days with the daily mean
+ * flow at or above `EWR_HIGH_FLOW_EVENT_LEVEL × peak` (m³/s; relative
+ * tolerance 1e-9) that reach the peak on at least one day and last at least
+ * `highFlowEventMinDays(durationDays)` days, counted in the month of their
+ * first day at the peak, which must be one of `months`. Two peaks count as
+ * two events only if the flow falls below the level between them. A run is
+ * cut at the window's ends, so each water year counts its own events, and a
+ * missing day breaks it. (Engines before 1.9.0 asked for `durationDays`
+ * consecutive days all at the peak, which a natural storm hydrograph almost
+ * never has.)
  */
 export function countHighFlowEvents(
 	flow: ArrayLike<number>,
@@ -627,20 +649,25 @@ export function countHighFlowEvents(
 	months: readonly number[]
 ): number {
 	const d0 = toEpochDay(startDate);
-	const threshold = peakM3s * SEC_PER_DAY * (1 - MET_TOLERANCE);
+	const peak = peakM3s * SEC_PER_DAY * (1 - MET_TOLERANCE);
+	const level = peakM3s * EWR_HIGH_FLOW_EVENT_LEVEL * SEC_PER_DAY * (1 - MET_TOLERANCE);
+	const minDays = highFlowEventMinDays(durationDays);
 	let count = 0;
 	let runStart = -1;
+	let peakDay = -1;
 	const close = (end: number) => {
-		if (runStart >= 0 && end - runStart >= durationDays) {
-			const m = new Date((d0 + runStart) * SEC_PER_DAY * 1000).getUTCMonth() + 1;
+		if (runStart >= 0 && peakDay >= 0 && end - runStart >= minDays) {
+			const m = new Date((d0 + peakDay) * SEC_PER_DAY * 1000).getUTCMonth() + 1;
 			if (months.includes(m)) count++;
 		}
 		runStart = -1;
+		peakDay = -1;
 	};
 	for (let t = from; t < from + days; t++) {
 		const v = flow[t]!;
-		if (Number.isFinite(v) && v >= threshold) {
+		if (Number.isFinite(v) && v >= level) {
 			if (runStart < 0) runStart = t;
+			if (peakDay < 0 && v >= peak) peakDay = t;
 		} else close(t);
 	}
 	close(from + days);

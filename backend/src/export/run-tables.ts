@@ -968,7 +968,7 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 			]);
 		}
 		for (const h of r.highFlows ?? []) {
-			yield csvRow(['High flow', h.label, 'starts in', h.months.map((m) => MONTH_NAMES[m - 1]!).join(' '), 'peak (m³/s)', h.peakAppliedM3s, 'days at peak', h.durationDays, 'per water year', h.perYear]);
+			yield csvRow(['High flow', h.label, 'peaks in', h.months.map((m) => MONTH_NAMES[m - 1]!).join(' '), 'peak (m³/s)', h.peakAppliedM3s, 'event days', h.durationDays, 'per water year', h.perYear]);
 			yield csvRow(['Water years met', h.overall.met, 'of', h.overall.required, 'that had it naturally', 'Met (%)', pct(h.overall.rate) as Cell, 'Water years assessed', h.overall.years]);
 			yield csvRow(['Water year', 'Natural events', 'Simulated events', 'Required', 'Met']);
 			for (const y of h.years) yield csvRow([waterYearText(y.waterYear), y.natural, y.actual, y.required, y.required === 0 ? 'not required' : y.met ? 'yes' : 'no']);

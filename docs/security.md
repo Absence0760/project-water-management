@@ -1553,15 +1553,24 @@ CISO or security analyst before go-live.
 **Roles.** The client (the WUA, or the consultancy for a hydrologist-only
 project) is the **responsible party**: it decides whom to invite and why.
 The operator (whoever runs this deployment) is its **operator** under POPIA
-s20–21 and needs a written agreement with it *(confirm)*. Farmers are invited
+s20–21 and needs a written agreement with it: the template is
+[legal/operator-agreement.md](./legal/operator-agreement.md) (for counsel
+review), and a breach follows [legal/incident-procedure.md](./legal/incident-procedure.md). Farmers are invited
 by the WUA; nobody is added to a project without an owner acting.
 
 **Lawful basis and consent, today.**
 - Accounts, memberships and farm links: to provide the service the member
   signed up for, and for farmers the WUA's function of managing its members'
   water use (legitimate interest or a legal duty under its constitution)
-  *(confirm)*. There is **no consent screen and no privacy notice yet**:
-  both are needed before a farmer is invited on production.
+  *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
+  `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
+  the sign-up form, invitations included, says that signing up accepts
+  both, and sends the version it showed: the account records it and when
+  (`app_user.terms_version` / `terms_accepted_at`, 087; a missing or stale
+  version is refused, `terms_not_accepted`). The time is the database's,
+  and an account can't backdate or clear its own record
+  (`app_user_terms_stamp`). Asking again after a change is open in
+  legal-status.md.
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
@@ -1595,7 +1604,7 @@ PDF someone else asked for kept the person as a recipient
 
 | Data | Tables | Retention | Account deleted | Project deleted |
 | --- | --- | --- | --- | --- |
-| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
+| Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
@@ -1728,7 +1737,8 @@ readable by anyone. The rules:
   role after a human approves the run.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
-  `/welcome`, issue #57) is static: it calls no API but `/auth/me` (the
+  `/welcome`, issue #57) and the legal pages (`/privacy`, `/terms`,
+  [legal-status.md](./legal-status.md)) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
@@ -1858,6 +1868,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   [§ Personal information](#personal-information-popia).
 
 ## Incident playbook
+
+Where personal information may have been seen or taken, the technical steps
+below run alongside [legal/incident-procedure.md](./legal/incident-procedure.md)
+(who decides, the 48-hour notice to clients, the Regulator's report and the
+notice to data subjects).
 
 1. **Suspected secret leak:** rotate the secret at its source.
    `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored

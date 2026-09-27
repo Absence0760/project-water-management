@@ -186,6 +186,8 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   soil-water store), so the abstraction D = F ÷ e scales with it while the
   crop area, the gross demand, the rain used, the irrigation efficiency and
   the loss return stay as they are: 85 % means "85 % of what they'd take".
+  A unit's demand objects (engine ≥ 1.7.0, model.md §2.7f) scale with it,
+  month by month; there is no op for one object yet (followups.md).
   For an other water user it multiplies the monthly demand (and so the
   senior requirement passed to the farms above it). Model.md §2.3 step 4a.
 - **Months** are calendar month numbers 1–12 (Oct = 10), the convention of

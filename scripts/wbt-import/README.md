@@ -78,6 +78,20 @@ rows and columns don't break it.
   engine lets a dam-less farm irrigate from the river routed to it with no
   limit, where b023's formula gave it nothing (issue #54, two found in a client
   workbook). The run warns about it too (docs/model.md §2.7e).
+  **`--run-of-river`** (off by default; the seed turns it on per workbook with
+  `WBT_RUN_OF_RIVER=1` in `wbt-import.<Prefix>.env`, bin/seed-demo.sh) imports
+  every unit so flagged as run of river instead (issue #54, 2c/2d):
+  `supplyRule: "runOfRiver"`, the dummy dam dropped (`damCapacityM3` 0, as the
+  model rules require) and `pumpCapacityM3Day: null`, with a `WARNING:` per
+  unit. b023 has no pump capacity, and nothing in it caps what a dummy dam or a
+  dam-less farm takes from the water routed to it (the dam's one-day capacity
+  doesn't: the day's inflow is available on top of it), so the pump is left
+  uncapped, as the workbook had it, and each run warns until the modeller
+  enters the capacity. A unit that an enabled transfer draws on keeps its dam
+  (the transfer needs the storage), with a warning saying so. On a unit with
+  no dam the river pump can take the unit's own runoff as well as the upstream
+  inflow (it takes from the river below the unit), where the dam-less import
+  took only what was routed to its absent dam.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted. The app computes demand from
   crop areas only, so the importer checks the sheet's gross demand
@@ -86,8 +100,24 @@ rows and columns don't break it.
   1 % in any month gets a `WARNING:`. That catches a demand typed over the
   formula, such as a town's potable demand drawn from a dam, and a formula
   that skips a crop because its crop index cell is blank (both found in a client
-  workbook, issue #54). The app models the crop-area figure. A demand that isn't
-  a crop waits for demand objects (#54, 2b).
+  workbook, issue #54). Where the workbook is **higher** than its crop areas
+  (the typed-over case), the part above them, month by month, is imported as a
+  **demand object** (engine ≥ 1.7.0, docs/model.md §2.7f, issue #54 2b):
+  `model.demandObjects` gets one "Non-crop demand" object on that farm, sized
+  `monthly` with that part in m³/day (months within the sheet's rounding are
+  0), supplied with the crops (`shared`), used in the catchment, and returning
+  the farm's irrigation return flow % r, so it takes and gives back what the
+  workbook's single demand did (supplied × r back, the rest consumed). A farm
+  with no crop areas at all is taken as a town or scheme (`municipal`);
+  otherwise the category is `other`. The warning then says what was done and
+  asks the modeller to confirm the category, priority and return share. Where
+  the workbook is **lower** (a formula that skips a crop), the app keeps the
+  crop-area figure, as before, and the warning says so. One difference stays:
+  b023 takes effective rain off a farm's whole gross demand, typed part
+  included, over its cropped area; the object isn't reduced by rain (on a farm
+  with no crops the two agree, the offset being 0). `model.demandObjects` is
+  present only when there is one, so a workbook without typed-over demand
+  imports exactly as before.
 - **Transfers** are the [Transfers] "Draw from dam" columns whose "Transfer
   To" is a farm and whose max rate is above 0. `minStoragePct` is that column's
   "Min capacity (%)". `dailyCapM3` is null because the engine derives the cap
@@ -163,12 +193,12 @@ reference gauge instead:
   Check the choice in Settings → calibration flow series.
 - `expected.json` is unchanged: it is the workbook's own results.
 
-`pnpm seed:demo` uses this for the client workbook, extracting into
-`data/client-catchment-app/`, while `data/client-catchment/` stays the
+`pnpm seed:demo` uses this for each client workbook, extracting into
+`data/client-<prefix>-app/`, while `data/client-catchment/` stays the
 workbook-faithful extraction for the regression tests. The scaling is client
 data, so it's read from `WBT_GAUGE_SCALING_FROM` / `WBT_GAUGE_SCALE_FACTOR`,
-set in the environment or in `$WBT_SOURCE_DIR/wbt-import.env` beside the
-workbooks, never in the repo. Set `WBT_GAUGE_AS_REFERENCE=0` to import the
+set in `$WBT_SOURCE_DIR/wbt-import.<prefix>.env` beside the workbooks
+(`<prefix>`: the file name before `_WBT_b023`), never in the repo. Set `WBT_GAUGE_AS_REFERENCE=0` to import the
 column as observed flow. The seed re-extracts when these options change, or
 when the importer (`extract_project.py`, `calibration.py`) does.
 
@@ -260,7 +290,7 @@ What each part of the fixture exercises (the note text is in `synthetic_b023.not
 | CHIRPS column with a blank header; forecast column empty | a series named after its kind; an empty column skipped |
 | Two dated rows after `zFlowData_DateE_DateSeries` | reading stops at the last date |
 | No Element sheet for Hotel Farm | note "no Element sheet for Hotel Farm" |
-| Charlie Farm: no crop areas, gross demand typed as 150 m³/day | `WARNING:` "the gross demand in 12 of 12 months doesn't follow from its crop areas" (the other farms' rounded sums don't trip it) |
+| Charlie Farm: no crop areas, gross demand typed as 150 m³/day | `WARNING:` "the gross demand in 12 of 12 months doesn't follow from its crop areas" (the other farms' rounded sums don't trip it), and a municipal "Non-crop demand" object of 150 m³/day every month |
 | [Shortfalls] and [EWR shortfalls Pivot Data] (a "-" where demand is 0) | `expected.json` only |
 
 Branches the committed workbook can't reach, because they exclude a case above

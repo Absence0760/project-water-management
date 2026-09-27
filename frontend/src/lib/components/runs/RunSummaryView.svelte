@@ -136,7 +136,7 @@
 
 {#if units}{@render units()}{/if}
 
-{#if summary.landCover || summary.users?.length || pumping.length}
+{#if summary.landCover || summary.users?.length || pumping.length || farms.some((f) => f.demandObjects?.length)}
 	<Lazy load={loadHumanImpacts}>
 		{#snippet children(HumanImpactTables)}
 			<HumanImpactTables {summary} />

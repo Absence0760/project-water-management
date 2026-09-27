@@ -6,6 +6,11 @@ import { expect, type APIRequestContext, type BrowserContext } from '@playwright
 import { plantEmailToken, userIdByEmail } from './db.ts';
 import { sessionToken } from './session.ts';
 import { API_URL } from './env.ts';
+// The terms version the sign-up form sends (acceptTerms): the engine's, by
+// path, since this workspace has no dependency on it and legal.ts imports nothing.
+import { LEGAL_VERSION } from '../../packages/engine/src/legal.ts';
+
+export { LEGAL_VERSION };
 
 export const PASSWORD = 'correct horse battery';
 
@@ -48,7 +53,7 @@ export async function register(
 ): Promise<TestUser> {
 	const email = uniqueEmail(displayName);
 	const res = await request.post(`${API_URL}/auth/register`, {
-		data: { email, password: PASSWORD, displayName }
+		data: { email, password: PASSWORD, displayName, acceptTerms: LEGAL_VERSION }
 	});
 	await json(res, 202);
 	const id = await userIdByEmail(email);

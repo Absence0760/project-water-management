@@ -1,6 +1,7 @@
 // The change history (WP-2.4, 030_history.sql): revisions of the project's
 // inputs, series revisions, audit events, restore, and who may read them.
 // Every "cannot see" has its positive control. Synthetic data only.
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -242,7 +243,7 @@ describe('members in the log', () => {
 		const email = `joiner-${crypto.randomUUID()}@example.com`;
 		expect((await owner.call('POST', `/projects/${projectId}/members`, { email, role: 'viewer' })).body.invited).toBe(true);
 		expect((await events(projectId, 'invite.sent')).at(-1)).toMatchObject({ subject: { email: `j•••@example.com`, role: 'viewer' }, actor_user_id: owner.id });
-		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Joiner', inviteToken: tokenIn(lastMailTo(email)) });
+		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Joiner', acceptTerms: LEGAL_VERSION, inviteToken: tokenIn(lastMailTo(email)) });
 		expect(reg.status).toBe(201);
 		expect((await events(projectId, 'member.added')).at(-1)).toMatchObject({
 			subject: { userId: reg.body.user.id, displayName: 'Joiner', role: 'viewer', via: 'invite' },

@@ -7,7 +7,7 @@
 // dams, zero areas, huge storms, long dry spells, missing days, leap days, runs
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
-import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type Borehole, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
+import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
 import { GR4J_PARAMS } from '../runoff/params';
@@ -273,7 +273,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	for (const c of crops) if (cd.bool(1 / 3)) c.irrigationEfficiency = cd.bool(0.1) ? 1 : cd.bool(0.05) ? cd.float(0.01, 0.1) : cd.float(0.5, 1);
 	// Calibration exclusions: date ranges and water years, in or around the run,
 	// overlapping or not. Their own stream too.
-	const cx = new Rng(seed ^ 0x1f83d9ab);
+	const cx = new Rng(seed ^ 0xbb67ae85);
 	if (cx.bool(0.3)) {
 		settings.calibrationExclusions = Array.from({ length: cx.int(1, 3) }, (_, i) => {
 			const a = cx.int(-60, days);
@@ -348,7 +348,13 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Supply rules and river pumps (WP-3.8), from their own stream and last, so
 	// the rest of every seed (transfers and boreholes included) is what it was.
 	addSupply(new Rng(seed ^ 0x5be0cd19), nodes);
-	return { settings, model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}), ...(boreholes.length ? { boreholes } : {}) }, series };
+	// Demand objects (engine ≥ 1.7.0), from their own stream and last of all, so every seed's rest is what it was.
+	const demandObjects = randomDemandObjects(new Rng(seed ^ 0x9e3779b9), nodes);
+	return {
+		settings,
+		model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}), ...(boreholes.length ? { boreholes } : {}), ...(demandObjects.length ? { demandObjects } : {}) },
+		series
+	};
 }
 
 /**
@@ -482,6 +488,45 @@ function randomBoreholes(g: Rng, nodes: NetworkNode[]): Borehole[] {
 }
 
 /**
+ * Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f) in 25 % of seeds: up
+ * to three on half the farms (now and then one on a gauge or user, or one
+ * switched off, which the engine skips), monthly or per unit, from a trickle
+ * to more than the river carries, months without any, losses, profiles, any
+ * return share (0 when piped out), any priority class.
+ */
+function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
+	if (!g.bool(0.25)) return [];
+	const out: DemandObject[] = [];
+	for (const n of nodes) {
+		if ((n.kind !== 'farm' && !g.bool(0.05)) || !g.bool(0.5)) continue;
+		const count = g.int(1, 3);
+		for (let k = 0; k < count; k++) {
+			const perUnit = g.bool(0.4);
+			const external = g.bool(0.2);
+			const level = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e5), 1e7]);
+			out.push({
+				id: `do-${n.id}-${k}`,
+				nodeId: n.id,
+				name: `Demand ${n.id}.${k}`,
+				category: g.pick(['domestic', 'municipal', 'industrial', 'livestock', 'other'] as const),
+				sizing: perUnit ? 'perUnit' : 'monthly',
+				monthlyM3Day: perUnit ? null : Array.from({ length: 12 }, () => (g.bool(0.15) ? 0 : level * g.float(0.2, 2))),
+				count: perUnit ? g.pick([0, g.int(1, 50_000)]) : null,
+				litresPerUnitDay: perUnit ? g.float(5, 400) : null,
+				lossPct: perUnit ? g.pick([0, g.float(0, 0.6)]) : 0,
+				monthlyFactor: perUnit && g.bool(0.5) ? Array.from({ length: 12 }, () => g.float(0, 3)) : null,
+				returnPct: external ? 0 : g.pick([0, 1, g.frac()]),
+				priority: g.pick(['first', 'shared', 'last'] as const),
+				destination: external ? 'external' : 'internal',
+				enabled: g.bool(0.9),
+				note: ''
+			});
+		}
+	}
+	return out;
+}
+
+/**
  * Up to three other water users (WP-1.33) in 30 % of seeds: each drains into
  * a random node, and half the time takes one of that node's upstream nodes
  * in-line above it. Demand from none to far more than the river carries,
@@ -593,6 +638,7 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	if (Array.isArray(x.settings.ewrRules)) rng.shuffle(x.settings.ewrRules);
 	if (m.landCover) rng.shuffle(m.landCover);
 	if (m.boreholes) rng.shuffle(m.boreholes);
+	if (m.demandObjects) rng.shuffle(m.demandObjects);
 	return x;
 }
 
@@ -616,6 +662,11 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 	for (let k = 0; k < (m.boreholes?.length ?? 0); k++) {
 		const x = cloneInput(input);
 		x.model.boreholes!.splice(k, 1);
+		yield x;
+	}
+	for (let k = 0; k < (m.demandObjects?.length ?? 0); k++) {
+		const x = cloneInput(input);
+		x.model.demandObjects!.splice(k, 1);
 		yield x;
 	}
 	const hasUpstream = new Set(m.nodes.map((nd) => nd.downstreamNodeId).filter((v): v is string => v !== null));

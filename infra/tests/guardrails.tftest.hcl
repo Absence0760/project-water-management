@@ -493,8 +493,8 @@ run "production_guardrails" {
     error_message = "No distribution-wide custom error responses — they would rewrite API 403/404 JSON into index.html. The SPA fallback is the spa_rewrite function."
   }
   assert {
-    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = '/welcome.html'")
-    error_message = "The prerendered landing page (/welcome, issue #57) must be served from welcome.html, not the SPA fallback."
+    condition     = strcontains(aws_cloudfront_function.spa_rewrite.code, "uri === '/welcome' || uri === '/privacy' || uri === '/terms'") && strcontains(aws_cloudfront_function.spa_rewrite.code, "request.uri = uri + '.html'")
+    error_message = "The prerendered pages (/welcome, /privacy, /terms) must be served from their .html, not the SPA fallback."
   }
   assert {
     condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"
@@ -740,7 +740,8 @@ run "dkim_uses_global_domain_outside_opt_in_regions" {
   command = plan
 
   variables {
-    aws_region = "eu-west-1"
+    aws_region                = "eu-west-1"
+    data_outside_south_africa = true
   }
 
   assert {
@@ -751,6 +752,17 @@ run "dkim_uses_global_domain_outside_opt_in_regions" {
     condition     = aws_vpc_endpoint.ses.service_name == "com.amazonaws.eu-west-1.email"
     error_message = "The SES endpoint follows var.aws_region."
   }
+}
+
+# The privacy notice promises storage in South Africa: another region is refused unless deliberately allowed.
+run "refuses_a_region_outside_south_africa_by_default" {
+  command = plan
+
+  variables {
+    aws_region = "eu-west-1"
+  }
+
+  expect_failures = [var.aws_region]
 }
 
 run "rejects_invalid_dmarc_policy" {

@@ -27,6 +27,8 @@ import {
 	type CalibrationFitStatus,
 	type CalibrationStats,
 	type CropDef,
+	type DemandObject,
+	DEMAND_OBJECT_CATEGORY_LABEL,
 	type FarmSummary,
 	type NetworkNode,
 	type PeInput,
@@ -1234,6 +1236,28 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 			const fields = ['name', 'capacityM3Day', 'annualCapM3', 'mode', 'emergencyBelowPct', 'target', 'depletionFactor'] as const;
 			if (moved || fields.some((f) => !same(x[f], y[f])))
 				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: borehole "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${x.emergencyBelowPct !== y.emergencyBelowPct ? `, emergency level ${fmtValue(x.emergencyBelowPct)} → ${fmtValue(y.emergencyBelowPct)}` : ''}` });
+		}
+	}
+
+	// --- demand objects (engine ≥ 1.7.0, issue #54 2b), by id, then by (unit name, object name) so copies line up ---
+	{
+		const nodeRenameDo = new Map(nodes.pairs.map(([x, y]) => [x.id, y.name] as [string, string]));
+		const ownerA = (o: DemandObject) => nodeRenameDo.get(o.nodeId) ?? na.node(o.nodeId) ?? '';
+		const ownerB = (o: DemandObject) => nb.node(o.nodeId) ?? '';
+		const objs = matchByIdThenName(a.demandObjects ?? [], b.demandObjects ?? [], (x) => x.id, (x) => `${(b.demandObjects ?? []).includes(x) ? ownerB(x) : ownerA(x)}\u0000${x.name}`);
+		const size = (x: DemandObject) =>
+			x.sizing === 'perUnit'
+				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
+				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
+		const describe = (x: DemandObject) =>
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.enabled ? '' : ', off'}`;
+		for (const x of objs.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Demand object "${x.name}" removed from ${ownerA(x)} (was ${describe(x)})` });
+		for (const y of objs.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Demand object "${y.name}" added to ${ownerB(y)} (${describe(y)})` });
+		for (const [x, y] of objs.pairs) {
+			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
+			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
+			if (moved || fields.some((f) => !same(x[f], y[f])))
+				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}` });
 		}
 	}
 

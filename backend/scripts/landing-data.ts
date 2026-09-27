@@ -126,6 +126,11 @@ const grid = EXTRA_HA.map((ha) =>
 );
 
 const baseFarm = base.summary.farms.find((f) => f.nodeId === farmId)!;
+// How closely the fitted model follows the example's weir record (Nash–Sutcliffe,
+// 1 is a perfect match): the run's own score over its calibration window, the
+// figure the app's Summary shows as "Calibration NSE".
+const nse = base.summary.calibration?.nse;
+if (nse == null) throw new Error('the example run has no calibration score: is its weir record missing?');
 const data = {
 	source: 'Invented example catchment (Kleinberg); every figure is synthetic.',
 	engineVersion: base.engineVersion,
@@ -135,7 +140,8 @@ const data = {
 		farms: kleinberg.model.nodes.filter((n) => n.kind === 'farm').length,
 		dams: kleinberg.model.nodes.filter((n) => n.damCapacityM3 > 0).length,
 		years: Math.round(years(base)),
-		days: base.days
+		days: base.days,
+		calibrationNse: round(nse, 2)
 	},
 	story,
 	whatIf: {

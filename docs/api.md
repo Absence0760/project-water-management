@@ -16,7 +16,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
-| POST | `/auth/register` | `{ email, password, displayName, inviteToken?, locale? }` | `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
+| POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked |
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
@@ -68,7 +68,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -82,6 +82,11 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   (`user_preferences`, 083), today `{ hiddenTabs: string[] }`: the workspace
   sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs by
   role](./ui.md)), `[]` until they hide one. Only ever their own.
+  `termsCurrent` is whether the account accepted the terms and privacy
+  notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
+  `false` after the version changes, and for an account a script made
+  (`seed:examples`, `import:project`: they accept nothing). Nothing asks
+  again yet ([legal-status.md](./legal-status.md)).
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
@@ -90,7 +95,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   reportSubscriptions, auditEvents, auditEventsTruncated }`. `preferences`
   is the person's saved display preferences, `[{ preferences, updatedAt }]`,
   or `[]` if they never saved any. `account` is
-  the `app_user` row without the password hash. `farms` is one entry per farm
+  the `app_user` row without the password hash (so it includes
+  `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
+  087). `farms` is one entry per farm
   linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
   with the registered volumes matched to that farm (`allocations`, holder
   name included) and the current publication's figures for it as the farm
@@ -179,6 +186,7 @@ unless it is listed there with why its status says enough.
 | `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
+| `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or with a version that isn't the current one (a sign-up page loaded before the terms changed); `params.version` is the current one. Checked before the sign-up throttle counts |
 | `wrong_current_password` | 403 | `POST /auth/change-password` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
@@ -972,6 +980,20 @@ or an unknown node, and an emergency or dam-target borehole on a node without a
 farm dam; `mode`, `emergencyBelowPct`, `target` and `depletionFactor` default
 to supplemental, 0.3, direct and 0.
 
+`ProjectModel.demandObjects` (engine ≥ 1.7.0, issue #54 item 2b, migration
+088, [model.md §2.7f](./model.md); optional, and absent from `GET` when the
+project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
+'municipal' | 'industrial' | 'livestock' | 'irrigation' | 'external' |
+'other'), sizing ('monthly' | 'perUnit'), monthlyM3Day (12 values ≥ 0, Oct–Sep,
+or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
+(0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
+priority ('first' | 'shared' | 'last'), destination ('internal' |
+'external'), enabled, note (≤ 1000 chars) }[]`, at most 5 000. Defaults:
+other, monthly, null, null, null, 0, null, 0, shared, internal, true, ''.
+`PUT` refuses an object on a gauge, an other water user or an unknown node, a
+monthly one without 12 values, a per-unit one without a count and litres, and
+an external one with a return share above 0.
+
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
@@ -1269,6 +1291,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `depletion_store` (m³), and `summary.waterBalance` rows gain
   `groundwaterM3` and `streamDepletionM3`. `summary.verification.checks` has
   a `groundwater` check on every run (it passes trivially without boreholes).
+- Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
+  an enabled object has, per object, the run series `object_demand@<id>` and
+  `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
+  name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort }[]`, in id
+  order). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's

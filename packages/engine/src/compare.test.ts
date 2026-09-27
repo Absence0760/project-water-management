@@ -548,6 +548,36 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Borehole "BH-01" removed from Rooikloof (was 300 m³/day, primary, annual cap 40,000 m³, depletion 0.25)']);
 	});
 
+	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const town = {
+			id: 'do',
+			nodeId: 'copy-f1',
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		b.model.demandObjects = [town];
+		expect(texts(a, b)).toEqual(['Demand object "Town" added to Rooikloof (Municipal (town), 600 m³/day on average, return 0.5, priority first)']);
+		const c = copyWithFreshIds(b);
+		c.model.demandObjects = [{ ...town, id: 'do-copy', nodeId: 'copy-copy-f1', monthlyM3Day: [...town.monthlyM3Day.slice(0, 11), 0], destination: 'external', returnPct: 0 }];
+		expect(texts(b, c)).toEqual([
+			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 550 m³/day on average, piped out, priority first, monthly values changed'
+		]);
+		expect(texts(b, a)).toEqual(['Demand object "Town" removed from Rooikloof (was Municipal (town), 600 m³/day on average, return 0.5, priority first)']);
+	});
+
 	it('describes a dam raise on a copied project by farm name', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

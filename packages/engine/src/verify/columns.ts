@@ -95,7 +95,7 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 		key: 'groundwater_to_dam',
 		letter: 'GWd',
 		formula:
-			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity; P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
+			'dam-target boreholes, before the surface G, at most the dam’s room cap − (S0 + M + O + K + J − release): primary fill it, supplemental add D − primary GW − (S0 + M + O + K + J − release − dead storage), emergency fill it while Q[t−1] < its level × capacity, primary and emergency only on a day with demand left for the dam (engine ≥ 1.7.0); P = S0 + M + O + K + J − release + GWd − (G − GW) (WP-3.9)',
 		optional: true
 	},
 	{
