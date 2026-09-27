@@ -372,8 +372,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   | `m3s` the month's mean flow), `points` (2–20 exceedance %, rising, in
   (0, 100]), `ewr` (12 rows, Oct … Sep, × one value per point, each 0–1e6),
   `naturalSource` (`run` | `table`), `natural` (the same shape, required when
-  `naturalSource` is `table`, else `null`), `scale` (above 0, at most 1 000)
-  `}`, and from engine 0.33.0 (model.md §2.9d) two optional fields:
+  `naturalSource` is `table`, else `null`), `scale` (above 0, at most 1 000),
+  optional `naturalMarMcm` (engine ≥ 1.7.0: the determination's natural MAR
+  at the site, Mm³ a year, above 0 up to 1e6, or `null`; absent = not
+  recorded) `}`, and from engine 0.33.0 (model.md §2.9d) two optional fields:
   `lowFlow` (the low-flow grid of a `total` table, same shape as `ewr`, or
   `null`; refused on a `lowFlow` table) and `highFlows` (at most 12 `{ label`
   1–100 chars, `months` (calendar 1–12, each once), `peakM3s` (above 0),
@@ -1335,6 +1337,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   (`EwrAssuranceSite` in `packages/engine/src/reserve/assurance.ts`):
   `nodeId` (`null` = outlet), `name`, `isOutlet`, the table's `source`,
   its `sourceKind` (engine ≥ 1.5.0, only when the table states one),
+  `naturalMar` (engine ≥ 1.7.0, only when the table records a natural MAR
+  and the run has every calendar month: `{ runMcm, tableMcm,
+  differencePct }`),
   `component`, `unit`, `naturalSource`, `scale` and `points`; `months` (each
   complete calendar month: `{ year, month, waterYear, days, natural,
   percentile, beyond: 'wetter' | 'drier' | null, required, actual, met,

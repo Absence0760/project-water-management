@@ -223,6 +223,7 @@ The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
   the Settings form's sentences (`ops[0].table.source: Say where the table
   comes from …`). Applied, the table is kept as the run reads it: the source
   trimmed, no natural grid unless it is the natural source, `sourceKind`
+  and `naturalMarMcm` (engine ≥ 1.7.0, the determination's natural MAR)
   only when stated.
 - **Problems** (the op is skipped): a table that fails those checks; a site
   that isn't the outlet or a gauge (`an EWR site is the outlet or a gauge;

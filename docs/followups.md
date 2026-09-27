@@ -480,6 +480,22 @@ collected as a checklist in issue #46; tick it there as they answer.
       especially the entries built on open quirks.
 - [x] **Curtailment "Demand left %"** is bounded 0–100 and shows "no
       demand" / "—" below 1 m³/day (Q13, engine 0.17.0).
+- [x] **Issue #46 persona drafts, three changes built** (engine 1.7.0,
+      2026-09-27; drafts from the licensing-authority and hydrologist
+      personas, **pending the client's hydrologist**, who may reverse any
+      of them on #46): (1) an optional `naturalMarMcm` on a Reserve rule
+      table (engine, settings API, `ewrRule.set`, the rule-table editor;
+      settings JSON, no migration) and a run warning when the percentile
+      comes from the run and the run's natural MAR is more than ±15 %
+      (`EWR_NATURAL_MAR_TOLERANCE`, a judgement) from it, model.md §2.9c;
+      (2) the annual assurance of supply counts complete water years only,
+      with `partWaterYears` saying how many part years were left out,
+      §2.11a; (3) the review triggers' lowest band runs from the lowest
+      total storage on record for the review date instead of empty dams,
+      §2.15a. Still open for the hydrologist: whether `naturalSource`
+      should default to `table` (or be a required choice) where the gazette
+      publishes a natural curve, the 15 % itself, and the minimum vs a 5th
+      percentile (≥ 20 years) for the lowest band.
 
 ## Issue #4 Phase 6: simulated review findings (2026-09-24)
 
