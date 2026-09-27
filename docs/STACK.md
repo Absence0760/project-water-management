@@ -134,10 +134,12 @@ pnpm check:terms            # no client-identifying term in any tracked file (ne
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release and scripts/ingest
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)
-pnpm gen:i18n:sheet         # rewrite the Afrikaans translation sheet (after changing a message or landing a translation); check:i18n checks it
-pnpm gen:i18n:stamp <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it
-pnpm gen:i18n:export <dir>  # the sheet's untranslated rows as JSON batches (for the af-translator agent, .claude/agents/i18n/)
-pnpm gen:i18n:apply <f.json …>  # write checked Afrikaans (sheet Id → text; later files win) into the catalogues and rewrite the sheet
+pnpm gen:i18n:sheet [lang…]        # rewrite a language's translation sheet (default: every non-English language in
+                             # packages/engine/src/languages.ts); check:i18n checks every language
+pnpm gen:i18n:stamp <lang> <id>    # re-stamp a farmer glossary translation from the current English, once the translator has re-checked it
+pnpm gen:i18n:export <lang> <dir>  # a language's untranslated sheet rows as JSON batches (for the i18n-translator agent, .claude/agents/i18n/)
+pnpm gen:i18n:apply <lang> <f.json …>  # write checked words (sheet Id → text; later files win) into that language's catalogues (creating one
+                             # that doesn't exist yet) and rewrite its sheet
 ```
 
 ## Running tests
@@ -269,10 +271,10 @@ Prefer reading these over guessing. Update them when behaviour changes.
   or variable is `msg('…')`, a counted word `plural({ one, other })`, and a
   file's messages sit under an `// i18n-section:` marker. Farmer emails come
   from `backend/src/mail/i18n/en.ts` (keyed) through `mailT()`. Never show a
-  string there without `t()`, never write Afrikaans by hand: a new or
-  changed message goes through the `af-translator` and `af-checker` agents
-  and `pnpm gen:i18n:apply` (ui.md § Language), and run
-  `pnpm gen:i18n:sheet` after changing a message (the
+  string there without `t()`, never write another language's words by hand:
+  a new or changed message goes through the `i18n-translator` and
+  `i18n-checker` agents and `pnpm gen:i18n:apply <lang>` (ui.md § Language),
+  and run `pnpm gen:i18n:sheet` after changing a message (the
   tests throw on English that isn't on the sheet; [ui.md §
   Language](./ui.md#language)). The workspace stays English. Those pages
   show a server error through `errorText` (`lib/i18n/apiError.ts`, from the
