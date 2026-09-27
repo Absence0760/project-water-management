@@ -978,6 +978,20 @@ or an unknown node, and an emergency or dam-target borehole on a node without a
 farm dam; `mode`, `emergencyBelowPct`, `target` and `depletionFactor` default
 to supplemental, 0.3, direct and 0.
 
+`ProjectModel.demandObjects` (engine ≥ 1.7.0, issue #54 item 2b, migration
+088, [model.md §2.7f](./model.md); optional, and absent from `GET` when the
+project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
+'municipal' | 'industrial' | 'livestock' | 'irrigation' | 'external' |
+'other'), sizing ('monthly' | 'perUnit'), monthlyM3Day (12 values ≥ 0, Oct–Sep,
+or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
+(0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
+priority ('first' | 'shared' | 'last'), destination ('internal' |
+'external'), enabled, note (≤ 1000 chars) }[]`, at most 5 000. Defaults:
+other, monthly, null, null, null, 0, null, 0, shared, internal, true, ''.
+`PUT` refuses an object on a gauge, an other water user or an unknown node, a
+monthly one without 12 values, a per-unit one without a count and litres, and
+an external one with a return share above 0.
+
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
 `boreholeRule` (`"supplemental"` | `"primary"` | `"drought"`),
@@ -1275,6 +1289,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `depletion_store` (m³), and `summary.waterBalance` rows gain
   `groundwaterM3` and `streamDepletionM3`. `summary.verification.checks` has
   a `groundwater` check on every run (it passes trivially without boreholes).
+- Demand objects (engine ≥ 1.7.0, [model.md §2.7f](./model.md)): a unit with
+  an enabled object has, per object, the run series `object_demand@<id>` and
+  `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
+  name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
+  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort }[]`, in id
+  order). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
   l/s over `settings.reportStart … reportEnd` (ISO dates, `null` = the run's

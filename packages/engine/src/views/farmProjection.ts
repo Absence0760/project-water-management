@@ -65,7 +65,8 @@ const NOISE_M3 = 1e-6;
 
 /** The run's series a projection reads, by node kind (null node = catchment). */
 export const PROJECTION_SERIES = {
-	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key],
+	// return_flow: read only for a unit with demand objects (engine ≥ 1.7.0), whose consumptive share follows it.
+	farm: ['demand', 'supplied', 'deficit', 'dam_storage', 'spill', 'transfer', 'inflow_upstream', 'runoff', 'outflow', 'ewr_charge', 'ewr_charge_irrigation', EWR_BINDING_SERIES.key, 'return_flow'],
 	user: ['supplied', 'inflow_upstream', 'outflow'],
 	// ewr_charge_shortfall only where the charge followed a Reserve rule table (engine ≥ 1.3.0); read when present.
 	gauge: ['inflow_upstream', 'outflow', 'ewr_shortfall', 'ewr_charged', 'ewr_natural', 'ewr_charge_shortfall'],
