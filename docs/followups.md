@@ -102,7 +102,13 @@ The checklist for these is issue #62; the history scrub is #63.
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
         the release preflight refuses every release;
-      - CodeQL and Scorecard fail on every push.
+      - CodeQL and Scorecard fail on every push;
+      - since 2026-09-25, no Actions job starts at all ("recent account
+        payments have failed or your spending limit needs to be increased"),
+        so CI, the e2e shards and the Dependabot workflows are all dark. Fix
+        the payment or spending limit under Billing & plans first, then
+        confirm the next push to `main` goes green (nothing since then has
+        had a CI run; #20, #60 and #61 were merged on local checks only).
 
       Make the repo public (after the history scrub above) or upgrade the plan. Then
       make `CI gate` a required check.
