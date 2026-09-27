@@ -625,6 +625,12 @@ daily output byte-identical (compared as RFC 8785 canonical JSON, engine
   references. A reference may only be inserted by an editor, for a run of the
   same project saved in the same transaction (`model_run.created_at =
   now()`). Nothing updates either table.
+- **Writes.** A blob is stored only through `app_store_series_blob(project,
+  valuesJson)` (074_series_blob_digest; `SECURITY DEFINER`, an editor or a
+  contributor): it keys the blob by the SHA-256 of the JSON text it is given
+  (`seriesDigest`, so the key is `seriesHash`) and stores the values parsed
+  from that same text, `ON CONFLICT DO NOTHING`. `water_app` has no
+  `INSERT` on `series_blob`, so a caller never chooses the key.
 - **Reads.** `series_blob` is visible through a `run_input_series` row the
   user can see, which is visible through a `model_run` the user can see
   (viewer). `loadRunInput` re-hashes each blob and checks it against the

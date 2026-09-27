@@ -11,8 +11,8 @@
 //    INSERT of a copy (fresh id) of a row A can't read, each inside a
 //    savepoint that is rolled back. A may change only what CHANGE lists
 //    (their own applications, notes, runs, and leaving the project) and
-//    insert nothing they can't read (KNOWN_INSERTS names the one exception,
-//    left for an issue).
+//    insert nothing they can't read (KNOWN_INSERTS would name a known
+//    exception; there is none).
 //  - routes: every /projects/:id route an applicant may call (the
 //    CONTRIBUTOR_ALLOWED list of applications.db.test.ts, taken here from the
 //    app's routes and the role ladder) with B's application, B's farm and
@@ -27,6 +27,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { seriesHash } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 let owner: User, viewer: User, applicantA: User, applicantB: User, consultantB: User, consultantA: User, farmer: User;
@@ -95,15 +96,9 @@ const CHANGE: Record<string, { update?: string; delete?: string }> = {
  * known gap with its follow-up; a new one fails the sweep.
  */
 const KNOWN_INSERTS: Record<string, string> = {
-	// series_blob_insert_contributor (045) admits any blob in the project: an
-	// application run stores its (possibly series.scale'd) inputs as an
-	// editor's run does. The blob's sha256 isn't checked against its values,
-	// so a direct insert (a second-layer bypass, never the API) can plant a
-	// blob under a hash the project will later store, and a later run then
-	// references it and fails loadRunInput's SHA-256 check. Left for an issue
-	// (durable fix: verify the digest in the database, or insert through a
-	// SECURITY DEFINER function that owns the key).
-	series_blob: 'content-addressed blob a contributor run writes; hash unchecked in the database'
+	// None. series_blob was one (045's series_blob_insert_contributor admitted
+	// any blob, its hash unchecked) until 074_series_blob_digest made the
+	// database key each blob itself.
 };
 
 /**
@@ -387,21 +382,39 @@ describe('what an applicant writes, table by table', () => {
 		expect(refused.length).toBeGreaterThan(30);
 	});
 
-	it('is the control for the insert sweep: the known gap does insert (drop it from KNOWN_INSERTS once fixed)', async () => {
-		const sha = 'f'.repeat(64);
-		const r = await withUser(applicantA.id, async (db) => {
+	it("can't plant a stored input under a hash of their choosing, and their application's run still stores its inputs", async () => {
+		const sha = seriesHash([2]);
+		// Directly: refused, as for everyone since 074 (no insert policy or grant).
+		await expect(
+			withUser(applicantA.id, (db) => db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [projectId, sha]))
+		).rejects.toMatchObject({ code: '42501' });
+		// Through the store function: the key is the text's own hash, never the one wanted.
+		const got = await withUser(applicantA.id, async (db) => {
 			await db.query('SAVEPOINT s');
 			try {
-				return (await db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [projectId, sha])).rowCount;
+				return (await db.query<{ sha: string }>('SELECT app_store_series_blob($1, $2) AS sha', [projectId, '[1]'])).rows[0]!.sha;
 			} finally {
 				await db.query('ROLLBACK TO SAVEPOINT s');
 			}
 		});
-		expect(r).toBe(1);
-		// A viewer can't (reproducible.db.test.ts): the gap is the contributor policy's.
-		await expect(withUser(viewer.id, (db) => db.query(`INSERT INTO series_blob (project_id, sha256, "values") VALUES ($1, $2, '{1}')`, [projectId, sha]))).rejects.toMatchObject({
-			code: '42501'
-		});
+		expect(got).toBe(seriesHash([1]));
+		// A viewer can't store one at all.
+		await expect(withUser(viewer.id, (db) => db.query('SELECT app_store_series_blob($1, $2)', [projectId, '[1]']))).rejects.toMatchObject({ code: '42501' });
+		// Positive control: A's application run (beforeAll, through the API)
+		// stored its inputs, each under the hash its snapshot names and its
+		// values hash to (a draft's run is A's alone to read, and A reads no
+		// run row, so checked as the schema owner: what loadRunInput checks).
+		const refs = await asOwner(
+			`SELECT i.kind, i.sha256, b."values", m.inputs -> 'series' -> i.kind ->> 'valuesSha256' AS want
+			 FROM model_run m JOIN run_input_series i ON i.run_id = m.id JOIN series_blob b ON b.project_id = i.project_id AND b.sha256 = i.sha256
+			 WHERE m.project_id = $1 AND m.scenario_id = $2`,
+			[projectId, appA]
+		);
+		expect(refs.map((r: { kind: string }) => r.kind).sort()).toEqual(['flow_observed_m3s', 'rain_catchment_mm']);
+		for (const r of refs) {
+			expect(r.sha256).toBe(r.want);
+			expect(seriesHash(r.values)).toBe(r.sha256);
+		}
 	});
 });
 
