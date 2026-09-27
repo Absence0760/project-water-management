@@ -216,6 +216,12 @@ bottom:
    compares as pan coefficient × A-pan. A changed pan-coefficient source
    note (`panCoefficientSource`, engine ≥ 0.31.1) is its own line, **Pan
    coefficient source**, reading "none" where a run has none.
+   A change of the areal rainfall correction (`settings.arealRain`, engine
+   ≥ 1.8.0, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--180))
+   is a settings line labelled **Areal rainfall correction (GR4J)**: "none →
+   × 1.85 (map: …)" when one side has none (a run saved before 1.8.0 had
+   none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
+   a changed method and a reworded source.
 3. **Headline results.** A **Water balance** table (total irrigation supplied
    and deficit, share of demand supplied, farms below 95 % supplied, EWR days
    not met and their share, mean outflow and natural flow, the runoff

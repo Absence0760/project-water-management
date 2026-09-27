@@ -2,7 +2,7 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { defaultProjectSettings, fitPeriodText, fromEpochDay, rainSourceText, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
+import { arealRainText, defaultProjectSettings, fitPeriodText, resolveArealRain, fromEpochDay, rainSourceText, toEpochDay, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
@@ -42,6 +42,8 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.31.1: under pan × A-pan, where the pan-coefficient row came from, when noted.
 		const kpSource = s.pe?.kind !== 'monthly' && s.panCoefficientSource ? ` (pan coefficient: ${s.panCoefficientSource})` : '';
 		rows.push(['GR4J potential evaporation', peText(s.pe) + kpSource]);
+		// Engine ≥ 1.8.0 (docs/model.md §2.4g); a snapshot without it ran with none.
+		rows.push(['Areal rainfall correction (GR4J rain)', arealRainText(resolveArealRain(s.arealRain, []))]);
 	}
 	rows.push(
 		['Calibration window', describeWindow(s.calibrationStart, s.calibrationEnd)],

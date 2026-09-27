@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, type ApanDailyFingerprint, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -77,6 +77,11 @@
 				<div data-testid="fit-pe">
 					<dt>GR4J potential evaporation <HelpTip key="settings.pe" /></dt>
 					<dd>{peText(recordedPe)}{#if recordedPe.kind === 'monthly'}: {monthsText(recordedPe.mm, 0)} mm{/if}</dd>
+				</div>
+				<!-- Engine ≥ 1.8.0 (docs/model.md §2.4g): a forcing without it ran with none. -->
+				<div data-testid="fit-areal-rain">
+					<dt>Areal rainfall correction <HelpTip key="settings.arealRain" /></dt>
+					<dd>{arealRainText(resolveArealRain(record.forcing.arealRain, []))}</dd>
 				</div>
 				<div>
 					<dt>Pan coefficient <HelpTip key="settings.panCoefficient" /></dt>

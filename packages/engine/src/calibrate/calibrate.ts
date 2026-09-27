@@ -19,9 +19,9 @@
 //   parameters scored against another observed record (a logger when the fit
 //   used the gauge, or the reverse), over that record's own days. It tests
 //   the fit against a second instrument, not just a second period.
-import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
 import { simulateNetwork } from '../network/simulate';
-import type { CalibrationFlowKind, ModelInput } from '../project';
+import { arealRainFactors, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, pickObservedKind } from '../run';
 import { requireCatchmentAreaKm2 } from '../runoff/area';
 import { gr4j } from '../runoff/gr4j';
@@ -38,6 +38,10 @@ import { excludedDayMask, exclusionRanges } from './provenance';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
+
+/** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.8.0), as runModel's WR2012 check reads it. */
+const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
+	rain && areal ? rain.map((v, t) => (v === null ? null : v * areal[waterYearIndex(month[t]!)]!)) : rain;
 
 const SEC_PER_DAY = 86_400;
 
@@ -328,7 +332,11 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			startDate,
 			idx[idx.length - 1]! + 1,
 			area,
-			runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1)
+			arealRainOn(
+				runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1),
+				arealRainFactors(settings.arealRain),
+				month
+			)
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),

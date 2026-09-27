@@ -305,6 +305,17 @@ export interface ProjectSettings {
 	 */
 	pe: PeInput;
 	/**
+	 * Areal rainfall correction (engine ≥ 1.8.0, docs/model.md §2.4g): the
+	 * rain GR4J runs on (catchment rain, else corrected CHIRPS, else
+	 * forecast) × a factor per water-year month, turning a point or gridded
+	 * series into the catchment's areal rain (orographic rain a valley gauge
+	 * or a 0.05° product misses). Runoff only: irrigation demand's effective
+	 * rain and rain on the dams keep the uncorrected rain. A fixed input with
+	 * its provenance, never a calibrated parameter. Optional so settings
+	 * stored before it still type; absent or null = no correction (× 1).
+	 */
+	arealRain?: ArealRain | null;
+	/**
 	 * Bias correction of CHIRPS rain where it fills in for blank catchment rain
 	 * (engine ≥ 0.7.0, ./rain.ts, docs/engine-audit.md B1). Default 'monthly'.
 	 */
@@ -485,6 +496,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		panCoefficient: [0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7],
 		panCoefficientSource: '',
 		pe: { kind: 'pan' },
+		arealRain: null,
 		chirpsBiasCorrection: 'monthly',
 		chirpsFitPeriod: 'all',
 		rainSource: [],
@@ -574,6 +586,114 @@ export function resolvePe(raw: unknown, warnings: string[]): PeInput {
 	}) as unknown as Monthly;
 	if (bad.length) warnings.push(`monthly PE is not a number ≥ 0 in month(s) ${bad.map((i) => i + 1).join(', ')} of the water year; using 0`);
 	return { kind: 'monthly', mm, source: typeof r.source === 'string' ? r.source.slice(0, PE_SOURCE_MAX) : '' };
+}
+
+/**
+ * How an areal rainfall factor was derived (engine ≥ 1.8.0, docs/model.md
+ * §2.4g). 'map': an independent mean annual precipitation for the catchment
+ * (a WR2012 quaternary MAP, an isohyetal or gridded MAP averaged over the
+ * catchment) ÷ the forcing's own mean annual rain, the preferred basis.
+ * 'stations': ratios against rain gauges in or near the catchment. 'fitted':
+ * chosen by fitting to the flow record, which makes the rain level a
+ * calibrated multiplier (it trades off against X1 and PE); allowed, but a run
+ * says so.
+ */
+export const AREAL_RAIN_METHODS = ['map', 'stations', 'fitted'] as const;
+export type ArealRainMethod = (typeof AREAL_RAIN_METHODS)[number];
+
+/** `settings.arealRain` (engine ≥ 1.8.0): the rain GR4J runs on × `factors` (water-year months, Oct–Sep). */
+export interface ArealRain {
+	factors: Monthly;
+	method: ArealRainMethod;
+	/** Where the factors come from (the MAP and its reference, the period compared); required, at most PE_SOURCE_MAX characters. */
+	source: string;
+}
+
+/**
+ * Bounds on one areal rainfall factor: the CHIRPS bias-correction clamp
+ * (docs/model.md §2.4b). A factor beyond 4 either way is more likely two
+ * series that don't describe the same area, or a unit error, than a real
+ * areal difference.
+ */
+export const AREAL_RAIN_FACTOR_MIN = 0.25;
+export const AREAL_RAIN_FACTOR_MAX = 4;
+
+/** Why a stored `arealRain` can't be used, or null. The API applies the same rules. */
+export function arealRainError(raw: unknown): string | null {
+	if (raw === null || raw === undefined) return null;
+	if (typeof raw !== 'object' || Array.isArray(raw)) return 'not an areal rainfall correction';
+	const r = raw as { factors?: unknown; method?: unknown; source?: unknown };
+	if (!Array.isArray(r.factors) || r.factors.length !== 12) return 'needs 12 monthly factors (water-year order, Oct–Sep)';
+	const bad = r.factors.findIndex((x) => !(typeof x === 'number' && Number.isFinite(x) && x >= AREAL_RAIN_FACTOR_MIN && x <= AREAL_RAIN_FACTOR_MAX));
+	if (bad >= 0) return `factor ${bad + 1} is not a number from ${AREAL_RAIN_FACTOR_MIN} to ${AREAL_RAIN_FACTOR_MAX}`;
+	if (!(AREAL_RAIN_METHODS as readonly unknown[]).includes(r.method)) return `method must be one of ${AREAL_RAIN_METHODS.join(', ')}`;
+	if (typeof r.source !== 'string' || !r.source.trim()) return 'needs its source';
+	if (r.source.length > PE_SOURCE_MAX) return `source longer than ${PE_SOURCE_MAX} characters`;
+	return null;
+}
+
+/**
+ * A stored `arealRain` as the engine runs it: absent, null or unusable (with a
+ * warning) = none. A correction whose factors are all 1 is kept (it records
+ * the decision), and changes nothing.
+ */
+export function resolveArealRain(raw: unknown, warnings: string[]): ArealRain | null {
+	if (raw === null || raw === undefined) return null;
+	const err = arealRainError(raw);
+	if (err) {
+		warnings.push(`areal rainfall correction ignored (${err}): GR4J runs on the rain as recorded`);
+		return null;
+	}
+	const r = raw as ArealRain;
+	return { factors: [...r.factors] as unknown as Monthly, method: r.method, source: r.source.trim() };
+}
+
+/** The run's areal rain column (engine ≥ 1.8.0): rain_final × the month's areal factor, output only with a correction. */
+export const AREAL_RAIN_COLUMN = { key: 'rain_areal', label: 'Areal catchment rainfall (final rainfall × areal factor, the rain GR4J runs on)', unit: 'mm' } as const;
+
+/** The run warning for an areal factor fitted to the flow record (method 'fitted'). */
+export const AREAL_RAIN_FITTED_WARNING =
+	'the areal rainfall correction was fitted to the flow record, so the rain level is a calibrated multiplier: it trades off against GR4J’s production store and the evaporation, and the fit cannot tell a rain error from a parameter error. Prefer a factor from an independent MAP or rain gauges (docs/model.md §2.4g)';
+
+/** The areal factor per water-year month (Oct–Sep), or null for none. */
+export const arealRainFactors = (a: ArealRain | null | undefined): readonly number[] | null => (a ? a.factors : null);
+
+/**
+ * The areal factor from an independent MAP (method 'map'): `mapMm` ÷ the
+ * forcing's mean annual rain over its complete water years (Oct–Sep, every
+ * day with a value). `rainMm` is the forcing before any areal correction,
+ * day by day from `startDate` (null or NaN = no value). Null when the series
+ * holds no complete water year or no rain. One flat factor: an annual MAP
+ * says nothing about the seasons, so the same value goes in every month.
+ */
+export function arealFactorFromMap(
+	mapMm: number,
+	rainMm: ArrayLike<number | null>,
+	startDate: string
+): { factor: number; meanAnnualMm: number; waterYears: number[] } | null {
+	if (!(Number.isFinite(mapMm) && mapMm > 0)) return null;
+	const [y0, m0, d0] = startDate.split('-').map(Number) as [number, number, number];
+	const t0 = Date.UTC(y0, m0 - 1, d0);
+	const sums = new Map<number, { mm: number; days: number; expected: number }>();
+	for (let t = 0; t < rainMm.length; t++) {
+		const d = new Date(t0 + t * 86_400_000);
+		const wy = d.getUTCMonth() >= 9 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+		let s = sums.get(wy);
+		if (!s) {
+			const expected = Math.round((Date.UTC(wy + 1, 9, 1) - Date.UTC(wy, 9, 1)) / 86_400_000);
+			sums.set(wy, (s = { mm: 0, days: 0, expected }));
+		}
+		const v = rainMm[t];
+		if (v !== null && v !== undefined && Number.isFinite(v)) {
+			s.mm += Math.max(0, v);
+			s.days++;
+		}
+	}
+	const full = [...sums.entries()].filter(([, s]) => s.days === s.expected).sort((a, b) => a[0] - b[0]);
+	if (!full.length) return null;
+	const meanAnnualMm = full.reduce((a, [, s]) => a + s.mm, 0) / full.length;
+	if (!(meanAnnualMm > 0)) return null;
+	return { factor: mapMm / meanAnnualMm, meanAnnualMm, waterYears: full.map(([y]) => y) };
 }
 
 /** A named set of monthly pan-coefficient values (water-year order, Oct–Sep). */
@@ -1760,7 +1880,14 @@ export interface RunoffBalance {
 	warmupDays: number;
 	/** Area the mm are spread over (km²). */
 	areaKm2: number;
+	/** Rain the model ran on: after the areal rainfall correction when there is one. */
 	rainMm: number;
+	/**
+	 * The areal rainfall correction the run applied (engine ≥ 1.8.0,
+	 * settings.arealRain, docs/model.md §2.4g) and the rain before it; absent
+	 * without one.
+	 */
+	arealRain?: ArealRain & { rainBeforeMm: number };
 	petMm: number;
 	aetMm: number;
 	flowMm: number;
@@ -1987,7 +2114,7 @@ export interface WaterBalanceRow {
 	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Catchment rain after gap-filling (rain_final, mm); null when the run has no rain series. */
+	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.8.0); null when the run has no rain series. */
 	rainMm: number | null;
 	/** Natural flow as depth over the catchment (mm); null without an area. */
 	naturalFlowMm: number | null;

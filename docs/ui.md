@@ -2265,7 +2265,21 @@ which checks every catchment tab).
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0.
-    After the GR4J parameters and the groundwater exchange (X2) block comes
+    Then the **Areal rainfall correction** group (`settings.arealRain`,
+    engine ≥ 1.8.0, `settings/arealRain.ts`;
+    [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--180)):
+    a checkbox "Scale the rain GR4J runs on to the catchment's areal rain"
+    (on: × 1 in every month, method Independent MAP, source blank; off:
+    null, and the correction switched off comes back if ticked again before
+    saving). On, it shows a "Factor in every month" input (fills all twelve;
+    blank when the months differ), a "Derived from" select (Independent MAP,
+    Rain gauges, Fitted to the flow record, each with its hint), the twelve
+    monthly factors (0.25–4, Oct … Sep) and a required Source. A factor out
+    of range or a blank source blocks Save, with the message beside the
+    source and in the save bar. The fit record lists the correction it ran
+    under ("Areal rainfall correction"), and the report's inputs table
+    shows it.
+    After it comes
     the **GR4J potential evaporation** group (`settings.pe`, engine ≥
     0.31.0, issue #39, `settings/peInput.ts`;
     [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4)).

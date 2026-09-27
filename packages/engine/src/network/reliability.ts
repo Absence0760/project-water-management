@@ -153,7 +153,7 @@ export interface WaterAccountRow {
 	/** Start year of the water year; null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Memo: rain on the catchment (rain_final × area); null without rain or an area. */
+	/** Memo: rain on the catchment (rain_final, × the areal factor with an areal rainfall correction, × area); null without rain or an area. */
 	rainM3: number | null;
 	/** Memo: rain − natural flow, what the catchment evaporated, stored or recharged; null with rainM3. */
 	catchmentLossM3: number | null;

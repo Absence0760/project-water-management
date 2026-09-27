@@ -589,6 +589,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.pe']
 	},
 	{
+		id: 'areal-rain',
+		term: 'Areal rainfall correction',
+		short: 'Scales the rain GR4J runs on to the catchment’s areal rain (e.g. from an independent MAP). Runoff only; demand keeps the recorded rain.',
+		units: '× per month',
+		category: 'flow',
+		fields: ['settings.arealRain', 'run.rain_areal']
+	},
+	{
 		id: 'actual-evaporation',
 		term: 'Actual evaporation (AET)',
 		short: 'Water the catchment actually evaporates each day in GR4J, in mm: never more than the potential evaporation.',

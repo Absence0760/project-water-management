@@ -88,8 +88,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const farm = (id: string, k: string) => series.get(`${id}|${k}`) ?? [];
 	const area = areaKm2 && areaKm2 > 0 ? areaKm2 : (out.summary.runoff?.areaKm2 ?? null);
-	// The catchment's rain after gap-filling.
-	const rain = cat('rain_final') ?? cat('rain_used');
+	// The catchment's rain after gap-filling, and after the areal rainfall correction when the run has one (engine ≥ 1.8.0).
+	const rain = cat('rain_areal') ?? cat('rain_final') ?? cat('rain_used');
 	const rainUsed = cat('rain_used');
 	const natural = cat('natural_flow') ?? [];
 	const outflow = cat('simulated_outflow') ?? [];

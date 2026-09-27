@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
-import { resolvePe, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { resolveArealRain, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -212,6 +212,12 @@ export interface FitRecord {
 		chirpsSource?: SeriesProvenance | null;
 		rainSource?: RainSourcePeriod[];
 		pe?: PeInput;
+		/**
+		 * The areal rainfall correction the fit ran under (engine ≥ 1.8.0,
+		 * docs/model.md §2.4g); null = none. Absent on a record made before it,
+		 * which ran with none, so a correction added since is a change.
+		 */
+		arealRain?: ArealRain | null;
 		/** Where the pan-coefficient row came from (engine ≥ 0.31.1); provenance only, never a forcing change. */
 		panCoefficientSource?: string;
 		/**
@@ -263,6 +269,8 @@ export interface FitContext {
 		rainSource?: RainSourcePeriod[];
 		/** GR4J's PE input (engine ≥ 0.31.0); absent = `{ kind: 'pan' }`. */
 		pe?: PeInput | null;
+		/** The areal rainfall correction (engine ≥ 1.8.0); absent = none. */
+		arealRain?: ArealRain | null;
 		panCoefficientSource?: string;
 	};
 	validate: boolean;
@@ -311,6 +319,7 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.chirpsSource !== undefined ? { chirpsSource: ctx.chirpsSource ? { ...ctx.chirpsSource } : null } : {}),
 			rainSource: structuredClone(ctx.settings.rainSource ?? []),
 			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
+			arealRain: resolveArealRain(ctx.settings.arealRain, []),
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {})
 		},
@@ -428,6 +437,16 @@ const peChanged = (a: PeInput, b: PeInput): boolean =>
 	a.kind !== b.kind || (a.kind === 'monthly' && b.kind === 'monthly' && !closeArray(a.mm, b.mm));
 
 /**
+ * Whether two areal rainfall corrections give GR4J different rain: one where
+ * there was none (or the reverse), or another factor in some month. The method
+ * and source note are left out, as the PE source is: rewording where a factor
+ * came from doesn't change the rain the fit ran on. A correction of all 1s is
+ * the same rain as none.
+ */
+const ONES = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+const arealRainChanged = (a: ArealRain | null, b: ArealRain | null): boolean => !closeArray(a?.factors ?? ONES, b?.factors ?? ONES);
+
+/**
  * Which of a fit's recorded forcing fields differ from the settings, or null
  * when there is nothing recorded to compare. `panCoefficient` and `apanMm`
  * count only while the settings' `pe` is `{ kind: 'pan' }`: under
@@ -438,7 +457,7 @@ const peChanged = (a: PeInput, b: PeInput): boolean =>
 function forcingDiff(
 	settings: Partial<ProjectSettings>,
 	record: FitRecord
-): { panCoefficient: boolean; apanMm: boolean; pe: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean; rainSource: boolean } | null {
+): { panCoefficient: boolean; apanMm: boolean; pe: boolean; arealRain: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean; rainSource: boolean } | null {
 	if (!record.forcing) return null;
 	const pe = resolvePe(settings.pe, []);
 	const panReachesGr4j = pe.kind === 'pan';
@@ -447,6 +466,8 @@ function forcingDiff(
 		apanMm: panReachesGr4j && !closeArray(settings.apanMm, record.forcing.apanMm),
 		// Engine ≥ 0.31.0. A forcing without it ran pan coefficient × A-pan, so a monthly PE now is a change.
 		pe: peChanged(pe, resolvePe(record.forcing.pe, [])),
+		// Engine ≥ 1.8.0. A forcing without it ran with none, so a correction added since is a change.
+		arealRain: arealRainChanged(resolveArealRain(settings.arealRain, []), resolveArealRain(record.forcing.arealRain, [])),
 		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
 		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection,
 		zeroRainRuns:
@@ -493,7 +514,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		forcingChanged:
 			chirpsSourceChanged ||
 			apanDailyChanged ||
-			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
+			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
 		chirpsSourceChanged,
 		apanDailyChanged
 	};
@@ -538,7 +559,7 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged) {
 		out.push(
-			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
+			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);
 	}
 	return out;

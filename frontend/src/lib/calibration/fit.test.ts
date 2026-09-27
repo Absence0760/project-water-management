@@ -278,9 +278,16 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' } });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' }, arealRain: null });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
+	});
+
+	it('records the areal rainfall correction the fit ran under (engine ≥ 1.8.0)', () => {
+		const arealRain = { factors: new Array(12).fill(1.9) as unknown as ProjectSettings['panCoefficient'], method: 'map' as const, source: 'invented MAP ÷ forcing mean' };
+		const rec = fitRecordFor(report(), { ...defaultProjectSettings(), arealRain }, { validate: false, validationRecord: null });
+		expect(rec.forcing!.arealRain).toEqual(arealRain);
+		expect(rec.forcing!.arealRain!.factors).not.toBe(arealRain.factors);
 	});
 
 	it('records where the pan-coefficient row came from, when noted (engine ≥ 0.31.1)', () => {

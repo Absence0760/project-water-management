@@ -49,6 +49,7 @@ const CATCHMENT_ORDER = [
 	'ewr_natural',
 	'rain_used',
 	'rain_final',
+	'rain_areal',
 	'rain_chirps',
 	'rain_chirps_corrected',
 	'chirps_factor',
