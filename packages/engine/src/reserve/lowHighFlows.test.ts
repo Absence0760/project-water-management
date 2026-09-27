@@ -8,7 +8,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { runModelWith } from '../run';
-import { assessSite, completeMonths, completeWaterYears, countHighFlowEvents } from './assurance';
+import { EWR_HIGH_FLOW_EVENT_LEVEL, assessSite, completeMonths, completeWaterYears, countHighFlowEvents, highFlowEventMinDays } from './assurance';
 import { DEFAULT_ASSURANCE_POINTS, type EwrHighFlowEvent, type EwrRuleTable } from './rules';
 
 const rows = (row: number[]) => Array.from({ length: 12 }, () => [...row]);
@@ -134,32 +134,81 @@ describe('countHighFlowEvents', () => {
 	const peak = 10;
 	const at = (m3s: number) => m3s * 86_400;
 
-	it('counts runs at or above the peak lasting the duration, starting in a listed month', () => {
+	it('needs ⌈duration × (1 − level)⌉ days at or above the level', () => {
+		expect(EWR_HIGH_FLOW_EVENT_LEVEL).toBe(0.5);
+		expect([1, 2, 3, 4, 5, 6, 7, 90].map(highFlowEventMinDays)).toEqual([1, 1, 2, 2, 3, 3, 4, 45]);
+	});
+
+	it('counts a natural storm hydrograph that reaches the peak and lasts the duration', () => {
+		// The reproduction (engine < 1.7.0 counted none of the 3-day or longer
+		// freshets here): a storm on a 1 m³/s base flow rising to 20 m³/s and
+		// receding with a 2-day time constant. Its daily flows are 1, 6, 20,
+		// 12.5, 8.0, 5.2, 3.6, 2.6 … m³/s: a flood that plainly carries a
+		// 10 m³/s, 3-day freshet, with only two consecutive days at or above 10.
 		const f = new Float64Array(30).fill(at(1));
-		f.fill(at(10), 2, 5); // 3 days: an event
-		f.fill(at(12), 10, 12); // 2 days: too short
-		f.fill(at(11), 20, 26); // 6 days: one event, not two
-		expect(countHighFlowEvents(f, 0, 30, start, peak, 3, [11])).toBe(2);
-		expect(countHighFlowEvents(f, 0, 30, start, peak, 2, [11])).toBe(3);
-		expect(countHighFlowEvents(f, 0, 30, start, peak, 7, [11])).toBe(0);
+		f[9] = at(6);
+		for (let t = 0; t < 20; t++) f[10 + t] = at(1 + 19 * Math.exp(-t / 2));
+		// Days at or above 5 m³/s (half of 10): 10 … 14 Nov, five days.
+		for (const d of [1, 2, 3, 5, 7, 9, 10]) expect(countHighFlowEvents(f, 0, 30, start, peak, d, [11])).toBe(1);
+		// A longer event than the storm was: none.
+		expect(countHighFlowEvents(f, 0, 30, start, peak, 11, [11])).toBe(0);
+		expect(countHighFlowEvents(f, 0, 30, start, peak, 30, [11])).toBe(0);
+		// A bigger freshet than the storm: none, however short.
+		expect(countHighFlowEvents(f, 0, 30, start, 21, 1, [11])).toBe(0);
+		// The storm with its rise above the base flow cut to 40 % by a dam
+		// (peak 8.6 m³/s) no longer carries the 10 m³/s freshet, but does a 5 m³/s one.
+		const dammed = f.map((v) => at(1) + (v - at(1)) * 0.4);
+		expect(countHighFlowEvents(dammed, 0, 30, start, peak, 3, [11])).toBe(0);
+		expect(countHighFlowEvents(dammed, 0, 30, start, 5, 3, [11])).toBe(1);
 		// Not a listed month: none count.
 		expect(countHighFlowEvents(f, 0, 30, start, peak, 3, [12])).toBe(0);
+	});
+
+	it('counts a triangular event hydrograph of the stated peak and duration, and not one half as long', () => {
+		// A triangle of peak 10 m³/s and base 2h days on a 1 m³/s base flow.
+		const tri = (h: number) => {
+			const f = new Float64Array(60).fill(at(1));
+			for (let i = -h; i <= h; i++) f[20 + i] = at(1 + 9 * (1 - Math.abs(i) / h));
+			return f;
+		};
+		for (const d of [4, 8, 12, 16]) {
+			expect(countHighFlowEvents(tri(d / 2), 0, 60, start, peak, d, [11])).toBe(1);
+			expect(countHighFlowEvents(tri(d / 4), 0, 60, start, peak, d, [11])).toBe(0);
+		}
+	});
+
+	it('counts a run above the level once, and two peaks with a fall below it between them twice', () => {
+		const f = new Float64Array(40).fill(at(1));
+		f.fill(at(6), 2, 12);
+		f[4] = at(10);
+		f[9] = at(11); // two peaks inside one run above 5: one event
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [11])).toBe(1);
+		f[7] = at(4); // the flow falls below 5 between them: two events
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [11])).toBe(2);
+		// The parts are 5 and 4 days long; a 9-day event asks for 5.
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 9, [11])).toBe(1);
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 11, [11])).toBe(0);
+		// A run above the level that never reaches the peak is no event.
+		expect(countHighFlowEvents(new Float64Array(10).fill(at(9)), 0, 10, start, peak, 1, [11])).toBe(0);
 		// A flow a hair below the peak (float noise) still reaches it.
 		expect(countHighFlowEvents(new Float64Array(5).fill(at(peak) * (1 - 1e-12)), 0, 5, start, peak, 5, [11])).toBe(1);
 	});
 
-	it('goes by the month the event starts in, and cuts a run at the window’s ends', () => {
+	it('goes by the month of the first day at the peak, and cuts a run at the window’s ends', () => {
 		const f = new Float64Array(40).fill(at(1));
-		f.fill(at(20), 28, 35); // 29 Nov … 5 Dec
-		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [11])).toBe(1);
-		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [12])).toBe(0);
-		// Inside a window from 1 Dec, the run starts on 1 Dec and has 5 days.
-		expect(countHighFlowEvents(f, 30, 10, start, peak, 3, [12])).toBe(1);
-		expect(countHighFlowEvents(f, 30, 10, start, peak, 6, [12])).toBe(0);
-		// A missing day breaks a run.
-		f[31] = NaN;
-		expect(countHighFlowEvents(f, 30, 10, start, peak, 3, [12])).toBe(1);
-		expect(countHighFlowEvents(f, 30, 10, start, peak, 4, [12])).toBe(0);
+		f.fill(at(6), 26, 36); // 27 Nov … 6 Dec above the level
+		f.fill(at(20), 30, 32); // 1 … 2 Dec at the peak
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [11])).toBe(0);
+		expect(countHighFlowEvents(f, 0, 40, start, peak, 3, [12])).toBe(1);
+		// Inside a window from 1 Dec, the run starts on 1 Dec and has 6 days.
+		expect(countHighFlowEvents(f, 30, 10, start, peak, 12, [12])).toBe(1);
+		expect(countHighFlowEvents(f, 30, 10, start, peak, 13, [12])).toBe(0);
+		// A window ending on 30 Nov sees the rise but not the peak.
+		expect(countHighFlowEvents(f, 0, 30, start, peak, 1, [11, 12])).toBe(0);
+		// A missing day breaks a run: 1 … 3 Dec is left.
+		f[33] = NaN;
+		expect(countHighFlowEvents(f, 30, 10, start, peak, 6, [12])).toBe(1);
+		expect(countHighFlowEvents(f, 30, 10, start, peak, 7, [12])).toBe(0);
 	});
 });
 
