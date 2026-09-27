@@ -440,17 +440,14 @@
 	.card dd {
 		margin: 0.1rem 0 0;
 	}
-	/* Wide: the table's box takes the height left in the window, and the page
-	   keeps only a small margin under it, so nothing but the table scrolls.
+	/* Wide: the table's box takes the height left in the window, above the
+	   page's 1rem gutter (app.css), so nothing but the table scrolls.
 	   (The cards stay out: a plain `.cards { display: grid }` used to beat
 	   `.phone-only { display: none }` and showed them under the table.) */
 	@media (min-width: 761px) {
 		.sort-phone,
 		.phone-only {
 			display: none;
-		}
-		.page:has(.fill) {
-			padding-bottom: 1rem;
 		}
 		.fill {
 			height: max(320px, calc(100vh - var(--fill-top, 0px) - var(--fill-below, 0px)));

@@ -799,16 +799,13 @@
 />
 
 <style>
+	/* The page's 1rem gutter, plus room for the fixed model save bar only while
+	   it shows (--dock-h is 0 otherwise), so it never hides the last row or a
+	   tab's own sticky actions (Settings). No more than that: a fixed 4rem made
+	   every tab whose content came within 56 px of the window's foot scroll for
+	   nothing, and the window-fitted tabs size themselves to exactly this gutter
+	   (`calc(100vh - top - var(--dock-h) - 1rem)`). */
 	.page {
-		/* Room for the fixed model save bar so it never hides the last row or a
-		   tab's own sticky actions (Settings). */
-		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
-	}
-	/* A page sized to the window (the Network's Map, Transfers, Applications; issue #17) needs
-	   only a gutter below it, plus the save bar when it shows. */
-	.page:has(:global(.map-layout)),
-	.page:has(:global(.transfers.fit)),
-	.page:has(:global(.applications.fit)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add {

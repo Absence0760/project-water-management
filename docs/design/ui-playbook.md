@@ -79,11 +79,21 @@ section it belongs to, with the example that taught it.
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
   where it makes sense (~1100×620). The page doesn't scroll; long lists
-  scroll *inside their card*. Add the fitted class to the page's
-  `.page:has(…)` rule in `routes/projects/[id]/+page.svelte`, which swaps
-  its 4rem bottom padding for a 1rem gutter: Applications fitted its card to
-  the window yet the page still scrolled 42 px until it was listed there. Help, guides and account pages scroll normally
-  with a readable text column (~75ch).
+  scroll *inside their card*. Size to the page's 1rem gutter
+  (`calc(100vh - top - var(--dock-h, 0px) - 1rem)`). Help, guides and
+  account pages scroll normally with a readable text column (~75ch).
+- **No reserved room below a page; no pointless scroll.** `.page` keeps a
+  1rem gutter under its content, and the workspace adds the model save
+  bar's height (`--dock-h`) only while the bar shows. Don't pad a page
+  "for breathing room": the old 5rem (4rem in the workspace) made every page
+  within 56–70 px of the window's foot scroll for nothing (an empty
+  project's Data tab by 3 px, a small one's History by 52 px at 1280×800),
+  and each fitted page had to be listed in a `.page:has(…)` override to
+  escape it (Applications scrolled 42 px until it was). Something fixed
+  at the foot is the owner's to make room for, and only while it shows.
+  `no-pointless-scroll.spec.ts` checks every tab and app page scrolls no
+  further than its content plus the gutter, and that the save bar clears
+  the last row on a fitted page and a long one.
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once
@@ -315,7 +325,8 @@ Interaction details that bit:
   `scenarios.ts`, `allocations.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
-  1440×960, lists scroll inside their card (see `network-map.spec.ts`,
+  1440×960, lists scroll inside their card; a new tab or page joins the
+  list in `no-pointless-scroll.spec.ts` (see `network-map.spec.ts`,
   `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate
