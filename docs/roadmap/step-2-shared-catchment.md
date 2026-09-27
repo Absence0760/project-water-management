@@ -2202,7 +2202,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Threat | Status | Test or fix |
 | --- | --- | --- |
 | Farmer IDOR on `nodeId` (another farm, a gauge, an unknown id, a malformed id) | ✅ | `publish/publication.db.test.ts` "404s a farm the farmer isn't linked to" (view and CSV, own farm as control); `farms/farms.db.test.ts` "404s any other node" |
-| Every other project route refuses a farmer | ✅ | `farms/farms.db.test.ts` "%s refuses a farmer" (every `/projects/:id` route not on `FARMER_ALLOWED`) |
+| Every other project route refuses a farmer | ✅ | `projects/role-ladder.db.test.ts` "answers a farmer 403 on every route that needs viewer or above" (every `/projects/:id` route not on `BELOW_VIEWER`, with a request its validation accepts) |
 | Response scan per farmer route (no other farm's id or name) | ✅ | `publish/publication.db.test.ts` (farm view, publication list, CSV), `farms/series-privacy.db.test.ts` (series, the access list), `notes/notes.db.test.ts` (list and counts) |
 | Differencing through totals (the `k` rule) | ✅ | `publish/publication.db.test.ts` "the aggregate rule on the even share"; `share/share.db.test.ts` k boundary at 4 and 5 holders; `farms/farms.db.test.ts` holder count (one user's farms once) |
 | Flow volumes reveal a neighbour's use | ✅ | `farms/series-privacy.db.test.ts` (downstream farmer gets no series equal to the upstream outflow; positive control as a viewer) |

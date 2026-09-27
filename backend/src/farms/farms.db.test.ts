@@ -1,11 +1,12 @@
 // Farm-scoped access for the `farmer` role (019/020, roadmap WP-2.1, issue
 // #24): RLS lets a farmer read their linked farms and nothing about any other
-// farm, every existing project route answers a farmer 403, and the owner-only
-// /farmers routes manage who is linked to what. Every "cannot see" check has
+// farm, the farmer-allowed routes answer them only that, and the owner-only
+// /farmers routes manage who is linked to what (every other project route
+// refusing a farmer is projects/role-ladder.db.test.ts). Every "cannot see" check has
 // a positive control: the same farmer sees their own farm, and a viewer sees
 // everything.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, monthly, node, signUp } from '../__tests__/helpers.js';
+import { monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -150,40 +151,12 @@ describe('anonymised farm context and the holder count', () => {
 	});
 });
 
-/**
- * The project routes a farmer may call (WP-2.3 publication read, WP-2.6 farm
- * view, WP-2.7 notes, where RLS limits a farmer to farm notes on their own
- * farms: notes/notes.db.test.ts; WP-2.13 alert events, where RLS limits a
- * farmer to their farms' events and the notice events: alerts/alerts.db.test.ts);
- * every other one refuses them.
- */
-const FARMER_ALLOWED = new Set([
-	'GET /projects/:id/publication',
-	'GET /projects/:id/farm',
-	'GET /projects/:id/farm/:nodeId',
-	'GET /projects/:id/farm/:nodeId/export.csv',
-	'GET /projects/:id/farm/:nodeId/access',
-	'GET /projects/:id/notes',
-	'GET /projects/:id/notes/counts',
-	'POST /projects/:id/notes',
-	'PATCH /projects/:id/notes/:noteId',
-	'DELETE /projects/:id/notes/:noteId',
-	'GET /projects/:id/alert-events'
-]);
-
+// Which routes admit a farmer (and that every other one refuses them at the
+// role check, with a request its validation accepts) is swept in
+// projects/role-ladder.db.test.ts (BELOW_VIEWER); these pin what the allowed
+// ones answer a farmer.
 describe('project routes for a farmer', () => {
 	const ZERO = '00000000-0000-4000-8000-000000000000';
-	const allRoutes = [
-		...new Set(
-			app.routes.filter((r) => r.method !== 'ALL' && r.method !== 'OPTIONS' && r.path.startsWith('/projects/:id')).map((r) => `${r.method} ${r.path}`)
-		)
-	];
-	const projectRoutes = allRoutes.filter((r) => !FARMER_ALLOWED.has(r));
-
-	it('finds the project routes, the farmer-allowed ones among them', () => {
-		expect(projectRoutes.length).toBeGreaterThan(40);
-		for (const r of FARMER_ALLOWED) expect(allRoutes).toContain(r);
-	});
 
 	// The farmer-allowed routes answer a farmer: the publication list, their
 	// farm index, and 404 (not 403) for a node that isn't theirs, which says
@@ -213,17 +186,6 @@ describe('project routes for a farmer', () => {
 	// Alert events admit a farmer; none have fired in this project.
 	it('lets a farmer list alert events, empty here', async () => {
 		expect(await farmer.call('GET', `/projects/${projectId}/alert-events`)).toEqual({ status: 200, body: { events: [] } });
-	});
-
-	// requireRole(…, 'viewer') and above refuse the farmer rank (fail closed). A
-	// request whose body or query fails validation before the role check
-	// answers 400; no route may answer a farmer 2xx or reveal anything with a
-	// 404 or 409.
-	it.each(projectRoutes)('%s refuses a farmer', async (route) => {
-		const [method, path] = route.split(' ') as [string, string];
-		const url = path.replace(':id', projectId).replace(/:[A-Za-z]+/g, ZERO);
-		const res = await farmer.call(method, url, method === 'GET' ? undefined : {});
-		expect([400, 403]).toContain(res.status);
 	});
 
 	it('lists the project for a farmer with their role and no run or data dates', async () => {

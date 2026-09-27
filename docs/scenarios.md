@@ -719,8 +719,8 @@ scenario is `'team'`, and behaves exactly as above).
 Tests: `backend/src/scenarios/applications.db.test.ts` (RLS with positive
 controls: drafts hidden from the other applicant, the editors and viewers;
 the published run's row unreadable, its catchment series readable; submit,
-freeze, decide; sharing; the per-application run cap; the contributor route
-inventory), `oracles.db.test.ts` (049: identical answers for member and
+freeze, decide; sharing; the per-application run cap; the contributor's
+routes are `projects/role-ladder.db.test.ts`), `oracles.db.test.ts` (049: identical answers for member and
 non-member ids and addresses, hidden and free farm, crop and application
 names, hidden and free item ids, a hidden farm's removal counting nothing,
 each with its positive control; the party prune), `applicant.test.ts`
