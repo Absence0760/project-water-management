@@ -38,6 +38,18 @@ export function escapeXml(text: string): string {
 		.replace(/[\u0000-\u0008\u000b-\u001f￾-￿]/g, (c) => `_x${c.charCodeAt(0).toString(16).padStart(4, '0')}_`);
 }
 
+/**
+ * A text cell's value. Excel decodes `_xHHHH_` in cell text (ECMA-376
+ * ST_Xstring), so a name typed as `_x003D_HYPERLINK(…)` would open as
+ * `=HYPERLINK(…)`, past the leading-character defuse (./names.ts), and any
+ * literal `_x0041_` would silently change. The spec's escape is to write the
+ * underscore that starts such a sequence as `_x005F_`. SheetJS didn't; text
+ * without the pattern is written exactly as it did (workbook.test.ts).
+ */
+export function escapeCellText(text: string): string {
+	return escapeXml(text.replace(/_(?=x[0-9A-Fa-f]{4}_)/g, '_x005F_'));
+}
+
 /** SheetJS marks an element whose text starts or ends with whitespace, or holds a newline, as space-preserving. */
 const PRESERVE = /(^\s|\s$|\n)/;
 const space = (body: string) => (PRESERVE.test(body) ? ' xml:space="preserve"' : '');
@@ -174,7 +186,7 @@ export class XlsxWorkbook {
 			if (s) attrs += ` s="${s}"`;
 		} else {
 			if (c.v.length > MAX_TEXT) throw new Error('Text length must not exceed 32767 characters');
-			v = tag('v', escapeXml(c.v));
+			v = tag('v', escapeCellText(c.v));
 			attrs += ' t="str"';
 		}
 		return `<c${attrs}${space(v)}>${v}</c>`;
@@ -361,7 +373,7 @@ const METADATA_XML =
 	'<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xlrd="http://schemas.microsoft.com/office/spreadsheetml/2017/richdata" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">\n  <metadataTypes count="1">\n    <metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/>\n  </metadataTypes>\n  <futureMetadata name="XLDAPR" count="1">\n    <bk>\n      <extLst>\n        <ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}">\n          <xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/>\n        </ext>\n      </extLst>\n    </bk>\n  </futureMetadata>\n  <cellMetadata count="1">\n    <bk>\n      <rc t="1" v="0"/>\n    </bk>\n  </cellMetadata>\n</metadata>';
 
 /** The default Office theme SheetJS writes (styles.xml's font colour refers to it). */
-const THEME_XML = 
+const THEME_XML =
 	'<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office Theme"><a:themeElements><a:clrScheme name="Office">' +
 	'<a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2>' +
 	'<a:srgbClr val="1F497D"/></a:dk2><a:lt2><a:srgbClr val="EEECE1"/></a:lt2><a:accent1><a:srgbClr val="4F81BD"/></a:accent1><a:accent2>' +
