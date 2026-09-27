@@ -10,7 +10,7 @@
 	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtQty } from '$lib/format/number';
-	import { BALANCE_COLUMNS, balanceTableRows, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+	import { balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
 
 	let {
 		summary,
@@ -19,6 +19,7 @@
 		startDate,
 		endDate,
 		nodes,
+		engineVersion,
 		trace: showTrace = true
 	}: {
 		summary: RunSummary;
@@ -28,6 +29,8 @@
 		endDate: string;
 		/** Nodes that can be traced, in network order. */
 		nodes: { id: string; name: string; kind: 'farm' | 'gauge' | 'user' }[];
+		/** The engine that made the run and ran its checks. */
+		engineVersion?: string;
 		/** Show Trace a day (the printable report leaves the interactive trace out). */
 		trace?: boolean;
 	} = $props();
@@ -37,6 +40,7 @@
 	const headline = $derived(checksHeadline(v));
 	const balance = $derived(balanceTableRows(summary.waterBalance));
 	const hasStores = $derived(balance.some((r) => r.runoff !== null));
+	const cols = $derived(balanceColumns(balance));
 
 	// Trace: start on the farm and day with the largest balance residual, else the first farm on the first day.
 	let nodeId = $state('');
@@ -94,14 +98,15 @@
 				<li class:failed={!c.passed}>
 					<span class="mark" aria-hidden="true">{c.passed ? '✓' : '✗'}</span>
 					<span class="visually-hidden">{c.passed ? 'Passed:' : 'Failed:'}</span>
-					{c.label}
+					{checkLabel(c.label)}
 					{#if c.detail}<div class="detail">First problem: {c.detail}</div>{/if}
 				</li>
 			{/each}
 		</ul>
+		{#if engineVersion}<p class="muted small" data-testid="checks-engine">Checked by engine {engineVersion} when the run was made.</p>{/if}
 		{#if v.maxResidual}
 			<p class="muted small">
-				Largest daily balance check (column V): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
+				Largest daily balance error of any unit (column V of its daily CSV): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
 				It should be float noise, far below the flows.
 			</p>
 		{/if}
@@ -114,7 +119,7 @@
 		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
 	{:else}
 		<p class="muted small">
-			Start storage + unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage. Volumes in Mm³; the residual, in m³, should be 0.
+			{balanceEquation(cols)}. Volumes in Mm³; the residual, in m³, should be 0.
 			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
 		</p>
 		<div class="table-wrap">
@@ -122,7 +127,7 @@
 				<thead>
 					<tr>
 						<th scope="col">Water year</th>
-						{#each BALANCE_COLUMNS as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}
+						{#each cols as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}
 						{#if hasStores}<th scope="col" class="num" title="Runoff model: rain − evaporation − flow + exchange − change in storage">Runoff-model residual (mm)</th>{/if}
 					</tr>
 				</thead>
@@ -130,7 +135,7 @@
 					{#each balance as r (r.waterYear ?? 'total')}
 						<tr class:total={r.waterYear === null}>
 							<th scope="row">{waterYearLabel(r.waterYear)}</th>
-							{#each BALANCE_COLUMNS as col (col.key)}
+							{#each cols as col (col.key)}
 								{@const x = col.value(r)}
 								<td class="num" class:off={col.key === 'residual' && !residualIsNoise(r)}>
 									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtQty(x, 3, true)}

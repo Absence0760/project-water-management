@@ -379,7 +379,7 @@
 							{#snippet units()}<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />{/snippet}
 						</RunSummaryView>
 						<div class="sub">
-							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} nodes={[]} trace={false} />
+							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} engineVersion={run.engineVersion} nodes={[]} trace={false} />
 						</div>
 					{:else if s.id === 'notes'}
 						<p class="notes">{run.notes}</p>

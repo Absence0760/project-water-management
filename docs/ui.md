@@ -2941,11 +2941,18 @@ read it before.
   [model.md § Verification](./model.md#verification)). It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
-  the first problem (farm name and date) under a failed one, and the largest
-  daily balance check (column V). Second, the **water balance by water year**: rain,
-  runoff coefficient, start storage, farm runoff, transfers, rain on dams,
+  in the workspace's words (the engine's "farm" reads "unit", `checkLabel`),
+  the first problem (the node's name and date) under a failed one, which engine
+  made the run and ran its checks, and the largest daily balance error of any
+  unit (column V). Second, the **water balance by water year**: rain,
+  runoff coefficient, start storage, unit runoff, transfers, rain on dams,
   consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
-  outflow and end storage in Mm³, and the residual in m³, with a red residual
+  outflow and end storage in Mm³, and the residual in m³. A network's
+  optional terms get a column only when the run has them (groundwater
+  pumped, storage set by a storage reset, other users' use, stream depletion,
+  seepage lost; `balanceColumns`), and the equation above the table names
+  exactly the columns shown (`balanceEquation`), so the row adds up to its
+  residual by eye, as in the summary CSV. A red residual
   if it isn't float noise; a GR4J run adds the runoff model's residual in mm.
   The last row is the whole run. Third, **Trace a day**: pick a farm (or gauge)
   and a date (it opens on the farm-day with the largest residual) and it

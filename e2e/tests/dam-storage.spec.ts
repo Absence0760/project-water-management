@@ -65,4 +65,8 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
 	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 9 self-checks passed.');
+	// The seepage lost from the catchment is a loss in the balance: its own column, and named in the equation.
+	const balance = page.getByRole('region', { name: 'Water balance by water year' });
+	await expect(balance.getByRole('columnheader', { name: 'Seepage lost', exact: true })).toBeVisible();
+	await expect(balance).toContainText('= consumptive use + dam evaporation + seepage lost + outflow + end storage.');
 });
