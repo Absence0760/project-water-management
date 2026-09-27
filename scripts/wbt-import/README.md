@@ -78,6 +78,20 @@ rows and columns don't break it.
   engine lets a dam-less farm irrigate from the river routed to it with no
   limit, where b023's formula gave it nothing (issue #54, two found in a client
   workbook). The run warns about it too (docs/model.md §2.7e).
+  **`--run-of-river`** (off by default; the seed turns it on per workbook with
+  `WBT_RUN_OF_RIVER=1` in `wbt-import.<Prefix>.env`, bin/seed-demo.sh) imports
+  every unit so flagged as run of river instead (issue #54, 2c/2d):
+  `supplyRule: "runOfRiver"`, the dummy dam dropped (`damCapacityM3` 0, as the
+  model rules require) and `pumpCapacityM3Day: null`, with a `WARNING:` per
+  unit. b023 has no pump capacity, and nothing in it caps what a dummy dam or a
+  dam-less farm takes from the water routed to it (the dam's one-day capacity
+  doesn't: the day's inflow is available on top of it), so the pump is left
+  uncapped, as the workbook had it, and each run warns until the modeller
+  enters the capacity. A unit that an enabled transfer draws on keeps its dam
+  (the transfer needs the storage), with a warning saying so. On a unit with
+  no dam the river pump can take the unit's own runoff as well as the upstream
+  inflow (it takes from the river below the unit), where the dam-less import
+  took only what was routed to its absent dam.
 - **Crops** come from [Crop demand]: 12 factors per crop, Oct–Sep. Crop areas
   come from [Farm demand], zero areas omitted. The app computes demand from
   crop areas only, so the importer checks the sheet's gross demand

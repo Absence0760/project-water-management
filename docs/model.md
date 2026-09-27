@@ -2505,10 +2505,18 @@ its dam); `droughtBoreholesAsSupplemental` also runs `trigger` as
 sooner and switches to the river earlier. The run comparison's input diff
 lists the four fields. Hand examples: `network/supply.test.ts`.
 
-**Not changed:** no imported project is switched to run of river. Unit 9 of
-the client catchment and v004's other run-of-river units move once the
-hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md and
-the regression suite's deviation list.
+**Not changed by default:** no imported project is switched to run of river.
+The importer's `--run-of-river` option (scripts/wbt-import/README.md; the seed
+sets it per workbook with `WBT_RUN_OF_RIVER=1`) imports the units it flags as
+probable run-of-river with `runOfRiver`, no dam and an uncapped pump (b023
+gives no capacity). It is on for the second configuration, whose dummy-dam and
+dam-less units pump from the river; on the workbook's own natural flow its
+town unit is supplied as the workbook supplies it, and the dam-less units,
+which b023 supplies nothing, now take what the river gives up to their demand.
+Unit 9 of the client catchment and v004's other run-of-river units move once
+the hydrologist confirms (issue #54 item 2d), recorded then in engine-audit.md
+and the regression suite's deviation list; the regression suite reads a
+default (workbook-faithful) extraction, so it is unchanged.
 
 ### 2.7f Demand objects: town, domestic, livestock and other non-crop demand (engine ≥ 1.7.0, issue #54 item 2b)
 
