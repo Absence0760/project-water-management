@@ -1609,7 +1609,7 @@ Open gaps:
       a "Hidden tabs (2)" menu brings it back. *Built (issue #17, 2026-09-27):*
       the **Choose sections** / "Hidden (n)" menu in the sidebar
       (`workspace/SectionsMenu.svelte`, ui.md § Tabs by role), stored per
-      account in `user_preferences` (082), not an `app_user.preferences`
+      account in `user_preferences` (083), not an `app_user.preferences`
       column: `app_user`'s SELECT policy lets co-members read each other's
       rows, and this table is own-row only. WP-1.26's unit preferences join
       that document as a key.

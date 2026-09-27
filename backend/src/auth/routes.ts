@@ -43,7 +43,7 @@ const MeBody = z
 		displayName: displayName.optional(),
 		locale: locale.optional(),
 		volumeUnit: volumeUnit.optional(),
-		/** The person's own display preferences (082, auth/preferences.ts): the keys sent replace theirs. */
+		/** The person's own display preferences (083, auth/preferences.ts): the keys sent replace theirs. */
 		preferences: PreferencesPatch.optional()
 	})
 	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined || b.preferences !== undefined, {
@@ -105,7 +105,7 @@ const toUser = (r: UserRow) => ({
 	volumeUnit: r.volume_unit,
 	// SES reported a bounce or complaint for the address (057): alert emails are paused (the banner, POST /me/alerts/resume).
 	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null,
-	// The person's own display preferences (082): the sections they hid from the workspace sidebar.
+	// The person's own display preferences (083): the sections they hid from the workspace sidebar.
 	preferences: toPreferences(r.preferences)
 });
 const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, ${PREFERENCES_COL}`;

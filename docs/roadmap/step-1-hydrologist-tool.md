@@ -119,7 +119,7 @@ Hono backend
  └─ export routes streamed (Function URL invoke mode RESPONSE_STREAM)       (WP-1.29, if chosen)
 Postgres (new next-free NNN_ migrations)
  ├─ model_run.pinned_at, pinned_by                                          (WP-1.11)
- ├─ user_preferences.preferences jsonb (082, built)                         (WP-1.26)
+ ├─ user_preferences.preferences jsonb (083, built)                         (WP-1.26)
  ├─ created_by nullable on project/team/model_run; app_delete_account()     (WP-1.13)
  └─ node: irrigation efficiency, dam area–volume, seepage; transfer.priority (WP-1.19–1.21, landed in 006)
 packages/engine (pure)
@@ -1376,7 +1376,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** each user sees flows and volumes in their own units.
 - **Changes:**
-  - **migration:** none. The preferences document exists since 082
+  - **migration:** none. The preferences document exists since 083
     (`user_preferences`, own row only under RLS; built for the members'
     own sidebar sections, data-model.md § Display preferences).
   - **backend:** a `units` key in `PreferencesPatch`

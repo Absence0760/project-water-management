@@ -201,7 +201,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'signoff.user_id': 'set null',
 	'team.created_by': 'restrict',
 	'team_member.user_id': 'cascade',
-	// A person's own display preferences go with them (082_user_preferences.sql).
+	// A person's own display preferences go with them (083_user_preferences.sql).
 	'user_preferences.user_id': 'cascade',
 	'yield_result.created_by': 'set null'
 };

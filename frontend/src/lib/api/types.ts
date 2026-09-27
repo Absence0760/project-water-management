@@ -61,7 +61,7 @@ export interface User {
 	 * the banner on the account and alert pages). null while mail flows.
 	 */
 	mailSuppressed?: { reason: 'bounce' | 'complaint'; at: string } | null;
-	/** The person's own display preferences (user_preferences, 082). */
+	/** The person's own display preferences (user_preferences, 083). */
 	preferences?: UserPreferences;
 }
 

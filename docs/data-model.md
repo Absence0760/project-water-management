@@ -1637,7 +1637,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   reset. Deny-all policy, as `login_throttle`. Numbers:
   [security.md § Password reset, email verification and invites](./security.md#password-reset-email-verification-and-invites).
 
-### Display preferences (082_user_preferences.sql)
+### Display preferences (083_user_preferences.sql)
 
 | Table | Holds |
 | --- | --- |

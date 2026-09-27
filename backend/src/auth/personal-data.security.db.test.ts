@@ -205,7 +205,7 @@ beforeAll(async () => {
 			[projectId, runId, farm.id]
 		)
 	);
-	// Their own display preferences (082): the sections they hid.
+	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);
 }, 120_000);

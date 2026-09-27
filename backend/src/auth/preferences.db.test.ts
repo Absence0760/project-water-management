@@ -1,4 +1,4 @@
-// A person's own display preferences (082_user_preferences.sql,
+// A person's own display preferences (083_user_preferences.sql,
 // auth/preferences.ts): the workspace sections they hid from their sidebar.
 // PATCH /auth/me { preferences } and GET /auth/me, the shape the backend
 // accepts, and RLS: your own row only, for every command. Every "cannot"

@@ -78,7 +78,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   bounce or a spam complaint for the address (057): alert emails are paused
   until the person turns them back on (`POST /me/alerts/resume`,
   [§ Alerts](#alerts)). `preferences` is the person's own display choices
-  (`user_preferences`, 082), today `{ hiddenTabs: string[] }`: the workspace
+  (`user_preferences`, 083), today `{ hiddenTabs: string[] }`: the workspace
   sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs by
   role](./ui.md)), `[]` until they hide one. Only ever their own.
 - **`GET /auth/me/export`** ("download my data", POPIA access;

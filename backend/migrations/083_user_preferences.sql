@@ -1,4 +1,4 @@
--- 082_user_preferences — a person's own display preferences, starting with
+-- 083_user_preferences — a person's own display preferences, starting with
 -- the workspace sections they hid from their sidebar (issue #17, followups.md
 -- § Roles and what each member sees: "Members choose their own tabs";
 -- docs/data-model.md § Accounts).
@@ -24,7 +24,7 @@ CREATE TABLE user_preferences (
 	updated_at  timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE user_preferences IS
-	'A person''s own display preferences (082): { hiddenTabs } today. Own row only, for every command.';
+	'A person''s own display preferences (083): { hiddenTabs } today. Own row only, for every command.';
 
 ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_preferences_own ON user_preferences FOR ALL

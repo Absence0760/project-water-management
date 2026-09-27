@@ -1,4 +1,4 @@
-// A person's own display preferences (082_user_preferences.sql): the
+// A person's own display preferences (083_user_preferences.sql): the
 // workspace sections they hid from their sidebar today. One jsonb document
 // per account, own row only under RLS. PATCH /auth/me { preferences } merges
 // the keys sent into it; GET /auth/me returns it on the user.
