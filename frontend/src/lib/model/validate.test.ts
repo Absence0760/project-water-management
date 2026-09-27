@@ -151,6 +151,17 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks the GN 538 property area and rate as the API does (engine 1.10.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = node('a', 'A', 'g');
+		expect(messages(model([g, { ...a, gaPropertyAreaHa: 60, gaRateM3HaYear: 45 }]))).toEqual([]);
+		expect(messages(model([g, { ...a, gaPropertyAreaHa: null, gaRateM3HaYear: null }]))).toEqual([]);
+		expect(messages(model([g, { ...a, gaPropertyAreaHa: -1, gaRateM3HaYear: 100 }]))).toEqual([
+			'"A": the GN 538 property area must be between 0 and 10 000 000 ha.',
+			'"A": the GN 538 rate must be one of 0, 45, 75, 150, 275, 400 m³/ha/a.'
+		]);
+	});
+
 	it('checks a dam’s survey curve, release and seepage share as the API does (WP-3.5)', () => {
 		const g = node('g', 'Gauge', null);
 		const curve = [

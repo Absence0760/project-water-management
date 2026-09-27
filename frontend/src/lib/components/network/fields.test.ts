@@ -96,10 +96,10 @@ describe('TABLE_FIELDS', () => {
 		expect(keys).not.toContain('damSeepagePerDay');
 		expect(keys).toContain('irrigationEfficiency');
 		// … and the boreholes (WP-1.34), which apply to few nodes.
-		for (const k of ['boreholeCapacityM3Day', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays']) expect(keys).not.toContain(k);
+		for (const k of ['boreholeCapacityM3Day', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays', 'gaPropertyAreaHa']) expect(keys).not.toContain(k);
 		// … and the seepage destination and outlet (WP-3.5).
 		for (const k of ['damSeepageReturnPct', 'damOutletCapacityM3Day']) expect(keys).not.toContain(k);
-		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 9);
+		expect(TABLE_FIELDS.length).toBe(NODE_FIELDS.length - 10);
 	});
 });
 

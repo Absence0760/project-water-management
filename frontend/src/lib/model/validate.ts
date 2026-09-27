@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, GA538_GROUNDWATER_RATES, isGa538Rate, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -103,6 +103,11 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			issues.push({ area: 'network', message: `${label}: borehole capacity and depletion lag can't be negative.` });
 		if (!inRange(n.streamDepletionFrac ?? 0, 0, 1) || !inRange(n.boreholeTriggerPct ?? 0.3, 0, 1))
 			issues.push({ area: 'network', message: `${label}: stream depletion and the drought trigger must be between 0% and 100%.` });
+		// GN 538 context (engine ≥ 1.10.0), as the API checks them.
+		if (n.gaPropertyAreaHa != null && !inRange(n.gaPropertyAreaHa, 0, 10_000_000))
+			issues.push({ area: 'network', message: `${label}: the GN 538 property area must be between 0 and 10 000 000 ha.` });
+		if (n.gaRateM3HaYear != null && !isGa538Rate(n.gaRateM3HaYear))
+			issues.push({ area: 'network', message: `${label}: the GN 538 rate must be one of ${GA538_GROUNDWATER_RATES.join(', ')} m³/ha/a.` });
 		// Dam storage (WP-3.5), as the API checks them.
 		if (!inRange(n.damSeepageReturnPct ?? 1, 0, 1)) issues.push({ area: 'network', message: `${label}: the share of seepage returning must be between 0% and 100%.` });
 		if (!inRange(n.damOutletCapacityM3Day ?? 0, 0, Infinity)) issues.push({ area: 'network', message: `${label}: the dam outlet capacity can't be negative.` });

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, GA538_GROUNDWATER_RATES, IRRIGATION_SYSTEMS, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
@@ -219,6 +219,24 @@
 						<select id={id('bh-rule')} disabled={readonly} value={node.boreholeRule ?? 'supplemental'} onchange={(e) => (node.boreholeRule = e.currentTarget.value as BoreholeRule)}>
 							{#each BOREHOLE_RULES as r (r)}<option value={r}>{BOREHOLE_RULE_LABEL[r]}</option>{/each}
 						</select>
+					</div>
+					<div class="field">
+						<span class="lbl"><label for={id('ga-rate')}>GN 538 rate <span class="u">(m³/ha/a)</span></label><HelpTip key="node.gaRateM3HaYear" /></span>
+						<select
+							id={id('ga-rate')}
+							disabled={readonly}
+							value={node.gaRateM3HaYear == null ? '' : String(node.gaRateM3HaYear)}
+							aria-describedby="{id('ga-rate')}-h"
+							onchange={(e) => (node.gaRateM3HaYear = e.currentTarget.value === '' ? null : Number(e.currentTarget.value))}
+						>
+							<option value="">Not looked up</option>
+							{#each GA538_GROUNDWATER_RATES as r (r)}<option value={String(r)}>{r}</option>{/each}
+						</select>
+						<span class="hint" id="{id('ga-rate')}-h">
+							The abstraction rate GN 538 Table 2 (Appendix B) lists for the property’s quaternary catchment. Property area × rate, at most 40 000 m³/a, is its
+							general authorisation volume; without both the run shows the 40 000 ceiling.
+						</span>
+						<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
 					</div>
 				{/if}
 				{#if g === 'dam'}

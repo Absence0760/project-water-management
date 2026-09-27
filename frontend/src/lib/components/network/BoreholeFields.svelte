@@ -4,7 +4,7 @@
 	// annual cap per water year, supply mode, target (straight to the crop or
 	// into the dam) and stream-depletion share. The boreholes are the editor's
 	// own objects, so edits land in the model directly.
-	import { BOREHOLE_MODES, GA538_GROUNDWATER_LIMIT_M3_YEAR, type Borehole, type BoreholeMode, type BoreholeTarget, type NetworkNode } from '@water-management/engine';
+	import { BOREHOLE_MODES, ga538VolumeM3, type Borehole, type BoreholeMode, type BoreholeTarget, type NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
@@ -32,6 +32,8 @@
 	};
 	const hasDam = $derived(node.kind === 'farm' && node.damCapacityM3 > 0);
 	const label = $derived(node.name || (node.kind === 'user' ? 'this user' : 'this unit'));
+	// The GN 538 volume for the property (engine ≥ 1.10.0): area × Table 2 rate, at most 40 000 m³/a; else the ceiling.
+	const ga = $derived(ga538VolumeM3(node));
 	const capped = $derived(boreholes.filter((b) => b.mode !== 'none').reduce<number | null>((s, b) => (s === null || b.annualCapM3 === null ? null : s + b.annualCapM3), 0));
 </script>
 
@@ -96,8 +98,15 @@
 		</ul>
 		<p class="muted small" data-testid="bh-cap-note">
 			{capped === null ? 'At least one borehole has no annual cap.' : `Annual caps total ${fmtNum(capped, 0)} m³/a.`}
-			For context, the GN 538 general authorisation allows a property up to {fmtNum(GA538_GROUNDWATER_LIMIT_M3_YEAR, 0)} m³/a of groundwater,
-			depending on its size. The run shows modelled use against both; the app never decides whether a use is lawful.
+			{#if ga.basis === 'property'}
+				For context, the GN 538 general authorisation allows this property {fmtNum(ga.limitM3, 0)} m³/a of groundwater (its area × the Table 2
+				rate, at most 40 000) in any 12 months.
+			{:else}
+				For context, the GN 538 general authorisation allows a property its area × the Table 2 rate of its quaternary, at most 40 000 m³/a;
+				enter the property area and rate above for this one’s.
+			{/if}
+			The run shows modelled use against both; the app never decides whether a use is lawful.
+			It doesn’t cover an alluvial aquifer connected to the stream, or groundwater taken within 100 m of a watercourse.
 		</p>
 	{/if}
 	{#if !readonly && onadd}

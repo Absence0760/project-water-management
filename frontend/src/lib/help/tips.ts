@@ -187,6 +187,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day']
 	},
 	{
+		id: 'ga538',
+		term: 'GN 538 general authorisation (groundwater)',
+		short: 'Groundwater a property may take unlicensed: its area × its quaternary’s Table 2 rate, at most 40 000 m³ in any 12 months.',
+		units: 'm³/a',
+		category: 'network',
+		fields: ['node.gaPropertyAreaHa', 'node.gaRateM3HaYear']
+	},
+	{
 		id: 'demand-object',
 		term: 'Demand object',
 		short: 'A demand on a unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from the unit’s dam.',
