@@ -11,7 +11,7 @@ These agents and commands were derived from a real working web app (SvelteKit + 
 - **`code-reviewer.md`** — invoked at PR / pre-commit time to review the diff against the project's documented rules.
 - **`doc-hygiene-checker.md`** — checks that code changes update docs and tests in the same change.
 - **`test-gap-checker.md`** — finds modules / routes without test coverage.
-- **`ui-polisher.md`** — applies typography / layout polish to frontend surfaces. Heavily SvelteKit-flavoured; adapt for other frontend frameworks.
+- **`ui-designer.md`** — this app's UI/UX designer, working from `docs/design/ui-playbook.md` (the lessons of the option A redesign, issue #17). Two modes: `build` redesigns one screen (board or sibling page first, screenshots at 1440/1280/390 in light and dark, a "nothing lost" inventory, specs, docs; commits, never pushes) and `review` checks a diff or screen against the playbook (read-only). Replaces the template's `ui-polisher`, which described a different site.
 - **`repo-security-auditor.md`** — read-only security auditor, adapted to this project: trust boundaries (CloudFront shared secret + WAF, tokens, Postgres RLS via `withUser`, fetcher SSRF, renderer, SQS message trust, OIDC, public repo), areas `secrets` / `xss` / `auth` / `rls` / `tokens` / `ssrf` / `queues` / `ci` / `public-repo` / `all`. Writes `reviews/security-<area>.md`.
 - **`infra-auditor.md`** — read-only Terraform + spend auditor. Main job: no runaway bill (Lambda concurrency ceilings with worst-case arithmetic, queue/job loops, retry storms, fan-out caps, log/storage growth, budget + alarms against `docs/deployment-tiers.md`); also `iam`, `network`, `data`, `observability`, `all`. Never calls AWS. Writes `reviews/infra-<area>.md`.
 - **`compliance-auditor.md`** — read-only privacy / legal / accessibility auditor. Backs the GDPR, cookie-consent, data-export, account-deletion, third-party-data-flows, and accessibility audit commands. Knows enough about GDPR / ePrivacy / CCPA / WCAG to flag the obvious gaps; the operator still owns the final policy / legal call.
@@ -23,7 +23,7 @@ These agents and commands were derived from a real working web app (SvelteKit + 
 - **`check.md`** — pre-commit gate: runs `code-reviewer`, `test-gap-checker` and `doc-hygiene-checker` in parallel over the working diff. Advisory; applies nothing.
 - **`safe-edit.md`** — workflow for edits to security-sensitive or load-bearing files.
 - **`safe-migration.md`** — DB-schema-change workflow with `migration-coordinator` in the loop.
-- **`polish-ui.md`** — orchestrates the `ui-polisher` agent against a target surface.
+- **`polish-ui.md`** — runs `ui-designer` on one screen: `/polish-ui <target>` builds, `/polish-ui review <target|diff>` reports.
 - **`persona.md`** — runs one, several, or all of the `persona-*` bug-hunting auditors in parallel and consolidates their reports.
 - **`release-readiness.md`** — go/no-go checklist before tagging a release.
 - **`endpoint-inventory.md`** — builds the HTTP-route inventory from the router source.

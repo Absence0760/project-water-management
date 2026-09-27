@@ -121,7 +121,7 @@ Run these as slash-commands. Each delegates to a specialised agent (`.claude/age
 - `/check` — pre-commit gate: code-reviewer + test-gap-checker + doc-hygiene-checker over the working diff, in parallel (advisory).
 - `/safe-edit` — workflow for security-sensitive or load-bearing changes.
 - `/safe-migration` — DB-schema-change workflow (apply locally, verify RLS, sync types, propose smoke tests).
-- `/polish-ui` — typography / layout polish on a target frontend surface.
+- `/polish-ui` — design, build or review one screen to the app's UI standard (`ui-designer` agent; rules in `docs/design/ui-playbook.md`). Read the playbook before any UI work.
 - `/release-readiness` — go/no-go checklist before tagging.
 - `/audit/all` — runs the core sweep (secrets, xss, deps, infra, cost-controls) in parallel; `/audit/<area>` for a single sweep, including the ones `all` skips. Areas: `secrets`, `infra`, `deps`, `xss`, `cost-controls`, `auth`, `accessibility`, `gdpr`, `data-export-completeness`, `account-deletion-completeness`, `cookie-consent`, `third-party-data-flows`.
 - `/persona` — runs the bug-hunting persona auditors (`.claude/agents/persona-*.md`): real-world points of view (new user, power user, admin, international user, accessibility, integrator, adversary, data subject) that find logic / UX / domain bugs a code review misses. Each writes a living report to `reviews/<persona>.md` (git-ignored). Protocol + how to add domain personas: `.claude/personas/README.md`. Domain pack for this app (need + correctness): `hydrologist`, `environmentalist`, `licence-applicant`, `licensing-authority`, `wua-manager`, `farmer`.

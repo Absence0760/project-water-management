@@ -1,5 +1,7 @@
 # The catchment workspace (UI)
 
+What each screen is and does. How to design, build and test a screen (process, layout rules, reusable pieces) is in [design/ui-playbook.md](./design/ui-playbook.md).
+
 ## App shell and account menu
 
 Every signed-in page sits in one frame (`lib/components/layout/AppShell.svelte`,
