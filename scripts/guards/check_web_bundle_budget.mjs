@@ -1035,6 +1035,15 @@
 //             files). Headroom ~12 KB, not the usual ~4, for the #17 pages
 //             being built in parallel against 1029: each must fit under 988
 //             once merged.
+// 2026-09-27  total 988 → 994 KB (measured 991 on main @ e3ac41ac, +15 on
+//             the trim's 976). The #17 headroom was spent as planned, by the
+//             ~20 feature commits since 19f02741: the section dialog, gauge
+//             flow records and the plausibility-check panels on Runs and
+//             Compare, the EWR-charge and low-flow settings, the report's
+//             schematic bands, the phone node cards. No one commit stands
+//             out and no chunk budget moved. Went unnoticed while Actions
+//             was down (billing), and the batch merge of #20, #60 and #61
+//             adds nothing to the total. Headroom back to the usual ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1045,7 +1054,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 988,
+	totalCodeKb: 994,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

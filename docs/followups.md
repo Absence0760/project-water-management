@@ -1797,8 +1797,8 @@ role and not before it.
         (`report/`), the farm view (a farmer's own reliability and stress
         months) and the scenario compare view (Δ reliability per farm).
         Trigger: WP-3.10's evidence pack, which needs them in the report.
-  - [x] **Bundle budget** (superseded by later ceiling moves; now 988 KB,
-        19f02741): the build was 829 KB against the 821 KB ceiling
+  - [x] **Bundle budget** (superseded by later ceiling moves; now 994 KB,
+        19f02741 then the 2026-09-27 raise): the build was 829 KB against the 821 KB ceiling
         (both panels are lazy; the growth is the engine module in every
         runModel chunk, the help entries and the Settings field). The
         coordinator raises the ceiling at merge or trims elsewhere.
