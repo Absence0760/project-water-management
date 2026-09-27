@@ -1762,11 +1762,36 @@ running. The workbook code loads only then, in a worker, never with the page.
 
 ## Settings & calibration
 
-- **On this page.** Under the intro, a **Settings sections** menu links to
+A reading page (issue #17, option A): the long form scrolls under the
+section header, which it fills (`fillHeader`) like the other sections.
+
+- **Header.** The context line says where the GR4J parameters in the form
+  came from (`fitSummary`, `settings/calibration.ts`): "GR4J · fitted 15 Jan
+  2025 · KGE′ 0.93 in calibration" (the fit record's day and its in-sample
+  score on its own objective), with "· changed since the fit" whenever the fit
+  record below lists a caveat (a parameter edited by hand, the forcing, the
+  window or the record changed; it follows the unsaved form), or "GR4J · no
+  fit record: the parameters were set by hand or imported". The actions add
+  **Fit the parameters** for editors (a link to `#set-fit`), or **Fit record**
+  for a viewer when there is one, before Add data and Run model. The old
+  intro paragraph is gone: the header and the menu's groups say what it
+  said, and the monthly tables' own Oct … Sep headers show the water year.
+- **Links into a group** (`?tab=settings#set-ewr`, a note's link from the
+  Project page's recent notes, `notes.ts` `noteHref`; `?tab=calibration`
+  still works) land on that group once the tab's chunk has drawn it, held
+  while the page settles (`holdAnchor`), with focus on its heading. Before,
+  the browser's own jump ran before the lazy tab existed and the page opened
+  at the top.
+- **On this page.** Under the header, a **Settings sections** menu links to
   each group (`#set-demand`, `#set-flow`, `#set-rain`, `#set-record`,
   `#set-fit`, `#set-wr2012`, `#set-share`, `#set-ewr`, `#set-reserve`, `#set-period`,
-  `#set-quality`, then `#set-feeds` after the form; listed by
-  `settings/sections.ts`). It is the shared in-page menu
+  `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
+  form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
+  listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
+  named for screen readers and set apart by a wider gap: **Model inputs**
+  (Demand … Simulation period), **How results are read** (Data quality,
+  Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
+  and reports**. It is the shared in-page menu
   (`common/SectionNav.svelte`, also on Runs & results): a bar of pill links
   that sticks at the top (under the phone bar on a phone) down the long form and marks the group
   being read with `aria-current="location"` (scroll spy: `activeSectionId`
@@ -1784,7 +1809,9 @@ running. The workbook code loads only then, in a worker, never with the page.
   only). When something blocks Save it says how many groups have a problem
   and links to each one (`saveBlockers`; the link's accessible name carries
   the message), and that group's menu link gets a red dot ("has a problem").
-  Each problem is also shown next to its field.
+  Each problem is also shown next to its field. The bar ends with the form;
+  a line under it tells editors that Data feeds, API keys (owners) and
+  scheduled reports save as they change, not with Save settings.
 
 The settings are grouped by what they drive. Every 12-month row (A-pan, pan
 coefficient, EWR, the WR2012 monthly flows) fits a 1280px screen beside the
@@ -1827,7 +1854,9 @@ which checks every catchment tab).
   Advanced, the recession tables; they are gone with the model.)
   - **GR4J**: X1, X3 and X4, each with its typical and allowed range
     (`settings/calibration.ts` `GR4J_FIELDS`, bounds from the engine). The
-    input refuses values outside those bounds. The GR4J view also has the
+    input refuses values outside those bounds, and shows at most three
+    decimals (display only: a fit writes nine, which stay stored until the
+    field is edited). The GR4J view also has the
     warm-up in days and the rain threshold, which under GR4J only affects
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0.

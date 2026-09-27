@@ -228,6 +228,23 @@ Interaction details that bit:
   Dialog `subhead` instead.
 - **Closing an overlay drops its param with `replaceState`**, so Back
   closes the overlay rather than leaving the page.
+- **A fragment into a lazy tab needs the tab to land it.** Workspace tabs
+  are lazy chunks, so the browser's own jump to `#set-ewr` runs before the
+  element exists and the page opens at the top. Settings' note links
+  (`?tab=settings#set-…`) had silently done that until its page spec
+  followed one; the tab now finds the element on mount and holds it with
+  `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
+  Units & supply, Runs and Project do. Test a fragment link by *loading* it,
+  not only by clicking the in-page menu.
+- **A reading page's header says what the page decides.** A long form has
+  no count to show; Settings & calibration's context line says where the
+  runoff parameters came from (the fit's day and score, "changed since the
+  fit", or no fit record) and its action jumps to the fit. Find the one fact
+  a user opens the page to check, and put it there.
+- **Width rules for a field's inputs catch its checkbox.** Settings'
+  `.field input { width: 100% }` stretched "Vary it by month"'s box across
+  the field, with the words half a field away. Scope such rules with
+  `input:not([type='checkbox'])`.
 - **A tab that copies a list from the page must take the page's updates.**
   Data kept its own copy of the series (`untrack(() => initial)`), so a file
   added through the header's Add data didn't show until a reload. Sync from

@@ -1,4 +1,5 @@
-import { GR4J_PARAMS, type Gr4jParams, type ParamSpec } from '@water-management/engine';
+import { GR4J_PARAMS, OBJECTIVE_LABELS, type FitRecord, type Gr4jParams, type ParamSpec } from '@water-management/engine';
+import { fmtDay, fmtNum } from '$lib/format/number';
 
 // The Flow calibration form (settings.calibration, settings.gr4j). GR4J is the
 // only runoff model since engine 1.0.0 removed the legacy b023 recession model
@@ -30,4 +31,25 @@ export const GR4J_FIELDS: Gr4jField[] = GR4J_PARAMS.map((p) => ({ ...p, help: GR
 /** "Typical 100–1200 mm" for a parameter hint. */
 export function typicalRange(p: ParamSpec<Gr4jParams>): string {
 	return `Typical ${p.typical[0]}–${p.typical[1]} ${p.unit}; allowed ${p.min}–${p.max}.`;
+}
+
+/**
+ * The Settings & calibration header's line (issue #17): where the GR4J
+ * parameters in the form came from. The fit's day and its in-sample score on
+ * its own objective ("KGE′ 0.93 in calibration"), and whether anything the fit
+ * depends on has changed since (the fit record under Fit automatically says
+ * what); without a record, that the parameters weren't fitted here.
+ */
+export function fitSummary(record: FitRecord | null | undefined, changedSinceFit: boolean): string {
+	if (!record) return 'GR4J · no fit record: the parameters were set by hand or imported';
+	const score = record.fit?.scores?.[record.objective];
+	const objective = (OBJECTIVE_LABELS[record.objective] ?? record.objective).replace(/ \(.*\)$/, '');
+	return [
+		'GR4J',
+		`fitted ${fmtDay(record.fittedAt)}`,
+		score == null ? null : `${objective} ${fmtNum(score, 2)} in calibration`,
+		changedSinceFit ? 'changed since the fit' : null
+	]
+		.filter(Boolean)
+		.join(' · ');
 }

@@ -159,7 +159,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary, the farms and dams on the Network), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series), **Add data** uploads a file, and **Run model** runs the saved model and opens the run in Runs & results. The Network adds **Grids** and **+ Add node**, Crops & demand **Grids** and **+ Add crop**. Notices sit in one line under the header: that you can only view the project, or that new data has arrived since the last run, with **Re-run model**.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary, the farms and dams on the Network, where the runoff parameters came from on Settings & calibration), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series), **Add data** uploads a file, and **Run model** runs the saved model and opens the run in Runs & results. The Network adds **Grids** and **+ Add node**, Crops & demand **Grids** and **+ Add crop**, and Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. Notices sit in one line under the header: that you can only view the project, or that new data has arrived since the last run, with **Re-run model**.'
 					},
 					{
 						type: 'note',

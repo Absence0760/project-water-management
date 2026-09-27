@@ -1,9 +1,13 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { onMount, untrack } from 'svelte';
+	import { page } from '$app/state';
+	import { holdAnchor } from '$lib/help/anchor';
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
 		CALIBRATION_FLOW_KINDS,
+		fitRecordCaveats,
+		fitRecordStatus,
 		hasPotentialEvaporation,
 		PAN_COEFFICIENT_PRESET_SOURCE,
 		PAN_COEFFICIENT_PRESETS,
@@ -34,14 +38,15 @@
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
+	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { dataQualityError } from './dataQuality';
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
 	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
 	import { outlookError, resolveOutlook } from '$lib/components/outlook/settings';
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
-	import { saveBlockers, SETTINGS_SECTIONS } from './sections';
+	import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
@@ -292,19 +297,47 @@
 			root.style.scrollPaddingBottom = '';
 		};
 	});
-	const navGroups = $derived([{ label: null, sections: SETTINGS_SECTIONS.map((sec) => ({ ...sec, problem: blockers.some((b) => b.id === sec.id) })) }]);
+	const navLabel = (id: string) => SETTINGS_SECTIONS.find((sec) => sec.id === id)?.label ?? AFTER_FORM_LABELS[id] ?? id;
+	const navGroups = $derived(
+		settingsNavGroups(project.role === 'owner').map((g) => ({
+			label: g.label,
+			sections: g.ids.map((id) => ({ id, label: navLabel(id), problem: blockers.some((b) => b.id === id) }))
+		}))
+	);
+
+	// The section header (issue #17): where the parameters came from, and the way to the fit.
+	const fitStatus = $derived(s.fitRecord ? fitRecordStatus(s as unknown as ProjectSettings, s.fitRecord, { chirpsSource, apanDaily: apanNow }) : null);
+	const summary = $derived(fitSummary(s.fitRecord, !!fitStatus && fitRecordCaveats(fitStatus).length > 0));
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
+
+	// A link into a group from elsewhere (`?tab=settings#set-ewr`, a note's link): the tab is a lazy
+	// chunk, so the browser's own jump found nothing. Land on the group once drawn, hold it while the
+	// panels settle (as River & reserve does), and focus its heading.
+	onMount(() => {
+		const hash = page.url.hash.slice(1);
+		const el = hash.startsWith('set-') ? document.getElementById(hash) : null;
+		if (!el) return;
+		const release = holdAnchor(el);
+		const heading = el.querySelector<HTMLElement>('h2, h3');
+		if (heading) {
+			if (!heading.hasAttribute('tabindex')) heading.tabIndex = -1;
+			heading.focus({ preventScroll: true });
+		}
+		return release;
+	});
 </script>
+
+{#snippet headerContext()}<span data-testid="fit-summary">{summary}</span>{/snippet}
+{#snippet headerActions()}
+	{#if !readonly}<a class="btn" href="#set-fit">Fit the parameters</a>{:else if s.fitRecord}<a class="btn" href="#set-fit">Fit record</a>{/if}
+{/snippet}
 
 <form onsubmit={save} novalidate>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
-	<p class="muted small lead">
-		Grouped by what each setting drives: irrigation <strong>demand</strong>, natural <strong>flow generation</strong> from rainfall, how
-		flow is <strong>shared</strong> between units, and the <strong>EWR</strong> at the outflow gauge. Monthly values run through the water
-		year, October → September.
-	</p>
-
-	<!-- In-page menu: sticks under the app header down this long form and marks the group being read. -->
+	<!-- In-page menu: sticks under the app header down this long form and marks the group being read.
+	     Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
+	     the header's context says where the parameters came from. -->
 	<SectionNav groups={navGroups} label="Settings sections" />
 
 	<!-- Demand ------------------------------------------------------------------>
@@ -439,7 +472,8 @@
 			{#each GR4J_FIELDS.filter((f) => !f.fixedByDefault) as p (p.key)}
 				<div class="field">
 					<span class="lbl"><label for="gr4j-{p.key}">{p.label} <span class="u">({p.unit})</span></label><HelpTip key="settings.gr4j" /></span>
-					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
+					<!-- A fit writes nine decimals; three show (display only, as the fit record does). -->
+					<NumberInput id="gr4j-{p.key}" min={p.min} max={p.max} step={p.step} decimals={3} disabled={readonly} bind:value={s.gr4j[p.key]} aria-describedby="gr4j-{p.key}-h" />
 					<span class="hint" id="gr4j-{p.key}-h">{p.help} {typicalRange(p)}</span>
 				</div>
 			{/each}
@@ -929,7 +963,12 @@
 	{/if}
 </form>
 
-<!-- Outside the form: feeds save themselves, never through Save settings. -->
+<!-- Outside the form: feeds, keys and schedules save themselves, never through Save settings. -->
+{#if !readonly}
+	<p class="muted small after-form">
+		Data feeds{project.role === 'owner' ? ', API keys' : ''} and scheduled reports save as you change them, not with Save settings.
+	</p>
+{/if}
 <DataFeedsPanel projectId={project.id} />
 
 {#if project.role === 'owner'}
@@ -939,9 +978,8 @@
 <ReportSchedulesPanel projectId={project.id} canEdit={project.role === 'editor' || project.role === 'owner'} />
 
 <style>
-	.lead {
-		max-width: 80ch;
-		margin: -0.25rem 0 0.9rem;
+	.after-form {
+		margin: 1.5rem 0 0.75rem;
 	}
 	.u {
 		font-weight: 400;
@@ -967,7 +1005,8 @@
 		gap: 0 1.25rem;
 		margin-top: 0.5rem;
 	}
-	.field :global(input),
+	/* Not a checkbox: stretched, "Vary it by month" sat half a field away from its box. */
+	.field :global(input:not([type='checkbox'])),
 	.field select {
 		width: 100%;
 	}
