@@ -11,6 +11,7 @@ import {
 	curtailmentSeriesKeys as engineSeriesKeys,
 	prepareCurtailment,
 	type CropArea,
+	type DemandObject,
 	type CropDef,
 	type CurtailmentSummary,
 	type NetworkNode,
@@ -39,6 +40,8 @@ export interface RunNetwork {
 	crops?: readonly CropDef[];
 	cropAreas?: readonly CropArea[];
 	apanMm?: readonly number[];
+	/** The snapshot's demand objects (engine ≥ 1.7.0): a unit with one is curtailed on the consumptive share its return flow gives. */
+	demandObjects?: readonly DemandObject[];
 }
 
 /**
@@ -53,7 +56,8 @@ export function curtailmentSeriesKeys(stored: CurtailmentSummary, network: RunNe
 	// Sites whose charge followed their Reserve rule table (engine ≥ 1.3.0) have their own shortfall series.
 	const ruleTableSites = stored.ewrSites.filter((s) => s.ewrSource === 'ruleTable').map((s) => (s.isOutlet ? null : s.nodeId));
 	const have = refs ? new Set(refs.map((r) => `${r.nodeId ?? ''}|${r.key}`)) : null;
-	return engineSeriesKeys(network.nodes, network.transfers, ruleTableSites.length ? { ruleTableSites } : {}, have ? (nodeId, key) => have.has(`${nodeId ?? ''}|${key}`) : undefined);
+	const options = { ...(ruleTableSites.length ? { ruleTableSites } : {}), ...(network.demandObjects?.length ? { demandObjects: network.demandObjects } : {}) };
+	return engineSeriesKeys(network.nodes, network.transfers, options, have ? (nodeId, key) => have.has(`${nodeId ?? ''}|${key}`) : undefined);
 }
 
 /** The keys the run has no stored series for (a run saved before one of them existed). */
@@ -75,6 +79,7 @@ export function prepareWindowed(run: { startDate: string; endDate: string }, net
 		nodes: network.nodes,
 		transfers: network.transfers,
 		...(network.crops && network.cropAreas ? { crops: network.crops, cropAreas: network.cropAreas, apanMm: network.apanMm ?? [] } : {}),
+		...(network.demandObjects?.length ? { demandObjects: network.demandObjects } : {}),
 		series: get
 	});
 }

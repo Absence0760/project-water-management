@@ -232,4 +232,24 @@ describe('validateModel', () => {
 							expect(supplyIssues(n).length > 0, JSON.stringify({ kind, supplyRule, damCapacityM3, supplyTriggerPct, pumpCapacityM3Day })).toBe(backend);
 						}
 	});
+
+	it('refuses exactly the demand objects the backend refuses (engine 1.7.0)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = node('a', 'A', 'g');
+		const u = { ...node('u', 'U', 'g'), kind: 'user' as const };
+		const o = (over: object) => ({ id: 'o', nodeId: 'a', name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(1), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '', ...over }) as never;
+		for (const [over, bad] of [
+			[{}, false],
+			[{ nodeId: 'u' }, true],
+			[{ monthlyM3Day: [1, 2] }, true],
+			[{ sizing: 'perUnit', monthlyM3Day: null }, true],
+			[{ sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, false],
+			[{ destination: 'external', returnPct: 0.2 }, true]
+		] as const) {
+			const m = model([g, a, u], { demandObjects: [o(over)] });
+			const backend = [...modelRuleIssues(m).keys()].some((k) => k.startsWith('do'));
+			expect(backend, JSON.stringify(over)).toBe(bad);
+			expect(messages(m).some((x) => /demand object/i.test(x)), JSON.stringify(over)).toBe(bad);
+		}
+	});
 });

@@ -1483,6 +1483,28 @@ note's link on the Summary, `notes.ts` `noteHref`).
   GN 538 context (up to 40 000 m³/a per property, depending on its size; the
   app never decides legality). Read-only for viewers; fields stack on a phone.
   Removing the node asks about its boreholes too.
+- **Demand objects** (engine ≥ 1.7.0, issue #54 item 2b, [model.md §2.7f](./model.md),
+  `DemandObjectFields.svelte`), one-node form, units only (and on a node turned
+  into a gauge or user that still has some, so they can be removed; the save
+  refuses them there): demands that aren't crops. A **category** picker
+  beside **+ Add demand** adds one with that category's defaults from the
+  issue's research table (municipal: m³/day by month, first, 50 % returned;
+  domestic: people × 230 l a day, first; livestock: head × 45 l a day, with
+  the crops; external: piped out, nothing returned; the rest: m³/day by month,
+  with the crops). Each has a **Name**, **Category**, **Demand given as**
+  (m³/day by month, or a count × litres a day), **Priority** (first / with the
+  crops / last), **Destination** (used in the catchment, or piped out, which
+  sets and locks the share returned at 0 %), **Share returned** (%),
+  **Modelled** (off keeps it on record only), a 12-month row (the demand in
+  m³/day, or the per-unit profile, blank = 1), and **Where the number comes
+  from**. Per unit: **Number of** people / head / units, **Litres per** person
+  / head / unit **a day** and **Distribution losses** (%). The line below gives
+  its mean m³/day as the engine sizes it; **Use October's demand for every
+  month** fills a monthly row. Read-only for viewers; removing the unit asks
+  about its objects too. Scenario override mode can't record an object edit
+  yet and says so. After a run, the human-impact tables show **Demand
+  objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  days short and returned (or "piped out").
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);

@@ -173,6 +173,12 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 	for (const id of bBores.keys()) if (!aBores.has(id) || changedBores.some((x) => x.id === id)) ops.push({ op: 'borehole.remove', boreholeId: id });
 	for (const x of aBores.values()) if (!bBores.has(x.id) || changedBores.includes(x)) ops.push({ op: 'borehole.add', borehole: plain(x) });
 
+	// --- demand objects (engine ≥ 1.7.0): no scenario op adds, changes or removes one yet (a follow-up), so an edit can't be recorded
+	{
+		const key = (xs: readonly { nodeId: string }[] | undefined) => JSON.stringify((xs ?? []).filter((x) => !removed.has(x.nodeId)).map((x) => plain(x)).sort((x, y) => (JSON.stringify(x) < JSON.stringify(y) ? -1 : 1)));
+		if (key(b.demandObjects) !== key(after.demandObjects)) unsupported.push("Adding, changing or removing a demand object: a scenario can't change demand objects yet. Change them on the catchment.");
+	}
+
 	// --- each op through the form's check, then the whole list against the model it came from
 	const problems: string[] = [];
 	// The name before the edit wins (an edit may be the name being cleared).

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// One node's fields as a labelled form with help text — the small-screen
 	// (and "focus on one node") alternative to the wide network table.
-	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type Borehole, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
+	import { BOREHOLE_RULES, IRRIGATION_SYSTEMS, type Borehole, type DemandObject, type DemandObjectCategory, type BoreholeRule, type LandCoverPatch, type NetworkNode, type NodeKind } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
@@ -10,6 +10,7 @@
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
 	import BoreholeFields from './BoreholeFields.svelte';
+	import DemandObjectFields from './DemandObjectFields.svelte';
 	import SupplyFields from './SupplyFields.svelte';
 	import FieldHistoryLine from '$lib/components/history/FieldHistoryLine.svelte';
 	import { hasSupplySettings } from './supply';
@@ -31,6 +32,9 @@
 		boreholes = [],
 		onaddborehole,
 		onremoveborehole,
+		demandObjects = [],
+		onadddemand,
+		onremovedemand,
 		farmersNote = null,
 		previewHref = null
 	}: {
@@ -52,6 +56,10 @@
 		boreholes?: Borehole[];
 		onaddborehole?: () => void;
 		onremoveborehole?: (id: string) => void;
+		/** This unit's demand objects (engine ≥ 1.7.0, issue #54 item 2b; units only). */
+		demandObjects?: DemandObject[];
+		onadddemand?: (category: DemandObjectCategory) => void;
+		onremovedemand?: (id: string) => void;
 		/** "N farmers are linked…" for a farm with linked farmers (WP-2.1); null otherwise. */
 		farmersNote?: string | null;
 		/** A farm's page as its farmer sees it (WP-2.6); null for other nodes. */
@@ -230,6 +238,14 @@
 	{/each}
 
 	<!-- A farm's; a farm turned into a gauge or user keeps its settings, shown so they can be reset (WP-3.8). -->
+	<!-- A unit's; one left on a node turned into a gauge or user is shown so it can be removed (the save refuses it). -->
+	{#if node.kind === 'farm' || demandObjects.length}
+		<fieldset>
+			<legend>Demand objects</legend>
+			<DemandObjectFields {node} objects={demandObjects} {readonly} onadd={onadddemand} onremove={onremovedemand} />
+		</fieldset>
+	{/if}
+
 	{#if node.kind === 'farm' || hasSupplySettings(node)}
 		<fieldset>
 			<legend>Supply</legend>

@@ -1,7 +1,7 @@
 // In-memory editor for a project's ProjectModel, shared by the Network, Crops
 // and Transfers tabs. Tracks unsaved changes against the last loaded/saved
 // snapshot and re-validates on every edit.
-import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, NEW_FARM_IRRIGATION, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
+import { BOREHOLE_DEFAULTS, DAM_AREA_EXPONENT, DAM_STORAGE_DEFAULTS, NEW_FARM_IRRIGATION, SUPPLY_DEFAULTS, USER_DEFAULTS, type Borehole, type CropDef, type DemandObject, type DemandObjectCategory, newDemandObjectDefaults, type LandCoverPatch, type NetworkNode, type ProjectModel, type Transfer } from '@water-management/engine';
 import { bySortOrder } from './order';
 import { validateModel, type ModelIssue } from './validate';
 
@@ -88,7 +88,9 @@ export class ModelEditor {
 			// Land cover (WP-1.35); an older API or document has none.
 			landCover: m.landCover ?? [],
 			// Individual boreholes (WP-3.9): in the document only when there are any, as the API returns it.
-			...(m.boreholes?.length ? { boreholes: m.boreholes } : {})
+			...(m.boreholes?.length ? { boreholes: m.boreholes } : {}),
+			// Demand objects (engine ≥ 1.7.0): likewise only when there are any.
+			...(m.demandObjects?.length ? { demandObjects: m.demandObjects } : {})
 		};
 		this.model = clone(normalised);
 		this.#saved = JSON.stringify(this.model);
@@ -146,6 +148,34 @@ export class ModelEditor {
 		m.transfers = m.transfers.filter((t) => t.fromNodeId !== id && t.toNodeId !== id);
 		m.landCover = (m.landCover ?? []).filter((p) => p.nodeId !== id);
 		if (m.boreholes) m.boreholes = m.boreholes.filter((b) => b.nodeId !== id);
+		if (m.demandObjects) m.demandObjects = m.demandObjects.filter((o) => o.nodeId !== id);
+	}
+
+	// --- demand objects (engine ≥ 1.7.0, issue #54 item 2b) ----------------
+	/** A new demand object on a unit, with its category's defaults (the 2b research table) and no demand yet. */
+	addDemandObject(nodeId: string, category: DemandObjectCategory = 'municipal'): DemandObject {
+		const count = (this.model.demandObjects ?? []).filter((o) => o.nodeId === nodeId).length;
+		const d = newDemandObjectDefaults(category);
+		const o: DemandObject = {
+			id: crypto.randomUUID(),
+			nodeId,
+			name: `Demand ${count + 1}`,
+			category,
+			...d,
+			monthlyM3Day: d.sizing === 'monthly' ? new Array(12).fill(0) : null,
+			count: d.sizing === 'perUnit' ? 0 : null,
+			monthlyFactor: null,
+			enabled: true,
+			note: ''
+		};
+		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.
+		this.model.demandObjects ??= [];
+		this.model.demandObjects.push(o);
+		return o;
+	}
+
+	removeDemandObject(id: string) {
+		this.model.demandObjects = (this.model.demandObjects ?? []).filter((o) => o.id !== id);
 	}
 
 	// --- individual boreholes (WP-3.9) -------------------------------------

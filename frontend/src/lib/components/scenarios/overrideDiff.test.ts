@@ -52,6 +52,21 @@ function roundTrips(b: ModelInput, after: ProjectModel) {
 }
 
 describe('diffModel', () => {
+	it('says a demand object edit can’t be recorded yet, but lets a removed unit take its objects (engine 1.7.0)', () => {
+		const b = base();
+		const e = editing(b);
+		e.addDemandObject(UP, 'municipal');
+		const d = diffModel(b, e.snapshot());
+		expect(d.unsupported).toEqual(["Adding, changing or removing a demand object: a scenario can't change demand objects yet. Change them on the catchment."]);
+		// A base with an object on the lower farm: removing that farm is a node.remove, which drops it.
+		const withObject = structuredClone(b);
+		withObject.model.demandObjects = [{ ...structuredClone(e.snapshot().demandObjects![0]!), nodeId: LO }];
+		const e2 = editing(withObject);
+		e2.removeNode(LO);
+		const ops = roundTrips(withObject, e2.snapshot());
+		expect(ops.some((op) => op.op === 'node.remove')).toBe(true);
+	});
+
 	it('records nothing when nothing changed, or only the row order did', () => {
 		const b = base();
 		const e = editing(b);
