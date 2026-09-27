@@ -1199,9 +1199,12 @@ In short:
   *after* conversion (1e308 in inches was Infinity in mm), and a project holds
   at most **1 000 series** (`series/limits.ts`): a new series past it is `409`
   on PUT and merge, and a project file with more is `400`, where one 5 MB file
-  had created 50 000 in a 12-second transaction. The cap counts the series
-  the writer can see, so an API key limited to some series counts only those
-  (still bounded: keys × 1 000). `series/limits.security.db.test.ts`.
+  had created 50 000 in a 12-second transaction. The cap is hard
+  (`075_series_cap.sql`): `app_project_series_count` (SECURITY DEFINER,
+  answering only an editor or a live `series:write` key of the project)
+  counts every series, not just the ones an API key limited to some series
+  can see, under a per-project advisory lock, so a concurrent burst at the
+  limit gets exactly the room left. `series/limits.security.db.test.ts`.
 - **Allocation files** (`allocations/parse.ts`): 2 MB, 5 000 rows and
   **200 columns** a row, the last checked while splitting so a million-column
   header is refused before it is built (`allocations/parse.security.test.ts`).
