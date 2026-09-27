@@ -103,19 +103,21 @@ export const EWR_HIGH_FLOW_PER_YEAR_MAX = 12;
 /**
  * A high-flow component of a Reserve (engine ≥ 0.33.0, WP-3.7, docs/model.md
  * §2.9d): a freshet or flood the river should carry, `perYear` times a water
- * year, each an unbroken run of `durationDays` days at or above `peakM3s`
- * (× the table's scale) starting in one of `months`. The requirement in a
+ * year, each a hydrograph that reaches `peakM3s` (× the table's scale) in
+ * one of `months` and lasts `durationDays` from rise to recession (engine
+ * ≥ 1.7.0: counted as a run at or above half the peak for at least half the
+ * duration, `countHighFlowEvents` in assurance.ts). The requirement in a
  * water year is capped by what the site's natural flow did that year: a flood
  * that would not have happened naturally is not asked of the river.
  */
 export interface EwrHighFlowEvent {
 	/** "Class II freshet", "1:2-year flood". */
 	label: string;
-	/** Calendar months (1–12) an event may start in, each once. */
+	/** Calendar months (1–12) an event may peak in (its first day at the peak), each once. */
 	months: number[];
 	/** Daily mean flow the event reaches, m³/s (> 0). */
 	peakM3s: number;
-	/** Consecutive days at or above the peak, 1 … 90. */
+	/** The event's duration from rise to recession, days, 1 … 90 (not days held at the peak; §2.9d). */
 	durationDays: number;
 	/** Events required in a water year, 1 … 12. */
 	perYear: number;
@@ -256,7 +258,7 @@ export function highFlowsIssue(list: unknown): string | null {
 		if (e.label.length > EWR_HIGH_FLOW_LABEL_MAX) return `${n}: keep the name under ${EWR_HIGH_FLOW_LABEL_MAX} characters.`;
 		const months = e.months;
 		if (!Array.isArray(months) || !months.length || !months.every((m) => isInt(m, 1, 12)) || new Set(months).size !== months.length) {
-			return `${n}: pick the months it may start in (each once).`;
+			return `${n}: pick the months it may peak in (each once).`;
 		}
 		if (!(isNum(e.peakM3s) && e.peakM3s > 0 && e.peakM3s <= EWR_RULE_VALUE_MAX)) return `${n}: the peak must be above 0 and at most ${EWR_RULE_VALUE_MAX.toLocaleString('en')} m³/s.`;
 		if (!isInt(e.durationDays, 1, EWR_HIGH_FLOW_DURATION_MAX)) return `${n}: the duration must be a whole number of days from 1 to ${EWR_HIGH_FLOW_DURATION_MAX}.`;
@@ -384,7 +386,7 @@ export function resolveEwrRules(raw: unknown, warnings: string[]): EwrRuleTable[
 			continue;
 		}
 		if (t.naturalSource === 'run') t.natural = null;
-		// Copies, sorted: the months an event may start in are a set.
+		// Copies, sorted: the months an event may peak in are a set.
 		t.highFlows = t.highFlows!.map((e) => ({ label: e.label, months: [...e.months].sort((a, b) => a - b), peakM3s: e.peakM3s, durationDays: e.durationDays, perYear: e.perYear }));
 		out.push(t);
 	}

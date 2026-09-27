@@ -3006,21 +3006,68 @@ and monthly flows for the DRM) · Ladson, Brown, Neal & Nathan 2013,
 *Australasian J. Water Resources* 17(1):25 (reflecting the ends).
 
 **High flows** (`EwrRuleTable.highFlows`, optional, at most 12). Each
-component: a label, the calendar months an event may start in, a peak
-(m³/s, daily mean; × the table's scale), a duration (1–90 days) and the
-events required per water year (1–12; `duration × per year ≤ 366`).
+component: a label, the calendar months an event may peak in, a peak
+(m³/s, daily mean; × the table's scale), an event duration (1–90 days) and
+the events required per water year (1–12; `duration × per year ≤ 366`).
 Per **complete water year** (1 Oct … 30 Sep inside the run; a part year at
 either end is not assessed):
 
 ```
-event     = a maximal run of days with daily flow ≥ peak (relative tolerance 1e-9),
-            at least `duration` days long, whose first day falls in one of the months;
+level     = EWR_HIGH_FLOW_EVENT_LEVEL × peak          (0.5: half the peak)
+min_days  = ⌈duration × (1 − 0.5)⌉ = ⌈duration / 2⌉    (highFlowEventMinDays)
+event     = a maximal run of days with daily flow ≥ level (relative tolerance 1e-9)
+            that reaches the peak on at least one day, lasts at least min_days,
+            and whose first day at the peak falls in one of the months;
             a run is cut at the water year's ends, a missing day breaks it
 n_nat     = events in the site's natural flow (Σ runoff of the farms upstream, §2.9c)
 n_sim     = events in the simulated flow at the site (outlet: outflow; gauge: its flow)
 required  = MIN(perYear, n_nat)
 met       = n_sim ≥ required
 ```
+
+*What "duration" means (engine ≥ 1.7.0).* A Reserve high flow is an event
+hydrograph, not a plateau: DWS's gazetted Reserves define high flows as "a
+set of flood events defined by a peak discharge in cubic meters per second,
+an event duration in hours and the frequency of the event", with the event
+sizes also carried as volumes in a high-flow assurance table (GN 165,
+*Government Gazette* 43015, 14 Feb 2020, Mzimvubu RQOs, Schedule §2), and the
+revised Desktop Reserve Model turns each event's peak and duration into an
+event volume (Hughes et al. 2014, *HSJ* 59:673). The duration therefore runs
+from the rise to the end of the recession. Engines 0.33.0–1.6.x instead
+counted an event only as `duration` consecutive days **all at or above the
+peak**. Natural daily flow almost never holds a peak for days, so natural
+flow itself rarely had an event, `required = MIN(perYear, n_nat)` fell to 0,
+and the check passed nearly every year whatever a dam did (licensing-authority
+review of issue #46). The reproduction (`reserve/lowHighFlows.test.ts`): a
+storm on a 1 m³/s base flow rising to 20 m³/s and receding with a 2-day time
+constant (daily 1, 6, 20, 12.5, 8.0, 5.2, 3.6 … m³/s) plainly carries a
+10 m³/s, 3-day freshet, yet the old rule counted **0** events for any
+duration of 3 days or more, and 0 for a 3-day freshet of any peak of
+8 m³/s or more. From 1.7.0 it counts one for every duration up to 10 days, none for
+11 or more or for a peak above 20 m³/s, and none once a dam cuts the storm's
+rise to 40 % (peak 8.6 m³/s).
+
+*Why half the peak for half the duration.* Neither the gazette nor the DRM
+papers give a rule for finding an event in a daily series, and "back to base
+flow" has no fixed day on an exponential recession, so the engine takes the
+required event as a triangle of base `duration` (the simplest hydrograph of
+that peak and duration). A triangle spends `duration × (1 − k)` days at or
+above `k × peak`; the engine measures the run at k = ½ (the hydrograph's
+width at half its peak, which doesn't depend on where the base flow sits
+or on the long tail of the recession) and asks for ⌈duration / 2⌉ days. A
+triangle of the stated peak and duration therefore counts, and one of half
+the duration doesn't (tested for 4 to 16 days). The level also separates
+events: two peaks count as two only if the flow falls below half the peak
+between them, in the spirit of the peaks-over-threshold independence rule
+that the flow must drop well below the smaller peak between two floods. The
+event counts in the month of its first day at the peak (a freshet "in
+November" peaks in November); before 1.7.0 it was the month its run
+started. Limits: on a base flow above half the peak (a small freshet on a
+high winter flow) a whole spell above the level is one event however many
+peaks it has, which undercounts natural and simulated flow alike; and a
+flood much longer than a triangle at half its peak (a broad, flat event)
+counts for a longer duration than its base. Both are for the hydrologist to
+confirm (below).
 
 A year is never asked for a flood its natural flow didn't have: a dry year is
 not failed for it, but a dam that holds back a flood the river would have had
@@ -3042,6 +3089,9 @@ each site (§2.7b) unless `settings.ewrChargeSource` is `'ruleTable'`
 - A table with neither addition reports exactly as before (no new keys).
 - Natural flow meets its own low flows whenever the low-flow grid is at most
   the natural curve, and its own high flows always (n_sim = n_nat ≥ required).
+- A storm hydrograph that reaches the peak and lasts the duration counts as
+  one event; a triangle of the peak and half the duration, or a storm cut
+  below the peak, counts none (engine ≥ 1.7.0).
 - With low flows ≤ the total at every point, a month that meets the total
   meets its low flows.
 - Less flow never meets more low-flow months (R_low depends only on natural
@@ -3065,6 +3115,9 @@ flow rather than the month's volume (`settings.lowFlowMeasure`, built, off by
 default) and, if so, with which filter parameter; whether a freshet's "per year" should be
 capped by natural events (as here) or required outright in maintenance years
 only; whether events should be counted per month rather than per water year;
+how an event is found in daily flow (engine 1.7.0: at least half the
+duration at or above half the peak, above) and whether the level should
+sit on the base flow instead of the peak;
 the DRM's own high-flow volumes (Mm³ per month) as a third check. None of
 this is signed off.
 
@@ -5352,7 +5405,7 @@ step when a definition changes.
 | **Pragmatic EWR** | b023's simplification: one fixed m³/day per month instead of a flow-dependent requirement, so farmers can plan for it. |
 | **Ecological category** | A–F class of river condition that the EWR aims to maintain. |
 | **Maintenance / drought low flows** | The low-flow part of a Reserve: the base flow a river needs in normal years (maintenance, the wetter % points of the DRM low-flow table) down to the least it needs in a drought (its 99 % point) (§2.9d). |
-| **Freshet / flood (high flows)** | A Reserve high-flow event: a peak held for some days, a number of times a water year, in given months; checked per water year against the events natural flow had (§2.9d). |
+| **Freshet / flood (high flows)** | A Reserve high-flow event: a flood hydrograph of a given peak and duration (rise to recession), a number of times a water year, peaking in given months; checked per water year against the events natural flow had (§2.9d). |
 | **Percentile (natural condition)** | Where a month's natural flow sits on that month's natural flow duration curve, as % exceedance: low = wet, high = dry; it picks the row of a Reserve rule table (§2.9c). |
 | **Quaternary catchment** | The smallest standard SA catchment unit (e.g. A21A). |
 | **CHIRPS** | Climate Hazards Group InfraRed Precipitation with Station data: satellite-based daily rainfall. |
