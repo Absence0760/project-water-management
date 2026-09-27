@@ -1062,6 +1062,16 @@
 //             root layout. No new dependency: the charts are plain SVG and the
 //             figures a small generated module, so the landing loads no uPlot,
 //             no engine and no workspace code. Headroom ~3 KB.
+// 2026-09-27  total 994 → 998 KB (measured 995 on e9380f9b + the ewrRule.set
+//             scenario op, WP-3.7): "Set an EWR site's rule table" in the
+//             scenario form reuses Settings' rule-table helpers (siteOptions,
+//             now reached from the scenarios chunk too) and lazy-loads the
+//             Settings tab's table editor as it is, so no editor code is
+//             duplicated; the op's description and draft in scenarios/ops.ts.
+//             No chunk budget moved. Headroom ~3 KB.
+// 2026-09-27  total 1020 → 1024 KB (measured 1020 on main with both of the
+//             above: the landing page and the ewrRule.set op landed in
+//             parallel, each measured without the other). Headroom ~4 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1072,7 +1082,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1020,
+	totalCodeKb: 1024,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

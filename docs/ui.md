@@ -3753,7 +3753,11 @@ them scenarios).
   or remove a transfer, add or remove land cover, change a setting, scale
   rainfall by a % change over a date range, scale demand (farms' irrigation
   or other water users', as a % of what they'd take, for ticked nodes and
-  months; none ticked is all; `demand.scale`, issue #53 R1). A setting's value is typed as
+  months; none ticked is all; `demand.scale`, issue #53 R1), set an EWR
+  site's Reserve rule table (`ewrRule.set`, engine ≥ 1.6.0: the outlet or a
+  gauge marked as an EWR site, then the Settings tab's own table editor,
+  starting from the site's table; always a baseline assumption,
+  [scenarios.md § Reserve rule tables](./scenarios.md)). A setting's value is typed as
   the Settings tab takes it; GR4J's PE input (`pe`, issue #39) has its own
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules

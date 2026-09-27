@@ -380,7 +380,8 @@ must build WP-2.15 Phase B.
       - `demand.scale { factor, nodeIds?, months?, category? }` (added
         later, issue #53 R1, engine 0.41.0: [scenarios.md](../scenarios.md));
       - later ops for the new physics fields: `allocation.set`,
-        `ewrSite.set`, `borehole.add`.
+        `ewrSite.set` (built as `ewrRule.set`, engine ≥ 1.6.0, issue #64),
+        `borehole.add` (built, WP-3.9).
     - Each op is classified as **proposal** (the applicant's own or new
       nodes, crops, pumps and boreholes) or **baseline assumption** (any
       `settings.*`, EWR tables, calibration, flow-share method, series,

@@ -768,11 +768,10 @@ the reports):
             Reserve panel and the printed report put the confidence line
             ("Desktop estimate, low confidence", "Gazetted Reserve") before
             the source, and run comparison lists it changing. The "changed
-            table in red as a baseline assumption" part has no place yet: a
-            scenario can't change a rule table (`settings.set` has no
-            `ewrRules` path), so there is nothing to mark; if that op is
-            ever added it is `settings.set`, already always baseline, and
-            the callout lists it.
+            table in red as a baseline assumption" part is the scenario op
+            `ewrRule.set` (engine ≥ 1.6.0): always baseline, and the
+            scenario list and the compare page's overrides show the table
+            it sets and the one it replaces, each with its confidence line.
 - [x] **Nominated evidence run** (2026-09-25, migration 010). An editor
       nominates a run as evidence with a required reason; the history is
       append-only in the database (who, when, runoff model and engine version
@@ -1934,8 +1933,14 @@ role and not before it.
         the engine's `modelRuleIssues` (`packages/engine/src/modelRules.ts`);
         `scenario/structure.ts` and `modelProblems` both call it, and a fuzz
         test checks a scenario applied to a valid model always passes them.
-  - [ ] **Later ops**: `ewrSite.set`, `allocation.set`, moving a node or
-        inserting one mid-river, `crop.set`, `landCover.set`
+  - [x] **EWR rule table op** (`ewrRule.set`, engine ≥ 1.6.0, issue #64,
+        WP-3.7): sets or replaces a site's Reserve rule table, checked with
+        Settings' own checks, always a baseline assumption (applications
+        included: shown in red, not refused), in the scenario form with the
+        Settings tab's table editor and described with its confidence line
+        ([scenarios.md § Reserve rule tables](./scenarios.md)).
+  - [ ] **Later ops**: `allocation.set`, removing a site's EWR rule table,
+        moving a node or inserting one mid-river, `crop.set`, `landCover.set`
         ([scenarios.md § Not yet supported](./scenarios.md#not-yet-supported)).
         Trigger: the scenario editor needing them.
 

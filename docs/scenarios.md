@@ -106,6 +106,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 | `borehole.remove` | `boreholeId` | Removes a borehole. `node.remove` drops the node's boreholes too. |
 | `settings.set` | `path, value` | Sets one whitelisted setting (below). Nested paths write over what is there. |
 | `series.scale` | `kind, factor, from?, to?` | Multiplies a rain series or the daily A-pan series by `factor` (0–10) on the days `from`–`to` (ISO dates, inclusive; each end open when absent). Missing days stay missing. |
+| `ewrRule.set` | `table` | Sets or replaces the Reserve rule table of one EWR site (engine ≥ 1.6.0, WP-3.7): `table.siteNodeId` is the site. Always a baseline assumption. § Reserve rule tables. |
 | `demand.scale` | `factor, nodeIds?, months?, category?` | Multiplies demand by `factor` (0–2): the farms' irrigation demand (`category: 'farm'`, the default) or the other water users' (`'user'`). `nodeIds` limits it to those nodes (default: every node of the category), `months` to those calendar months (default: every month). It multiplies each target's `demandFactor`, so ops stack (0.9 twice is 0.81). Engine ≥ 0.41.0, issue #53 R1; § Demand scaling. |
 
 **`node.set` fields, per node kind.** Never `id`, `kind`,
@@ -139,9 +140,8 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
   EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
   can't be taken off (a model rule), and the op is always a baseline
-  assumption (§ Classification). A scenario can't change a Reserve rule table
-  (`settings.set` has no `ewrRules` path), so there is no changed table to
-  mark.
+  assumption (§ Classification). A site's Reserve rule table is `ewrRule.set`
+  (§ Reserve rule tables), not a `settings.set` path.
 
 Ranges are the backend's (`backend/src/model/validate.ts`).
 
@@ -205,6 +205,41 @@ R1](./design/planning-outputs.md#31-r1-a-demandscale-scenario-op-foundation-s)).
   `node.set` don't carry it, and override mode keeps a scaled node's factor
   as it is. The input diff reports it (`demand factor none → 0.85, … (Oct–Sep)`).
 
+**Reserve rule tables (`ewrRule.set`, engine ≥ 1.6.0, WP-3.7).** "What if
+the Reserve at this site were the desktop estimate, not the gazetted table?"
+The op carries a whole `EwrRuleTable` ([model.md §2.9c](./model.md)), its
+`siteNodeId` the site.
+
+- **Set or replace.** A site with a table has it replaced whole; one without
+  gets it. The outlet is one site whether a table names it `null` (as
+  Settings saves it) or by the outlet node's id (as the run also reads it),
+  and a replaced table keeps the key its site had, so run comparison sees
+  that site's table changed rather than one removed and one added. There is
+  no op to remove a table yet.
+- **Checked as Settings checks it.** The validator rebuilds the table from
+  its known fields (a high-flow component's too) and runs the engine's
+  `ewrRuleTableIssues`, the checks the Settings form and the settings API
+  use, so a table a scenario sets is one Settings would save; its errors are
+  the Settings form's sentences (`ops[0].table.source: Say where the table
+  comes from …`). Applied, the table is kept as the run reads it: the source
+  trimmed, no natural grid unless it is the natural source, `sourceKind`
+  only when stated.
+- **Problems** (the op is skipped): a table that fails those checks; a site
+  that isn't the outlet or a gauge (`an EWR site is the outlet or a gauge;
+  "Upper farm" is a farm`); a missing node; a gauge taken off the EWR sites
+  (`"Weir" is not marked as an EWR site: set its EWR site flag first`, so a
+  scenario that flags a gauge and gives it a table puts `node.set ewrSite`
+  first); a 21st table (`At most 20 rule tables.`).
+- **Always a baseline assumption**, whoever owns the site's gauge: the
+  Reserve is the authority's, never part of a proposal. An application may
+  make one (§ Applications): like every baseline op it is shown to the
+  assessor in red, not refused.
+- The input diff reports it per field (source, kind of source, EWR values
+  per month …, `run-comparison.md`), and the editor describes it with its
+  confidence line: "Reserve rule table at the outlet (Outflow gauge): “GN …”
+  (Gazetted Reserve) → “…” (Desktop estimate, low confidence), total flow,
+  10 % points".
+
 **Which series scale.** The rain drivers, `rain_catchment_mm`,
 `rain_chirps_mm`, `rain_forecast_mm`, and the daily A-pan evaporation
 `evap_apan_mm` (engine ≥ 0.38.0, [model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)).
@@ -227,7 +262,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
-| `settings.set`, `series.scale` | never | baseline (settings, calibration, EWR, flow-share method, climate) |
+| `settings.set`, `series.scale`, `ewrRule.set` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
 | `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`) or a gauge's `ewrSite`; so the own farm's supply rule and river pump are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, and where the EWR is assessed |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
@@ -280,16 +315,22 @@ non-empty string here; the backend tightens them to UUIDs (`backend/src/scenario
   `overrides.test.ts` has `demand.scale`'s own cases: what it sets (default
   every farm, some nodes and months, stacking), the run (crop requirement and
   demand scaled, gross demand, rain and store not), `category: 'user'`, the
-  problems, the input diff, its classification and its validation.
+  problems, the input diff, its classification and its validation; and
+  `ewrRule.set`'s (engine ≥ 1.6.0): the outlet's table replaced however it
+  is keyed, a gauge's added then replaced, the run assessing the scenario's
+  table, the problems, always baseline (masked too), the input diff, and the
+  validator's Settings-form errors. The fuzz generator (`randomOps`) adds
+  `ewrRule.set` ops from a stream of their own, so the no-silent-change
+  property covers them.
 
   Soak: `SCENARIO_FUZZ_CASES=5000 pnpm -C packages/engine exec vitest run src/scenario/scenario.invariants.test.ts`.
 
 ## Not yet supported
 
 Each of these is a follow-up, not a gap in what's listed above:
-- **EWR and allocations**: `ewrSite.set` (an EWR rule table) and
-  `allocation.set` (roadmap WP-3.2's later ops). EWR rule tables are
-  baseline either way.
+- **Allocations**: `allocation.set` (roadmap WP-3.2's later ops). The EWR
+  rule table op is built (`ewrRule.set`, engine ≥ 1.6.0, § Reserve rule
+  tables); removing a site's table is not an op yet.
 - **Moving a node** (`downstreamNodeId`) and **inserting a node mid-river**
   (re-pointing existing nodes into a new one): `node.add` adds leaves only.
 - **Editing a crop** (`crop.set` on crop factors) and **removing a crop**;
@@ -524,6 +565,19 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   is all of them, and the op then leaves `nodeIds` / `months` out; every
   month ticked is the same as none). It reads "Irrigation demand of Upper
   farm: 85 % of what they'd take (× 0.85), in Jan, Feb, Dec".
+- **Set an EWR site's rule table** (`ewrRule.set`, engine ≥ 1.6.0): pick
+  the site (the outlet, or a gauge still marked as an EWR site), with
+  "Now: …" naming the table it has (source, confidence line, what it covers,
+  % points) or "no rule table"; the form then shows the Settings tab's own
+  table editor (`settings/EwrRuleTablesEditor.svelte`, lazy-loaded, limited
+  to that site), starting from a copy of the site's table or a blank one, so
+  source, kind of source, grids, paste, low and high flows work as there,
+  and a table Settings wouldn't save is refused in the same words. A note
+  says it is always a baseline assumption. The list reads it as "Reserve rule
+  table at the outlet (…): “old” (Desktop estimate, low confidence) → “new”
+  (Gazetted Reserve), total flow, 10 % points", so the compare page's
+  Scenario overrides show the changed table, in red, with both confidence
+  lines.
 - **Classification in the UI**: each op shows **Proposal** or **Baseline
   assumption**; any baseline op shows the red **Baseline assumptions
   changed** callout, in the tab and on the compare page. On a team scenario
@@ -608,7 +662,12 @@ demand through the form: one farm at 50 % in December and January, the
 proposer's, kept over a reload, run; the scenario run's daily demand is the
 base's × 0.5 on exactly those days and the base's on the rest, and the
 compare section's farm table shows that farm's demand down to the run's mean
-and the other farm's unchanged).
+and the other farm's unchanged) and `e2e/tests/scenario-ewr-rule.spec.ts`
+(Set an EWR site's rule table through the form: the outlet, a table with
+no source refused in the Settings form's words, a desktop estimate added,
+described with its confidence line and a baseline assumption even with every
+node the proposer's, run, and the compare page's overrides and What changed
+showing it; the catchment's settings untouched; axe).
 
 ## Applications (WP-3.3)
 
@@ -752,7 +811,9 @@ names, hidden and free item ids, a hidden farm's removal counting nothing,
 each with its positive control; the party prune), `applicant.test.ts`
 (the projection and the mask), the engine's `overrides.test.ts` ("mask:
 names" and "mask: ids, counts and value rules"),
-`history/write-routes.db.test.ts` (each new route records its event), e2e
+`history/write-routes.db.test.ts` (each new route records its event),
+the applicant's `ewrRule.set` in `applications.db.test.ts` (accepted,
+applied, classed baseline beside their own farm's proposal), e2e
 `e2e/tests/applications.spec.ts` (the applicant's flow, the assessor's
 decision, the owner's party and the applicant's share picker, axe in both
 themes).

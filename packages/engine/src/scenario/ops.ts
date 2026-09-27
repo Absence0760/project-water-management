@@ -32,7 +32,18 @@ import {
 	type ZeroRainMode
 } from '../project';
 import { GR4J_PARAMS } from '../runoff/params';
-import { EWR_CHARGE_SOURCES, LOW_FLOW_MEASURES, type EwrChargeSource, type LowFlowMeasure } from '../reserve/rules';
+import {
+	EWR_CHARGE_SOURCES,
+	EWR_NATURAL_SOURCES,
+	EWR_RULE_COMPONENTS,
+	EWR_RULE_SOURCE_KINDS,
+	EWR_RULE_UNITS,
+	LOW_FLOW_MEASURES,
+	ewrRuleTableIssues,
+	type EwrChargeSource,
+	type EwrRuleTable,
+	type LowFlowMeasure
+} from '../reserve/rules';
 
 // ---------------------------------------------------------------------------
 // Value checks: each returns an error message, or null when the value is fine.
@@ -417,6 +428,51 @@ export function demandScaleError(op: { factor?: unknown; nodeIds?: unknown; mont
 }
 
 // ---------------------------------------------------------------------------
+// ewrRule.set
+// ---------------------------------------------------------------------------
+
+/** A rule table's fields: the shape checks here, then the engine's own (ewrRuleTableIssues), as Settings does. */
+const EWR_TABLE_FIELDS: Record<string, Check> = {
+	siteNodeId: nullable(id),
+	source: (v) => (typeof v === 'string' ? null : 'must be text'),
+	sourceKind: nullable(oneOf(EWR_RULE_SOURCE_KINDS)),
+	component: oneOf(EWR_RULE_COMPONENTS),
+	unit: oneOf(EWR_RULE_UNITS),
+	points: (v) => (Array.isArray(v) ? null : 'must be a list of % points'),
+	ewr: (v) => (Array.isArray(v) ? null : 'must be 12 rows of values'),
+	naturalSource: oneOf(EWR_NATURAL_SOURCES),
+	natural: nullable((v) => (Array.isArray(v) ? null : 'must be 12 rows of values')),
+	scale: (v) => (isNum(v) ? null : 'must be a finite number'),
+	lowFlow: nullable((v) => (Array.isArray(v) ? null : 'must be 12 rows of values')),
+	highFlows: (v) => (Array.isArray(v) ? null : 'must be a list')
+};
+/** Left out = not stated (sourceKind), none (lowFlow, highFlows): the same as a table saved in Settings before them. */
+const EWR_TABLE_OPTIONAL = new Set(['sourceKind', 'lowFlow', 'highFlows']);
+const HIGH_FLOW_KEYS = ['label', 'months', 'peakM3s', 'durationDays', 'perYear'] as const;
+
+/**
+ * An `ewrRule.set` op's table, rebuilt from its known fields (a high-flow
+ * component's too), with every problem as `[field, message]`: the shape,
+ * then the Settings form's and the backend's own checks (ewrRuleTableIssues),
+ * so a table a scenario sets is one Settings would save.
+ */
+export function ewrRuleTableOpIssues(raw: unknown): { table: EwrRuleTable | null; issues: [string, string][] } {
+	if (!isObj(raw)) return { table: null, issues: [['', 'must be a rule table']] };
+	const errs: string[] = [];
+	const t = pickFields(raw, EWR_TABLE_FIELDS, EWR_TABLE_OPTIONAL, '', errs) as Obj;
+	const issues: [string, string][] = errs.map((e) => {
+		const [k, ...rest] = e.slice(1).split(': ');
+		return [k!, rest.join(': ')];
+	});
+	if (Array.isArray(t.highFlows)) {
+		t.highFlows = t.highFlows.map((e) => (isObj(e) ? Object.fromEntries(HIGH_FLOW_KEYS.filter((k) => k in e).map((k) => [k, cloneValue(e[k])])) : e));
+	}
+	if (issues.length) return { table: null, issues };
+	for (const i of ewrRuleTableIssues(t as unknown as EwrRuleTable)) issues.push([i.field, i.message]);
+	return { table: issues.length ? null : (t as unknown as EwrRuleTable), issues };
+}
+
+// ---------------------------------------------------------------------------
 // The ops
 // ---------------------------------------------------------------------------
 
@@ -449,7 +505,20 @@ export type ScenarioOp =
 	| SettingsSetOp
 	/** Multiply a rain series by factor on the days from–to (inclusive; each open when absent). */
 	| { op: 'series.scale'; kind: ScalableSeriesKind; factor: number; from?: string; to?: string }
-	| DemandScaleOp;
+	| DemandScaleOp
+	| EwrRuleSetOp;
+
+/**
+ * Set or replace the Reserve rule table of one EWR site (engine ≥ 1.6.0,
+ * WP-3.7): `table.siteNodeId` is the site (null = the outlet, else a gauge
+ * marked as an EWR site). A site with a table has it replaced whole; one
+ * without gets it. Always a baseline assumption (classifyOp): the Reserve is
+ * never the applicant's to propose.
+ */
+export interface EwrRuleSetOp {
+	op: 'ewrRule.set';
+	table: EwrRuleTable;
+}
 
 /**
  * Multiply demand by `factor` (0–2, issue #53 R1): the farms' irrigation
@@ -483,7 +552,8 @@ export const SCENARIO_OP_NAMES = [
 	'borehole.remove',
 	'settings.set',
 	'series.scale',
-	'demand.scale'
+	'demand.scale',
+	'ewrRule.set'
 ] as const satisfies readonly ScenarioOpName[];
 
 /** Most ops one scenario may hold (the backend's body limit mirrors it). */
@@ -673,6 +743,12 @@ function validateOne(raw: unknown, where: string, errors: string[]): ScenarioOp 
 			opt('months', demandMonths);
 			opt('category', oneOf(DEMAND_CATEGORIES));
 			op = s;
+			break;
+		}
+		case 'ewrRule.set': {
+			const { table, issues } = ewrRuleTableOpIssues(raw.table);
+			for (const [k, m] of issues) errors.push(`${where}.table${k ? `.${k}` : ''}: ${m}`);
+			op = { op: 'ewrRule.set', table: table as EwrRuleTable };
 			break;
 		}
 		default:

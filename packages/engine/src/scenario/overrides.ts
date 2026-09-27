@@ -11,6 +11,7 @@ import {
 	SCALABLE_SERIES_KINDS,
 	SERIES_SCALE_MAX,
 	demandScaleError,
+	ewrRuleTableOpIssues,
 	isIsoDate,
 	nodeAddFieldError,
 	nodeFieldError,
@@ -19,6 +20,7 @@ import {
 	type ScenarioOp
 } from './ops';
 import { structureIssues } from './structure';
+import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 
 /** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
 export interface AppliedOp {
@@ -482,6 +484,30 @@ function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[]
 			if (!op.nodeIds) notes.push(`${targets.length} ${word}(s) scaled`);
 			break;
 		}
+		case 'ewrRule.set': {
+			const { table, issues } = ewrRuleTableOpIssues(op.table);
+			if (!table) fail(`the rule table isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
+			// As the run reads it (resolveEwrRules): the source trimmed, no natural grid unless it is the source, a kind only when stated.
+			const { sourceKind, ...rest } = table!;
+			const t: EwrRuleTable = { ...rest, ...(sourceKind != null ? { sourceKind } : {}), source: rest.source.trim(), natural: rest.naturalSource === 'table' ? rest.natural : null };
+			// The outlet is its own site whether a table names it null (as Settings does) or by its node's id (as the run reads both).
+			const outflowId = m.nodes.find((n) => n.downstreamNodeId === null)?.id;
+			const site = (id: string | null | undefined) => (id === undefined || id === null || id === outflowId ? null : id);
+			if (site(t.siteNodeId) !== null) {
+				const n = findNode(d, t.siteNodeId!);
+				if (n.kind !== 'gauge') fail(`an EWR site is the outlet or a gauge; "${n.name}" is ${n.kind === 'user' ? 'an other water user' : `a ${n.kind}`}`);
+				if (n.ewrSite === false) fail(`"${n.name}" is not marked as an EWR site: set its EWR site flag first`);
+			}
+			const list: EwrRuleTable[] = Array.isArray(d.settings.ewrRules) ? d.settings.ewrRules : [];
+			const at = list.findIndex((x) => x && typeof x === 'object' && site(x.siteNodeId) === site(t.siteNodeId));
+			// A replaced table keeps the key its site had, so run comparison sees the same site's table changed.
+			const next = at < 0 ? [...list, t] : list.map((x, i) => (i === at ? { ...t, siteNodeId: x.siteNodeId ?? null } : x));
+			const e = ewrRuleListIssues(next);
+			if (e) fail(e);
+			// No note: what it replaced is the op's "was", which the editor describes (like node.set's).
+			d.settings.ewrRules = next;
+			break;
+		}
 		default:
 			fail(`unknown op ${(op as { op?: unknown }).op as string}`);
 	}
@@ -628,6 +654,8 @@ export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input
 	switch (op.op) {
 		case 'settings.set':
 		case 'series.scale':
+		// The Reserve's rule table: never the applicant's to propose, whoever's node the site is.
+		case 'ewrRule.set':
 			return 'baseline';
 		case 'node.set':
 			// Any other field of the applicant's own node is theirs to propose: its dam, irrigation,

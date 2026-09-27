@@ -295,5 +295,38 @@ export function randomOps(input: ModelInput, seed: number, count?: number): Scen
 			ops.push(op);
 		}
 	}
+	// ewrRule.set (engine ≥ 1.6.0, WP-3.7), from a stream of its own for the same reason: a
+	// table at the outlet, a gauge, and now and then a farm or a missing node (a problem),
+	// any kind of source, the natural flows from the run or the table, low and high flows.
+	const r = new Rng(seed ^ 0x68e31da4);
+	if (count === undefined && r.bool(0.25)) {
+		for (let k = r.int(1, 2); k > 0; k--) {
+			const gauges = nodes.filter((x) => x.kind === 'gauge').map((x) => x.id);
+			const siteNodeId = r.bool(0.1) ? (nodes.length && r.bool(0.5) ? r.pick(nodes).id : missing()) : r.bool(0.5) || !gauges.length ? null : r.pick(gauges);
+			const points = r.bool(0.7) ? [10, 20, 30, 40, 50, 60, 70, 80, 90, 99] : [...new Set(Array.from({ length: r.int(2, 8) }, () => r.int(1, 100)))].sort((a, b) => a - b);
+			const size = r.pick([0.001, 1, 100]);
+			const grid = () => Array.from({ length: 12 }, () => points.map(() => r.logFloat(1e-6, 1) * size).sort((a, b) => b - a));
+			const component = r.pick(['total', 'lowFlow'] as const);
+			const naturalSource = r.pick(['run', 'run', 'table'] as const);
+			const ewr = grid();
+			ops.push({
+				op: 'ewrRule.set',
+				table: {
+					siteNodeId,
+					source: `Scenario table ${k}`,
+					sourceKind: r.pick(['gazetted', 'desktop', 'other', null] as const),
+					component,
+					unit: r.pick(['mcm', 'm3s'] as const),
+					points,
+					ewr,
+					naturalSource,
+					natural: naturalSource === 'table' || r.bool(0.2) ? grid() : null,
+					scale: r.pick([1, r.logFloat(0.01, 100)]),
+					lowFlow: component === 'total' && r.bool(0.4) ? ewr.map((row) => row.map((v) => v * 0.5)) : null,
+					highFlows: r.bool(0.4) ? [{ label: 'Scenario freshet', months: [11, 12], peakM3s: r.logFloat(1e-3, 10), durationDays: r.int(1, 5), perYear: r.int(1, 2) }] : []
+				}
+			});
+		}
+	}
 	return ops;
 }

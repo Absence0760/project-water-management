@@ -4,7 +4,9 @@
 // The engine owns the rules (applyScenario, validateScenarioOps); this only
 // reads and builds its data. No Svelte, no API.
 import {
+	blankEwrRuleTable,
 	DEMAND_SCALE_MAX,
+	ewrSourceConfidence,
 	LAND_COVER_CLASSES,
 	SCALABLE_SERIES_KINDS,
 	scenarioSteps,
@@ -14,6 +16,7 @@ import {
 	type BoreholeMode,
 	type BoreholeTarget,
 	type DemandCategory,
+	type EwrRuleTable,
 	type ModelInput,
 	type NetworkNode,
 	type NodeSetField,
@@ -155,7 +158,8 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'borehole.remove': 'Remove a borehole',
 	'settings.set': 'Change a setting',
 	'series.scale': 'Scale rainfall or daily A-pan',
-	'demand.scale': 'Scale demand'
+	'demand.scale': 'Scale demand',
+	'ewrRule.set': "Set an EWR site's rule table"
 };
 
 /** A node or crop id that neither the base nor any name source knows. */
@@ -254,9 +258,49 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 			const months = op.months?.length ? `, in ${monthsText(op.months)}` : '';
 			return `${user ? 'Demand' : 'Irrigation demand'} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
 		}
+		case 'ewrRule.set': {
+			const t = op.table;
+			const was = before ? siteTable(before, t.siteNodeId) : undefined;
+			const now = tableText(t, true);
+			const where = `Reserve rule table at ${siteName(t.siteNodeId, m, nodeName)}`;
+			return was === undefined ? `${where}: → ${now}` : `${where}: ${was ? tableText(was, false) : 'none'} → ${now}`;
+		}
 		default:
 			return `Unknown change ${(op as { op?: string }).op ?? ''}`;
 	}
+}
+
+/** The outlet, or a gauge by name: where an ewrRule.set puts its table. */
+function siteName(siteNodeId: string | null, m: ModelInput['model'] | undefined, nodeName: (id: string) => string): string {
+	const outflow = m?.nodes.find((n) => n.downstreamNodeId === null);
+	if (siteNodeId === null || siteNodeId === outflow?.id) return outflow ? `the outlet (${outflow.name})` : 'the outlet';
+	return nodeName(siteNodeId);
+}
+
+/**
+ * The table the input has at an EWR site (null when it has none): the outlet
+ * whether a table names it null or by the outlet node's id, as the engine
+ * matches it (ewrRule.set, engine ≥ 1.6.0).
+ */
+export function siteTable(input: ModelInput, siteNodeId: string | null): EwrRuleTable | null {
+	const outflow = input.model.nodes.find((n) => n.downstreamNodeId === null)?.id;
+	const site = (id: string | null | undefined) => (id === undefined || id === null || id === outflow ? null : id);
+	const list = Array.isArray(input.settings.ewrRules) ? input.settings.ewrRules : [];
+	return list.find((x) => x && typeof x === 'object' && site(x.siteNodeId) === site(siteNodeId)) ?? null;
+}
+
+/**
+ * A rule table in a few words, with its source and its confidence line (WP-3.7):
+ * “GN 1234, table 3” (Gazetted Reserve), and with `detail` what it covers
+ * and its % points.
+ */
+export function tableText(t: EwrRuleTable, detail: boolean): string {
+	const source = typeof t.source === 'string' && t.source.trim() ? `“${t.source.trim()}”` : 'a table with no source';
+	const confidence = ewrSourceConfidence(t.sourceKind) ?? 'kind of source not stated';
+	if (!detail) return `${source} (${confidence})`;
+	const covers = t.component === 'lowFlow' ? 'low flows' : 'total flow';
+	const points = Array.isArray(t.points) ? t.points.length : 0;
+	return `${source} (${confidence}), ${covers}, ${points} % point${points === 1 ? '' : 's'}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,7 +356,13 @@ export interface OpDraft {
 	demandCategory: DemandCategory;
 	demandNodeIds: string[];
 	demandPct: string;
+	/** ewrRule.set (engine ≥ 1.6.0): the site (OUTLET_SITE or a gauge's id), and its table as the Settings editor holds it (one table). */
+	ewrSite: string;
+	ewrTables: EwrRuleTable[];
 }
+
+/** The form's value for the outlet as an EWR site (a table's siteNodeId null). */
+export const OUTLET_SITE = '(outlet)';
 
 export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 	return {
@@ -356,8 +406,21 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 		to: '',
 		demandCategory: 'farm',
 		demandNodeIds: [],
-		demandPct: ''
+		demandPct: '',
+		ewrSite: '',
+		ewrTables: []
 	};
+}
+
+/**
+ * The table ewrRule.set starts from at a site: a copy of the one the input
+ * has there (so a small change is a small edit), or a blank one at the
+ * Settings form's default points.
+ */
+export function startTable(input: ModelInput, site: string): EwrRuleTable {
+	const siteNodeId = site === OUTLET_SITE ? null : site;
+	const t = siteTable(input, siteNodeId);
+	return t ? { ...(JSON.parse(JSON.stringify(t)) as EwrRuleTable), siteNodeId } : blankEwrRuleTable(siteNodeId);
 }
 
 /** The value spec of the field a node.set / transfer.set / settings.set draft names, or null. */
@@ -523,6 +586,15 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				op = s;
 				break;
 			}
+			case 'ewrRule.set': {
+				const site = need(d.ewrSite, 'an EWR site');
+				const t = d.ewrTables[0];
+				if (!t) throw new DraftError('the table was removed: pick the site again');
+				// Plain data (the editor's state may be a proxy); a blank cell (NaN) becomes null, which the checks name.
+				const table = JSON.parse(JSON.stringify(t)) as EwrRuleTable;
+				op = { op: 'ewrRule.set', table: { ...table, siteNodeId: site === OUTLET_SITE ? null : site, source: typeof table.source === 'string' ? table.source.trim() : table.source } };
+				break;
+			}
 			default:
 				throw new DraftError('pick a kind of change');
 		}
@@ -591,6 +663,8 @@ export function opItems(
 /** series.scale's factor is typed as a % change, demand.scale's as a % of today's demand: say their limits that way. */
 function scaleNote(kind: ScenarioOpName, text: string): string {
 	if (kind === 'series.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, 'the change must be between −100 % and +900 %');
+	// A rule table's own checks are sentences already ("Say where the table comes from …"); a shape error names its field.
+	if (kind === 'ewrRule.set') return text.replace(/(^|; )table\.\w+: (?=[A-Z])/g, '$1').replace(/(^|; )table\.(\w+): /g, '$1$2 ');
 	if (kind === 'demand.scale') return text.replace(/^factor: must be (at least 0|at most \d+)$/, `the demand must be between 0 % and ${DEMAND_SCALE_MAX * 100} % of what they'd take`);
 	return text;
 }
