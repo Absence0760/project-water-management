@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { metricDelta, type FarmDelta, type InputChange, type RunComparison } from '@water-management/engine';
-import { DAYS_PER_YEAR, leadChange, outcomeRows, takeaways } from './summary';
+import { compareDamStorage, damStorageShare, DAYS_PER_YEAR, leadChange, outcomeRows, takeaways } from './summary';
+import type { FarmSummary } from '@water-management/engine';
 
 const farm = (node: string, name: string, a: number, b: number): FarmDelta =>
 	({ name, nameA: null, nodeIdA: node, nodeIdB: `${node}-b`, fractionSupplied: metricDelta(a, b) }) as unknown as FarmDelta;
@@ -56,6 +57,57 @@ describe('outcomeRows', () => {
 		expect(farms[0]!.whatIfs[1]).toEqual({ a: null, b: null, delta: null });
 		expect(farms[1]!.whatIfs[1]!.b).toBe(0.95);
 		expect(rows.at(-1)!.id).toBe('nse');
+	});
+});
+
+describe('dam storage (issue #55 figures)', () => {
+	const f = (nodeId: string, damEndM3?: number) => ({ nodeId, ...(damEndM3 === undefined ? {} : { damEndM3 }) }) as unknown as FarmSummary;
+	const nodes = [
+		{ id: 'big', damCapacityM3: 90_000 },
+		{ id: 'small', damCapacityM3: 10_000 },
+		{ id: 'none', damCapacityM3: 0 }
+	];
+
+	it('weights each dam by its capacity, as the Summary does, and leaves out a farm with no dam', () => {
+		// 45 000 + 10 000 of 100 000: 55 %, not the 75 % a plain mean of 50 % and 100 % would give.
+		expect(damStorageShare([f('big', 45_000), f('small', 10_000), f('none')], nodes)).toBeCloseTo(0.55);
+	});
+
+	it('is unknown (null), never 0, with no dam or on a run saved before the figures', () => {
+		expect(damStorageShare([f('none')], nodes)).toBeNull();
+		expect(damStorageShare([f('big'), f('small', 10_000)], nodes)).toBeNull();
+		expect(damStorageShare(undefined, nodes)).toBeNull();
+		expect(damStorageShare([f('big', 1)], undefined)).toBeNull();
+	});
+
+	it("reads each side's own capacities, so a raised dam is a share of its new size", () => {
+		const side = (end: number, cap: number) => ({ run: { summary: { farms: [f('big', end)] }, inputs: { model: { nodes: [{ id: 'big', damCapacityM3: cap }] } } } });
+		const m = compareDamStorage({ a: side(45_000, 90_000), b: side(90_000, 300_000) });
+		expect(m.a).toBeCloseTo(0.5);
+		expect(m.b).toBeCloseTo(0.3);
+		expect(m.delta).toBeCloseTo(-0.2);
+		expect(compareDamStorage({ a: side(45_000, 90_000), b: { run: { summary: { farms: [f('big')] }, inputs: { model: { nodes: [{ id: 'big', damCapacityM3: 90_000 }] } } } } })).toEqual({
+			a: 0.5,
+			b: null,
+			delta: null
+		});
+	});
+
+	it('adds a row before the mean outflow only when a run has dams, shown without a verdict or a takeaway', () => {
+		const base = [cmp({ ewrShare: [0.1, 0.1] }), cmp({ ewrShare: [0.1, 0.1] })];
+		expect(outcomeRows(base).some((r) => r.id === 'dams')).toBe(false);
+		expect(outcomeRows(base, [{ a: null, b: null, delta: null }]).some((r) => r.id === 'dams')).toBe(false);
+		const rows = outcomeRows(base, [
+			{ a: 0.6, b: 0.48, delta: -0.12 },
+			{ a: 0.6, b: 0.63, delta: 0.03 }
+		]);
+		expect(rows.map((r) => r.id)).toEqual(['reserveMet', 'reserveDays', 'supplied', 'farmsBelow', 'dams', 'outflow']);
+		const dams = rows.find((r) => r.id === 'dams')!;
+		expect(dams).toMatchObject({ label: 'Dam storage, end of run', unit: '% of capacity', base: 0.6, spec: { format: 'fraction', better: 'neutral' } });
+		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2)).map((x) => x.text)).toEqual([
+			'What-if 1 makes no material change to these outcomes',
+			'What-if 2 makes no material change to these outcomes'
+		]);
 	});
 });
 

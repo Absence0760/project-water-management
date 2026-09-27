@@ -12,10 +12,16 @@
 	// cards, outcomes table, takeaways, days below the reserve each year) sits
 	// on top; the full two-run comparison, for the baseline against the
 	// what-if picked, stays below it with nothing left out.
+	//
+	// Inside the workspace the section header is the page title: the view puts
+	// its context line and its actions (Export impact report, + New what-if)
+	// there with fillHeader and draws no title of its own. The standalone page
+	// has no section header, so it keeps the view's own h1 with the same
+	// actions beside it.
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
+	import { api, ApiError, hasRole, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
@@ -29,11 +35,12 @@
 	import { fmtMetric } from '$lib/components/compare/delta';
 	import { rainSourceNote } from '$lib/components/compare/rainSource';
 	import { asFitRecord } from '$lib/components/compare/fit';
-	import { leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
+	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
 	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
+	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { runYears } from '$lib/components/runs/runList';
 	import { fmtDate } from '$lib/format/number';
 
@@ -262,7 +269,12 @@
 	// The what-ifs in the summary: what-if 1, and what-if 2 once its comparison is in.
 	const whatIfs = $derived(WHAT_IFS.filter((s) => cmp[s].data && refOf(s)));
 	const loaded = $derived(whatIfs.map((s) => cmp[s].data!));
-	const rows = $derived(outcomeRows(loaded.map((d) => d.comparison)));
+	const rows = $derived(
+		outcomeRows(
+			loaded.map((d) => d.comparison),
+			loaded.map((d) => compareDamStorage(d))
+		)
+	);
 	const notes = $derived(
 		takeaways(
 			rows,
@@ -330,15 +342,94 @@
 			: []
 	);
 	const H = $derived(`h${level}`);
+
+	// --- the actions: Export impact report and + New what-if ------------------------
+	/**
+	 * A what-if's impact report: the printable report of its run
+	 * (routes/projects/[id]/report) with an "Impact against the baseline"
+	 * section first (`against`), so it can be saved as a PDF or handed round.
+	 */
+	function reportHref(side: WhatIf): string | null {
+		const r = refOf(side);
+		if (!r || !refA) return null;
+		return `${base}/projects/${r.projectId}/report?${new URLSearchParams({ run: r.runId, against: formatRef(refA) })}`;
+	}
+	const reports = $derived(
+		whatIfs.flatMap((s) => {
+			const href = reportHref(s);
+			return href ? [{ side: s, href, label: cmp[s].data?.b.run.label || 'Untitled run' }] : [];
+		})
+	);
+	/**
+	 * + New what-if: the Scenarios tab's create dialog (`new=1`) in the
+	 * baseline's project, on the baseline (`base`) when it is a run of the
+	 * model (a scenario run can't be a scenario's base). For whoever can edit
+	 * that project; its run then compares here like any other.
+	 */
+	const newWhatIfProject = $derived(refA?.projectId ?? projectA);
+	const canNewWhatIf = $derived(!!newWhatIfProject && hasRole(projects.find((p) => p.id === newWhatIfProject)?.role, 'editor'));
+	const newWhatIfHref = $derived.by(() => {
+		const q = new URLSearchParams({ tab: 'scenarios', new: '1' });
+		const m = runMeta('a');
+		if (refA && m && !m.scenarioId) q.set('base', refA.runId);
+		return `${base}/projects/${newWhatIfProject}?${q}`;
+	});
+
+	// Export impact report with two what-ifs is a menu (Escape and a click outside close it, as the Network's Grids).
+	let exportEl: HTMLDetailsElement | undefined = $state();
+	let exportOpen = $state(false);
+	function closeExport() {
+		if (exportEl) exportEl.open = false;
+	}
+	function exportKeydown(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || !exportEl?.open) return;
+		e.preventDefault();
+		closeExport();
+		exportEl.querySelector('summary')?.focus();
+	}
+	$effect(() => {
+		if (!exportOpen) return;
+		const onDoc = (e: PointerEvent) => {
+			if (exportEl && !exportEl.contains(e.target as Node)) closeExport();
+		};
+		document.addEventListener('pointerdown', onDoc);
+		return () => document.removeEventListener('pointerdown', onDoc);
+	});
+
+	// In the workspace the section header carries the context line and the actions.
+	$effect(() => fillHeader({ context: headerContext, actions: headerActions }, level === 2));
 </script>
 
-<header class="cmp-head">
-	<div class="cmp-title">
-		<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
-		<p class="muted" data-testid="compare-context">{context}</p>
-	</div>
-	{#if actions}<div class="cmp-actions">{@render actions()}</div>{/if}
-</header>
+{#snippet headerContext()}<span data-testid="compare-context">{context}</span>{/snippet}
+{#snippet headerActions()}
+	{#if reports.length === 1}
+		<a class="btn" href={reports[0]!.href}>Export impact report</a>
+	{:else if reports.length > 1}
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<details class="export-menu" bind:open={exportOpen} bind:this={exportEl} onkeydown={exportKeydown}>
+			<summary class="btn">Export impact report <span aria-hidden="true">▾</span></summary>
+			<div class="export-pop" role="group" aria-label="Impact report of">
+				{#each reports as r (r.side)}
+					<a href={r.href} onclick={closeExport}><span class="key" style:background={COLOUR[r.side]} aria-hidden="true"></span>{NAME[r.side]}: {r.label}</a>
+				{/each}
+			</div>
+		</details>
+	{/if}
+	{#if canNewWhatIf}<a class="btn" href={newWhatIfHref}>+ New what-if</a>{/if}
+{/snippet}
+
+{#if level === 1}
+	<header class="cmp-head">
+		<div class="cmp-title">
+			<svelte:element this={H} id="compare-title">Compare runs</svelte:element>
+			<p class="muted">{@render headerContext()}</p>
+		</div>
+		<div class="cmp-actions">
+			{#if actions}{@render actions()}{/if}
+			{@render headerActions()}
+		</div>
+	</header>
+{/if}
 
 {#snippet card(side: Side)}
 	{@const pid = side === 'a' ? projectA : side === 'b' ? projectB : projectC}
@@ -440,7 +531,7 @@
 							<tbody>
 								{#each rows as r (r.id)}
 									<tr>
-										<th scope="row">{r.label}{#if r.unit}<span class="visually-hidden">, </span><span class="u">{r.unit}</span>{/if}</th>
+										<th scope="row">{r.label}{#if r.unit}<span class="visually-hidden">,{' '}</span><span class="u">{r.unit}</span>{/if}</th>
 										<td class="num val">{fmtMetric(r.base, r.spec)}</td>
 										{#each r.whatIfs as m, i (i)}
 											<td class="num">
@@ -653,6 +744,50 @@
 	.cmp-title p {
 		margin: 0.2rem 0 0;
 		overflow-wrap: anywhere;
+	}
+	.cmp-actions {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+	}
+	.export-menu {
+		position: relative;
+	}
+	.export-menu summary {
+		list-style: none;
+		cursor: pointer;
+	}
+	.export-menu summary::-webkit-details-marker {
+		display: none;
+	}
+	.export-pop {
+		position: absolute;
+		right: 0;
+		top: calc(100% + 4px);
+		z-index: 20;
+		display: grid;
+		width: max-content;
+		max-width: min(28rem, 90vw);
+		padding: 0.3rem;
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: var(--radius);
+		box-shadow: 0 6px 20px rgb(0 0 0 / 0.14);
+	}
+	.export-pop a {
+		display: flex;
+		align-items: baseline;
+		min-height: 36px;
+		padding: 0.45rem 0.6rem;
+		border-radius: var(--radius-sm);
+		color: var(--text);
+		font-size: 0.9rem;
+		text-decoration: none;
+		overflow-wrap: anywhere;
+	}
+	.export-pop a:hover {
+		background: var(--surface-2);
 	}
 	.cards {
 		display: grid;
