@@ -324,3 +324,81 @@ export function wrappedSchematicLayout(nodes: NetworkNode[], maxCols: number): S
 		orphans: nodes.filter((n) => !seen.has(n.id))
 	};
 }
+
+// --- paper: page-high bands --------------------------------------------------
+// The paper layout bounds the width, not the height: a main stem of a dozen
+// gauges, or many wrapped rows, is taller than an A4 page, and Chromium carried
+// the one drawing over the page break wherever it fell, through a row of names
+// if that's where it was. So a drawing taller than its page is split into
+// bands, each at most a page high and cut just below a row's names, drawn as
+// SVGs of their own that print whole (`break-inside: avoid`). A river that
+// crosses a cut runs off the bottom of one band and on from the top of the next.
+
+/**
+ * How far below a row's centre a band ends: under its names (which end
+ * ~16 px down), above the next row's confluence line (half a row, 37 px).
+ */
+export const BAND_CUT = 26;
+
+/** The drawing's vertical metrics in pixels, as NetworkSchematic places rows (row r's centre at `padY + r * rowH`). */
+export interface BandGeometry {
+	rows: number;
+	rowH: number;
+	padY: number;
+	/** The whole drawing's height. */
+	height: number;
+}
+
+/** Rows `first`–`last` (inclusive), drawn from `y0` to `y1` of the whole drawing. */
+export interface Band {
+	first: number;
+	last: number;
+	y0: number;
+	y1: number;
+}
+
+/**
+ * The drawing in bands of at most `rest` pixels high (the first at most
+ * `first`, since it shares its page with the section's heading), each cut
+ * `BAND_CUT` below its last row. One band, the whole drawing, when it fits
+ * `first`. A band always takes at least one row, so a budget smaller than a
+ * row still ends (with bands taller than the budget).
+ */
+export function paperBands(g: BandGeometry, budget: { first: number; rest: number }): Band[] {
+	if (g.rows <= 0) return [];
+	if (g.height <= budget.first) return [{ first: 0, last: g.rows - 1, y0: 0, y1: g.height }];
+	const cutBelow = (r: number) => g.padY + r * g.rowH + BAND_CUT;
+	const bands: Band[] = [];
+	let first = 0;
+	let y0 = 0;
+	for (;;) {
+		const room = bands.length === 0 ? budget.first : budget.rest;
+		if (first === g.rows - 1 || g.height - y0 <= room) {
+			bands.push({ first, last: g.rows - 1, y0, y1: g.height });
+			return bands;
+		}
+		// The last row always goes in the last band, which also holds the drawing's foot.
+		let last = first;
+		while (last + 1 < g.rows - 1 && cutBelow(last + 1) - y0 <= room) last++;
+		bands.push({ first, last, y0, y1: cutBelow(last) });
+		y0 = cutBelow(last);
+		first = last + 1;
+	}
+}
+
+/**
+ * The columns where rivers cross the cut under row `row` (sorted, each once):
+ * a river leaving that row goes straight down from its node; one wrapped from
+ * higher up is in its gutter (`via`) by then.
+ */
+export function bandCrossings(l: SchematicLayout, row: number): number[] {
+	const at = new Map(l.nodes.map((n) => [n.node.id, n]));
+	const cols = new Set<number>();
+	for (const e of l.edges) {
+		const a = at.get(e.from);
+		const b = at.get(e.to);
+		if (!a || !b || a.row > row || b.row <= row) continue;
+		cols.add(a.row === row || e.via === undefined ? a.col : e.via);
+	}
+	return [...cols].sort((x, y) => x - y);
+}

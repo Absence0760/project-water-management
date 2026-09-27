@@ -1219,7 +1219,17 @@ note's link on the Summary, `notes.ts` `noteHref`).
   stacked upwards, the shortest nearest the node, the higher rows' rivers
   running down a gutter on their left into the node's confluence line. Names
   print at their full size (a 30-unit catchment on one page, names at
-  9.4 pt; unwrapped it printed at ~15 %, names ~1.4 pt).
+  9.4 pt; unwrapped it printed at ~15 %, names ~1.4 pt). A drawing that is
+  then taller than its page (a long main stem wraps down, not across) is split
+  into page-high bands (`paperBands`): each band is its own SVG that prints
+  whole (`break-inside: avoid`), cut just below a row's names and above the
+  next row's confluence line, so no page break runs through a row of names.
+  The first band leaves room for the section heading. A river that crosses a
+  cut runs off the foot of one band and on from the top of the next, with a
+  small arrowhead at both ends (`bandCrossings`), and a note under the band
+  ("Continues on the next page") and over the next ("Continued from the
+  previous page"). A drawing that fits its page prints as one picture, as
+  before, and the screen never bands.
 - **Colour units by** (the Catchment map card's header, offered once there is
   a farm; component state, not kept in the URL). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
@@ -4078,8 +4088,10 @@ exists, says so with a link to Runs & results.
   summary sentence, contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
-  wrapped one, `report-schematic-print.spec.ts` measuring its names in the
-  PDF with `pdftotext -bbox`), **Inputs** (the run's settings, monthly A-pan, pan
+  wrapped one, in page-high bands when it is taller than a page;
+  `report-schematic-print.spec.ts` measures its names in the PDF with
+  `pdftotext -bbox`, and checks a 25-gauge main stem prints every name whole
+  on one page, none across a page edge), **Inputs** (the run's settings, monthly A-pan, pan
   coefficient and pragmatic EWR, nodes, crops and planted areas, transfers, and
   each input series' dates and days inside the run; `report/inputs.ts`.
   The **Runoff model** row reads "GR4J", or for a run whose settings don't
