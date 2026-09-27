@@ -117,7 +117,7 @@ test('Crops grids: units in the table heads and the small captions', async ({ pa
 	});
 });
 
-test('Runs tab: the flow-unit switch, a small link and units in a table head', async ({ page, owner }) => {
+test('Runs tab: the flow-unit switch and a small link; Units & supply: units in a table head', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Shared CSS runs');
 	await createRun(page.request, project.id, 'Baseline');
@@ -129,8 +129,6 @@ test('Runs tab: the flow-unit switch, a small link and units in a table head', a
 	// The Runs list's own link (a.small), not the tab bar's Compare tab.
 	const compare = page.locator('a.small').filter({ hasText: 'Compare runs' });
 	await expect(compare).toBeVisible();
-	const unit = page.locator('th .u').filter({ hasText: /^% of demand$/ }).first();
-	await expect(unit).toBeVisible();
 	// RunInputsPanel had `class="muted small"` but no rule for .small until it became global: it now renders small like every other hint.
 	const restoreHint = page.getByText(/^Puts back the settings and model this run used/);
 	await expect(restoreHint).toBeVisible();
@@ -140,6 +138,14 @@ test('Runs tab: the flow-unit switch, a small link and units in a table head', a
 		expect(await styleOf(units.getByRole('button', { name: 'm³/s' }), SEG), at).toEqual(FIRST);
 		expect(await styleOf(units.getByRole('button', { name: 'm³/day' }), SEG), at).toEqual(LAST);
 		expect(await styleOf(compare, ['font-size', 'color']), at).toEqual({ 'font-size': SMALL, color: await token(page, '--accent') });
+	});
+
+	// The unit results table (and its "% of demand" head) moved from Runs & results to Units & supply.
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto(`/projects/${project.id}?tab=supply&run=${runId}`);
+	const unit = page.locator('th .u').filter({ hasText: /^% of demand$/ }).first();
+	await expect(unit).toBeVisible();
+	await eachCombo(page, async (at) => {
 		expect(await styleOf(unit, TYPE), at).toEqual({ 'font-size': SMALL, 'font-weight': '400', color: await token(page, '--text-muted') });
 	});
 });
