@@ -153,7 +153,22 @@ bottom:
    water at the event scale, so the comparison is a workbook comparison
    only, not evidence.
 2. **What changed.** Every difference in the inputs, grouped by network, crops,
-   transfers, settings and time series. Examples:
+   transfers, settings and time series. **Who changed it and when** (issue
+   #42): for two runs of one project, the earlier as the baseline, and
+   neither a scenario run, a line over the list counts the saved model and
+   settings changes between the runs and names who made them ("2 saved
+   changes to the model or settings between the runs, by Ann and Bob", with
+   a link to the project's History tab), and each model or settings line
+   says which save set its final value: "Changed by Ann on 2026-09-26
+   14:02 · “Licence application”" (the save's reason, when it has one).
+   The saves are the project's `model_revision` rows made after the
+   baseline ran and up to when the what-if ran; the matching rule is in
+   [api.md § Compare runs](./api.md#compare-runs) (`attribution`). A
+   series line carries no name (a series change is in the History tab), nor
+   does a line no recorded save describes (a change made before history was
+   recorded, say). Runs of two projects, a what-if older than its baseline
+   and a scenario run (its inputs are its scenario on a base run, not a state
+   the project was in) show no attribution. Examples:
    *"Rooikloof: dam capacity 600,000 m³ → 720,000 m³"*,
    *"Crop "Apples" added to Bergwater (40 ha)"*,
    *"Calibration rain threshold: 2 mm → 3 mm"*,

@@ -2232,9 +2232,25 @@ matched.
   b: { … same shape … },
   comparison: RunComparison,    // compareRuns(a.run, b.run) — every delta is b − a
   changes: InputChange[],       // diffInputs(a.run.inputs, b.run.inputs, both runs' stored values of each differing series)
+  attribution: {                // who changed the inputs between the runs (issue #42); null unless both runs are of one
+                                // project, A ran before B, and neither is a scenario run
+    revisions: RevisionItem[],  // the model_revision rows after A ran, up to when B ran, newest first, no baseline (as GET /history's)
+    truncated: boolean,         // more than 100: the oldest are left out
+    changedBy: (string | null)[] // changedBy[i]: the id in `revisions` of the save that set changes[i]; null when none did
+  } | null,
   catchmentSeries: { key, label, unit }[]  // catchment series present in both runs, same unit
 }
 ```
+
+- `attribution.changedBy` (`backend/src/history/attribute.ts`): a line is
+  credited to the newest revision between the runs whose own change lines
+  either are the same text, or describe the same subject and field and end
+  on the same new value (A → B "600,000 → 720,000 m³" is set by the
+  revision "650,000 → 720,000 m³"). Series lines are never credited: series
+  changes are audit events, not model revisions. A line no revision's wording
+  matches stays `null` rather than credited to a guess. Revisions are read
+  under RLS, so a caller who can't read the history (a farmer, a contributor)
+  gets an empty `revisions`.
 
 - `RunInputsSnapshot`, `RunComparison` and `InputChange` are in
   `packages/engine/src/compare.ts`. `inputs` is the snapshot stored with the run

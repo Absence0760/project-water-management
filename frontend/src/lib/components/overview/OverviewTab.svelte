@@ -33,6 +33,8 @@
 	// The share links (owners only) sit far below the first screen and load their own data: their own
 	// chunk keeps the page's first chunk under its budget (room the section header, issue #17, needed).
 	const loadShareLinks = () => import('./ShareLinksPanel.svelte');
+	// Recent changes (issue #42) sit below the first screen and load their own data: their own chunk, as the share links.
+	const loadRecentChanges = () => import('./RecentChanges.svelte');
 
 	let {
 		project,
@@ -445,6 +447,12 @@
 		<ImportReportPanel projectId={project.id} />
 		<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
 		<RecentNotes projectId={project.id} />
+		<!-- Who changed the model or settings last, and when (issue #42); the History tab has the rest. -->
+		{#if visibleTabs.includes('history')}
+			<Lazy load={loadRecentChanges}>
+				{#snippet children(RecentChanges)}<RecentChanges projectId={project.id} updatedAt={project.updatedAt} saving={editor.saving} />{/snippet}
+			</Lazy>
+		{/if}
 	</div>
 
 	<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->

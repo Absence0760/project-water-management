@@ -458,6 +458,9 @@ the result change?", and put back any earlier version.
   `{ settings, model }` (the shape of `model_run.inputs` without series),
   `changes` (the engine's `diffInputs` lines against the previous revision),
   `node_ids` (for the farm filter), and `restored_from` / `restored_from_run`.
+  The compare page credits each line of its input diff to the revision
+  between the two runs that set it (issue #42, `history/attribute.ts`;
+  [api.md § Compare runs](./api.md#compare-runs)).
   A save whose snapshot is unchanged writes nothing; a reorder is recorded,
   with a line saying it only changed the order. A **`baseline`** row stores
   the state before the first change to a project that predates history, so

@@ -368,7 +368,18 @@ put the results first; its first screen follows board A1 of the redesign
    table moved to the [Dams](#dams) page), the setup checklist (usually the one-line "Setup
    complete"), then **The model**: eight headline facts, project details,
    the import record (an imported project only), recent notes
-   ([§ Notes](#notes)), team, members, farmers and share links.
+   ([§ Notes](#notes)), **Recent changes**, team, members, farmers and share links.
+
+- **Recent changes** (`overview/RecentChanges.svelte`, issue #42; its own
+  chunk, as the share links, to keep the Summary's first chunk in budget):
+  the three newest saved changes to the model or settings
+  (`GET /history?kind=revision`), each in one line with the History tab's
+  wording (`overview/recentChanges.ts`: "Model changed: Upper farm: dam
+  capacity 150,000 m³ → 180,000 m³ and 2 more"), then who, when and the
+  save's reason, and a link to the History tab. Shown only to members who
+  have the History tab; reloads after a save of the model (the save bar) or
+  of the settings or details. e2e:
+  `e2e/tests/history.spec.ts`.
 
 - **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
   record is in: the Runs tab's *EWR vs simulated outflow* chart
@@ -3270,6 +3281,10 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   this change", kept with the revision.
 - **Runs**: a collapsible "Changes since this run" and **Restore these
   inputs** (not for a scenario run).
+- **Elsewhere** (issue #42): the compare page's *What changed* says who
+  changed each model or settings line between two runs and when
+  ([run-comparison.md](./run-comparison.md)), and the Summary lists the
+  three newest changes (**Recent changes**, [§ Summary](#summary)).
 - **Series values** aren't part of a version. A series change that kept
   the values it replaced (a replace, a person's merge, a delete, or a restore
   of them; `timeline.ts` `seriesRestore`) shows **Restore the earlier

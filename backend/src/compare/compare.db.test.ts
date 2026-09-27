@@ -277,4 +277,50 @@ describe('GET /compare/runs', () => {
 		expect((await compare(u, p1, `${p2}:${r2}`)).status).toBe(400);
 		expect((await u.call('GET', `/compare/runs?a=${p2}:${r2}`)).status).toBe(400);
 	});
+
+	it('says who changed each model and settings line between two runs of one project, and when (issue #42)', async () => {
+		const owner = await signUp('AttrOwner');
+		const editor = await signUp('AttrEditor');
+		const viewer = await signUp('AttrViewer');
+		const { projectId, model } = await runnableProject(owner, 'Attributed');
+		for (const [u, role] of [[editor, 'editor'], [viewer, 'viewer']] as const) {
+			expect((await owner.call('POST', `/projects/${projectId}/members`, { email: u.email, role })).status).toBe(201);
+		}
+		const base = await run(owner, projectId, 'Baseline');
+		// The editor raises the dam twice (the second with a reason), the owner changes a setting.
+		const raised = structuredClone(model);
+		raised.nodes[1]!.damCapacityM3 = 120_000;
+		expect((await editor.call('PUT', `/projects/${projectId}/model`, raised)).status).toBe(200);
+		raised.nodes[1]!.damCapacityM3 = 150_000;
+		expect((await editor.call('PUT', `/projects/${projectId}/model`, { ...raised, reason: 'Licence application 2026' })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(160) } })).status).toBe(200);
+		const after = await run(owner, projectId, 'Raised');
+
+		// A viewer sees the attribution (the positive control for the null cases below).
+		const res = await compare(viewer, `${projectId}:${base}`, `${projectId}:${after}`);
+		expect(res.status).toBe(200);
+		const { changes, attribution } = res.body as {
+			changes: { area: string; text: string }[];
+			attribution: { revisions: { id: string; actor: string; createdAt: string; reason: string | null }[]; truncated: boolean; changedBy: (string | null)[] };
+		};
+		expect(attribution.truncated).toBe(false);
+		expect(attribution.changedBy).toHaveLength(changes.length);
+		// Newest first: the setting, then the two dam raises.
+		expect(attribution.revisions.map((r) => r.actor)).toEqual(['AttrOwner', 'AttrEditor', 'AttrEditor']);
+		const by = (text: string) => attribution.revisions.find((r) => r.id === attribution.changedBy[changes.findIndex((c) => c.text.startsWith(text))]);
+		// The dam line is credited to the save that made it 150,000 m³, with its reason and time.
+		expect(changes.some((c) => c.text === 'Rooikloof: dam capacity 100,000 m³ → 150,000 m³')).toBe(true);
+		expect(by('Rooikloof: dam capacity')).toMatchObject({ actor: 'AttrEditor', reason: 'Licence application 2026' });
+		expect(by('Rooikloof: dam capacity')!.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+		expect(by('A-pan evaporation')).toMatchObject({ actor: 'AttrOwner' });
+
+		// Reversed (the later run as A): no attribution, the diff itself unchanged in length.
+		const back = await compare(viewer, `${projectId}:${after}`, `${projectId}:${base}`);
+		expect(back.status).toBe(200);
+		expect(back.body.attribution).toBeNull();
+		// Across projects: no attribution either (each project has its own history).
+		const other = await runnableProject(owner, 'Other');
+		const otherRun = await run(owner, other.projectId, 'Other run');
+		expect((await compare(owner, `${projectId}:${base}`, `${other.projectId}:${otherRun}`)).body.attribution).toBeNull();
+	});
 });
