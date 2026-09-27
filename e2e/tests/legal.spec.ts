@@ -43,6 +43,43 @@ test('the legal pages open signed out and signed in, and pass an a11y scan on a 
 	await expect(member.page).toHaveURL('/terms');
 });
 
+test('the legal pages pass an a11y scan in the dark theme, on a desktop and a phone', async ({ page }) => {
+	await page.emulateMedia({ colorScheme: 'dark' });
+	for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+		await page.setViewportSize(size);
+		for (const p of PAGES) {
+			await page.goto(p.path);
+			await expect(page.getByRole('heading', { level: 1, name: p.title })).toBeVisible();
+			await expectNoViolations(page);
+		}
+	}
+});
+
+test('the contents list shows on a desktop and folds on a phone, and the header opens the app', async ({ page }) => {
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto('/privacy');
+	const toc = page.getByRole('navigation', { name: 'Contents' });
+	await expect(toc.getByRole('link', { name: '1. Who we are' })).toBeVisible();
+	await expect(toc.getByText(/^Contents/)).toBeHidden();
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/privacy');
+	const fold = toc.getByText(/^Contents/);
+	await expect(fold).toBeVisible();
+	await expect(toc.getByRole('link', { name: '1. Who we are' })).toBeHidden();
+	// Folded, the privacy notice's own words start on the first screen.
+	await expect(page.getByText('This notice explains what personal information')).toBeInViewport();
+	await fold.click();
+	await toc.getByRole('link', { name: '10. Your rights' }).click();
+	await expect(page).toHaveURL('/privacy#rights');
+
+	// The page can't know the session: its header button opens the app (sign-in, or on to the projects when signed in).
+	const open = page.getByRole('banner').getByRole('link', { name: 'Open the app' });
+	expect((await open.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	await open.click();
+	await expect(page).toHaveURL('/login');
+});
+
 test('the landing footer, the sign-in pages and the sign-up form link both pages', async ({ page }) => {
 	await page.goto('/');
 	const footer = page.getByRole('contentinfo');

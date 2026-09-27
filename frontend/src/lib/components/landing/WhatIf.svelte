@@ -8,6 +8,8 @@
 	// Compare runs' words: what the change costs the river, and what it gives
 	// the farm.
 	import { t } from '$lib/i18n/locale.svelte';
+	import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
+	import { SUPPLY_TARGET } from '$lib/components/runs/results';
 	import { DATA } from './data.generated';
 	import { fmt, signed } from './format';
 
@@ -38,6 +40,12 @@
 					: t('and the farm gets {points} points less of what it needs.', { points: fmt(-supplyChange) });
 		return `${river}, ${farm}`;
 	});
+	/**
+	 * The supply bar's colour: the app's supply bands (Summary → Supply by farm,
+	 * the Network's farm colours), met from 95 %, short from 70 %, low below.
+	 * The % is written beside it, so the colour is never the only cue.
+	 */
+	const band = (pct: number) => (pct / 100 >= SUPPLY_TARGET ? 'met' : pct / 100 >= LOW_SUPPLY ? 'short' : 'low');
 	const barWidth = (v: number, max: number) => `${Math.max(2, Math.min(100, (v / max) * 100)).toFixed(1)}%`;
 	const DAYS_MAX = 366;
 </script>
@@ -66,19 +74,22 @@
 				<p class="what">{t('Irrigation supplied')}</p>
 				<p class="value">{t('{pct} % of what the farm needs', { pct: fmt(cell.supplied) })}</p>
 				<div class="bars" aria-hidden="true">
-					<span class="bar today" style:width={barWidth(today.supplied, 100)}></span>
-					<span class="bar plan supply" style:width={barWidth(cell.supplied, 100)}></span>
+					<span class="bar-label">{t('Today')}</span>
+					<span class="track"><span class="bar today" style:width={barWidth(today.supplied, 100)}></span></span>
+					<span class="bar-label">{t('This plan')}</span>
+					<span class="track"><span class="bar plan supply {band(cell.supplied)}" style:width={barWidth(cell.supplied, 100)}></span></span>
 				</div>
 			</div>
 			<div class="figure">
 				<p class="what">{t('River below the reserve')}</p>
 				<p class="value">{t('{days} days a year', { days: fmt(cell.reserveDays) })}</p>
 				<div class="bars" aria-hidden="true">
-					<span class="bar today" style:width={barWidth(today.reserveDays, DAYS_MAX)}></span>
-					<span class="bar plan reserve" style:width={barWidth(cell.reserveDays, DAYS_MAX)}></span>
+					<span class="bar-label">{t('Today')}</span>
+					<span class="track"><span class="bar today" style:width={barWidth(today.reserveDays, DAYS_MAX)}></span></span>
+					<span class="bar-label">{t('This plan')}</span>
+					<span class="track"><span class="bar plan reserve" style:width={barWidth(cell.reserveDays, DAYS_MAX)}></span></span>
 				</div>
 			</div>
-			<p class="key" aria-hidden="true"><i class="today"></i>{t('Today')} <i class="plan"></i>{t('This plan')}</p>
 			<p class="takeaway">{takeaway}</p>
 		</div>
 		<p class="muted small change" aria-hidden="true">
@@ -160,9 +171,20 @@
 		font-size: 1.25rem;
 		font-variant-numeric: tabular-nums;
 	}
+	/* Each bar named beside it: Today above This plan, in every figure. */
 	.bars {
 		display: grid;
-		gap: 4px;
+		grid-template-columns: max-content minmax(0, 1fr);
+		align-items: center;
+		gap: 4px 0.6rem;
+	}
+	.bar-label {
+		font-size: 0.8rem;
+		line-height: 1.2;
+		color: var(--text-muted);
+	}
+	.track {
+		display: block;
 	}
 	.bar {
 		display: block;
@@ -170,34 +192,22 @@
 		border-radius: 4px;
 		transition: width 250ms ease-out;
 	}
+	/* ≥ 3:1 on the card in both themes (WCAG 1.4.11); --border-strong was 1.9:1. */
 	.bar.today {
-		background: var(--border-strong);
+		background: var(--text-muted);
 	}
-	.bar.supply {
-		background: var(--series-3);
+	/* The supply bands (overview/SupplyByFarm.svelte): met, short, low. */
+	.bar.supply.met {
+		background: var(--accent);
+	}
+	.bar.supply.short {
+		background: var(--warning);
+	}
+	.bar.supply.low {
+		background: var(--danger);
 	}
 	.bar.reserve {
 		background: var(--warning);
-	}
-	.key {
-		grid-column: 1 / -1;
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		margin: 0;
-		font-size: 0.8rem;
-		color: var(--text-muted);
-	}
-	.key i {
-		display: inline-block;
-		width: 14px;
-		height: 8px;
-		border-radius: 4px;
-		background: var(--border-strong);
-	}
-	.key i.plan {
-		margin-left: 0.6rem;
-		background: linear-gradient(90deg, var(--series-3) 50%, var(--warning) 50%);
 	}
 	.takeaway {
 		grid-column: 1 / -1;

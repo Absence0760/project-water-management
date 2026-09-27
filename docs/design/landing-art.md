@@ -27,14 +27,32 @@ running or building the app needs none of it. `bin/gen-landing-art.sh` runs:
 | render | ImageMagick 7, avifenc | the renders | `hero-{day,dusk}-{800,1200,1600}.{avif,webp}` (the hero is never wider than ~800 CSS px, so 1600 covers 2× screens and keeps each file under the 100 KB asset ceiling), 24 px blur-up placeholders (inlined) |
 | render | FontForge, ImageMagick | `static/fonts/outfit-600.woff2` | `og.jpg`: the dusk backdrop with the headline set in the display font (FontForge makes the TTF ImageMagick needs) |
 | vector | Inkscape 1.4 | `scripts/landing-art/vector/*.svg` | the four audience icons and the river divider as plain SVG, every shape a path (their path data goes into the module); the laptop and phone frames at 1× |
-| screens | Playwright | `e2e/art/landing-screens.spec.ts` on the e2e servers, `pnpm seed:examples` data | the Summary (1440 × 900), Network and River & reserve (1280 × 800) as the demo hydrologist, the farm view (390 × 844) as the demo farmer, light and dark; ImageMagick frames them (the frames' screens are transparent holes, so the screenshot goes under the frame) |
-| data | the engine | `backend/scripts/landing-data.ts` on the Kleinberg example | `data.generated.ts`: the story's charts (one water year by week) and the what-if grid (7 orchard sizes × 5 dam sizes, 35 runs) |
-| (always) | node | `scripts/landing-art/modules.mjs` | `art.generated.ts`: the hero's size and placeholders, the overlay, the framed screens' sizes, the icons' and divider's path data |
+| screens | Playwright | `e2e/art/landing-screens.spec.ts` on the e2e servers, `pnpm seed:examples` data | the Summary (1440 × 900), Network and River & reserve (1280 × 800) as the demo hydrologist, the farm view (390 × 844) as the demo farmer, light and dark, on a pinned day (below); ImageMagick frames them (the frames' screens are transparent holes, so the screenshot goes under the frame; the phone's camera sits in the bezel, not over the screen, where it covered the farm view's EN button) |
+| data | the engine | `backend/scripts/landing-data.ts` on the Kleinberg example | `data.generated.ts`: the story's charts (one water year by week), the what-if grid (7 orchard sizes × 5 dam sizes, 35 runs) and the example run's calibration NSE |
+| (always) | node | `scripts/landing-art/modules.mjs` | `art.generated.ts`: the hero's size and placeholders, the overlay, the framed screens' sizes, the icons' and divider's path data; it **fails the run if the hero's outermost rows or columns hold anything** (the block ran off the camera's frame) |
 
 The screens step needs `pnpm dev:db:up` (it runs on the e2e database, which it
 rebuilds, and seeds the examples there). Working files go to
 `scripts/landing-art/.work/` (gitignored), so a partial run can still write the
 module.
+
+**The screens are taken on a pinned day**, 3 January 2025: three days after
+the examples' record ends (31 December 2024), inside the app's 7-day freshness
+window. Taken on the day the seed ran, every screen warned that the rain was
+20 months old ("Recorded rain ends 20 months ago", an amber rain pill, "ask
+your WUA if newer figures are coming"), which is true only of the seed's age
+and not what a kept-up catchment looks like. The browser's clock is pinned
+(`page.clock.setFixedTime`); the server stamps the farm view's publication and
+judges it stale by its own clock, so the spec answers that one request as the
+server would on the pinned day (published that morning, stale by the server's
+own 7-day rule).
+
+**The hero camera frames the whole block.** At 42 mm the block's front corner
+fell 16 % of the frame below the bottom edge, and the crop's clamp cut it off
+(a flat bottom where the corner should be). The camera is now at 35 mm, aimed
+lower (`diorama.py` `HERO`), which puts the block between 3 % and 95 % of the
+frame's height; `modules.mjs` refuses a hero with anything on its edge, so a
+change to the scene or the camera that clips it again fails the run.
 
 **Only invented data.** The screens come from the example catchments, never the
 client catchment (CLAUDE.md rule 11). Where a figure is shown it is named as the
@@ -58,7 +76,12 @@ that contradicts itself.
   streaks drift from the clouds to the ridges, a pulse of water runs down the
   tributary and the river (`stroke-dashoffset`), the dams fill (a `scaleY`
   from the waterline), the gauge's needle settles and its tag fades in with
-  the example's reserve figure. One loop is about 10 s, then 4 s of rest. On a
+  the example's reserve figure. One loop is about 10 s, then 4 s of rest.
+  Every loop starts 11.2 s in (80 %, inside the rest), which is exactly the
+  still frame the prerendered page shows, so the moment the script turns
+  motion on nothing moves; the rest runs out and the rain starts. (It first
+  started at 0 %: the dams emptied, the rivers went dark and the tag vanished
+  the instant the page hydrated.) On a
   phone the picture is cropped to the lower valley: the river, the dam below
   and the outlet. **Sign in** morphs the diorama into the sign-in panel's
   scene with a View Transition (`view-transition-name: catchment-scene` on
@@ -79,13 +102,29 @@ that contradicts itself.
   rise 24 px into view once, the phone 150 ms after; a ≤ 12 px parallax on the
   phone where scroll-driven animations exist.
 - **Who it's for** (`Audiences.svelte`, `DrawnIcon.svelte`): the four roadmap
-  audiences, each icon drawing itself on once in view. The icons are one
+  audiences, each icon drawing itself on once in view. The icons wait undrawn
+  only once the script has run and motion is allowed (`armed`, set on mount,
+  as `Screens.svelte` does for its rise): before that, without script and
+  under reduced motion they are simply drawn. They were drawn in the HTML and
+  blanked when the draw began, a flicker. The icons are one
   family: a 48 px grid, 1.75 px strokes, round caps, the brand navy with one
   water-blue accent.
 - **How it works**, **Why trust it** (`HowItWorks.svelte`, `Trust.svelte`):
   three steps; four plain statements (no borrowed logos: no CHIRPS or DWS
-  marks) and three example figures that count up once in view (the real figure
-  is what assistive tech reads).
+  marks) and three figures under "In the example catchment" that count up
+  once in view (the real figure is what assistive tech reads): the years and
+  days of the example's run, and how closely its fitted model follows its
+  weir's measured flow, the run's calibration NSE (0.87), taken from the
+  engine by `landing-data.ts` (`hero.calibrationNse`), never typed in. It
+  replaced "35 runs behind the what-if above", a count of work done rather
+  than a reason to trust the result.
+- **No link to the engine audit.** The brief asked for a link to a public
+  summary of the engine audit. None is given: the audit (`docs/engine-audit.md`)
+  lives in the source repository, which isn't guaranteed to be public (it has
+  been private), and there is no public page that summarises it. A link a
+  visitor may not be able to open is worse than none, so the page says it in
+  words ("every place it departs from the workbook is written down"). When the
+  site serves a public summary, link it from that statement in `Trust.svelte`.
 - **Texture**: the contours at 5 % behind the hero and the footer, drifting a
   pixel or two over 40 s; a meandering river line between sections instead of
   rules.
@@ -116,6 +155,9 @@ that contradicts itself.
   sliders are labelled with value texts and the results are announced; axe
   scans at desktop and phone, light and dark (landing.spec.ts).
 - [x] Copy: plain, specific; figures are named as the example catchment's where shown.
+- [x] The first animated frame is the still frame (the hero), and nothing drawn
+  in the HTML is blanked when its animation arms (the icons): landing.spec.ts
+  checks both.
 - [x] Bundle: the landing is its own chunk (no workspace, no uPlot, no engine),
   guarded by `scripts/guards/check_web_bundle_budget.mjs`.
 - [ ] Prototype and operator review: the operator chose to review the built
