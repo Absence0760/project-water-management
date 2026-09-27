@@ -1052,7 +1052,7 @@
 //             out and no chunk budget moved. Went unnoticed while Actions
 //             was down (billing), and the batch merge of #20, #60 and #61
 //             adds nothing to the total. Headroom back to the usual ~3 KB.
-// 2026-09-27  total 994 → MEASURED_TOTAL KB (measured MEASURED_NOW); new landingKb 25 KB. The
+// 2026-09-27  total 994 → 1020 KB (measured 1017, with the email-first sign-up); new landingKb 25 KB. The
 //             public landing page (issue #57) adds ~24 KB: its own chunk
 //             (lib/components/landing/, 15.7 KB JS + 4.4 KB CSS = 20 KB, under
 //             the issue's 25 KB landing budget, now its own ceiling above), the
@@ -1061,7 +1061,7 @@
 //             prerendered /welcome route's node (0.2 KB) and a few lines in the
 //             root layout. No new dependency: the charts are plain SVG and the
 //             figures a small generated module, so the landing loads no uPlot,
-//             no engine and no workspace code. Headroom ~4 KB.
+//             no engine and no workspace code. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
