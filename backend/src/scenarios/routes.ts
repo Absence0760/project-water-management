@@ -82,6 +82,9 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 	throw err;
 };
 
+/** restrict_violation: scenario_signed_run_guard (079) refused the DELETE. */
+const PG_RESTRICT = '23001';
+const signedKept = () => new ApiError(409, 'this scenario has a signed-off run, so it is kept: the run stays the scenario run that was signed');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
 
@@ -272,7 +275,15 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 			if (s.status === 'submitted' || s.status === 'decided') throw new ApiError(409, `a ${s.status} scenario can't be deleted`);
 			// Its base run stops being cited and may be trimmed: under the project's run lock, as a trim is.
 			await lockProjectRuns(db, id);
-			mustChange(await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]));
+			// A signed-off run stays the run that was signed, its scenario included
+			// (model_run.scenario_id would go NULL). The scenario_signed_run_guard
+			// trigger (079) refuses the DELETE too, whoever runs it, and sees the
+			// sign-offs a contributor can't read; its restrict_violation is the same 409.
+			const signed = await db.query('SELECT 1 FROM signoff so JOIN model_run r ON r.id = so.run_id WHERE r.scenario_id = $1 LIMIT 1', [sid]);
+			if (signed.rowCount) throw signedKept();
+			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string }) => {
+				throw err.code === PG_RESTRICT ? signedKept() : err;
+			});
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
 		});

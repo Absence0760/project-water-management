@@ -122,6 +122,18 @@ describe('what an item says', () => {
 		);
 	});
 
+	it('writes who reaches the project through its team (079), with the role it gives here', () => {
+		const who = { team: 'Upper WUA', userId: 'u1', displayName: 'Ben' };
+		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'member', role: 'editor' }))).toBe('Added Ben to the team “Upper WUA” as member, so editor here');
+		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'viewer', role: 'viewer', via: 'invite' }))).toBe(
+			'Ben joined the team “Upper WUA” as viewer (accepted an invite), so viewer here'
+		);
+		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from member to admin, so owner here');
+		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (admin) from the team “Upper WUA”');
+		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
+		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
+	});
+
 	it('gives an event one line and a revision its changes', () => {
 		expect(itemLines(ev('invite.revoked', { email: 'j•••@example.com' }))).toEqual(['Revoked the invite for j•••@example.com']);
 		expect(itemLines(rev())).toHaveLength(1);

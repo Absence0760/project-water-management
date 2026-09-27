@@ -642,7 +642,18 @@ In short:
   `series_revision` retention trigger deletes, and only that series' old
   rows. An audit row must name the caller as its actor. Viewers and above
   read history; farmers and strangers see nothing. Invite emails in events
-  are masked. Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
+  are masked. A team role is a project role on every team project, so a
+  team member added (directly or by an accepted invite), re-roled, removed
+  or leaving, and a team deleted, is an event on each of the team's projects
+  (`team_member.*`, `team.deleted`; 079). Guards:
+  `history/write-routes.db.test.ts` sweeps every write route in `app.routes`
+  (under `/projects/:id` and outside it) for the row it must write, with a
+  reason for each exemption; `history/audit-trail.security.db.test.ts` tries
+  `UPDATE`, `DELETE` and `TRUNCATE` on the audit trail (the three tables,
+  `signoff`, `run_nomination`) as every actor (each project role, a team
+  admin, a stranger, an API key, no user) and lists the only functions whose
+  body rewrites a trail row (two triggers: the series retention trim and
+  account-deletion pseudonymisation). Details: [data-model.md § Change history and audit log](./data-model.md#change-history-and-audit-log-030_historysql).
 - **`SECURITY DEFINER` functions are executable by `water_app` only**
   (028_definer_grants, issue #37). They run as the owner, so Postgres's default
   `EXECUTE` grant to `PUBLIC` would hand the owner's rights to any role that can
@@ -1435,7 +1446,13 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     removed that model) can't be signed (audit H1).
   - *Immutable:* `water_app` has no `UPDATE` or `DELETE` on `signoff` and no
     policy allows either (catalogue guard); the signed run is cited, so it
-    can't be deleted or trimmed. Each sign-off is in the audit log.
+    can't be deleted or trimmed, and `water_app` may change only its notes
+    and pin. A scenario with a signed-off run can't be deleted either (409;
+    the `scenario_signed_run_guard` trigger, 079, refuses it in SQL too),
+    since the run's `scenario_id` would go NULL and the signed scenario run
+    would pass for a run of the project's own inputs. Deleting the whole
+    project still takes its sign-offs with it (cascade), unless it has an
+    evidence nomination (035). Each sign-off is in the audit log.
   - *Limits, stated on the report and in the dialog:* the registration
     number is **self-declared** (not checked against the SACNASP register);
     dam safety classification (DW793) is for others; there is no MFA on

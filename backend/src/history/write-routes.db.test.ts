@@ -14,7 +14,7 @@
 //      later entry needs in `ctx`. Or, for a route that changes nothing the
 //      history covers, `exempt: '<why>'`.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
+import { anon, app, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -520,5 +520,244 @@ describe('every write route records its change', () => {
 
 	it('gives every exemption a reason', () => {
 		for (const e of WRITE_ROUTES) if ('exempt' in e) expect(e.exempt.length, e.route).toBeGreaterThan(20);
+	});
+});
+
+// --- every other write route ------------------------------------------------------
+// The same guard over the write routes outside /projects/:id. A team role is a
+// project role on every project of the team (app_project_role), so a team
+// change that alters who reaches a project is recorded on each of the team's
+// projects (079_audit_trail); the rest act on an account, not a project.
+
+interface TeamCtx {
+	admin: User;
+	mate: User;
+	teamId: string;
+	/** Two projects in the team: a team change is recorded on each. */
+	teamProjects: string[];
+	[key: string]: unknown;
+}
+
+type OtherEntry =
+	| {
+			route: string;
+			records: string[];
+			call: (c: TeamCtx) => Promise<Res>;
+			/** The projects whose history must show it. */
+			projectsOf: (c: TeamCtx, res: Res) => string[];
+	  }
+	| { route: string; exempt: string };
+
+const T = '/teams/:id';
+const team = (c: TeamCtx) => `/teams/${c.teamId}`;
+const inTeam = (c: TeamCtx) => c.teamProjects;
+
+const OTHER_WRITE_ROUTES: OtherEntry[] = [
+	// --- teams: who reaches the team's projects ------------------------------------------
+	{
+		route: `POST ${T}/members`,
+		records: ['team_member.added'],
+		call: (c) => c.admin.call('POST', `${team(c)}/members`, { email: c.mate.email, role: 'member' }),
+		projectsOf: inTeam
+	},
+	{
+		route: `PATCH ${T}/members/:userId`,
+		records: ['team_member.role'],
+		call: (c) => c.admin.call('PATCH', `${team(c)}/members/${c.mate.id}`, { role: 'admin' }),
+		projectsOf: inTeam
+	},
+	{
+		route: `DELETE ${T}/members/:userId`,
+		records: ['team_member.removed'],
+		call: (c) => c.admin.call('DELETE', `${team(c)}/members/${c.mate.id}`),
+		projectsOf: inTeam
+	},
+	{
+		route: `PATCH ${T}`,
+		records: ['team_thresholds.changed'],
+		call: (c) => c.admin.call('PATCH', team(c), { settings: { portfolio: { thresholds: { green: 2, amber: 10 } } } }),
+		projectsOf: inTeam
+	},
+	{
+		route: `DELETE ${T}`,
+		records: ['team.deleted'],
+		call: (c) => c.admin.call('DELETE', team(c)),
+		projectsOf: inTeam
+	},
+	// --- projects arriving whole, and keyed ingest ---------------------------------------
+	{
+		route: 'POST /projects/import',
+		records: ['revision'],
+		call: (c) =>
+			c.admin.call('POST', '/projects/import', {
+				format: 'water-management.project',
+				version: 1,
+				name: 'Guard import',
+				description: '',
+				settings: {},
+				model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
+				series: []
+			}),
+		projectsOf: (_c, res) => [res.body.project.id]
+	},
+	{
+		route: 'POST /ingest/v1/series/merge',
+		records: ['series.created'],
+		call: async (c) => {
+			const pid = (await c.admin.call('POST', '/projects', { name: 'Guard ingest' })).body.project.id;
+			c.ingestProjectId = pid;
+			const key = await c.admin.call('POST', `/projects/${pid}/api-keys`, { name: 'Guard logger' });
+			const r = await app.request('/ingest/v1/series/merge', {
+				method: 'POST',
+				headers: { authorization: `Bearer ${key.body.secret}`, 'content-type': 'application/json' },
+				body: JSON.stringify({ kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: [1, 2] })
+			});
+			return { status: r.status, body: await r.json() };
+		},
+		projectsOf: (c) => [c.ingestProjectId as string]
+	},
+	// --- exempt: they change no project's inputs, results or access ---------------------
+	{ route: 'POST /projects', exempt: 'a new project has nothing to diff yet; its first change records a baseline revision (recordModelRevision)' },
+	{ route: 'POST /teams', exempt: 'a new team has no projects, so no project history; a project moved in records project.changed' },
+	{ route: `DELETE ${T}/invites/:inviteId`, exempt: 'a pending team invite grants nothing; accepting one records team_member.added (079_audit_trail)' },
+	{ route: 'PUT /me/alerts/:projectId', exempt: 'a member’s own alert subscription: their preference, not the project’s rules (alert_rules.changed covers those)' },
+	{ route: 'POST /me/alerts/resume', exempt: 'resumes the caller’s own paused alert emails; a personal delivery setting, not project data' },
+	{ route: 'POST /alerts/unsubscribe', exempt: 'a recipient’s one-click unsubscribe from alert emails: a personal delivery setting, not project data' },
+	{ route: 'POST /share/view', exempt: 'reads a publication through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'POST /share/series', exempt: 'reads one series through a share link; writes nothing to the project (share/routes.ts)' },
+	{ route: 'PATCH /auth/me', exempt: 'the caller’s own account settings; history rows keep a snapshot of the name as it was (actor_label)' },
+	{ route: 'POST /auth/register', exempt: 'creates an account, not project data; joining a project by invite records member.added on verify' },
+	{ route: 'POST /auth/verify-email', exempt: 'confirms an address; the invites it accepts record member.added / team_member.added (app_accept_invites)' },
+	{ route: 'POST /auth/resend-verification', exempt: 'resends the caller’s verification email; changes no project' },
+	{ route: 'POST /auth/login', exempt: 'starts a session (auth rate limits and lockout cover abuse); changes no project' },
+	{ route: 'POST /auth/logout', exempt: 'ends the caller’s session; changes no project or its history' },
+	{ route: 'POST /auth/logout-everywhere', exempt: 'ends every session of the caller’s account; changes no project' },
+	{ route: 'POST /auth/change-password', exempt: 'the caller’s own credential; changes no project, and the password is never logged' },
+	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
+	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },
+	{ route: 'POST /auth/invite-info', exempt: 'reads what an invite token is for, to show on the sign-up page; writes nothing' },
+	{ route: 'POST /auth/render-session', exempt: 'exchanges a one-use render token for the report renderer’s read-only session; changes no project' }
+];
+
+const otherWriteRoutes = [
+	...new Set(
+		app.routes
+			.filter((r) => !['GET', 'HEAD', 'ALL', 'OPTIONS'].includes(r.method) && !(r.path === P || r.path.startsWith(`${P}/`)))
+			.map((r) => `${r.method} ${r.path}`)
+	)
+].sort();
+
+describe('the other write routes', () => {
+	it('lists every write route outside /projects/:id, and nothing that no longer exists', () => {
+		const listed = OTHER_WRITE_ROUTES.map((e) => e.route);
+		expect(otherWriteRoutes.length).toBeGreaterThan(20);
+		expect(new Set(listed).size, 'a route listed twice').toBe(listed.length);
+		expect(otherWriteRoutes.filter((r) => !listed.includes(r)), 'write routes missing from OTHER_WRITE_ROUTES').toEqual([]);
+		expect(listed.filter((r) => !otherWriteRoutes.includes(r)), 'listed routes that no longer exist').toEqual([]);
+		for (const e of OTHER_WRITE_ROUTES) if ('exempt' in e) expect(e.exempt.length, e.route).toBeGreaterThan(20);
+	});
+
+	const ctx = {} as TeamCtx;
+
+	beforeAll(async () => {
+		const [admin, mate] = await Promise.all(['Tadmin', 'Tmate'].map((n) => signUp(n)));
+		ctx.admin = admin!;
+		ctx.mate = mate!;
+		ctx.teamId = (await admin!.call('POST', '/teams', { name: 'Guard WUA' })).body.team.id;
+		ctx.teamProjects = [];
+		for (const name of ['Upper', 'Lower']) {
+			const r = await admin!.call('POST', '/projects', { name, teamId: ctx.teamId });
+			expect(r.status).toBe(201);
+			ctx.teamProjects.push(r.body.project.id);
+		}
+	}, 30_000);
+
+	const recorded = OTHER_WRITE_ROUTES.filter((e): e is Extract<OtherEntry, { records: string[] }> => 'records' in e);
+	for (const e of recorded) {
+		it(`${e.route} records ${e.records.join(' + ')} on each project it reaches`, async () => {
+			const [{ rev, ev }] = await asOwner(
+				'SELECT (SELECT coalesce(max(id), 0) FROM model_revision) AS rev, (SELECT coalesce(max(id), 0) FROM audit_event) AS ev'
+			);
+			const res = await e.call(ctx);
+			expect(res.status, JSON.stringify(res.body)).toBeGreaterThanOrEqual(200);
+			expect(res.status, JSON.stringify(res.body)).toBeLessThan(300);
+			const pids = e.projectsOf(ctx, res);
+			expect(pids.length).toBeGreaterThan(0);
+			for (const pid of pids) {
+				const revs = await asOwner('SELECT 1 FROM model_revision WHERE project_id = $1 AND id > $2', [pid, rev]);
+				const kinds = (await asOwner('SELECT kind FROM audit_event WHERE project_id = $1 AND id > $2', [pid, ev])).map((r) => r.kind);
+				for (const want of e.records) {
+					if (want === 'revision') expect(revs.length, `${e.route}: a model_revision on ${pid}`).toBeGreaterThan(0);
+					else expect(kinds, `${e.route}: an audit_event ${want} on ${pid}`).toContain(want);
+				}
+			}
+		});
+	}
+});
+
+describe('a team change in the history', () => {
+	let admin: User;
+	let teamId: string;
+	let projectId: string;
+	const teamEvents = (kind: string) =>
+		asOwner(`SELECT actor_user_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND kind = $2 ORDER BY id`, [projectId, kind]);
+
+	beforeAll(async () => {
+		admin = await signUp('Thistory');
+		teamId = (await admin.call('POST', '/teams', { name: 'History WUA' })).body.team.id;
+		projectId = (await admin.call('POST', '/projects', { name: 'Team catchment', teamId })).body.project.id;
+	});
+
+	it('records who joined, as what here, and shows it in the project’s timeline', async () => {
+		const mate = await signUp('Tjoiner');
+		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: mate.email, role: 'viewer' })).status).toBe(201);
+		const [e] = await teamEvents('team_member.added');
+		expect(e).toMatchObject({
+			actor_user_id: admin.id,
+			subject: { teamId, team: 'History WUA', userId: mate.id, displayName: 'Tjoiner', teamRole: 'viewer', role: 'viewer' }
+		});
+		// Positive control: the owner (the team admin) reads it through the API.
+		const items = (await admin.call('GET', `/projects/${projectId}/history?kind=team_member`)).body.items;
+		expect(items.map((i: { kind: string }) => i.kind)).toContain('team_member.added');
+		// A team viewer leaving records it as themselves, before the access goes.
+		expect((await mate.call('DELETE', `/teams/${teamId}/members/${mate.id}`)).status).toBe(204);
+		const [left] = await teamEvents('team_member.removed');
+		expect(left).toMatchObject({ actor_user_id: mate.id, subject: { userId: mate.id, self: true, teamRole: 'viewer' } });
+	});
+
+	it('records a role change only when the role changed', async () => {
+		const mate = await signUp('Trole');
+		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: mate.email, role: 'member' })).status).toBe(201);
+		const before = (await teamEvents('team_member.role')).length;
+		expect((await admin.call('PATCH', `/teams/${teamId}/members/${mate.id}`, { role: 'member' })).status).toBe(200);
+		expect(await teamEvents('team_member.role')).toHaveLength(before);
+		expect((await admin.call('PATCH', `/teams/${teamId}/members/${mate.id}`, { role: 'admin' })).status).toBe(200);
+		expect((await teamEvents('team_member.role')).at(-1)).toMatchObject({ subject: { userId: mate.id, from: 'member', to: 'admin', role: 'owner' } });
+	});
+
+	it('records a team invite accepted as the person joining (app_accept_invites, 079)', async () => {
+		const email = `tinvited-${crypto.randomUUID()}@example.com`;
+		const invited = await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' });
+		expect(invited.body.invited).toBe(true);
+		const reg = await anon('POST', '/auth/register', { email, password: 'correct horse', displayName: 'Tinvited' });
+		expect(reg.status).toBe(201);
+		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
+		const joined = (await teamEvents('team_member.added')).filter((e) => e.subject.via === 'invite');
+		expect(joined).toHaveLength(1);
+		expect(joined[0]).toMatchObject({
+			actor_user_id: reg.body.user.id,
+			actor_label: 'Tinvited',
+			subject: { teamId, userId: reg.body.user.id, teamRole: 'member', role: 'editor' }
+		});
+	});
+
+	it('records the team deleted on the project it leaves, which keeps its history', async () => {
+		expect((await admin.call('DELETE', `/teams/${teamId}`)).status).toBe(204);
+		const [e] = await teamEvents('team.deleted');
+		expect(e).toMatchObject({ actor_user_id: admin.id, subject: { teamId, team: 'History WUA' } });
+		expect(e!.subject.members).toBeGreaterThanOrEqual(2);
+		// The project stays, with its direct owner, and reads its history.
+		const items = (await admin.call('GET', `/projects/${projectId}/history?kind=team`)).body.items;
+		expect(items.map((i: { kind: string }) => i.kind)).toContain('team.deleted');
 	});
 });
