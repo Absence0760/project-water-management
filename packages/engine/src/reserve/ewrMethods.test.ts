@@ -6,11 +6,12 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput, NetworkNode } from '../project';
 import { Rng } from '../random';
-import { runModelCapturing, runModelFrom, runModelWith } from '../run';
+import { captureModelState, runModelCapturing, runModelFrom, runModelWith, runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario/overrides';
 import { settingsValueError } from '../scenario/ops';
 import { checkInvariants } from '../verify/checks';
 import { assessSite } from './assurance';
+import { lyneHollickBaseflow } from './baseflow';
 import { DEFAULT_ASSURANCE_POINTS, type EwrRuleTable } from './rules';
 
 const rows = (row: number[]) => Array.from({ length: 12 }, () => [...row]);
@@ -283,20 +284,85 @@ describe('the EWR charge from the Reserve rule table', () => {
 	});
 });
 
-describe('low flows on base flow in a resumed run (../warmstart)', () => {
-	it('carries the part month’s base flow in the snapshot, and the resumed run judges that month whole', () => {
-		const t = { ...rule(null), component: 'lowFlow' as const };
-		const input = network({ lowFlowMeasure: 'baseflow' }, [t]);
-		const { output, snapshot } = runModelCapturing(input, '2001-05-17');
-		const carry = snapshot.state.reserveMonths[0]!.carry!;
-		expect(carry.days).toBe(16);
-		expect(carry.baseflow).toBeGreaterThanOrEqual(0);
-		expect(carry.baseflow!).toBeLessThanOrEqual((carry.impacted as number) * (1 + 1e-12));
-		const tail = runModelFrom(JSON.parse(JSON.stringify(snapshot)), input);
-		const may = (o: ModelOutput) => o.summary.ewrAssurance![0]!.months.find((m) => m.year === 2001 && m.month === 5)!;
-		expect(may(tail).actual).toBeCloseTo(may(output).actual, 6);
-		expect(may(tail).baseflow).toBeDefined();
-		// Without the setting the snapshot carries no base flow.
-		expect(runModelCapturing(network({}, [t]), '2001-05-17').snapshot.state.reserveMonths[0]!.carry).not.toHaveProperty('baseflow');
+describe('low flows on base flow in a resumed run (../warmstart, engine ≥ 1.6.0)', () => {
+	const t = { ...rule(null), component: 'lowFlow' as const };
+	const input = network({ lowFlowMeasure: 'baseflow' }, [t]);
+	// The model's own natural flow, as runModelFrom has.
+	const full = runModelWithoutChecks(input);
+
+	it('carries the impacted flow the base-flow windows reach back into, and no base-flow sum', () => {
+		const { snapshot } = runModelCapturing(input, '2002-05-17');
+		const s = snapshot.state.reserveMonths[0]!;
+		expect(s.carry).toMatchObject({ days: 16 });
+		expect(s.carry).not.toHaveProperty('baseflow');
+		// 730 days before 1 May 2002 reach back past the run's first day: the whole record so far.
+		expect(s.history).toHaveLength(daysBetween(START, '2002-05-16'));
+		expect(s.history).toEqual(Array.from(col(full, 'out', 'outflow')!).slice(0, s.history!.length));
+		// Without the setting the snapshot carries none.
+		expect(runModelCapturing(network({}, [t]), '2002-05-17').snapshot.state.reserveMonths[0]).not.toHaveProperty('history');
+		// A snapshot missing the days it needs is refused, not judged on a shorter window.
+		const cut = JSON.parse(JSON.stringify(snapshot));
+		delete cut.state.reserveMonths[0].history;
+		expect(() => runModelFrom(cut, input)).toThrow(/needs the 16 days of its first month/);
+	});
+
+	for (const at of ['2000-10-15', '2001-05-17', '2002-01-01', '2002-11-30', '2003-09-20']) {
+		it(`a run resumed on ${at} judges every month as the uninterrupted run does, base flow to the bit`, () => {
+			const tail = runModelFrom(JSON.parse(JSON.stringify(captureModelState(input, at))), input);
+			const months = tail.summary.ewrAssurance![0]!.months;
+			for (const m of months) {
+				expect(m.baseflow).toBeDefined();
+				expect(m).toEqual(full.summary.ewrAssurance![0]!.months.find((w) => w.year === m.year && w.month === m.month));
+				expect(Object.is(m.baseflow, full.summary.ewrAssurance![0]!.months.find((w) => w.year === m.year && w.month === m.month)!.baseflow)).toBe(true);
+			}
+			// The month the snapshot splits is judged whole (every later one too).
+			const d = new Date(toEpochDay(at) * 86_400_000);
+			if (d.getUTCDate() > 1 && at !== START && at < '2003-09-01') expect(months[0]).toMatchObject({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 });
+		});
+	}
+});
+
+describe('a month’s base flow is causal (engine ≥ 1.6.0)', () => {
+	// A table on its own natural curve, so the requirement doesn't move with the record either (K1).
+	const table = (unit: 'mcm' | 'm3s'): EwrRuleTable => ({
+		siteNodeId: null,
+		source: 'Synthetic',
+		component: 'total',
+		unit,
+		points: [10, 50, 90],
+		ewr: rows([3, 2, 1]),
+		lowFlow: rows([1, 0.6, 0.3]),
+		naturalSource: 'table',
+		natural: rows([30, 20, 10]),
+		scale: unit === 'mcm' ? 1 : 1 / 2.6
+	});
+
+	it('appending days never changes a completed month’s base flow or low-flow verdict', () => {
+		const rng = new Rng(1606);
+		let compared = 0;
+		let moved = 0;
+		for (let k = 0; k < 30; k++) {
+			const n = rng.int(40, 1500);
+			const extra = rng.int(1, 120);
+			const q = Array.from({ length: n + extra }, () => (rng.bool(0.08) ? rng.logFloat(1e6, 3e7) : rng.logFloat(1e3, 5e5)));
+			const s0 = new Date(Date.UTC(1990 + rng.int(0, 20), rng.int(0, 11), rng.int(1, 28))).toISOString().slice(0, 10);
+			const t = table(rng.pick(['mcm', 'm3s'] as const));
+			const assess = (days: number) => assessSite(s0, days, { table: t, nodeId: null, name: 'O', isOutlet: true, natural: q, impacted: q }, undefined, null, 'baseflow').report;
+			const short = assess(n);
+			const long = assess(n + extra);
+			for (const m of short.months) {
+				const w = long.months.find((x) => x.year === m.year && x.month === m.month)!;
+				expect(Object.is(w.baseflow, m.baseflow)).toBe(true);
+				expect(w.lowFlowMet).toBe(m.lowFlowMet);
+				compared++;
+			}
+			// Positive control: the whole-record filter (engine 1.3.0–1.5.x) did move a completed month.
+			const whole = (days: number) => lyneHollickBaseflow(q.slice(0, days));
+			const a = whole(n);
+			const b = whole(n + extra);
+			if (a.some((v, i) => v !== b[i])) moved++;
+		}
+		expect(compared).toBeGreaterThan(100);
+		expect(moved).toBeGreaterThan(0);
 	});
 });

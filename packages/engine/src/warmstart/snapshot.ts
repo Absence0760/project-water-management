@@ -13,7 +13,9 @@
 //     stream-depletion lag store, whether the river pump was on and each
 //     pumping unit's volume so far this water year;
 //   - per Reserve rule table, the month in progress (its natural and
-//     impacted flow so far), and the columns the capture run carried;
+//     impacted flow so far) and, when low flows are judged on base flow,
+//     the impacted flow its base-flow windows reach back into (engine ≥
+//     1.6.0), and the columns the capture run carried;
 //   - the record-wide quantities, pinned from the run it was captured from
 //     (the decision in model.md §2.16): the land-cover low-flow threshold,
 //     each Reserve rule table's natural duration curves (in 'run' mode), the
@@ -29,8 +31,8 @@ import { decodePlain, encodePlain, Hasher, hashText, stableStringify, type Encod
 
 /** The snapshot's kind tag. */
 export const MODEL_STATE_KIND = 'water-management/model-state';
-/** Bumped when the snapshot's shape changes (a reader refuses another format). */
-export const MODEL_STATE_FORMAT = 1;
+/** Bumped when the snapshot's shape changes (a reader refuses another format). 2: engine ≥ 1.6.0, reserveMonths[].history. */
+export const MODEL_STATE_FORMAT = 2;
 
 /** One node's state at the start of the snapshot's day. */
 export interface ModelNodeState {
@@ -72,13 +74,18 @@ export interface ModelState {
 	 * Per Reserve rule table (keyed as reserveNatural): the natural and
 	 * impacted flow of the calendar month the day falls in, from its first
 	 * day to the day before, so a resumed run still assesses that month
-	 * whole; null on a month's first day. `baseflow` (engine ≥ 1.3.0): the
-	 * impacted flow's base flow over those days, when low flows are judged on
-	 * base flow (settings.lowFlowMeasure); the resumed run's filter restarts
-	 * at its first day, so its base flow after that is close to, not
-	 * bit-identical with, the uninterrupted run's.
+	 * whole; null on a month's first day. `history` (format 2, engine ≥
+	 * 1.6.0), when low flows are judged on base flow
+	 * (settings.lowFlowMeasure 'baseflow'): the impacted daily flow (m³/day,
+	 * oldest first) of the BASEFLOW_HISTORY_DAYS days before that month and
+	 * its days before the snapshot's, or as many as the record held, so a
+	 * resumed run filters each month's base flow over the same days as the
+	 * uninterrupted run, to the bit (../reserve/assurance.ts
+	 * baseflowHistoryAt). Format 1 carried the part month's base flow as a
+	 * sum instead, and a resumed run's base flow only approximated the
+	 * uninterrupted run's.
 	 */
-	reserveMonths: { site: string; carry: { days: number; natural: number; impacted: number; baseflow?: number } | null }[];
+	reserveMonths: { site: string; carry: { days: number; natural: number; impacted: number } | null; history?: number[] }[];
 	/**
 	 * Columns the capture run carried because some of its days needed them
 	 * (a zero-run or accumulation mask, a storage reset's step, the senior

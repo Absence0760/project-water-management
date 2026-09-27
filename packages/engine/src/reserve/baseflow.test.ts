@@ -1,7 +1,7 @@
 // The Lyne–Hollick base-flow filter (engine ≥ 1.3.0, issue #64, docs/model.md §2.9d).
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../random';
-import { BASEFLOW_ALPHA, BASEFLOW_PASSES, BASEFLOW_REFLECT_DAYS, lyneHollickBaseflow } from './baseflow';
+import { BASEFLOW_ALPHA, BASEFLOW_HISTORY_DAYS, BASEFLOW_PASSES, BASEFLOW_REFLECT_DAYS, lyneHollickBaseflow, monthBaseflowSum } from './baseflow';
 
 describe('lyneHollickBaseflow', () => {
 	it('uses the South African daily parameter, three passes and a 30-day reflection', () => {
@@ -43,5 +43,18 @@ describe('lyneHollickBaseflow', () => {
 				expect(b[t]).toBeLessThanOrEqual(q[t]!);
 			}
 		}
+	});
+
+	it('a month’s base flow is the filter over its window, summed over its last days (engine ≥ 1.6.0)', () => {
+		expect(BASEFLOW_HISTORY_DAYS).toBe(730);
+		const rng = new Rng(1606);
+		const w = Array.from({ length: 400 }, () => (rng.bool(0.05) ? rng.logFloat(100, 1e5) : rng.logFloat(1, 50)));
+		const b = lyneHollickBaseflow(w);
+		let sum = 0;
+		for (let t = 370; t < 400; t++) sum += b[t]!;
+		expect(monthBaseflowSum(w, 30)).toBe(sum);
+		expect(monthBaseflowSum(new Array(40).fill(3), 31)).toBe(93);
+		expect(monthBaseflowSum(w, 0)).toBe(0);
+		expect(() => monthBaseflowSum(w, 401)).toThrow(RangeError);
 	});
 });

@@ -1344,7 +1344,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   required, met }]` over the complete water years, and `overall { years,
   required, met, rate }`). From engine 1.3.0 (issue #64), with
   `settings.lowFlowMeasure: 'baseflow'` and a low-flow requirement, each
-  month adds `baseflow` (the month's base flow, table unit) and the site
+  month adds `baseflow` (the month's base flow, table unit; from engine
+  1.6.0 filtered over the month and the 730 days before it only, so later
+  days never change it) and the site
   `lowFlowMeasure: 'baseflow'`. Each site also has the daily series
   `ewr_rule` (m³/day; NaN outside complete months); with
   `settings.ewrChargeSource: 'ruleTable'` a site the charge followed its table

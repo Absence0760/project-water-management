@@ -15,6 +15,15 @@
 // before filtering (Ladson et al. 2013), so the first and last days don't
 // carry the filter's start-up. Every choice here is pending the hydrologist
 // (plan.md question 17).
+//
+// Causal per month (engine ≥ 1.6.0): the backward pass makes a day's base
+// flow depend on the days after it, so filtering the whole record lets a
+// flood next month (or days appended to the record) change this month's base
+// flow. A month's base flow is therefore filtered over a window that ends on
+// its last day: the month and at most BASEFLOW_HISTORY_DAYS days before it,
+// reflected at both ends as above (monthBaseflowSum). Nothing after the month
+// reaches it, and a model-state snapshot that carries the window's days
+// resumes it exactly (../warmstart, docs/model.md §2.9d).
 
 /** Filter parameter (South African daily flows, Smakhtin & Watkins 1997). */
 export const BASEFLOW_ALPHA = 0.995;
@@ -22,6 +31,14 @@ export const BASEFLOW_ALPHA = 0.995;
 export const BASEFLOW_PASSES = 3;
 /** Days reflected at each end before filtering (Ladson et al. 2013). */
 export const BASEFLOW_REFLECT_DAYS = 30;
+/**
+ * Days of record before a month that its base flow is filtered over
+ * (engine ≥ 1.6.0). Two years: on a 30-year synthetic record a longer
+ * window gave the same month sums to the bit as the whole record up to the
+ * month's end (the clamp at 0 forgets the filter's state on each
+ * recession), where one year moved them by up to 2.5 %.
+ */
+export const BASEFLOW_HISTORY_DAYS = 730;
 
 /**
  * Daily base flow of `flow` (any unit, ≥ 0 by construction: a non-finite or
@@ -63,4 +80,20 @@ export function lyneHollickBaseflow(
 		}
 	}
 	return x.slice(r, r + n);
+}
+
+/**
+ * A month's base flow, causally (engine ≥ 1.6.0): `window` is the month's
+ * daily flow preceded by the days of record before it (at most
+ * BASEFLOW_HISTORY_DAYS), and the result is the base flow of its last
+ * `days` days, filtered over the window alone (reflected at both ends as
+ * lyneHollickBaseflow does) and summed oldest first. It depends on nothing
+ * after the month's last day.
+ */
+export function monthBaseflowSum(window: ArrayLike<number>, days: number): number {
+	if (days < 0 || days > window.length) throw new RangeError(`a ${days}-day month does not fit a ${window.length}-day window`);
+	const b = lyneHollickBaseflow(window);
+	let sum = 0;
+	for (let t = window.length - days; t < window.length; t++) sum += b[t]!;
+	return sum;
 }

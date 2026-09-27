@@ -1450,7 +1450,10 @@ causal. It isn't quite: a few figures are record-wide statistics, so a day at
 the end of the record moves values at its start. The land-cover low-flow
 threshold is the natural flow's Q75 over the record (§2.5a); EWR rule tables
 are read against the record's flow-duration curve (§2.9c); GR4J's warm-up
-cycles the forcing when the record is shorter than the warm-up (§2.4a). A
+cycles the forcing when the record is shorter than the warm-up (§2.4a).
+(The Reserve's base flow, `settings.lowFlowMeasure: 'baseflow'`, was a
+fourth from engine 1.3.0; from engine 1.6.0 each month is filtered on a
+window that ends on its last day, so a later day no longer moves it, §2.9d.) A
 14-day tail on a 900-day random network moved historical values by about
 1e-8 relative; on a short record, by more. Taking the history from the run
 without the tail makes it an ordinary run's **to the bit**, by construction.
@@ -2856,7 +2859,8 @@ low-flow requirement (the `lowFlow` grid of a total table, or a table whose
 component is `lowFlow`) is judged on the month's **base flow** B instead:
 
 ```
-b_t    = base flow of the site's simulated daily flow (Lyne–Hollick, below)
+b_t    = base flow of the site's simulated daily flow (Lyne–Hollick, below),
+         filtered over the month and the record before it only (engine ≥ 1.6.0)
 B      = Σ b_t over the month   (table unit)
 lowMet = B ≥ R_low               (a lowFlow table: met = B ≥ R, deficit = MAX(R − B, 0))
 ```
@@ -2890,14 +2894,69 @@ adds up across months. 0 ≤ b_t ≤ Q_t every day (tested), so B ≤ A: a month
 met on base flow is met on its volume, and base flow only ever fails more
 low-flow months than the total does.
 
-The backward pass makes a day's base flow depend on the days after it, so a
-run resumed from a model-state snapshot (§2.16) carries the part month's base
-flow in the snapshot but filters from its own first day: its later base flow
-is close to, not bit-identical with, the uninterrupted run's (the daily series
-are, since base flow isn't one).
+*Causal per month (engine ≥ 1.6.0).* The backward pass makes a day's base
+flow depend on the days after it. Filtered over the whole run, as engines
+1.3.0–1.5.x did, a month's base flow therefore depended on what came after
+it: a wetter next month, or days appended to the record, moved a completed
+month's base flow and could flip its low-flow verdict (the §2.4f / engine-audit
+K1 problem: the future refitting the past), and a run resumed from a
+model-state snapshot (§2.16), which can't see the uninterrupted run's
+later days' effect on its first month, came out close to the uninterrupted
+run but not equal to it. On a 30-year synthetic daily record, a month
+filtered over the record up to its own end differed from the same month
+filtered over the whole record by 8 % on average and up to 33 % (a one-off
+probe, 2026-09-27: 30 years of seasonal base flow with random floods, the
+months after the first 3 000 days); that gap is how much a month's base
+flow could still move after it ended.
+
+So each month is filtered **on its own window**: the month's days and at
+most the **730 days** before its first day (`BASEFLOW_HISTORY_DAYS`, fewer
+at the start of the record), with the same three passes, α and 30-day
+reflection at both window ends (`monthBaseflowSum`), and B is the sum of
+the window's last days. The month's end is the window's end, so the end
+reflection stands in for the days after it exactly as it did for the last
+month of a run before; nothing after the month's last day reaches B. This
+is what a hydrologist with the record up to that month's end would compute,
+which is the question a Reserve compliance check asks each month; the whole
+record's answer, which a later flood revises, is a hindcast. Two years is
+long enough that the window's start no longer matters: the clamp at 0 on
+every recession forgets the filter's state, and on the same synthetic
+record a 730-day window gave the month sums of the record-to-month-end
+filter to the bit (365 days moved them by 0.09 % on average, up to 2.5 %).
+Each month costs one filter over at most ~820 days, so a run's cost grows
+linearly with its months.
+
+Alternatives set aside. *One forward pass* (causal by construction, one
+number of state) is the original Lyne & Hollick recursion without the
+Nathan & McMahon passes, but it is a different separation: on the same
+record its base-flow index was 0.73 against 0.54 for three passes, so at
+the same α it would pass low-flow months the method the hydrologist is
+being asked to confirm (question 17) fails; changing the method is theirs
+to decide, not a side effect of making it causal.
+Eckhardt's (2005) two-parameter filter is causal too but needs a maximum
+base-flow index per aquifer type that nobody has set for these catchments.
+*Carrying the whole record* in the snapshot would reproduce "the record up
+to the month's end" with no window, but a snapshot and each month's cost
+would then grow with the record, for no change on the synthetic test.
+
+*Resumed runs are exact.* With low flows on base flow, a model-state
+snapshot (§2.16, format 2) carries each such site's impacted daily flow over
+the 730 days before the month it falls in and that month's days before it
+(`history`, `baseflowHistoryAt`), so a resumed run filters every month over
+the same days as the uninterrupted run and its months (base flow, verdicts,
+deficits) are the uninterrupted run's **to the bit**
+(`reserve/ewrMethods.test.ts`, and the random-network warm-start invariants,
+which from engine 1.6.0 compare every Reserve month a resumed run assesses,
+field by field, as well as its series). Appending days to a run never changes a completed month's base flow
+or low-flow verdict (tested on random series; the whole-record filter's did
+move). The requirement itself can still move with the record in `run`
+mode, whose natural curves are the whole run's (§2.9c, K1); a `table`-mode
+rule table has no such dependence.
 
 *Sources:* Lyne & Hollick 1979, Hydrology and Water Resources Symposium,
-Institution of Engineers Australia, 89–93 (the filter) · Nathan & McMahon
+Institution of Engineers Australia, 89–93 (the filter) · Eckhardt 2005,
+*Hydrological Processes* 19:507 (the two-parameter causal filter, set
+aside) · Nathan & McMahon
 1990, *WRR* 26:1465 (three passes; α 0.925) · Smakhtin & Watkins 1997, WRC
 494/1/97 (α 0.995–0.997 for South African daily flows) · Hughes, Hannart &
 Watkins 2003, *Water SA* 29(1):43 (continuous base-flow separation of daily
@@ -4737,7 +4796,8 @@ run the history once instead of in every member. Pure, in
 - `ModelStateMismatchError` (`code`: `format`, `engineVersion`, `input`,
   `history`, `window`) refuses a snapshot that isn't this input's.
 
-**The snapshot** (`ModelStateSnapshot`, format 1) is plain, versioned data:
+**The snapshot** (`ModelStateSnapshot`, format 2 from engine 1.6.0; a
+reader refuses another format) is plain, versioned data:
 `kind` (`water-management/model-state`), `format`, the capturing
 `engineVersion`, `date` (the first day a resumed run simulates: the state
 is the end of the day before), `runStart` (the capture run's first day),
@@ -4758,7 +4818,10 @@ can store one per base run. The state holds:
   resumed run clears them on 1 October as an uninterrupted one does);
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
-  split by the snapshot is still assessed whole (§2.9c);
+  split by the snapshot is still assessed whole (§2.9c); with low flows on
+  base flow (engine ≥ 1.6.0, format 2), also the impacted daily flow its
+  months' base-flow windows reach back into, 730 days before that month
+  and its days so far (§2.9d);
 - the columns the capture run carried because some day of it needed them
   (a zero-run or accumulation mask, a storage reset's step, the senior
   users' requirement), so a resumed run has the same columns, 0 on days
@@ -4775,7 +4838,10 @@ after one, 1 October, mid-month, the last day;
 curves and releases, boreholes with caps and lags, supply rules, other
 water users, land cover, rule tables, CHIRPS, zero runs and accumulations,
 demand factors from a date and storage resets: 0 differences in a
-550-seed soak, 3 300 networks and 21 878 resumes, 2026-09-26). The
+550-seed soak, 3 300 networks and 21 878 resumes, 2026-09-26). From engine
+1.6.0 the same checks also hold every Reserve month the resumed run
+assesses equal, field by field, to the uninterrupted run's, base flow
+included (§2.9d). The
 summary covers the resumed days only (farm means, the curtailment window,
 calibration, compliance): it is a run of those days. Runs that don't
 capture or resume are unchanged to the bit (the engine version moved for

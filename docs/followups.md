@@ -753,7 +753,11 @@ the reports):
             `settings.lowFlowMeasure: 'baseflow'` judges a low-flow
             requirement on the month's base flow from a three-pass
             Lyne–Hollick filter (α 0.995, Smakhtin & Watkins 1997); the
-            default stays the month's total volume. Left for the
+            default stays the month's total volume. Engine ≥ 1.6.0 filters
+            each month over its own days and the 730 before it only, so a
+            completed month's base flow never moves with later days and a
+            resumed run's is the uninterrupted run's to the bit (the
+            snapshot, format 2, carries those days). Left for the
             hydrologist: which measure a Reserve monitoring report uses, and
             the filter parameter (plan.md question 17).
       - [x] **Site source and confidence labels (WP-3.7 UI)** (engine

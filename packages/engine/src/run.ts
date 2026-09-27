@@ -43,7 +43,7 @@ import { buildTopology, canonicalOrder, ewrSiteNodes } from './network/topology'
 import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
-import { assessSite, assuranceWarnings, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
+import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
 import { NATURAL_FLOW, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	CALIBRATION_FLOW_KINDS,
@@ -782,7 +782,7 @@ function runNetwork(
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				fits: prepared.fits!
 			},
-			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null })),
+			reserveMonths: ewrAssurance.map((a) => ({ site: a.site, carry: a.carry ?? null, ...(a.history ? { history: a.history } : {}) })),
 			columns: []
 		};
 	}
@@ -1502,8 +1502,8 @@ function assessEwrRules(
 	 * carried into a resumed run; or the day to report each site's carry at.
 	 */
 	warm: { pinned?: ModelState['pinned']['reserveNatural']; carried?: ModelState['reserveMonths']; captureAt?: number } = {}
-): { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null }[] {
-	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null }[] = [];
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null; history?: number[] }[] {
+	const out: { report: EwrAssuranceSite; requiredM3Day: Float64Array; site: string; node: number; carry?: MonthCarry | null; history?: number[] }[] = [];
 	const siteOf = new Map(sites.map((s) => [s.node, s]));
 	const key = (id: string | null) => id ?? '';
 	const tables = [...settings.ewrRules].sort((a, b) => (key(a.siteNodeId) < key(b.siteNodeId) ? -1 : key(a.siteNodeId) > key(b.siteNodeId) ? 1 : 0));
@@ -1547,13 +1547,15 @@ function assessEwrRules(
 		const name = nodes[node]!.name;
 		for (const note of ewrRuleTableNotes(table)) warnings.push(`EWR rule table at ${isOutlet ? `the outlet (${name})` : name}: ${note}`);
 		const site = key(table.siteNodeId);
+		const carried = warm.carried?.find((p) => p.site === site);
 		const a = assessSite(
 			startDate,
 			days,
 			{ table, nodeId: isOutlet ? null : nodes[node]!.id, name, isOutlet, natural, impacted },
 			warm.pinned?.find((p) => p.site === site)?.curves,
-			warm.carried?.find((p) => p.site === site)?.carry ?? null,
-			settings.lowFlowMeasure ?? 'total'
+			carried?.carry ?? null,
+			settings.lowFlowMeasure ?? 'total',
+			carried?.history
 		);
 		warnings.push(...assuranceWarnings(a.report));
 		done.add(node);
@@ -1562,7 +1564,9 @@ function assessEwrRules(
 			requiredM3Day: a.requiredM3Day,
 			site,
 			node,
-			...(warm.captureAt !== undefined ? { carry: monthCarryAt(startDate, warm.captureAt, natural, impacted, a.baseflowM3Day) } : {})
+			...(warm.captureAt !== undefined ? { carry: monthCarryAt(startDate, warm.captureAt, natural, impacted) } : {}),
+			// Low flows on base flow (engine ≥ 1.6.0): the days a resumed run's base-flow windows reach back into.
+			...(warm.captureAt !== undefined && a.report.lowFlowMeasure === 'baseflow' ? { history: baseflowHistoryAt(startDate, warm.captureAt, impacted, carried?.history) } : {})
 		});
 	}
 	return out;

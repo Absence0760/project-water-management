@@ -25,7 +25,7 @@
 // because the lookup interpolates T and N with the same weights; and R
 // depends only on natural flow, so more abstraction can only lose months.
 import { toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
-import { lyneHollickBaseflow } from './baseflow';
+import { BASEFLOW_HISTORY_DAYS, monthBaseflowSum } from './baseflow';
 import type { EwrHighFlowEvent, EwrNaturalSource, EwrRuleComponent, EwrRuleSourceKind, EwrRuleTable, EwrRuleUnit, LowFlowMeasure } from './rules';
 
 const SEC_PER_DAY = 86_400;
@@ -69,7 +69,9 @@ export interface EwrAssuranceMonth {
 	 * judged on base flow (settings.lowFlowMeasure 'baseflow', engine ≥ 1.3.0)
 	 * and the table has a low-flow requirement: then a `lowFlow` table's `met`
 	 * and a total table's `lowFlowMet` compare it, not `actual`, with the
-	 * requirement. Absent otherwise.
+	 * requirement. Absent otherwise. From engine 1.6.0 it is filtered over
+	 * the month and the days before it only (./baseflow.ts monthBaseflowSum),
+	 * so no later day changes it.
 	 */
 	baseflow?: number;
 }
@@ -288,8 +290,22 @@ export interface MonthCarry {
 	days: number;
 	natural: number;
 	impacted: number;
-	/** The impacted flow's base flow over those days (engine ≥ 1.3.0), for low flows judged on base flow; absent = not captured. */
-	baseflow?: number;
+}
+
+/**
+ * The impacted daily flow (m³/day, oldest first) a resumed run needs before
+ * its first day to filter its months' base flow exactly as the
+ * uninterrupted run does (engine ≥ 1.6.0, settings.lowFlowMeasure
+ * 'baseflow'): the BASEFLOW_HISTORY_DAYS days before the first day of the
+ * month holding day `at` and that month's days before `at`, or as many of
+ * them as the record holds. `history` is the days the run itself was given
+ * before its first day (a resumed run's), oldest first.
+ */
+export function baseflowHistoryAt(startDate: string, at: number, impacted: ArrayLike<number>, history: ArrayLike<number> = []): number[] {
+	const before = new Date((toEpochDay(startDate) + at) * SEC_PER_DAY * 1000).getUTCDate() - 1;
+	const out: number[] = [];
+	for (let t = Math.max(at - before - BASEFLOW_HISTORY_DAYS, -history.length); t < at; t++) out.push(t < 0 ? history[history.length + t]! : impacted[t]!);
+	return out;
 }
 
 /** The calendar month a run starts inside, `before` of its days before the run: a block with from = −before, or null when the run ends before the month does. */
@@ -314,24 +330,20 @@ export function monthCarryAt(
 	startDate: string,
 	at: number,
 	natural: ArrayLike<number>,
-	impacted: ArrayLike<number>,
-	/** The impacted flow's daily base flow, when low flows are judged on it (engine ≥ 1.3.0). */
-	baseflow?: ArrayLike<number>
+	impacted: ArrayLike<number>
 ): MonthCarry | null {
 	const date = new Date((toEpochDay(startDate) + at) * SEC_PER_DAY * 1000);
 	const before = date.getUTCDate() - 1;
 	if (before === 0 || at - before < 0) return null;
 	let nat = 0;
 	let imp = 0;
-	let base = 0;
 	for (let t = at - before; t < at; t++) {
 		const n = natural[t]!;
 		const a = impacted[t]!;
 		nat += Number.isFinite(n) ? n : 0;
 		imp += Number.isFinite(a) ? a : 0;
-		if (baseflow) base += baseflow[t]!;
 	}
-	return { days: before, natural: nat, impacted: imp, ...(baseflow ? { baseflow: base } : {}) };
+	return { days: before, natural: nat, impacted: imp };
 }
 
 /** m³ over a month of `days` days → the table's unit, and back. */
@@ -364,40 +376,56 @@ export function assessSite(
 	 * requirement on the month's base flow (./baseflow.ts); 'total' or absent,
 	 * on its volume.
 	 */
-	lowFlowMeasure: LowFlowMeasure = 'total'
-): { report: EwrAssuranceSite; requiredM3Day: Float64Array; baseflowM3Day?: Float64Array } {
+	lowFlowMeasure: LowFlowMeasure = 'total',
+	/**
+	 * A resumed run's impacted daily flow before its first day, oldest first
+	 * (baseflowHistoryAt, carried in the snapshot; engine ≥ 1.6.0): the
+	 * record a month's base-flow window reaches back into.
+	 */
+	history: ArrayLike<number> = []
+): { report: EwrAssuranceSite; requiredM3Day: Float64Array } {
 	const { table } = site;
 	const unit = table.unit;
 	const P = table.points;
 	// Base flow only matters where there is a low-flow requirement to judge.
 	const onBase = lowFlowMeasure === 'baseflow' && (table.component === 'lowFlow' || !!table.lowFlow);
-	const baseDaily = onBase ? lyneHollickBaseflow(Array.from({ length: days }, (_, t) => site.impacted[t]!)) : null;
+	// A month's base flow (m³), causally: filtered over the month and the record
+	// before it (at most BASEFLOW_HISTORY_DAYS days; a resumed run's reaches into
+	// `history`), so nothing after the month changes it (./baseflow.ts).
+	const baseOf = (from: number, len: number) => {
+		const w0 = Math.max(from - BASEFLOW_HISTORY_DAYS, -history.length);
+		const w = new Float64Array(from + len - w0);
+		for (let k = 0; k < w.length; k++) {
+			const t = w0 + k;
+			w[k] = t < 0 ? history[history.length + t]! : site.impacted[t]!;
+		}
+		return monthBaseflowSum(w, len);
+	};
 	const inRun = completeMonths(startDate, days);
 	const requiredM3Day = new Float64Array(days).fill(NaN);
 	const d0 = toEpochDay(startDate);
 	// The month the run starts inside, whole with the days carried from before it (from < 0).
 	const head = carried && carried.days > 0 ? carriedMonth(d0, days, carried.days) : null;
 	const blocks = head ? [head, ...inRun] : inRun;
+	if (onBase && head && history.length < -head.from)
+		throw new Error(`a resumed run judging low flows on base flow needs the ${-head.from} days of its first month before it; the snapshot carries ${history.length}`);
 
 	// Per complete month, natural and impacted in the table's unit.
 	const rows = blocks.map((b) => {
 		let nat = b === head ? carried!.natural : 0;
 		let imp = b === head ? carried!.impacted : 0;
-		// A snapshot without the carried days' base flow: their volume stands in (a resumed run's head month only).
-		let base = b === head ? (carried!.baseflow ?? carried!.impacted) : 0;
 		for (let t = Math.max(b.from, 0); t < b.from + b.days; t++) {
 			const n = site.natural[t]!;
 			const a = site.impacted[t]!;
 			nat += Number.isFinite(n) ? n : 0;
 			imp += Number.isFinite(a) ? a : 0;
-			if (baseDaily) base += baseDaily[t]!;
 		}
 		return {
 			...b,
 			w: waterYearIndex(b.month),
 			natural: toUnit(nat, b.days, unit),
 			actual: toUnit(imp, b.days, unit),
-			...(baseDaily ? { baseflow: toUnit(base, b.days, unit) } : {})
+			...(onBase ? { baseflow: toUnit(baseOf(b.from, b.days), b.days, unit) } : {})
 		};
 	});
 
@@ -522,7 +550,7 @@ export function assessSite(
 		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
 	}
 	if (onBase) report.lowFlowMeasure = 'baseflow';
-	return { requiredM3Day, report, ...(baseDaily ? { baseflowM3Day: baseDaily } : {}) };
+	return { requiredM3Day, report };
 }
 
 const isMet = (actual: number, required: number) => actual >= required - MET_TOLERANCE * Math.max(Math.abs(required), Math.abs(actual));
