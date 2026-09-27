@@ -11,7 +11,7 @@
 // staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
-import { afWords } from '../support/af.ts';
+import { words } from '../support/lang.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -19,7 +19,7 @@ import { simulateBounce } from '../support/jobs.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
-const af = await afWords();
+const af = await words('af');
 
 test('a farmer chooses how often they get their dam alerts, and the choice is kept', async ({ page, owner, signIn }) => {
 	void owner;

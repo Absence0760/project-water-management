@@ -982,6 +982,11 @@
 //             the other is rendered, never both). Nothing to trim that the
 //             page doesn't show. The earlier raise's parallel-page headroom
 //             is spent; this leaves ~3 KB. No new dependency.
+// 2026-09-27  total 1018 → 1029 KB (measured 1026 on merged main): the
+//             Projects list below (+6), the farm frame on /account for
+//             farmer-only users (+0.9), the On this page menu on three more
+//             tabs with its More overflow, the phone section header, and
+//             main's multi-language i18n work landing the same day.
 // 2026-09-27  total 1004 → 1009 KB (measured 1006, +6 on main's 1000 @ 14117da1);
 //             largest chunk (34 KB) and largest tab chunk (57 KB) unchanged.
 //             The Projects list (issue #17): outcome columns from the
@@ -1002,7 +1007,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1024,
+	totalCodeKb: 1029,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
