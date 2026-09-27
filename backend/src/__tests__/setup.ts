@@ -11,6 +11,10 @@ process.env.ALERTS_TOKEN_SECRET = 'test-only-alerts-secret-000000000000000';
 process.env.COOKIE_SECURE = 'false';
 // Outgoing email collects in memory (src/mail/transport.ts `outbox`).
 process.env.MAIL_TRANSPORT = 'memory';
+// TEST-ONLY: the sign-up throttle off (auth/signupThrottle.ts). signUp() makes
+// hundreds of accounts from one address; signupThrottle.security.db.test.ts
+// turns it back on. Lambda refuses the setting (config/production.ts).
+process.env.SIGNUP_THROTTLE = 'off';
 // DB-backed tests (*.db.test.ts) use a dedicated test database, water_test in
 // the main checkout and water_test_w<n> in a git worktree (test-db.ts); see
 // db-global-setup.ts. DEV-ONLY docker credentials.

@@ -21,6 +21,7 @@ const CODES: Record<string, Msg> = {
 	account_exists: msg('An account with that email address already exists. Sign in, or reset your password.'),
 	wrong_credentials: msg('Wrong email or password.'),
 	signin_locked: msg('Too many sign-in attempts for this address. Try again in {wait}, or reset your password.'),
+	signup_throttled: msg('Too many accounts were made from your network. Try again in {wait}.'),
 	wrong_current_password: msg('Your current password is wrong.'),
 	password_changed_elsewhere: msg('Your password was changed somewhere else a moment ago. Sign in again.'),
 	link_invalid: msg('This link is invalid or has expired. Ask for a new one.'),
@@ -64,7 +65,7 @@ interface HttpFailure {
 const isHttpFailure = (e: unknown): e is HttpFailure => e instanceof Error && typeof (e as { status?: unknown }).status === 'number';
 
 /** Codes whose wording says how long to wait: `params.seconds`, as whole minutes. */
-const WAITS = new Set(['signin_locked', 'export_throttled']);
+const WAITS = new Set(['signin_locked', 'signup_throttled', 'export_throttled']);
 
 /** What to tell the reader about a failed request (anything thrown: anything else reads as a generic failure). */
 export function errorText(err: unknown): string {

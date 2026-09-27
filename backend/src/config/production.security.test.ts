@@ -302,6 +302,7 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['worker', 'MAIL_EVENTS_QUEUE_ARN', undefined],
 			['api', 'VITEST', 'true'],
 			['worker', 'PASSWORD_HASH_COST', '4'],
+			['api', 'SIGNUP_THROTTLE', 'off'],
 			['migrate', 'MASTER_SECRET_ARN', undefined],
 			['migrate', 'DB_HOST', 'localhost'],
 			['migrate', 'WATER_APP_PASSWORD', 'water_app'],

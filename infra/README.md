@@ -40,7 +40,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 - **`/api` prefix.** The `api_strip_prefix` CloudFront Function turns
   `/api/auth/login` into `/auth/login` before it reaches Lambda. The Hono app
   routes are unprefixed, the same as in local dev on `:3001`. **Do not also
-  add `basePath('/api')` in the app.**
+  add `basePath('/api')` in the app.** It also sets `X-Viewer-Address` to the
+  viewer's IP (overwriting any value sent), the one client address the API
+  trusts, and only with the shared secret (the sign-up throttle,
+  `backend/src/http/clientAddress.ts`).
 - **SPA deep links.** The `spa_rewrite` function serves `/index.html` with a
   200 for any path whose last segment has no file extension
   (`/projects/<id>`). There is deliberately **no** distribution-wide

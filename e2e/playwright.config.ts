@@ -73,7 +73,11 @@ export default defineConfig({
 				// server's time in a parallel run, and model saves and page loads queued
 				// past their waits behind it (issue #41). e2e tests sign-up and login, not
 				// the work factor; Lambda refuses the override.
-				PASSWORD_HASH_COST: '4'
+				PASSWORD_HASH_COST: '4',
+				// TEST-ONLY: every e2e test signs up accounts, all from this one address,
+				// far past the sign-up throttle's 10 an hour (backend/src/auth/signupThrottle.ts;
+				// its own tests are in the backend). Lambda refuses the setting.
+				SIGNUP_THROTTLE: 'off'
 			}
 		},
 		DEV_SERVER
