@@ -7,6 +7,7 @@
 	// the button from everyone else).
 	import { api, type BulkFarmerResult, type FarmerEntry, type InviteLocale } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
+	import { LANGUAGES } from '$lib/i18n/state.svelte';
 	import { bulkSummary, farmNames, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
 
 	let {
@@ -22,11 +23,6 @@
 		/** Something changed: `entry` is the one farmer or invite (single mode), `message` what to announce. */
 		ondone: (message: string, entry?: FarmerEntry) => void;
 	} = $props();
-
-	const LANGUAGES: { value: InviteLocale; label: string }[] = [
-		{ value: 'en', label: 'English' },
-		{ value: 'af', label: 'Afrikaans' }
-	];
 
 	let mode = $state<'single' | 'csv'>('single');
 	let error = $state<string | null>(null);
@@ -163,13 +159,14 @@
 			<div class="field">
 				<label for="invite-farmer-lang">Email language</label>
 				<select id="invite-farmer-lang" bind:value={locale}>
-					{#each LANGUAGES as l (l.value)}<option value={l.value}>{l.label}</option>{/each}
+					{#each LANGUAGES as l (l.code)}<option value={l.code} lang={l.code}>{l.name}</option>{/each}
 				</select>
 			</div>
 		{:else}
 			<p class="muted small" id="invite-csv-help">
 				One farm per row: <code>email,farm,language</code>. The farm name must match a unit’s name on the Network tab (capitals don’t
-				matter); language is <code>en</code> or <code>af</code>, English if left out. A farmer with two farms gets two rows and one
+				matter); language is a code ({#each LANGUAGES as l, i (l.code)}{i ? ', ' : ''}<code>{l.code}</code>{/each}) or the language’s
+				name, English if left out. A farmer with two farms gets two rows and one
 				email. At most 200 rows.
 			</p>
 			<div class="field">

@@ -17,17 +17,4 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid, with a first draft in Afrikaans for the reviewer.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-4 strings: 4 on the site, 0 in emails, 0 in the glossary.
-
-## The site (farm pages, sign-in pages, account)
-
-### password
-
-Password fields: the Show / Hide button inside each one (it shows the typed password as text), and the rules shown under the field when the password is not accepted.
-
-| Id | English | Context | Afrikaans |
-| --- | --- | --- | --- |
-| `2bd339e0` | Hide | Meaning: password field. The same English elsewhere has its own row. |  |
-| `09ed6139` | Show | Meaning: password field. The same English elsewhere has its own row. |  |
-| `cd577cde` | Hide password |  |  |
-| `500e3555` | Show password |  |  |
+0 strings: 0 on the site, 0 in emails, 0 in the glossary.

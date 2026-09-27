@@ -4,7 +4,7 @@
 // vs what-if i + 1); this module turns those into the outcomes table's rows,
 // the plain-language takeaways under it, and the one-line "what changed" of
 // each run card. Pure: no I/O, no Svelte.
-import { SUPPLY_TARGET, type InputChange, type InputChangeArea, type MetricDelta, type RunComparison } from '@water-management/engine';
+import { SUPPLY_TARGET, type FarmSummary, type InputChange, type InputChangeArea, type MetricDelta, type RunComparison } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import type { MetricSpec } from './delta';
 
@@ -40,8 +40,8 @@ export const FARM_ROW_MIN_CHANGE = 0.01;
 /** At most this many farm rows, the largest changes first. */
 export const FARM_ROWS_MAX = 2;
 
-function row(id: string, label: string, unit: string, spec: MetricSpec, pick: (c: RunComparison) => MetricDelta | null, comparisons: readonly RunComparison[]): OutcomeRow {
-	const ms = comparisons.map((c) => pick(c) ?? NONE);
+function row(id: string, label: string, unit: string, spec: MetricSpec, pick: (c: RunComparison, i: number) => MetricDelta | null, comparisons: readonly RunComparison[]): OutcomeRow {
+	const ms = comparisons.map((c, i) => pick(c, i) ?? NONE);
 	return { id, label, unit, spec, base: ms.find((m) => m.a !== null)?.a ?? null, whatIfs: ms };
 }
 
@@ -73,8 +73,49 @@ function farmRows(comparisons: readonly RunComparison[]): OutcomeRow[] {
 		}));
 }
 
-/** The outcomes table: the headline outcomes, each for the baseline and every what-if. */
-export function outcomeRows(comparisons: readonly RunComparison[]): OutcomeRow[] {
+/** A run's own model nodes, as far as the dam figures need them. */
+type DamNode = { id: string; damCapacityM3?: unknown };
+
+/**
+ * All of a run's farm dams at the end of the run, as a share of their
+ * capacity (0–1), weighted by capacity: the Summary's "Dams today" figure
+ * (overview/damLevels.ts damsToday), from the run summary's dam figures
+ * (FarmSummary.damEndM3, engine ≥ 1.2.0, issue #55) and the capacities in the
+ * run's own model. null when the run has no dam, or was saved before the
+ * figures (a dam without them): unknown, never 0.
+ */
+export function damStorageShare(farms: readonly FarmSummary[] | undefined, nodes: readonly DamNode[] | undefined): number | null {
+	const cap = new Map((nodes ?? []).map((n) => [n.id, typeof n.damCapacityM3 === 'number' && Number.isFinite(n.damCapacityM3) ? n.damCapacityM3 : 0]));
+	let stored = 0;
+	let capacity = 0;
+	for (const f of farms ?? []) {
+		const c = cap.get(f.nodeId) ?? 0;
+		if (!(c >= 1)) continue;
+		if (f.damEndM3 === undefined) return null;
+		stored += f.damEndM3;
+		capacity += c;
+	}
+	return capacity > 0 ? stored / capacity : null;
+}
+
+/** One side of GET /compare/runs, as far as the dam figures need it. */
+type DamSide = { run: { summary: { farms?: readonly FarmSummary[] }; inputs?: { model?: { nodes?: readonly DamNode[] } } } };
+
+/** The dam storage at the end of the run of the baseline (`a`) and a what-if (`b`), each from its own summary and model. */
+export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
+	const share = (s: DamSide) => damStorageShare(s.run.summary.farms, s.run.inputs?.model?.nodes);
+	const a = share(d.a);
+	const b = share(d.b);
+	return { a, b, delta: a === null || b === null ? null : b - a };
+}
+
+/**
+ * The outcomes table: the headline outcomes, each for the baseline and every
+ * what-if. `dams[i]` is the dam storage at the end of the run for
+ * comparison i (damStorageShare of each side); its row shows when either
+ * side of any comparison has one.
+ */
+export function outcomeRows(comparisons: readonly RunComparison[], dams: readonly MetricDelta[] = []): OutcomeRow[] {
 	const rows: OutcomeRow[] = [
 		row('reserveMet', 'Reserve met', '% of days', { format: 'fraction', better: 'higher' }, (c) => complement(c.catchment.ewrFractionDaysNotMet), comparisons),
 		row(
@@ -88,6 +129,19 @@ export function outcomeRows(comparisons: readonly RunComparison[]): OutcomeRow[]
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
 		row('farmsBelow', `Units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
 		...farmRows(comparisons),
+		...(dams.some((m) => m.a !== null || m.b !== null)
+			? [
+					row(
+						'dams',
+						'Dam storage, end of run',
+						'% of capacity',
+						// Neutral: a bigger dam can end emptier as a share yet hold more; the change is shown, not judged.
+						{ format: 'fraction', better: 'neutral' },
+						(_c, i) => dams[i] ?? null,
+						comparisons
+					)
+				]
+			: []),
 		row('outflow', 'Mean outflow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanSimulatedOutflowM3Day, comparisons)
 	];
 	if (comparisons.some((c) => c.calibration && c.calibration.nse.a !== null)) {
@@ -109,7 +163,9 @@ export interface Takeaway {
  * What counts as material, so a takeaway never reports noise: a whole day a
  * year below the reserve, a percentage point of the demand supplied, one farm
  * crossing the supply target, five points of one farm's supply, 5 % of the
- * mean outflow.
+ * mean outflow. The dam storage row has no takeaway: a what-if that raises
+ * a dam ends emptier as a share of the bigger dam while holding more, so the
+ * row shows the change without a verdict.
  */
 export const MATERIAL = { reserveDays: 1, suppliedPp: 1, farmPp: 5, outflowShare: 0.05 } as const;
 

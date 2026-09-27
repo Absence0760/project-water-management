@@ -1,5 +1,9 @@
 // Applies backend/migrations/*.sql in filename order, once each, recording
-// them in schema_migrations. Each file runs in its own transaction.
+// them in schema_migrations. Each file runs in its own transaction. Then it
+// syncs the `language` table (080_language.sql) from the engine's language
+// table, so a language is added in one place (LANGUAGES) and the database's
+// foreign keys accept it on the next deploy. It only adds: a language that
+// left the list stays, since stored locales may still name it.
 //
 // Runs as the schema owner (MIGRATION_DATABASE_URL), never as water_app.
 //   pnpm dev:db:migrate                     — dev database
@@ -8,7 +12,7 @@ import { config } from 'dotenv';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
-
+import { LOCALES } from '@water-management/engine/languages';
 
 export async function migrate(databaseUrl: string, log = console.log): Promise<string[]> {
 	const dir = join(import.meta.dirname, '..', 'migrations');
@@ -37,11 +41,21 @@ export async function migrate(databaseUrl: string, log = console.log): Promise<s
 			applied.push(file);
 			log(`applied ${file}`);
 		}
+		const added = await syncLanguages(client);
+		if (added.length) log(`added language(s) ${added.join(', ')}`);
 		await client.query('SELECT pg_advisory_unlock(727274)');
 	} finally {
 		await client.end();
 	}
 	return applied;
+}
+
+/** Insert every code in LOCALES the `language` table lacks (once 080 has made it); returns the codes added. */
+export async function syncLanguages(client: pg.ClientBase, codes: readonly string[] = LOCALES): Promise<string[]> {
+	const { rows: exists } = await client.query<{ ok: boolean }>(`SELECT to_regclass('public.language') IS NOT NULL AS ok`);
+	if (!exists[0]?.ok) return [];
+	const { rows } = await client.query<{ code: string }>('INSERT INTO language (code) SELECT unnest($1::text[]) ON CONFLICT DO NOTHING RETURNING code', [codes]);
+	return rows.map((r) => r.code);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

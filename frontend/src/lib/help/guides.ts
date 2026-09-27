@@ -405,7 +405,7 @@ export const GUIDES: Guide[] = [
 							'Press **Add data** in the section header, or drop the file anywhere on the page.',
 							'Check the series the form guessed from the file name and header, and the preview chart.',
 							'For an existing series keep **Append / update**: new days are added and overlapping days corrected. The preview counts new, changed and unchanged days. Use **Replace** only to overwrite the whole series.',
-							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: put them back from the **History** tab with **Restore the earlier values**.',
+							'Upload. If the file would change days already stored, the form asks first: it says how many days and between which dates, and **Show the changes** lists each one. Press **Overwrite** to go ahead, or **Back**. The values it replaces are kept: in the **History** tab, pick that change and press **Restore the earlier values**.',
 							'Press **Re-run model** in the notice under the header when you are ready.'
 						]
 					},
@@ -707,7 +707,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme. Viewers can open it too.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
 					}
 				]
 			},
@@ -747,11 +747,12 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Run a baseline.',
-							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if.',
+							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if. On **Compare runs**, **+ New what-if** starts a scenario on the baseline for you: give it a name, add its changes on **Scenarios** and run it.',
 							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
-							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value, and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
-							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.'
+							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value (dam storage at the end of the run too, as a share of each run’s own dam capacity), and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
+							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.',
+							'To hand the result round, press **Export impact report** (with two what-ifs, pick which). It opens that what-if’s printable report with **Impact against the baseline** first: the same outcomes, takeaways and input changes. **Download PDF** saves it.'
 						]
 					},
 					{

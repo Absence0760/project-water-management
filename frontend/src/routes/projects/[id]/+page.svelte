@@ -599,6 +599,8 @@
 				{#snippet children(ApplicantView)}<ApplicantView project={applicantProject!} />{/snippet}
 			</Lazy>
 		{:else if notFound || !project}
+			<!-- The same frame as every section: one title, then what happened (issue #17). -->
+			<SectionHeader title="Project not found" />
 			<div class="alert alert-error" role="alert">
 				This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
 			</div>
@@ -800,16 +802,13 @@
 />
 
 <style>
+	/* The page's 1rem gutter, plus room for the fixed model save bar only while
+	   it shows (--dock-h is 0 otherwise), so it never hides the last row or a
+	   tab's own sticky actions (Settings). No more than that: a fixed 4rem made
+	   every tab whose content came within 56 px of the window's foot scroll for
+	   nothing, and the window-fitted tabs size themselves to exactly this gutter
+	   (`calc(100vh - top - var(--dock-h) - 1rem)`). */
 	.page {
-		/* Room for the fixed model save bar so it never hides the last row or a
-		   tab's own sticky actions (Settings). */
-		padding-bottom: calc(var(--dock-h, 0px) + 4rem);
-	}
-	/* A page sized to the window (the Network's Map, Transfers, Applications; issue #17) needs
-	   only a gutter below it, plus the save bar when it shows. */
-	.page:has(:global(.map-layout)),
-	.page:has(:global(.transfers.fit)),
-	.page:has(:global(.applications.fit)) {
 		padding-bottom: calc(var(--dock-h, 0px) + 1rem);
 	}
 	.add {
@@ -1132,11 +1131,6 @@
 		font-weight: 600;
 		line-height: 1.35;
 		text-align: center;
-	}
-/* Absolutely positioned bits inside wide tables (visually-hidden labels)
-	   must be clipped by their scroll container, not widen the page. */
-	.tab-body :global(.table-wrap) {
-		position: relative;
 	}
 	/* Read-only inputs read as plain values, not as a broken, greyed-out form. */
 	.readonly :global(input:not([type='checkbox']):read-only),

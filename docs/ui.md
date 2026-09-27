@@ -27,6 +27,13 @@ session exists. A **Skip to content** link comes first.
   and in-page link targets stop at the top edge. A page (`.page`) starts at
   the sidebar's edge rather than centring in the width left, which left a
   dead gap between the sidebar and the content.
+- **No pointless scroll.** Below its content a page keeps a 1rem gutter and
+  nothing more; the project workspace adds the model save bar's height only
+  while the bar shows (`--dock-h`, 0 otherwise), so the bar never covers the
+  last row. A page whose content fits the window doesn't scroll at all. It
+  used to reserve 5rem (the workspace 4rem) below everything, so a page that
+  came within 56–70 px of the window's foot scrolled for nothing
+  (`no-pointless-scroll.spec.ts`).
 - **Below 900 px (phones):** a slim sticky bar, 52 px (`--header-h`): a
   **Menu** button that opens the Main navigation under the bar, the brand,
   and a compact account button (initials only). The Menu closes on a
@@ -310,7 +317,7 @@ role, freshness, Add data) and each tab's own header:
   when the newest ran; River & reserve the run it shows (label, badges,
   period, engine, the EWR rule); Units & supply, Dams, Scenarios,
   Allocations, Project and Applications a summary of what they hold; History
-  what it holds. The others count what they hold (`workspace/context.ts`):
+  the latest change, by whom and when. The others count what they hold (`workspace/context.ts`):
   "2 runs" on Compare runs, "4 input series · 1 behind",
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
@@ -1037,9 +1044,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Screen use:** from 900 px the layout is exactly the height left in the
     window below its top edge, less what the page keeps below it (its bottom
     padding and the save bar's room; at least 520 px), both measured on load
-    and whenever the page resizes, so **the page itself doesn't scroll**. On
-    this page the workspace's bottom padding is 1rem (plus the save bar), not
-    the usual 4rem. The drawing takes the card's height
+    and whenever the page resizes, so **the page itself doesn't scroll**
+    (the workspace's bottom padding is its usual 1rem gutter, plus the save
+    bar while it shows). The drawing takes the card's height
     after the legend, and the node list takes the side column's height after
     the node card, each scrolling inside itself. `NetworkSchematic`'s `fill`
     lays the tree out to the box rather than zooming it: columns are at least
@@ -3281,8 +3288,23 @@ Board A4 of issue #17: a baseline and up to two what-ifs on one page
 gives it an `h1` and **Back to runs**). The full reference is
 [run-comparison.md](./run-comparison.md); the layout, top to bottom:
 
-- **Header:** *Compare runs* and a context line ("Baseline “…” against 2
-  what-ifs · same period, 2021–2024 · engine 0.45.0").
+- **Header:** in the workspace, the section header (the page's only title)
+  carries the view's context line ("Baseline “…” against 2 what-ifs · same
+  period, 2021–2024 · engine 0.45.0") and its actions, filled with
+  `fillHeader`; the view draws no title of its own there. The standalone
+  page has no section header, so the view draws its `h1`, the context line
+  and the same actions beside **Back to runs**. The actions:
+  - **Export impact report:** the what-if's printable report with an
+    *Impact against the baseline* section first
+    (`/projects/<what-if's project>/report?run=<what-if>&against=<baseline ref>`,
+    § Report). A plain link with one what-if; with two, a menu naming each
+    ("What-if 1: <label>", its colour key beside it), which Escape or a
+    click outside closes.
+  - **+ New what-if** (owner and editor of the baseline's project only):
+    the Scenarios tab's create dialog, `?tab=scenarios&new=1&base=<baseline
+    run>`, with the baseline as its base run (left to the dialog's default
+    when the baseline is itself a scenario run). Its run then compares here
+    like any other.
 - **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
@@ -3295,8 +3317,8 @@ gives it an `h1` and **Back to runs**). The full reference is
   select on add, and back to the add button on remove.
 - **What changes** (left, ~55 %): the outcomes table (reserve met, days
   below the reserve per average year, irrigation supplied, farms below 95 %,
-  up to two most-changed farms, mean outflow, calibration NSE when there is
-  one), each what-if cell its value over its `Delta`, the unit on its own
+  up to two most-changed farms, dam storage at the end of the run (when a
+  run has a dam), mean outflow, calibration NSE when there is one), each what-if cell its value over its `Delta`, the unit on its own
   line under the outcome; then the takeaways box (the first worse, else
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
@@ -3308,7 +3330,11 @@ gives it an `h1` and **Back to runs**). The full reference is
   then every panel of the two-run comparison, unchanged.
 
 At 1440×960 the header, cards, table and chart fit above the fold; below
-1100 px the table and chart stack, below 900 px the cards.
+1100 px the table and chart stack, below 900 px the cards. The standalone
+`/compare` page sits in the app frame with **Projects** as its current
+section; on a phone neither it nor the tab scrolls sideways (the delta
+cells' screen-reader words are clipped by their table's box, app.css
+`.table-wrap`; `e2e/tests/report-pages.spec.ts`).
 
 ## Scenarios (`?tab=scenarios`)
 
@@ -3340,9 +3366,12 @@ them scenarios).
   `&scenario=<id>` in the URL.
 - **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
   it, dropping `new` in place): a name and a base run, the published run by
-  default, else the latest; scenario runs aren't offered (a scenario run
-  can't be a base). **Create scenario** picks the new one and replaces the
-  dialog's history entry. `new=1` opens nothing for a viewer or with no run.
+  default, else the latest, or the run named by `&base=<runId>` (Compare
+  runs' **+ New what-if** opens it on its baseline) when that run can be a
+  base; scenario runs aren't offered (a scenario run can't be a base).
+  Closing drops `base` with `new`. **Create scenario** picks the new one and
+  replaces the dialog's history entry. `new=1` opens nothing for a viewer or
+  with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
   is kept while the scenario exists.
 - **Changes** (`OpList.svelte`): the ops in order, each in words against the
@@ -3545,17 +3574,19 @@ panel calls the role "Applicant") never sees the workspace's tabs, which the
 API refuses them. `/projects/:id` shows them the **Applicant view**
 (`lib/components/scenarios/ApplicantView.svelte`, a lazy chunk; the page
 detects the role from the project list after the `403`, as it does for a
-farmer): an "Applicant view" badge, the published baseline (its date, and
-that other farms show only by an anonymous name), links to their own farms'
-farm view if they have links, and the Scenarios tab in applicant mode
-("Your applications"; `?scenario=<id>` selects one):
+farmer). It has the same frame as every workspace section (issue #17): a
+section header titled **Applications** with an "Applicant view" badge, a
+context line (the catchment's name, "Baseline published <date> by <who>",
+and links to their own farms' farm view if they have links) and one slim
+notice (their applications start on the published baseline; other farms
+show only by an anonymous name). Under it, the Scenarios tab in applicant
+mode ("Your applications"; `?scenario=<id>` selects one):
 
-- **New application**: a button at the top of the list (the Applicant view
-  has no section header), opening the same dialog at `new=1` with a name
-  only; it starts on the current publication's run. With nothing
-  published, a note says so and there is no button. The list scrolls inside
-  its card, so the button stays on the first screen with thirty
-  applications.
+- **New application**: the section header's action, opening the same
+  dialog at `new=1` with a name only; it starts on the current
+  publication's run. With nothing published, the list says so and there is
+  no button. The list scrolls inside its card, so the header and its
+  button stay on the first screen with thirty applications.
 - **The editor** is the Scenarios editor, with the base from
   `GET …/scenarios/:sid/base` (other farms as "Farm 1", "Farm 2", their
   values blank, so an op on one isn't described "from" a value). Their own
@@ -3625,14 +3656,51 @@ states, a viewer, the phone cards, axe at desktop light and dark and phone).
 
 ## History (`?tab=history`)
 
-WP-2.4 (`lib/components/history/`, a lazy tab). A timeline of model and
-settings revisions and audit events, grouped by the viewer's day, with a
-request's change set folded into one entry; filters by unit ("All units"), event kind and
-parameter. Each revision shows its change lines, and for editors a
-**Restore this version** button behind a confirm that previews the diff;
-restore buttons are disabled while there are unsaved model edits, and a
-restored farm lists the farmers to re-link. Viewers read it; farmers never
-see the tab. Empty: "No changes recorded yet. History starts from {date}."
+WP-2.4 (`lib/components/history/`, a lazy tab; laid out for issue #17 option
+A). A timeline of model and settings revisions and audit events, grouped by
+the viewer's day, with a request's change set folded into one entry.
+
+- **Section header:** the fact the page is opened for, the latest change of
+  the whole history (whatever the filters), who made it and when, and since
+  when changes are recorded: "Latest change today 14:05 by Ann: Model
+  changed · recorded since 3 Sep 2026"; "No changes recorded yet · recorded
+  since …" (`timeline.ts` `historyContext`). No actions of its own beside
+  Add data and Run model.
+- **The card** "Changes, newest first": a line on what it holds (and for
+  editors "Restoring a version saves it as a new change: nothing is ever
+  erased"), then the filters: **Unit** ("All units"), **Kind of change** and
+  **Parameter** (typed words, narrowing what's loaded). Unit and kind are
+  the server's filters and live in the URL (`&unit=<nodeId>`,
+  `&kind=revision|series|run|…`), pushed, so Back steps back through them and
+  a link keeps them; an unknown kind, or a unit not in the model, is no
+  filter.
+- **Wide (the card's column from 840 px):** a list of compact rows beside the
+  picked change. A row is a link: time and author, what it was (a revision's
+  title, or an event's sentence), its first line with "+N more", and its
+  reason, one line each. The pick is `&entry=<key>` (Back returns to the
+  previous one; with none, or one no longer loaded, the newest shows,
+  without writing the URL). The detail: a heading (the revision's title, or
+  the kind of change: "Data series", "Members"), the day, time and author,
+  **Newer** / **Older**, every line and the reason, the restore buttons, and
+  for a revision **Differences from now**: the lines between the saved inputs
+  now and that version, grouped by area (`GET …/history/revisions/:id`'s
+  preview, cached per version until the list reloads), "what restoring it
+  would change" for an editor. From 1100 × 620 the card fills the window
+  (`.history.fit`) and the list and the detail scroll inside it; a linked
+  entry further down is scrolled into view inside the list, never the page.
+  **Show older changes** (50 items a page) sits at the foot of the list.
+- **Narrow (a phone):** no detail; each entry shows whole under its day, with
+  its buttons (44 px targets), and the page scrolls. The two selects share a
+  row, the parameter box has its own.
+- **Restore this version** (editors) opens a confirm that previews the diff,
+  with an optional reason; restore buttons are disabled while there are
+  unsaved model edits (a note says so), and a restored farm lists the
+  farmers to re-link (a link to the Project page's Farmers list). After a
+  restore the new entry (the restore itself) is picked, in place.
+- Viewers read everything, the differences included, with no restore
+  buttons; farmers never see the tab. Empty: "No changes recorded yet.
+  History starts from {date}."; a filter with none: "Nothing matches these
+  filters." `?tab=changes` is an old name for it.
 
 - The **save bar** and the Settings save row have an optional "Reason for
   this change", kept with the revision.
@@ -3653,6 +3721,14 @@ see the tab. Empty: "No changes recorded yet. History starts from {date}."
   series list. e2e: `e2e/tests/history.spec.ts`.
 - A small "history" affordance on individual fields is not built
   (followups.md).
+
+e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer) and
+`e2e/tests/history-page.spec.ts` (the page: header line, window fit and a
+44-entry history over eleven days from `e2e/support/history.ts` and
+`spreadHistoryOverDays`, the pick's URL, Back, reload, Newer/Older and a
+deep link, the filters' URL and Back, pagination, a restore picking itself,
+empty states, a viewer, the phone layout, `?tab=changes`, axe at desktop
+light and dark and phone).
 
 ## Notes
 
@@ -3705,6 +3781,23 @@ chunk. A non-member gets the workspace's "This project doesn't exist or you
 don't have access to it"; a project with no runs, or a run that no longer
 exists, says so with a link to Runs & results.
 
+- **Impact report** (`&against=<projectId>:<runId>`, Compare runs' **Export
+  impact report**, issue #17 A4): the same report with the cover's eyebrow
+  reading *Impact report* and a first section, **Impact against the
+  baseline** (`report/ImpactSection.svelte`, its own chunk, loaded before
+  `data-report-ready` only for an impact report), from `GET /compare/runs`
+  with the baseline as A and this run as B: a line naming the baseline
+  (label, project, period, when it ran), the outcomes table of Compare runs
+  for this run (Outcome, Baseline, This run, Change, from the same
+  `compare/summary.ts` rows, dam storage included), the takeaways ("In
+  short", naming the run by its label in quotes) and the input changes
+  (`ChangesList`). A baseline that can't be read (deleted, or its project
+  not shared) leaves the report loading, with the reason in that section.
+  The bar's back link reads **← Back to the comparison** (the Compare runs
+  tab on this pair). The server-side PDF renders the plain report
+  (`backend/src/reports/render.ts` takes a run only), so in its place the bar
+  links **The run's report without the impact (server PDF)**; **Download
+  PDF** (the browser's print) prints the impact report.
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
@@ -3792,7 +3885,14 @@ exists, says so with a link to Runs & results.
   before each section, headings kept with what follows, rows and figures not
   split, tables printed whole with their header row repeated, wide tables
   tightened to fit the page width, background colours kept (the heat map,
-  flagged rows), and no app sidebar, phone bar, banner or on-screen bar.
+  flagged rows), and no app sidebar, phone bar, banner or on-screen bar
+  (the frame hides its own sidebar and phone bar in print,
+  `layout/AppShell.svelte`: A4 is narrower than 900 px, so the phone bar
+  used to print on the cover, and whichever frame was drawn when the print
+  began changed the whole PDF: with the phone bar the type printed at ~80 %
+  of its size, with the sidebar's grid column 22 pages became 37). On screen only (`@media screen`), row headers get 11rem, so the
+  curtailment table's unit names and verdicts aren't a word a line; paper
+  keeps the tightened print fit.
 - **Themes.** On screen the report follows the light or dark theme. A print
   is always light: on `beforeprint` the page and each print-mode chart set
   `data-theme="light"` on `<html>` (`report/printTheme.ts`, idempotent) and
@@ -3814,11 +3914,22 @@ exists, says so with a link to Runs & results.
   must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
 - **The emailed link** opens `/projects/:id/reports/:jobId`
   (`routes/projects/[id]/reports/[jobId]/+page.svelte`, its own lazy route):
-  signed out, the reader signs in first and comes back; a member sees the
-  status and, once ready, **Download the PDF** (a fresh one-hour link each
-  visit) and **Open the report in the app**. Anyone else, or a PDF past its 7
+  signed out, the reader signs in first and comes back. A member sees the
+  title, *Catchment report PDF*, with a context line naming the catchment and
+  the run ("Upper catchment · Run “Baseline”", read from the project and
+  its runs list, best effort), then one card: the state as a pill in words
+  (Queued, Making, Retrying, Ready, Failed) beside the status line, when it
+  was asked for (and "This page checks again every few seconds." while it's
+  pending, polling every 2 s), **Download the PDF** once ready (a fresh
+  one-hour link each visit), after a failure a line pointing back to the
+  report, and **Open the report in the app** and **Go to the run** (**Go to
+  Runs & results** for a scheduled PDF of the latest run). The card's
+  `data-state` is the report's state. Anyone else, or a PDF past its 7
   days, gets "This report doesn't exist any more, or you don't have access to
-  its project." Tested by `e2e/tests/server-report.spec.ts`.
+  its project." Tested by `e2e/tests/server-report.spec.ts` and
+  `e2e/tests/report-pages.spec.ts` (queued and failed states planted with
+  `support/db.ts` `holdReportJob` / `failReport`, a viewer, not found, axe in
+  both themes at desktop and phone).
 
 ## Help (`/help`)
 
@@ -3828,10 +3939,18 @@ box heads the page, above the text, and a contents list
 *How it works*, *How to*, and the glossary) marks the page you're on
 (`aria-current`). From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window, or the glossary's term list). They
+taller than the window (a short window, or the glossary's term list). The column fits the window exactly
+(the page's top gutter above it and below it), and the reading space at the end of a long page belongs
+to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
+guide) doesn't scroll. They
 don't go in the app sidebar's slot ([§ App shell](#app-shell-and-account-menu)):
 a long list there made the sidebar scroll. On phones the contents fold behind a **Help contents** button
 under the search box, and close again when you pick a page.
+
+Each subpage (a guide, the glossary, search) heads its text the same way: a
+breadcrumb (`help/HelpCrumbs.svelte`: *Help › How to › Add a transfer*,
+*Help › Reference › Glossary*, *Help › Search*) over one `h1` of the
+overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts`).
 
 - **Pictures.** One Blender scene of an invented catchment, rendered as several
   shots (`lib/help/pictures.ts`): the whole catchment, one farm and its dam, the
@@ -3870,7 +3989,12 @@ under the search box, and close again when you pick a page.
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
   `help-main`, a sticky rail right of the 42rem article instead, so the
-  article keeps its reading width and the right-hand space is used), numbered steps, tip and
+  article keeps its reading width and the right-hand space is used). The list
+  marks the section being read (`aria-current="location"`, in bold; the last
+  heading past a line near the top, `lib/help/spy.ts`, or the last section at
+  the end of the page; nothing while the intro shows), and a link to one
+  section (`/help/guides/<id>#<section>`) lands on it and focuses its heading
+  (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
   stores under the ground, the outlet gauge, the transfer, the EWR reach), the
   glossary terms it uses, related guides and previous / next. Guide text is
@@ -3906,7 +4030,11 @@ under the search box, and close again when you pick a page.
   **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
   removed the model; it still explains a stored legacy run's daily columns.
 - **Search** (`/help/search?q=`): results update as you type in the box at
-  the head of the page, which keeps focus; guides first, then glossary terms.
+  the head of the page, which keeps focus; guides first, then glossary terms,
+  each a list in columns (the overview's guide list: three across at 1440, so
+  a common word's ~50 terms start on the first screen), one column on a phone.
+  When both kinds match, **Guides (n)** and **Glossary terms (n)** under the
+  count jump to each list.
 
 ## Farmer view (`/farm`)
 
@@ -4013,18 +4141,32 @@ public shared view (`/share`), and the emails a farmer receives (confirm
 address, reset password, the farmer invite, the alert emails and their
 digest). The modeller workspace stays English.
 
-- **Switch.** `lib/i18n/LanguageSwitch.svelte`, "English | Afrikaans" (each
-  name in its own language, the button marked with that `lang`, `aria-pressed`
-  on the current one; "EN | AF" in the phone headers, the full name as the
-  accessible name). It sits above the sign-in forms (`AuthCard`), in the farm
+- **The language table.** Every language the site, the emails and the
+  database know is one entry in `packages/engine/src/languages.ts`
+  (`LANGUAGES`: code, own name, Intl locale, decimal mark; issue #58). The
+  switch, browser detection, number and date formatting, plural rules, API
+  validation, the invite dialog, the CSV language column and the database's
+  `language` table ([data-model.md § Languages](./data-model.md#languages-080_languagesql))
+  all read it; nothing else lists the languages. Frontend and backend import
+  it from `@water-management/engine/languages`.
+- **Switch.** `lib/i18n/LanguageSwitch.svelte`, drawn from the table. With
+  two languages it is "English | Afrikaans" (each name in its own language,
+  the button marked with that `lang`, `aria-pressed` on the current one;
+  "EN | AF" in the phone headers, the full name as the accessible name);
+  from three it becomes a `<select>` named "Language", each `<option>` in
+  its own language with its own `lang` (`LanguageSwitch.test.ts`,
+  `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
   pages' and the `/share` page's header, and under **Language and units** on the account page, which
   also sets the farm view's volume unit (m³ or ML). There it is `segmented`:
   the two buttons joined into one control sized like the form fields
   (36 px with a mouse, 44 px on touch and phones).
 - **Which language.** The account's `locale` when signed in and chosen, else
-  this device's choice (`localStorage` `wm.locale`, try/catch), else
-  Afrikaans when it is the browser's first language, else English
-  (`resolveLocale`, run by the root layout whenever the session changes).
+  this device's choice (`localStorage` `wm.locale`, try/catch), else the
+  first language in the browser's list (`navigator.languages`) that the
+  table has, by primary tag (`["de-DE", "af"]` gives Afrikaans,
+  `["en-ZA", "af"]` English), else English (`resolveLocale` through the
+  engine's `matchLocale`, run by the root layout whenever the session
+  changes).
   Choosing applies at once, is kept on the device and, signed in, saved with
   `PATCH /auth/me { locale }` ([api.md § Auth](./api.md#auth)). Signing up
   sends the page's language as the account's; an account created from an
@@ -4120,11 +4262,14 @@ digest). The modeller workspace stays English.
   sideways, no text is cut off in its box, and axe finds nothing, in light
   and dark. Specs read the Afrikaans from the catalogues
   (`e2e/support/af.ts`), so a corrected translation doesn't break them.
-- **Numbers and dates** (D8). The farm view writes a decimal comma in
-  Afrikaans at once ("84,9 ML"), with no-break spaces between thousands in
-  both languages. Dates follow the words' language (`en-ZA`, and `af-ZA` once
-  the Afrikaans words are in), so an English sentence never carries Afrikaans
-  month names.
+- **Numbers and dates** (D8). The farm view writes the chosen language's
+  decimal mark (the table's `decimalMark`) at once: a comma in Afrikaans
+  ("84,9 ML"), with no-break spaces between thousands in every language.
+  Dates and plural rules follow the words' language, in the table's Intl
+  locale (`en-ZA`, and `af-ZA` once the Afrikaans words are in), so an
+  English sentence never carries Afrikaans month names. The emails date in
+  the same locale (`mail/alerts.ts` `dateText`, the day without a leading
+  zero).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
   entries. It was written by the `af-translator` agent and reviewed by the
@@ -4164,6 +4309,40 @@ digest). The modeller workspace stays English.
   (`scripts/guards/i18n_stamp.mjs`) writes the current English's hash into
   its `sourceHash` and rewrites the sheet. It never writes a translation: an
   id without one is refused.
+
+### Adding a language
+
+A language is one table entry, three catalogue files, one index line and a
+translation run. No other code changes; `frontend/src/lib/i18n/testLanguage.test.ts`,
+`backend/src/mail/i18n/testLanguage.test.ts` and
+`backend/src/auth/testLanguage.db.test.ts` prove it with a stand-in `xx`
+that exists only in the tests.
+
+1. **Table entry.** Add `{ code, name, intl, decimalMark }` to `LANGUAGES`
+   in `packages/engine/src/languages.ts`: `code` the BCP 47 primary tag
+   (2–3 lower-case letters), `name` in the language itself, `intl` the Intl
+   locale South Africa writes it in (e.g. `zu-ZA`), `decimalMark` `.` or `,`.
+   The next migration run adds the code to the `language` table (no
+   migration file).
+2. **Catalogues**, each found by its file name, so they need no other line:
+   - site: `frontend/src/lib/i18n/messages/<code>.ts` exporting
+     `const <code>: Catalogue` (loaded lazily on first use);
+   - email: `backend/src/mail/i18n/<code>.ts` exporting `const <code>`,
+     **plus its line** in `backend/src/mail/i18n/catalogues.ts` (a Lambda
+     bundle can't find files by name);
+   - glossary: `frontend/src/lib/help/content.<code>.ts` exporting
+     `const HELP_<CODE>` (loaded lazily by `/farm/words`,
+     `lib/help/translations.ts`).
+   Start each empty: a missing message shows in English, and the page keeps
+   `lang="en"` until the site catalogue is complete. The unit tests fail
+   until all three exist (`locale.test.ts`, `translations.test.ts`,
+   `catalogues.test.ts`).
+3. **Translation run.** Export, translate, check and apply as above
+   (§ Translation).
+4. **Layout and axe.** The language's layout spec (as `af-layout.spec.ts`:
+   every translated page at 360 px, light and dark) passes, and so does
+   `language.spec.ts`. From the third language the switch is a `<select>`:
+   check it at 360 px in the headers and on the account page.
 
 ## Alerts
 

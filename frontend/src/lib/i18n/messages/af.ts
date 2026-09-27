@@ -93,6 +93,14 @@ export const af: Catalogue = {
 	'329d64e6': 'Stuur e-pos weer',
 	// Dismiss
 	'265915f3': 'Maak toe',
+	// Hide (password field)
+	'2bd339e0': 'Versteek',
+	// Show (password field)
+	'09ed6139': 'Wys',
+	// Hide password
+	'cd577cde': 'Versteek wagwoord',
+	// Show password
+	'500e3555': 'Wys wagwoord',
 	// Compared with last season
 	'3366c515': 'Vergeleke met verlede seisoen',
 	// Your dam
@@ -803,10 +811,10 @@ export const af: Catalogue = {
 	'7247e23b': 'Laai my data af',
 	// Your data has been downloaded.
 	'a51c54d9': 'Jou data is afgelaai.',
-	// Back to your account
-	'eb3bc0dd': 'Terug na jou rekening',
 	// Choose which alerts you get by email for each catchment, and how often. Alerts come from the catchment model: estimates, not instructions.
 	'2ba7c149': 'Kies watter waarskuwings jy per e-pos kry vir elke opvanggebied, en hoe gereeld. Waarskuwings kom van die opvanggebied se model: skattings, nie opdragte nie.',
+	// Back to your account
+	'eb3bc0dd': 'Terug na jou rekening',
 	// At most {cap} alert emails a day come right away. Any more wait for the next morning’s summary (06:00).
 	'6e6c53b1': 'Hoogstens {cap} waarskuwings-e-posse per dag kom dadelik. Die res wag vir die volgende oggend se opsomming (06:00).',
 	// None of your catchments can send you alerts yet.

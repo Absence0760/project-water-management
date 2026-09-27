@@ -368,7 +368,12 @@ textarea {
 /* A long table scrolls inside its box, so its header row stays in view while
    you read down it (the sticky thead below needs a scrolling ancestor with a
    height). Short tables are shorter than the cap and never get a scrollbar. */
+/* position: relative makes the wrap the containing block of the
+   absolutely positioned bits inside its cells (visually-hidden labels), so
+   they are clipped with the table instead of widening the page: on a phone
+   they gave /compare and the report 185 px of sideways scroll. */
 .table-wrap {
+	position: relative;
 	overflow: auto;
 	max-height: 70vh;
 	border: 1px solid var(--border);
@@ -516,10 +521,15 @@ table.data tr.flag {
 }
 
 /* ---- Page container --------------------------------------------------- */
+/* A small gutter below, never reserved room: a page whose content fits the
+   window must not scroll (docs/design/ui-playbook.md § 2). 5rem here made every
+   page that came within 70 px of the window's foot scroll for nothing. Room for
+   something fixed at the foot (the workspace's model save bar) is added only
+   while it shows, by the page that owns it. */
 .page {
 	max-width: 1480px;
 	margin: 0 auto;
-	padding: 1.25rem var(--gutter) 5rem;
+	padding: 1.25rem var(--gutter) 1rem;
 }
 .toolbar {
 	display: flex;

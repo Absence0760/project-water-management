@@ -1,6 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { HistoryEvent, HistoryRevision } from '$lib/api/types';
-import { eventLine, filterEntries, groupByChangeSet, groupByDay, itemLines, localTime, revisionLines, revisionTitle, seriesRestore } from './timeline';
+import {
+	entryHeading,
+	entrySummary,
+	eventLine,
+	filterEntries,
+	groupByChangeSet,
+	groupByDay,
+	historyContext,
+	itemLines,
+	localTime,
+	parseKind,
+	pickEntry,
+	revisionLines,
+	revisionTitle,
+	seriesRestore,
+	whenText
+} from './timeline';
 
 const rev = (over: Partial<HistoryRevision> = {}): HistoryRevision => ({
 	type: 'revision',
@@ -228,5 +244,64 @@ describe('seriesRestore', () => {
 		expect(seriesRestore(ev('series.created', kept))).toBeNull();
 		expect(seriesRestore(ev('restore', { target: 'model', revisionId: '42' }))).toBeNull();
 		expect(seriesRestore(rev())).toBeNull();
+	});
+});
+
+describe('the page: the kind filter, the rows, the pick and the header line', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+
+	it('reads the kind filter from the URL, and anything unknown as every kind', () => {
+		expect(parseKind('revision')).toBe('revision');
+		expect(parseKind('series')).toBe('series');
+		expect(parseKind('nonsense')).toBe('');
+		expect(parseKind('')).toBe('');
+		expect(parseKind(null)).toBe('');
+	});
+
+	it('sums up a row: a revision by its title and first line, an event by its sentence', () => {
+		const two = rev({
+			reason: 'Surveyed',
+			changes: [
+				{ area: 'network', kind: 'changed', subject: 'Hilltop', text: 'Hilltop: dam capacity 100,000 m³ → 250,000 m³' },
+				{ area: 'network', kind: 'changed', subject: 'Hilltop', text: 'Hilltop: area 10 → 12 km²' }
+			]
+		});
+		const [withEvent] = groupByChangeSet([two, ev('member.added', { displayName: 'Bo', role: 'viewer' })]);
+		expect(entrySummary(withEvent!)).toEqual({ title: 'Model changed', line: 'Hilltop: dam capacity 100,000 m³ → 250,000 m³', more: 2, reason: true });
+		const [alone] = groupByChangeSet([ev('member.added', { displayName: 'Bo', role: 'viewer' }, { changeSet: null })]);
+		expect(entrySummary(alone!)).toEqual({ title: 'Added Bo as viewer', line: '', more: 0, reason: false });
+	});
+
+	it('heads the picked entry by its revision, else by the kind of change', () => {
+		const [r] = groupByChangeSet([rev({ source: 'settings_patch' })]);
+		expect(entryHeading(r!)).toBe('Settings changed');
+		const heads = ['series.replaced', 'member.role', 'publication.published', 'team_member.added', 'restore'].map(
+			(k) => entryHeading(groupByChangeSet([ev(k, {}, { changeSet: null })])[0]!)
+		);
+		expect(heads).toEqual(['Data series', 'Members', 'Publication', 'Change', 'Restores of data']);
+	});
+
+	it('picks the entry the URL names, else the newest, else none', () => {
+		const entries = groupByChangeSet([rev({ id: '2', changeSet: 'a' }), rev({ id: '1', changeSet: 'b' })]);
+		expect(pickEntry(entries, 'revision1')?.key).toBe('revision1');
+		expect(pickEntry(entries, 'revision99')?.key).toBe('revision2');
+		expect(pickEntry(entries, null)?.key).toBe('revision2');
+		expect(pickEntry([], 'revision1')).toBeNull();
+	});
+
+	it('says what changed last, by whom and when, on the viewer’s clock', () => {
+		process.env.TZ = 'Pacific/Kiritimati'; // UTC+14
+		const now = new Date('2026-09-25T09:00:00Z'); // 25 Sep 23:00 there
+		const [today] = groupByChangeSet([rev({ createdAt: '2026-09-25T08:05:00.000000Z' })]);
+		expect(historyContext(today!, '2026-09-01T00:00:00Z', now)).toBe('Latest change today 22:05 by Ann: Model changed · recorded since 1 Sep 2026');
+		const [older] = groupByChangeSet([ev('run.created', {}, { createdAt: '2026-09-20T01:00:00.000000Z', actor: 'Bo' })]);
+		expect(historyContext(older!, null, now)).toBe('Latest change 20 Sep 2026 15:00 by Bo: Ran the model');
+		const [gone] = groupByChangeSet([rev({ actor: null, createdAt: '2026-09-24T09:00:00.000000Z' })]);
+		expect(historyContext(gone!, null, now)).toBe('Latest change yesterday 23:00 by a deleted account: Model changed');
+		expect(historyContext(null, '2026-09-01T00:00:00Z', now)).toBe('No changes recorded yet · recorded since 1 Sep 2026');
+		expect(whenText('2026-09-25T08:05:00.000000Z', now)).toBe('today 22:05');
 	});
 });

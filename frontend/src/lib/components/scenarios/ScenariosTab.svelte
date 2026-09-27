@@ -9,7 +9,8 @@
 	//
 	// Layout (issue #17, option A): the section header carries the counts
 	// (summary.ts) and + New scenario, which opens the create dialog at
-	// `new=1` (Back closes it). The list is a rail beside the scenario, as tall
+	// `new=1` (Back closes it; Compare runs' + New what-if adds `base=<runId>`
+	// to start it on that run). The list is a rail beside the scenario, as tall
 	// as the window from where it starts and scrolling inside itself; the
 	// scenario is an editing page and scrolls with the page. With none picked
 	// the first (newest) opens, in place (replaceState), so there's no empty
@@ -107,6 +108,7 @@
 		if (id) q.set('scenario', id);
 		else q.delete('scenario');
 		q.delete('new');
+		q.delete('base');
 		return goto(`?${q}`, { noScroll: true, keepFocus: true, replaceState: replace });
 	}
 	// None picked: open the first (the newest). Not while the create dialog is open (it picks the new one).
@@ -194,17 +196,25 @@
 	});
 	$effect(() => {
 		// Closed (Cancel, Esc, the ✕): drop `new` in place.
-		if (!createOpen && untrack(() => newParam)) void goto(withoutParam(page.url, 'new'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!createOpen && untrack(() => newParam)) {
+			const u = new URL(page.url);
+			u.searchParams.delete('base');
+			void goto(withoutParam(u, 'new'), { replaceState: true, noScroll: true, keepFocus: true });
+		}
 	});
+	// `base=<runId>` (Compare runs' + New what-if) picks the base run, when it is one a scenario can start from.
+	const baseParam = $derived(page.url.searchParams.get('base'));
 	$effect(() => {
 		if (!createOpen) return;
+		const want = untrack(() => baseParam);
+		if (want && untrack(() => bases).some((r) => r.id === want)) newBase = want;
 		createError = null;
 		void tick().then(() => document.getElementById('new-scenario-name')?.focus());
 	});
 	const newHref = $derived(withParam(page.url, 'new', '1'));
 	const newLabel = $derived(applicant ? 'New application' : 'New scenario');
 
-	// --- the section header (not in the Applicant view, which has none) ---
+	// --- the section header (the Applicant view draws its own, with New application) ---
 	const summary = $derived(scenarios ? scenariosSummary(scenarios) : null);
 	$effect(() => fillHeader({ context: summary ? headerContext : undefined, actions: headerActions }, !applicant));
 
@@ -235,7 +245,6 @@
 		<!-- Not "Scenarios": the tab body is already the region of that name (landmarks need unique names). -->
 		<div class="panel-head">
 			<h2 id="scenarios-h">{applicant ? 'Your applications' : 'All scenarios'}</h2>
-			{#if applicant && publishedRunId}<a class="btn btn-sm btn-primary" href={newHref}>{newLabel}</a>{/if}
 		</div>
 		{#if applicant && !publishedRunId}
 			<p class="muted small">Nothing is published yet: an application starts on the published baseline.</p>

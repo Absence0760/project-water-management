@@ -67,7 +67,11 @@ section it belongs to, with the example that taught it.
   section's own actions, **Add data** and **Run model**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
   (`workspace/headerSlot.svelte.ts`); it never draws its own title (Dams
-  briefly had two). A section whose main action replaces Run model passes
+  briefly had two). A view that is also a standalone page draws its title
+  only there: Compare runs showed "Compare runs" twice in the workspace
+  (the header's `h1` and its own `h2`, 65 px) until it filled the header
+  with its context and actions when inside a tab and kept its own `h1`
+  only on `/compare`. A section whose main action replaces Run model passes
   it as `main`, rendered last after a plain Add data: Runs & results' run
   form (label, Run forecast, Run model) went there from a full-width panel
   that pushed the results 110 px down, its status one slim line under the
@@ -79,11 +83,28 @@ section it belongs to, with the example that taught it.
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
   where it makes sense (~1100×620). The page doesn't scroll; long lists
-  scroll *inside their card*. Add the fitted class to the page's
-  `.page:has(…)` rule in `routes/projects/[id]/+page.svelte`, which swaps
-  its 4rem bottom padding for a 1rem gutter: Applications fitted its card to
-  the window yet the page still scrolled 42 px until it was listed there. Help, guides and account pages scroll normally
-  with a readable text column (~75ch).
+  scroll *inside their card*. Size to the page's 1rem gutter
+  (`calc(100vh - top - var(--dock-h, 0px) - 1rem)`). Help, guides and
+  account pages scroll normally with a readable text column (~75ch).
+- **No reserved room below a page; no pointless scroll.** `.page` keeps a
+  1rem gutter under its content, and the workspace adds the model save
+  bar's height (`--dock-h`) only while the bar shows. Don't pad a page
+  "for breathing room": the old 5rem (4rem in the workspace) made every page
+  within 56–70 px of the window's foot scroll for nothing (an empty
+  project's Data tab by 3 px, a small one's History by 52 px at 1280×800),
+  and each fitted page had to be listed in a `.page:has(…)` override to
+  escape it (Applications scrolled 42 px until it was). Something fixed
+  at the foot is the owner's to make room for, and only while it shows.
+  `no-pointless-scroll.spec.ts` checks every tab and app page scrolls no
+  further than its content plus the gutter, and that the save bar clears
+  the last row on a fitted page and a long one.
+- **A reading page that fits the window doesn't scroll.** Help's sticky
+  contents column was as tall as the window minus 2rem, and the page's (then 5rem)
+  bottom padding sat under it, so search with nothing typed and an unknown
+  guide scrolled 60 px at 1280×800. A sticky column starts and sticks at the
+  page's top gutter and ends as far from the bottom
+  (`max-height: calc(100vh - 2 × gutter)`); the end-of-page reading space goes
+  on the text column (`help-pages.spec.ts` checks the page and the column).
 - **A sticky rail on a reading page fits from where it starts.** Runs &
   results scrolls (its results are long), with the runs list in a sticky
   rail beside them. `max-height: calc(100vh - top-offset)` only fits once
@@ -128,6 +149,14 @@ section it belongs to, with the example that taught it.
   non-sticky ancestor: a stuck element's `getBoundingClientRect()` is where
   it is stuck, so measuring the rail itself grew its top with the scroll
   and shrank it to a sliver.
+- **When the narrow layout shows different content, pick the layout in
+  script.** History's rows beside a detail become whole entries on a phone
+  (each with its own restore buttons, since a detail stacked under fifty rows
+  is out of reach). Rendering both and hiding one with a container query
+  would put every restore button in the DOM twice: duplicate names for
+  strict locators and axe. Measure the column (`bind:clientWidth`) and
+  render one or the other; keep container queries for restyling the same
+  markup.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
@@ -172,6 +201,22 @@ section it belongs to, with the example that taught it.
   doesn't add its own `scroll-margin-top` on top (the notice's 72 px then
   doubled it). `farm-view.spec.ts` checks a link lands below the header at
   both widths.
+- **Print is a layout too.** The report route feeds the server PDF, so the
+  frame must never reach paper: the shell's `.app-header` was renamed when
+  the sidebar came in, the report's print rule kept hiding the old name, and
+  the phone bar printed on every report's cover (A4 is under 900 px). Worse,
+  whichever frame was drawn when printing began changed the whole PDF: the
+  sidebar's grid column made 37 pages of 22, and the PDF with the phone bar
+  on its cover printed every word at ~80 % of the stylesheet's size. The frame now hides itself in print (`AppShell.svelte`). Check a
+  print change by comparing the PDF (`page.pdf()`, `pdftotext -bbox` for type
+  size, `pdfinfo` for pages), and keep screen-only fixes in `@media screen`.
+- **An absolutely positioned bit inside a scrolling table escapes it**
+  unless the box is its containing block: the visually-hidden words in
+  `/compare`'s delta cells and the report's EWR grid gave both pages 185 px of
+  sideways scroll on a phone while the workspace, which had its own
+  `position: relative` rule, didn't. `.table-wrap` is `position: relative`
+  app-wide now; `expectNoSidewaysScroll` (`support/reflow.ts`) on a phone
+  catches the next one.
 
 ## 3. Colour, wording, content
 
@@ -269,7 +314,9 @@ picker in the header, moved panels, anchor redirects),
 with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
 window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
-cards in a narrow column).
+cards in a narrow column), `history/HistoryTab.svelte` (a timeline: rows
+beside the picked entry with Newer/Older, filters in the URL, whole entries
+on a phone).
 
 Interaction details that bit:
 
@@ -297,9 +344,16 @@ Interaction details that bit:
 - **Move a page's main actions to where they're seen.** Scenarios' Run sat
   under the changes, the form and a checkbox per node, off the first screen
   on a big network; it now sits in the scenario's head row. A section's
-  "new" action goes in the section header (or at the top of the list where
-  there is no header, as in the Applicant view), never under the list,
-  where thirty items pushed it 2,700 px down.
+  "new" action goes in the section header (the Applicant view's New
+  application too, once it got one), never under the list, where thirty
+  items pushed it 2,700 px down.
+- **A view shared by a page and a tab draws its title only on the page.**
+  Compare runs (`CompareView`) drew its own "Compare runs" heading and
+  context under the workspace's section header, so the tab had the title
+  twice, and its spec pinned the second one. Inside the workspace it now
+  puts its context in the header (`fillHeader`) and draws no heading; the
+  standalone `/compare` keeps its `h1`. Count *all* headings with the
+  title's name, not just `h1`s, when checking "one page title".
 - **A fragment into a lazy tab needs the tab to land it.** Workspace tabs
   are lazy chunks, so the browser's own jump to `#set-ewr` runs before the
   element exists and the page opens at the top. Settings' note links
@@ -312,7 +366,11 @@ Interaction details that bit:
   no count to show; Settings & calibration's context line says where the
   runoff parameters came from (the fit's day and score, "changed since the
   fit", or no fit record) and its action jumps to the fit. Find the one fact
-  a user opens the page to check, and put it there.
+  a user opens the page to check, and put it there. It describes the
+  section, not the filter: History's "Latest change today 14:05 by Ann:
+  Model changed" stays the latest of all while the list is filtered to one
+  unit (a small unfiltered read beside the filtered one), so a filter never
+  makes the header claim something false.
 - **Width rules for a field's inputs catch its checkbox.** Settings'
   `.field input { width: 100% }` stretched "Vary it by month"'s box across
   the field, with the words half a field away. Scope such rules with
@@ -354,7 +412,8 @@ Interaction details that bit:
   `scenarios.ts`, `allocations.ts`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
-  1440×960, lists scroll inside their card (see `network-map.spec.ts`,
+  1440×960, lists scroll inside their card; a new tab or page joins the
+  list in `no-pointless-scroll.spec.ts` (see `network-map.spec.ts`,
   `portfolio.spec.ts`, `dams-page.spec.ts`, `data-page.spec.ts`).
 - **Modals make the page inert, but Playwright still sees it.** Scope
   locators to the dialog and close it before touching the page; duplicate

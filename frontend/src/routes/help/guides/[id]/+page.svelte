@@ -3,13 +3,17 @@
 	// formulas and diagrams, with links into the glossary (/help/glossary#<id>) and to
 	// other guides. Guide text is plain strings with a small markup that
 	// inline() parses, so nothing here is {@html}.
+	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import Diagram from '$lib/components/help/Diagram.svelte';
+	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
 	import PictureTour from '$lib/components/help/PictureTour.svelte';
 	import RichText from '$lib/components/help/RichText.svelte';
+	import { holdAnchor } from '$lib/help/anchor';
 	import { helpFor } from '$lib/help/content';
 	import { GUIDE_KIND_TITLES, GUIDES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
+	import { currentSection } from '$lib/help/spy';
 
 	const guide = $derived(guideFor(page.params.id ?? ''));
 	const index = $derived(guide ? GUIDES.indexOf(guide) : -1);
@@ -17,25 +21,79 @@
 	const next = $derived(index >= 0 && index < GUIDES.length - 1 ? GUIDES[index + 1] : undefined);
 	const terms = $derived((guide?.terms ?? []).map((id) => helpFor(id)).filter((e) => e !== undefined));
 	const related = $derived((guide?.related ?? []).map((id) => guideFor(id)).filter((g) => g !== undefined));
+	const sectionIds = $derived(guide ? guide.sections.map((s) => sectionId(s.heading)) : []);
+
+	// A link to one section (#<section>, copied from "On this page"): the SPA
+	// renders after navigation, so land it once the guide exists and hold it
+	// while the pictures and fonts settle (lib/help/anchor.ts), focusing its
+	// heading, as the glossary does for a term.
+	$effect(() => {
+		const id = decodeURIComponent(page.url.hash.slice(1));
+		if (!id || !sectionIds.includes(id)) return;
+		let live = true;
+		let release: (() => void) | undefined;
+		tick().then(() => {
+			const el = live ? document.getElementById(id) : null;
+			if (!el) return;
+			release = holdAnchor(el);
+			el.focus({ preventScroll: true });
+		});
+		return () => {
+			live = false;
+			release?.();
+		};
+	});
+
+	// "On this page" marks the section being read (aria-current), like the
+	// glossary's contents: the last heading that has passed a line a little
+	// below the top of the window (under the phone bar), or the last section at
+	// the end of the page. Nothing while the intro is still in view.
+	let reading = $state('');
+	$effect(() => {
+		const ids = sectionIds;
+		if (ids.length < 2) {
+			reading = '';
+			return;
+		}
+		let frame = 0;
+		const spy = () => {
+			const header = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--header-h')) || 0;
+			const doc = document.documentElement;
+			const atEnd = window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
+			const tops = ids.map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity);
+			const i = currentSection(tops, header + 64, atEnd);
+			reading = i >= 0 ? ids[i]! : '';
+		};
+		const onScroll = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(spy);
+		};
+		tick().then(spy);
+		window.addEventListener('scroll', onScroll, { passive: true });
+		window.addEventListener('resize', onScroll);
+		return () => {
+			cancelAnimationFrame(frame);
+			window.removeEventListener('scroll', onScroll);
+			window.removeEventListener('resize', onScroll);
+		};
+	});
 </script>
 
 <svelte:head><title>{guide ? `${guide.title} · Help` : 'Guide not found'} · Water Management</title></svelte:head>
 
 <article class="guide-page">
-	<nav aria-label="Breadcrumb" class="crumbs">
-		<ol>
-			<li><a href="{base}/help">Help</a></li>
-			{#if guide}<li>{GUIDE_KIND_TITLES[guide.kind]}</li>
-				<li aria-current="page">{guide.title}</li>{/if}
-		</ol>
-	</nav>
+	<HelpCrumbs
+		trail={guide
+			? [{ label: 'Help', href: `${base}/help` }, { label: GUIDE_KIND_TITLES[guide.kind] }, { label: guide.title }]
+			: [{ label: 'Help', href: `${base}/help` }]}
+	/>
 
 	{#if !guide}
-		<h1>Guide not found</h1>
+		<h1 class="title">Guide not found</h1>
 		<p>There is no guide called “{page.params.id}”. <a href="{base}/help">See all guides and the glossary</a>.</p>
 	{:else}
 		<header class="head">
-			<h1>{guide.title}</h1>
+			<h1 class="title">{guide.title}</h1>
 			<p class="lede">{guide.summary}</p>
 			{#if guide.tab}
 				<p class="muted where">In a project: the <strong>{TAB_TITLES[guide.tab]}</strong> tab.</p>
@@ -47,7 +105,8 @@
 				<p class="muted">On this page</p>
 				<ul>
 					{#each guide.sections as s (s.heading)}
-						<li><a href="#{sectionId(s.heading)}">{s.heading}</a></li>
+						{@const id = sectionId(s.heading)}
+						<li><a href="#{id}" aria-current={reading === id ? 'location' : undefined}>{s.heading}</a></li>
 					{/each}
 				</ul>
 			</nav>
@@ -55,7 +114,7 @@
 
 		{#each guide.sections as s (s.heading)}
 			<section aria-labelledby={sectionId(s.heading)}>
-				<h2 id={sectionId(s.heading)}>{s.heading}</h2>
+				<h2 id={sectionId(s.heading)} tabindex="-1">{s.heading}</h2>
 				{#each s.blocks as b, i (i)}
 					{#if b.type === 'p'}
 						<p><RichText text={b.text} /></p>
@@ -143,7 +202,7 @@
 			grid-column: 2;
 			grid-row: 1 / span 999;
 			position: sticky;
-			top: 1rem;
+			top: 1.25rem;
 			margin: 0;
 		}
 		/* In the narrow rail a wrapped heading reads better as a plain block link than a bullet. */
@@ -157,24 +216,8 @@
 			line-height: 1.35;
 		}
 	}
-	.crumbs ol {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-		margin: 0 0 1rem;
-		padding: 0;
-		list-style: none;
-		font-size: 0.875rem;
-	}
-	.crumbs li:not(:last-child)::after {
-		content: '›';
-		margin-left: 0.35rem;
-		color: var(--text-muted);
-	}
-	.crumbs [aria-current='page'] {
-		color: var(--text-muted);
-	}
-	.head h1 {
+	/* Every help page's title has this size (the overview, the glossary, search). */
+	.title {
 		margin: 0 0 0.4rem;
 		font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
 	}
@@ -207,6 +250,11 @@
 		display: inline-block;
 		min-height: 24px;
 		padding: 0.1rem 0;
+	}
+	/* The section being read: in words' weight as well as colour. */
+	.onpage a[aria-current] {
+		color: var(--text);
+		font-weight: 600;
 	}
 	section > h2 {
 		margin: 1.75rem 0 0.6rem;
