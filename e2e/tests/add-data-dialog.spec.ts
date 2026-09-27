@@ -1,8 +1,9 @@
 // The header's Add data dialog (docs/ui.md § Header: data freshness and "Add
 // data"): what it shows, the ways it opens (the button, a CSV dropped on the
-// page) and closes (Escape, the close button, an upload), the question before
-// a read file is thrown away, where focus goes, and a11y at desktop and phone.
-// Synthetic series only.
+// page) and closes (Escape, the close button, Cancel, an upload), the question
+// before a read file is thrown away, where focus goes, and a11y at desktop and
+// phone. It is the app's shared Dialog: the drawn close button, and Cancel and
+// the upload button at the right of the action row. Synthetic series only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addDataDialog, csv, dropCsv } from '../support/addData.ts';
 import { addMember, createProject, putSeries, syntheticRain } from '../support/api.ts';
@@ -38,6 +39,30 @@ test('the dialog shows the upload form, closes on Escape and gives focus back to
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeDisabled();
 
 	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+	await expect(addButton(page)).toBeFocused();
+});
+
+test('it is the shared dialog: a drawn close button, and Cancel then the upload button at the right of the action row', async ({ page, owner }) => {
+	void owner;
+	await seeded(page, 'Add data layout');
+	const dialog = addDataDialog(page);
+	await addButton(page).click();
+	// The close button draws its cross (an SVG), not a font's ✕, which some fonts render as a plain X.
+	const close = dialog.getByRole('button', { name: 'Close dialog' });
+	await expect(close).toHaveText('');
+	await expect(close.locator('svg')).toHaveCount(1);
+	const actions = dialog.locator('.actions').getByRole('button');
+	await expect(actions).toHaveText(['Cancel', 'Upload and merge']);
+	const box = (await dialog.boundingBox())!;
+	const upload = (await actions.nth(1).boundingBox())!;
+	const cancel = (await actions.nth(0).boundingBox())!;
+	// Right-aligned inside the dialog's padding (1.25rem = 17.5 px), side by side on one line.
+	expect(box.x + box.width - (upload.x + upload.width)).toBeLessThan(24);
+	expect(cancel.x + cancel.width).toBeLessThanOrEqual(upload.x);
+	expect(Math.abs(cancel.y - upload.y)).toBeLessThan(2);
+	// Cancel with nothing read closes at once and gives focus back.
+	await actions.nth(0).click();
 	await expect(dialog).toBeHidden();
 	await expect(addButton(page)).toBeFocused();
 });
@@ -100,9 +125,22 @@ test('an upload that changes stored days asks in the dialog; Back returns to the
 	const confirm = dialog.getByTestId('overwrite-confirm');
 	await expect(confirm).toContainText('This changes 2 days already stored in “Rainfall — catchment”');
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toHaveCount(0);
-	await dialog.getByRole('button', { name: 'Back', exact: true }).click();
+	// The action row asks too: Back beside Overwrite, where Cancel and Upload were.
+	await expect(dialog.locator('.actions').getByRole('button')).toHaveText(['Back', 'Overwrite 2 days']);
+	const back = dialog.getByRole('button', { name: 'Back', exact: true });
+	await back.click();
 	await expect(confirm).toHaveCount(0);
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
+	// The button that was Back is Cancel again and keeps the focus; Cancel asks before discarding the file.
+	await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+	let asked = '';
+	page.once('dialog', (d) => {
+		asked = d.message();
+		void d.dismiss();
+	});
+	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+	await expect.poll(() => asked).toBe("Discard the file you haven't uploaded yet?");
+	await expect(dialog).toBeVisible();
 });
 
 test('a viewer has no Add data, and a dropped file opens nothing', async ({ page, owner, signIn }) => {

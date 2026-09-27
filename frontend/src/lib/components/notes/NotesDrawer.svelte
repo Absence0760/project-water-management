@@ -1,7 +1,9 @@
 <!--
 	A notes button with its count badge, opening the notes on one target in a
-	dialog (WP-2.7; docs/ui.md § Notes): on a Network node row, a run's Record
-	group and each settings group. Counts come from the project's shared
+	side sheet (WP-2.7; docs/ui.md § Notes): on a Network node row, a run's
+	Record group and each settings group. The add form sits on top and the
+	notes scroll under it, with Close pinned at the foot, so thirty notes never
+	push either off the screen. Counts come from the project's shared
 	noteCounts, refreshed after any change.
 -->
 <script lang="ts">
@@ -45,9 +47,9 @@
 	{#if count > 0}<span class="count" aria-hidden="true">{count}</span>{/if}
 </button>
 
-<Dialog bind:open title={targetTitle(target)} wide>
+<Dialog bind:open title={targetTitle(target)} side>
 	{#if open}
-		<NotesList {projectId} {target} {canWrite} onChanged={() => counts.refresh()} />
+		<NotesList {projectId} {target} {canWrite} formFirst onChanged={() => counts.refresh()} />
 	{/if}
 	{#snippet actions()}
 		<button type="button" class="btn" onclick={() => (open = false)}>Close</button>

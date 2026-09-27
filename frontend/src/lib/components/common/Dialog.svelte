@@ -17,6 +17,8 @@
 		keepInputs = false,
 		// Fixed under the title, above the scrolling body (a side sheet's picker), so nothing scrolls under it.
 		subhead,
+		// Asked before Escape or the close button closes it; false keeps it open (Add data's "discard the file?").
+		beforeclose,
 		children,
 		actions
 	}: {
@@ -27,6 +29,7 @@
 		side?: boolean;
 		keepInputs?: boolean;
 		subhead?: Snippet;
+		beforeclose?: () => boolean;
 		children: Snippet;
 		actions: Snippet;
 	} = $props();
@@ -49,6 +52,20 @@
 	function oncancel(e: Event) {
 		if (e.target === el && !e.defaultPrevented) open = false;
 	}
+
+	/** Close unless `beforeclose` says no. */
+	function requestClose() {
+		if (!beforeclose || beforeclose()) open = false;
+	}
+
+	// With a `beforeclose`, Escape is handled here rather than through `cancel`:
+	// once a page has refused one `cancel` with no click since, Chrome closes on
+	// the next Escape without firing it, so the question would be skipped.
+	function onkeydown(e: KeyboardEvent) {
+		if (!beforeclose || e.key !== 'Escape' || e.defaultPrevented) return;
+		e.preventDefault();
+		requestClose();
+	}
 </script>
 
 <dialog
@@ -59,6 +76,7 @@
 	class:keep-inputs={keepInputs}
 	aria-labelledby={titleId}
 	{oncancel}
+	{onkeydown}
 	onclose={() => (open = false)}
 >
 	<h2 id={titleId}>{title}</h2>
@@ -67,7 +85,7 @@
 	<div class="actions">{@render actions()}</div>
 	<!-- A visible way out for people who don't know Esc closes it. Last in the DOM so
 	     showModal() still focuses the dialog's first real control; drawn top right. -->
-	<button type="button" class="x" aria-label="Close dialog" title="Close (Esc)" onclick={() => (open = false)}>
+	<button type="button" class="x" aria-label="Close dialog" title="Close (Esc)" onclick={requestClose}>
 		<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
 	</button>
 </dialog>

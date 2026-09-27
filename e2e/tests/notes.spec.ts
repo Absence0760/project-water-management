@@ -3,10 +3,12 @@
 // farmer's page lists only the farm-visible one under "Notes about your
 // farm", and the farmer's own note reaches the WUA. Notes are plain text:
 // markup shows as typed, and line breaks are kept. Settings groups take notes
-// too, and the Project page lists the newest.
+// too, and the Project page lists the newest. The notes open in a side sheet
+// with the add form on top and Close pinned, so thirty notes push neither
+// off the screen.
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createRun, seedRunnableProject } from '../support/api.ts';
+import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('a farm note shown to the farm reaches its farmer; a team note never does', async ({ page, owner, signIn }) => {
@@ -94,3 +96,58 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Add a note on this run' })).toBeVisible();
 });
+
+for (const size of [
+	{ name: 'desktop', width: 1440, height: 960 },
+	{ name: 'phone', width: 390, height: 844 }
+]) {
+	test(`thirty notes: a side sheet with the form on top, the notes scrolling under it and Close in view; no a11y violations (${size.name})`, async ({ page, owner }) => {
+		void owner;
+		await page.setViewportSize({ width: size.width, height: size.height });
+		const project = await createProject(page.request, `Notes drawer ${size.name}`);
+		for (let i = 1; i <= 30; i++) {
+			const body = i % 5 === 0 ? `Logger at the weir moved ${i} m downstream after the flood; readings before and after are not directly comparable.\nChecked by the field team.` : `Note ${i}: dam raised per owner`;
+			expect((await page.request.post(`${API_URL}/projects/${project.id}/notes`, { data: { body, visibility: 'team' } })).status()).toBe(201);
+		}
+		await page.goto(`/projects/${project.id}?tab=project`);
+		const button = page.getByRole('button', { name: 'Notes on the project (30)' });
+		await button.click();
+		const dialog = page.getByRole('dialog', { name: 'Project notes' });
+		const items = dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem');
+		await expect(items).toHaveCount(30);
+		await expect(items.first()).toContainText('Logger at the weir moved 30 m');
+
+		// A sheet down the right edge, the full height; the whole width on a phone.
+		const box = (await dialog.boundingBox())!;
+		expect(Math.round(box.y)).toBe(0);
+		expect(Math.round(box.height)).toBe(size.height);
+		expect(Math.round(box.x + box.width)).toBeGreaterThanOrEqual(size.width - 16);
+		if (size.name === 'phone') expect(Math.round(box.x)).toBe(0);
+		// The form comes first, inside the first screen; the notes scroll inside the sheet, which doesn't grow.
+		const add = dialog.getByRole('button', { name: 'Add note' });
+		await expect(add).toBeInViewport();
+		expect((await dialog.getByLabel('Add a note').boundingBox())!.y).toBeLessThan((await items.first().boundingBox())!.y);
+		const body = dialog.locator(':scope > .body');
+		expect(await body.evaluate((b) => b.scrollHeight > b.clientHeight)).toBe(true);
+		await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+		await body.evaluate((b) => (b.scrollTop = b.scrollHeight));
+		await expect(items.last()).toBeInViewport();
+		await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeInViewport();
+		expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+
+		await expectNoViolations(page, { include: 'dialog[open]' });
+
+		// A new note lands at the top of the list, right under the form.
+		await body.evaluate((b) => (b.scrollTop = 0));
+		await dialog.getByLabel('Add a note').fill('Weir recalibrated');
+		await add.click();
+		await expect(items).toHaveCount(31);
+		await expect(items.first()).toContainText('Weir recalibrated');
+		await expect(items.first()).toBeInViewport();
+
+		// Escape closes it and gives focus back to the button, whose count follows.
+		await page.keyboard.press('Escape');
+		await expect(dialog).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Notes on the project (31)' })).toBeFocused();
+	});
+}

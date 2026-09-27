@@ -956,6 +956,17 @@
 //             ~4, for four new #17 pages being built in parallel: each one
 //             measured against this ceiling, not against the others. No new
 //             dependency.
+// 2026-09-27  total 1004 → 1006 KB (measured 1005). main @ a72132d5 was
+//             already over: 1 028 283 bytes gzip against the 1 028 096 a
+//             1004 KB ceiling allows (the i18n and #17 pages since the last
+//             entry). Issue #17's leftovers (the Add data dialog on the
+//             shared Dialog, the notes as a side sheet with the form on top,
+//             the download preview's row fixes) add 598 bytes → 1 028 881:
+//             Dialog's `beforeclose` and Esc handling, UploadForm's external
+//             buttons, NotesList's form-first layout, and help text for notes
+//             and the download preview (~300 bytes of words). Largest chunk
+//             and tab chunk unchanged. No new dependency. Headroom ~1 KB:
+//             History (the last #17 section) must trim or bring its own entry.
 // Run:   pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -966,7 +977,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1004,
+	totalCodeKb: 1006,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
