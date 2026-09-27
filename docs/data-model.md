@@ -1637,6 +1637,26 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   reset. Deny-all policy, as `login_throttle`. Numbers:
   [security.md § Password reset, email verification and invites](./security.md#password-reset-email-verification-and-invites).
 
+### Display preferences (082_user_preferences.sql)
+
+| Table | Holds |
+| --- | --- |
+| `user_preferences` | One row per account that saved any: `user_id` (primary key, cascade), `preferences` (jsonb, an object of at most 4 KB), `updated_at` |
+
+- Today `preferences` is `{ hiddenTabs: [...] }`, the workspace sections the
+  person hid from their sidebar ([ui.md § Tabs by role](./ui.md)); later
+  display choices (the roadmap's WP-1.26 unit preferences) join it as keys.
+  The backend validates the shape (`auth/preferences.ts`, zod); the table
+  keeps it an object of bounded size (`CHECK`).
+- Its own table, not an `app_user` column, because `app_user`'s SELECT
+  policy (068) lets you read the account of everyone you work with. Here one
+  policy, `user_preferences_own` (`FOR ALL`, `user_id =
+  app_current_user_id()` both ways), means your own row only: read, insert,
+  update and delete. `water_app` has all four grants. Proven with positive
+  controls in `src/auth/preferences.db.test.ts`.
+- Goes with the account (cascade) and is in the data-subject export
+  (`preferences`).
+
 ### Languages (080_language.sql)
 
 | Table | Holds |

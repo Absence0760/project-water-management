@@ -119,7 +119,7 @@ Hono backend
  └─ export routes streamed (Function URL invoke mode RESPONSE_STREAM)       (WP-1.29, if chosen)
 Postgres (new next-free NNN_ migrations)
  ├─ model_run.pinned_at, pinned_by                                          (WP-1.11)
- ├─ app_user.preferences jsonb                                              (WP-1.26)
+ ├─ user_preferences.preferences jsonb (082, built)                         (WP-1.26)
  ├─ created_by nullable on project/team/model_run; app_delete_account()     (WP-1.13)
  └─ node: irrigation efficiency, dam area–volume, seepage; transfer.priority (WP-1.19–1.21, landed in 006)
 packages/engine (pure)
@@ -1376,12 +1376,14 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 - **Goal:** each user sees flows and volumes in their own units.
 - **Changes:**
-  - **migration:** `app_user.preferences jsonb NOT NULL DEFAULT '{}'`.
-    `app_user` has no RLS; the backend reads and writes only the session
-    user's row.
-  - **backend:** `PATCH /auth/me { preferences }` (zod:
+  - **migration:** none. The preferences document exists since 082
+    (`user_preferences`, own row only under RLS; built for the members'
+    own sidebar sections, data-model.md § Display preferences).
+  - **backend:** a `units` key in `PreferencesPatch`
+    (`backend/src/auth/preferences.ts`; zod:
     `units.flow ∈ m3s | m3day | mlday | ls`, `units.volume ∈ mm3a | mla`);
-    `user` responses include `preferences`.
+    `PATCH /auth/me { preferences }` and the `user.preferences` in responses
+    already exist.
   - **frontend:**
     - `lib/format/units.ts` conversions (one table, unit-tested);
     - applied to headline cards, the per-farm table, charts (axis labels),

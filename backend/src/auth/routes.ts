@@ -16,6 +16,7 @@ import { readJson } from '../http/body.js';
 import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
+import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -38,9 +39,15 @@ const RegisterBody = z.object({
 });
 const LoginBody = z.object({ email, password: z.string().min(1).max(200) });
 const MeBody = z
-	.object({ displayName: displayName.optional(), locale: locale.optional(), volumeUnit: volumeUnit.optional() })
-	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined, {
-		message: 'nothing to change: send displayName, locale or volumeUnit'
+	.object({
+		displayName: displayName.optional(),
+		locale: locale.optional(),
+		volumeUnit: volumeUnit.optional(),
+		/** The person's own display preferences (082, auth/preferences.ts): the keys sent replace theirs. */
+		preferences: PreferencesPatch.optional()
+	})
+	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined || b.preferences !== undefined, {
+		message: 'nothing to change: send displayName, locale, volumeUnit or preferences'
 	});
 const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 
@@ -87,6 +94,7 @@ type UserRow = {
 	volume_unit: 'm3' | 'ML';
 	mail_suppressed_at: Date | null;
 	mail_suppressed_reason: 'bounce' | 'complaint' | null;
+	preferences: unknown;
 };
 const toUser = (r: UserRow) => ({
 	id: r.id,
@@ -96,9 +104,11 @@ const toUser = (r: UserRow) => ({
 	locale: r.locale,
 	volumeUnit: r.volume_unit,
 	// SES reported a bounce or complaint for the address (057): alert emails are paused (the banner, POST /me/alerts/resume).
-	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null
+	mailSuppressed: r.mail_suppressed_at ? { reason: r.mail_suppressed_reason!, at: r.mail_suppressed_at.toISOString() } : null,
+	// The person's own display preferences (082): the sections they hid from the workspace sidebar.
+	preferences: toPreferences(r.preferences)
 });
-const USER_COLS = 'id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason';
+const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, ${PREFERENCES_COL}`;
 
 export const authRoutes = new Hono<AuthEnv>()
 	.post('/register', async (c) => {
@@ -235,6 +245,8 @@ export const authRoutes = new Hono<AuthEnv>()
 		const body = MeBody.parse(await readJson(c));
 		// Only the fields sent change; locale may be set back to null (follow the browser).
 		const row = await withUser(c.get('userId'), async (db) => {
+			// First, so the UPDATE's RETURNING (a later statement) reads the saved document.
+			if (body.preferences) await savePreferences(db, c.get('userId'), body.preferences);
 			const { rows } = await db.query<UserRow>(
 				`UPDATE app_user SET
 					display_name = coalesce($2, display_name),
