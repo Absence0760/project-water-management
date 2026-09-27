@@ -516,10 +516,15 @@ table.data tr.flag {
 }
 
 /* ---- Page container --------------------------------------------------- */
+/* A small gutter below, never reserved room: a page whose content fits the
+   window must not scroll (docs/design/ui-playbook.md § 2). 5rem here made every
+   page that came within 70 px of the window's foot scroll for nothing. Room for
+   something fixed at the foot (the workspace's model save bar) is added only
+   while it shows, by the page that owns it. */
 .page {
 	max-width: 1480px;
 	margin: 0 auto;
-	padding: 1.25rem var(--gutter) 5rem;
+	padding: 1.25rem var(--gutter) 1rem;
 }
 .toolbar {
 	display: flex;

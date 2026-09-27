@@ -26,6 +26,13 @@ session exists. A **Skip to content** link comes first.
   and in-page link targets stop at the top edge. A page (`.page`) starts at
   the sidebar's edge rather than centring in the width left, which left a
   dead gap between the sidebar and the content.
+- **No pointless scroll.** Below its content a page keeps a 1rem gutter and
+  nothing more; the project workspace adds the model save bar's height only
+  while the bar shows (`--dock-h`, 0 otherwise), so the bar never covers the
+  last row. A page whose content fits the window doesn't scroll at all. It
+  used to reserve 5rem (the workspace 4rem) below everything, so a page that
+  came within 56–70 px of the window's foot scrolled for nothing
+  (`no-pointless-scroll.spec.ts`).
 - **Below 900 px (phones):** a slim sticky bar, 52 px (`--header-h`): a
   **Menu** button that opens the Main navigation under the bar, the brand,
   and a compact account button (initials only). The Menu closes on a
@@ -1036,9 +1043,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
   - **Screen use:** from 900 px the layout is exactly the height left in the
     window below its top edge, less what the page keeps below it (its bottom
     padding and the save bar's room; at least 520 px), both measured on load
-    and whenever the page resizes, so **the page itself doesn't scroll**. On
-    this page the workspace's bottom padding is 1rem (plus the save bar), not
-    the usual 4rem. The drawing takes the card's height
+    and whenever the page resizes, so **the page itself doesn't scroll**
+    (the workspace's bottom padding is its usual 1rem gutter, plus the save
+    bar while it shows). The drawing takes the card's height
     after the legend, and the node list takes the side column's height after
     the node card, each scrolling inside itself. `NetworkSchematic`'s `fill`
     lays the tree out to the box rather than zooming it: columns are at least
