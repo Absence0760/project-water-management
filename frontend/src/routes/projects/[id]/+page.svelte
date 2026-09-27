@@ -53,6 +53,7 @@
 	import { fmtDay, localIsoDate } from '$lib/format/number';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
+	import { fetchProjectPage, takeProjectPage } from '$lib/workspace/firstLoad';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { withoutFarm } from '$lib/components/crops/farmDrawer';
 	import { MediaQuery } from 'svelte/reactivity';
@@ -262,14 +263,9 @@
 		applicantProject = null;
 		try {
 			// Everything a tab's first render needs, behind one loading gate, so no
-			// tab (or the Overview checklist) flashes an empty state. The lists are
-			// best-effort: a failure there shouldn't hide the project.
-			const [p, m, sl, rl] = await Promise.all([
-				api.projects.get(projectId),
-				api.model.get(projectId),
-				api.series.list(projectId).catch(() => null),
-				api.runs.list(projectId).catch(() => null)
-			]);
+			// tab (or the Overview checklist) flashes an empty state. On a full page
+			// load the root layout already started them beside /auth/me (firstLoad.ts).
+			const [p, m, sl, rl] = await (takeProjectPage(projectId) ?? fetchProjectPage(projectId));
 			project = p;
 			editor.load(m);
 			series = sl;

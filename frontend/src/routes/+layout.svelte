@@ -9,6 +9,7 @@
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
 	import { isPublicPath, routeAccess, session } from '$lib/auth/session.svelte';
+	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import { msg, type Msg } from '$lib/i18n/msg';
@@ -20,9 +21,13 @@
 
 	async function checkSession() {
 		bootError = null;
+		// The catchment page's own requests go out beside /auth/me, not after it
+		// (workspace/firstLoad.ts); the page still mounts only once it answers.
+		startProjectPage(page.url.pathname, base);
 		try {
 			session.user = await api.auth.me();
 		} catch (e) {
+			dropProjectPage();
 			if (e instanceof ApiError && e.status === 401) session.user = null;
 			else bootError = e instanceof Error ? e.message : String(e);
 		}

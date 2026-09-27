@@ -114,6 +114,24 @@ test('an unauthenticated deep link goes to login and back after signing in', asy
 	await expect(page.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
 });
 
+test('a full load of a catchment asks for the project beside /auth/me, not after it', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Parallel first load');
+	// The order the browser saw (the API's GETs: the page's own document has the same path, a CORS preflight is an OPTIONS):
+	// the project's request goes out before /auth/me has answered (workspace/firstLoad.ts), and the page still renders
+	// only once it has.
+	const events: string[] = [];
+	page.on('request', (r) => {
+		if (r.resourceType() === 'fetch' && r.method() === 'GET' && new URL(r.url()).pathname === `/projects/${project.id}`) events.push('project sent');
+	});
+	page.on('response', (r) => {
+		if (r.request().method() === 'GET' && new URL(r.url()).pathname === '/auth/me') events.push('me answered');
+	});
+	await page.goto(`/projects/${project.id}`);
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Parallel first load' })).toBeVisible();
+	expect(events.slice(0, 2)).toEqual(['project sent', 'me answered']);
+});
+
 test('an off-site ?next= is ignored after signing in', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
 	const user = await register(api, 'Redirect target');
