@@ -128,7 +128,8 @@ export const authRoutes = new Hono<AuthEnv>()
 					return { row: fresh[0]!, mail: null };
 				}
 			}
-			return { row, mail: await verificationMail(db, row.id, row.email) };
+			const verify = await verificationMail(db, row.id, row.email);
+			return { row, mail: 'mail' in verify ? verify.mail : null };
 		});
 		if (!result) throw ApiError.coded(409, 'account_exists', 'an account with that email already exists');
 		if (result.mail) await trySendMail(result.mail);

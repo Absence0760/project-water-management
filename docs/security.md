@@ -112,6 +112,22 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
 - **Mail-bombing throttle:** at most one reset, verification or invite email
   per address per minute, enforced in Postgres (`app_issue_email_token` with an
   advisory lock; `invite.last_sent_at`) so it holds across Lambda instances.
+  On top, a **daily cap** (078, `account_mail_quota`): at most 10 reset and
+  verification emails per address in a rolling 24 hours, so a distributed
+  sender can't have one inbox mailed ~1440 times a day. A request from a
+  browser holding a valid `wm_device` cookie for the address (auth/device.ts,
+  the same trust as the sign-in lockout) counts on that device's own 10
+  instead, so a stranger who uses up the shared count can't block the owner's
+  own browser. Forgot-password answers the same `202` whether the cap held the
+  email back or not (known address or not); resend-verification, which only
+  mails the signed-in account's own address, says `verification_limit`.
+  `mail-cap.security.db.test.ts` pins the boundary, the window's edge, the
+  device allowance and the identical answers. **Accepted residual:** someone
+  with no device cookie for the address (a new browser, cleared cookies, a
+  reset or "sign out everywhere" since, which retires older devices) can be
+  denied a reset link, or a verification email, for up to a day after such an
+  attack. They can still sign in with their password, and a trusted device
+  keeps its own sign-in lockout (070) and its own reset allowance.
 - **Mail failures never change the response** (`trySendMail` logs the error
   without the body, which contains a live token). Mail is sent after the
   transaction commits, so a mailed link always refers to a stored token.
@@ -1486,6 +1502,7 @@ PDF someone else asked for kept the person as a recipient
 | --- | --- | --- | --- | --- |
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
+| Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |

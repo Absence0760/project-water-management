@@ -27,7 +27,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }`; `400` bad/expired/used link (public) |
-| POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago (signed in) |
+| POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
@@ -50,9 +50,10 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
 - **`forgot-password`** answers the same `202` whether or not the address has
-  an account, and sends at most one email per address per minute (later
-  requests inside the window get `202` and no email). Requesting again replaces
-  the previous link.
+  an account, and sends at most one email per address per minute and ten
+  reset or verification emails per address in 24 hours (a browser trusted for
+  the address has its own ten; later requests get `202` and no email).
+  Requesting again replaces the previous link.
 - **`logout-everywhere`** is reachable from the frontend header's account menu
   ("Sign out everywhere", next to plain "Sign out"), which asks for
   confirmation before calling it (docs/ui.md § Header).
@@ -169,6 +170,7 @@ unless it is listed there with why its status says enough.
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
 | `already_verified` | 409 | `POST /auth/resend-verification` for a confirmed address |
 | `verification_sent_recently` | 429 | the same, within the resend cooldown |
+| `verification_limit` | 429 | the same, once the address's daily cap on reset and verification emails is reached (078) |
 | `invite_invalid` | 404 | `POST /auth/invite-info` for a dead invitation |
 | `note_farmer_own_farm` | 403 | a farmer's note anywhere but their own farm, shown to the farm |
 | `note_farm_visibility` | 400 | a farm-visible note on something that isn't a farm |

@@ -1536,12 +1536,15 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `app_user.email_verified_at` | When the address was confirmed; `NULL` = unverified (accounts that predate 004 were backfilled as verified) |
 | `app_user.sessions_revoked_at` | Session watermark: sessions issued earlier are rejected (set by a password reset) |
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
+| `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (`en` / `af`, the email's language, default `en`; 034); unique per (project, email) / (team, email) |
 | `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
-  functions: `app_issue_email_token()` (per-address cooldown, replaces older
-  tokens of the purpose) and `app_consume_email_token()` (deletes = single
+  functions: `app_issue_email_token()` (per-address cooldown, then the daily
+  cap on `account_mail_quota`, per trusted device or shared since 078;
+  returns `issued`, `cooldown` or `capped`; replaces older tokens of the
+  purpose) and `app_consume_email_token()` (deletes = single
   use; `NULL` if unknown/expired; also clears tokens expired over 7 days). The RLS policies on `email_token` only allow
   a signed-in user their own rows.
 - `invite` RLS: project owners (via `app_has_role(…, 'owner')`) or team admins

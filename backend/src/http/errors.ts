@@ -50,6 +50,7 @@ export const ERROR_CODES = [
 	'link_invalid',
 	'already_verified',
 	'verification_sent_recently',
+	'verification_limit',
 	'invite_invalid',
 	'note_farmer_own_farm',
 	'note_farm_visibility',
