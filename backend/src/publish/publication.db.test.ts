@@ -113,14 +113,14 @@ describe('publishedAt on the project list (WP-2.1, WP-2.3)', () => {
 describe('publishing', () => {
 	it('publishes a run as an editor, with one projection per farm, and one current publication', async () => {
 		const r1 = await run(editor);
-		const res = await publish(editor, r1, { note: 'First baseline', restriction: { level: 'advisory', pct: 10, noticeEn: 'Please save water.', noticeAf: 'Spaar asseblief water.' }, nextExpectedOn: '2024-01-15' });
+		const res = await publish(editor, r1, { note: 'First baseline', restriction: { level: 'advisory', pct: 10, notice: { en: 'Please save water.', af: 'Spaar asseblief water.' } }, nextExpectedOn: '2024-01-15' });
 		expect(res.status).toBe(201);
 		expect(res.body.farms).toBe(6);
 		expect(res.body.publication).toMatchObject({
 			runId: r1,
 			publishedBy: 'Peditor',
 			note: 'First baseline',
-			restriction: { level: 'advisory', pct: 10, noticeEn: 'Please save water.', noticeAf: 'Spaar asseblief water.' },
+			restriction: { level: 'advisory', pct: 10, notice: { en: 'Please save water.', af: 'Spaar asseblief water.' } },
 			nextExpectedOn: '2024-01-15',
 			supersededAt: null,
 			catchmentView: { runStart: RAIN_START, farmCount: 6, runoffModel: 'gr4j' }
@@ -129,7 +129,7 @@ describe('publishing', () => {
 		expect((await publish(editor, r2)).status).toBe(201);
 		const list = await viewer.call('GET', `/projects/${projectId}/publication`);
 		expect(list.body.current.runId).toBe(r2);
-		expect(list.body.current.restriction).toEqual({ level: 'none', pct: null, noticeEn: null, noticeAf: null });
+		expect(list.body.current.restriction).toEqual({ level: 'none', pct: null, notice: {} });
 		expect(list.body.history.map((h: { runId: string }) => h.runId)).toEqual([r2, r1]);
 		expect(list.body.history[1].supersededAt).not.toBeNull();
 		const current = await asOwner('SELECT count(*)::int AS n FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
@@ -185,7 +185,7 @@ describe('publishing', () => {
 		const [{ run_id: runId }] = await asOwner('SELECT run_id FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 		expect((await publish(editor, runId, { restriction: { level: 'none', pct: 5 } })).status).toBe(400);
 		expect((await publish(editor, runId, { restriction: { level: 'severe' } })).status).toBe(400);
-		expect((await publish(editor, runId, { restriction: { level: 'advisory', noticeEn: 'x'.repeat(2001) } })).status).toBe(400);
+		expect((await publish(editor, runId, { restriction: { level: 'advisory', notice: { en: 'x'.repeat(2001) } } })).status).toBe(400);
 		expect((await publish(editor, runId, { nextExpectedOn: '2024-02-31' })).status).toBe(400);
 	});
 });
@@ -194,17 +194,37 @@ describe('changing the notice', () => {
 	it('changes the restriction, note and next date without re-publishing, as an editor', async () => {
 		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
 		const res = await editor.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, {
-			restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null },
+			restriction: { level: 'restricted', pct: 25.5, notice: { en: 'Irrigation cut by 25 %.' } },
 			nextExpectedOn: null
 		});
 		expect(res.status).toBe(200);
-		expect(res.body.publication).toMatchObject({ id: cur.id, runId: cur.runId, restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null }, nextExpectedOn: null, updatedBy: 'Peditor' });
+		expect(res.body.publication).toMatchObject({ id: cur.id, runId: cur.runId, restriction: { level: 'restricted', pct: 25.5, notice: { en: 'Irrigation cut by 25 %.' } }, nextExpectedOn: null, updatedBy: 'Peditor' });
 		expect(res.body.publication.catchmentView).toEqual(cur.catchmentView);
 		expect((await viewer.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, { note: 'x' })).status).toBe(403);
 		expect((await farmer.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, { note: 'x' })).status).toBe(403);
 		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${cur.id}`, {})).status).toBe(400);
 		const old = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.history[1];
 		expect((await editor.call('PATCH', `/projects/${projectId}/publication/${old.id}`, { note: 'late' })).status).toBe(409);
+	});
+
+	it('keeps the notice’s languages of the table, drops blank ones, and refuses a code the table doesn’t list (issue #58)', async () => {
+		const cur = (await viewer.call('GET', `/projects/${projectId}/publication`)).body.current;
+		const at = `/projects/${projectId}/publication/${cur.id}`;
+		const trimmed = await editor.call('PATCH', at, { restriction: { level: 'advisory', notice: { af: '  Besproei snags.  ', en: ' \n ' } } });
+		expect(trimmed.status).toBe(200);
+		expect(trimmed.body.publication.restriction.notice).toEqual({ af: 'Besproei snags.' });
+		for (const notice of [{ de: 'Nachts bewässern' }, { en: 'x', xx: 'stand-in' }, { EN: 'x' }, ['x'], 'x']) {
+			expect((await editor.call('PATCH', at, { restriction: { level: 'advisory', notice } })).status, JSON.stringify(notice)).toBe(400);
+		}
+		// The two-column shape is gone (the body is strict).
+		expect((await editor.call('PATCH', at, { restriction: { level: 'advisory', noticeEn: 'x' } })).status).toBe(400);
+		// Nothing above landed; null is no notice.
+		expect((await viewer.call('GET', `/projects/${projectId}/publication`)).body.current.restriction.notice).toEqual({ af: 'Besproei snags.' });
+		const none = await editor.call('PATCH', at, { restriction: { level: 'none', notice: null } });
+		expect(none.status).toBe(200);
+		expect(none.body.publication.restriction.notice).toEqual({});
+		// Back as the tests below expect it.
+		expect((await editor.call('PATCH', at, { restriction: cur.restriction, nextExpectedOn: cur.nextExpectedOn })).status).toBe(200);
 	});
 
 	it('refuses a notice change that a concurrent publish superseded while it waited', async () => {
@@ -327,7 +347,7 @@ describe('what a farmer reads', () => {
 			project: { id: projectId, name: 'Publication' },
 			farm: { nodeId: farms[0]!.id, name: 'Farm One', dataUntil: '2023-12-29', season: { from: '2023-10-01', to: '2023-12-29' } },
 			context: { farmsUpstream: 2, farmsDownstream: 0, farmCount: 6 },
-			publication: { publishedBy: 'Peditor', restriction: { level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null }, nextExpectedOn: null },
+			publication: { publishedBy: 'Peditor', restriction: { level: 'restricted', pct: 25.5, notice: { en: 'Irrigation cut by 25 %.' } }, nextExpectedOn: null },
 			outlet30: { name: 'Weir', days: 30 },
 			stale: true
 		});
@@ -355,7 +375,7 @@ describe('what a farmer reads', () => {
 
 	it('carries the notice in both languages as the WUA wrote them (the page picks one)', async () => {
 		const res = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`);
-		expect(res.body.publication.restriction).toEqual({ level: 'restricted', pct: 25.5, noticeEn: 'Irrigation cut by 25 %.', noticeAf: null });
+		expect(res.body.publication.restriction).toEqual({ level: 'restricted', pct: 25.5, notice: { en: 'Irrigation cut by 25 %.' } });
 	});
 
 	it('404s a farm the farmer isn’t linked to, even with a publication (positive control: their own is 200)', async () => {

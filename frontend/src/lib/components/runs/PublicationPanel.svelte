@@ -10,7 +10,7 @@
 	import { api, PUBLICATION_TEXT_MAX, type Publication, type PublicationMeta, type Run } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { fmtDate, fmtDay } from '$lib/format/number';
-	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
+	import { damsWithoutStopLevel, draftFrom, emptyDraft, LEVEL_LABEL, noticeLanguages, noticeTextFields, parseDraft, publishBlocker, restrictionSummary, type NoticeDraft } from './publication';
 
 	let {
 		projectId,
@@ -130,11 +130,11 @@
 				<input id="{prefix}-next" type="date" bind:value={draft.nextExpectedOn} />
 			</div>
 		</div>
-		<label for="{prefix}-en">Notice in English <span class="muted">(optional)</span></label>
-		<textarea id="{prefix}-en" rows="3" maxlength={PUBLICATION_TEXT_MAX} bind:value={draft.noticeEn}></textarea>
-		<label for="{prefix}-af">Notice in Afrikaans <span class="muted">(optional)</span></label>
-		<textarea id="{prefix}-af" rows="3" maxlength={PUBLICATION_TEXT_MAX} bind:value={draft.noticeAf}></textarea>
-		<p class="muted small">Farmers read the notice first, in their language (the other one when theirs is empty). The app never writes restriction wording itself.</p>
+		{#each noticeTextFields() as f (f.code)}
+			<label for="{prefix}-{f.code}">{f.label} <span class="muted">(optional)</span></label>
+			<textarea id="{prefix}-{f.code}" lang={f.code} rows="3" maxlength={PUBLICATION_TEXT_MAX} bind:value={draft.notice[f.code]}></textarea>
+		{/each}
+		<p class="muted small">Farmers read the notice first, in their language (in English, or another one written, when theirs is empty). The app never writes restriction wording itself.</p>
 	</fieldset>
 {/snippet}
 
@@ -158,8 +158,7 @@
 		<dl class="notice" aria-label="Current notice">
 			<dt>Notice</dt>
 			<dd>{restrictionSummary(current.restriction)}</dd>
-			{#if current.restriction.noticeEn}<dt>English</dt><dd class="text">{current.restriction.noticeEn}</dd>{/if}
-			{#if current.restriction.noticeAf}<dt>Afrikaans</dt><dd class="text">{current.restriction.noticeAf}</dd>{/if}
+			{#each noticeLanguages(current.restriction.notice) as n (n.code)}<dt>{n.name}</dt><dd class="text" lang={n.code}>{n.text}</dd>{/each}
 			<dt>Next update</dt>
 			<dd>{current.nextExpectedOn ? fmtDay(current.nextExpectedOn) : 'Not set'}</dd>
 			{#if current.updatedAt}<dt>Notice changed</dt><dd>{fmt(current.updatedAt)}{current.updatedBy ? ` by ${current.updatedBy}` : ''}</dd>{/if}

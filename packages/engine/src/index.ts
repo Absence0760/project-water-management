@@ -64,6 +64,7 @@ export {
 	type WaterAccountRow
 } from './network/reliability';
 export * from './views/farmView';
+export * from './views/notice';
 export * from './views/farmProjection';
 export * from './views/fdc';
 export * from './views/yearClasses';

@@ -183,10 +183,6 @@ export const af: Catalogue = {
 	'692d3ef2': 'Kennisgewing van die WGV · {level}',
 	// Set by the WUA: {pct} of registered use.
 	'091d4149': 'Deur die WGV bepaal: {pct} van geregistreerde gebruik.',
-	// The WUA wrote this notice in English only.
-	'840b8f7d': 'Die WGV het hierdie kennisgewing net in Engels geskryf.',
-	// The WUA wrote this notice in Afrikaans only.
-	'4a5ec0cb': 'Die WGV het hierdie kennisgewing net in Afrikaans geskryf.',
 	// No restriction from the WUA
 	'82c3a5ec': 'Geen beperking van die WGV nie',
 	// drip
@@ -515,6 +511,8 @@ export const af: Catalogue = {
 	'1597c5ce': 'Advies',
 	// Restriction
 	'9db32ccd': 'Beperking',
+	// The WUA wrote this notice in {language} only.
+	'c2ecebc9': 'Die WGV het hierdie kennisgewing net in {language} geskryf.',
 	// What the model found
 	'6312837d': 'Wat die model gevind het',
 	// Why about {pct}?

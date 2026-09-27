@@ -44,8 +44,7 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	run_publication: [
 		'next_expected_on',
 		'note',
-		'notice_af',
-		'notice_en',
+		'notice',
 		'restriction_level',
 		'restriction_pct',
 		'superseded_at',

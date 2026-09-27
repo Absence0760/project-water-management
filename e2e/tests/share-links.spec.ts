@@ -5,7 +5,7 @@
 // the dead-link state. A catchment with too few farms gets no flow chart.
 // The layout (issue #17) is pinned at 1440 × 960 and on a phone.
 import type { APIRequestContext } from '@playwright/test';
-import { afWords } from '../support/af.ts';
+import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
@@ -13,7 +13,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const PHONE = { width: 360, height: 740 };
-const words = await afWords();
+const words = await siteWords('af');
 const NOTICE = 'Water is short on the river.\nIrrigate at night and cut back where you can.';
 
 /** The sample network with three more farms: five farm holders, enough for the flow chart (FARMER_K). */
@@ -31,7 +31,7 @@ function fiveFarms(model: Model): Model {
 async function publish(request: APIRequestContext, projectId: string) {
 	const runId = await createRun(request, projectId, 'Baseline');
 	const res = await request.post(`${API_URL}/projects/${projectId}/publication`, {
-		data: { runId, note: 'Staff only: the gauge was re-rated in March.', restriction: { level: 'advisory', pct: 10, noticeEn: NOTICE, noticeAf: null } }
+		data: { runId, note: 'Staff only: the gauge was re-rated in March.', restriction: { level: 'advisory', pct: 10, notice: { en: NOTICE } } }
 	});
 	expect(res.status()).toBe(201);
 }
@@ -100,7 +100,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await shared.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' }).click();
 	await expect(shared.locator('html')).toHaveAttribute('lang', 'af');
 	await expect(shared.getByRole('group', { name: words('Language') }).getByRole('button', { name: 'Afrikaans' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(notice).toContainText(words('The WUA wrote this notice in English only.'));
+	// The line names the language in the page's words ("Engels"), as the browser names it.
+	await expect(notice).toContainText(words('The WUA wrote this notice in {language} only.').replace('{language}', new Intl.DisplayNames(['af-ZA'], { type: 'language' }).of('en')!));
 	await expect(notice.getByRole('heading', { name: 'Water is short on the river.' })).toHaveAttribute('lang', 'en');
 	const reserveAf = shared.getByRole('region', { name: words('The river’s ecological reserve') });
 	await expect(reserveAf.getByText(words('At the catchment outlet'))).toBeVisible();

@@ -16,6 +16,9 @@ import {
 	type ForecastSummary,
 	type NetworkNode,
 	type ProjectionRun,
+	isLocale,
+	LOCALES,
+	type NoticeText,
 	type RestrictionLevel,
 	type Transfer
 } from '@water-management/engine';
@@ -57,7 +60,7 @@ export interface PublicationMeta {
 export interface Publication extends Omit<PublicationMeta, 'restriction'> {
 	/** The modeller's note: viewers and above only (absent for a farmer). */
 	note?: string;
-	restriction: { level: RestrictionLevel; pct: number | null; noticeEn: string | null; noticeAf: string | null };
+	restriction: { level: RestrictionLevel; pct: number | null; notice: NoticeText };
 	nextExpectedOn: string | null;
 	catchmentView: StoredCatchmentView;
 	updatedAt: string | null;
@@ -70,7 +73,25 @@ const text = z
 	.trim()
 	.max(PUBLICATION_TEXT_MAX)
 	.refine((s) => !s.includes('\u0000'), 'text cannot contain NUL characters');
-const notice = text.nullable().transform((s) => (s ? s : null));
+/**
+ * The notice by language code: each key a language of the table
+ * (packages/engine/src/languages.ts), each value its words. A blank one is
+ * no notice in that language; null or {} is none at all
+ * (081_notice_languages.sql).
+ */
+export const NoticeTextBody = z
+	.record(z.string(), text)
+	.nullable()
+	.superRefine((m, ctx) => {
+		for (const code of Object.keys(m ?? {})) {
+			if (!isLocale(code)) ctx.addIssue({ code: 'custom', path: [code], message: `unknown language "${code}"; the notice takes ${LOCALES.join(', ')}` });
+		}
+	})
+	.transform((m): NoticeText => {
+		const out: NoticeText = {};
+		for (const code of LOCALES) if (m && Object.hasOwn(m, code) && m[code]) out[code] = m[code];
+		return out;
+	});
 const isoDate = z
 	.string()
 	.regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')
@@ -81,12 +102,11 @@ export const RestrictionBody = z
 	.object({
 		level: z.enum(['none', 'advisory', 'restricted']),
 		pct: z.number().min(0).max(100).nullable().optional(),
-		noticeEn: notice.optional(),
-		noticeAf: notice.optional()
+		notice: NoticeTextBody.optional()
 	})
 	.strict()
 	.refine((r) => r.level !== 'none' || r.pct == null, { message: 'no restriction carries no percentage', path: ['pct'] })
-	.transform((r) => ({ level: r.level, pct: r.pct == null ? null : Math.round(r.pct * 100) / 100, noticeEn: r.noticeEn ?? null, noticeAf: r.noticeAf ?? null }));
+	.transform((r) => ({ level: r.level, pct: r.pct == null ? null : Math.round(r.pct * 100) / 100, notice: r.notice ?? {} }));
 
 export const PublishBody = z
 	.object({
@@ -114,8 +134,7 @@ interface PublicationRow {
 	note: string;
 	restriction_level: RestrictionLevel;
 	restriction_pct: string | null;
-	notice_en: string | null;
-	notice_af: string | null;
+	notice: NoticeText;
 	next_expected_on: string | null;
 	catchment_view: StoredCatchmentView;
 	superseded_at: Date | null;
@@ -125,7 +144,7 @@ interface PublicationRow {
 
 const SELECT_PUBLICATION = `
 	SELECT p.id, p.run_id, p.published_at, pu.display_name AS published_by_name, p.note, p.restriction_level,
-		p.restriction_pct, p.notice_en, p.notice_af, p.next_expected_on, p.catchment_view, p.superseded_at,
+		p.restriction_pct, p.notice, p.next_expected_on, p.catchment_view, p.superseded_at,
 		p.updated_at, uu.display_name AS updated_by_name
 	FROM run_publication p
 	LEFT JOIN app_user pu ON pu.id = p.published_by
@@ -146,7 +165,7 @@ function toPublication(r: PublicationRow, withNote: boolean): Publication {
 		publishedAt: r.published_at.toISOString(),
 		publishedBy: r.published_by_name,
 		...(withNote ? { note: r.note } : {}),
-		restriction: { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct), noticeEn: r.notice_en, noticeAf: r.notice_af },
+		restriction: { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct), notice: r.notice },
 		nextExpectedOn: r.next_expected_on,
 		catchmentView: withNote ? r.catchment_view : staffOnlyRemoved(r.catchment_view),
 		supersededAt: iso(r.superseded_at),
@@ -309,11 +328,11 @@ export async function publishRun(db: Db, projectId: string, body: z.infer<typeof
 		recent: recentShortfall(loaded.run, analysis)
 	};
 	await db.query('UPDATE run_publication SET superseded_at = now() WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
-	const r = body.restriction ?? { level: 'none' as const, pct: null, noticeEn: null, noticeAf: null };
+	const r = body.restriction ?? { level: 'none' as const, pct: null, notice: {} };
 	const { rows } = await db.query<{ id: string }>(
-		`INSERT INTO run_publication (project_id, run_id, published_by, note, restriction_level, restriction_pct, notice_en, notice_af, next_expected_on, catchment_view)
-		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-		[projectId, body.runId, body.note ?? '', r.level, r.pct, r.noticeEn, r.noticeAf, body.nextExpectedOn ?? null, JSON.stringify(stored)]
+		`INSERT INTO run_publication (project_id, run_id, published_by, note, restriction_level, restriction_pct, notice, next_expected_on, catchment_view)
+		 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8) RETURNING id`,
+		[projectId, body.runId, body.note ?? '', r.level, r.pct, JSON.stringify(r.notice), body.nextExpectedOn ?? null, JSON.stringify(stored)]
 	);
 	const pubId = rows[0]!.id;
 	if (views.length) {
@@ -338,7 +357,7 @@ export async function patchPublication(db: Db, projectId: string, pubId: string,
 	if (body.note !== undefined) set.push(['note', body.note]);
 	if (body.nextExpectedOn !== undefined) set.push(['next_expected_on', body.nextExpectedOn]);
 	if (body.restriction) {
-		set.push(['restriction_level', body.restriction.level], ['restriction_pct', body.restriction.pct], ['notice_en', body.restriction.noticeEn], ['notice_af', body.restriction.noticeAf]);
+		set.push(['restriction_level', body.restriction.level], ['restriction_pct', body.restriction.pct], ['notice', JSON.stringify(body.restriction.notice)]);
 	}
 	// Guarded again in the UPDATE: a publish that superseded this one since the
 	// check above (it waits on the row lock) must not let the edit land on history.

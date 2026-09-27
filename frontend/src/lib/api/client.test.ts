@@ -129,7 +129,7 @@ describe('createApi', () => {
 		expect((get.mock.calls[0] as unknown as [string])[0]).toBe('/projects/p%2F1/publication');
 		const publication = { id: 'pub1', runId: 'r1' };
 		const post = mockFetch(201, { publication, farms: 3 });
-		const restriction = { level: 'advisory' as const, pct: null, noticeEn: 'Save water', noticeAf: null };
+		const restriction = { level: 'advisory' as const, pct: null, notice: { en: 'Save water' } };
 		await expect(createApi('', post).publication.publish('p1', { runId: 'r1', restriction })).resolves.toEqual({ publication, farms: 3 });
 		const [url, init] = post.mock.calls[0] as unknown as [string, RequestInit];
 		expect(url).toBe('/projects/p1/publication');

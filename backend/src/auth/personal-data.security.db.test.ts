@@ -130,7 +130,7 @@ beforeAll(async () => {
 	runId = (await call(owner, 'POST', `/projects/${projectId}/runs`, { label: 'r' })).run.id;
 	await call(subject, 'PATCH', `/projects/${projectId}/runs/${runId}`, { notes: 'checked' });
 	const pub = await call(subject, 'POST', `/projects/${projectId}/publication`, { runId });
-	await call(subject, 'PATCH', `/projects/${projectId}/publication/${pub.publication.id}`, { restriction: { level: 'advisory', noticeEn: 'Use water sparingly' } });
+	await call(subject, 'PATCH', `/projects/${projectId}/publication/${pub.publication.id}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } });
 	const key = await call(subject, 'POST', `/projects/${projectId}/api-keys`, { name: 'logger' });
 	await call(subject, 'DELETE', `/projects/${projectId}/api-keys/${key.key.id}`);
 	const link = await call(subject, 'POST', `/projects/${projectId}/share-links`, { label: 'WUA', expiresInDays: 7 });

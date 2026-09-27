@@ -12,7 +12,7 @@
 // language switch re-words them.
 import type { SharedCatchmentView, ShareView } from '$lib/api/types';
 import { count, DAYS, FARMS, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
-import { LEVEL_WORDS, pickNotice, splitNotice, type NoticeVm } from '$lib/components/farm/notice';
+import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from '$lib/components/farm/notice';
 import { i18n, t } from '$lib/i18n/locale.svelte';
 
 /** A share token as we issue it: 32 bytes, base64url (backend auth/tokens.ts). */
@@ -27,13 +27,13 @@ export function readShareToken(hash: string): string | null {
 /**
  * The WUA's notice card (the farmer view's NoticeCard lays it out); null for
  * level `none`. The notice is in the reader's language (the one the page
- * resolved: this device's choice, else the browser's), or the other with a
- * line saying so, as on the farm view (design §7).
+ * resolved: this device's choice, else the browser's), else English, else
+ * another it wrote, with a line saying so, as on the farm view (design §7).
  */
 export function shareNotice(view: ShareView): NoticeVm | null {
 	const { restriction: r, publishedAt, publishedBy } = view.publication;
 	if (r.level === 'none') return null;
-	const picked = pickNotice(r, i18n.locale);
+	const picked = pickNotice(r.notice, i18n.locale);
 	const { title, body } = splitNotice(picked?.text ?? null);
 	// i18n-section: farm.notice
 	const label = t('Notice from the WUA · {level}', { level: t(LEVEL_WORDS[r.level]) });
@@ -47,7 +47,7 @@ export function shareNotice(view: ShareView): NoticeVm | null {
 		byline: `${publishedBy ?? t('A former member')}, ${fmtStampDay(publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,
-		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'The WUA wrote this notice in English only.' : 'The WUA wrote this notice in Afrikaans only.') : null
+		langNote: picked && picked.lang !== i18n.locale ? t(WRITTEN_ONLY_IN, { language: languageName(picked.lang) }) : null
 	};
 }
 

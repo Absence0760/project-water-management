@@ -195,7 +195,7 @@ const WRITE_ROUTES: Entry[] = [
 	{
 		route: `PATCH ${P}/publication/:pubId`,
 		records: ['publication.notice_changed'],
-		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', noticeEn: 'Use water sparingly' } })
+		call: (c) => c.owner.call('PATCH', `${at(c)}/publication/${c.pubId}`, { restriction: { level: 'advisory', notice: { en: 'Use water sparingly' } } })
 	},
 	{
 		route: `POST ${P}/share-links`,

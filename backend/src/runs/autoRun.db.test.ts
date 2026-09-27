@@ -358,8 +358,8 @@ describe('trimRuns with auto runs', () => {
 
 describe('auto-publish (settings.autoRun.publish)', () => {
 	async function published(pid: string) {
-		return (await asOwner(`SELECT run_id, note, restriction_level, restriction_pct, notice_en FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL`, [pid]))[0] as
-			| { run_id: string; note: string; restriction_level: string; restriction_pct: string | null; notice_en: string | null }
+		return (await asOwner(`SELECT run_id, note, restriction_level, restriction_pct, notice FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL`, [pid]))[0] as
+			| { run_id: string; note: string; restriction_level: string; restriction_pct: string | null; notice: Record<string, string> }
 			| undefined;
 	}
 
@@ -378,7 +378,7 @@ describe('auto-publish (settings.autoRun.publish)', () => {
 		const u = await signUp('PubAuto');
 		const pid = await runnable(u, { enabled: true, debounceMinutes: 0, publish: 'if_no_new_warnings' });
 		const first = (await u.call('POST', `/projects/${pid}/runs`, { label: 'baseline' })).body.run.id as string;
-		const restriction = { level: 'restricted', pct: 20, noticeEn: 'Irrigate at night only', noticeAf: null };
+		const restriction = { level: 'restricted', pct: 20, notice: { en: 'Irrigate at night only' } };
 		expect((await u.call('POST', `/projects/${pid}/publication`, { runId: first, restriction })).status).toBe(201);
 		// Published at 22:30 UTC: the next day in South Africa, the day the note names (the project's zone, 058).
 		await asOwner(`UPDATE run_publication SET published_at = '2026-09-25T22:30:00Z' WHERE project_id = $1 AND superseded_at IS NULL`, [pid]);
@@ -386,7 +386,7 @@ describe('auto-publish (settings.autoRun.publish)', () => {
 		await runTick();
 		const autoRun = (await runs(pid)).find((r) => r.trigger === 'auto')!;
 		const now = await published(pid);
-		expect(now).toMatchObject({ run_id: autoRun.id, restriction_level: 'restricted', notice_en: 'Irrigate at night only' });
+		expect(now).toMatchObject({ run_id: autoRun.id, restriction_level: 'restricted', notice: { en: 'Irrigate at night only' } });
 		expect(Number(now!.restriction_pct)).toBe(20);
 		expect(now!.note).toMatch(/^Published automatically: .* the run published on 2026-09-26 didn't\.$/);
 		const [audit] = await asOwner(`SELECT subject FROM audit_event WHERE project_id = $1 AND kind = 'publication.published' ORDER BY created_at DESC, id DESC LIMIT 1`, [pid]);

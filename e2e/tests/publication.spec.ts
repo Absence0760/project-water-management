@@ -30,6 +30,11 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await expect(dialog.getByRole('status')).toHaveText(/^1 farm dam has no stop level/);
 	await dialog.getByLabel('Level').selectOption('advisory');
 	await dialog.getByLabel(/^Cut/).fill('10');
+	// One field per language of the table, English first, each marked with its language.
+	await expect(dialog.getByRole('textbox', { name: /^Notice in / })).toHaveCount(2);
+	await expect(dialog.getByRole('textbox', { name: /^Notice in / }).first()).toHaveAccessibleName(/^Notice in English/);
+	await expect(dialog.getByLabel('Notice in English')).toHaveAttribute('lang', 'en');
+	await expect(dialog.getByLabel('Notice in Afrikaans')).toHaveAttribute('lang', 'af');
 	await dialog.getByLabel('Notice in English').fill('The river is low. Please irrigate at night.');
 	await dialog.getByLabel(/^Next update expected/).fill('2022-02-15');
 	await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
@@ -69,7 +74,7 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	expect(view.status()).toBe(200);
 	const body = await view.json();
 	expect(body.farm.name).toBe('Upper farm');
-	expect(body.publication.restriction).toEqual({ level: 'restricted', pct: 25, noticeEn: 'The river is low. Please irrigate at night.', noticeAf: null });
+	expect(body.publication.restriction).toEqual({ level: 'restricted', pct: 25, notice: { en: 'The river is low. Please irrigate at night.' } });
 	expect(body.publication.nextExpectedOn).toBe('2022-02-15');
 	expect(JSON.stringify(body)).not.toContain('Lower farm');
 });

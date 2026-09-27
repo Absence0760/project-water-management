@@ -103,7 +103,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 
 | Line on screen | Source | Notes |
 | --- | --- | --- |
-| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice_en` / `notice_af`, `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself |
+| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself |
 | "No restriction from the WUA" (success tokens, check icon) | level `none` | The official answer stays first and loud even when there's nothing to say (§11 F8) |
 | Model card "Looking back: 1 Oct to 10 Jan", chip "Model: watch", "If you had pumped less on the days the river needed it, you would have had about 83 % of the water you needed." | **E7**: (`CF.suppliedM3Day` − \|`CF.ewrSupplyCutM3Day`\|) ÷ `CF.demandM3Day` [(3 179 − 121) ÷ 3 691 = 83 %] | whole %. Band §6.2. Past tense. Under a `restricted` notice the card collapses to one link line, so only the WUA's percentage competes for attention |
 | "The model's estimate, not an official restriction" | fixed text (D10) | Always on the model card |
@@ -355,8 +355,9 @@ screen-reader user can jump by heading.
 - **Reflow:** no horizontal scroll at 320 px (the existing reflow pattern).
   Chips and buttons wrap; nothing has a fixed width.
 - **Afrikaans:** strings run 20 to 30 % longer, which the wrapping layout
-  absorbs. The notice comes in the viewer's language (`notice_af` /
-  `notice_en`), falling back to the other with a "not translated" note.
+  absorbs. The notice comes in the viewer's language (`notice`, one text
+  per language code), falling back to English, then any other written,
+  with a "not translated" note.
   Afrikaans boards of the main and "Why?" screens get drawn once the
   translator is named, before WP-2.6 is built (§12).
 - **Dark mode** follows the system, as the workspace does (board 2).
@@ -551,11 +552,14 @@ settled something this spec left open:*
 - *The binding site (`river.bindingSite`) is recomputed from the run's
   stored flows with the engine's attribution, since a run doesn't store it
   (exact unless the transfer rules form a loop; followups.md).*
-- *`FarmView.publication.restriction` carries both notices (`noticeEn`,
+- *`FarmView.publication.restriction` carried both notices (`noticeEn`,
   `noticeAf`), and the page picks the reader's language, showing "not
   translated" when it falls back to the other (§7). (First built as one
   `notice` picked by `?lang` with a `noticeLang`; changed in WP-2.5 so a
-  language switch and the saved copy need no second request.)*
+  language switch and the saved copy need no second request. Since issue
+  #58 it is one `notice` map by language code, `{ en, af, … }`, falling
+  back to English, then any other the WUA wrote, so a new language needs
+  no schema or API change.)*
 - *A legacy-runoff-model run can't be published (audit H1). Since engine
   1.0.0 removed that model, only a stored run from before it can be one.*
 - *`shortDaysAtStopLevel` is 0 for a farm with no dam (it has no stop

@@ -4,7 +4,10 @@
 // msg() from $lib/i18n/msg, which imports nothing and holds no words. A static
 // import of the message code here would put it in every page's download again.
 // /share is translated too, but stays off the workspace's code: it imports
-// only its own modules, the farm view's catalogue-free ones and the i18n.
+// only its own modules, the farm view's catalogue-free ones and the i18n (the
+// engine too: pure, no workspace code, and the page's formatting already
+// reads its constants; the notice picks its language with the engine's
+// pickNotice and names it from the engine's language table, issue #58).
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
@@ -51,7 +54,7 @@ it('msg() imports nothing, so marking a message costs a shared module nothing', 
 describe('/share stays off the workspace’s code', () => {
 	/** Static (non-type) imports of any module. */
 	const imports = (code: string) => [...code.matchAll(/^\s*import\s+(?!type\b)[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]!);
-	const allowed = /^(svelte|\$app\/(navigation|paths|state)|\$lib\/api(\/types|\/client)?|\$lib\/i18n\/(locale\.svelte|msg|LanguageSwitch\.svelte)|\$lib\/components\/share\/[\w.]+|\$lib\/components\/farm\/(notice|numbers|format|chartGeometry|NoticeCard\.svelte)|\$lib\/components\/layout\/BrandMark\.svelte|\.\/[\w.]+)$/;
+	const allowed = /^(svelte|\$app\/(navigation|paths|state)|\$lib\/api(\/types|\/client)?|@water-management\/engine|\$lib\/i18n\/(locale\.svelte|state\.svelte|msg|LanguageSwitch\.svelte)|\$lib\/components\/share\/[\w.]+|\$lib\/components\/farm\/(notice|numbers|format|chartGeometry|NoticeCard\.svelte)|\$lib\/components\/layout\/BrandMark\.svelte|\.\/[\w.]+)$/;
 	for (const file of [
 		'routes/share/+page.svelte',
 		'lib/components/share/share.ts',

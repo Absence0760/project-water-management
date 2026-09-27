@@ -137,7 +137,7 @@ beforeAll(async () => {
 	const pub = await owner.call('POST', `/projects/${projectId}/publication`, {
 		runId: run.body.run.id,
 		note: `Staff note ${MARKER}`,
-		restriction: { level: 'restricted', pct: 20, noticeEn: 'Irrigate at night only.', noticeAf: null }
+		restriction: { level: 'restricted', pct: 20, notice: { en: 'Irrigate at night only.' } }
 	});
 	expect(pub.status).toBe(201);
 	await tick();

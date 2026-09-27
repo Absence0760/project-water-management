@@ -28,13 +28,13 @@ const rain = (wet: number) => Array.from({ length: DAYS }, (_, i) => (i % 9 === 
 const putRain = async (wet: number) =>
 	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2022-01-01', values: rain(wet) })).status).toBe(200);
 
-async function publish(noticeEn: string) {
-	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: noticeEn });
+async function publish(notice: string) {
+	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: notice });
 	expect(run.status).toBe(201);
 	const res = await owner.call('POST', `/projects/${projectId}/publication`, {
 		runId: run.body.run.id,
 		note: NOTE,
-		restriction: { level: 'advisory', pct: 10, noticeEn, noticeAf: null },
+		restriction: { level: 'advisory', pct: 10, notice: { en: notice } },
 		nextExpectedOn: '2023-06-01'
 	});
 	expect(res.status).toBe(201);
@@ -84,17 +84,17 @@ describe('a link reads the current publication only', () => {
 	it('shows the newest publication, not the one current when the link was made', async () => {
 		const res = await view(token);
 		expect(res.status).toBe(200);
-		expect(res.body.publication.restriction.noticeEn).toBe('Second notice');
+		expect(res.body.publication.restriction.notice).toEqual({ en: 'Second notice' });
 		const [current] = await asOwner('SELECT published_at FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL', [projectId]);
 		expect(res.body.publication.publishedAt).toBe((current.published_at as Date).toISOString());
 		// The function answers one row, the current one: never the superseded publication beside it.
-		const rows = await fnRows('SELECT restriction_level, notice_en FROM app_share_view($1)', [hashOf(token)]);
-		expect(rows).toEqual([{ restriction_level: 'advisory', notice_en: 'Second notice' }]);
+		const rows = await fnRows('SELECT restriction_level, notice FROM app_share_view($1)', [hashOf(token)]);
+		expect(rows).toEqual([{ restriction_level: 'advisory', notice: { en: 'Second notice' } }]);
 		// Positive control: the first publication is still there, superseded, for the function to pass over.
-		const all = await asOwner('SELECT notice_en, superseded_at IS NOT NULL AS superseded FROM run_publication WHERE project_id = $1 ORDER BY published_at', [projectId]);
+		const all = await asOwner('SELECT notice, superseded_at IS NOT NULL AS superseded FROM run_publication WHERE project_id = $1 ORDER BY published_at', [projectId]);
 		expect(all).toEqual([
-			{ notice_en: 'First notice', superseded: true },
-			{ notice_en: 'Second notice', superseded: false }
+			{ notice: { en: 'First notice' }, superseded: true },
+			{ notice: { en: 'Second notice' }, superseded: false }
 		]);
 	});
 

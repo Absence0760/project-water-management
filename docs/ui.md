@@ -547,7 +547,8 @@ put the results first; its first screen follows board A1 of the redesign
   `GET /projects/:id/publication` and names the published run (a link to it
   in Runs, with its period from the page's runs list), when and by whom it
   was published, the notice level with its percentage ("Advisory · 15 %"),
-  the English and Afrikaans notice, and the next expected update (a calendar
+  the notice in each language the WUA wrote it in (named in its own
+  language, the text marked with its `lang`), and the next expected update (a calendar
   day, `fmtDay`). It is read-only for everyone: editors get **Change the
   notice or publish another run**, a link to the Runs tab on the published
   run at its Publication panel (`?tab=runs&run=<id>#res-publication`), so
@@ -2813,15 +2814,18 @@ read it before.
   menu entry **Publication**). Says whether the shown run is the project's
   published baseline ("This run is the published baseline … Published … by
   …"), another run is, or nothing is published yet, and shows the current
-  notice: the level with its percentage ("Advisory · 10 %"), the English and
-  Afrikaans text, the next update date and who last changed it. Editors get
+  notice: the level with its percentage ("Advisory · 10 %"), its text in
+  each language written (table order, `noticeLanguages`), the next update
+  date and who last changed it. Editors get
   **Publish this run** on any other run: a confirm dialog says what changes
   for stakeholders (each farmer sees this run's figures for their own farm
   from 1 October, and the notice; it replaces the current baseline, which
   stays in the history), warns when farm dams have no stop level ("N farm
   dams have no stop level (0 %)…", from the run's model snapshot, design
   §3 Q3), and holds the notice fields (level, cut %, next update date,
-  notice in English and Afrikaans) and an optional note for the staff
+  one "Notice in …" text field per language of the language table, English
+  first, each with its `lang` so the browser spell-checks it in that
+  language: `noticeTextFields`; issue #58) and an optional note for the staff
   ("farmers don't see it"). **Publish** answers "Published. N farm views
   updated." **Edit notice** changes the current notice in place (`PATCH`,
   no re-publishing): "Notice saved." A legacy-model run (a stored run from
@@ -4232,11 +4236,16 @@ published.
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA". The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
-  the page's words are still English, and carries `lang="af"`), or in the
-  one the WUA wrote, with "The WUA wrote this notice in English only" (or
-  "in Afrikaans only") under it (design §7). `FarmView` carries both
-  (`noticeEn`, `noticeAf`), so a switch needs no request and the saved copy
-  holds both (`farm/notice.ts` `pickNotice`, shared with `/share`); water received this season with the ML/m³
+  the page's words are still English, and carries `lang="af"`), else in
+  English, else in the first other language the WUA wrote, with "The WUA
+  wrote this notice in {language} only" under it (design §7). `{language}`
+  is the language's name in the page's words' language from the browser's
+  `Intl.DisplayNames` ("Engels" on an Afrikaans page), the table's own
+  name when the browser has none, so a new language needs no message of
+  its own. `FarmView` carries every language the WUA wrote (`notice`, by
+  code), so a switch needs no request and the saved copy holds them all
+  (the engine's `pickNotice`, through `farm/notice.ts`, shared with
+  `/share` and the alert emails); water received this season with the ML/m³
   switch (saved to the account, `app_user.volume_unit`, and kept on the
   phone for the saved copy); the dam
   (hidden without one) with the days-left line, or the no-stop-level
@@ -4403,14 +4412,17 @@ digest). The modeller workspace stays English.
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
-- **Afrikaans layouts.** Afrikaans runs 20–30 % longer than English, with
-  long compound words. `e2e/tests/af-layout.spec.ts` opens every translated
-  page in Afrikaans at 360 px (sign-in, register, forgot password, the farm
-  view with its why and dam pages, `/farm/words`, the account and alert
-  pages, `/share`) and checks that `<html lang>` is `af`, nothing scrolls
+- **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer
+  than English, with long compound words, and every language has its own
+  reflow risk. `e2e/tests/lang-layout.spec.ts` runs once for each
+  non-English language in the table, opening every translated page at
+  360 px (sign-in, register, forgot password, the farm view with its why
+  and dam pages, `/farm/words`, the account and alert pages, `/share`) and
+  checking that `<html lang>` is that language's code, nothing scrolls
   sideways, no text is cut off in its box, and axe finds nothing, in light
-  and dark. Specs read the Afrikaans from the catalogues
-  (`e2e/support/af.ts`), so a corrected translation doesn't break them.
+  and dark. Specs read a language's words from its catalogues
+  (`e2e/support/lang.ts`: `words(lang)`, `mail(lang)`), so a corrected
+  translation doesn't break them.
 - **Numbers and dates** (D8). The farm view writes the chosen language's
   decimal mark (the table's `decimalMark`) at once: a comma in Afrikaans
   ("84,9 ML"), with no-break spaces between thousands in every language.
@@ -4421,40 +4433,48 @@ digest). The modeller workspace stays English.
   zero).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
-  entries. It was written by the `af-translator` agent and reviewed by the
-  `af-checker` agent (`.claude/agents/i18n/`: meaning, placeholders, bold,
-  plural forms, register, and one term for one English word across the whole
-  set, with §5.1 of `docs/design/farmer-view.md` as the word list); no native
-  speaker has reviewed it yet (docs/followups.md § Afrikaans). The wording
-  goes to real farmers, so a new string goes through the same two steps:
-  `pnpm gen:i18n:export <dir>` writes what's on the sheet as JSON batches,
-  the translator agent fills them, the checker reviews the whole set, and
-  `pnpm gen:i18n:apply <translations.json> <corrections.json>`
-  (`scripts/guards/i18n_apply.mjs`) refuses a translation that drops or adds
-  a placeholder or bold mark, or covers only part of a counted word or a
-  glossary entry, then writes the rest into the three catalogues (the
-  glossary stamped with its `sourceHash`) and rewrites the sheet.
-  `docs/i18n/af-translation-sheet.md` (generated by `pnpm gen:i18n:sheet`)
-  lists every untranslated string with its English, context and placeholders,
-  and an empty Afrikaans column for the client's translator; the farmer
-  glossary entries (`lib/help/farmer.ts`) are on it too (`lib/help/content.af.ts`, stamped with a
-  `sourceHash` of the English so a later English edit makes the translation
-  stale). The sheet lists every English string once, by id (a counted word
-  one row per form, `<id>.one` / `<id>.other`), in section order;
-  the translator's return is applied by id. `catalogue.test.ts` (frontend
-  and backend) and `content.af.test.ts` fail when an untranslated message is
-  missing from the sheet; the frontend's also fails on an af.ts id that is
-  no current message's (a **stale** translation: its English changed, and is
-  back on the sheet under the new id, or it is gone), on a translation that
-  drops a placeholder or a bold marker, and on a note or section nothing
-  uses. `pnpm check:i18n` prints what has no Afrikaans yet and lists any
-  stale translation, and fails when the sheet or the id list is out of date,
-  a message can't be read, or a translation is stale. A stale site
-  translation is moved to the new id once the translator has checked it
-  against the new English, or deleted. When the English of a translated glossary entry
-  changes, the entry goes back on the sheet (marked "the English changed");
-  once the translator has re-checked it (and any fix is in
-  `content.af.ts`), `pnpm gen:i18n:stamp <id>`
+  entries. It was written by the `i18n-translator` agent and reviewed by the
+  `i18n-checker` agent (`.claude/agents/i18n/`, language-parameterised since
+  issue #58 — the target language is the first line of the prompt, with a
+  per-language reference file for register, spelling authority and
+  terminology, `.claude/agents/i18n/languages/<code>.md`: meaning,
+  placeholders, bold, plural forms, register, and one term for one English
+  word across the whole set, with §5.1 of `docs/design/farmer-view.md` as
+  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet
+  (docs/followups.md § Afrikaans). The wording goes to real farmers, so a
+  new string in any language goes through the same two steps:
+  `pnpm gen:i18n:export <lang> <dir>` writes what's still on that language's
+  sheet as JSON batches, the translator agent fills them, the checker
+  reviews the whole set, and `pnpm gen:i18n:apply <lang> <translations.json>
+  <corrections.json>` (`scripts/guards/i18n_apply.mjs`) refuses a
+  translation that drops or adds a placeholder or bold mark, or covers only
+  part of a counted word or a glossary entry, then writes the rest into
+  that language's three catalogues (creating one that doesn't exist yet
+  from a small boilerplate header; a brand new email catalogue also gets
+  its line added in `backend/src/mail/i18n/catalogues.ts`) and rewrites
+  that language's sheet. `docs/i18n/<code>-translation-sheet.md` (one per
+  language, generated by `pnpm gen:i18n:sheet`, default every non-English
+  language in the table) lists every untranslated string with its English,
+  context and placeholders, and an empty column for the client's
+  translator; the farmer glossary entries (`lib/help/farmer.ts`) are on it
+  too (`lib/help/content.<code>.ts`, stamped with a `sourceHash` of the
+  English so a later English edit makes the translation stale). The sheet
+  lists every English string once, by id (a counted word one row per form,
+  `<id>.one` / `<id>.other`), in section order; the translator's return is
+  applied by id. `catalogue.test.ts` (frontend and backend) and
+  `content.af.test.ts` fail when an untranslated message is missing from
+  the sheet; the frontend's also fails on a catalogue id that is no current
+  message's (a **stale** translation: its English changed, and is back on
+  the sheet under the new id, or it is gone), on a translation that drops a
+  placeholder or a bold marker, and on a note or section nothing uses.
+  `pnpm check:i18n` prints what has no words yet and lists any stale
+  translation, for every language, and fails when a sheet or the id list is
+  out of date, a message can't be read, or a translation is stale. A stale
+  site translation is moved to the new id once the translator has checked
+  it against the new English, or deleted. When the English of a translated
+  glossary entry changes, the entry goes back on its sheet (marked "the
+  English changed"); once the translator has re-checked it (and any fix is
+  in `content.<code>.ts`), `pnpm gen:i18n:stamp <lang> <id>`
   (`scripts/guards/i18n_stamp.mjs`) writes the current English's hash into
   its `sourceHash` and rewrites the sheet. It never writes a translation: an
   id without one is refused.
@@ -4463,9 +4483,11 @@ digest). The modeller workspace stays English.
 
 A language is one table entry, three catalogue files, one index line and a
 translation run. No other code changes; `frontend/src/lib/i18n/testLanguage.test.ts`,
-`backend/src/mail/i18n/testLanguage.test.ts` and
-`backend/src/auth/testLanguage.db.test.ts` prove it with a stand-in `xx`
-that exists only in the tests.
+`backend/src/mail/i18n/testLanguage.test.ts`,
+`backend/src/auth/testLanguage.db.test.ts` and the tooling's own
+`scripts/guards/i18n_sheet.test.mjs` / `i18n_apply.test.mjs` (a throwaway
+fixture repo, never the real one) prove it with a stand-in `xx` that exists
+only in the tests.
 
 1. **Table entry.** Add `{ code, name, intl, decimalMark }` to `LANGUAGES`
    in `packages/engine/src/languages.ts`: `code` the BCP 47 primary tag
@@ -4486,12 +4508,13 @@ that exists only in the tests.
    `lang="en"` until the site catalogue is complete. The unit tests fail
    until all three exist (`locale.test.ts`, `translations.test.ts`,
    `catalogues.test.ts`).
-3. **Translation run.** Export, translate, check and apply as above
-   (§ Translation).
-4. **Layout and axe.** The language's layout spec (as `af-layout.spec.ts`:
-   every translated page at 360 px, light and dark) passes, and so does
-   `language.spec.ts`. From the third language the switch is a `<select>`:
-   check it at 360 px in the headers and on the account page.
+3. **Translation run.** `pnpm gen:i18n:export <code> <dir>`, translate,
+   `pnpm check:i18n`, `pnpm gen:i18n:apply <code> …` (§ Translation above).
+4. **Layout and axe.** `e2e/tests/lang-layout.spec.ts` already runs once
+   per non-English language in the table, so the new one needs no new spec
+   file — make sure it (and `language.spec.ts`) passes. From the third
+   language the switch is a `<select>`: check it at 360 px in the headers
+   and on the account page.
 
 ## Alerts
 
@@ -4602,8 +4625,8 @@ signed in or out, for someone outside the project, on a phone first.
 - **Top to bottom:** the catchment's name; "Published by *name* on *date*.
   Data up to *date*." (and the next expected update); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
-  restriction from the WUA"), in the reader's language or the other with a
-  "not translated" line, as on the farm view (marked with its `lang` when
+  restriction from the WUA"), in the reader's language, else English, else
+  another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
   it isn't the page's); **The river's
   ecological reserve**: the outlet (unnamed, it may be a farm) and each
   gauge, with a check or warning icon, the last 30 days and the season in

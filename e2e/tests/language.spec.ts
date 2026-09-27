@@ -6,19 +6,19 @@
 //
 // The Afrikaans catalogue is complete, so choosing Afrikaans turns the words
 // and <html lang> to Afrikaans (the plan's WP-2.5 e2e: the sign-in page and
-// the farm view). The Afrikaans is read from the catalogue (support/af.ts).
+// the farm view). The Afrikaans is read from the catalogue (support/lang.ts).
 // The emails are covered by backend/src/auth/locale.db.test.ts and
 // farms/invites.db.test.ts (e2e mail goes to the server log), and the alert
 // email through Mailpit by alerts-mailpit.spec.ts.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { createRun, register, seedRunnableProject } from '../support/api.ts';
-import { afWords } from '../support/af.ts';
+import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PHONE = { width: 360, height: 740 };
-const words = await afWords();
+const words = await siteWords('af');
 
 const me = async (request: APIRequestContext) => ((await (await request.get(`${API_URL}/auth/me`)).json()) as { user: { locale: string | null; volumeUnit: string } }).user;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -61,7 +61,8 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	const project = await seedRunnableProject(wua.page.request, 'Taal catchment');
 	const runId = await createRun(wua.page.request, project.id, 'Baseline');
 	// The WUA writes both notices; these stand in for its words (the app never writes restriction text).
-	const restriction = { level: 'advisory', pct: null, noticeEn: 'English notice from the WUA, for the test.', noticeAf: '[af] Afrikaans notice from the WUA, for the test.' };
+	const notice = { en: 'English notice from the WUA, for the test.', af: '[af] Afrikaans notice from the WUA, for the test.' };
+	const restriction = { level: 'advisory', pct: null, notice };
 	const pub = await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction } });
 	expect(pub.status(), await pub.text()).toBe(201);
 	const farmer = await register(page.context().request, 'Taal Farmer');
@@ -78,8 +79,8 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	await expect.poll(async () => (await me(page.request)).volumeUnit).toBe('ML');
 
 	// English first.
-	const notice = page.locator('#notice');
-	await expect(notice.getByText(restriction.noticeEn)).toBeVisible();
+	const card = page.locator('#notice');
+	await expect(card.getByText(notice.en)).toBeVisible();
 
 	const numbers = page.getByRole('region', { name: either('Last 12 months, in ML') });
 	await numbers.getByText('Show the numbers', { exact: true }).click();
@@ -95,10 +96,11 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	await expect(page.getByRole('heading', { level: 2, name: words('Water you received this season') })).toBeVisible();
 	await expect(numbers.getByText(words('Show the numbers'), { exact: true })).toBeVisible();
 	// The WUA's Afrikaans follows the choice at once; on an Afrikaans page it needs no lang of its own.
-	await expect(notice.getByText(restriction.noticeAf)).toBeVisible();
-	await expect(notice.getByText(restriction.noticeAf)).not.toHaveAttribute('lang', /./);
-	await expect(notice).not.toContainText(restriction.noticeEn);
-	await expect(notice).not.toContainText(words('The WUA wrote this notice in English only.'));
+	await expect(card.getByText(notice.af)).toBeVisible();
+	await expect(card.getByText(notice.af)).not.toHaveAttribute('lang', /./);
+	await expect(card).not.toContainText(notice.en);
+	// No "written only in …" line: the notice is in the reader's language.
+	await expect(card).not.toContainText(words('The WUA wrote this notice in {language} only.').split('{language}')[0]!);
 	await expectNoViolations(page);
 
 	// From the account now, not just this device: a fresh browser signed in as the farmer starts in Afrikaans and ML.

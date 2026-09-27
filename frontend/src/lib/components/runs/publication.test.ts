@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { damsWithoutStopLevel, draftFrom, emptyDraft, parseDraft, publishBlocker, publishedRunIds, restrictionSummary } from './publication';
+import { damsWithoutStopLevel, draftFrom, emptyDraft, noticeTextFields, noticeLanguages, parseDraft, publishBlocker, publishedRunIds, restrictionSummary } from './publication';
 
 describe('damsWithoutStopLevel', () => {
 	it('counts farm dams whose stop level is 0, not farms without a dam or gauges', () => {
@@ -38,16 +38,23 @@ describe('restrictionSummary', () => {
 });
 
 describe('the notice draft', () => {
+	it('has one text field per language, English first, each named in its own language', () => {
+		expect(noticeTextFields()).toEqual([
+			{ code: 'en', label: 'Notice in English' },
+			{ code: 'af', label: 'Notice in Afrikaans' }
+		]);
+		expect(emptyDraft().notice).toEqual({ en: '', af: '' });
+	});
 	it('round-trips a publication', () => {
-		const p = { restriction: { level: 'restricted' as const, pct: 25.5, noticeEn: 'Cut', noticeAf: null }, nextExpectedOn: '2024-02-01' };
-		expect(draftFrom(p)).toEqual({ level: 'restricted', pct: '25.5', noticeEn: 'Cut', noticeAf: '', nextExpectedOn: '2024-02-01' });
+		const p = { restriction: { level: 'restricted' as const, pct: 25.5, notice: { en: 'Cut' } }, nextExpectedOn: '2024-02-01' };
+		expect(draftFrom(p)).toEqual({ level: 'restricted', pct: '25.5', notice: { en: 'Cut', af: '' }, nextExpectedOn: '2024-02-01' });
 		expect(parseDraft(draftFrom(p))).toEqual({ ok: true, restriction: p.restriction, nextExpectedOn: '2024-02-01' });
 		expect(draftFrom(null)).toEqual(emptyDraft());
 	});
 	it('takes a decimal comma, trims the notices and treats empty as none', () => {
-		expect(parseDraft({ level: 'advisory', pct: ' 12,5 ', noticeEn: '  Save water ', noticeAf: '   ', nextExpectedOn: '' })).toEqual({
+		expect(parseDraft({ level: 'advisory', pct: ' 12,5 ', notice: { en: '  Save water ', af: '   ' }, nextExpectedOn: '' })).toEqual({
 			ok: true,
-			restriction: { level: 'advisory', pct: 12.5, noticeEn: 'Save water', noticeAf: null },
+			restriction: { level: 'advisory', pct: 12.5, notice: { en: 'Save water' } },
 			nextExpectedOn: null
 		});
 	});
@@ -55,6 +62,13 @@ describe('the notice draft', () => {
 		expect(parseDraft({ ...emptyDraft(), pct: '5' })).toMatchObject({ ok: false });
 		expect(parseDraft({ ...emptyDraft(), level: 'advisory', pct: '120' })).toMatchObject({ ok: false });
 		expect(parseDraft({ ...emptyDraft(), level: 'advisory', pct: 'ten' })).toMatchObject({ ok: false });
-		expect(parseDraft({ ...emptyDraft(), noticeAf: 'x'.repeat(2001) })).toEqual({ ok: false, error: 'The Afrikaans notice is 2001 characters; the most is 2000.' });
+		expect(parseDraft({ ...emptyDraft(), notice: { en: '', af: 'x'.repeat(2001) } })).toEqual({ ok: false, error: 'The Afrikaans notice is 2001 characters; the most is 2000.' });
+	});
+	it('lists the languages a notice is written in, in table order', () => {
+		expect(noticeLanguages({ af: 'Spaar water', en: 'Save water' })).toEqual([
+			{ code: 'en', name: 'English', text: 'Save water' },
+			{ code: 'af', name: 'Afrikaans', text: 'Spaar water' }
+		]);
+		expect(noticeLanguages({})).toEqual([]);
 	});
 });

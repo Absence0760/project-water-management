@@ -70,13 +70,13 @@ describe('the notice', () => {
 
 	it('is null with no restriction (the page says "No restriction from the WUA")', () => {
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'none', pct: null, noticeEn: null, noticeAf: null };
+		v.publication.restriction = { level: 'none', pct: null, notice: {} };
 		expect(noticeCard(v)).toBeNull();
 	});
 
 	it('names a restriction and, with no text, carries only the published percentage', () => {
 		const v = vaalbankFixture();
-		v.publication.restriction = { level: 'restricted', pct: 20, noticeEn: null, noticeAf: null };
+		v.publication.restriction = { level: 'restricted', pct: 20, notice: {} };
 		const n = noticeCard(v)!;
 		expect(n.heading).toBe('Notice from the WUA · Restriction');
 		expect(n.label).toBeNull();
@@ -87,7 +87,7 @@ describe('the notice', () => {
 		afterEach(() => setLocale('en'));
 		const both = () => {
 			const v = vaalbankFixture();
-			v.publication.restriction = { level: 'advisory', pct: null, noticeEn: 'Irrigate at night', noticeAf: '[af] Irrigate at night' };
+			v.publication.restriction = { level: 'advisory', pct: null, notice: { en: 'Irrigate at night', af: '[af] Irrigate at night' } };
 			return v;
 		};
 
@@ -102,18 +102,18 @@ describe('the notice', () => {
 
 		it('falls back to the language the WUA wrote, and says so', async () => {
 			const enOnly = both();
-			enOnly.publication.restriction.noticeAf = null;
+			delete enOnly.publication.restriction.notice.af;
 			await setLocale('af', {});
 			expect(noticeCard(enOnly)).toMatchObject({ heading: 'Irrigate at night', lang: 'en', langNote: 'The WUA wrote this notice in English only.' });
 			await setLocale('en');
 			const afOnly = both();
-			afOnly.publication.restriction.noticeEn = '  ';
+			afOnly.publication.restriction.notice.en = '  ';
 			expect(noticeCard(afOnly)).toMatchObject({ heading: '[af] Irrigate at night', lang: 'af', langNote: 'The WUA wrote this notice in Afrikaans only.' });
 		});
 
 		it('has no language without words (the percentage alone)', () => {
 			const v = vaalbankFixture();
-			v.publication.restriction = { level: 'restricted', pct: 20, noticeEn: null, noticeAf: null };
+			v.publication.restriction = { level: 'restricted', pct: 20, notice: {} };
 			expect(noticeCard(v)).toMatchObject({ lang: null, langNote: null });
 		});
 	});

@@ -14,6 +14,7 @@
 // The WUA's restriction notice and next-update date carry over unchanged,
 // since a new run is no reason to lift or change a restriction. The note says
 // it was published automatically, and the audit event carries `auto: true`.
+import type { NoticeText } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
@@ -46,11 +47,10 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 		published_at: Date;
 		restriction_level: 'none' | 'advisory' | 'restricted';
 		restriction_pct: string | null;
-		notice_en: string | null;
-		notice_af: string | null;
+		notice: NoticeText;
 		next_expected_on: string | null;
 	}>(
-		`SELECT run_id, published_at, restriction_level, restriction_pct, notice_en, notice_af, next_expected_on
+		`SELECT run_id, published_at, restriction_level, restriction_pct, notice, next_expected_on
 		 FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL`,
 		[projectId]
 	);
@@ -81,8 +81,7 @@ export async function autoPublish(db: Db, projectId: string, runId: string): Pro
 			restriction: {
 				level: current.restriction_level,
 				pct: current.restriction_pct === null ? null : Number(current.restriction_pct),
-				noticeEn: current.notice_en,
-				noticeAf: current.notice_af
+				notice: current.notice
 			},
 			nextExpectedOn: current.next_expected_on
 		});

@@ -126,6 +126,6 @@ test('the seeded farmer reads their published farm and the advisory notice', asy
 	const body = await view.json();
 	expect(body.farm.name).toBe('Vaalbank');
 	expect(body.publication.restriction.level).toBe('advisory');
-	expect(body.publication.restriction.noticeAf).toMatch(/^Die rivier is laag/);
+	expect(body.publication.restriction.notice.af).toMatch(/^Die rivier is laag/);
 	expect(body.farm.monthly).toHaveLength(12);
 });

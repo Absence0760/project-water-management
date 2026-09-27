@@ -14,7 +14,7 @@ import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type Model
 import { STALE_DAYS } from '$lib/components/series/freshness';
 import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
-import { LEVEL_WORDS, pickNotice, splitNotice, type NoticeVm } from './notice';
+import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from './notice';
 import { count, DAYS, daysBetween, FARMS, fmtDay, fmtDayMonth, fmtMonthShort, fmtPct, fmtStampDay, fmtStampTime, fmtVolume, joinAnd, POINTS, type VolumeUnit, WEEKS } from './format';
 
 // ---- The dates line (§2, §6.1 item 2) ---------------------------------------
@@ -50,14 +50,14 @@ export { splitNotice, type NoticeVm } from './notice';
 
 /**
  * null for level `none` (the page shows "No restriction from the WUA"). The
- * WUA's words in the language the reader chose, or in the other one with a
- * line saying so (design §7): the chosen language, not the page's words,
+ * WUA's words in the language the reader chose, else in English, else in
+ * another it wrote, with a line saying so (design §7): the chosen language, not the page's words,
  * since the WUA's Afrikaans is real even while our own isn't translated yet.
  */
 export function noticeCard(view: FarmView): NoticeVm | null {
 	const r = view.publication.restriction;
 	if (r.level === 'none') return null;
-	const picked = pickNotice(r, i18n.locale);
+	const picked = pickNotice(r.notice, i18n.locale);
 	const { title, body } = splitNotice(picked?.text ?? null);
 	// i18n-section: farm.notice
 	const label = t('Notice from the WUA · {level}', { level: levelWord(r.level) });
@@ -71,7 +71,7 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		byline: `${view.publication.publishedBy}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,
-		langNote: picked && picked.lang !== i18n.locale ? t(picked.lang === 'en' ? 'The WUA wrote this notice in English only.' : 'The WUA wrote this notice in Afrikaans only.') : null
+		langNote: picked && picked.lang !== i18n.locale ? t(WRITTEN_ONLY_IN, { language: languageName(picked.lang) }) : null
 	};
 }
 

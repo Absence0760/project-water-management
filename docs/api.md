@@ -1643,15 +1643,21 @@ received. For a **forecast run** (WP-2.12) it is the day before
 | POST | `/projects/:id/publication` | `{ runId, note?, restriction?, nextExpectedOn? }` | `201 { publication, farms }`: supersedes the current publication; `farms` is how many farm projections were stored (every farm of the run that is still a farm of the project). `400` for a run not in this project; `409` for a legacy-runoff-model run (a stored run from before engine 1.0.0; a workbook comparison, not evidence) or a run too old to project (from before engine 0.17.0, which has no EWR charge series) | editor |
 | PATCH | `/projects/:id/publication/:pubId` | `{ note?, restriction?, nextExpectedOn? }` (at least one) | `{ publication }`: the notice, the note or the next date change without re-publishing; stamps `updatedAt` / `updatedBy`. `409` for a superseded publication | editor |
 
-- `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, noticeEn?: string | null, noticeAf?: string | null }`.
+- `restriction = { level: 'none' | 'advisory' | 'restricted', pct?: 0–100 | null, notice?: { [code]: string } | null }`.
   A change replaces the whole notice. `pct` is stored to two decimals and is
-  refused with `none`. Notices and the note are trimmed, at most 2 000
-  characters, no NUL; an empty notice is none. `nextExpectedOn` is a date
+  refused with `none`. `notice` is the WUA's words by language code
+  (`{ "en": "…", "af": "…" }`): every key must be a language of the one
+  language table (`packages/engine/src/languages.ts`; `400` naming an
+  unknown code), each text is trimmed, at most 2 000 characters, no NUL,
+  and a blank one is no notice in that language; `null`, `{}` or no
+  `notice` is none (issue #58; 081_notice_languages.sql). The note is
+  trimmed the same way. `nextExpectedOn` is a date
   (`YYYY-MM-DD`) or `null` (design E10). Without `restriction` a
   publication has none.
 - `PublicationMeta = { id, runId, publishedAt, publishedBy, restriction: { level }, supersededAt }`;
   `publishedBy` is a display name (`null` once that account is gone).
-- `Publication = PublicationMeta & { note?, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn, catchmentView, updatedAt, updatedBy }`.
+- `Publication = PublicationMeta & { note?, restriction: { level, pct, notice }, nextExpectedOn, catchmentView, updatedAt, updatedBy }`,
+  `notice` as above (`{}` for none), only the languages the WUA wrote.
   `note` is the modeller's note to the project's staff: returned to viewers
   and above only, never to a farmer.
 - `catchmentView = { runStart, dataUntil, runDays, season: { from, to, days }, last30: { from, to, days }, farmCount, sites: { name, isOutlet, daysNotMet: { run, season, last30 } }[], engineVersion, runoffModel, calibration: { nse, pbias, kge } | null }`:
@@ -1691,7 +1697,7 @@ never a farm's row, name or id.
 - `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
   gone). `lastUsedAt` moves at most once an hour, on a `/share/view`.
-- `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn } }`.
+- `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, notice }, nextExpectedOn } }`.
   `catchmentView = { runStart, dataUntil, runDays, season, last30, farmCount, sites }`,
   the publication's [`catchmentView`](#publication) cut to an allowlist
   (no `engineVersion`, `runoffModel` or `calibration`), and the outlet's
@@ -1863,10 +1869,11 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil` to today in the project's time zone.
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
-- `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, noticeEn, noticeAf }, nextExpectedOn }`.
-  The WUA's notice in both languages as it wrote them (either may be
-  `null`); the page shows the reader's language, or the other with a "not
-  translated" line (design §7), so a language switch needs no request.
+- `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
+  The WUA's notice in every language it wrote it in, by code (`{}` for
+  none); the page shows the reader's language, else English, else another,
+  with a "not translated" line (`pickNotice`, design §7), so a language
+  switch needs no request.
 - `outlet30 = { name, daysNotMet, days }`: the outlet over the 30 days to
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
