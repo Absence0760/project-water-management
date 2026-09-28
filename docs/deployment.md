@@ -813,7 +813,11 @@ plan-only until the first deploy):
   client and playwright-core, installed with `npm ci` from the lockfile in
   `backend/renderer-deps/`; moving Playwright means the tag and digest there,
   that package.json and backend's, and a refreshed lock, and `pnpm
-  check:pins` fails until all of them agree with e2e's `@playwright/test`), x86_64,
+  check:pins` fails until all of them agree with e2e's `@playwright/test`;
+  its build stage's apt packages are pinned to exact versions from one
+  Ubuntu archive snapshot, `APT_SNAPSHOT`, which `check:pins` also
+  enforces, and Dependabot's `docker` entry proposes new tags and digests
+  but never auto-merges them), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,

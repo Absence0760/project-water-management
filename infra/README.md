@@ -101,8 +101,14 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
   The image is pinned by content: its Playwright base by tag *and* digest
   (`mcr.microsoft.com/playwright:v<version>-noble@sha256:…`, both `FROM`
-  lines), and its npm packages (playwright-core, aws-lambda-ric) by
-  `backend/renderer-deps/package-lock.json`, installed with `npm ci`. Moving
+  lines), its npm packages (playwright-core, aws-lambda-ric) by
+  `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
+  its build stage's apt packages by exact version from one Ubuntu archive
+  snapshot (`APT_SNAPSHOT`; move the snapshot and the versions together,
+  read from the base with `apt-cache policy` as the Dockerfile shows).
+  Dependabot's `docker` entry for `/backend` opens the tag-and-digest PR;
+  it is never auto-merged (`pnpm check:workflows` keeps `docker` off the
+  auto-merge allowlist). Moving
   Playwright moves every pin at once: the Dockerfile tag and digest
   (`docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`),
   playwright-core in `backend/renderer-deps/package.json` (then
