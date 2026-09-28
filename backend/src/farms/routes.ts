@@ -22,7 +22,7 @@ import { withUser } from '../db/tx.js';
 import { farmLinks, maskEmail, recordAudit, recordLinkChanges } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
-import { dropInvite, inviteByEmail, type PendingMail } from '../invites/invites.js';
+import { countInvites, dropInvite, inviteByEmail, type PendingMail } from '../invites/invites.js';
 import { DEFAULT_LOCALE, LANGUAGES, LOCALES, type Locale } from '@water-management/engine/languages';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
@@ -218,6 +218,8 @@ export const farmerRoutes = new Hono<AuthEnv>()
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			const nodeIds = await assertFarms(db, id, body.nodeIds);
+			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
+			await countInvites(c, db, 'project', id, 1);
 			const { rows: users } = await db.query<UserRow>(USER_SQL, [[body.email]]);
 			const user = users[0];
 			// Same rule as adding a member: only an account that proved it owns the
@@ -277,6 +279,9 @@ export const farmerRoutes = new Hono<AuthEnv>()
 			const byEmail = new Map<string, Valid[]>();
 			for (const v of valid) byEmail.set(v.email, [...(byEmail.get(v.email) ?? []), v]);
 			const emails = [...byEmail.keys()];
+			// Every address counts against the daily cap (101_invite_throttle) before any is looked up, a dry run's too:
+			// its preview says which would be added and which invited.
+			await countInvites(c, db, 'project', id, emails.length);
 			const { rows: users } = await db.query<UserRow>(USER_SQL, [emails]);
 			const userOf = new Map(users.map((u) => [u.email.toLowerCase(), u]));
 			const { rows: members } = await db.query<{ user_id: string; role: string }>(

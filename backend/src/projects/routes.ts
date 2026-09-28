@@ -12,7 +12,7 @@ import {
 	recordLinkChanges,
 	recordModelRevision
 } from '../history/record.js';
-import { dropInvite, inviteByEmail } from '../invites/invites.js';
+import { countInvites, dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
@@ -383,6 +383,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
+			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
+			await countInvites(c, db, 'project', id, 1);
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
 				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
 				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',

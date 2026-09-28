@@ -130,6 +130,21 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (`POST /auth/resend-verification`). Opening a confirmation link trusts that
   browser for the address's sign-in lockout (`auth/device.ts`), as a password
   reset does.
+- **Adding people by email is capped** (issue #51, `101_invite_throttle.sql`,
+  `invites/invites.ts` `INVITE_CAP`): 300 addresses a day per inviting
+  person and per project or team, across the member, farmer, bulk-farmer
+  and team-member routes, each address counted before it is looked up and
+  a bulk dry run counted too. Any registered user can own a project, and
+  those routes add a verified account at once but invite any other
+  address, so they tell the adder which addresses have verified accounts
+  (and their display names) and mail the project's name to an address the
+  adder chose; the cap bounds both. `app_invite_attempt` (SECURITY
+  DEFINER) counts only for the project's owner or the team's admin, so
+  nobody can use up another project's allowance; the table is deny-all.
+  **Open:** the add itself still differs (and the members list shows the
+  account at once) until a verified account must accept an invite too
+  ([followups.md § Roles and what each member sees](./followups.md#roles-and-what-each-member-sees)).
+  Tests: `invites/invites.db.test.ts` "the daily cap on adding by email".
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,

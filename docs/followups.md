@@ -1842,6 +1842,35 @@ the first non-modeller user is invited (WUA staff, a client reviewer), and
 with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
 role and not before it.
 
+- [ ] **Adding someone by email tells the adder whether they have an
+      account, and adds a verified account without asking it** (issue #51,
+      adversary finding 3). `POST /projects/:id/members`, `/farmers`,
+      `/farmers/bulk` and `POST /teams/:id/members` add a verified account
+      at once (`201 { member }` with its display name, bulk `status:
+      'added'`) and invite any other address (`201 { invited: true }`,
+      `'invited'`). Any registered user can create a project and so own
+      one, so this probes which addresses have verified accounts, learns
+      their display names, and makes a stranger a member (with the alert
+      mails that brings) without their consent. Built now: the daily cap on
+      adding by email, 300 a person and 300 a project or team, counted
+      before the lookup (`101_invite_throttle.sql`, `invites/invites.ts`
+      `INVITE_CAP`), which bounds both the probing and the invite mail.
+      **Not built, and one change:** every add by email becomes an invite,
+      and a verified account joins only when its holder accepts (a link in
+      the invite mail opening an accept page while signed in, or a pending
+      invitation on their project list), so every answer is the same
+      `{ invited: true, invite }` / `'invited'` and no display name is shown
+      before acceptance. Changing the response shape alone would not close
+      the leak: `GET /projects/:id/members` (and the farmers list) shows an
+      added account, with its name and address, at once, so the shape and
+      acceptance have to land together. Size: the invite routes, an accept
+      endpoint and page, the members and farmers panels' wording, and the
+      tests that add verified members directly (about 200 call sites use
+      `POST …/members` as setup and would need an accept step or a test
+      helper). Who: operator (product call: WUA staff lose "added at once").
+      Trigger: before public registration opens, or before the first
+      catchment with members outside the operator's own team.
+
 ## Features left half-way
 
 - [ ] **Make the model causal, then run forecast mode once** (engine-audit.md

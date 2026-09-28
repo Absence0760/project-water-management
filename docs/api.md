@@ -631,7 +631,7 @@ out, and a re-import of an export records itself as a `project-file` import.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
@@ -660,8 +660,8 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code> }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
-| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code> }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project; `429` past the daily cap on adding by email | owner |
+| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }`; `429` when its distinct valid addresses (a dry run's too) would pass the daily cap on adding by email | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
@@ -711,7 +711,19 @@ pre-registering a colleague's address doesn't get you added in their place.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
 Adding an address whose account *is* verified makes it a member directly and
-clears its invite.
+clears its invite (so the answer, and the members list, tell the adder that
+the address has a verified account: [followups.md § Roles and what each
+member sees](./followups.md#roles-and-what-each-member-sees), issue #51).
+
+**The daily cap on adding by email** (issue #51, `101_invite_throttle.sql`,
+`invites/invites.ts` `INVITE_CAP`): a person adds at most **300** addresses a
+day, and a project or team is added to at most 300 times a day, across
+`POST /projects/:id/members`, `/farmers`, `/farmers/bulk` (each distinct
+valid address counts, a dry run's too) and `POST /teams/:id/members`. Every
+address counts before it is looked up, whether it is then added or invited;
+past the cap the answer is `429 { error }` with `Retry-After` (seconds),
+the same for any address, and nothing is counted, added, invited or mailed.
+A window is 24 hours from its first add.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -740,7 +752,7 @@ move or copy into it). `role` in the member and invite bodies is one of
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |

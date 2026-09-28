@@ -9,7 +9,7 @@
 // by the verify-email link, a password-reset link, or signing up through the
 // invite link itself (app_accept_invites). Owners (projects) / admins (teams)
 // list and revoke pending invites; RLS enforces the same.
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { issueEmailToken } from '../auth/email-routes.js';
 import { newToken, RESEND_COOLDOWN, TOKEN_TTL } from '../auth/tokens.js';
@@ -31,6 +31,39 @@ export type InviteKind = 'project' | 'team';
  * of someone who never signed up (docs/security.md § Personal information).
  */
 export const INVITE_RETENTION_DAYS = 90;
+
+/**
+ * How many addresses one person may add by email in a day, and one project
+ * or team may be added to (101_invite_throttle.sql, issue #51). Every
+ * address an add names counts, before it is looked up, whether it is then
+ * added or invited: a full bulk add (200 rows) and more fits, while probing
+ * which addresses have accounts, or mailing strangers the project's name,
+ * stops at a few hundred a day.
+ */
+export const INVITE_CAP = { perUser: 300, perTarget: 300, window: '24 hours' } as const;
+
+/**
+ * Count `n` addresses the signed-in user is adding to a project (as its
+ * owner) or a team (as its admin), before any is looked up: 429 with
+ * Retry-After when the day's cap is used up (nothing counted then). The
+ * caller has checked the role already.
+ */
+export async function countInvites(c: Context, db: Db, kind: InviteKind, targetId: string, n: number): Promise<void> {
+	if (n < 1) return;
+	const { rows } = await db.query<{ wait: number }>('SELECT app_invite_attempt($1, $2, $3, $4, $5, $6::interval) AS wait', [
+		kind,
+		targetId,
+		n,
+		INVITE_CAP.perUser,
+		INVITE_CAP.perTarget,
+		INVITE_CAP.window
+	]);
+	const wait = rows[0]?.wait ?? 0;
+	if (wait > 0) {
+		c.header('Retry-After', String(wait));
+		throw new ApiError(429, `too many people added by email today: try again in ${Math.ceil(wait / 3600)} h`);
+	}
+}
 
 /** Delete invites expired more than `days` ago (the job tick, as no user). Returns how many went. */
 export async function purgeInvites(db: Db, days = INVITE_RETENTION_DAYS): Promise<number> {
