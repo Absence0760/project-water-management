@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CalibrationStats } from '@water-management/engine';
-import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, waterYearLabel, windowError } from './metrics';
+import { describeWindow, isLegacyStats, isPartYear, kgeComponents, metricRows, volumeBiasText, waterYearLabel, windowError } from './metrics';
 
 const base: CalibrationStats = {
 	days: 100,
@@ -23,7 +23,11 @@ describe('metricRows', () => {
 	it('formats values with a plain explanation and no pass mark (calibration research CR-6)', () => {
 		const rows = Object.fromEntries(metricRows(base).map((r) => [r.key, r]));
 		expect(rows.nse!.value).toBe('0.70');
-		expect(rows.pbias!.value).toBe('-12.3%');
+		// PBIAS −12.34 (Moriasi sign) is 12.3 % too much water, the volume error +12.34: one reading, in words (issue #51).
+		expect(rows.pbias!.value).toBe('12.3% too wet');
+		expect(rows.pbias!.label).toBe('Volume bias (PBIAS)');
+		// One tile for the volume bias: the signed volume error isn't shown beside it.
+		expect(Object.keys(rows)).not.toContain('volumeErrorPct');
 		expect(rows.rmseM3s!.unit).toBe('m³/s');
 		expect(metricRows(base).every((r) => r.help.length > 10)).toBe(true);
 		// Moriasi's thresholds were set for monthly flows: no daily score is rated.
@@ -39,8 +43,18 @@ describe('metricRows', () => {
 		expect(isLegacyStats(base)).toBe(false);
 		const rows = Object.fromEntries(metricRows(old).map((r) => [r.key, r]));
 		expect(rows.kge!.value).toBe('–');
-		expect(rows.volumeErrorPct!.value).toBe('–');
+		expect(rows.pbias!.value).toBe('30.0% too dry');
 		expect(kgeComponents(old)).toBeNull();
+	});
+});
+
+describe('volumeBiasText (issue #51)', () => {
+	it('reads the volume error in words, never a sign', () => {
+		expect(volumeBiasText(-57.594)).toBe('57.6% too dry');
+		expect(volumeBiasText(12.34)).toBe('12.3% too wet');
+		expect(volumeBiasText(0.01)).toBe('0.0%');
+		expect(volumeBiasText(null)).toBe('–');
+		expect(volumeBiasText(Number.NaN)).toBe('–');
 	});
 });
 

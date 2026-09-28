@@ -1060,6 +1060,26 @@ forecast tail out, and a forecast run keeps it apart (§2.4f). Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
+**A CHIRPS feed into the catchment rain series** (issue #51). The feed may
+also target `rain_catchment_mm` (Settings → Data feeds, *Into series*; a
+series that already holds data is replaced only after an owner confirms).
+Then CHIRPS *is* the catchment rain, and everything above that treats CHIRPS
+as the gap-filler stops applying to it:
+- it is used **as published**: the monthly bias correction (§2.4b) corrects
+  `rain_chirps_mm` against the catchment series, so it never touches CHIRPS
+  written into the catchment series itself;
+- the checks that use CHIRPS as the reference for the catchment rain, the
+  low-vs-CHIRPS warning and the double-mass check (§2.10a), compare it with
+  nothing independent, or with itself if the same product is also in
+  `rain_chirps_mm`;
+- GR4J (§2.4a) is calibrated on raw satellite rain, whose areal bias the
+  parameters absorb.
+That can be the right choice for an ungauged catchment, with the areal
+correction (§2.4g) scaling the product to the catchment's rain, but it is a
+modelling decision, not a default: with any gauge, write CHIRPS into
+`rain_chirps_mm` and let it fill the gauge's gaps. The feed form says so under
+*Into series* when this target is picked (`feeds.ts` `targetHint`).
+
 **One CHIRPS product and version per series** (issue #40 part c). The
 factors are fitted on whatever the CHIRPS series holds, so they are only as
 good as its homogeneity. CHIRPS v2.0 and v3.0 differ by an era-dependent
@@ -1445,6 +1465,24 @@ tail and with it. Its output is
   days), but not its warning (the summaries no longer cover them);
 - a self-check the run with the tail fails, added to the warnings as *self-check
   failed on the run with the forecast tail (…)*.
+
+**Record-wide views outside the run keep to the history too** (issue #51).
+The daily series run on into the tail, so anything that ranks or fits over
+a saved run's whole record must cut them first, or the forecast days leak
+back in:
+- the flow-duration curve and its Q10–Q95 table (the Runs tab, the summary
+  CSV, the `.xlsx` workbook, the report): `fdcPercentileTable(flows, { startDate,
+  forecastFrom })` cuts every record at `forecastFrom` and reports the days it
+  left out (`forecastDays`); a chart drawing the curves cuts its series with
+  `beforeForecast` (`views/fdc.ts`). A forecast run's table is the ordinary
+  run's to the bit;
+- firm yield (§2.13) refuses a forecast run (409), as sweeps, outlooks and
+  scenarios do;
+- the automatic fit (§2.10b): the browser's `fitInput` (`frontend/src/lib/calibration/fit.ts`)
+  applies `withoutForecastTail` to the live input (`GET /model-input`, which
+  carries the forecast series whole) after the form's settings are in, as a
+  saved run does after the project's, so the fit and its "before" scores see
+  the record only and agree with an ordinary run's.
 
 **Why two runs: the model is not causal.** The plan assumed a run with a
 tail and one without agree on every shared day because the simulation is
@@ -3916,6 +3954,23 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   pan coefficient or A-pan evaporation it is taken from), the areal rainfall
   correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods
   or zero-rain run handling has changed since the fit. …".
+  **CHIRPS factor drift (issue #51).** The monthly factors are fitted on
+  every day the catchment rain and CHIRPS share (§2.4b), so with the
+  settings and product unchanged they still move when those days change: a
+  logger reporting beside a daily CHIRPS feed adds shared days on every
+  merge, and preliminary CHIRPS turning final revises them. With the run's
+  applied factor sets (`FitForcingNow.chirpsFactors`, the frontend's
+  `runChirpsFactors` of `summary.chirpsCorrection`; the Settings form has no
+  run, so it doesn't compare), `fitRecordStatus` sets `chirpsFactorsChanged`
+  (and `forcingChanged`) when the number of fit ranges differs, a month has a
+  factor on one side only, or a month's factor moved by more than
+  `CHIRPS_FACTOR_TOLERANCE` (2 %) of the fit's (`chirpsFactorsDrifted`). A
+  change of bias-correction mode, fit period or product is said by its own
+  flag instead. The caveat names the cause and the durable fix: refit, or fit
+  the factors on fixed water years (Settings → CHIRPS fit period ranges),
+  which a fed project should do so its factors stop moving with each merge.
+  Run comparison's "Forcing changed since fit" says *yes (the CHIRPS factors
+  drifted)*. Not a run output, so `ENGINE_VERSION` doesn't move.
   **The areal rainfall correction (engine ≥ 1.13.0, §2.4g).**
   `forcing.arealRain` is always recorded (null = none). A different factor
   in any month, or a correction added or removed, is a forcing change; its
@@ -4107,7 +4162,7 @@ primary catchment series only.
 
 | Check | Rule | Why |
 | --- | --- | --- |
-| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
+| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days, and from engine 1.16.0 (issue #51) a negative **flow** is read as missing everywhere (`prepare.ts` `alignFlow`: calibration statistics, the fit, plausibility, the `observed_flow` series), as the DWS import and the CSV upload read it, the warning saying so |
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
 | Flat-lines | rain: the same non-zero value on 5+ consecutive days (A-pan 7). Flow (engine ≥ 1.12.0): the same value, zero included, on max(14, ⌈3·r / (0.01·Q)⌉) consecutive days, capped at 90, where r is the record's resolution and Q the value (below). Rain's zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
@@ -4916,7 +4971,9 @@ the model is unchanged (the version moved to 0.34.0 for the new API).
 **Definitions.** Every result is **historical**: it replays the one record
 the project has. Stochastic yield, from many synthetic records, can be
 materially less reliable than the historical firm yield (Water SA 2022) and
-is Step 4; the UI says so next to every number.
+is Step 4; the UI says so next to every number. Never on a forecast run
+(issue #51): its input runs on past the record on forecast rain (§2.4f), so
+the API refuses one (409) and the Network tab doesn't offer it.
 
 - **Historical firm yield** of dam *d*: the largest draft *x* (m³/day) that
   *d* supplies on every day of the record without a single failure day, the

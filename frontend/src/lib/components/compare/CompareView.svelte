@@ -38,7 +38,7 @@
 	import { rainSourceNote } from '$lib/components/compare/rainSource';
 	import { asFitRecord } from '$lib/components/compare/fit';
 	import { compareDamStorage, leadChange, outcomeRows, takeaways } from '$lib/components/compare/summary';
-	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
 	import RunPicker from '$lib/components/compare/RunPicker.svelte';
 	import { defaultPair, defaultRunFor, defaultWhatIf, formatRef, parseRef, publishedBaseline, type RunRef } from '$lib/components/compare/picker';
 	import { compareEvidenceNote } from '$lib/components/runs/evidence';
@@ -688,6 +688,8 @@
 						chirpsB={chirpsSourceOfInput(data.b.run.inputs.series)}
 						apanA={apanDailyOfInput(data.a.run.inputs.series)}
 						apanB={apanDailyOfInput(data.b.run.inputs.series)}
+						factorsA={runChirpsFactors(data.a.run.summary)}
+						factorsB={runChirpsFactors(data.b.run.summary)}
 					/>
 				</section>
 

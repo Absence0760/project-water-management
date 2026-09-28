@@ -14,7 +14,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
-	import { damsHeadline, headlines, ranAgo, runDays, type DamsState } from './latestRun';
+	import { damsHeadline, headlines, historyDays, ranAgo, type DamsState } from './latestRun';
 
 	let {
 		meta,
@@ -46,7 +46,7 @@
 		dams: DamsState;
 	} = $props();
 
-	const all = $derived(run ? headlines(run.summary, runDays(run), previous?.summary ?? null) : []);
+	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null) : []);
 	// Reserve · Irrigation supplied · Dams today · NSE; the outflow goes under them.
 	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams), ...all.filter((h) => h.id === 'nse')] : []);
 	const outflow = $derived(all.find((h) => h.id === 'outflow') ?? null);

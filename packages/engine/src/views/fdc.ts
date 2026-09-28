@@ -5,6 +5,13 @@
 // read that table from fdcPercentileTable here (issue #45), so an export
 // carries exactly the numbers the chart shows. A view over a saved run's
 // series: not part of runModel, so ENGINE_VERSION doesn't move.
+//
+// A forecast run's series run on into its forecast days (WP-2.12). The FDC
+// is a record-wide statistic of the history, so every caller ranks only the
+// days before the first forecast day: fdcPercentileTable cuts them itself
+// given the run's start and forecastFrom, and a chart drawing the curves cuts
+// its series with beforeForecast (issue #51).
+import { toEpochDay } from '../calendar';
 
 /** Exceedance percentages sampled for plotting: fine at the tails, coarser in the middle. */
 export function exceedanceGrid(): number[] {
@@ -99,6 +106,27 @@ export function finiteCount(values: ArrayLike<number | null>): number {
 	return n;
 }
 
+/**
+ * How many of a run's days come before its forecast tail: the days from
+ * `startDate` to the day before `forecastFrom`. Null when the run has no
+ * forecast tail (an ordinary run, or `forecastFrom` null or absent).
+ */
+export function historyDayCount(startDate: string, forecastFrom: string | null | undefined): number | null {
+	if (!forecastFrom) return null;
+	return Math.max(0, toEpochDay(forecastFrom) - toEpochDay(startDate));
+}
+
+/**
+ * A daily series starting on `startDate`, cut before a forecast run's first
+ * forecast day (issue #51): the historical record a record-wide statistic
+ * (the flow-duration curve and its table) ranks. The series itself when the
+ * run has no forecast tail.
+ */
+export function beforeForecast<T>(values: ArrayLike<T>, startDate: string, forecastFrom: string | null | undefined): ArrayLike<T> {
+	const n = historyDayCount(startDate, forecastFrom);
+	return n === null || n >= values.length ? values : Array.prototype.slice.call(values, 0, n);
+}
+
 /** The flow records the FDC chart ranks, in its order (natural, simulated outflow, observed). */
 export const FDC_RECORDS = ['natural', 'simulated', 'observed'] as const;
 export type FdcRecord = (typeof FDC_RECORDS)[number];
@@ -128,14 +156,33 @@ export interface FdcPercentileTable {
 	runDays: number;
 	/** Days the observed record has a reading. */
 	observedDays: number;
+	/**
+	 * A forecast run's forecast days left out of every row (issue #51): the
+	 * table ranks the history only. 0 on an ordinary run.
+	 */
+	forecastDays: number;
+}
+
+/** A forecast run's split, for fdcPercentileTable: the day its series start and its first forecast day. */
+export interface FdcRunDays {
+	startDate: string;
+	forecastFrom?: string | null;
 }
 
 /**
  * The FDC chart's Q10/Q50/Q90/Q95 table for a run's catchment flows. Values
  * in any one unit (the chart passes m³/s or m³/day, the exports m³/s); a
- * record that is absent is left out.
+ * record that is absent is left out. With `run` (the series' start day and a
+ * forecast run's forecastFrom) the forecast days are cut off first, so a
+ * forecast run's table is its history's, that of an ordinary run.
  */
-export function fdcPercentileTable(flows: Partial<Record<FdcRecord, ArrayLike<number | null>>>): FdcPercentileTable {
+export function fdcPercentileTable(allFlows: Partial<Record<FdcRecord, ArrayLike<number | null>>>, run?: FdcRunDays): FdcPercentileTable {
+	const fullDays = allFlows.simulated?.length ?? allFlows.natural?.length ?? 0;
+	const flows: Partial<Record<FdcRecord, ArrayLike<number | null>>> = {};
+	for (const r of FDC_RECORDS) {
+		const v = allFlows[r];
+		if (v) flows[r] = run ? beforeForecast(v, run.startDate, run.forecastFrom) : v;
+	}
 	const present = FDC_RECORDS.filter((r) => flows[r]);
 	const obs = flows.observed ?? null;
 	const runDays = flows.simulated?.length ?? flows.natural?.length ?? 0;
@@ -144,7 +191,7 @@ export function fdcPercentileTable(flows: Partial<Record<FdcRecord, ArrayLike<nu
 	const wholeRun = present.map((r) => row(r, flows[r]!));
 	const partial = !!obs && observedDays > 0 && observedDays < runDays;
 	const onObservedDays = partial ? wholeRun.map((w) => (w.record === 'observed' ? w : row(w.record, onDaysOf(flows[w.record]!, obs!)))) : null;
-	return { wholeRun, onObservedDays, runDays, observedDays };
+	return { wholeRun, onObservedDays, runDays, observedDays, forecastDays: fullDays - runDays };
 }
 
 /** A daily series in m³/day as m³/s, gaps (null, NaN) as null: the conversion the Runs tab's charts make (frontend runs/results.ts toDisplayUnit). */

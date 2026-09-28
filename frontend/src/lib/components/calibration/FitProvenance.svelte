@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -24,7 +24,8 @@
 		headingLevel = 3,
 		context = 'run',
 		chirpsSource,
-		apanDaily
+		apanDaily,
+		chirpsFactors
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -37,10 +38,12 @@
 		chirpsSource?: SeriesProvenance | null;
 		/** The daily A-pan series now (the run's, or the project's; issue #45); undefined when not known. */
 		apanDaily?: ApanDailyFingerprint | null;
+		/** The CHIRPS factor sets the run applied (runChirpsFactors, issue #51); undefined when not known (the form). */
+		chirpsFactors?: ChirpsFactorSet[] | null;
 	} = $props();
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);

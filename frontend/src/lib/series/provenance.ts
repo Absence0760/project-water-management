@@ -2,11 +2,14 @@
 // docs/data-model.md § Series provenance). A select's value is the
 // provenance key ('CHIRPS/2.0'), '' for "not recorded".
 import {
+	chirpsFactorSets,
 	CHIRPS_PROVENANCES,
 	provenanceKey,
 	provenanceLabel,
 	seriesDigest,
 	type ApanDailyFingerprint,
+	type ChirpsFactorSet,
+	type RunSummary,
 	type DailySeries,
 	type RunSeriesSnapshot,
 	type SeriesMeta,
@@ -53,6 +56,17 @@ export function provenanceFields(key: string): { product: string | null; product
 export function chirpsSourceOf(list: readonly Pick<SeriesMeta, 'kind' | 'product' | 'productVersion'>[] | null | undefined): SeriesProvenance | null | undefined {
 	if (!list) return undefined;
 	return seriesProvenance(list.find((s) => s.kind === 'rain_chirps_mm'));
+}
+
+/**
+ * The CHIRPS factor sets a run applied (engine rain.ts chirpsFactorSets of its
+ * summary.chirpsCorrection), what "forcing changed since fit" compares with
+ * the fit's (issue #51): null when the run applied no monthly correction,
+ * undefined when its summary predates the correction record (nothing to compare).
+ */
+export function runChirpsFactors(summary: Pick<RunSummary, 'chirpsCorrection'> | null | undefined): ChirpsFactorSet[] | null | undefined {
+	if (!summary || summary.chirpsCorrection === undefined) return undefined;
+	return chirpsFactorSets(summary.chirpsCorrection);
 }
 
 /**
