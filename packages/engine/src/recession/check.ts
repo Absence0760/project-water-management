@@ -9,7 +9,7 @@
 // Warnings (indicative thresholds, for the hydrologist to confirm):
 // - fewer than RECESSION_MIN_SEGMENTS segments: too few for a stable fit
 //   (CR-15: don't trust a recession table from fewer than about 8; TOSSH
-//   itself warns below 10);
+//   itself warns below 10), so not judged (no warning; the panel says so);
 // - with enough segments, the simulated recession differs from the observed
 //   by more than RECESSION_B_WARN_DIFF in b, or its recession rate
 //   −dQ/dt ÷ Q at the observed points' median flow by more than a factor
@@ -111,16 +111,13 @@ export function recessionCheck(x: RecessionCheckInput): RecessionCheck {
 const RECORD: Record<CalibrationFlowKind, string> = { flow_observed_m3s: 'observed gauge', flow_logger_m3s: 'logger' };
 const fix = (v: number, d: number) => v.toFixed(d);
 
-/** The run warnings of the recession diagnostics (in order: too few segments, then the comparison); empty when there is nothing to say. */
+/** The run warnings of the recession diagnostics: only when the comparison is judged and fails (8+ segments); empty otherwise. */
 export function recessionWarnings(r: RecessionCheck | null | undefined): string[] {
 	if (!r) return [];
 	const n = r.segments.length;
-	if (n < RECESSION_MIN_SEGMENTS) {
-		return [
-			`Recession diagnostics: the ${RECORD[r.flowKind]} record has ${n === 0 ? 'no' : `only ${n}`} rain-free recession segment${n === 1 ? '' : 's'} of ${r.options.recessionLength}+ days, ` +
-				`fewer than the ${RECESSION_MIN_SEGMENTS} a recession fit needs to be stable, so the simulated recessions are not judged against it.`
-		];
-	}
+	// Too few segments to judge: the Plausibility checks panel says "Not judged"; a run warning
+	// would fire on most short records and say nothing about the model.
+	if (n < RECESSION_MIN_SEGMENTS) return [];
 	if (r.agrees !== false) return [];
 	if (!r.simulated) {
 		return [

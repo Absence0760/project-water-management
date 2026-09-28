@@ -130,6 +130,7 @@ describe('plausibility checks in a run', () => {
 		expect(r.simulated!.a).toBeCloseTo(r.observed!.a, 9);
 		expect(r.simulated!.b).toBeCloseTo(r.observed!.b, 9);
 		expect(r.agrees).toBeNull();
-		expect(out.summary.warnings.filter((w) => w.startsWith('Recession diagnostics:'))).toHaveLength(1);
+		// Too few segments to judge: no run warning (the panel says "Not judged").
+		expect(out.summary.warnings.filter((w) => w.startsWith('Recession diagnostics'))).toEqual([]);
 	});
 });

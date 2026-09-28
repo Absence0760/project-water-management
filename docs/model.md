@@ -4745,8 +4745,10 @@ simulated b − observed b.
 confirm):
 
 - fewer than **8** segments (`RECESSION_MIN_SEGMENTS`; CR-15: a recession fit
-  from fewer than about 8 isn't stable; TOSSH itself warns below 10): the run
-  says so and the comparison is not judged (`agrees` null);
+  from fewer than about 8 isn't stable; TOSSH itself warns below 10): the
+  comparison is not judged (`agrees` null) and the panel says *Not judged*;
+  no run warning, since most short records have too few and it says nothing
+  about the model;
 - with 8 or more, the simulated rate more than a **factor of 2** from the
   observed (`RECESSION_RATE_WARN_FACTOR`: a recession halving its flow in half
   or twice the time), or b more than **0.5** apart (`RECESSION_B_WARN_DIFF`:

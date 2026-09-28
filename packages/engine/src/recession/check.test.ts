@@ -47,18 +47,16 @@ describe('recessionCheck', () => {
 		expect(recessionWarnings(r)[0]).toMatch(/b is 1\.00 simulated against (1\.9\d|2\.0\d) observed \(more than 0\.5 apart\)/);
 	});
 
-	it(`does not judge fewer than ${RECESSION_MIN_SEGMENTS} segments, and says so`, () => {
+	it(`does not judge fewer than ${RECESSION_MIN_SEGMENTS} segments, and doesn't warn about it`, () => {
 		const r = recessionCheck(input(0.03, 0.09, PEAKS.slice(0, 3)));
 		expect(r.segments).toHaveLength(3);
 		expect(r.observed).not.toBeNull();
 		expect(r.agrees).toBeNull();
-		expect(recessionWarnings(r)).toEqual([
-			'Recession diagnostics: the observed gauge record has only 3 rain-free recession segments of 5+ days, fewer than the 8 a recession fit needs to be stable, so the simulated recessions are not judged against it.'
-		]);
+		expect(recessionWarnings(r)).toEqual([]);
 		const none = recessionCheck({ ...input(0.05, 0.05), rainMm: input(0.05, 0.05).rainMm.map(() => 30) });
 		expect(none.segments).toEqual([]);
 		expect(none.observed).toBeNull();
-		expect(recessionWarnings(none)[0]).toContain('has no rain-free recession segments');
+		expect(recessionWarnings(none)).toEqual([]);
 	});
 
 	it('leaves the calibration exclusions out', () => {
