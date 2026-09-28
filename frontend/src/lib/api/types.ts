@@ -23,6 +23,7 @@ import type {
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
 	SignoffStatement,
+	RegistrationBodyCode,
 	RunSummary,
 	ScenarioOp,
 	SeasonalOutlook,
@@ -1226,7 +1227,11 @@ export interface Signoff {
 	id: string;
 	runId: string;
 	fullName: string;
+	/** 'sacnasp' or 'ecsa' from signoff-3 (engine liability/registration.ts); the signer's free text on older rows. */
 	registrationBody: string;
+	/** Category and field codes; null on a signoff-1 or -2 row (not recorded). */
+	registrationCategory: string | null;
+	registrationField: string | null;
 	registrationNo: string;
 	scope: string;
 	statementVersion: string;
@@ -1251,7 +1256,10 @@ export interface SignoffList {
 /** POST /projects/:id/runs/:runId/signoffs. */
 export interface SignoffRequest {
 	fullName: string;
-	registrationBody: string;
+	registrationBody: RegistrationBodyCode;
+	/** A category and a field (SACNASP) or discipline (ECSA) of that body; a blocked category is refused (400). */
+	registrationCategory: string;
+	registrationField: string;
 	registrationNo: string;
 	scope: string;
 	/** Every confirmation id of the statement. */

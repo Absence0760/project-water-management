@@ -1,6 +1,8 @@
 <script lang="ts">
 	// Sign a run off (WP-3.13, docs/ui.md § Report). The signer's name and
-	// registration come first (the first statement is about "the person named
+	// registration (body, category and field as fixed choices, issue #47;
+	// candidate and certificated categories shown but disabled, an unusual
+	// category or field warned of inline) come first (the first statement is about "the person named
 	// above"), then every statement is ticked on its own and the whole
 	// known-limitations list must be scrolled through before it can be
 	// submitted. The server gets back the hash of the
@@ -9,7 +11,15 @@
 	import { tick, untrack } from 'svelte';
 	import { api, ApiError, type Signoff, type SignoffList } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
-	import { DEFAULT_REGISTRATION_BODY, scrolledToEnd, signoffBlockers } from './signoffForm';
+	import {
+		BLOCKED_CATEGORIES_NOTE,
+		REGISTRATION_BODIES,
+		registrationBody as bodyInfo,
+		registrationCategoriesOf,
+		registrationFieldsOf,
+		type RegistrationBodyCode
+	} from '@water-management/engine';
+	import { DEFAULT_REGISTRATION_BODY, registrationAdvice, scrolledToEnd, signoffBlockers } from './signoffForm';
 
 	let {
 		open = $bindable(false),
@@ -32,16 +42,28 @@
 	let ticked = $state(new Set<string>());
 	let readAll = $state(false);
 	let fullName = $state('');
-	let registrationBody = $state(DEFAULT_REGISTRATION_BODY);
+	let registrationBody = $state<RegistrationBodyCode>(DEFAULT_REGISTRATION_BODY);
+	let registrationCategory = $state('');
+	let registrationField = $state('');
 	let registrationNo = $state('');
 	let scope = $state('');
 	let busy = $state(false);
 	let error = $state('');
 	let box: HTMLElement | undefined = $state();
 
-	const blockers = $derived(
-		signoffBlockers({ fullName, registrationBody, registrationNo, scope }, statement.confirmations.map((c) => c.id), ticked, readAll)
-	);
+	const fields = $derived({ fullName, registrationBody, registrationCategory, registrationField, registrationNo, scope });
+	const blockers = $derived(signoffBlockers(fields, statement.confirmations.map((c) => c.id), ticked, readAll));
+	const advice = $derived(registrationAdvice(fields));
+	const body = $derived(bodyInfo(registrationBody)!);
+	const categories = $derived(registrationCategoriesOf(registrationBody));
+	const fieldChoices = $derived(registrationFieldsOf(registrationBody));
+
+	// Category and field belong to a body: choosing another body clears them.
+	function chooseBody(code: RegistrationBodyCode) {
+		registrationBody = code;
+		registrationCategory = '';
+		registrationField = '';
+	}
 
 	function toggle(id: string, on: boolean) {
 		const next = new Set(ticked);
@@ -75,6 +97,8 @@
 			const s = await api.signoffs.create(projectId, runId, {
 				fullName,
 				registrationBody,
+				registrationCategory,
+				registrationField,
 				registrationNo,
 				scope,
 				confirmed: [...ticked],
@@ -100,8 +124,33 @@
 		<!-- Before the confirmations: the first refers to "the person named above". -->
 		<div class="grid">
 			<label>Full name <input bind:value={fullName} maxlength="200" autocomplete="name" required /></label>
-			<label>Registration body <input bind:value={registrationBody} maxlength="100" required /></label>
-			<label>Registration number <input bind:value={registrationNo} maxlength="50" required /></label>
+			<!-- Labels beside, not around, the selects: a wrapping label would add the chosen option to the select's name. -->
+			<div>
+				<label for="{uid}-body">Registration body</label>
+				<select id="{uid}-body" value={registrationBody} onchange={(e) => chooseBody(e.currentTarget.value as RegistrationBodyCode)} required>
+					{#each REGISTRATION_BODIES as b (b.code)}<option value={b.code}>{b.label}</option>{/each}
+				</select>
+			</div>
+			<div>
+				<label for="{uid}-cat">Registration category</label>
+				<select id="{uid}-cat" bind:value={registrationCategory} required aria-describedby="{uid}-cat-note">
+					<option value="" disabled>Choose…</option>
+					{#each categories as c (c.code)}<option value={c.code} disabled={c.status === 'blocked'}>{c.label}</option>{/each}
+				</select>
+			</div>
+			<div>
+				<label for="{uid}-field">{body.fieldName}</label>
+				<select id="{uid}-field" bind:value={registrationField} required>
+					<option value="" disabled>Choose…</option>
+					{#each fieldChoices as f (f.code)}<option value={f.code}>{f.label}</option>{/each}
+				</select>
+			</div>
+			<label>Registration number <input bind:value={registrationNo} maxlength="50" required placeholder="e.g. {body.numberExample}" /></label>
+		</div>
+		<p class="muted small" id="{uid}-cat-note">{BLOCKED_CATEGORIES_NOTE}</p>
+		<div aria-live="polite">
+			{#if advice.block}<p class="alert alert-error small">{advice.block}</p>{/if}
+			{#each advice.warnings as w (w)}<p class="alert alert-warning small">{w}</p>{/each}
 		</div>
 		<label>What this sign-off covers <textarea bind:value={scope} maxlength="1000" rows="2" required placeholder="e.g. the hydrology section of the WULA technical report for the proposed dam"></textarea></label>
 		<fieldset>
@@ -194,6 +243,13 @@
 	}
 	label {
 		display: block;
+	}
+	/* A long option ("SACNASP (South African Council …)") stays inside its column. */
+	.grid select,
+	.grid input {
+		display: block;
+		width: 100%;
+		margin-top: 0.2rem;
 	}
 	.notes {
 		padding-left: 1.2rem;

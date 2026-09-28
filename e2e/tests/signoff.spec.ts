@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { plantSignoff2 } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const ready = (page: Page) => expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
@@ -37,6 +38,20 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 
 	const submit = dialog.getByRole('button', { name: 'Sign off', exact: true });
 	await dialog.getByLabel('Full name', { exact: true }).fill('Dr A. Hydrologist');
+	// The registration as fixed choices (issue #47): SACNASP by default; a candidate category can't be chosen.
+	await expect(dialog.getByLabel('Registration body', { exact: true })).toHaveValue('sacnasp');
+	const category = dialog.getByLabel('Registration category', { exact: true });
+	await expect(category.getByRole('option', { name: 'Cand.Sci.Nat. (Candidate Natural Scientist)' })).toBeDisabled();
+	await expect(dialog.getByText(/^Candidates and certificated scientists work under a professional’s supervision/)).toBeVisible();
+	await category.selectOption('pr_sci_nat');
+	const field = dialog.getByLabel('Field of practice', { exact: true });
+	// An unusual field warns, and doesn't block; the usual one is silent.
+	await field.selectOption('earth');
+	const warning = dialog.getByText(/^Your field is Earth Science\. This statement covers catchment hydrology/);
+	await expect(warning).toBeVisible();
+	await field.selectOption('water_resources');
+	await expect(warning).toHaveCount(0);
+	await expect(dialog.getByLabel('Registration number', { exact: true })).toHaveAttribute('placeholder', 'e.g. 400123/15');
 	await dialog.getByLabel('Registration number', { exact: true }).fill('400999/20');
 	await dialog.getByLabel('What this sign-off covers', { exact: true }).fill('Hydrology section of a synthetic WULA');
 	const boxes = dialog.getByRole('checkbox');
@@ -60,8 +75,10 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 
 	await expect(dialog).toBeHidden();
 	await expect(signoff.getByRole('status')).toHaveText('Signed off by Dr A. Hydrologist.');
-	const record = signoff.getByRole('definition').filter({ hasText: 'SACNASP 400999/20' });
+	const record = signoff.getByRole('definition').filter({ hasText: 'Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, Water Resources Science, no. 400999/20' });
 	await expect(record).toBeVisible();
+	// The register's address is printed, not only linked: reports are printed to PDF.
+	await expect(signoff.getByRole('link', { name: 'https://www.sacnasp.org.za/scientists' })).toBeVisible();
 	await expect(signoff).not.toContainText('Not signed off.');
 
 	// A viewer sees the same sign-off after a reload, and has no way to sign.
@@ -72,6 +89,12 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	const theirs = viewer.page.locator('#rep-signoff');
 	await expect(theirs.getByText('Dr A. Hydrologist', { exact: true })).toBeVisible();
 	await expect(theirs.getByRole('button', { name: 'Sign off this run…' })).toHaveCount(0);
+
+	// A sign-off made under signoff-2 prints its free-text registration as recorded, without category or field.
+	await plantSignoff2(runId, 'Dr C. Earlier', 'SACNASP', '400111/10');
+	await viewer.page.reload();
+	await ready(viewer.page);
+	await expect(theirs.getByRole('definition').filter({ hasText: 'SACNASP 400111/10 (category and field not recorded)' })).toBeVisible();
 
 	// The run is kept for good: the Runs tab tags it and offers no delete.
 	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
