@@ -14,6 +14,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
 import { nodeColumnHeader } from '../export/run-tables.js';
+import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
 import { isStale } from '../portfolio/status.js';
@@ -167,7 +168,9 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				},
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
 				// Counted to today where the catchment is (project.time_zone, 058), not UTC's day.
-				stale: isStale(farm.dataUntil, localDate(new Date(), p[0]!.timeZone))
+				stale: isStale(farm.dataUntil, localDate(new Date(), p[0]!.timeZone)),
+				// The seasonal outlook the WUA published, this farm's own figures (issue #53 R5, E3), until its season ends there.
+				outlook: await farmOutlook(db, id, nodeId, localDate(new Date(), p[0]!.timeZone))
 			};
 			return c.json(body);
 		});

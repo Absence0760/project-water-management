@@ -56,6 +56,9 @@ interface World {
 	applicationId: string;
 	sweepId: string;
 	outlookId: string;
+	/** A complete outlook with one level, "0", and its current publication to farmers (103). */
+	completeOutlookId: string;
+	outlookPublicationId: string;
 	ruleId: string;
 	ensembleId: string;
 	series: { id: string; sha256: string; kind: string; startDate: string };
@@ -145,6 +148,11 @@ async function world(name: string): Promise<World> {
 				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels, created_by, status) VALUES ($1, $2, 'Outlook', '2012-10-01', '2013-04-30', '[{}]', $3, 'pending')`,
 				[projectId, runId, u]
 			),
+			completeOutlookId: await one(
+				`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, levels, created_by, status, result, engine_version, completed_at)
+				 VALUES ($1, $2, 'Published outlook', '2012-10-01', '2013-04-30', '[{"id": "0", "label": "85 %", "ops": []}]', $3, 'complete', '{}', 'x', now())`,
+				[projectId, runId, u]
+			),
 			ruleId: await one(`INSERT INTO alert_rule (project_id, kind, node_id, threshold, created_by) VALUES ($1, 'dam_below', $2, 0.3, $3)`, [projectId, farm.id, u]),
 			ensembleId: await one(
 				`INSERT INTO run_uncertainty (project_id, run_id, runoff_model, engine_version, method, seed, members, options, status, accepted, summary, result, completed_at, created_by)
@@ -153,9 +161,17 @@ async function world(name: string): Promise<World> {
 			)
 		};
 	});
+	const [pub] = await arrange((q) =>
+		q(
+			`INSERT INTO outlook_publication (project_id, outlook_id, level_id, level_label, decision_date, season_end, engine_version, published_by)
+			 VALUES ($1, $2, '0', '85 %', '2012-10-01', '2013-04-30', 'x', $3) RETURNING id::text`,
+			[projectId, ids.completeOutlookId, u]
+		)
+	);
 	return {
 		projectId,
 		outletId: outlet.id,
+		outlookPublicationId: pub!.id as string,
 		farmId: farm.id,
 		farm2Id: farm2.id,
 		cropId: crop.id,
@@ -338,6 +354,22 @@ const CASES: Record<string, Case> = {
 	'publication_farm.publication_id': {
 		ref: (w) => w.publicationId,
 		insert: (h, ref) => [`INSERT INTO publication_farm (publication_id, project_id, node_id, view) VALUES ($1, $2, $3, '{}')`, [ref, h.projectId, h.farmId]]
+	},
+	// Ended, so it isn't a second current publication.
+	'outlook_publication.outlook_id': {
+		ref: (w) => w.completeOutlookId,
+		insert: (h, ref) => [
+			`INSERT INTO outlook_publication (project_id, outlook_id, level_id, level_label, decision_date, season_end, engine_version, ended_at) VALUES ($1, $2, '0', 'x', '2012-10-01', '2013-04-30', 'x', now())`,
+			[h.projectId, ref]
+		]
+	},
+	'outlook_publication_farm.publication_id': {
+		ref: (w) => w.outlookPublicationId,
+		insert: (h, ref) => [`INSERT INTO outlook_publication_farm (publication_id, project_id, node_id, view) VALUES ($1, $2, $3, '{}')`, [ref, h.projectId, h.farmId]]
+	},
+	'outlook_publication_farm.node_id': {
+		ref: (w) => w.farm2Id,
+		insert: (h, ref) => [`INSERT INTO outlook_publication_farm (publication_id, project_id, node_id, view) VALUES ($1, $2, $3, '{}')`, [h.outlookPublicationId, h.projectId, ref]]
 	},
 	'render_token.run_id': {
 		ref: (w) => w.runId,

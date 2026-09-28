@@ -63,7 +63,9 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	scenario_sweep: ['completed_at', 'engine_version', 'status'],
 	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
 	// An outlook's base run, job, season, levels and share are fixed at insert; it is completed once (063_seasonal_outlook.sql).
-	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status']
+	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status', 'triggers'],
+	// An outlook publication's level, season and publisher never change; it is ended once (103_outlook_triggers_publication.sql).
+	outlook_publication: ['ended_at', 'ended_by']
 };
 /**
  * Append-only tables: water_app may read and add rows, never change or remove
@@ -80,6 +82,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
  * model revision and an audit event go only with their project, a series
  * revision also through its retention trim (030_history.sql). A sign-off
  * is a professional's signature on a run, never changed (036_signoff.sql).
+ * A farm's figures in an outlook publication are what its farmers were
+ * shown (103_outlook_triggers_publication.sql).
  */
 const APPEND_ONLY = new Set([
 	'run_nomination',
@@ -92,7 +96,8 @@ const APPEND_ONLY = new Set([
 	'model_revision',
 	'series_revision',
 	'audit_event',
-	'signoff'
+	'signoff',
+	'outlook_publication_farm'
 ]);
 /**
  * Keep-forever tables: water_app may never remove a row (it goes only with
@@ -104,9 +109,11 @@ const APPEND_ONLY = new Set([
  * editors (037_notes.sql). An API key too: audit events name it
  * (audit_event.actor_api_key_id, 039_api_keys.sql). An account is deleted
  * only by the operator, as the schema owner, on a POPIA request
- * (068_app_user_rls.sql; deployment.md § Runbooks item 7).
+ * (068_app_user_rls.sql; deployment.md § Runbooks item 7). An outlook
+ * publication is ended, not deleted; the newest 12 are kept by its cap
+ * trigger (103_outlook_triggers_publication.sql).
  */
-const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user']);
+const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', 'app_user', 'outlook_publication']);
 /**
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
@@ -189,6 +196,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'report_schedule_recipient.user_id': 'cascade',
 	'revoked_session.user_id': 'cascade',
 	'run_nomination.nominated_by': 'restrict',
+	// What the WUA published to farmers stays with who published or ended it cleared (103).
+	'outlook_publication.ended_by': 'set null',
+	'outlook_publication.published_by': 'set null',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
 	'run_uncertainty.created_by': 'restrict',

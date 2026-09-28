@@ -5,7 +5,7 @@
 // A route whose validation refuses an empty body needs a SAMPLE here; both
 // sweeps fail until it has one.
 import { expect } from 'vitest';
-import { asOwner, monthly, node, signUp } from './helpers.js';
+import { asOwner, monthly, node, plantCompleteOutlook, signUp } from './helpers.js';
 
 export type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -70,6 +70,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'GET /projects/:id/yield/jobs': (c) => ({ query: { nodeId: c.farmId } }),
 	'POST /projects/:id/sweeps': (c) => ({ body: { name: 'Ladder sweep', baseRunId: c.runId, members: levels('name') } }),
 	'POST /projects/:id/outlooks': (c) => ({ body: { name: 'Ladder outlook', baseRunId: c.runId, levels: levels('label') } }),
+	'POST /projects/:id/outlooks/:outlookId/publish': () => ({ body: { levelId: '0' } }),
 	'POST /projects/:id/feeds': () => ({ body: { source: 'dws', config: { station: 'X0H001' } } }),
 	'POST /projects/:id/report-schedules': (c) => ({ body: { frequency: 'weekly', weekday: 1, hour: 7, timezone: 'UTC', recipients: [c.owner.id] } }),
 	'POST /projects/:id/farmers': (c) => ({ body: { email: `ladder-${crypto.randomUUID()}@example.com`, nodeIds: [c.farmId] } }),
@@ -144,6 +145,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 	const inviteId = await made('/members', { email: `ladder-${crypto.randomUUID()}@example.com`, role: 'viewer' }, (b) => b.invite.id);
 	const noteId = await made('/notes', { body: 'Owner note', nodeId: a.id }, (b) => b.note.id);
 	const jobId = await made('/yield', { nodeId: a.id, runId, kind: 'firm' }, (b) => b.jobId);
+	const outlookId = await plantCompleteOutlook(owner!.id, projectId, runId, [{ nodeId: a.id }, { nodeId: b.id }]);
 	const [rev] = await asOwner('SELECT id FROM model_revision WHERE project_id = $1 ORDER BY id DESC LIMIT 1', [projectId]);
 	return {
 		owner: owner!,
@@ -174,6 +176,7 @@ export async function buildLadder(prefix = 'L'): Promise<LadderCtx> {
 			inviteId,
 			noteId,
 			jobId,
+			outlookId,
 			revId: String(rev!.id)
 		}
 	};

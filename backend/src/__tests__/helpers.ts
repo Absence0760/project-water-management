@@ -3,6 +3,7 @@ import pg from 'pg';
 import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
+import { withUser } from '../db/tx.js';
 // (app is only exercised by *.db.test.ts; unit tests import the pure helpers)
 
 export const app = createApp();
@@ -154,3 +155,41 @@ export async function makeStoredLegacyRun(runId: string) {
 		[runId]
 	);
 }
+
+/**
+ * A complete seasonal outlook planted as `userId` (an editor), without its
+ * job: one level, "0" (85 %), and each of `farms` with a share of demand met
+ * and a dam of 100 000 m³ (issue #53 R5: something to publish to farmers;
+ * the outlook job itself is outlooks.db.test.ts's). The season defaults to
+ * 2099/2100, so it hasn't ended; no review date.
+ */
+export async function plantCompleteOutlook(
+	userId: string,
+	projectId: string,
+	runId: string,
+	farms: { nodeId: string; p50?: number }[],
+	opts: { season?: [string, string]; perFarm?: boolean } = {}
+): Promise<string> {
+	const [from, to] = opts.season ?? ['2099-10-01', '2100-04-30'];
+	const stat = (p50: number, top = 1) => ({ p10: p50 * 0.75, p50, p90: Math.min(top, p50 * 1.2) });
+	const level = {
+		id: '0',
+		label: '85 %',
+		problems: [],
+		nYears: 12,
+		storageByDam: farms.map((f) => ({ nodeId: f.nodeId, name: 'Farm', capacityM3: 100_000, stat: stat(50_000, 100_000) })),
+		// perFarm false: an outlook from before engine 1.18.0, without per-farm figures.
+		...(opts.perFarm === false ? {} : { demandMetByFarm: farms.map((f) => ({ nodeId: f.nodeId, name: 'Farm', nYears: 12, stat: stat(f.p50 ?? 0.8) })) })
+	};
+	const result = { decisionDate: from, seasonEnd: to, nYears: 12, levels: [level] };
+	return withUser(userId, async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO seasonal_outlook (project_id, base_run_id, name, decision_date, season_end, review_date, levels)
+			 VALUES ($1, $2, 'Planted outlook', $4, $5, NULL, $3) RETURNING id`,
+			[projectId, runId, JSON.stringify([{ id: '0', label: '85 %', ops: [{ op: 'demand.scale', factor: 0.85 }] }]), from, to]
+		);
+		await db.query(`UPDATE seasonal_outlook SET status = 'complete', result = $2, engine_version = 'x' WHERE id = $1`, [rows[0]!.id, JSON.stringify(result)]);
+		return rows[0]!.id;
+	});
+}
+

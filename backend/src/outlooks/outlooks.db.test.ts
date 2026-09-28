@@ -72,9 +72,9 @@ describe('settings.outlook', () => {
 		await member(owner, c.projectId, viewer, 'viewer');
 		const before = (await owner.call('GET', `/projects/${c.projectId}`)).body.project;
 		// The defaults (O3, O6, confirmed by the client), from the start.
-		expect(before.settings.outlook).toEqual({ season: null, planningShare: null });
+		expect(before.settings.outlook).toEqual({ season: null, planningShare: null, review: null });
 
-		const outlook = { season: { startMonth: 11, startDay: 1, endMonth: 3, endDay: 31 }, planningShare: 0.7 };
+		const outlook = { season: { startMonth: 11, startDay: 1, endMonth: 3, endDay: 31 }, planningShare: 0.7, review: { month: 2, day: 1 } };
 		// The Settings form sends every setting: the whole document with only outlook changed leaves updatedAt alone.
 		const set = await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { ...before.settings, outlook } });
 		expect(set.status).toBe(200);
@@ -415,5 +415,93 @@ describe('seasonal_outlook RLS', () => {
 		await expect(forge(owner)).rejects.toMatchObject({ code: '23514' });
 		const upd = await withUser(owner.id, (db) => db.query(`UPDATE seasonal_outlook SET result = '{}' WHERE id = $1 RETURNING id`, [outlook.id]));
 		expect(upd.rows).toEqual([]);
+	});
+});
+
+describe('review triggers (issue #53 R6)', () => {
+	it('an outlook carries its season’s review date and a trigger table drawn on the latest one the record holds', async () => {
+		const owner = await signUp('TriggerOwner');
+		const c = await catchment(owner);
+		const res = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));
+		expect(res.status, JSON.stringify(res.body)).toBe(202);
+		// The engine's defaultReviewDate for 1 October – 30 April: 1 January (O3).
+		expect(res.body.outlook.reviewDate).toBe('2014-01-01');
+		await tick();
+		expect(await job(res.body.jobId)).toMatchObject({ status: 'done', progress: 100 });
+		const o = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${res.body.outlook.id}`)).body.outlook;
+		const t = o.triggers;
+		expect(t).toMatchObject({ reviewDate: '2014-01-01', problem: null, failures: [] });
+		// The run ends on 30 September 2013: its latest 1 January with a day before is 2013's, to 30 April 2013.
+		expect(t.table).toMatchObject({ reviewDate: '2013-01-01', seasonEnd: '2013-04-30', bandSource: 'historicalTerciles', representative: 'lowerEdge', capacityM3: 80_000 });
+		// Thirteen water years hold 1 January (2001 … 2013); the table's own season (2012/13) is left out of its analogues.
+		expect(t.table.history).toHaveLength(13);
+		expect(t.table.nYears).toBe(12);
+		expect(t.excluded).toContainEqual({ waterYear: 2012, reason: 'theSeason' });
+		// Three bands, fullest first, covering 0 … capacity; each row's pick is one of the levels, or none.
+		const rows = t.table.rows as { band: { fromM3: number; toM3: number }; level: { id: string } | null; perLevel: { levelId: string }[]; outlook?: unknown }[];
+		expect(rows).toHaveLength(3);
+		expect(rows[0]!.band.toM3).toBe(80_000);
+		expect(rows[2]!.band.fromM3).toBe(0);
+		for (let i = 1; i < rows.length; i++) expect(rows[i]!.band.toM3).toBe(rows[i - 1]!.band.fromM3);
+		for (const r of rows) {
+			expect(r).not.toHaveProperty('outlook');
+			expect(r.perLevel.map((l) => l.levelId).sort()).toEqual(['0', '1', '2']);
+			if (r.level) expect(['0', '1', '2']).toContain(r.level.id);
+		}
+		// The list stays light: no table there.
+		const list = (await owner.call('GET', `/projects/${c.projectId}/outlooks`)).body.outlooks[0];
+		expect(list).toMatchObject({ reviewDate: '2014-01-01' });
+		expect(list).not.toHaveProperty('triggers');
+	});
+
+	it('takes the project’s review date, or the request’s; null asks for no table', async () => {
+		const owner = await signUp('TriggerDates');
+		const c = await catchment(owner);
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { outlook: { review: { month: 2, day: 1 } } } })).status).toBe(200);
+		const fromSetting = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));
+		expect(fromSetting.body.outlook.reviewDate).toBe('2014-02-01');
+		const given = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { reviewDate: '2013-12-15' }));
+		expect(given.body.outlook.reviewDate).toBe('2013-12-15');
+		// Two pending per person: let those finish.
+		await tick();
+		const none = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { reviewDate: null }));
+		expect(none.status).toBe(202);
+		expect(none.body.outlook.reviewDate).toBeNull();
+		await tick();
+		const got = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${none.body.outlook.id}`)).body.outlook;
+		expect(got).toMatchObject({ status: 'complete', triggers: null });
+		// Positive control: the one from the setting has its table.
+		const withTable = (await owner.call('GET', `/projects/${c.projectId}/outlooks/${fromSetting.body.outlook.id}`)).body.outlook;
+		expect(withTable.triggers.table.reviewDate).toBe('2013-02-01');
+	});
+
+	it('refuses a review date outside the season, and one for a catchment with no farm dam', async () => {
+		const owner = await signUp('TriggerBad');
+		const c = await catchment(owner);
+		for (const reviewDate of ['2013-10-01', '2014-05-01', '2013-09-01']) {
+			const r = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { reviewDate }));
+			expect(r.status, reviewDate).toBe(422);
+			expect(r.body.error).toMatch(/review date must fall after the decision date/);
+		}
+		// With the season in the body, the schema says so.
+		const inBody = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { decisionDate: '2012-10-01', seasonEnd: '2013-04-30', reviewDate: '2013-06-01' }));
+		expect(inBody.status).toBe(400);
+		// The project's setting outside the default season: said so, not a dead job.
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { outlook: { review: { month: 7, day: 1 } } } })).status).toBe(200);
+		const setting = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));
+		expect(setting.status).toBe(422);
+		expect(setting.body.error).toMatch(/review date setting doesn't fit this season/);
+
+		const dry = await signUp('TriggerNoDam');
+		const d = await catchment(dry, 'No dam');
+		const model = (await dry.call('GET', `/projects/${d.projectId}/model`)).body;
+		const nodes = model.nodes.map((n: { kind: string }) => (n.kind === 'farm' ? { ...n, damCapacityM3: 0, damInitialPct: 0 } : n));
+		expect((await dry.call('PUT', `/projects/${d.projectId}/model`, { ...model, nodes })).status).toBe(200);
+		const run = (await dry.call('POST', `/projects/${d.projectId}/runs`, { label: 'no dam' })).body.run.id;
+		expect((await dry.call('POST', `/projects/${d.projectId}/outlooks`, outlookOf(run, { reviewDate: '2014-01-01' }))).status).toBe(422);
+		// Without asking for one: no table, the outlook still runs.
+		const plain = await dry.call('POST', `/projects/${d.projectId}/outlooks`, outlookOf(run));
+		expect(plain.status).toBe(202);
+		expect(plain.body.outlook.reviewDate).toBeNull();
 	});
 });
