@@ -51,6 +51,8 @@
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
+	import Wr2012FitTable from './Wr2012FitTable.svelte';
+	import { wr2012FitPeriods } from '$lib/calibration/wr2012Fit';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -385,6 +387,7 @@
 				{#if report.differential}
 					<p class="muted small" data-testid="fit-dsst-ranking">Dry → wet test: {rankedByText(report.differential)}.</p>
 				{/if}
+				<Wr2012FitTable periods={wr2012FitPeriods(report)} />
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
 				{/if}

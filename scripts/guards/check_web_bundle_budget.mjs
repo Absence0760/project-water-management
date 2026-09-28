@@ -1158,14 +1158,22 @@
 //             entry. Lazy-loading the editor would not lower this figure:
 //             the total sums every chunk, so a split only moves the bytes and
 //             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
-// 2026-09-28  total 1094 → 1100 KB (measured 1097, +6 on 1091 for the same
-//             tree without it). The sensitivity runs (calibration research
-//             CR-21): River & reserve's Sensitivity panel, its tornado chart
-//             and helpers (~4 KB in the tab's chunk), the engine's verdict
-//             module the page reads (~0.7 KB, kept apart from the run by
-//             engineSplit.test.ts, which put the worker's engine back in the
-//             worker: without it the total was 1098) and sensitivityRuns in
-//             the calibration worker (~1 KB). No new dependency. Headroom ~3 KB.
+// 2026-09-28  total 1094 → 1117 KB (measured 1114), largestWorkerKb 32 → 34
+//             (calibration worker measured 33). Issue #65, the calibration
+//             workflow batch (engine 1.18.0), one change: CR-21 sensitivity
+//             runs (River & reserve's Sensitivity panel and tornado, ~4 KB;
+//             the verdict module kept apart from the run by engineSplit.test.ts;
+//             sensitivityRuns in the calibration worker), CR-28 WR2012
+//             five-statistic table (Wr2012FitTable), CR-29 daily compliance,
+//             %nMAR and the monthly FDC overlay (EwrDailyCompliance,
+//             EwrFdcOverlay, reused on the compare page), CR-3/CR-5 score
+//             intervals and benchmarks, CR-34 record representativeness, the
+//             hydrograph's exclusion shading and CR-13 recession diagnostics
+//             (RecessionDiagnostics in the plausibility panel). The worker
+//             grows by the bootstrap, WR2012 statistics, representativeness
+//             and sensitivity code it runs; all of it is scoring or run code
+//             the worker needs, so none can move to the page. No new
+//             dependency. Headroom ~3 KB total, ~1 KB worker.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1176,10 +1184,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1100,
+	totalCodeKb: 1117,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 32,
+	largestWorkerKb: 34,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

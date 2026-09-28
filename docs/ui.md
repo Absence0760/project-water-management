@@ -2643,6 +2643,19 @@ which checks every catchment tab).
     percentile thresholds (model.md §2.10b). Any limit it implies ("all dry:
     it can't show how the model behaves in wet years") is among the notes
     at the top of the result.
+  - Under it, **WR2012 statistics** (`calibration/Wr2012FitTable.svelte`,
+    helpers in `lib/calibration/wr2012Fit.ts`; engine ≥ 1.18.0, CR-28,
+    model.md §2.10): MAR, mean of log annual flows, SD, log SD and seasonal
+    index on complete water years of monthly flows, each observed, simulated,
+    the signed difference, the band ("< 4 %") and a **Within** / **Outside**
+    badge in words (Outside amber), or "Not computed" (the SDs with one
+    year). A **Period** select switches between the fit, the current
+    parameters and each test part that has a complete year. Below: how many
+    are within, over which water years, and while the bands are unconfirmed
+    (`WR2012_GOOD_FIT_BANDS.confirmed`) the column is headed **Indicative
+    band** with a note that they come from a consultant report citing WR2012,
+    not yet checked against WRC TT 689/16 and TT 690/16. A report from before
+    engine 1.18.0 shows no table.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
@@ -3588,7 +3601,9 @@ read it before.
   calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
   and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
-  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled),
+  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled;
+  from engine 1.18.0 the same **WR2012 statistics** table as the fit results, for the run's scored
+  days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
@@ -3729,7 +3744,21 @@ read it before.
   the share of months met per month of the year on a fixed 0–100 % axis with
   each bar's value written above it, the same by month of the year as a table
   (years, met, %, mean required and simulated flow in the table's unit, deficit,
-  FDC points met), and, collapsed, **Month by month**: every complete month's
+  FDC points met), and, from engine 1.18.0 (calibration research CR-29,
+  helpers in `runs/ewrReporting.ts`): a fifth figure, **EWR as % of natural
+  MAR** ("50.0 %nMAR", with the mean annual EWR and the site's natural MAR in
+  Mm³/a, and the low flows' % with a low-flow grid); **from daily data**
+  (`runs/EwrDailyCompliance.svelte`) a sentence for the whole run ("Below the
+  day's requirement on 10 of 365 days (2.7% of the time); 2.7% of the
+  required volume was not delivered") and a table by month of the year with
+  the monthly verdict beside the days not met, % of time and % of volume not
+  met, a month of the year whose every month was met but had short days
+  marked **short days** in words; and the **flow-duration curves on the EWR**
+  (`runs/EwrFdcOverlay.svelte`): a month select (opening on the first month
+  whose simulated curve falls below the EWR at a point), a key naming each
+  line, the run's natural flow (dashed), present-day flow (solid) and the EWR
+  curve (dash-dot, the text colour) at the table's % points on a log scale,
+  and, collapsed, **Values for** the month as a table. Then, collapsed, **Month by month**: every complete month's
   natural flow, its condition (% exceedance, or wetter / drier than the table),
   the requirement, the simulated flow, the share of the requirement and met or
   not met (rows not met shaded). From engine 0.33.0 ([model.md §2.9d](./model.md)),

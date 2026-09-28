@@ -3270,6 +3270,52 @@ test needs it. The run also stores each site's requirement as a daily series,
 `ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
 complete months), so it can be charted and downloaded beside the flow.
 
+**Reported as the gazette and CMAs report it** (engine ≥ 1.18.0,
+calibration research CR-29). Reserve compliance is published as % of time
+and % of volume not met per month, judged on daily as well as monthly data
+(daily data shows more non-compliance), with monthly flow-duration curves of
+natural, present-day and scenario flow drawn on the EWR, and the Reserve
+itself stated as %nMAR (Pollard et al. 2011; Riddell et al. 2014). Each site
+adds:
+
+- **From daily data** (`EwrAssuranceSite.daily` and `byMonth[].daily`):
+  every day of a complete month against that day's requirement, R_day = the
+  month's R ÷ its days (the `ewr_rule` series), on the day's total flow A_t:
+
+  ```
+  not met      A_t < R_day                                   (relative float tolerance 1e-9, as the month)
+  time not met = days not met ÷ days assessed
+  volume not met = Σ MAX(R_day − A_t, 0) ÷ Σ R_day
+  ```
+
+  Per calendar month over the run, and over the whole run. A month met on
+  volume can still have short days, and the panel marks a month of the year
+  whose every month was met but had short days. A `lowFlow` table judged on
+  base flow (`lowFlowMeasure: 'baseflow'`) still counts days on total flow:
+  a base-flow filter has no daily reading of its own. A resumed run's first
+  month, only part of which is in the run, is left out of the daily figures.
+- **The FDC overlay** (`byMonth[].fdc[].natural`): the run's *natural* flow
+  duration curve at each % point beside the simulated one (`impacted`) and
+  the EWR curve (`required`), always from the run's natural flow, whatever
+  the table's natural source (the `naturalCurve` is the one the requirement
+  is read from). A scenario's curve is the scenario run's own `impacted` at
+  the same site; the compare page draws it over run A's (run-comparison.md).
+- **The EWR as %nMAR** (`ewrPctNmar`, when every calendar month has a
+  complete year): the mean annual requirement, Σ over the 12 calendar months
+  of the mean complete-month R (m³), over the run's natural MAR at the site
+  computed the same way (as `naturalMar.runMcm`), × 100; with a low-flow
+  grid, the low flows alone the same way (`lowFlowPct`). Because R follows
+  the natural flow, it is the long-term share the rule asks for, as a
+  gazette's %nMAR is; it changes only with the table or the natural flow.
+
+None of it changes the monthly verdict, the charge or a result; a run from
+before engine 1.18.0 has none of the fields, and the panel and CSV leave
+them out. Tested in `reserve/assurance.test.ts` (a worked month met on volume
+with 10 of 31 days short; %nMAR over a year, with and without a low-flow
+grid; less flow never has fewer short days or less shortfall, and leaves
+%nMAR and the natural curve unchanged; the months of the year add up to the
+whole).
+
 **Warnings.** A table that isn't usable (validation below) is skipped; so is
 one whose site is missing or isn't the outlet or a gauge. When a site has
 two usable tables (the API refuses that; stored settings can still carry it),
@@ -3314,8 +3360,10 @@ years of a calendar month. From engine 1.11.0, a run natural MAR more than
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
 secondary measure; the Reserve compliance panel has the per-month-of-year
-table and chart; the summary CSV has a block per site; run comparison compares
-each site's rates (docs/ui.md, docs/run-comparison.md).
+table and chart, and from engine 1.18.0 the %nMAR figure, the daily table
+and the FDC overlay; the summary CSV has a block per site; run comparison
+compares each site's rates and draws a scenario's (run B's) flow-duration
+curve over run A's (docs/ui.md, docs/run-comparison.md).
 
 **The charge from the rule table** (engine ≥ 1.3.0, issue #64;
 `settings.ewrChargeSource`, `'pragmatic'` by default). With `'ruleTable'`,
@@ -3790,6 +3838,60 @@ log-NSE is a low-flow check, not a low-flow calibration target. When a fit
 will feed an EWR (low-flow) decision, fit to the mean of KGE′(Q) and
 KGE′(1/Q) instead (Fit automatically's `kgeLowHigh` objective, §2.10b;
 calibration research CR-3).
+
+**The WR2012 five-statistic table** (engine ≥ 1.18.0, calibration research
+CR-28; `packages/engine/src/reference/wr2012Fit.ts`). South African practice
+with the WRSM/Pitman model judges a calibration on five statistics of
+observed and simulated flow, each as a % difference against a "good fit"
+band, beside the hydrograph and flow-duration curve (WR2012: Bailey & Pitman
+2016; Ndiritu 2009). The daily model's statistics above say nothing a WR2012
+reviewer reads first, so every scored period of a fit (`ScoredPeriod.wr2012Fit`:
+the fit, the current parameters, each validation) and every run's
+calibration (`CalibrationStats.wr2012Fit`) carry them, on the same scored
+days as the other statistics:
+
+- **Months.** The scored days are summed per calendar month, observed and
+  simulated on the same days. A month counts when at least **90 %** of its
+  days are scored (`WR2012_FIT_MONTH_MIN_SHARE`); its volume, both sides, is
+  the mean of those days × the month's days (February 28 or 29), so a few
+  missing days don't bias either side.
+- **Years.** A hydrological (water) year, Oct–Sep, counts only when all 12
+  months count; every statistic is over those complete years. With none the
+  field is null ("Not computed"); a split-sample half or a record with gaps
+  in every year can have none.
+
+| Statistic | Formula (Y = annual runoff of a complete year, Mm³) |
+| --- | --- |
+| MAR | mean Y |
+| Mean of logs | mean log10 Y, over years with Y > 0 on both sides (`logYears`) |
+| SD | sample SD of Y (n − 1; needs 2 years) |
+| Log SD | sample SD of log10 Y |
+| Seasonal index | 100 × Σ_m \|Q̄_m − MAR/12\| ÷ MAR, Q̄_m the mean volume of month m (Walsh & Lawler 1981 as a %: 0 even, 183 all in one month) |
+
+Each carries **% difference** = 100 × (simulated − observed) ÷ |observed|
+(the absolute value keeps "+ = simulated higher" for a negative mean of logs,
+which annual runoff under 1 Mm³ gives) and **within band** = |difference| <
+the band. The bands (`WR2012_GOOD_FIT_BANDS`) are MAR 4 %, mean of logs 4 %,
+SD 6 %, log SD 6 %, seasonal index 8 %.
+
+**Unconfirmed: the bands and the seasonal index.** The bands are the
+"good fit" guidelines a 2025 consultant hydrology report submitted to a CMA
+tabulates citing WR2012 (Dabrowski 2025, Table 4); the WR2012 manuals that
+would define them (WRC TT 689/16, the WRSM/Pitman user manual, and TT
+690/16, the theory manual) could not be reached to check them (2026-09-28:
+the WRC and WR2012 sites were out of reach from the build environment). The
+seasonal index's WRSM definition wasn't found either; the Walsh & Lawler
+form above is the app's working definition. So `confirmed: false`, the
+stored result carries `bandsConfirmed: false`, and the UI calls them
+"indicative bands (to be confirmed)". Confirming either changes only that
+constant or `seasonalIndex()`. Question for the hydrologist
+(issue #90): are these the WR2012/WRSM bands, is the seasonal
+index WRSM's own, and are the SDs sample (n − 1) or population SDs?
+
+The table never changes a result or a score, and no fit optimises it.
+Tested by hand-computed series (`reference/wr2012Fit.test.ts`), and against
+the run's and the fit's other statistics' scored days (`network/stats.test.ts`,
+`calibrate/calibrate.test.ts`).
 
 The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow

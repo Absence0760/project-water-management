@@ -11,6 +11,7 @@ import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { RainAccumulationInfo } from './accumulation';
+import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
@@ -1841,6 +1842,12 @@ export interface CalibrationStats {
 	 * ./calibrate/provenance.ts). Absent on older runs.
 	 */
 	fitStatus?: CalibrationFitStatus;
+	/**
+	 * The WR2012 five-statistic table on the scored days (CR-28, engine ≥
+	 * 1.18.0; reference/wr2012Fit.ts): null when no water year has all 12
+	 * months scored or the run has no start date; absent on older runs.
+	 */
+	wr2012Fit?: Wr2012FitStats | null;
 }
 
 /**
