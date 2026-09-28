@@ -354,9 +354,18 @@ section it belongs to, with the example that taught it.
   - **A halo behind every free label**, in the ground's colour
     (`paint-order: stroke fill`, a 4 px stroke of `--surface-sunken` on the
     schematic, `--surface` on help diagrams' `.lbl`), so anything that must
-    pass (the drag preview) breaks behind the words. Chromium's PDF keeps one
-    copy of the text (`pdftotext` finds each name once). Not on text inside a
-    filled box: the halo would ring it in the wrong colour.
+    pass (the drag preview) breaks behind the words. On screen only: Chromium
+    prints stroked text as a second copy of every word (a Type 3 font), so
+    the PDF's text held each name twice (poppler before 25 lists both). The
+    schematic drops its halo in `@media print`, where nothing is dragged and
+    the routed transfers clear every label. Not on text inside a filled box:
+    the halo would ring it in the wrong colour.
+  - **Reserve the text as drawn, not as estimated.** Room for a label comes
+    from its width in the font it is drawn in (the schematic measures on a
+    canvas, `measuredWidths`), with the per-character estimate only as the
+    floor: the system sans varies, and DejaVu Sans (Linux, CI) draws ~15 %
+    wider than the estimate, which ran names into the next node and put a
+    transfer through "Melkhout Gauge".
   - **Three steps of hierarchy:** the name (12.5 px, 600, `--text`), its
     figure (11 px, 400, `--text-muted`), and the line's own key (the legend,
     not a label on every line). Both text colours are ≥ 4.5:1 on the ground
