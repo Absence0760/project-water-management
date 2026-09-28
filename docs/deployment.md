@@ -443,6 +443,34 @@ the real plan stays an operator step
   deploy workflow (the workflow guard's `no-cache` rule), since a cache is
   written by other runs and the build ships with deploy credentials.
 
+### Migration integrity
+
+The migrate Lambda refuses to apply anything, and the deploy stops before
+the new code ships, when `schema_migrations` disagrees with the migrations in
+the release ([data-model.md § Migrations](./data-model.md#migrations)). Its
+error names each file:
+
+- **"… was applied but its contents have changed"**: someone edited a
+  migration production already ran. The database is fine; the release is
+  wrong. Put the file back as it was on the tag that applied it
+  (`git show backend@X.Y.Z:backend/migrations/<file>`), move the change into
+  a new `NNN_*.sql`, and cut a new release. Never update the checksum in the
+  database to make the error go away: the change would never reach the
+  schema, and every environment would differ from the files.
+- **"… was applied but its file is missing"**: a migration was deleted or
+  renamed. Restore it under its original name.
+- **"… is pending but sorts before …"**: two branches took migration
+  numbers out of order, and the one merged later has the lower number.
+  Renumber it after the latest applied file and release again.
+
+Each migration also runs with `lock_timeout = 5s` and
+`statement_timeout = 240s`. A deploy failing with *lock timeout* means live
+traffic held a lock the migration needed: nothing was applied (the file's
+transaction rolled back), so re-run the deploy at a quieter time. A
+*statement timeout* means the migration is too slow for a deploy: split it,
+or give it a `-- migrate: statement_timeout = …` line and raise the migrate
+Lambda's `timeout` (`infra/lambda.tf`) to match.
+
 ### Lambda bundles
 
 `infra/scripts/package-lambdas.sh` builds every Lambda bundle with esbuild's

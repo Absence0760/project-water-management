@@ -344,8 +344,14 @@ Claude does not run any of these, and none of them print a secret. Replace
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out=prod.tfplan`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply prod.tfplan`
+   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+
+   A saved plan holds every variable and secret it read (the decrypted sops
+   values, the database passwords) in plain form, so it is written outside
+   the repo and deleted once applied. If you don't apply it, delete it
+   yourself: `rm -f ~/.cache/water-management/prod.tfplan`. `.gitignore`
+   also ignores `*.tfplan` as a backstop.
 
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
