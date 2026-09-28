@@ -125,8 +125,8 @@ Afrikaans version too, reviewed the same way.
    `SIGNOFF_STATEMENT_VERSION` (`signoff-2`). A new disclaimer version also
    changes the statement's hash, because `disclaimerVersion` is part of it.
 3. Change any farmer line in its source. Send the Afrikaans through the
-   `af-translator` and `af-checker` agents and `pnpm gen:i18n:apply`, then run
-   `pnpm gen:i18n:sheet`. For those lines, use the Afrikaans the adviser
+   `i18n-translator` and `i18n-checker` agents and `pnpm gen:i18n:apply af`,
+   then run `pnpm gen:i18n:sheet`. For those lines, use the Afrikaans the adviser
    agreed.
 4. Update the quotes in this file. The tests named at the top fail until you
    do.
