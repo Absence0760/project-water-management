@@ -194,7 +194,7 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 		spec: { t: 'enum', options: plain(ACCUMULATION_MODES, { spread: 'Spread over the days', asRecorded: 'As recorded' }) }
 	},
 	'calibration.rainThresholdMm': { label: 'Calibration rain threshold', spec: num('mm') },
-	'calibration.catchmentAreaKm2': { label: 'Calibration catchment area', spec: num('km²', { nullable: true, nullLabel: 'sum of unit areas' }) },
+	'calibration.catchmentAreaKm2': { label: 'Calibration catchment area', spec: num('km²', { nullable: true, nullLabel: 'sum of hydrological unit areas' }) },
 	simulationStart: { label: 'Simulation start', spec: { t: 'date', nullLabel: 'first day with rain' } },
 	simulationEnd: { label: 'Simulation end', spec: { t: 'date', nullLabel: 'last day with rain' } },
 	reportStart: { label: 'Curtailment report start', spec: { t: 'date', nullLabel: 'start of run' } },

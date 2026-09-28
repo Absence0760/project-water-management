@@ -106,7 +106,7 @@
 		{#if engineVersion}<p class="muted small" data-testid="checks-engine">Checked by engine {engineVersion} when the run was made.</p>{/if}
 		{#if v.maxResidual}
 			<p class="muted small">
-				Largest daily balance error of any unit (column V of its daily CSV): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
+				Largest daily balance error of any hydrological unit (column V of its daily CSV): {fmtValue(v.maxResidual.valueM3Day)} m³/day, {v.maxResidual.name} on {v.maxResidual.date}.
 				It should be float noise, far below the flows.
 			</p>
 		{/if}
@@ -154,12 +154,12 @@
 <section aria-labelledby="{uid}-tr">
 	<h3 id="{uid}-tr">Trace a day <HelpTip key="run.gross_demand" /></h3>
 	<p class="muted small">
-		Every column of one unit's day, with the formula the model used, so the day can be checked by hand. The unit's daily CSV has the same
+		Every column of one hydrological unit's day, with the formula the model used, so the day can be checked by hand. The hydrological unit's daily CSV has the same
 		columns for every day. Pick the catchment to see how the runoff model turned the day's rain into natural flow.
 	</p>
 	<form class="trace-form" onsubmit={trace}>
 		<label>
-			<span>Unit, gauge or catchment</span>
+			<span>Hydrological unit, gauge or catchment</span>
 			<select bind:value={nodeId}>
 				<option value={CATCHMENT}>Catchment (rain to natural flow)</option>
 				{#each nodes as n (n.id)}<option value={n.id}>{n.name}{n.kind === 'gauge' ? ' (gauge)' : n.kind === 'user' ? ' (other user)' : ''}</option>{/each}

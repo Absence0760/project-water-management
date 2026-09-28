@@ -20,7 +20,7 @@ async function sectionNames(page: Page) {
 	return (await nav(page).getByRole('link').allInnerTexts()).map((t) => t.replace(/\s*\d+$/, '').trim());
 }
 
-const EVERY = ['Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History', 'Summary', 'River & reserve', 'Units & supply', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
+const EVERY = ['Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 
 test.describe('1440×960', () => {
 	test.use({ viewport: { width: 1440, height: 960 } });

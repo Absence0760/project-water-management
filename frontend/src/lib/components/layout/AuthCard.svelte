@@ -75,9 +75,9 @@
 			<p class="kicker">Water Management</p>
 			<h2>{t('Catchment water balance, from rainfall to river.')}</h2>
 			<ul>
-				<li>{t('Model farms, dams and transfers on a river network.')}</li>
+				<li>{t('Model hydrological units, dams and transfers on a river network.')}</li>
 				<li>{t('Run decades of daily flows in seconds.')}</li>
-				<li>{t('Check the environmental flow requirement (EWR) against every farm’s use.')}</li>
+				<li>{t('Check the environmental flow requirement (EWR) against every hydrological unit’s use.')}</li>
 			</ul>
 		</div>
 	</aside>

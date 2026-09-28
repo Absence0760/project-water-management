@@ -32,13 +32,13 @@ export const DEPARTURES: readonly Departure[] = [
 	},
 	{
 		ids: ['Q17', 'Q13'],
-		was: 'Shortfalls below the Ecological Reserve were handed down the network in a way that didn’t add up, and a farm with no irrigation could be told to cut supply.',
-		now: 'Each shortfall at a Reserve site is shared among the farms upstream in proportion to their net effect on the river, and split into what cutting irrigation can fix and what only releasing water can.'
+		was: 'Shortfalls below the Ecological Reserve were handed down the network in a way that didn’t add up, and a hydrological unit with no irrigation could be told to cut supply.',
+		now: 'Each shortfall at a Reserve site is shared among the hydrological units upstream in proportion to their net effect on the river, and split into what cutting irrigation can fix and what only releasing water can.'
 	},
 	{
 		ids: ['N1'],
 		was: 'Water that returned to the river from irrigation was taken off the crop’s own requirement, so a crop reported as fully supplied was short.',
-		now: 'Each farm has an irrigation efficiency: abstraction is the crop’s requirement divided by it, and a set share of the losses returns to the river.'
+		now: 'Each hydrological unit has an irrigation efficiency: abstraction is the crop’s requirement divided by it, and a set share of the losses returns to the river.'
 	},
 	{
 		ids: ['N2'],
@@ -88,7 +88,7 @@ export const DEPARTURES: readonly Departure[] = [
 	{
 		ids: ['W1–W5'],
 		was: 'Impossible or silently patched inputs gave no warning.',
-		now: 'The run warns about them: more runoff than rain, days with no rain value, farm areas that don’t add up.'
+		now: 'The run warns about them: more runoff than rain, days with no rain value, hydrological unit areas that don’t add up.'
 	}
 ];
 

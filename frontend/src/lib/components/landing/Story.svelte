@@ -95,8 +95,8 @@
 			</li>
 			<li data-step="farms" bind:this={els.farms} class:on={active === 'farms'}>
 				<p class="n">4</p>
-				<h3>{t('Farms take their share')}</h3>
-				<p>{t('Crops need water by the month. The model supplies what the dam and the river can give, and counts the days a farm runs short.')}</p>
+				<h3>{t('Hydrological units take their share')}</h3>
+				<p>{t('Crops need water by the month. The model supplies what the dam and the river can give, and counts the days a hydrological unit runs short.')}</p>
 				<MiniChart
 					kind="pair"
 					values={s.farm.supplied}

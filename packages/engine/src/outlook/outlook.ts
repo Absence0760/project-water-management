@@ -51,14 +51,12 @@ export interface OutlookLevel {
 
 /**
  * The share of analogue years a demand level must meet the river's
- * requirement in to be the planning figure. A **judgement, pending the
- * client's O6** (plan.md § Decision-support outputs; design §3.5, after
- * Kaune et al. 2020's finding that a cautious percentile with a review beats
- * an optimistic one).
+ * requirement in to be the planning figure. Confirmed by the client (O6,
+ * issue #90; plan.md § Decision-support outputs; design §3.5, after Kaune et
+ * al. 2020's finding that a cautious percentile with a review beats an
+ * optimistic one); a project may set its own (settings.outlook.planningShare).
  */
 export const DEFAULT_PLANNING_SHARE = 0.8;
-/** True while DEFAULT_PLANNING_SHARE is unconfirmed (O6); a surface showing it should say so. */
-export const PLANNING_SHARE_PENDING_CLIENT = true;
 
 /**
  * Fewest analogue years for percentiles and a planning figure (judgement,
@@ -462,7 +460,7 @@ export type PlanningReason = 'met' | 'noLevelMeets' | 'notEnoughYears' | 'noLeve
  */
 export interface PlanningFigure {
 	share: number;
-	/** DEFAULT_PLANNING_SHARE was used (pending the client's O6). */
+	/** DEFAULT_PLANNING_SHARE was used (the project set no share of its own). */
 	shareIsDefault: boolean;
 	reason: PlanningReason;
 	/** The level, when reason is `met`. */

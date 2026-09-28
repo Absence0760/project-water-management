@@ -71,6 +71,10 @@ htmlcov/
 .terraform/
 *.tfstate
 *.tfstate.*
+# Saved plans hold decrypted secrets (sops values, passwords) in plain form.
+# infra/README.md writes them outside the repo; this is the backstop.
+*.tfplan
+*.tfplan.json
 *.tfvars
 !*.tfvars.example
 .terraform.lock.hcl.bak

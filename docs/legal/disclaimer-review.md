@@ -232,8 +232,11 @@ view's *why* page and the farmer glossary say the same about restrictions:
 Alerts about data feeds and background jobs carry no liability line: they
 report the system's state, not a model result.
 
-The Afrikaans went through the `i18n-checker` agent; no native speaker has
-reviewed it yet (`.claude/agents/i18n/languages/af.md`).
+The Afrikaans went through the `i18n-checker` agent
+(`.claude/agents/i18n/languages/af.md`); no native speaker has reviewed it
+yet. The client confirmed (issue #90) that their native-speaker translator
+will review these lines with the rest of the Afrikaans farmer text before
+farmers are invited in Afrikaans ([followups.md § Afrikaans](../followups.md#afrikaans-wp-25)).
 
 ### Is an Afrikaans version of the report disclaimer needed?
 

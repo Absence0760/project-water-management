@@ -2,7 +2,7 @@
 // (docs/design/farmer-view-prototype/Main.dc.html, Farms.dc.html) with the
 // Vaalbank fixture, plus the rules the design states for the other cases.
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FarmProjection, FarmView } from '@water-management/engine';
+import { IRRIGATION_SYSTEMS, NEW_FARM_IRRIGATION, type FarmProjection, type FarmView } from '@water-management/engine';
 import {
 	compareCard,
 	damCard,
@@ -121,9 +121,9 @@ describe('the notice', () => {
 
 	it('splits a notice into title and text', () => {
 		expect(splitNotice(null)).toEqual({ title: null, body: null });
-		expect(splitNotice('Irrigation cut by 20 % from 15 Jan\n\nEvery farm takes 20 % less.')).toEqual({
+		expect(splitNotice('Irrigation cut by 20 % from 15 Jan\n\nEvery hydrological unit takes 20 % less.')).toEqual({
 			title: 'Irrigation cut by 20 % from 15 Jan',
-			body: 'Every farm takes 20 % less.'
+			body: 'Every hydrological unit takes 20 % less.'
 		});
 		const long = 'x'.repeat(81);
 		expect(splitNotice(long)).toEqual({ title: null, body: long });
@@ -159,16 +159,24 @@ describe('Water you received this season', () => {
 		expect(txt(s.last30)).toBe('Last 30 days: very little water needed');
 	});
 
-	it('names the irrigation system nearest the efficiency', () => {
+	it('names the SABI 2021 irrigation system nearest the efficiency (the table the node form sets)', () => {
 		expect(systemName(0.9)).toBe('drip');
-		expect(systemName(0.85)).toBe('micro or centre pivot');
-		expect(systemName(0.75)).toBe('sprinklers');
+		expect(systemName(0.95)).toBe('drip');
+		expect(systemName(0.85)).toBe('micro or centre pivot'); // centre pivot
+		expect(systemName(0.82)).toBe('micro or centre pivot'); // micro-sprinkler
+		expect(systemName(0.8)).toBe('sprinklers'); // permanent
+		expect(systemName(0.75)).toBe('sprinklers'); // movable
+		expect(systemName(0.7)).toBe('flood'); // surface
 		expect(systemName(0.65)).toBe('flood');
 		expect(systemName(0.5)).toBe('flood');
-		expect(systemName(0.95)).toBe('drip');
 	});
 
-	it('words the short days for each kind of farm', () => {
+	it('names every engine system in a farmer’s word, and drip for a new farm', () => {
+		expect(IRRIGATION_SYSTEMS.map((s) => systemName(s.efficiency))).toEqual(['drip', 'micro or centre pivot', 'micro or centre pivot', 'sprinklers', 'sprinklers', 'flood']);
+		expect(systemName(NEW_FARM_IRRIGATION.irrigationEfficiency)).toBe('drip');
+	});
+
+	it('words the short days for each kind of hydrological unit', () => {
 		const f = vaalbankFixture().farm;
 		expect(sp(shortLine({ ...f, season: { ...f.season, shortDays: 0 } }))).toBe("You weren't short of water on any day this season.");
 		expect(sp(shortLine({ ...f, season: { ...f.season, shortDays: 1, shortMonths: ['2023-11'], shortDaysAtStopLevel: 1 } }))).toBe(
@@ -201,7 +209,7 @@ describe('Your dam', () => {
 		expect(sp(damCard(vaalbankFixture().farm, 'm3')!.volumes)).toBe('83 640 m³ of 350 000 m³');
 	});
 
-	it('is null for a farm with no dam', () => {
+	it('is null for a hydrological unit with no dam', () => {
 		expect(damCard(withFarm((f) => ((f.damCapacityM3 = 0), (f.dam = null))).farm, 'm3')).toBeNull();
 	});
 
@@ -247,7 +255,7 @@ describe('Looking back (the model card)', () => {
 	it('has no chip and no % under the demand floor', () => {
 		const l = lookingBack(withFarm((f) => ((f.river.headline = null), (f.river.band = null))).farm);
 		expect(l.chip).toBeNull();
-		expect(txt(l.text)).toBe('Your farm needed very little water this season.');
+		expect(txt(l.text)).toBe('Your hydrological unit needed very little water this season.');
 	});
 
 	it('doesn’t ask to pump less when the river never did', () => {
@@ -286,22 +294,22 @@ describe('Compared with last season', () => {
 	});
 });
 
-describe('Your farm on the river', () => {
+describe('Your hydrological unit on the river', () => {
 	it('matches board 1', () => {
 		const v = vaalbankFixture();
-		expect(sp(positionLine(v))).toBe('1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment. The same rules apply to every farm.');
+		expect(sp(positionLine(v))).toBe('1 hydrological unit is upstream of you and 2 are downstream, of 8 hydrological units in the catchment. The same rules apply to every hydrological unit.');
 		expect(txt(outletLine(v))).toBe('River at Sandspruit Outlet: below its reserve on all of the last 30 days.');
 		expect(privacy()).toBe(
-			'Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.'
+			'Your hydrological unit’s figures are seen by you, anyone else linked to this hydrological unit, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.'
 		);
 	});
 
 	it('uses the plural rules', () => {
 		const v = vaalbankFixture();
 		v.context = { farmsUpstream: 0, farmsDownstream: 1, farmCount: 2 };
-		expect(sp(positionLine(v))).toMatch(/^No farm is upstream of you and 1 is downstream, of 2 farms in the catchment\./);
+		expect(sp(positionLine(v))).toMatch(/^No hydrological unit is upstream of you and 1 is downstream, of 2 hydrological units in the catchment\./);
 		v.context = { farmsUpstream: 3, farmsDownstream: 0, farmCount: 1 };
-		expect(sp(positionLine(v))).toMatch(/^3 farms are upstream of you and none is downstream, of 1 farm in the catchment\./);
+		expect(sp(positionLine(v))).toMatch(/^3 hydrological units are upstream of you and none is downstream, of 1 hydrological unit in the catchment\./);
 		v.outlet30 = { name: 'Outlet', daysNotMet: 12, days: 30 };
 		expect(txt(outletLine(v))).toBe('River at Outlet: below its reserve on 12 of the last 30 days.');
 		v.outlet30 = { name: 'Outlet', daysNotMet: 0, days: 30 };
@@ -309,8 +317,8 @@ describe('Your farm on the river', () => {
 	});
 });
 
-describe('the farms list (board 9)', () => {
-	it('sums a farm up in one line', () => {
+describe('the hydrological units list (board 9)', () => {
+	it('sums a hydrological unit up in one line', () => {
 		expect(sp(farmSummaryLine(vaalbankFixture().farm))).toBe('86 % of water needed · dam 24 %');
 		expect(sp(farmSummaryLine(withFarm((f) => ((f.damCapacityM3 = 0), (f.dam = null))).farm))).toBe('86 % of water needed · no dam');
 	});
@@ -342,9 +350,9 @@ describe('the states', () => {
 	});
 });
 
-describe('Who can see my farm', () => {
+describe('Who can see my hydrological unit', () => {
 	it('names each person with what they can do, and marks the caller', () => {
-		expect(accessLine({ displayName: 'Demo Farmer', role: 'farmer', you: true })).toBe('Demo Farmer (you) · linked to this farm');
+		expect(accessLine({ displayName: 'Demo Farmer', role: 'farmer', you: true })).toBe('Demo Farmer (you) · linked to this hydrological unit');
 		expect(accessLine({ displayName: 'Demo Analyst', role: 'owner', you: false })).toBe('Demo Analyst · WUA, manages who has access');
 		expect(accessLine({ displayName: 'Clerk', role: 'viewer', you: false })).toBe('Clerk · WUA, can read');
 		expect(accessLine({ displayName: 'Modeller', role: 'editor', you: false })).toBe('Modeller · WUA, can change the model');
@@ -361,17 +369,17 @@ describe('words picked by value', () => {
 		expect([0.9, 0.85, 0.75, 0.65, 0.5].map(systemName)).toEqual(['drip', 'micro or centre pivot', 'sprinklers', 'flood', 'flood']);
 	});
 
-	it('words every farm page state', () => {
+	it('words every hydrological unit page state', () => {
 		const states = ['loading', 'slow', 'errorTitle', 'errorText', 'noPublication', 'noPublicationText', 'contact', 'removed', 'needsConnection', 'updating'] as const;
 		expect(states.map(stateText)).toEqual([
-			'Loading your farm…',
+			'Loading your hydrological unit…',
 			'Slow signal? This can take a moment.',
-			'We couldn’t load your farm',
+			'We couldn’t load your hydrological unit',
 			'Check your signal and try again. Your figures are safe; nothing was changed.',
 			'Your WUA hasn’t published figures yet',
 			'When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.',
 			'Questions? Contact your WUA.',
-			'You no longer have access to this farm. Contact your WUA.',
+			'You no longer have access to this hydrological unit. Contact your WUA.',
 			'Charts, “Why?” and downloads need a connection.',
 			'Updating…'
 		]);
@@ -379,8 +387,8 @@ describe('words picked by value', () => {
 
 	it('names the WUA in the contact lines when the project has its name, else “your WUA”', () => {
 		expect(contactText('contact', 'Vaalbank WUA')).toBe('Questions? Contact Vaalbank WUA.');
-		expect(contactText('removed', 'Vaalbank WUA')).toBe('You no longer have access to this farm. Contact Vaalbank WUA.');
+		expect(contactText('removed', 'Vaalbank WUA')).toBe('You no longer have access to this hydrological unit. Contact Vaalbank WUA.');
 		expect(contactText('contact', null)).toBe('Questions? Contact your WUA.');
-		expect(contactText('removed', '')).toBe('You no longer have access to this farm. Contact your WUA.');
+		expect(contactText('removed', '')).toBe('You no longer have access to this hydrological unit. Contact your WUA.');
 	});
 });

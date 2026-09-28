@@ -25,8 +25,8 @@ export function eventText(e: AlertEvent): string {
 	switch (e.kind) {
 		case 'dam_below':
 			return d.source === 'forecast'
-				? `${e.nodeName ?? 'A unit'}: dam may fall to about ${pct(d.pct)} around ${day(d.date)} on the forecast (alert below ${pct(e.threshold)})`
-				: `${e.nodeName ?? 'A unit'}: dam about ${pct(d.pct)} on ${day(d.date)} (alert below ${pct(e.threshold)})`;
+				? `${e.nodeName ?? 'A hydrological unit'}: dam may fall to about ${pct(d.pct)} around ${day(d.date)} on the forecast (alert below ${pct(e.threshold)})`
+				: `${e.nodeName ?? 'A hydrological unit'}: dam about ${pct(d.pct)} on ${day(d.date)} (alert below ${pct(e.threshold)})`;
 		case 'ewr_forecast_fail':
 			return `EWR at the outlet at risk on ${n(d.days)} of ${n(d.of)} forecast days (alert at ${e.threshold})`;
 		case 'data_stale': {

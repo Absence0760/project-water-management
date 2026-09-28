@@ -1,6 +1,6 @@
 // The seasonal outlook (issue #53 R5, docs/ui.md § Seasonal outlook): an
 // editor sets the planning share in Settings (the season stays the default,
-// marked pending the client), starts an outlook on a base run at 100 / 85 /
+// confirmed by the client, issue #90, so nothing is marked pending), starts an outlook on a base run at 100 / 85 /
 // 70 % plus a monthly plan, the background worker runs it (one tick that
 // queues nothing of its own), and the table appears once the outlook's own
 // status says complete. The rendered figures are checked against the stored
@@ -82,13 +82,13 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	const project = await seedTwelveYears(page.request, 'Seasonal outlook');
 	const runId = await createRun(page.request, project.id, 'Base');
 
-	// Settings: the defaults are marked pending the client; the project chooses a 55 % planning share and keeps the default season.
+	// Settings: the defaults are confirmed (issue #90), so no pending badge; the project chooses a 55 % planning share and keeps the default season.
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('outlook-settings');
-	await expect(section.getByTestId('season-pending')).toHaveText('Default pending the client');
-	await expect(section.getByTestId('share-pending')).toHaveText('Default pending the client');
-	await section.getByRole('checkbox', { name: 'Use the default planning share (80 %)' }).uncheck();
+	await expect(section.getByRole('checkbox', { name: 'Use the default season (1 Oct – 30 Apr)' })).toBeChecked();
+	await expect(section.getByTestId('season-pending')).toHaveCount(0);
 	await expect(section.getByTestId('share-pending')).toHaveCount(0);
+	await section.getByRole('checkbox', { name: 'Use the default planning share (80 %)' }).uncheck();
 	await section.getByLabel('Planning share (% of analogue years)').fill('55');
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByText('Settings saved.')).toBeVisible();
@@ -135,7 +135,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	expect(n).toBe(12);
 
 	await expect(panel.getByTestId('outlook-season')).toHaveText(`Season: 1 Oct 2018 – 30 Apr 2019 (${r.days} days)`);
-	await expect(panel.getByTestId('outlook-season-pending')).toHaveText('Season pending the client');
+	await expect(panel.getByTestId('outlook-season-pending')).toHaveCount(0);
 	await expect(panel.getByTestId('outlook-share')).toHaveText('Planning share: 55 % of analogue years');
 	await expect(panel.getByTestId('outlook-share-pending')).toHaveCount(0);
 	await expect(panel.getByTestId('outlook-metric')).toHaveText('Measure: Days below the pragmatic EWR at the outlet');

@@ -41,6 +41,17 @@ describe('ModelEditor', () => {
 		expect(farm.pctUpstreamToDam).toBe(1);
 	});
 
+	it('starts a new farm on drip irrigation (90 %, issue #90) with half its losses returning, and leaves a loaded farm as saved', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const farm = ed.addNode();
+		expect([farm.irrigationEfficiency, farm.lossReturnFraction]).toEqual([0.9, 0.5]);
+		farm.irrigationEfficiency = 0.65;
+		ed.load(ed.snapshot());
+		expect(ed.model.nodes.find((n) => n.id === farm.id)!.irrigationEfficiency).toBe(0.65);
+	});
+
 	it('re-routes children and drops references when a node is removed', () => {
 		const ed = new ModelEditor();
 		const g = ed.addNode();

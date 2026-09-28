@@ -35,12 +35,12 @@
 		{#if attempts > 1}<p>{stillFailing(offline, wuaName)}</p>{/if}
 	</div>
 {:else if kind === 'removed'}
-	<h1>{farmName ?? t('Your farm')}</h1>
+	<h1>{farmName ?? t('Your hydrological unit')}</h1>
 	<p role="alert">{contactText('removed', wuaName)}</p>
-	<a class="link" href="{base}/farm">{t('Your farms')}</a>
+	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
 {:else}
 	<div>
-		<h1>{farmName ?? t('Your farm')}</h1>
+		<h1>{farmName ?? t('Your hydrological unit')}</h1>
 		{#if projectName}<p class="sub">{projectName}</p>{/if}
 	</div>
 	<section class="card empty" aria-labelledby="empty-h">

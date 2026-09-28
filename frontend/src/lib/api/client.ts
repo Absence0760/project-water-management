@@ -43,6 +43,7 @@ import type {
 	EnsembleStart,
 	FarmAccessPerson,
 	AddFarmerResult,
+	FarmRole,
 	BulkFarmerResult,
 	BulkFarmerRow,
 	Farmer,
@@ -353,9 +354,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		 */
 		farmers: {
 			list: (id: string) => request<{ farmers: FarmerEntry[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
-			/** A verified account is added (`{ farmer }`); any other address is invited (`{ invited: true, invite }`). */
-			add: (id: string, email: string, nodeIds: string[], locale: InviteLocale = 'en') =>
-				request<AddFarmerResult>('POST', `${p(id)}/farmers`, { email, nodeIds, locale }),
+			/**
+			 * A verified account is added (`{ farmer }`); any other address is invited (`{ invited: true, invite }`).
+			 * `role: 'contributor'` adds or invites a licence applicant with their farms (WP-3.3).
+			 */
+			add: (id: string, email: string, nodeIds: string[], locale: InviteLocale = 'en', role: FarmRole = 'farmer') =>
+				request<AddFarmerResult>('POST', `${p(id)}/farmers`, { email, nodeIds, locale, role }),
 			/** Many rows at once, one farm each; `dryRun` returns the outcomes without writing or mailing anything. */
 			bulk: (id: string, rows: BulkFarmerRow[], dryRun = false) =>
 				request<{ results: BulkFarmerResult[]; dryRun: boolean }>('POST', `${p(id)}/farmers/bulk`, { rows, dryRun }).then((r) => r.results),
@@ -502,6 +506,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
 			nominate: (id: string, runId: string, reason: string) =>
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
+			/** Withdraw the current nomination (a history row with no run, 098): nothing is the evidence until a run is nominated again. Answers with the whole history. */
+			withdrawNomination: (id: string, reason: string) =>
+				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence/withdraw`, { reason }).then((r) => r.nominations),
 			/** Re-run a run from its stored inputs with today's engine and compare (WP-3.1). */
 			reproduce: (id: string, runId: string) => request<Reproduction>('GET', `${p(id)}/runs/${enc(runId)}/reproduce`),
 			/** The exact input a run would use (merged settings, model, first series of each kind), for the in-browser engine. */

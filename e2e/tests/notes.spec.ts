@@ -28,12 +28,12 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	await dialog.getByRole('button', { name: 'Add note' }).click();
 	await expect(dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem')).toHaveCount(1);
 	await dialog.getByLabel('Add a note').fill('Dam raised in 2019 per owner');
-	await dialog.getByLabel('Also show to this unit’s farmers').check();
+	await dialog.getByLabel('Also show to this hydrological unit’s farmers').check();
 	await dialog.getByRole('button', { name: 'Add note' }).click();
 	const items = dialog.getByRole('list', { name: 'Notes' }).getByRole('listitem');
 	await expect(items).toHaveCount(2);
 	await expect(items.first()).toContainText('Dam raised in 2019 per owner');
-	await expect(items.first()).toContainText('Shown to the farm');
+	await expect(items.first()).toContainText('Shown to its farmers');
 	// Plain text: the markup is shown as typed, and the line break is kept.
 	const team = items.nth(1).locator('.body');
 	await expect(team).toHaveText('Owner disputes the dam volume\n<b>check survey</b>');
@@ -46,7 +46,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 
 	// The farmer's page: the farm-visible note only.
 	await farmer.page.goto(`/farm/${project.id}`);
-	const notes = farmer.page.getByRole('region', { name: 'Notes about your farm' });
+	const notes = farmer.page.getByRole('region', { name: 'Notes about your hydrological unit' });
 	await expect(notes.getByRole('list', { name: 'Notes' }).getByRole('listitem')).toHaveCount(1);
 	await expect(notes).toContainText('Dam raised in 2019 per owner');
 	await expect(notes).not.toContainText('Owner disputes');

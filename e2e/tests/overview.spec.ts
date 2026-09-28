@@ -17,7 +17,7 @@ test('a fresh project: nothing loaded, every step to do', async ({ page, owner }
 	await expect(setup(page).getByRole('heading', { name: 'Set up this catchment' })).toBeVisible();
 	await expect(setup(page)).toContainText('0 of 5 done');
 	await expect(setup(page)).toContainText('Upload daily catchment rainfall (mm).');
-	await expect(setup(page)).toContainText('Run it to get unit supply & deficit');
+	await expect(setup(page)).toContainText('Run it to get hydrological unit supply & deficit');
 	// The model's facts are on the Project page, one link away.
 	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toHaveCount(0);
 	await expect(page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ })).toHaveAttribute('href', '?tab=project');
@@ -108,15 +108,15 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	const damsLink = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(damsLink).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
-	await expect(page.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 	// The bars' % says what it measures.
-	await expect(page.getByTestId('supply-bars-what')).toHaveText("Share of each unit's irrigation demand supplied, latest run");
+	await expect(page.getByTestId('supply-bars-what')).toHaveText("Share of each hydrological unit's irrigation demand supplied, latest run");
 
 	// First screen (board A1): the KPI row, then the chart on the left, Needs attention above Supply by unit on the right.
 	const kpis = await box('Latest run');
 	const chart = await box('Flow vs reserve');
 	const attention = await box('Needs attention');
-	const supply = await box('Supply by unit');
+	const supply = await box('Supply by hydrological unit');
 	expect(chart.y).toBeGreaterThan(kpis.y + kpis.height - 1);
 	expect(attention.x).toBeGreaterThan(chart.x + chart.width);
 	expect(Math.abs(attention.y - chart.y)).toBeLessThan(2);
@@ -180,7 +180,7 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the dashed EWR line (EWR not met).`);
 });
 
-test('needs attention cards and supply by unit: coloured by how much it matters, each unit opens its drawer, and both lead to Units & supply', async ({ page, owner }) => {
+test('needs attention cards and supply by hydrological unit: coloured by how much it matters, each hydrological unit opens its drawer, and both lead to Hydrological units', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Summary side column');
 	// Plant far more on Lower farm than its water can serve, so it comes up short.
@@ -191,12 +191,12 @@ test('needs attention cards and supply by unit: coloured by how much it matters,
 
 	const attention = page.getByRole('region', { name: 'Needs attention', exact: true });
 	const short = attention.locator('[data-attention="short-farms"]');
-	await expect(short).toContainText('1 of 2 units below 95%');
+	await expect(short).toContainText('1 of 2 hydrological units below 95%');
 	await expect(short).toContainText(/Lower farm got \d+% of its demand in the latest run/);
 	await expect(short).toHaveAttribute('data-tone', /^(danger|warning)$/);
 	await expect(attention.locator('[data-attention="stale-data"]')).toHaveAttribute('data-tone', 'warning');
 
-	const supply = page.getByRole('region', { name: 'Supply by unit' });
+	const supply = page.getByRole('region', { name: 'Supply by hydrological unit' });
 	const rows = supply.getByRole('listitem');
 	await expect(rows).toHaveCount(2);
 	// Fullest first, emptiest last, in the Network's supply bands, with a key to them.
@@ -207,7 +207,7 @@ test('needs attention cards and supply by unit: coloured by how much it matters,
 	expect(pcts[0]!).toBeGreaterThan(pcts[1]!);
 	await expect(supply).toContainText(/supplied/);
 	// The whole picture is on Units & supply, for the same run (issue #17).
-	await expect(supply.getByRole('link', { name: 'More on Units & supply' })).toHaveAttribute('href', /^\?tab=supply&run=[0-9a-f-]{36}$/);
+	await expect(supply.getByRole('link', { name: 'More on Hydrological units' })).toHaveAttribute('href', /^\?tab=supply&run=[0-9a-f-]{36}$/);
 
 	// A farm's name opens its planted areas over the Summary.
 	await rows.last().getByRole('link', { name: 'Lower farm' }).click();
@@ -219,7 +219,7 @@ test('needs attention cards and supply by unit: coloured by how much it matters,
 	// The whole card is the link: a click on its detail follows the main action, Units & supply on the worst unit (issue #17).
 	await short.click({ position: { x: 16, y: 34 } });
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=supply&run=[0-9a-f-]{36}&unit=${project.model.nodes[2]!.id}$`));
-	await expect(page.getByRole('region', { name: 'Unit detail: Lower farm' })).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Hydrological unit detail: Lower farm' })).toBeVisible();
 });
 
 test.describe('the first screen has no accessibility violations', () => {
@@ -236,7 +236,7 @@ test.describe('the first screen has no accessibility violations', () => {
 			await page.goto(`/projects/${project.id}`);
 			await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('full');
-			await expect(page.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
+			await expect(page.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
 			await expectNoViolations(page);
 		});

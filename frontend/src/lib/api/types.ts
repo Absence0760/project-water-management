@@ -249,13 +249,16 @@ export interface FarmAccessPerson {
 }
 
 /** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
+/** The roles that hold farms: a farmer, or a licence applicant with their farms (contributor, WP-3.3). */
+export type FarmRole = 'farmer' | 'contributor';
+
 export interface Farmer {
 	status: 'active';
 	userId: string;
 	email: string;
 	displayName: string;
 	/** An applicant (contributor, WP-3.3) keeps farm links too; absent from servers before it. */
-	role?: 'farmer' | 'contributor';
+	role?: FarmRole;
 	nodeIds: string[];
 }
 
@@ -267,6 +270,8 @@ export interface InvitedFarmer {
 	status: 'invited' | 'expired';
 	inviteId: string;
 	email: string;
+	/** What they join as: an applicant invited with their farms (097); absent from servers before it. */
+	role?: FarmRole;
 	nodeIds: string[];
 	/** Display name of whoever (re-)sent it. */
 	invitedBy: string;
@@ -609,14 +614,17 @@ export const RUN_NOTES_MAX = 4000;
 export type EvidenceStatus = 'current' | 'past';
 
 /** One row of a project's evidence history (GET …/evidence, oldest first; the last is current). */
+/** A row of the evidence history: a run nominated, or a withdrawal of the nomination before it (098: every run field null). */
 export interface Nomination {
 	id: string;
-	runId: string;
-	runLabel: string;
-	runCreatedAt: string;
+	/** A withdrawal: no run, only who, when and why. Absent from an older API (every row a nomination). */
+	withdrawn?: boolean;
+	runId: string | null;
+	runLabel: string | null;
+	runCreatedAt: string | null;
 	/** Copied from the run when it was nominated. */
-	runoffModel: StoredRunoffModelId;
-	engineVersion: string;
+	runoffModel: StoredRunoffModelId | null;
+	engineVersion: string | null;
 	reason: string;
 	nominatedAt: string;
 	nominatedBy: string | null;
@@ -667,7 +675,8 @@ export interface RunEvidence {
 	nominatedAt: string;
 	nominatedBy: string | null;
 	reason: string;
-	replacedBy: { runId: string; runLabel: string; nominatedAt: string; nominatedBy: string | null; reason: string } | null;
+	/** The row after it: another run nominated, or (`withdrawn`, no run) the nomination withdrawn. */
+	replacedBy: { withdrawn?: boolean; runId: string | null; runLabel: string | null; nominatedAt: string; nominatedBy: string | null; reason: string } | null;
 }
 
 export interface Run extends RunMeta {
@@ -1479,7 +1488,7 @@ export interface Outlook {
 	baseRun: { id: string; label: string; createdAt: string };
 	decisionDate: string;
 	seasonEnd: string;
-	/** null = the engine's default share (pending the client's O6). */
+	/** null = the engine's default share (O6). */
 	planningShare: number | null;
 	levels: { id: string; label: string; ops: ScenarioOp[] }[];
 	analogueYears: number[] | null;

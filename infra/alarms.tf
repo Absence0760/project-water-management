@@ -273,8 +273,9 @@ resource "aws_cloudwatch_metric_alarm" "rds_connections" {
   period              = 300
   statistic           = "Maximum"
   # db.t4g.micro allows ~80 connections. The API can open at most
-  # reserved concurrency (10) x pool max (5) = 50; above 60 something is
-  # leaking or the concurrency cap was lifted without resizing the DB.
+  # reserved concurrency (10) x pool max (5) = 50, the worker 8 x 2 = 16 and
+  # the migrator 1. Both saturated for 15 minutes is itself worth a look; above
+  # 60 otherwise, something is leaking or a cap was raised without resizing the DB.
   threshold          = 60
   alarm_description  = "RDS connections above 60 (t4g.micro max is ~80)."
   alarm_actions      = [aws_sns_topic.alerts.arn]

@@ -32,10 +32,15 @@ budget_monthly_usd = 80
 budget_alert_email = "you+aws-alerts@example.com"
 
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
-# keeps 10 unreserved, so ANY reservation fails until the quota is raised
-# (Service Quotas → Lambda → Concurrent executions → 1000). Use -1 until then.
+# keeps 10 unreserved, so ANY reservation fails until the quota is raised:
+# raise it BEFORE the first apply to at least the sum of these + 10 (33 at the
+# defaults; ask for 1000: infra/README.md § Operator steps). -1 (unreserved)
+# is refused: it lifts the spend and DB-connection caps.
 lambda_reserved_concurrency  = 10
 migrate_reserved_concurrency = 1
+# worker_reserved_concurrency   = 8 # at least 8: its four SQS triggers x 2
+# fetcher_reserved_concurrency  = 2
+# renderer_reserved_concurrency = 2
 
 # Database sizing (defaults shown).
 # db_instance_class           = "db.t4g.micro"

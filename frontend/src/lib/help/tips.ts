@@ -107,7 +107,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'report-window',
 		term: 'Reporting window',
-		short: 'The period the curtailment report (equitable shares and EWR cuts per unit) averages over. Empty = the whole run.',
+		short: 'The period the curtailment report (equitable shares and EWR cuts per hydrological unit) averages over. Empty = the whole run.',
 		category: 'basics',
 		fields: ['settings.reportStart', 'settings.reportEnd']
 	},
@@ -115,7 +115,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'assurance-of-supply',
 		term: 'Assurance of supply',
-		short: 'How reliably each unit’s irrigation demand was met over the reporting window: by days, by volume and by water years.',
+		short: 'How reliably each hydrological unit’s irrigation demand was met over the reporting window: by days, by volume and by water years.',
 		units: '% ; days; m³',
 		category: 'results',
 		fields: ['settings.assuranceAnnualThreshold']
@@ -153,14 +153,14 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'network',
 		term: 'Network',
-		short: 'How the units and gauges connect: each element drains into exactly one element downstream, ending at the outflow gauge.',
+		short: 'How the hydrological units and gauges connect: each element drains into exactly one element downstream, ending at the outflow gauge.',
 		category: 'network',
 		fields: ['node.downstreamNodeId']
 	},
 	{
 		id: 'element-farm',
-		term: 'Unit',
-		short: 'A farm, sub-catchment or town with land of its own: a runoff share, an optional dam and demands. The farmer view calls it a farm.',
+		term: 'Hydrological unit',
+		short: 'A farm, sub-catchment or town with land of its own: a runoff share, an optional dam and demands. Exports and the API call it a farm.',
 		category: 'network',
 		fields: ['node.kind', 'node.name']
 	},
@@ -181,7 +181,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'user-priority',
 		term: 'User priority (senior / junior)',
-		short: 'Senior: units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
+		short: 'Senior: hydrological units and junior users upstream must pass its demand first. Junior: it takes what reaches it after them.',
 		category: 'network',
 		fields: ['node.userPriority', 'run.passed_for_senior']
 	},
@@ -196,7 +196,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'borehole',
 		term: 'Boreholes (groundwater)',
-		short: 'Groundwater a unit or other user pumps, up to a daily capacity and an annual cap, by a mode: supplemental, primary or emergency.',
+		short: 'Groundwater a hydrological unit or other user pumps up to a daily capacity and annual cap, by mode: supplemental, primary or emergency.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.boreholeCapacityM3Day', 'node.boreholeRule', 'node.boreholeTriggerPct', 'run.groundwater_used', 'run.groundwater_to_dam', 'summary.avgGroundwaterM3Day', 'summary.avgGroundwaterToDamM3Day']
@@ -212,7 +212,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-object',
 		term: 'Demand object',
-		short: 'A demand on a unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from the unit’s dam.',
+		short: 'A demand on a hydrological unit that isn’t a crop (a town, households, livestock, water piped out), supplied with the crops from its dam.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['demandObject.category', 'demandObject.priority', 'demandObject.returnPct', 'summary.demandObjects']
@@ -220,7 +220,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
-		short: 'Where a unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
+		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',
 		units: 'm³/day',
 		category: 'network',
 		fields: ['node.supplyRule', 'node.pumpCapacityM3Day', 'node.supplyTriggerPct', 'node.supplyStopPct', 'run.river_abstraction', 'summary.avgRiverAbstractionM3Day']
@@ -235,7 +235,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'land-cover',
 		term: 'Land cover (invasive plants, forestry)',
-		short: 'Invasive alien trees and plantations on a unit use more water than natural vegetation, so the unit passes on less runoff.',
+		short: 'Invasive alien trees and plantations on a hydrological unit use more water than natural vegetation, so it passes on less runoff.',
 		category: 'network',
 		fields: ['run.landcover_reduction']
 	},
@@ -250,8 +250,8 @@ export const TIPS: HelpTipText[] = [
 	// ---- Units and dams -----------------------------------------------------
 	{
 		id: 'farm-area',
-		term: 'Unit area',
-		short: 'Land area of the unit, in km². Drives its share of catchment runoff under the Area method.',
+		term: 'Hydrological unit area',
+		short: 'Land area of the hydrological unit, in km². Drives its share of catchment runoff under the Area method.',
 		units: 'km²',
 		category: 'farm',
 		fields: ['node.areaKm2']
@@ -259,7 +259,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'hi-lo-map-area',
 		term: 'High-MAP and low-MAP area',
-		short: 'The unit’s land in the wetter (high mean annual precipitation) and drier parts of the catchment, in km².',
+		short: 'The hydrological unit’s land in the wetter (high mean annual precipitation) and drier parts of the catchment, in km².',
 		units: 'km²',
 		category: 'farm',
 		fields: ['node.areaHiKm2', 'node.areaLoKm2']
@@ -267,7 +267,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'flow-share',
 		term: 'Flow share (fragmentation)',
-		short: 'The fixed fraction of catchment natural flow (and EWR) assigned to each unit. Shares should add up to 100 %.',
+		short: 'The fixed fraction of catchment natural flow (and EWR) assigned to each hydrological unit. Shares should add up to 100 %.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['settings.flowShareMethod', 'node.flowShareManual', 'summary.flowShare']
@@ -283,7 +283,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'upstream-to-dam',
 		term: 'Upstream inflow share (dam)',
-		short: 'Fraction of the water arriving from upstream that enters the unit’s dam; the rest passes below it.',
+		short: 'Fraction of the water arriving from upstream that enters the hydrological unit’s dam; the rest passes below it.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['node.pctUpstreamToDam']
@@ -291,7 +291,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'runoff-to-dam',
 		term: 'Own runoff into dam',
-		short: 'Fraction of the unit’s own runoff that drains into its dam. The rest joins the river below the dam.',
+		short: 'Fraction of the hydrological unit’s own runoff that drains into its dam. The rest joins the river below the dam.',
 		units: 'fraction 0–1 (shown as %)',
 		category: 'farm',
 		fields: ['node.pctRunoffToDam']
@@ -299,7 +299,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'dam-capacity',
 		term: 'Dam capacity',
-		short: 'Combined full-supply volume of the unit’s dams, in m³. 0 means no storage: water not used the same day flows on.',
+		short: 'Combined full-supply volume of the hydrological unit’s dams, in m³. 0 means no storage: water not used the same day flows on.',
 		units: 'm³',
 		category: 'farm',
 		fields: ['node.damCapacityM3']
@@ -363,7 +363,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'irrigation-efficiency',
 		term: 'Irrigation efficiency',
-		short: 'Share of the water abstracted for irrigation that reaches the crop. The unit abstracts crop requirement ÷ efficiency.',
+		short: 'Share of the water abstracted for irrigation that reaches the crop. The hydrological unit abstracts crop requirement ÷ efficiency.',
 		units: 'fraction 0–1 (shown as %), above 0',
 		category: 'farm',
 		fields: ['node.irrigationEfficiency', 'crop.irrigationEfficiency']
@@ -371,7 +371,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'demand-factor',
 		term: 'Demand factor',
-		short: 'A scenario’s multiplier on what a unit or other water user would take, per month: 0.85 is 85 % of it.',
+		short: 'A scenario’s multiplier on what a hydrological unit or other water user would take, per month: 0.85 is 85 % of it.',
 		units: 'multiplier ≥ 0 per month (a scenario op takes 0–2)',
 		category: 'farm',
 		fields: ['node.demandFactor']
@@ -403,7 +403,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'working-columns',
 		term: 'Working columns',
-		short: "A unit's intermediate daily numbers (K … T), so any day can be redone by hand from the daily CSV.",
+		short: "A hydrological unit's intermediate daily numbers (K … T), so any day can be redone by hand from the daily CSV.",
 		units: 'm³/day (interim storage m³)',
 		category: 'results',
 		fields: [
@@ -422,7 +422,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'balance-check',
 		term: 'Self-checks and the balance check',
-		short: 'Every run checks its own output: each unit’s day must balance, and the reports must add up to the daily series.',
+		short: 'Every run checks its own output: each hydrological unit’s day must balance, and the reports must add up to the daily series.',
 		units: 'm³/day',
 		category: 'results',
 		fields: ['run.balance_residual']
@@ -448,7 +448,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'crop-area',
 		term: 'Crop area',
-		short: 'Area of each crop on each unit, entered in hectares. Leave a crop blank on units that don’t grow it.',
+		short: 'Area of each crop on each hydrological unit, entered in hectares. Leave a crop blank on hydrological units that don’t grow it.',
 		units: 'ha (stored as m²; 1 ha = 10 000 m²)',
 		category: 'crops',
 		fields: ['cropArea.areaM2']
@@ -472,7 +472,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'crop-requirement',
 		term: 'Crop water requirement',
-		short: 'Water the unit’s crops need from irrigation on a given day, after effective rain, in m³/day (the workbook’s net irrigation demand).',
+		short: 'Water the hydrological unit’s crops need from irrigation each day, after effective rain, in m³/day (the workbook’s net irrigation demand).',
 		units: 'm³/day',
 		category: 'crops',
 		fields: ['run.crop_requirement', 'summary.avgCropRequirementM3Day']
@@ -480,7 +480,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'irrigation-demand',
 		term: 'Irrigation demand (abstraction)',
-		short: 'What the unit has to abstract: crop requirement ÷ irrigation efficiency, plus any demand objects’ demand, in m³/day.',
+		short: 'What the hydrological unit has to abstract: crop requirement ÷ irrigation efficiency, plus any demand objects’ demand, in m³/day.',
 		units: 'm³/day',
 		category: 'crops',
 		fields: ['run.demand', 'summary.avgDemandM3Day']
@@ -488,7 +488,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'irrigation-supplied',
 		term: 'Irrigation supplied',
-		short: 'Water abstracted for the unit that day (dam, river, boreholes): the demand, or less when water runs short. The crop gets e × it.',
+		short: 'Water abstracted for the hydrological unit that day (dam, river, borehole): the demand, or less when water runs short. The crop gets e × it.',
 		units: 'm³/day',
 		category: 'crops',
 		fields: ['run.supplied', 'summary.avgSuppliedM3Day']
@@ -506,7 +506,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'transfer',
 		term: 'Transfer',
-		short: 'Water moved from one unit’s dam to another unit (pipeline or canal), in chosen months and up to a maximum rate.',
+		short: 'Water moved from one hydrological unit’s dam to another hydrological unit (pipeline or canal), in chosen months and up to a maximum rate.',
 		category: 'transfers',
 		fields: ['transfer.fromNodeId', 'transfer.toNodeId', 'transfer.enabled', 'run.transfer']
 	},
@@ -529,7 +529,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'transfer-offtake',
 		term: 'River off-take',
-		short: 'A transfer that takes from the river leaving its source unit, not from a dam: a canal or pipe fed from a weir.',
+		short: 'A transfer that takes from the river leaving its source hydrological unit, not from a dam: a canal or pipe fed from a weir.',
 		units: 'hands-off m³/day; losses %',
 		category: 'transfers',
 		fields: ['transfer.source', 'transfer.handsOffM3Day', 'transfer.handsOffEwr', 'transfer.lossPct', 'transfer.sizing', 'transfer.topUpDam']
@@ -555,15 +555,15 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'natural-flow',
 		term: 'Natural flow',
-		short: 'The flow the catchment would produce with no units, dams or abstraction, in m³/day. Generated from rain.',
+		short: 'The flow the catchment would produce with no hydrological units, dams or abstraction, in m³/day. Generated from rain.',
 		units: 'm³/day',
 		category: 'flow',
 		fields: ['run.natural_flow', 'catchment.meanNaturalFlowM3Day', 'run.resultant_flow']
 	},
 	{
 		id: 'farm-runoff',
-		term: 'Unit runoff',
-		short: 'The unit’s share of catchment natural flow on the day, in m³/day.',
+		term: 'Hydrological unit runoff',
+		short: 'The hydrological unit’s share of catchment natural flow on the day, in m³/day.',
 		units: 'm³/day',
 		category: 'flow',
 		fields: ['run.runoff']
@@ -685,7 +685,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'catchment-area',
 		term: 'Catchment area (rain)',
-		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the unit areas.',
+		short: 'Area, in km², that rain falls on when converting mm to m³. Empty = the sum of the hydrological unit areas.',
 		units: 'km²',
 		category: 'flow',
 		fields: ['calibration.catchmentAreaKm2']
@@ -732,8 +732,8 @@ export const TIPS: HelpTipText[] = [
 	},
 	{
 		id: 'ewr-share',
-		term: 'Unit EWR share',
-		short: 'The unit’s part of the pragmatic EWR (EWR × its flow share), added up down the river to give the EWR each point must pass.',
+		term: 'Hydrological unit EWR share',
+		short: 'The hydrological unit’s part of the pragmatic EWR (EWR × its flow share), added up down the river to give the EWR each point must pass.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['run.ewr_cumulative']
@@ -749,7 +749,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-charge',
 		term: 'EWR charge',
-		short: 'A unit’s share of the EWR shortfall at the EWR sites below it, pro rata to its net impact that day.',
+		short: 'A hydrological unit’s share of the EWR shortfall at the EWR sites below it, pro rata to its net impact that day.',
 		units: 'm³/day, shown as a positive volume charged (negative in the daily series)',
 		category: 'ewr',
 		fields: ['run.ewr_charge', 'run.ewr_charged', 'run.ewr_natural', 'run.ewr_binding_site', 'summary.avgEwrShortfallM3Day']
@@ -757,7 +757,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-charge-split',
 		term: 'Irrigate less / store less',
-		short: 'The EWR charge split by what the unit can change: its irrigation, or its storage and pass-through.',
+		short: 'The EWR charge split by what the hydrological unit can change: its irrigation, or its storage and pass-through.',
 		units: 'm³/day; l/s',
 		category: 'ewr',
 		fields: ['run.ewr_charge_irrigation']
@@ -765,21 +765,21 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'equitable-share',
 		term: 'Equitable share of supply (fairness benchmark)',
-		short: 'Σ supplied ÷ Σ demand: the share of its demand each unit would get if supply were shared in proportion. Not an allocation.',
+		short: 'Σ supplied ÷ Σ demand: the share of its demand each hydrological unit would get if supply were shared in proportion. Not an allocation.',
 		units: '% of demand; m³/day',
 		category: 'results'
 	},
 	{
 		id: 'demand-left',
 		term: 'Demand left',
-		short: 'Share of a unit’s demand left to irrigate once supply is shared fairly and the EWR supply cut is made.',
+		short: 'Share of a hydrological unit’s demand left to irrigate once supply is shared fairly and the EWR supply cut is made.',
 		units: '% of demand',
 		category: 'results'
 	},
 	{
 		id: 'reach-shortfall',
 		term: 'Reach shortfall (workbook AB)',
-		short: 'The workbook’s incremental shortfall: a unit’s shortfall minus those directly upstream. A diagnostic only.',
+		short: 'The workbook’s incremental shortfall: a hydrological unit’s shortfall minus those directly upstream. A diagnostic only.',
 		units: 'm³/day',
 		category: 'ewr',
 		fields: ['run.ewr_shortfall_incremental']
@@ -787,7 +787,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'ewr-days-not-met',
 		term: 'Days EWR not met',
-		short: 'Outlet: days flow was below the EWR. A unit: days it was charged for a shortfall at an EWR site below it. Also as a share.',
+		short: 'Outlet: days flow was below the EWR. A hydrological unit: days it was charged for a shortfall at an EWR site below it. Also as a share.',
 		units: 'days; fraction 0–1',
 		category: 'ewr',
 		fields: ['summary.daysEwrNotMet', 'catchment.ewrDaysNotMet', 'catchment.ewrFractionDaysNotMet']

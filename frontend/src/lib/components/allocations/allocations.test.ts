@@ -96,7 +96,7 @@ describe('unitRows', () => {
 		expect(r!.registeredM3).toBeCloseTo(12_000);
 	});
 
-	it('picks the unit in the URL, else the first row', () => {
+	it('picks the hydrological unit in the URL, else the first row', () => {
 		const rows = unitRows(many());
 		expect(pickUnit(rows, 'W')).toBe('W');
 		expect(pickUnit(rows, 'gone')).toBe('O2');
@@ -106,10 +106,10 @@ describe('unitRows', () => {
 
 	it('says what the header counts', () => {
 		const rows = unitRows(many());
-		expect(allocationsContext(5, 0, rows)).toBe('5 registered volumes · 2 units above registered');
+		expect(allocationsContext(5, 0, rows)).toBe('5 registered volumes · 2 hydrological units above registered');
 		expect(allocationsContext(1, 1, [])).toBe('1 registered volume · 1 not matched');
 		expect(allocationsContext(0, 0, null)).toBe('No registered volumes yet');
-		expect(allocationsContext(0, 0, unitRows(comparison()).filter((r) => r.status !== 'over'))).toBe('No registered volumes yet · no unit above registered');
+		expect(allocationsContext(0, 0, unitRows(comparison()).filter((r) => r.status !== 'over'))).toBe('No registered volumes yet · no hydrological unit above registered');
 	});
 });
 

@@ -147,7 +147,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 	'node.set': "Change a node's value",
 	'node.add': 'Add a node',
 	'node.remove': 'Remove a node',
-	'cropArea.set': "Set a unit's crop area",
+	'cropArea.set': "Set a hydrological unit's crop area",
 	'crop.add': 'Add a crop',
 	'transfer.add': 'Add a transfer',
 	'transfer.set': 'Change a transfer',
@@ -166,7 +166,7 @@ export const OP_LABEL: Record<ScenarioOpName, string> = {
 export const UNKNOWN_NODE = 'a node the base run doesn’t have';
 export const UNKNOWN_CROP = 'a crop the base run doesn’t have';
 
-const KIND_WORD: Record<string, string> = { farm: 'unit', user: 'other water user', gauge: 'gauge' };
+const KIND_WORD: Record<string, string> = { farm: 'hydrological unit', user: 'other water user', gauge: 'gauge' };
 const ha = (m2: number) => `${fmtNum(m2 / 10_000, 2, true)} ha`;
 const coverLabel = (id: string) => LAND_COVER_CLASSES.find((c) => c.id === id)?.label ?? id;
 const change = (spec: ValueSpec, was: unknown, now: unknown, name: (id: string) => string) =>
@@ -254,7 +254,7 @@ export function describeOp(op: ScenarioOp, before: ModelInput | null, names: Rea
 		}
 		case 'demand.scale': {
 			const user = op.category === 'user';
-			const who = op.nodeIds?.length ? op.nodeIds.map(nodeName).join(', ') : user ? 'every other water user' : 'every unit';
+			const who = op.nodeIds?.length ? op.nodeIds.map(nodeName).join(', ') : user ? 'every other water user' : 'every hydrological unit';
 			const months = op.months?.length ? `, in ${monthsText(op.months)}` : '';
 			return `${user ? 'Demand' : 'Irrigation demand'} of ${who}: ${fmtNum(op.factor * 100, 2, true)} % of what they'd take (× ${fmtNum(op.factor, 4, true)})${months}`;
 		}
@@ -487,7 +487,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 				op = { op: 'node.remove', nodeId: need(d.nodeId, 'a node') };
 				break;
 			case 'cropArea.set':
-				op = { op: 'cropArea.set', nodeId: need(d.nodeId, 'a unit'), cropId: need(d.cropId, 'a crop'), areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })! };
+				op = { op: 'cropArea.set', nodeId: need(d.nodeId, 'a hydrological unit'), cropId: need(d.cropId, 'a crop'), areaM2: number(d.areaHa, 'the area', { scale: 1 / 10_000 })! };
 				break;
 			case 'crop.add': {
 				const name = d.cropName.trim();
@@ -527,7 +527,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 					op: 'landCover.add',
 					patch: {
 						id: newId(),
-						nodeId: need(d.nodeId, 'a unit'),
+						nodeId: need(d.nodeId, 'a hydrological unit'),
 						coverClass: need(d.coverClass, 'a land-cover class') as never,
 						areaKm2: number(d.coverAreaKm2, 'the area')!,
 						densityPct: number(d.densityPct, 'the cover', { scale: 100 })!,
@@ -545,7 +545,7 @@ export function buildOp(d: OpDraft, model: ProjectModel, newId: () => string = (
 					op: 'borehole.add',
 					borehole: {
 						id: newId(),
-						nodeId: need(d.nodeId, 'a unit or other user'),
+						nodeId: need(d.nodeId, 'a hydrological unit or other user'),
 						name,
 						capacityM3Day: number(d.bhCapacityM3Day, 'the capacity')!,
 						annualCapM3: number(d.bhAnnualCapM3, 'the annual cap', { nullable: true }),

@@ -177,18 +177,28 @@ variable "lambda_reserved_concurrency" {
     Max concurrent API Lambda executions. Bounds worst-case spend during an
     attack AND the number of DB connections (each container holds a pg pool of
     up to 5; 10 x 5 = 50 stays under db.t4g.micro's ~80 max_connections).
-    AWS requires >= 10 unreserved executions to remain, so on a new account
-    whose concurrency quota is still 10 any reservation is rejected — set -1
-    until Service Quotas → Lambda → Concurrent executions is raised.
+    AWS keeps >= 10 executions unreserved, so the account's Lambda
+    concurrent-executions quota must cover the sum of every reservation + 10
+    before the first apply (a new account's quota is 10, which rejects any
+    reservation): infra/README.md § Operator steps. Never -1 (unreserved):
+    that removes the cap on spend and on DB connections.
   EOT
   type        = number
   default     = 10
+  validation {
+    condition     = var.lambda_reserved_concurrency >= 1
+    error_message = "Must be at least 1: -1 (unreserved) removes the spend and DB-connection cap. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
 }
 
 variable "migrate_reserved_concurrency" {
-  description = "Reserved concurrency for the migrate Lambda. 1 serialises migrators (on top of the advisory lock in migrate.ts). Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  description = "Reserved concurrency for the migrate Lambda. 1 serialises migrators (on top of the advisory lock in migrate.ts). Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number
   default     = 1
+  validation {
+    condition     = var.migrate_reserved_concurrency >= 1
+    error_message = "Must be at least 1: -1 (unreserved) lets migrators run in parallel. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
 }
 
 # --- Background jobs (jobs.tf) -------------------------------------------------
@@ -200,9 +210,21 @@ variable "worker_memory_mb" {
 }
 
 variable "worker_reserved_concurrency" {
-  description = "Max concurrent worker Lambda executions: bounds spend, DB connections (x a pool of 2) and parallel jobs. 2 is the SQS event source's minimum. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  description = <<-EOT
+    Max concurrent worker Lambda executions: bounds spend, DB connections
+    (x a pool of 2) and parallel jobs. Four SQS queues trigger the worker (jobs,
+    ingest-results, render-results, mail-events), each at maximum_concurrency 2,
+    the least an SQS event source allows. AWS needs reserved concurrency >= the
+    sum of those (8), or the pollers are throttled and throttled messages burn
+    receive counts into the DLQs. 8 x a pool of 2 = 16 connections (infra/README.md
+    § Connections). Never -1: raise the account quota instead.
+  EOT
   type        = number
-  default     = 2
+  default     = 8
+  validation {
+    condition     = var.worker_reserved_concurrency >= 8
+    error_message = "Must be at least 8, the sum of the worker's four SQS triggers' maximum_concurrency (4 x 2); -1 (unreserved) is refused too. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
 }
 
 variable "sqs_endpoint_az_count" {
@@ -216,9 +238,13 @@ variable "sqs_endpoint_az_count" {
 }
 
 variable "fetcher_reserved_concurrency" {
-  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  description = "Max concurrent fetcher Lambda executions (data feeds, feeds.tf): bounds spend and how hard the public sources are hit at once. At least 2, its SQS trigger's maximum_concurrency. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number
   default     = 2
+  validation {
+    condition     = var.fetcher_reserved_concurrency >= 2
+    error_message = "Must be at least 2, its SQS trigger's maximum_concurrency; -1 (unreserved) is refused too. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
 }
 
 # --- Server-side reports (reports.tf) --------------------------------------------
@@ -244,9 +270,13 @@ variable "renderer_memory_mb" {
 }
 
 variable "renderer_reserved_concurrency" {
-  description = "Max concurrent renderer Lambda executions: bounds spend and how many Chromiums load the site at once. Set -1 under the same new-account quota constraint as lambda_reserved_concurrency."
+  description = "Max concurrent renderer Lambda executions: bounds spend and how many Chromiums load the site at once. At least 2, its SQS trigger's maximum_concurrency. Never -1: raise the account quota instead (lambda_reserved_concurrency)."
   type        = number
   default     = 2
+  validation {
+    condition     = var.renderer_reserved_concurrency >= 2
+    error_message = "Must be at least 2, its SQS trigger's maximum_concurrency; -1 (unreserved) is refused too. Raise the account's Lambda concurrency quota instead (infra/README.md § Operator steps)."
+  }
 }
 
 variable "jobs_backlog_alarm_seconds" {

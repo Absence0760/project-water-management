@@ -111,7 +111,7 @@
 <Dialog bind:open side title={allocation ? 'Change the registered volume' : 'Add a registered volume'}>
 	<form id="alloc-form" class="form" onsubmit={save}>
 		<div class="field">
-			<label for="af-node">Unit or water user</label>
+			<label for="af-node">Hydrological unit or water user</label>
 			<select id="af-node" bind:value={draft.nodeId}>
 				<option value="">Not matched yet</option>
 				{#each nodes as n (n.id)}<option value={n.id}>{n.name}</option>{/each}

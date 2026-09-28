@@ -221,7 +221,7 @@ export function allocationsContext(volumes: number, unmatched: number, rows: rea
 	if (unmatched) parts.push(`${fmtNum(unmatched)} not matched`);
 	if (rows?.length) {
 		const over = new Set(rows.filter((r) => r.status === 'over').map((r) => r.nodeId)).size;
-		parts.push(over ? `${fmtNum(over)} unit${over === 1 ? '' : 's'} above registered` : 'no unit above registered');
+		parts.push(over ? `${fmtNum(over)} hydrological unit${over === 1 ? '' : 's'} above registered` : 'no hydrological unit above registered');
 	}
 	return parts.join(' · ');
 }

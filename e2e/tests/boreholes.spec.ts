@@ -16,7 +16,7 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	const project = await seedRunnableProject(page.request, 'Boreholes');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Groundwater (boreholes)' });
 	await group.getByLabel('Borehole capacity (m³/day)').fill('600');
@@ -28,7 +28,7 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Groundwater (boreholes)' });
 	await expect(again.getByLabel('Borehole capacity (m³/day)')).toHaveValue('600');
 	await expect(again.getByLabel('Borehole rule')).toHaveValue('primary');
@@ -58,7 +58,7 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	const project = await seedRunnableProject(page.request, 'Individual boreholes');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Individual boreholes', exact: true });
 	await expect(group.getByText('Depletion is a fixed fraction, not an aquifer model. Attach the geohydrology report.')).toBeVisible();
@@ -82,7 +82,7 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Individual boreholes', exact: true });
 	await expect(again.getByLabel('Name')).toHaveValue('BH-01');
 	await expect(again.getByLabel('Annual cap (m³/a)')).toHaveValue('20\u202f000');

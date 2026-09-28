@@ -58,7 +58,7 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	const stat = (term: string) => page.getByRole('term').filter({ hasText: term }).locator('xpath=following-sibling::dd');
 	await expect(stat('Outflow gauge')).toHaveText('Outflow gauge');
-	await expect(stat('Units')).toHaveText(/^2\s*\+ 1 gauge$/);
+	await expect(stat('Hydrological units')).toHaveText(/^2\s*\+ 1 gauge$/);
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).
@@ -278,7 +278,7 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	const pr = row(page, 'Outcome published');
 	await expect(pr.locator('td.c-ewr')).toContainText(pillText(pubFig)!);
 	await expect(pr.locator('td.c-ewr')).toContainText('Published · to 28 Jan 2022');
-	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ units? short this week\s*$/);
+	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short this week\s*$/);
 	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ %\s*$/);
 	await expect(pr.locator('td.c-run')).toContainText('published today');
 
