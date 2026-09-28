@@ -8,15 +8,8 @@ import type { CropArea, CropDef, ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
 import { blankEwrRuleTable } from '../reserve/rules';
 import { ENGINE_VERSION } from '../version';
-import {
-	SENSITIVITY_RANGES,
-	SENSITIVITY_THRESHOLDS,
-	sensitivityRuns,
-	siteVerdict,
-	type SensitivityResult,
-	type SensitivitySite,
-	type SiteValues
-} from './sensitivity';
+import { sensitivityRuns } from './sensitivity';
+import { SENSITIVITY_RANGES, SENSITIVITY_THRESHOLDS, siteVerdict, type SensitivityResult, type SensitivitySite, type SiteValues } from './sensitivityVerdict';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
 	id: 'x',

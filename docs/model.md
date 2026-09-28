@@ -4679,8 +4679,10 @@ parameters (Renard et al. 2010; Oudin et al. 2006 on biased rain and PE
 inputs; Hughes & Mantel 2010 on the uncertainty of South African natural
 and modified flow simulations), and reports EWR compliance as a central
 value with a low–high range. Code: `packages/engine/src/uncertainty/sensitivity.ts`
-(`sensitivityRuns`, `sensitivityPlan`, `siteValues`, `siteVerdict`). It
-changes no run's results.
+(`sensitivityRuns`, `sensitivityPlan`, `siteValues`) and, apart from the
+run so a page can show and re-judge a result without loading it,
+`sensitivityVerdict.ts` (the factors, the default ranges and thresholds,
+`siteVerdict`). It changes no run's results.
 
 **One factor at a time.** The **central run** is the project as it stands.
 Each factor is then run at its low and at its high with everything else at

@@ -6,3 +6,4 @@ export * from './paired';
 export * from './verify';
 export { latinHypercube } from './sample';
 export * from './sensitivity';
+export * from './sensitivityVerdict';
