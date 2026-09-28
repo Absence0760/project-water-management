@@ -830,7 +830,9 @@ for every workspace tab. Its own chunk.
   the dams the run stored storage for (`damsInRun`, capacity and minimum
   level from the run's own model), each dam's daily series fetched through
   the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
-  and the chart.
+  and the chart. On a forecast run the levels, the cards and their sparklines
+  are the record's, up to the day before the forecast, like the Summary's
+  (issue #51); the chart shows the forecast days in their band.
 - **Cards** (`damCards`), emptiest first (the levels' order), then any dam
   without a level in node order: the name, capacity, % full at the end of the
   run, "below 30%" / "at its minimum level" in words, the change over the
@@ -3404,7 +3406,9 @@ read it before.
   fall in the forecast period (`RunSummary.forecastRain`). On a forecast run
   *Last 7 / 14 / 30 days* end on the day before the forecast, and the note says
   so (issue #51): the latest days of the record, never forecast days read as
-  "this week"; *Whole record* and a custom range may still reach into it. A run saved before
+  "this week". *Whole record* and a custom range end there too, with a note
+  ("Cut to the record before the forecast: …"; a range wholly in the forecast
+  is refused): a historical figure never averages over forecast days. A run saved before
   engine 0.17.0 (no EWR charge series), or missing any series the recompute
   reads, disables the picker and asks for a new run. The engine's
   `views/curtailmentOverWindow.test.ts` checks the table, binding sites

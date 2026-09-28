@@ -126,7 +126,9 @@ For a run, per farm or water user, per water source and per **water year**
 - **Registered volume**: each allocation's volume × the days it is valid in
   that part of the year ÷ the days in the water year (365 or 366). A run that
   covers only part of a water year compares that part with the prorated
-  volume, marked **part**, and isn't counted in the summary.
+  volume, marked **part**, and isn't counted in the summary. A forecast
+  run (WP-2.12) is compared on its record only, the days before its
+  forecast (issue #51), so its last water year may end as a part year.
 - **Status**, with the project's band, ±10 % unless set (Settings ›
   Registered volumes, `settings.allocationTolerance`, pending the
   hydrologist; `?tolerance=` on the API overrides it for one request):

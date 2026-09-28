@@ -605,7 +605,9 @@ and nothing else.
   rules close it, for every key, whatever its `allowedSeries`:
   - a key may **create** a series only of a kind the project has no outlet
     series of; otherwise the merge is `409` and a person adds the series
-    first (an upload of one day is enough), after which the key may merge
+    first, with its record so far: the message says so, since a series with
+    fewer than 100 non-zero days is checked for negatives only (Limits
+    above). The key may then merge
     into it (`series/merge.ts` `assertKeyMayCreate`, through
     `app_project_has_outlet_series`, SECURITY DEFINER because a key limited
     to some series can't see the others, `100_key_series_kind.sql`; called
