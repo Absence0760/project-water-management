@@ -2619,7 +2619,7 @@ from the WP:
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
       extract (plan.md questions).
-- [x] **Licence conditions** (2026-09-28, migration 096, issue #72):
+- [x] **Licence conditions** (2026-09-28, migration 100, issue #72):
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
       input.

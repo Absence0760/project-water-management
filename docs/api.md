@@ -1715,7 +1715,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migrations 038 and 096,
+modelled use against them (roadmap WP-3.10, migrations 038 and 100,
 [allocations.md](./allocations.md)). The app compares; it never decides
 whether a use is lawful.
 
@@ -1736,7 +1736,7 @@ whether a use is lawful.
   storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
   createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
   `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
-  (strings) are licence conditions (096, issue #72), recorded and shown, not
+  (strings) are licence conditions (100, issue #72), recorded and shown, not
   yet applied by the engine. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.

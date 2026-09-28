@@ -1552,7 +1552,7 @@ database:
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
   cells (`'` prefix), as every export does. A licence condition in words
-  (096) is checked like the holder: a 13-digit number there is a row problem.
+  (100) is checked like the holder: a 13-digit number there is a row problem.
 - **Run inputs** (engine ≥ 1.16.0, issue #72): every run's stored input
   carries the project's allocations so the run replays, but only what the
   engine reads (id, unit, source, volume, storage, validity, months, maximum

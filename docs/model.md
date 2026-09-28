@@ -4945,7 +4945,7 @@ bits whatever order they came in).
   (`scaled`).
 
 Licence conditions (the months of use, a maximum rate, conditions in words;
-migration 096) ride on the input but neither mode applies them yet
+migration 100) ride on the input but neither mode applies them yet
 (followups.md § Allocations).
 
 **Warm starts** (§2.16): a snapshot keeps each capped unit's use so far in

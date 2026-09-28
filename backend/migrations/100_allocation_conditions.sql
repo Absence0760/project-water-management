@@ -1,4 +1,4 @@
--- 096_allocation_conditions — licence conditions on an allocation (roadmap
+-- 100_allocation_conditions — licence conditions on an allocation (roadmap
 -- WP-3.10, issue #72; docs/allocations.md § What is stored, docs/data-model.md
 -- § Allocations). Latest definition of the table: 038_allocations.sql.
 --
@@ -27,6 +27,6 @@ ALTER TABLE allocation
 	ADD COLUMN max_rate_m3s double precision CHECK (max_rate_m3s IS NULL OR (max_rate_m3s >= 0 AND max_rate_m3s < 1e6)),
 	ADD COLUMN conditions jsonb NOT NULL DEFAULT '[]'::jsonb CHECK (jsonb_typeof(conditions) = 'array' AND jsonb_array_length(conditions) <= 20);
 
-COMMENT ON COLUMN allocation.months IS 'Licence condition: the calendar months (1–12) the use may happen in; NULL = none stated. Shown, not yet enforced by the engine (096, issue #72).';
-COMMENT ON COLUMN allocation.max_rate_m3s IS 'Licence condition: the most it may take at once, m³/s; NULL = none stated. Shown, not yet enforced (096).';
-COMMENT ON COLUMN allocation.conditions IS 'Licence conditions in words: a JSON array of up to 20 strings (1–500 characters, checked by the API); [] = none (096).';
+COMMENT ON COLUMN allocation.months IS 'Licence condition: the calendar months (1–12) the use may happen in; NULL = none stated. Shown, not yet enforced by the engine (100, issue #72).';
+COMMENT ON COLUMN allocation.max_rate_m3s IS 'Licence condition: the most it may take at once, m³/s; NULL = none stated. Shown, not yet enforced (100).';
+COMMENT ON COLUMN allocation.conditions IS 'Licence conditions in words: a JSON array of up to 20 strings (1–500 characters, checked by the API); [] = none (100).';

@@ -918,7 +918,7 @@ results for plausibility; and that they read its known limitations
   (`app_subject_export`, 054; the registration columns since 092). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
 
-### Allocations (038_allocations.sql, 096_allocation_conditions.sql)
+### Allocations (038_allocations.sql, 100_allocation_conditions.sql)
 
 Roadmap WP-3.10, [allocations.md](./allocations.md). Registered and licensed
 water-use volumes per farm or water user.
@@ -939,7 +939,7 @@ water-use volumes per farm or water user.
   `water_source` (`surface` | `groundwater`), `volume_m3_year` (≥ 0, < 10¹²),
   `storage_m3` (optional), `valid_from` / `valid_to` (dates, from ≤ to),
   `reference` (≤ 500), `created_at`, `updated_at`. No names. Indexes cover
-  every key. Licence conditions (096, issue #72): `months smallint[]` (the
+  every key. Licence conditions (100, issue #72): `months smallint[]` (the
   calendar months 1–12 the use may happen in, 1–12 of them, no NULLs; NULL =
   none stated), `max_rate_m3s` (≥ 0, < 10⁶; NULL = none stated) and
   `conditions jsonb` (an array of at most 20 strings, `[]` by default; the API
