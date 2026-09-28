@@ -351,7 +351,9 @@ screen-reader user can jump by heading.
 - **Reading order** is the visual order (§6.1). One `h1` (the farm's name),
   an `h2` per card, each card a `section` labelled by its `h2`. Charts are
   `aria-hidden` with a visually hidden summary sentence and a real table
-  behind "Show the numbers". Bars and gauges are decorative; the number
+  behind "Show the numbers". The dam summary's latest level is "on 10 January
+  2024" when the data stops mid-month and "at the end of December 2023" when
+  the last month is complete (issue #51). Bars and gauges are decorative; the number
   beside them is the content.
 - **Reflow:** no horizontal scroll at 320 px (the existing reflow pattern).
   Chips and buttons wrap; nothing has a fixed width.

@@ -76,4 +76,12 @@ describe('the dam line', () => {
 		);
 		expect(damRows(farm.monthly, farm.dataUntil).map((r) => sp(r.pct))).toEqual(['16 %', '82 %', '100 %', '100 %', '100 %', '100 %', '82 %', '45 %', '20 %', '17 %', '25 %', '24 %']);
 	});
+
+	// Issue #51: with the last month complete, {to} is a month, and "on December 2023" isn't English.
+	it('says "at the end of" a complete last month', () => {
+		const upToDec = farm.monthly.slice(0, 11);
+		expect(sp(damSummary(upToDec, '2023-12-31'))).toBe(
+			'Dam level at the end of each month, February 2023 to December 2023. Lowest 16 % at the end of February 2023, highest 100 % at the end of April 2023, and 25 % at the end of December 2023. The numbers are in the table below.'
+		);
+	});
 });

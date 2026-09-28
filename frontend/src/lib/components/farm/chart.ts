@@ -158,7 +158,8 @@ export function damSummary(monthly: readonly MonthTotals[], dataUntil: string): 
 	const low = withDam.reduce((a, b) => (b.damPctEnd < a.damPctEnd ? b : a));
 	const high = withDam.reduce((a, b) => (b.damPctEnd > a.damPctEnd ? b : a));
 	const latest = withDam[withDam.length - 1]!;
-	return t('Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.', {
+	// A complete last month is a month, not a day: "at the end of December 2024", never "on December 2024" (issue #51).
+	return t(last.partial ? 'Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.' : 'Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} at the end of {to}. The numbers are in the table below.', {
 		from: fmtMonthLongYear(monthly[0]!.month),
 		to: end,
 		low: fmtPct(low.damPctEnd),
