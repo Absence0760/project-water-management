@@ -277,8 +277,11 @@ section it belongs to, with the example that taught it.
   beside it a long context line wrapped to 3–4 short lines (River & reserve
   for a viewer at 1440, Compare runs at 1024). Size a text column that
   shares a wrapping row with controls by its content (`flex: 1 1 auto`, its
-  max-content, with the old basis as `min-width`), so the controls wrap
-  under it once its text would wrap, and pin the line count in e2e.
+  max-content), so the controls wrap under it once its text would wrap, and
+  pin the line count in e2e. No `min-width` floor over the content: kept as
+  a 16rem floor, it made a short title claim room it never drew in, and in
+  DejaVu Sans Data's controls wrapped under "2 input series · 1 behind" at
+  1024 with ~40 px to spare.
 
 ## 3. Colour, wording, content
 
@@ -354,9 +357,18 @@ section it belongs to, with the example that taught it.
   - **A halo behind every free label**, in the ground's colour
     (`paint-order: stroke fill`, a 4 px stroke of `--surface-sunken` on the
     schematic, `--surface` on help diagrams' `.lbl`), so anything that must
-    pass (the drag preview) breaks behind the words. Chromium's PDF keeps one
-    copy of the text (`pdftotext` finds each name once). Not on text inside a
-    filled box: the halo would ring it in the wrong colour.
+    pass (the drag preview) breaks behind the words. On screen only: Chromium
+    prints stroked text as a second copy of every word (a Type 3 font), so
+    the PDF's text held each name twice (poppler before 25 lists both). The
+    schematic drops its halo in `@media print`, where nothing is dragged and
+    the routed transfers clear every label. Not on text inside a filled box:
+    the halo would ring it in the wrong colour.
+  - **Reserve the text as drawn, not as estimated.** Room for a label comes
+    from its width in the font it is drawn in (the schematic measures on a
+    canvas, `measuredWidths`), with the per-character estimate only as the
+    floor: the system sans varies, and DejaVu Sans (Linux, CI) draws ~15 %
+    wider than the estimate, which ran names into the next node and put a
+    transfer through "Melkhout Gauge".
   - **Three steps of hierarchy:** the name (12.5 px, 600, `--text`), its
     figure (11 px, 400, `--text-muted`), and the line's own key (the legend,
     not a label on every line). Both text colours are ≥ 4.5:1 on the ground

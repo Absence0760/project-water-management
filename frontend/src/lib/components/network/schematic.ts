@@ -66,9 +66,39 @@ export interface Arc {
 const LABEL_CHAR_W = 7;
 const META_CHAR_W = 6.1;
 
+/** How wide (px) a node's two lines are drawn: the 12.5 px semibold name and the 11 px figure under it. */
+export interface TextWidths {
+	label(text: string): number;
+	meta(text: string): number;
+}
+
+/**
+ * Widths from average glyph widths, sized for the fonts the drawing was first
+ * laid out in. A wider system font draws wider than this (DejaVu Sans, the
+ * usual one on Linux, by ~15 %), so the drawing measures its text where it can
+ * (measuredWidths) and uses this only as the floor, and where nothing measures.
+ */
+export const estimatedWidths: TextWidths = {
+	label: (text) => text.length * LABEL_CHAR_W,
+	meta: (text) => text.length * META_CHAR_W
+};
+
+/**
+ * The text as drawn, never narrower than the estimate: `measure(text, font)`
+ * is the rendered width in the drawing's own font (a canvas's measureText).
+ * The estimate stays the floor, so the spacing the drawing was designed with
+ * holds where the font is narrower, and only a wider font widens it.
+ */
+export function measuredWidths(measure: (text: string, font: 'label' | 'meta') => number): TextWidths {
+	return {
+		label: (text) => Math.max(estimatedWidths.label(text), Math.ceil(measure(text, 'label'))),
+		meta: (text) => Math.max(estimatedWidths.meta(text), Math.ceil(measure(text, 'meta')))
+	};
+}
+
 /** The two text lines drawn right of a node at `p` (label at y−2, meta at y+12). */
-export function labelBox(p: Point, label: string, meta: string): Box {
-	const w = Math.max(label.length * LABEL_CHAR_W, meta.length * META_CHAR_W);
+export function labelBox(p: Point, label: string, meta: string, widths: TextWidths = estimatedWidths): Box {
+	const w = Math.max(widths.label(label), widths.meta(meta));
 	return { x0: p.x + 15, y0: p.y - 13, x1: p.x + 17 + w, y1: p.y + 16 };
 }
 

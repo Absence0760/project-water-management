@@ -7,7 +7,9 @@ import {
 	BAND_CUT,
 	bandCrossings,
 	distinctShortNames,
+	estimatedWidths,
 	labelBox,
+	measuredWidths,
 	paperBands,
 	polylineHits,
 	routeAround,
@@ -250,6 +252,32 @@ describe('paperBands and bandCrossings (a printed schematic taller than a page)'
 		for (const n of l.nodes.filter((x) => x.row === r)) expect(lower).toContain(n.col);
 		expect(lower).toHaveLength(1 + l.nodes.filter((x) => x.row === r).length);
 		expect([...lower].sort((a, b) => a - b)).toEqual(lower);
+	});
+});
+
+describe('labelBox', () => {
+	const p = { x: 100, y: 50 };
+
+	it('reserves the wider of the two lines, right of the symbol', () => {
+		expect(labelBox(p, 'Hilltop farm', '12.0 km²')).toEqual({ x0: 115, y0: 37, x1: 117 + 12 * 7, y1: 66 });
+		expect(labelBox(p, 'Dam', '12.0 km² · 0.15 Mm³').x1).toBeCloseTo(117 + 19 * 6.1, 6);
+	});
+
+	it('reserves the text as drawn when a wider font draws it wider than the estimate', () => {
+		// DejaVu Sans: "Melkhout Gauge" is ~112 px at 12.5 px semibold, where the estimate says 98.
+		const wide = measuredWidths((text, font) => text.length * (font === 'label' ? 8 : 7));
+		expect(labelBox(p, 'Melkhout Gauge', '148.0 km²', wide).x1).toBe(117 + 14 * 8);
+		expect(labelBox(p, 'Gauge', '148.0 km² · 1.25 Mm³', wide).x1).toBe(117 + 20 * 7);
+	});
+
+	it('never reserves less than the estimate, so a narrower font keeps the usual spacing', () => {
+		const narrow = measuredWidths(() => 10);
+		expect(labelBox(p, 'Melkhout Gauge', '148.0 km²', narrow)).toEqual(labelBox(p, 'Melkhout Gauge', '148.0 km²'));
+		expect(narrow.label('Melkhout Gauge')).toBe(estimatedWidths.label('Melkhout Gauge'));
+	});
+
+	it('rounds a measured width up to the whole pixel', () => {
+		expect(measuredWidths(() => 200.2).label('ab')).toBe(201);
 	});
 });
 

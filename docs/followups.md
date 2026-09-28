@@ -2480,7 +2480,7 @@ role and not before it.
       (`wrappedSchematicLayout`, at most five columns, a wide row of
       branches wrapped onto more rows with a gutter for their rivers; the
       screen copy is unchanged and hidden in print). A 30-unit catchment
-      prints on one page with its names at 9.4 pt;
+      prints on one page with its names at ~7.6 pt of type;
       `report-schematic-print.spec.ts` prints one and checks every name's
       box in `pdftotext -bbox` (CI installs poppler-utils). Still open: the
       drawing isn't split at a page break on purpose, so a network more than
@@ -2502,7 +2502,7 @@ role and not before it.
       page" / "Continued from the previous page" note. A drawing that fits
       prints as one, as before. `report-schematic-print.spec.ts` prints a
       25-gauge main stem (four pages) and checks every name is whole on one
-      page, inside its margins, at ≥ 9.5 pt boxes.
+      page, inside its margins, at ≥ 7 pt of type (measured from the printed width, not the word box, whose height is each font's own metric; 2026-09-28).
 - [ ] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move
