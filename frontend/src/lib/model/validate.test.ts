@@ -110,13 +110,13 @@ describe('validateModel', () => {
 		expect(messages(model([g, f], { transfers: [{ ...t, priority: 2 }] }))).not.toContain('Transfer 1: priority must be a whole number.');
 	});
 
-	it('checks a river off-take: unit to unit, losses below 100 %, no negative hands-off flow (engine 1.14.0)', () => {
+	it('checks a river off-take: hydrological unit to hydrological unit, losses below 100 %, no negative hands-off flow (engine 1.14.0)', () => {
 		const g = node('g', 'G', null);
 		const f = node('f', 'F', 'g');
 		const h = node('h', 'H', 'g');
 		const t = { id: 't', fromNodeId: 'f', toNodeId: 'h', months: [1], maxRateM3s: 1, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0, source: 'river' as const };
 		expect(messages(model([g, f, h], { transfers: [t] }))).toEqual([]);
-		expect(messages(model([g, f, h], { transfers: [{ ...t, toNodeId: 'g' }] }))).toContain('Transfer 1: a river off-take runs from one unit to another.');
+		expect(messages(model([g, f, h], { transfers: [{ ...t, toNodeId: 'g' }] }))).toContain('Transfer 1: a river off-take runs from one hydrological unit to another.');
 		expect(messages(model([g, f, h], { transfers: [{ ...t, lossPct: 1 }] }))).toContain('Transfer 1: conveyance losses are 0–99%.');
 		expect(messages(model([g, f, h], { transfers: [{ ...t, handsOffM3Day: -1 }] }))).toContain("Transfer 1: the hands-off flow can't be negative.");
 	});
@@ -147,7 +147,7 @@ describe('validateModel', () => {
 			'"Town": the share returned must be between 0% and 100%.',
 			'"Town": demand needs 12 monthly values, none negative.',
 			'"Town" is an other water user: its demand is monthly, so remove its crop areas.',
-			'"Town" is an other water user: transfers run between units’ dams.'
+			'"Town" is an other water user: transfers run between hydrological units’ dams.'
 		]);
 	});
 
@@ -155,7 +155,7 @@ describe('validateModel', () => {
 		const g = node('g', 'Gauge', null);
 		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 100, streamDepletionFrac: 0.5 }]))).toEqual([]);
 		expect(messages(model([{ ...g, boreholeCapacityM3Day: 5 }, node('a', 'A', 'g')]))).toEqual(['"Gauge": a gauge can\'t have boreholes.']);
-		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a dam on the unit to trigger on.']);
+		expect(messages(model([g, { ...node('a', 'A', 'g'), boreholeCapacityM3Day: 5, boreholeRule: 'drought' }]))).toEqual(['"A": the drought borehole rule needs a dam on the hydrological unit to trigger on.']);
 		expect(messages(model([g, { ...node('a', 'A', 'g'), streamDepletionFrac: 1.5, streamDepletionLagDays: -1 }]))).toEqual([
 			'"A": borehole capacity and depletion lag can\'t be negative.',
 			'"A": stream depletion and the drought trigger must be between 0% and 100%.'
@@ -182,7 +182,7 @@ describe('validateModel', () => {
 		const a = { ...node('a', 'A', 'g'), damCapacityM3: 20_000 };
 		expect(messages(model([g, { ...a, damCurve: curve, damReleaseRule: 'fixed', damReleaseM3Day: new Array(12).fill(5), damSeepageReturnPct: 0.5 }]))).toEqual([]);
 		expect(messages(model([g, { ...a, damCurve: [curve[1]!] }]))).toEqual(['"A": dam survey curve: a survey curve needs at least two rows.']);
-		expect(messages(model([{ ...g, damCurve: curve }, a]))).toEqual(['"Gauge": dam survey curve: only a unit has a dam.']);
+		expect(messages(model([{ ...g, damCurve: curve }, a]))).toEqual(['"Gauge": dam survey curve: only a hydrological unit has a dam.']);
 		expect(messages(model([g, { ...a, damSeepageReturnPct: 1.5, damOutletCapacityM3Day: -1, damReleaseM3Day: [1] }]))).toEqual([
 			'"A": the share of seepage returning must be between 0% and 100%.',
 			'"A": the dam outlet capacity can\'t be negative.',
@@ -194,7 +194,7 @@ describe('validateModel', () => {
 		const g = node('g', 'Gauge', null);
 		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [p] }))).toEqual([]);
-		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a unit, not a gauge.']);
+		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, nodeId: 'g' }] }))).toEqual(['"Gauge": land cover lies on a hydrological unit, not a gauge.']);
 		expect(messages(model([g, node('a', 'A', 'g')], { landCover: [{ ...p, densityPct: 2 }] }))).toEqual(['Land cover on "A": area can\'t be negative, cover and reductions are 0–100%.']);
 	});
 
@@ -225,11 +225,11 @@ describe('validateModel', () => {
 		]);
 		expect(messages(model([g, farm({ pumpCapacityM3Day: -1 })]))).toEqual(['"A": the river pump capacity can\'t be negative.']);
 		expect(messages(model([{ ...g, supplyRule: 'riverFirst' }, farm({})]))).toEqual([
-			'"Gauge": only a unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
+			'"Gauge": only a hydrological unit has a supply rule and river pump; set the supply rule to dam only and clear the pump capacity.'
 		]);
 	});
 
-	it('refuses the EWR site flag off the outlet or a unit, exactly as the backend does (engine 1.5.0)', () => {
+	it('refuses the EWR site flag off the outlet or a hydrological unit, exactly as the backend does (engine 1.5.0)', () => {
 		const g = node('g', 'Gauge', null);
 		const weir = { ...node('w', 'Weir', 'g'), kind: 'gauge' as const };
 		const a = node('a', 'A', 'w');

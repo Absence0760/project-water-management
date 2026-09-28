@@ -64,7 +64,7 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	await tip.click();
 	await bubble.getByRole('link', { name: 'More in the glossary' }).click();
 	await expect(page).toHaveURL(/\/help\/glossary#element-farm$/);
-	await expect(page.getByRole('article', { name: 'Unit', exact: true })).toBeInViewport();
+	await expect(page.getByRole('article', { name: 'Hydrological unit', exact: true })).toBeInViewport();
 });
 
 test('a help tip works from the keyboard alone and is announced to screen readers', async ({ page, owner }) => {
@@ -89,7 +89,7 @@ test('a help tip works from the keyboard alone and is announced to screen reader
 	await expect(tip).toHaveAttribute('aria-describedby', controls);
 	await expect(live.locator('.term')).toHaveText('Dam capacity');
 	await expect(live.locator('.short')).toHaveText(
-		'Combined full-supply volume of the unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
+		'Combined full-supply volume of the hydrological unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
 	);
 	await expect(live.locator('.units')).toHaveText('Units: m³');
 
@@ -223,7 +223,7 @@ test('the catchment tour links each picture marker to its stop', async ({ page, 
 	const less = page.getByRole('button', { name: 'Show less: Dams catch part of it' });
 	await expect(less).toHaveAttribute('aria-expanded', 'true');
 	await expect(dam.getByRole('img', { name: /Close-up of one farm/ })).toBeVisible();
-	await expect(dam.getByText('Every unit’s daily balance closes to the cubic metre.')).toBeVisible();
+	await expect(dam.getByText('Every hydrological unit’s daily balance closes to the cubic metre.')).toBeVisible();
 	await less.click();
 	await expect(dam.getByRole('img', { name: /Close-up of one farm/ })).toBeHidden();
 
@@ -242,7 +242,7 @@ test('a guide shows a close-up of the catchment with its own numbered stops', as
 	await expect(figure.getByRole('img', { name: /Close-up of one farm/ })).toBeVisible();
 	await expect(figure.getByRole('heading', { level: 3 })).toHaveText([
 		'Inflow from upstream',
-		'The unit’s own runoff',
+		'The hydrological unit’s own runoff',
 		'Dam storage',
 		'Spill over the wall',
 		'Irrigation draw',
@@ -313,9 +313,9 @@ test('the glossary shows every term in full, as many as the help page counts', a
 	// names, related terms (linked) and where the idea comes from.
 	const dam = page.getByRole('article', { name: 'Dam capacity' });
 	await expect(dam.locator('.short')).toHaveText(
-		'Combined full-supply volume of the unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
+		'Combined full-supply volume of the hydrological unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
 	);
-	await expect(dam.locator('.long')).toHaveText([/^b023 treats a unit’s dams as one composite dam\./]);
+	await expect(dam.locator('.long')).toHaveText([/^b023 treats a hydrological unit’s dams as one composite dam\./]);
 	await expect(dam.getByRole('definition')).toHaveText([
 		'm³',
 		'composite dam, storage capacity, full supply',
@@ -330,7 +330,7 @@ test('the glossary shows every term in full, as many as the help page counts', a
 test('the farm glossary shows the glossary’s farmer words and jumps to the one linked', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/help/glossary');
-	const topic = page.getByRole('region', { name: 'Words on your farm page' });
+	const topic = page.getByRole('region', { name: 'Words on your hydrological unit page' });
 	await expect(topic.getByRole('article').first()).toBeVisible();
 	const terms = (await topic.getByRole('article').locator('h3 > span').allTextContents()).map((t) => t.trim());
 	expect(terms.length).toBeGreaterThan(0);

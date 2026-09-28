@@ -17,7 +17,7 @@ import { openNodeForm } from '../support/network.ts';
 async function openUpperFarm(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	return page.getByRole('region', { name: 'Yield of Upper farm' });
 }
 
@@ -47,7 +47,7 @@ test('an editor runs a storage–yield curve for a dam, cancels a queued yield, 
 	await expect(table.getByRole('rowheader').nth(5)).toHaveText('150\u202f000 (this dam)');
 	await expect(table.getByRole('rowheader').last()).toHaveText('300\u202f000');
 	await expect(panel.getByRole('heading', { name: 'Storage–yield curve' })).toBeVisible();
-	await expect(panel.getByText(/firm yield, this unit's demand shape, at 11 capacities/)).toBeVisible();
+	await expect(panel.getByText(/firm yield, this hydrological unit's demand shape, at 11 capacities/)).toBeVisible();
 	await expect(panel.getByTestId('yield-status')).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="yield-panel"]' });
 
@@ -74,7 +74,7 @@ test('the panel follows a yield job it did not queue: running after a reload, th
 	await openUpperFarm(page, project.id);
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const panel = page.getByRole('region', { name: 'Yield of Upper farm' });
 	await expect(panel.getByTestId('yield-status')).toHaveText('Running: 40 % done.');
 	await expect(panel.getByRole('progressbar', { name: 'Yield calculation progress' })).toHaveAttribute('value', '40');

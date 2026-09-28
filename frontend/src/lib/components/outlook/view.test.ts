@@ -126,13 +126,13 @@ describe('outlookState', () => {
 describe('buildOutlookView', () => {
 	it('each level’s medians and 10–90 % ranges as the engine summarised them, the planning figure in its words, and the level that didn’t run', () => {
 		const r = result();
-		const v = buildOutlookView({ ...SEASON, result: r }, DEFAULTS);
+		const v = buildOutlookView({ ...SEASON, result: r });
 		expect(v.season).toBe('1 Oct 2012 – 30 Apr 2013 (212 days)');
 		expect(v.metricLabel).toBe('Days below the pragmatic EWR at the outlet');
 		expect(v.ewrHeading).toBe('Days below the EWR');
 		expect(v.nYears).toBe(12);
 		expect(v.tooFewYears).toBeNull();
-		expect(v.start).toBe('The units’ dams held 52\u202f000 m³ of 80\u202f000 m³ at the end of 30 Sep 2012: every year starts from there.');
+		expect(v.start).toBe('The hydrological units’ dams held 52\u202f000 m³ of 80\u202f000 m³ at the end of 30 Sep 2012: every year starts from there.');
 		const [l100, l85, l70, gone] = v.rows;
 		const s = r.levels[0]!.seasonEndStorageM3!;
 		expect(l100).toMatchObject({ label: '100 %', kind: 'ran', nYears: 12, yearsMet: 'EWR met on every day in 7 of 12 years' });
@@ -153,19 +153,19 @@ describe('buildOutlookView', () => {
 		expect(v.years[11]!.cells[0]).toMatchObject({ ewr: '16 days below', met: false });
 	});
 
-	it('marks the defaults pending the client while in use, and not once the project chose', () => {
-		const pending = buildOutlookView({ ...SEASON, result: result() }, DEFAULTS);
-		expect(pending).toMatchObject({ seasonPending: true, sharePending: true, share: '80 % of analogue years' });
-		const chosen = buildOutlookView({ ...SEASON, result: result(12, 0.7) }, { season: { startMonth: 10, startDay: 1, endMonth: 4, endDay: 30 }, planningShare: 0.7 });
-		expect(chosen).toMatchObject({ seasonPending: false, sharePending: false, share: '70 % of analogue years' });
+	it('shows the planning share the outlook ran, the default or the project’s, with no pending badge (O3, O6 confirmed, issue #90)', () => {
+		const byDefault = buildOutlookView({ ...SEASON, result: result() });
+		expect(byDefault.share).toBe('80 % of analogue years');
+		expect(byDefault).not.toHaveProperty('seasonPending');
+		expect(byDefault).not.toHaveProperty('sharePending');
+		const chosen = buildOutlookView({ ...SEASON, result: result(12, 0.7) });
+		expect(chosen.share).toBe('70 % of analogue years');
 		// 85 % meets in 9 of 12 = 75 %: at a 70 % share it is the planning figure.
 		expect(chosen.rows[1]!.planning).toBe(true);
-		// Another season than the default isn't the default, whatever the settings say now.
-		expect(buildOutlookView({ decisionDate: '2012-11-01', seasonEnd: '2013-04-30', result: result() }, DEFAULTS).seasonPending).toBe(false);
 	});
 
 	it('with too few years: no ranges and no planning figure, and it says why', () => {
-		const v = buildOutlookView({ ...SEASON, result: result(4) }, DEFAULTS);
+		const v = buildOutlookView({ ...SEASON, result: result(4) });
 		expect(v.enoughYears).toBe(false);
 		expect(v.tooFewYears).toBe('Only 4 analogue years: at least 10 are needed for the 10–90 % range and a planning figure, so only each year’s values are shown.');
 		expect(v.rows[0]!.storage).toEqual({ median: '–', band: '' });
@@ -176,7 +176,7 @@ describe('buildOutlookView', () => {
 
 	it('never words a result as the app choosing or advising a level', () => {
 		for (const r of [result(), result(4), result(12, 1)]) {
-			const words = JSON.stringify(buildOutlookView({ ...SEASON, result: r }, DEFAULTS));
+			const words = JSON.stringify(buildOutlookView({ ...SEASON, result: r }));
 			expect(words).not.toMatch(/recommend|likely|should|best|optimal/i);
 		}
 	});

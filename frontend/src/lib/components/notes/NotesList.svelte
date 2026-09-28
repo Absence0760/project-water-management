@@ -142,11 +142,11 @@
 			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
 			<p id="{uid}-help" class="muted small">
 				{words.plainText}
-				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this hydrological unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
 				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
 			</p>
 			{#if showShare}
-				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this unit’s farmers</label>
+				<label class="check"><input type="checkbox" bind:checked={shareWithFarm} /> Also show to this hydrological unit’s farmers</label>
 			{/if}
 			<div class="row">
 				<button type="submit" class="btn btn-primary btn-sm" disabled={busy || draftLength === 0 || draftLength > NOTE_MAX}>{busy ? words.saving : words.submit}</button>
@@ -185,7 +185,7 @@
 						<span>{n.mine ? words.you : (n.author ?? words.formerMember)}</span>
 						· <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time>
 						{#if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
-						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to the farm</span>{/if}
+						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to its farmers</span>{/if}
 						{#if canWrite && editing !== n.id}
 							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
 							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}

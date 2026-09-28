@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
 	defaultProjectSettings,
+	IRRIGATION_SYSTEMS,
+	NEW_FARM_IRRIGATION,
+	NEW_FARM_IRRIGATION_SYSTEM,
 	PAN_COEFFICIENT_PRESETS,
 	PAN_COEFFICIENT_TYPICAL_MAX,
 	PAN_COEFFICIENT_TYPICAL_MIN,
@@ -38,5 +41,40 @@ describe('PAN_COEFFICIENT_PRESETS', () => {
 		expect(winter!.values).not.toEqual(generic!.values);
 		expect(summer!.values).not.toEqual(generic!.values);
 		expect(winter!.values).not.toEqual(summer!.values);
+	});
+});
+
+describe('IRRIGATION_SYSTEMS (SABI 2021 system efficiencies, issue #54 Q10)', () => {
+	// SABI Agricultural Design Norms 2021, Table 4, "proposed default system efficiency" min–max (%), pp. 9–10.
+	const TABLE_4: Record<string, [number, number]> = {
+		drip: [90, 95],
+		micro: [80, 85],
+		pivot: [80, 90],
+		sprinkler: [75, 90],
+		movable: [70, 83],
+		surface: [60, 95] // piped 80–95, lined canal 70–90, earth canal 60–83
+	};
+	// Issue #54 Q10's recommended values.
+	const Q10: Record<string, number> = { drip: 0.9, micro: 0.82, pivot: 0.85, sprinkler: 0.8, movable: 0.75, surface: 0.7 };
+
+	it('keeps Table 4 ranges and offers the Q10 value, inside its range', () => {
+		expect(IRRIGATION_SYSTEMS.map((s) => s.id)).toEqual(Object.keys(TABLE_4));
+		for (const s of IRRIGATION_SYSTEMS) {
+			expect([s.min * 100, s.max * 100].map(Math.round), s.id).toEqual(TABLE_4[s.id]);
+			expect(s.efficiency, s.id).toBe(Q10[s.id]);
+			expect(s.efficiency >= s.min && s.efficiency <= s.max, s.id).toBe(true);
+		}
+	});
+
+	it('offers each efficiency once, so a stored value names at most one system', () => {
+		const values = IRRIGATION_SYSTEMS.map((s) => s.efficiency);
+		expect(new Set(values).size).toBe(values.length);
+	});
+
+	it('starts a new farm on drip (confirmed by the client, issue #90), half its losses returning', () => {
+		expect(NEW_FARM_IRRIGATION_SYSTEM).toBe('drip');
+		const drip = IRRIGATION_SYSTEMS.find((s) => s.id === NEW_FARM_IRRIGATION_SYSTEM)!;
+		expect(NEW_FARM_IRRIGATION).toEqual({ irrigationEfficiency: drip.efficiency, lossReturnFraction: 0.5 });
+		expect(NEW_FARM_IRRIGATION.irrigationEfficiency).toBe(0.9);
 	});
 });

@@ -6,7 +6,7 @@ import { SUPPLY_DEFAULTS, type NetworkNode, type SupplyRule } from '@water-manag
 
 /** What each rule does, under the form's select. */
 export const SUPPLY_RULE_HELP: Record<SupplyRule, string> = {
-	damFirst: 'Irrigation comes from the unit’s dam only, with no river pump.',
+	damFirst: 'Irrigation comes from the hydrological unit’s dam only, with no river pump.',
 	riverFirst: 'Pumps from the river below the dam up to the pump capacity; the dam covers the rest.',
 	trigger: 'The dam only until it falls below the switch-to-river level, then river first until it is back at the switch-back level.',
 	runOfRiver: 'No dam: pumps from the river up to the pump capacity; the rest is a shortfall.'
@@ -33,7 +33,7 @@ export function noDamSupplyHint(
 ): string | null {
 	if (n.kind !== 'farm' || (n.supplyRule ?? SUPPLY_DEFAULTS.supplyRule) !== 'damFirst' || n.damCapacityM3 > 0) return null;
 	if (!(n.pctUpstreamToDam > 0 || n.pctRunoffToDam > 0 || n.divertCapacityM3Day > 0)) return null;
-	return 'This unit has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit. To cap it, pick run of river and enter the pump capacity.';
+	return 'This hydrological unit has no dam, so what is routed to its dam (upstream inflow, runoff, diversion) is irrigated straight from the river, with no pump limit. To cap it, pick run of river and enter the pump capacity.';
 }
 
 /** Whether a node carries supply settings other than the defaults (a farm turned into a gauge or user keeps them). */

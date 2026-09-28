@@ -26,7 +26,7 @@ describe('alertMail', () => {
 		expect(m.subject).toBe('Dam low on Farm One — Rustenvrede WUA');
 		expect(m.text).toContain('The model puts the dam on Farm One at about 28 % of capacity on 20 Sept 2026, below the alert level of 30 %.');
 		expect(m.text).toContain('It is not a measurement of your dam and not an instruction.');
-		expect(m.text).toContain('Open your farm: http://localhost:7777/farm/p1');
+		expect(m.text).toContain('Open your hydrological unit: http://localhost:7777/farm/p1');
 		expect(m.text).toContain('You get this email because you get dam level alerts for Rustenvrede WUA.');
 		expect(m.text).toContain('Stop these emails: http://localhost:7777/alerts/unsubscribe#t=TOKEN');
 		expect(m.text).toContain('Manage your alerts: http://localhost:7777/account/alerts');
@@ -167,7 +167,7 @@ describe('digestMail', () => {
 	it('ends a digest cut at its line limit with how many more, pointing at the app', () => {
 		const m = digestMail(farmer, project, [dam], unsub, 5, 80);
 		expect(m.text).toContain('…and 80 more alerts. Open the catchment to see them all.');
-		expect(m.text).toContain('Open your farm: http://localhost:7777/farm/p1');
+		expect(m.text).toContain('Open your hydrological unit: http://localhost:7777/farm/p1');
 	});
 });
 

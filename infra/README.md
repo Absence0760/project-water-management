@@ -78,8 +78,12 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   `water_app`, and applies `backend/migrations/*.sql`. It has 512 MB, a 300 s
   timeout, reserved concurrency 1 and no URL. `water-management-worker`
   (`backend/src/lambda-worker.ts`, `jobs.tf`) runs the background job queue
-  as `water_app`: 1024 MB, 300 s, reserved concurrency 2, triggered by the
-  SQS `jobs` queue and an EventBridge tick every 5 minutes
+  as `water_app`: 1024 MB, 300 s, reserved concurrency
+  `worker_reserved_concurrency` (8: the sum of its four SQS triggers'
+  `maximum_concurrency`, 4 × 2, or throttled messages burn receive counts into
+  the DLQs), triggered by the SQS `jobs`, `ingest-results`, `render-results`
+  and `mail-events` queues (partial batch failures reported, so one bad record
+  is retried alone) and an EventBridge tick every 5 minutes
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
   `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
   downloads the data feeds' sources: no VPC, no database URL or secret, 512
@@ -124,7 +128,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `network.tf` | VPC, 2 private subnets, security groups, Secrets Manager endpoint |
 | `rds.tf` | Subnet group, pg17 parameter group, log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
-| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / backlog / dead-job alarms |
+| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
@@ -138,7 +142,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (19 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (30 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -167,7 +171,9 @@ an AZ failure means a restore (minutes to about an hour), which is acceptable
 here.
 
 **Connections.** max_connections on t4g.micro is ~80. The API is capped at
-10 concurrent containers × a `pg` pool of 5 = 50, plus the migrator. RDS
+10 concurrent containers × a `pg` pool of 5 = 50, the worker at 8 × a pool of
+2 = 16, plus the migrator: 67 at the very worst, under the limit with room for
+RDS's own. Raising a reserved concurrency means redoing this sum. RDS
 Proxy isn't used: its minimum bill (~$22/month) is more than the DB at this
 scale. An alarm fires at 60 connections.
 
@@ -271,7 +277,7 @@ Idle to light use, on-demand, us-east-1:
 | SES API interface endpoint, 1 AZ | 7.30 |
 | SQS interface endpoint, 1 AZ (job wake-ups, `jobs.tf`) | 7.30 |
 | SQS + EventBridge (the 5-minute tick: ~8,600 invocations) | ~0 |
-| SQS polling by the five event sources (`jobs`, `fetch-requests`, `ingest-results`, `render-requests`, `render-results`: ~0.65 M receives a month each, ~2.25 M past the free tier) | ~0.90 |
+| SQS polling by the six event sources (`jobs`, `fetch-requests`, `ingest-results`, `render-requests`, `render-results`, `mail-events`: ~0.65 M receives a month each, ~2.9 M past the free tier) | ~1.16 |
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
@@ -279,7 +285,7 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 26 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration), logs, RDS log export | ~2.80 |
+| CloudWatch: 28 alarms (incl. the self-check-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.00 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
 
@@ -317,10 +323,17 @@ Claude does not run any of these, and none of them print a secret. Replace
    `aws account enable-region --region-name af-south-1 --profile water-management`,
    then poll `aws account get-region-opt-status --region-name af-south-1 --profile water-management`
    until it shows `ENABLED`.
-3. **Lambda concurrency quota** (a new account has 10, and any reservation
-   fails until it is raised; otherwise set every `*_reserved_concurrency = -1`,
-   the worker's included):
+3. **Lambda concurrency quota, before the first apply.** A new account's
+   concurrent-executions quota is 10 and AWS keeps 10 unreserved, so any
+   reservation fails until it is raised. The quota must cover the sum of the
+   reservations plus 10: at the defaults 10 (API) + 1 (migrate) + 8 (worker)
+   + 2 (fetcher) + 2 (renderer) + 10 = **33**. Ask for 1000 (the usual
+   default) and wait for it to be granted before planning the first apply.
+   `-1` (unreserved) is refused by the variables' validation: it would lift
+   the spend and DB-connection caps.
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
+   Check it with
+   `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
    `budget_monthly_usd = 0`.
@@ -344,8 +357,14 @@ Claude does not run any of these, and none of them print a secret. Replace
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out=prod.tfplan`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply prod.tfplan`
+   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+
+   A saved plan holds every variable and secret it read (the decrypted sops
+   values, the database passwords) in plain form, so it is written outside
+   the repo and deleted once applied. If you don't apply it, delete it
+   yourself: `rm -f ~/.cache/water-management/prod.tfplan`. `.gitignore`
+   also ignores `*.tfplan` as a backstop.
 
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
@@ -467,7 +486,13 @@ deploy role's trust postcondition, with negative runs for a branch subject, a
 immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
-below two ticks does.
+below two ticks does. Six more refuse an unreserved (`-1`) concurrency on each
+Lambda and a worker cap below the sum of its SQS triggers'
+`maximum_concurrency`; `worker_sqs_triggers` pins that sum against the planned
+mappings, `ReportBatchItemFailures` on every worker trigger and the worker
+throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
+limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so
+`/api/%61uth/login` can't slip past it).
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 

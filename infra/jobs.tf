@@ -145,7 +145,10 @@ resource "aws_lambda_function" "worker" {
   timeout       = local.worker_timeout_seconds
   memory_size   = var.worker_memory_mb
 
-  # Bounds spend and DB connections (2 x a pool of 2), and how many jobs run at once.
+  # Bounds spend and DB connections (8 x a pool of 2), and how many jobs run at
+  # once. At least the sum of the four SQS triggers' maximum_concurrency (jobs,
+  # ingest-results, render-results, mail-events: 4 x 2), or throttled pollers
+  # burn receive counts into the DLQs (variables.tf, guarded by a tftest).
   reserved_concurrent_executions = var.worker_reserved_concurrency
 
   vpc_config {
@@ -211,9 +214,14 @@ resource "aws_lambda_event_source_mapping" "worker_jobs" {
   batch_size       = 10
   # Coalesce a burst of wake-ups into one tick.
   maximum_batching_window_in_seconds = 5
+  # The worker reports the records it failed (lambda-worker.ts), so one bad
+  # record is retried alone instead of taking its whole batch to the DLQ.
+  function_response_types = ["ReportBatchItemFailures"]
 
   scaling_config {
-    maximum_concurrency = 2 # SQS event sources can't go lower; reserved concurrency caps it anyway
+    # SQS event sources can't go lower. The worker's reserved concurrency must
+    # cover the sum over its four triggers (worker_reserved_concurrency).
+    maximum_concurrency = 2
   }
 }
 
@@ -423,6 +431,28 @@ resource "aws_cloudwatch_metric_alarm" "worker_errors" {
   statistic           = "Sum"
   threshold           = 0
   alarm_description   = "The worker Lambda failed a tick (a job's own failure is recorded in the job table and does not count here)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.worker.function_name
+  }
+}
+
+# The worker hit its reserved concurrency: its SQS pollers are being throttled,
+# and a throttled message still counts a receive, so a sustained run of these
+# ends with messages in the DLQs. Raise worker_reserved_concurrency (and check
+# the RDS connection budget) or find what is flooding the queues.
+resource "aws_cloudwatch_metric_alarm" "worker_throttles" {
+  alarm_name          = "${local.project}-worker-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The worker Lambda hit reserved_concurrent_executions: throttled SQS messages burn receive counts toward the DLQs — investigate."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 

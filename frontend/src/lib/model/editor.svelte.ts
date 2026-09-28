@@ -28,7 +28,7 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		damInitialPct: 0,
 		damMinPct: 0,
 		divertCapacityM3Day: 0,
-		// A typical mixed system with half its losses returning (audit N1).
+		// Drip (0.90, the client's default, issue #90) with half its losses returning (audit N1).
 		...NEW_FARM_IRRIGATION,
 		// Dam area unknown (the run estimates it), the default exponent, no seepage (audit N2).
 		damAreaFullM2: null,

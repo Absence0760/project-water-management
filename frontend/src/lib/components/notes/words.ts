@@ -59,7 +59,7 @@ export const NOTES_EN: NotesWords = {
 	confirmDelete: (n) => `Delete ${n.mine ? 'your note' : `${n.author ?? 'this person'}’s note`}? It is hidden from everyone; editors keep it in the audit trail.`,
 	add: 'Add a note',
 	plainText: 'Plain text.',
-	farmerAudience: 'Read by the WUA and anyone else linked to this farm.',
+	farmerAudience: 'Read by the WUA and anyone else linked to this hydrological unit.',
 	submit: 'Add note',
 	saving: 'Saving…',
 	writeFirst: 'Write something first.',

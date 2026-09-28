@@ -31,7 +31,7 @@
 </script>
 
 <section class="card" aria-labelledby="fair-h">
-	<h2 id="fair-h">{t('Your farm on the river')}</h2>
+	<h2 id="fair-h">{t('Your hydrological unit on the river')}</h2>
 	<p>{positionLine(view)}</p>
 	<p><Rich text={outletLine(view)} /></p>
 	<p class="privacy">

@@ -96,7 +96,7 @@
 	</div>
 	<p class="muted small intro">
 		A read-only link to the published baseline for someone outside the project: the catchment’s reserve status and the WUA’s notice,
-		signed out. It never shows a unit’s name or figures, or the modeller’s note.
+		signed out. It never shows a hydrological unit’s name or figures, or the modeller’s note.
 	</p>
 	{#if published === false}
 		<p class="muted small">Nothing is published yet: a link opens only once a run is published (Runs tab).</p>

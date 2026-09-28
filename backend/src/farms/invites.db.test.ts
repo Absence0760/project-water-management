@@ -321,3 +321,64 @@ describe('POST /farmers/bulk', () => {
 		expect((await bulk(owner, [])).status).toBe(400);
 	});
 });
+
+// A licence applicant invited with the farms they hold (097_contributor_invite_farms,
+// issue #73): they join as a contributor with exactly those links.
+describe('inviting an applicant with farms', () => {
+	it('invites a new address as an applicant of its farms, with the ordinary invite email; accepting links them as a contributor', async () => {
+		const email = newEmail('applicant');
+		const res = await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmB.id], role: 'contributor' });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.invite).toEqual(expect.objectContaining({ status: 'invited', email, role: 'contributor', nodeIds: [farmB.id] }));
+		// Not the farmer email: it speaks of the role, not of the farms given to a farmer.
+		const mail = lastMailTo(email)!;
+		expect(mail.subject).not.toBe('Iowner has given you access to Rustenvrede in Invite <Kloof>');
+		expect(mail.text).toMatch(/\/register\?invite=[A-Za-z0-9_-]{43}/);
+		const uid = await register(email, tokenIn(mail));
+		expect(await asOwner('SELECT role::text AS role FROM project_member WHERE project_id = $1 AND user_id = $2', [projectId, uid])).toEqual([{ role: 'contributor' }]);
+		expect(await farmNodesOf(uid)).toEqual([farmB.id]);
+		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers;
+		expect(listed.filter((f: { email: string }) => f.email === email)).toEqual([
+			{ status: 'active', userId: uid, email, displayName: 'New Farmer', role: 'contributor', nodeIds: [farmB.id] }
+		]);
+	});
+
+	it('adds a verified account as an applicant with its farms at once', async () => {
+		const u = await signUp('Verifiedapplicant');
+		const res = await owner.call('POST', `/projects/${projectId}/farmers`, { email: u.email, nodeIds: [farmA.id, farmC.id], role: 'contributor' });
+		expect(res.status, JSON.stringify(res.body)).toBe(201);
+		expect(res.body.farmer).toEqual(expect.objectContaining({ userId: u.id, role: 'contributor', nodeIds: [farmA.id, farmC.id].sort() }));
+		expect(await farmNodesOf(u.id)).toEqual([farmA.id, farmC.id].sort());
+	});
+
+	it('a resend through /members keeps the farms; an applicant invite without farms stays off the farmer list', async () => {
+		const email = newEmail('resend');
+		const inv = await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmA.id], role: 'contributor' });
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email, role: 'contributor' })).status).toBe(201);
+		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers;
+		expect(listed.find((f: { inviteId?: string }) => f.inviteId === inv.body.invite.inviteId)).toEqual(expect.objectContaining({ role: 'contributor', nodeIds: [farmA.id] }));
+		const bare = newEmail('bare');
+		expect((await owner.call('POST', `/projects/${projectId}/members`, { email: bare, role: 'contributor' })).status).toBe(201);
+		expect((await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers.some((f: { email: string }) => f.email === bare)).toBe(false);
+	});
+
+	it('refuses another role, and a viewer (a farm invite is owner-only)', async () => {
+		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: newEmail('x'), nodeIds: [farmA.id], role: 'viewer' })).status).toBe(400);
+		expect((await viewer.call('POST', `/projects/${projectId}/farmers`, { email: newEmail('x'), nodeIds: [farmA.id], role: 'contributor' })).status).toBe(403);
+	});
+
+	it('the database refuses farms on a viewer invite (invite_node_check); a contributor one is the control', async () => {
+		const mk = async (role: string) =>
+			(
+				await asOwner(
+					`INSERT INTO invite (email, project_id, project_role, invited_by, token_hash, expires_at)
+					 VALUES ($1, $2, $3, $4, decode(md5(random()::text) || md5(random()::text), 'hex'), now() + interval '1 day') RETURNING id`,
+					[newEmail(role), projectId, role, owner.id]
+				)
+			)[0].id as string;
+		const v = await mk('viewer');
+		await expect(asOwner('INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [v, projectId, farmA.id])).rejects.toThrow(/not a farmer or applicant invite/);
+		const c = await mk('contributor');
+		await expect(asOwner('INSERT INTO invite_node (invite_id, project_id, node_id) VALUES ($1, $2, $3)', [c, projectId, farmA.id])).resolves.toBeTruthy();
+	});
+});
