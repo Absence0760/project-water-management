@@ -177,6 +177,26 @@ version the sign-up form sends as `acceptTerms` and the account records
 (087); change the pages and that date together.
 `e2e/tests/legal.spec.ts`.
 
+## Methods page
+
+`/methods`, "How the model is checked" (`routes/methods`): the public summary
+of [engine-audit.md](./engine-audit.md), in the legal pages' frame and
+prerendered like them (static HTML, no script, open to anyone). It backs the
+landing page's first trust statement and is linked under it and from the
+landing and legal-page footers. Nine sections: what the model does, the
+standard it is held to (documented hydrology and invariants, not the
+workbook), the checks on every run and on every change, the departures from
+the workbook, the known limitations, calibration statistics, versions, and a
+link to the full audit in the public source. No client data. Two parts can't
+drift from the audit: the **known limitations** table is the engine's
+generated `KNOWN_LIMITATIONS` (the list every report prints), and a
+departure's *Pending a hydrologist's confirmation* mark is read from it too.
+The departures' own words are `lib/methods/departures.ts`; its test checks
+that every id is a row of the audit. After changing an audit decision, run
+`pnpm gen:limitations` as usual and the page follows; when the audit adds or
+closes a finding a reader would care about, update `departures.ts`. The
+**Effective** line shows the engine version instead. English only.
+
 ## Sign-in pages
 
 `/login`, `/register`, `/forgot-password`, `/reset-password`,
@@ -995,8 +1015,10 @@ the upload dialog (`?add=data`). The **⋯** button ("More actions for
 *name*") opens a small disclosure menu with **Copy…** (anyone) and
 **Delete…** (owners); it's drawn `position: fixed` so the scrolling list
 never clips it, opens upward near the window's bottom, and closes on
-Escape (focus back on ⋯), a click outside, focus leaving, a scroll or a
-resize. One menu is open at a time.
+Escape (focus back on ⋯), a click outside, focus leaving, a scroll that
+moves ⋯ (not the one that brought an off-screen ⋯ into view: its event
+arrives a frame after the menu opened) or a resize. One menu is open at a
+time.
 
 **Delete** asks for confirmation, then deletes. A project that has nominated
 an evidence run is kept for good (issue #43, [data-model.md](./data-model.md)

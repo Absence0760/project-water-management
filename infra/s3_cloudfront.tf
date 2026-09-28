@@ -133,8 +133,9 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   /index.html with a 200, and the client router takes over. Done here rather
 #   than with a distribution-wide custom_error_response because those also
 #   rewrite the API's own 403/404 JSON responses into index.html. The
-#   prerendered pages, the landing page (issue #57) and the legal pages, are
-#   served from their own HTML: /welcome, /privacy, /terms → <path>.html
+#   prerendered pages, the landing page (issue #57), the legal pages and the
+#   methods page, are served from their own HTML: /welcome, /privacy, /terms,
+#   /methods → <path>.html
 #   (static HTML for crawlers and link previews).
 #
 # api_strip_prefix — /api/* behaviour. The browser calls same-origin
@@ -158,7 +159,7 @@ resource "aws_cloudfront_function" "spa_rewrite" {
       var request = event.request;
       var uri = request.uri;
       var last = uri.substring(uri.lastIndexOf('/') + 1);
-      if (uri === '/welcome' || uri === '/privacy' || uri === '/terms') {
+      if (uri === '/welcome' || uri === '/privacy' || uri === '/terms' || uri === '/methods') {
         request.uri = uri + '.html';
       } else if (last.indexOf('.') === -1) {
         request.uri = '/index.html';

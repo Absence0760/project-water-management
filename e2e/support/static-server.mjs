@@ -48,8 +48,8 @@ async function fileAt(pathname) {
 }
 
 // The prerendered pages, served for their extension-less path, as CloudFront's
-// spa_rewrite function does (infra/s3_cloudfront.tf): the landing page (issue #57) and the legal pages.
-const PRERENDERED = { '/welcome': '/welcome.html', '/privacy': '/privacy.html', '/terms': '/terms.html' };
+// spa_rewrite function does (infra/s3_cloudfront.tf): the landing page (issue #57), the legal pages and /methods.
+const PRERENDERED = { '/welcome': '/welcome.html', '/privacy': '/privacy.html', '/terms': '/terms.html', '/methods': '/methods.html' };
 
 createServer(async (req, res) => {
 	const { pathname } = new URL(req.url ?? '/', 'http://localhost');
