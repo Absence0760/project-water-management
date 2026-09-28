@@ -4363,7 +4363,13 @@ exists, says so with a link to Runs & results.
   `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
   doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
   `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
-  uploaded forecast, then the contents), then numbered
+  uploaded forecast; a **Read this first** box above the summary sentence
+  (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
+  disclaimer's key points with the Disclaimer's section number, then who
+  signed the run, "Signed off by <name> (<body> <number>)", or "Not signed
+  off by a registered professional."; an unsigned run nominated as evidence,
+  or any unsigned impact report, adds **Not signed off: not for use as
+  evidence in a licence application.** in bold; then the contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -4415,8 +4421,10 @@ exists, says so with a link to Runs & results.
     sees neither. Loaded with the report (`GET …/signoffs`), so
     `data-report-ready` waits for it and the server-side PDF prints it.
   - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): its five
-    paragraphs and its version (`2026-09-28`, agreed: accepted by the
-    operator after a pre-counsel review). While the engine marks a wording
+    paragraphs and its version (`2026-09-28.2`, agreed: accepted by the
+    operator after a pre-counsel review). Paragraph 5 ends with the Terms of
+    use URL in full, on the site's own address (`withSite`, the page's
+    origin). While the engine marks a wording
     `draft`, a bold *Draft wording, pending the client's legal review
     (decision D10)* line stands above it.
 
@@ -4481,7 +4489,13 @@ exists, says so with a link to Runs & results.
   sit beside Download PDF for any viewer. They queue a server-side render of
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
-  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)),
+  plus a running footer on every page: the page's `data-report-footer`
+  (the engine's `REPORT_FOOTER`: project · run · "Model estimates; see the
+  Disclaimer (section N, version …). The operator of this software accepts
+  no responsibility to anyone who relies on this report.") and "Page X of
+  Y" (`reports/render.ts` `footerTemplate`). The browser's own print
+  (Download PDF) has no running footer.
   The bar then follows the job's status (`role="status"`: "PDF queued: waiting
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
@@ -5087,7 +5101,11 @@ signed in or out, for someone outside the project, on a phone first.
   view's for the notice card; [§ Language](#language)), in this device's
   choice or the browser's language.
 - **Top to bottom:** the catchment's name; "Published by *name* on *date*.
-  Data up to *date*." (and the next expected update); the WUA's notice
+  Data up to *date*." (and the next expected update); in body type, "A model
+  estimate that can be wrong, not a measurement, licence or restriction. As
+  far as the law allows, the operator of this software accepts no
+  responsibility to anyone who relies on this page." (`shareCaveat()`,
+  quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
   restriction from the WUA"), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when

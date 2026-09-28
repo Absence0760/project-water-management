@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Run } from '$lib/api/types';
-import { FORECAST_RAIN_NOTE } from '@water-management/engine';
-import { forecastNote, isReportReady, reportCharts, reportSections } from './sections';
+import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED } from '@water-management/engine';
+import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from './sections';
 
 type R = Pick<Run, 'summary' | 'model' | 'notes'>;
 const run = (over: { curtailment?: boolean; nodes?: number; notes?: string } = {}): R =>
@@ -97,5 +97,26 @@ describe('forecastNote', () => {
 
 	it('gives a run with no forecast days none', () => {
 		expect(forecastNote({ summary: {} } as unknown as F)).toBeNull();
+	});
+});
+
+describe('readFirst (the cover box)', () => {
+	const sections = reportSections(run({ nodes: 3 }));
+	const signer = { fullName: 'A Person', registrationBody: 'ECSA', registrationNo: '123' };
+
+	it('points to the Disclaimer by its section number', () => {
+		expect(disclaimerSection(sections)).toBe(sections.length - 1);
+		expect(readFirst(sections, [], false).text).toContain(`(see the Disclaimer, section ${sections.length - 1})`);
+	});
+
+	it('says who signed, or that no one did', () => {
+		expect(readFirst(sections, [signer], false).status).toBe('Signed off by A Person (ECSA 123).');
+		expect(readFirst(sections, [], false).status).toBe(REPORT_NOT_SIGNED);
+	});
+
+	it('marks an unsigned run used as evidence as not for a licence application, and only that', () => {
+		expect(readFirst(sections, [], true).notEvidence).toBe(REPORT_NOT_EVIDENCE);
+		expect(readFirst(sections, [], false).notEvidence).toBeNull();
+		expect(readFirst(sections, [signer], true).notEvidence).toBeNull();
 	});
 });
