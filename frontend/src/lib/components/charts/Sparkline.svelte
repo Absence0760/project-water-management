@@ -7,10 +7,14 @@
 	// quantity and its span ("Crop factor by month, Oct–Sep"); a list of rows
 	// shows it once as a column header (`captionHidden`), a card on its own.
 	// The accessible name is the item, the caption and the numbers in words
-	// (every value for a dozen or fewer). Geometry and words: sparkline.ts.
+	// (every value for a dozen or fewer). The keyboard reads it out too: a
+	// slider over the line takes focus (starting at the mark) and the arrow
+	// keys, Page Up/Down, Home and End step the read-out and the dot, its
+	// value in words as `aria-valuetext`. Geometry and words: sparkline.ts.
 	import {
 		dotAt,
 		extremeIndex,
+		keyStep,
 		markText,
 		nearestPoint,
 		readout,
@@ -79,30 +83,60 @@
 	const markPt = $derived(pts.find((p) => p.i === markIdx) ?? null);
 	const label = $derived(`${name ? `${name}: ` : ''}${caption}. ${sparkDescription(words, endWords)}.`);
 
-	// The read-out: the point under the pointer, until it leaves.
+	// The read-out: the point under the pointer, until it leaves; else the
+	// keyboard's point while the slider has focus; else the mark.
 	let hover = $state<SparkPoint | null>(null);
 	function move(e: PointerEvent) {
 		const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		hover = box.width > 0 ? nearestPoint(pts, (e.clientX - box.left) / box.width) : null;
 	}
-	const dot = $derived(hover ?? markPt);
+	/** The keyboard's point, an index into `pts`; null without focus. */
+	let keyAt = $state<number | null>(null);
+	const markAt = $derived(Math.max(0, pts.findIndex((p) => p.i === markIdx)));
+	const keyPt = $derived(keyAt == null ? null : (pts[Math.min(keyAt, pts.length - 1)] ?? null));
+	function key(e: KeyboardEvent) {
+		const to = keyStep(pts, keyAt ?? markAt, e.key);
+		if (to === undefined) return;
+		e.preventDefault();
+		keyAt = to;
+	}
+	const shown = $derived(hover ?? keyPt);
+	const sliderPt = $derived(keyPt ?? markPt);
+	const dot = $derived(shown ?? markPt);
 	const dotPos = $derived(dot ? dotAt(dot) : null);
 </script>
 
 <figure class="sparkline" class:long={markLabel} style:--spark-c={color} style:--spark-w={stroke} data-testid="sparkline">
 	{#if !captionHidden}<figcaption class="cap">{caption}</figcaption>{/if}
-	<!-- The read-out follows a pointer only: the accessible name already carries every number, so there is nothing to operate. -->
+	<!-- The pointer's read-out; the keyboard's is the slider laid over the line. -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="plot" style:height="{px}px" onpointermove={move} onpointerleave={() => (hover = null)}>
 		<svg viewBox="0 0 {SPARK_W} {SPARK_H}" preserveAspectRatio="none" role="img" aria-label={label}>
 			<path d={paths.fill} class="fill" />
 			<polyline points={paths.line} class="line" />
 		</svg>
-		{#if dotPos}<span class="dot" class:hover={!!hover} style:left="{dotPos.left * 100}%" style:top="{dotPos.top * 100}%" aria-hidden="true"></span>{/if}
+		{#if sliderPt}
+			<span
+				class="keys"
+				role="slider"
+				tabindex="0"
+				aria-label="{name ? `${name}: ` : ''}{caption}, read-out"
+				aria-orientation="horizontal"
+				aria-valuemin={0}
+				aria-valuemax={values.length - 1}
+				aria-valuenow={sliderPt.i}
+				aria-valuetext={readout(labels, values, sliderPt.i, format)}
+				onkeydown={key}
+				onmousedown={(e) => e.preventDefault()}
+				onfocus={() => (keyAt = markAt)}
+				onblur={() => (keyAt = null)}
+			></span>
+		{/if}
+		{#if dotPos}<span class="dot" class:hover={!!shown} style:left="{dotPos.left * 100}%" style:top="{dotPos.top * 100}%" aria-hidden="true"></span>{/if}
 	</div>
 	<div class="ticks" aria-hidden="true">
 		<span class="end">{endWords[0]}</span>
-		<span class="read" data-testid="sparkline-read">{hover ? readout(labels, values, hover.i, format) : markText(words, markLabel)}</span>
+		<span class="read" data-testid="sparkline-read">{shown ? readout(labels, values, shown.i, format) : markText(words, markLabel)}</span>
 		<span class="end">{endWords[1]}</span>
 	</div>
 </figure>
@@ -127,6 +161,13 @@
 		width: 100%;
 		height: 100%;
 		overflow: visible;
+	}
+	/* The keyboard's slider: the line's box, invisible but for its focus ring. A mouse press doesn't focus it
+	   (onmousedown), so pointing and clicking behave as before and a click still reaches the card beneath. */
+	.keys {
+		position: absolute;
+		inset: 0;
+		border-radius: 2px;
 	}
 	.fill {
 		fill: var(--spark-c);

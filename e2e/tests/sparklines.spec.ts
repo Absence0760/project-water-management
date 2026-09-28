@@ -1,8 +1,9 @@
 // The compact chart pattern (docs/design/ui-playbook.md § 3, "Label every
 // chart"; charts/Sparkline.svelte): a sparkline names its quantity and span,
 // shows its first and last x label, marks its peak (or low) with the value,
-// reads out the point under the pointer and carries the numbers in its
-// accessible name. Its two uses: the Crops list's crop factors (the caption
+// reads out the point under the pointer (and, from the keyboard, the point a
+// slider over the line steps to) and carries the numbers in its accessible
+// name. Its two uses: the Crops list's crop factors (the caption
 // once, over the column) and the Dams cards' storage. Synthetic data only.
 import type { Locator, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -20,7 +21,7 @@ async function pointAt(page: Page, spark: Locator, fx: number) {
 	await page.mouse.move(box.x + box.width * fx, box.y + box.height / 2);
 }
 
-test('a crop row: the column’s caption, Oct and Sep at the ends, the highest factor marked, a read-out on hover', async ({ page, owner }) => {
+test('a crop row: the column’s caption, Oct and Sep at the ends, the highest factor marked, a read-out on hover and from the keyboard', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Crop sparkline');
@@ -48,6 +49,27 @@ test('a crop row: the column’s caption, Oct and Sep at the ends, the highest f
 	const moved = (await spark.locator('.dot').boundingBox())!;
 	expect(Math.abs(moved.x + moved.width / 2 - plot.x - (plot.width * 9) / 11)).toBeLessThanOrEqual(1);
 	await page.mouse.move(0, 0);
+	await expect(read(spark)).toHaveText('max 0.80');
+
+	// The keyboard reads it out too: a slider over the line, starting at the mark; the keys step it and the dot.
+	const slider = spark.getByRole('slider', { name: 'Orchard: Crop factor by month, Oct–Sep, read-out', exact: true });
+	await expect(slider).toHaveAttribute('tabindex', '0');
+	await slider.focus();
+	await expect(read(spark)).toHaveText('Dec 0.80');
+	await expect(slider).toHaveAttribute('aria-valuetext', 'Dec 0.80');
+	await page.keyboard.press('ArrowRight');
+	await expect(read(spark)).toHaveText('Jan 0.80');
+	await expect(slider).toHaveAttribute('aria-valuenow', '3');
+	await page.keyboard.press('End');
+	await expect(read(spark)).toHaveText('Sep 0.60');
+	await page.keyboard.press('Home');
+	await expect(read(spark)).toHaveText('Oct 0.60');
+	await page.keyboard.press('ArrowLeft'); // stops at the end
+	await expect(slider).toHaveAttribute('aria-valuetext', 'Oct 0.60');
+	const first = (await spark.locator('.dot').boundingBox())!;
+	expect(Math.abs(first.x + first.width / 2 - plot.x)).toBeLessThanOrEqual(1);
+	// Leaving it goes back to the mark.
+	await slider.blur();
 	await expect(read(spark)).toHaveText('max 0.80');
 });
 
@@ -112,12 +134,25 @@ test('a dam card: its caption, the window’s first and last day, the low the Da
 		const end = (await card.locator('.level .v').innerText()).trim();
 		await pointAt(page, spark, 0.999);
 		await expect(read(spark)).toHaveText(`28 Jan 2022 ${end}`);
+		// The keyboard reaches the same day: End on the slider.
+		await page.mouse.move(0, 0);
+		const slider = spark.getByRole('slider', { name: `${name}: % full over the run's last year, read-out`, exact: true });
+		await slider.focus();
+		// It starts at the low: "15% · 19 Dec 2021" read out as "19 Dec 2021 15%".
+		const [lowPct, lowDay] = lowest.split(' · ');
+		await expect(read(spark)).toHaveText(`${lowDay} ${lowPct}`);
+		await page.keyboard.press('End');
+		await expect(slider).toHaveAttribute('aria-valuetext', `28 Jan 2022 ${end}`);
+		await expect(read(spark)).toHaveText(`28 Jan 2022 ${end}`);
+		await slider.blur();
 	}
 
 	// The line is above the card's stretched link, yet a click on it still picks the dam.
 	const lower = cards.filter({ has: page.getByText('Lower farm', { exact: true }) });
 	await lower.getByTestId('sparkline').locator('.plot').click();
 	await expect(page).toHaveURL(/[?&]dam=/);
+	// A click doesn't focus the slider: the pointer's read-out stays the pointer's.
+	await expect(lower.getByRole('slider')).not.toBeFocused();
 	await expect(page.getByRole('heading', { name: 'Storage: Lower farm' })).toBeVisible();
 });
 

@@ -768,7 +768,8 @@ for every workspace tab. Its own chunk.
   captioned "% full over the run's last year", the window's first and last
   day under its ends, and between them the low with its day ("low 15% ·
   19 Dec 2023", the Dam levels table's *Lowest in its last year* to the day),
-  marked by a dot; pointing at the line reads out that day instead. In a
+  marked by a dot; pointing at the line reads out that day instead, and so
+  do the keys on its focused slider (from the low; End is the last day). In a
   narrow card (a phone's two columns) the low takes its own line under the
   dates. The line sits above the card's stretched link, and a click on it
   picks the dam as the rest of the card does. Then links
@@ -990,7 +991,10 @@ me), one table per group with the same fixed columns.
 
 **Fits the window** from 900 × 620 up, like the portfolio: the list's card
 takes at most the height left below the strip (its top and what sits below
-it, measured by a `ResizeObserver` on `body`), the groups scroll inside it
+it, measured by a `ResizeObserver` on `body` and the page's `<main>`; below
+is measured to the end of `<main>`, not the document's height, which counts
+the empty window under a short list and left the card at its 320 px floor
+after a search was cleared), the groups scroll inside it
 with each table's header stuck, and the page keeps a 1 rem gutter and
 doesn't scroll; a short list just ends. `.groups` is `position: relative`
 so its visually hidden captions stay inside the scroll box (without it they
@@ -1664,7 +1668,9 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   ("Crop factor by month, Oct–Sep"), each has Oct and Sep under its ends and
   its highest factor between them ("max 0.80"), marked by a dot, its top at
   1.0 (or the highest factor above it); pointing at it reads out a month
-  ("Jul 0.40"), and its image name gives every month's factor. Then
+  ("Jul 0.40"), as do the arrow keys once it has focus (its slider, "Orchard:
+  Crop factor by month, Oct–Sep, read-out"), and its image name gives every
+  month's factor. Then
   **Edit** (viewers: **View**), which opens the **crop
   sheet**. A crop with a factor above 1.0 gets a warning icon, a button named
   "Factor above 1.0 in Jan: check Vines isn't an FAO Kc" whose short text

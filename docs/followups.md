@@ -1663,21 +1663,27 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
-- [ ] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
+- [x] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
       `main`** (tracked on #76; seen 2026-09-27, not caused by it; fails the same on a clean
       checkout): at 1440 px the page itself scrolls 25 px, where the list
       should scroll inside its card and the page not at all; under load the
-      row's More-actions menu also misses `aria-expanded="true"`. Fix the
-      layout at the source (the card's height budget), not the assertion.
-      Trigger: the next session on the project list, or before the next
-      release.
+      row's More-actions menu also misses `aria-expanded="true"`. **Done
+      2026-09-28.** The menu: the list's late scroll event closed the menu
+      its own opening had scrolled into view (#101). The height budget: the
+      card measured what sits below it from the document's `scrollHeight`,
+      which counts the empty window under a short list, so after a search
+      narrowed the list and was cleared the card stayed at its 320 px floor
+      with the window empty below; it now measures to the end of the page's
+      `<main>` and observes `<main>` too (`routes/+page.svelte`; the spec
+      clears a search and checks the card refills). The 25 px page scroll
+      no longer reproduces at 1440 or 1280, idle or under full CPU load.
 - [x] **Thousands separator style** (issue #76, 2026-09-27; D10): a narrow
       no-break space (U+202F) app-wide, the original ask: the workspace's
       `fmtNum`, the farm view, the landing page and the engine's messages
       all group through `engine/src/format.ts` ([ui.md § Number
       style](./ui.md#number-style)). Pasting commas still parses. The client
       or hydrologist may reverse it; it is one constant.
-- [ ] **Sparkline read-out is mouse-only** (found with the chart labels,
+- [x] **Sparkline read-out is mouse-only** (found with the chart labels,
       2026-09-27; `charts/Sparkline.svelte`). Pointing reads out the month
       or day under the pointer ("Jul 0.40"); a screen reader gets every
       value through the accessible name, but a sighted keyboard user sees
@@ -1685,7 +1691,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       sparkline focusable with arrow keys stepping the read-out (a slider
       pattern, `aria-valuetext`), or a "Show the numbers" disclosure beside
       the Crops list and the Dams cards. Trigger: the next accessibility
-      pass, or an accessibility-persona finding on it.
+      pass, or an accessibility-persona finding on it. **Done 2026-09-28**
+      (#76): the slider. It lies over the line, takes focus with Tab, starts
+      at the mark, and the arrows, Page Up/Down (a tenth of the line) and
+      Home/End step the read-out and the dot (`keyStep` in
+      `charts/sparkline.ts`), with the point in words as `aria-valuetext`. A
+      mouse press doesn't focus it. ui-playbook § 3; `sparklines.spec.ts`.
 - [ ] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
       diagram labels work). The help `Diagram` never draws text under
       9.5 px, so at column width the model pipeline, workflow, calibration
