@@ -25,8 +25,9 @@ import { pickNotice } from '@water-management/engine';
 import { hashToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { safeError } from '../logging/safeError.js';
-import { alertMail, digestMail, type AlertFacts, type Recipient } from '../mail/alerts.js';
+import { alertMail, digestMail, type AlertFacts, type MailProject, type Recipient } from '../mail/alerts.js';
 import { sendMail, type Mail } from '../mail/transport.js';
+import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
 import { alertsEnabled } from './evaluate.js';
 import type { AlertKind, AlertMode } from './rules.js';
 import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
@@ -113,7 +114,7 @@ async function subscriptionToken(db: Db, projectId: string, kind: AlertKind | 'a
 interface Context {
 	recipient: Recipient;
 	role: string;
-	project: { id: string; name: string };
+	project: MailProject;
 }
 
 /** Why a delivery goes unsent when SES has suppressed its address (057_alert_followups). */
@@ -125,16 +126,17 @@ export const SUPPRESSED = 'the address is suppressed (a bounce or complaint)';
  * address since the delivery was made: mail/suppression.ts).
  */
 async function context(db: Db, projectId: string): Promise<Context | string> {
-	const { rows } = await db.query<{ email: string; locale: string | null; verified: boolean; suppressed: boolean; role: string | null; name: string | null }>(
+	const { rows } = await db.query<{ email: string; locale: string | null; verified: boolean; suppressed: boolean; role: string | null; name: string | null; time_zone: string | null }>(
 		`SELECT u.email, u.locale, u.email_verified_at IS NOT NULL AS verified, u.mail_suppressed_at IS NOT NULL AS suppressed,
-			app_project_role($1)::text AS role, (SELECT p.name FROM project p WHERE p.id = $1) AS name
+			app_project_role($1)::text AS role, (SELECT p.name FROM project p WHERE p.id = $1) AS name,
+			(SELECT p.time_zone FROM project p WHERE p.id = $1) AS time_zone
 		 FROM app_user u WHERE u.id = app_current_user_id()`,
 		[projectId]
 	);
 	const r = rows[0];
 	if (!r?.verified || !r.role || !r.name) return 'no longer a member, or no confirmed address';
 	if (r.suppressed) return SUPPRESSED;
-	return { recipient: { email: r.email, locale: r.locale, farmer: r.role === 'farmer' }, role: r.role, project: { id: projectId, name: r.name } };
+	return { recipient: { email: r.email, locale: r.locale, farmer: r.role === 'farmer' }, role: r.role, project: { id: projectId, name: r.name, timeZone: r.time_zone ?? DEFAULT_TIME_ZONE } };
 }
 
 /** One event as the recipient may read it, or why not. */
@@ -173,12 +175,14 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 			if (!p[0]) return 'cannot see the publication';
 			const { rows: me } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = app_current_user_id()');
 			// The notice in the reader's language, else English, else any (the farm view's rule).
-			const notice = pickNotice(p[0].notice, me[0]?.locale)?.text ?? null;
+			const picked = pickNotice(p[0].notice, me[0]?.locale);
 			return {
 				kind: 'restriction_published',
 				level: d.level ?? p[0].restriction_level,
 				pct: d.pct === null || d.pct === undefined ? null : Number(d.pct),
-				notice,
+				notice: picked?.text ?? null,
+				// Its language, so the mail marks it when it isn't the mail's (WCAG 3.1.2, issue #51).
+				noticeLang: picked?.lang ?? null,
 				publishedAt: p[0].published_at.toISOString(),
 				lifted: d.lifted === true
 			};

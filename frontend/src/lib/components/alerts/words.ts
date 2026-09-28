@@ -3,6 +3,7 @@
 // from the message catalogue. Pure, so it is unit-tested apart from the pages.
 import type { AlertChoice, AlertEvent, AlertMode, Unsubscribed, User } from '$lib/api/types';
 import { ApiError } from '$lib/api/client';
+import { fmtPct } from '$lib/components/farm/numbers';
 import { msg, t, type Msg } from '$lib/i18n/locale.svelte';
 
 export const ALERT_MODES: readonly AlertMode[] = ['immediate', 'daily_digest', 'off'];
@@ -47,6 +48,17 @@ export function choiceLabel(c: Pick<AlertChoice, 'kind' | 'nodeName'>): string {
 }
 
 export const modeLabel = (m: AlertMode) => t(MODES[m]);
+
+/**
+ * "Warns when the model puts your dam below 30 %." for a farm's dam alert
+ * the WUA has switched on, so a farmer knows the level (issue #51); null
+ * otherwise. The level is the WUA's rule, not the farmer's to set.
+ */
+export function thresholdLine(c: Pick<AlertChoice, 'kind' | 'nodeId' | 'ruleOn' | 'threshold'>): string | null {
+	if (c.kind !== 'dam_below' || !c.nodeId || !c.ruleOn || c.threshold == null) return null;
+	// i18n-section: alerts
+	return t('Warns when the model puts your dam below {pct}. Your WUA sets this level.', { pct: fmtPct(c.threshold) });
+}
 
 /** What the unsubscribe page says once it's done. */
 export function unsubscribedText(u: Unsubscribed): string {

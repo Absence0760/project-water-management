@@ -4933,7 +4933,11 @@ published.
   saved on this phone at …") over a reduced view. Cleared on sign-out, on a
   403/404, when another user signs in, after 30 days unused, and by the
   Menu's opt-out. No service worker, no polling: the page refetches when it
-  becomes visible again.
+  becomes visible again. Ages on it (the dates line, the forecast's) count
+  to today where the catchment is (`farmToday`: the project's zone from the
+  response, on this device's clock), never the phone's own zone, so a saved
+  copy ages with the day and a phone set to another zone agrees with the
+  server (issue #51).
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.
@@ -5050,9 +5054,15 @@ digest). The modeller workspace stays English.
   returns a `Rich` sentence where `**…**` and `{ b }` values are bold
   (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
   `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
+  `t()` and `tRich()` drop a full stop that comes straight after a value
+  already ending in one, since af-ZA abbreviates months with a dot and a
+  sentence ending on "31 Des." must not read "31 Des.." (issue #51).
   They read runes, so a template that calls them re-renders on a switch.
   The backend's emails keep a keyed catalogue, `backend/src/mail/i18n/`
-  (`mailT(locale)` → `{ t, lang }`): the server ships no bundle, so its keys
+  (`mailT(locale)` → `{ t, tn, lang }`; `tn(base, n, vars)` picks a counted
+  message's form, keys `<base>.one` / `<base>.other` and whatever else the
+  language's `Intl.PluralRules` needs, so no mail says "1 days late", issue
+  #51): the server ships no bundle, so its keys
   cost nothing, and the sheet lists its rows by key beside the site's ids;
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
@@ -5065,6 +5075,9 @@ digest). The modeller workspace stays English.
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
+  The prerendered `/welcome` ships `lang="en"` (`app.html`) because its
+  prerendered words are English; `lang` follows the words once the page
+  hydrates (a per-language prerender is in followups.md § Landing page).
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
 - **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer
@@ -5086,7 +5099,8 @@ digest). The modeller workspace stays English.
   locale (`en-ZA`, and `af-ZA` once the Afrikaans words are in), so an
   English sentence never carries Afrikaans month names. The emails date in
   the same locale (`mail/alerts.ts` `dateText`, the day without a leading
-  zero).
+  zero), and a timestamp in them (a notice's publication) by its day in the
+  project's time zone, never UTC's (issue #51).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
   entries (the ones that name a farm node re-translated 2026-09-28 for
@@ -5213,7 +5227,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   is an estimate, not a measurement or a restriction; its body ends
   "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
   says it is the WUA's own, shown as published, and that questions go to the
-  WUA. The operational alerts (data feed behind, data feed failing,
+  WUA; its percentage reads as a cut, "a 20 % cut in registered water use",
+  written whole as the farm page writes it (`cutPctText`: never "12.5 %"),
+  and the WUA's own words are marked with their `lang` when they are in
+  another language than the mail (issue #51). The operational alerts (data feed behind, data feed failing,
   background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
@@ -5232,7 +5249,11 @@ the catalogue, [§ Language](#language)); both unit-tested.
   move the choice; the picked one tinted, bold and ticked; 32 px with a
   mouse, 44 px on touch and phones; in a narrow card the switch goes under
   the name at full width). A farmer sees a *Dam running low: <farm>* row per
-  own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  own farm and *Restriction notices from the WUA*, nothing else; a farm's
+  dam row the WUA has switched on says under the switch at what level it
+  warns, "Warns when the model puts your dam below 30 %. Your WUA sets this
+  level." (also the row's description; `thresholdLine` in
+  `alerts/words.ts`, issue #51); a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
   ("Saved." in the card's head); the switch stays usable while it saves

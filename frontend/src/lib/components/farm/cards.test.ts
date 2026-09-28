@@ -30,6 +30,7 @@ import {
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
 import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);
@@ -69,6 +70,16 @@ describe('the notice', () => {
 		expect(n.byline).toBe('Example WUA, 12 Jan 2024');
 	});
 
+	// Issue #51: the API sent English "a former member", which leaked into the Afrikaans byline.
+	it('words a deleted publisher from the catalogue', async () => {
+		const v = vaalbankFixture();
+		v.publication.publishedBy = null;
+		expect(noticeCard(v)!.byline).toBe('A former member, 12 Jan 2024');
+		await setLocale('af', await markedCatalogue());
+		expect(noticeCard(v)!.byline).toMatch(/^\[af\] A former member, /);
+		await setLocale('en');
+	});
+
 	it('is null with no restriction (the page says "No restriction from the WUA")', () => {
 		const v = vaalbankFixture();
 		v.publication.restriction = { level: 'none', pct: null, notice: {} };
@@ -81,7 +92,7 @@ describe('the notice', () => {
 		const n = noticeCard(v)!;
 		expect(n.heading).toBe('Notice from the WUA · Restriction');
 		expect(n.label).toBeNull();
-		expect(sp(n.pctLine)).toBe('Set by the WUA: 20 % of registered use.');
+		expect(sp(n.pctLine)).toBe('Set by the WUA: a 20 % cut in registered water use.');
 	});
 
 	describe('in the language the reader chose (design §7)', () => {

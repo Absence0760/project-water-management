@@ -104,10 +104,12 @@ export async function currentFor(db: Db, projectId: string, nodeId: string): Pro
  * (D2, design §10.3): the even share is a catchment ratio, shown only with at
  * least k − 1 other holders. cutBeyondShare is measured against that share,
  * so it goes with it (it would bound K_tot). The farm page and the
- * data-subject export (auth/export.ts) both go through here.
+ * data-subject export (auth/export.ts) both go through here. Counted as
+ * `nodeId`'s own farmer would count it (096), so the WUA's "Preview as
+ * farmer" hides the even share where that farmer's page does.
  */
-export async function farmerProjection(db: Db, projectId: string, view: FarmProjection): Promise<FarmProjection> {
-	const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1) AS n', [projectId]);
+export async function farmerProjection(db: Db, projectId: string, nodeId: string, view: FarmProjection): Promise<FarmProjection> {
+	const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1, $2) AS n', [projectId, nodeId]);
 	if ((h[0]?.n ?? 0) >= FARMER_K - 1) return view;
 	return { ...view, river: { ...view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 }
@@ -142,20 +144,24 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				'SELECT name, time_zone AS "timeZone", wua_name AS "wuaName" FROM project WHERE id = $1',
 				[id]
 			);
-			const farm = await farmerProjection(db, id, cur.view);
+			const farm = await farmerProjection(db, id, nodeId, cur.view);
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
 				'SELECT farms_upstream, farms_downstream, farm_count FROM app_farm_context($1, $2)',
 				[id, nodeId]
 			);
 			const cv = cur.catchment_view;
 			const outlet = cv.sites.find((s) => s.isOutlet) ?? cv.sites[0];
+			// Counted to today where the catchment is (project.time_zone, 058), not UTC's day or the phone's.
+			const today = localDate(new Date(), p[0]!.timeZone);
 			const body: FarmView = {
-				project: { id, name: p[0]!.name, wuaName: p[0]!.wuaName },
+				project: { id, name: p[0]!.name, wuaName: p[0]!.wuaName, timeZone: p[0]!.timeZone },
+				today,
 				farm,
 				context: { farmsUpstream: ctx[0]?.farms_upstream ?? 0, farmsDownstream: ctx[0]?.farms_downstream ?? 0, farmCount: ctx[0]?.farm_count ?? 0 },
 				publication: {
 					publishedAt: cur.published_at.toISOString(),
-					publishedBy: cur.published_by_name ?? 'a former member',
+					// null once that account is gone: the page words it in the reader's language.
+					publishedBy: cur.published_by_name,
 					engineVersion: cv.engineVersion,
 					restriction: {
 						level: cur.restriction_level,
@@ -166,8 +172,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					nextExpectedOn: cur.next_expected_on
 				},
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
-				// Counted to today where the catchment is (project.time_zone, 058), not UTC's day.
-				stale: isStale(farm.dataUntil, localDate(new Date(), p[0]!.timeZone))
+				stale: isStale(farm.dataUntil, today)
 			};
 			return c.json(body);
 		});

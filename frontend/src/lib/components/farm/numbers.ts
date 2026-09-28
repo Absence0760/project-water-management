@@ -28,6 +28,7 @@
 // carries Afrikaans month names.
 import { M3_PER_DAY_PER_LS } from '@water-management/engine';
 import { groupDigits } from '@water-management/engine/format';
+import { localIsoDate, zonedIsoDate } from '$lib/format/number';
 import { i18n, language, wordsLang } from '$lib/i18n/state.svelte';
 
 /** No-break space: between a figure and its unit. */
@@ -157,4 +158,25 @@ export function monthEnd(isoMonth: string): string {
 	const d = utc(isoMonth)!;
 	const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0));
 	return last.toISOString().slice(0, 10);
+}
+
+/**
+ * Today where the catchment is (the project's zone, as the backend counts
+ * staleness), worked out now from this device's clock, so a saved copy on
+ * the phone and a tab left open past midnight move on with the day, and a
+ * phone set to the wrong zone, or a visitor abroad, count the same days as
+ * the server (issue #51). A zone the browser doesn't know falls back to the
+ * server's `today` at the response, and a saved copy from before either
+ * field existed to the phone's own date.
+ */
+export function farmToday(view: { today?: string; project: { timeZone?: string } }, now: Date = new Date()): string {
+	const tz = view.project.timeZone;
+	if (tz) {
+		try {
+			return zonedIsoDate(now, tz);
+		} catch {
+			// An unknown zone: the server's day below.
+		}
+	}
+	return view.today ?? localIsoDate(now);
 }
