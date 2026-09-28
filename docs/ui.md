@@ -4828,7 +4828,7 @@ digest). The modeller workspace stays English.
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
   them, in the language the words came out in. The alert emails' liability
-  lines (`mail.alert.model`, `mail.alert.model.staff`,
+  lines (`mail.alert.model`, `mail.alert.model.dam.staff`, `mail.alert.model.staff`,
   `mail.alert.restriction.wua`, [§ Alerts](#alerts)) are quoted in the legal
   review pack; `mail/i18n/liability.test.ts` fails when the pack's quote
   differs.
@@ -4967,11 +4967,15 @@ the catalogue, [§ Language](#language)); both unit-tested.
   and that each alert is sent once per crossing.
 - **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
   kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
-  kind by kind). A dam alert (`mail.alert.model`) says it is the catchment
-  model's estimate from the figures the WUA published (true: dam_below reads
-  the current publication, `alerts/evaluate.ts`), not a measurement of the
-  dam and not an instruction, to check the dam and ask the WUA, and that
-  only a notice from the WUA or DWS is a restriction. The EWR forecast alert,
+  kind by kind and reader by reader). A dam alert to a farmer
+  (`mail.alert.model`) says it is the catchment model's estimate from the
+  figures your WUA published (true: dam_below reads the current
+  publication, `alerts/evaluate.ts`), not a measurement of your dam and not
+  an instruction, to check the dam and ask the WUA, and that only a notice
+  from the WUA or DWS is a restriction. The same alert to the WUA's staff
+  (`mail.alert.model.dam.staff`, chosen by the recipient's role, `send.ts`
+  → `Recipient.farmer`) says the same in the third person, without the
+  advice to check the dam. The EWR forecast alert,
   which only the WUA's staff can get (`mail.alert.model.staff`), says it
   comes from the newest forecast run, which may not be published yet, and
   is an estimate, not a measurement or a restriction; its body ends

@@ -597,10 +597,10 @@ export const af: Catalogue = {
 	'e31fe149': 'Jy het nodig gehad',
 	// {leaves} is about **{pct}** of the {need} you needed.
 	'78fd83cd': '{leaves} is ongeveer **{pct}** van die {need} wat jy nodig gehad het.',
-	// Only a notice from your WUA is a restriction. Right now: **no restriction**.
-	'09d3c636': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
-	// Only a notice from your WUA is a restriction. Right now: **{level}**.
-	'a99180e3': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik: **{level}**.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **no restriction**.
+	'4967ee19': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **{level}**.
+	'4ddcc30a': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik: **{level}**.',
 	// Not your allocation or licence. It doesn’t know your registered water use.
 	'678ca7b2': 'Nie jou toekenning of lisensie nie. Dit ken nie jou geregistreerde watergebruik nie.',
 	// Not a forecast. It looks back over {span}.

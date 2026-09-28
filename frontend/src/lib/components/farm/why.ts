@@ -187,10 +187,10 @@ export function step3(farm: FarmProjection): Step3 | null {
 
 export function wuaDecided(view: FarmView): Rich {
 	const r = view.publication.restriction;
-	if (r.level === 'none') return tRich('Only a notice from your WUA is a restriction. Right now: **no restriction**.');
+	if (r.level === 'none') return tRich('Only a notice from your WUA or from DWS is a restriction. Right now: **no restriction**.');
 	// The same words as the notice card: in the language the reader chose, else English, else another.
 	const { title } = splitNotice(pickNotice(r.notice, i18n.locale)?.text ?? null);
-	const out = tRich('Only a notice from your WUA is a restriction. Right now: **{level}**.', { level: levelWord(r.level) });
+	const out = tRich('Only a notice from your WUA or from DWS is a restriction. Right now: **{level}**.', { level: levelWord(r.level) });
 	// The WUA's own title, after the level, in the WUA's words.
 	return title ? [...out, ` ${title.replace(/[.!]?$/, '.')}`] : out;
 }

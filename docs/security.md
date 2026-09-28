@@ -673,7 +673,7 @@ against its owner, and a farmer's mail naming a neighbour's farm.
 - **Liability.** A dam alert says it is the model's estimate from the WUA's
   published figures, not a measurement of the dam or an instruction, to
   check the dam and ask the WUA, and that only a notice from the WUA or DWS
-  is a restriction; the staff-only EWR forecast alert says it comes from the
+  is a restriction (to the WUA's staff, the same in the third person); the staff-only EWR forecast alert says it comes from the
   newest forecast run, which may not be published, and is an estimate, not
   a restriction; a forecast says forecasts change; a restriction notice
   says it is the WUA's own words and questions go to the WUA. The

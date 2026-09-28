@@ -35,7 +35,7 @@ export const FARMER_HELP: HelpEntry[] = [
 		id: 'farm-pump-less',
 		term: 'Pump less (for the river)',
 		short: 'How much less you would have pumped on the days the river needed water, so it kept its reserve.',
-		long: 'Your farm page gives this per day the river needed it, not averaged over the whole season: cutting a little every day does little on the days that matter.\n\nIf your dam also held back water the river needed, the page says so separately. That part isn’t taken off your pumping; if your dam has an outlet or a bypass, letting that water through helps.\n\nThis is the model’s estimate. Only a notice from your WUA is a restriction.',
+		long: 'Your farm page gives this per day the river needed it, not averaged over the whole season: cutting a little every day does little on the days that matter.\n\nIf your dam also held back water the river needed, the page says so separately. That part isn’t taken off your pumping; if your dam has an outlet or a bypass, letting that water through helps.\n\nThis is the model’s estimate. Only a notice from your WUA or from DWS is a restriction.',
 		category: 'farmer',
 		aliases: ['pomp minder'],
 		related: ['farm-reserve', 'farm-model-band'],
@@ -72,7 +72,7 @@ export const FARMER_HELP: HelpEntry[] = [
 	{
 		id: 'farm-model-band',
 		term: 'Model: OK, watch or short',
-		short: 'The model’s own rating of your season so far. Not a restriction: only a notice from your WUA is one.',
+		short: 'The model’s own rating of your season so far. Not a restriction: only a notice from your WUA or from DWS is one.',
 		long: 'OK: you would have had at least 90 % of the water you needed after pumping less for the river. Watch: 70 to 90 %, or your dam held back water the river needed. Short: under 70 %.\n\nThese thresholds are a proposal the WUA may change.',
 		category: 'farmer',
 		related: ['farm-pump-less'],

@@ -8,9 +8,10 @@
 //   - a one-click unsubscribe: a link to the landing page (token in the
 //     fragment) and the RFC 8058 headers pointing at POST /alerts/unsubscribe;
 //   - "why you got this" and a link to manage alerts;
-//   - the liability line for its kind (liabilityKey): a dam alert says it is
-//     the model's estimate from the published figures, not a measurement or
-//     an instruction; an EWR forecast alert (staff only) says it comes from
+//   - the liability line for its kind and reader (liabilityKey): a dam alert
+//     says it is the model's estimate from the published figures, not a
+//     measurement or an instruction (a farmer's words "your dam", "your WUA";
+//     the WUA's staff get the same in the third person); an EWR forecast alert (staff only) says it comes from
 //     the newest forecast run, which may not be published; a restriction
 //     notice says it is the WUA's own words. The WUA's operational alerts
 //     (stale or failing feeds, dead jobs) are no model figure, so they get none.
@@ -113,15 +114,17 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 }
 
 /**
- * The liability line under an alert of `kind`, or null for none. dam_below
- * reads the current publication (alerts/evaluate.ts), so "the figures your
- * WUA published" is true of it; ewr_forecast_fail reads the newest forecast
+ * The liability line under an alert of `kind` sent to a farmer or not, or
+ * null for none. dam_below reads the current publication
+ * (alerts/evaluate.ts), so "the figures your WUA published" is true of it;
+ * a farmer reads it about their own dam, the WUA's staff about a member's
+ * (mail.alert.model.dam.staff). ewr_forecast_fail reads the newest forecast
  * run, published or not, and reaches only the WUA's staff (051 fan-out).
  */
-export function liabilityKey(kind: AlertKind): MailKey | null {
+export function liabilityKey(kind: AlertKind, farmer: boolean): MailKey | null {
 	switch (kind) {
 		case 'dam_below':
-			return 'mail.alert.model';
+			return farmer ? 'mail.alert.model' : 'mail.alert.model.dam.staff';
 		case 'ewr_forecast_fail':
 			return 'mail.alert.model.staff';
 		case 'restriction_published':
@@ -133,10 +136,12 @@ export function liabilityKey(kind: AlertKind): MailKey | null {
 	}
 }
 
-/** The liability lines for a set of alerts: each distinct one once, in kind order. */
-function liabilityLines(kinds: AlertKind[], tr: MailTranslator): string[] {
-	const keys = new Set(kinds.map(liabilityKey).filter((k): k is MailKey => k !== null));
-	return (['mail.alert.model', 'mail.alert.model.staff', 'mail.alert.restriction.wua'] as const).filter((k) => keys.has(k)).map((k) => tr.t(k));
+const LIABILITY_ORDER = ['mail.alert.model', 'mail.alert.model.dam.staff', 'mail.alert.model.staff', 'mail.alert.restriction.wua'] as const;
+
+/** The liability lines for a set of alerts to one reader: each distinct one once, in a fixed order. */
+function liabilityLines(kinds: AlertKind[], farmer: boolean, tr: MailTranslator): string[] {
+	const keys = new Set(kinds.map((k) => liabilityKey(k, farmer)).filter((k): k is MailKey => k !== null));
+	return LIABILITY_ORDER.filter((k) => keys.has(k)).map((k) => tr.t(k));
 }
 
 function headers(u: Unsubscribe): Record<string, string> {
@@ -172,7 +177,7 @@ export function alertMail(to: Recipient, project: { id: string; name: string }, 
 		tr.t('mail.alert.subject', { what, project: project.name }),
 		{
 			heading: what,
-			paragraphs: [...body, ...liabilityLines([facts.kind], tr)],
+			paragraphs: [...body, ...liabilityLines([facts.kind], to.farmer, tr)],
 			action: openAction(tr, to, project.id),
 			footer: [tr.t('mail.alert.why', { kind: tr.t(`mail.alert.kind.${facts.kind}` as MailKey), project: project.name })],
 			links: [
@@ -198,7 +203,7 @@ export function digestMail(to: Recipient, project: { id: string; name: string },
 		paragraphs.push(`${what}: ${body.join(' ')}`);
 	}
 	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
-	paragraphs.push(...liabilityLines(items.map((f) => f.kind), tr));
+	paragraphs.push(...liabilityLines(items.map((f) => f.kind), to.farmer, tr));
 	const mail = render(
 		to.email,
 		tr.t('mail.alert.digest.subject', { project: project.name, product: PRODUCT }),

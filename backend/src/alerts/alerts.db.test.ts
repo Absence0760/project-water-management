@@ -262,6 +262,11 @@ describe('a dam alert end to end', () => {
 		expect(mailsTo(farmer2)[0]!.text).not.toContain('Farm One');
 		// The WUA: a mail per farm for the editor and the owner; the viewer didn't opt in.
 		expect(mailsTo(editor).length).toBe(3);
+		// The staff's liability line is about the WUA's figures and a member's dam, not "your dam".
+		for (const x of mailsTo(editor)) {
+			expect(x.text).toMatch(/It is not a measurement of the dam and not an instruction\. Only a notice from the WUA or from DWS is a restriction\./);
+			expect(x.text).not.toContain('your dam');
+		}
 		expect(mailsTo(viewer).length).toBe(0);
 		expect(mailsTo(stranger).length).toBe(0);
 		// The same figure next time: still firing, no second mail.
