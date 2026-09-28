@@ -60,6 +60,10 @@
 			ask the organisation first; we will help it answer you.
 		</li>
 	</ul>
+	<p>
+		We process an organisation’s project information under a written agreement with it (POPIA section 21); you can ask the
+		organisation, or us, for the organisation’s contact details.
+	</p>
 
 	<h2 id="what">3. What we collect</h2>
 	<h3>Information you give us</h3>

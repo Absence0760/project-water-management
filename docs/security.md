@@ -1568,14 +1568,17 @@ by the WUA; nobody is added to a project without an owner acting.
   signed up for, and for farmers the WUA's function of managing its members'
   water use (legitimate interest or a legal duty under its constitution)
   *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
-  `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
-  the sign-up form, invitations included, says that signing up accepts
-  both, and sends the version it showed: the account records it and when
+  `/terms` (research-based, not counsel-reviewed, [legal-status.md](./legal-status.md));
+  the sign-up form, invitations included, shows the Terms' main points and
+  a required checkbox accepting both, and sends the version it showed: the
+  account records it and when
   (`app_user.terms_version` / `terms_accepted_at`, 087; a missing or stale
   version is refused, `terms_not_accepted`). The time is the database's,
   and an account can't backdate or clear its own record
-  (`app_user_terms_stamp`). Asking again after a change is open in
-  legal-status.md.
+  (`app_user_terms_stamp`). After a change, an account on an older version
+  sees a notice before any app page until it accepts
+  (`POST /auth/me/accept-terms`, which refuses a stale version the same
+  way).
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,

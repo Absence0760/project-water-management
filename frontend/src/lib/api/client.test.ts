@@ -445,6 +445,13 @@ describe('teams client', () => {
 		expect(call(f, 1).body).toEqual({ ...base, inviteToken: 'tok' });
 	});
 
+	it('acceptTerms posts the terms version this build shows and returns the user', async () => {
+		const f = mockFetch(200, { user: { id: 'u', termsCurrent: true } });
+		const user = await createApi('', f).auth.acceptTerms();
+		expect(user).toEqual({ id: 'u', termsCurrent: true });
+		expect(call(f, 0)).toMatchObject({ url: '/auth/me/accept-terms', method: 'POST', body: { version: LEGAL_VERSION } });
+	});
+
 	it('deletes teams and members (204)', async () => {
 		const f = mockFetch(204);
 		const api = createApi('', f);

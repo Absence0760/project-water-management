@@ -1117,6 +1117,12 @@
 //             (shared by the run worker and the pages), the water-account
 //             and balance lines, the help, report and scenario lines. No new
 //             dependency. Headroom ~3 KB.
+// 2026-09-28  total 1066 → 1072 KB (measured 1069). Terms re-acceptance
+//             (issue #47, legal-status.md): the re-acceptance notice (its
+//             own 1.4 KB chunk, loaded only for an account on old terms),
+//             the Terms' main-points box on sign-up (0.5 KB), their
+//             Afrikaans words, and the longer prerendered Terms page. No
+//             new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1127,7 +1133,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1066,
+	totalCodeKb: 1072,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

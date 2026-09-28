@@ -81,6 +81,32 @@ export const af: Catalogue = {
 	'c184a764': 'Volgens die reënvoorspelling kan jou dam onder die waarskuwingsvlak van {threshold} daal: ongeveer {pct} rondom {date}.',
 	// Your dam is below the alert level of {threshold}: about {pct} on {date}.
 	'321b2d7f': 'Jou dam is onder die waarskuwingsvlak van {threshold}: ongeveer {pct} op {date}.',
+	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
+	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
+	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
+	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit heel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
+	// The Terms now start with a short version of the main points.
+	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
+	// {page} · Water Management
+	'96d7c65d': '{page} · Water Management',
+	// Our terms have changed
+	'530477d8': 'Ons voorwaardes het verander',
+	// Read what changed, then accept the new Terms of use and Privacy notice to carry on.
+	'5ad23668': 'Lees wat verander het, en aanvaar dan die nuwe Gebruiksvoorwaardes en Privaatheidskennisgewing om voort te gaan.',
+	// What changed
+	'e8345543': 'Wat het verander',
+	// Terms of use
+	'953dc886': 'Gebruiksvoorwaardes',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Saving…
+	'74119e7f': 'Stoor tans…',
+	// Accept the new terms
+	'c67007cf': 'Aanvaar die nuwe voorwaardes',
+	// Signing out…
+	'53ed2592': 'Teken tans uit…',
+	// Sign out
+	'8b4f3c70': 'Teken uit',
 	// Sent — check your inbox (and spam folder).
 	'beb2912f': 'Gestuur — kyk in jou inkassie (en gemorspos).',
 	// Email confirmation
@@ -143,12 +169,8 @@ export const af: Catalogue = {
 	'874e0640': 'Wat beteken hierdie woorde?',
 	// Account
 	'59f8a2fc': 'Rekening',
-	// Privacy notice
-	'016ac231': 'Privaatheidskennisgewing',
 	// Don’t keep a copy on this phone
 	'adfda47f': 'Moenie ’n kopie op hierdie foon hou nie',
-	// Sign out
-	'8b4f3c70': 'Teken uit',
 	// Back to the workspace
 	'9ab2f19d': 'Terug na die werkruimte',
 	// Try again
@@ -503,8 +525,6 @@ export const af: Catalogue = {
 	'6cff79ac': 'Word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
 	// Add note
 	'b6439108': 'Voeg nota by',
-	// Saving…
-	'74119e7f': 'Stoor tans…',
 	// Write something first.
 	'81dc7120': 'Skryf eers iets.',
 	// Too long: {length} of {max} characters.
@@ -665,8 +685,6 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
-	// Terms of use
-	'953dc886': 'Gebruiksvoorwaardes',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
@@ -817,6 +835,18 @@ export const af: Catalogue = {
 	'd0e44714': 'Bereken dekades se daaglikse vloei in sekondes.',
 	// Check the environmental flow requirement (EWR) against every farm’s use.
 	'65909895': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke plaas se gebruik.',
+	// The main things you agree to
+	'0a1c21b6': 'Die belangrikste dinge waartoe jy instem',
+	// Results are model estimates and can be wrong. Check them before you rely on them.
+	'b9189589': 'Die resultate is skattings van die model en kan verkeerd wees. Kyk self daarna voordat jy daarop staatmaak.',
+	// As far as the law allows, we are not responsible for losses from decisions made on the results, and our total liability to you is limited to the fees you paid in the last 12 months or US $100, whichever is more (Terms §13).
+	'4a481dd3': 'Sover die wet dit toelaat, is ons nie verantwoordelik vir verliese weens besluite wat op die resultate geneem is nie, en ons totale aanspreeklikheid teenoor jou is beperk tot die fooie wat jy in die afgelope 12 maande betaal het of US $100, watter ook al die meeste is (Voorwaardes §13).',
+	// If someone claims against us because of what you put in or how you used the service, you cover that claim (Terms §14).
+	'1642b612': 'As iemand ’n eis teen ons instel weens wat jy ingesit het of hoe jy die diens gebruik het, dra jy daardie eis (Voorwaardes §14).',
+	// If you live or are based in South Africa, South African law and South African courts apply; otherwise, Virginia law and courts. Either way, your rights under the consumer and data-protection law where you live still apply (Terms §15).
+	'7f91a8a0': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en Suid-Afrikaanse howe; andersins die reg en howe van Virginia. Hoe ook al, jou regte kragtens die verbruikers- en databeskermingswette van waar jy woon, geld steeds (Voorwaardes §15).',
+	// The Terms are in English; this summary is in your language.
+	'782a6b6b': 'Die Voorwaardes is in Engels; hierdie opsomming is in jou taal.',
 	// River flow each month, in m³ a day
 	'a0ddf26e': 'Riviervloei elke maand, in m³ per dag',
 	// Ecological reserve
@@ -871,8 +901,8 @@ export const af: Catalogue = {
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
-	// The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.
-	'c3395d0e': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy, lees hulle en registreer weer.',
+	// The Terms of use or Privacy notice changed since this page opened. Reload the page and read them again.
+	'b7c3703c': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy en lees hulle weer.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
@@ -935,8 +965,6 @@ export const af: Catalogue = {
 	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Enter your current password.
 	'f555922c': 'Tik jou huidige wagwoord in.',
-	// {page} · Water Management
-	'96d7c65d': '{page} · Water Management',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -1133,8 +1161,8 @@ export const af: Catalogue = {
 	'4b568eda': 'die projek {name}',
 	// the team {name}
 	'bbe4f51e': 'die span {name}',
-	// By creating an account, you agree to the {terms} and {privacy}.
-	'db2110ec': 'Deur ’n rekening te skep, aanvaar jy die {terms} en die {privacy}.',
+	// I have read the main points above and accept the {terms} and {privacy}.
+	'074c540e': 'Ek het die hoofpunte hierbo gelees en aanvaar die {terms} en die {privacy}.',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
 	// The two passwords don’t match. Type the same password in both.
@@ -1161,8 +1189,6 @@ export const af: Catalogue = {
 	'a33d5294': 'Hierdie uitnodiging na **{target}** is vir **{email}**, nie vir die rekening waarmee jy ingeteken is nie.',
 	// To accept it, sign out and create an account for {email}. To use this account instead, ask {inviter} to invite {me}.
 	'd7e05349': 'Om dit te aanvaar, teken uit en skep ’n rekening vir {email}. Om eerder hierdie rekening te gebruik, vra {inviter} om {me} uit te nooi.',
-	// Signing out…
-	'53ed2592': 'Teken tans uit…',
 	// Sign out and accept as {email}
 	'f5eed39b': 'Teken uit en aanvaar as {email}',
 	// Stay signed in and go to your projects

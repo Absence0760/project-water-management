@@ -86,6 +86,18 @@ export async function termsAccepted(email: string): Promise<{ version: string | 
 	});
 }
 
+/**
+ * Record that these accounts accepted terms `version` (app_user.terms_version;
+ * the database stamps the time). The seeded demo accounts accepted nothing,
+ * so they would meet the re-acceptance notice (docs/legal-status.md) on every
+ * page; an older version sets one up for it.
+ */
+export async function setTermsVersion(emails: string[], version: string): Promise<void> {
+	await withDb(async (db) => {
+		await db.query('UPDATE app_user SET terms_version = $2 WHERE email = ANY($1) AND terms_version IS DISTINCT FROM $2', [emails, version]);
+	});
+}
+
 /** Re-key the pending invite(s) for `email` so the test knows the link token. */
 export async function plantInviteToken(email: string): Promise<string> {
 	const { token, hash } = newToken();

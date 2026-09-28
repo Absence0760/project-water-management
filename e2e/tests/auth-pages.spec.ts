@@ -28,11 +28,16 @@ const SIZES = [
  * and what shows it has settled: the page's own message, never any alert (the
  * layout's "Could not reach the API" is one too).
  */
-const STATES: { name: string; path: string; settle: (page: Page) => Promise<void> }[] = [
+/**
+ * `long`: the sign-up form carries the Terms' main points above its button, at
+ * body size (docs/legal-status.md), so it is taller than a window and scrolls;
+ * its title still starts on the same line as every other page's.
+ */
+const STATES: { name: string; path: string; settle: (page: Page) => Promise<void>; long?: boolean }[] = [
 	{ name: 'sign in', path: '/login', settle: (p) => expect(p.getByLabel('Email')).toBeVisible() },
-	{ name: 'create an account', path: '/register', settle: (p) => expect(p.getByLabel('Display name')).toBeVisible() },
+	{ name: 'create an account', path: '/register', settle: (p) => expect(p.getByLabel('Display name')).toBeVisible(), long: true },
 	// The longest sign-up: the dead-invitation warning above the form.
-	{ name: 'a dead invitation', path: `/register?invite=${DEAD_TOKEN}`, settle: (p) => expect(p.getByRole('alert')).toHaveText(/This invitation link has expired or was withdrawn/) },
+	{ name: 'a dead invitation', path: `/register?invite=${DEAD_TOKEN}`, settle: (p) => expect(p.getByRole('alert')).toHaveText(/This invitation link has expired or was withdrawn/), long: true },
 	{ name: 'forgot password', path: '/forgot-password', settle: (p) => expect(p.getByLabel('Email')).toBeVisible() },
 	{ name: 'choose a new password', path: `/reset-password?token=${DEAD_TOKEN}`, settle: (p) => expect(p.getByLabel('New password', { exact: true })).toBeVisible() },
 	{ name: 'a reset link without its token', path: '/reset-password', settle: (p) => expect(p.getByRole('alert')).toHaveText(/This reset link is invalid/) },
@@ -69,9 +74,20 @@ for (const size of SIZES) {
 					await s.settle(page);
 					const m = await measure(page);
 					expect(m.h1Count, s.name).toBe(1);
-					expect(m.verticalOverflow, `${s.name}: the page scrolls`).toBeLessThanOrEqual(0);
 					expect(m.sidewaysOverflow, `${s.name}: the page scrolls sideways`).toBeLessThanOrEqual(0);
-					expect(m.boxBottom, `${s.name}: the form runs off the window`).toBeLessThanOrEqual(size.viewport.height);
+					if (s.long) {
+						// It scrolls no further than the form: the button that makes the account ends the page.
+						const button = page.getByRole('button', { name: /^Create account/ });
+						await button.scrollIntoViewIfNeeded();
+						await expect(button).toBeInViewport();
+						const end = await page.evaluate(() => document.documentElement.scrollHeight - (document.querySelector('.form-box')!.getBoundingClientRect().bottom + scrollY));
+						// The form column's 2.5rem bottom padding (35 px), and no more.
+						expect(end, `${s.name}: room below the form`).toBeLessThanOrEqual(36);
+						await page.evaluate(() => scrollTo(0, 0));
+					} else {
+						expect(m.verticalOverflow, `${s.name}: the page scrolls`).toBeLessThanOrEqual(0);
+						expect(m.boxBottom, `${s.name}: the form runs off the window`).toBeLessThanOrEqual(size.viewport.height);
+					}
 					titleTop ??= m.h1Top;
 					expect(Math.abs(m.h1Top - titleTop), `${s.name}: the title moved`).toBeLessThanOrEqual(1);
 				}

@@ -235,6 +235,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					...(inviteToken ? { inviteToken } : {}),
 					...(locale ? { locale } : {})
 				}),
+			/**
+			 * The re-acceptance step (docs/legal-status.md): accept the terms
+			 * version this build shows (LEGAL_VERSION) after they changed.
+			 * ApiError 400 terms_not_accepted = they changed again since.
+			 */
+			acceptTerms: () => request<{ user: User }>('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION }).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),

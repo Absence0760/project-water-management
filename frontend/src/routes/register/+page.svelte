@@ -13,6 +13,7 @@
 	import { i18n, readStoredLocale, t, tRich } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import Rich from '$lib/i18n/Rich.svelte';
+	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
 
 	const emailAuth = emailAuthApi(api);
 
@@ -95,9 +96,12 @@
 				: 'Water Management'
 	);
 
-	// "By creating an account, you agree to the {terms} and {privacy}.",
-	// split around its two links (t leaves a placeholder it isn't given as written).
-	const agreeParts = $derived(t('By creating an account, you agree to the {terms} and {privacy}.').split(/(\{terms\}|\{privacy\})/));
+	// The assent checkbox's words, "I have read the main points above and accept
+	// the {terms} and {privacy}.", split around its two links (t leaves a
+	// placeholder it isn't given as written).
+	const agreeParts = $derived(t('I have read the main points above and accept the {terms} and {privacy}.').split(/(\{terms\}|\{privacy\})/));
+	// Required and unticked: the browser won't submit the form without it.
+	let agreed = $state(false);
 
 	// Keep ?next= across to sign-in, but not the invite token.
 	const next = page.url.searchParams.get('next');
@@ -270,10 +274,15 @@
 		</div>
 
 		<!-- Directly above the button that makes the account, so the terms are seen before they are accepted
-		     (a notice below the button is weak evidence of assent). -->
-		<p class="agree">
-			{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
-		</p>
+		     (a notice below the button is weak evidence of assent): the main points in the reader's language,
+		     then a required, unticked box. -->
+		<TermsSummary />
+		<div class="agree">
+			<input id="agree" type="checkbox" required bind:checked={agreed} />
+			<label for="agree">
+				{#each agreeParts as part, i (i)}{#if part === '{terms}'}<a href="{base}/terms">{t('Terms of use')}</a>{:else if part === '{privacy}'}<a href="{base}/privacy">{t('Privacy notice')}</a>{:else}{part}{/if}{/each}
+			</label>
+		</div>
 		<button class="btn btn-primary" type="submit" disabled={busy || inviteState === 'loading'}>
 			{busy ? t('Creating…') : inviteState === 'ok' ? t('Create account and join') : t('Create account')}
 		</button>
@@ -300,9 +309,21 @@
 		margin-top: 0.75rem;
 	}
 	.agree {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.5rem;
+		margin: 0 0 0.25rem;
+		font-size: 0.9rem;
+		color: var(--text-2);
+	}
+	/* A 24 px target (WCAG 2.5.8), level with the first line. */
+	.agree input {
+		flex: none;
+		width: 1.15rem;
+		height: 1.15rem;
+		min-width: 24px;
+		min-height: 24px;
 		margin: 0;
-		font-size: 0.8rem;
-		color: var(--text-muted);
 	}
 	.agree a {
 		color: inherit;

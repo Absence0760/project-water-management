@@ -9,7 +9,7 @@
 // helpers load nothing else.
 
 /** The terms and privacy notice in force: the date they took effect, `YYYY-MM-DD`. */
-export const LEGAL_VERSION = '2026-09-27';
+export const LEGAL_VERSION = '2026-09-28';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
