@@ -475,7 +475,10 @@ keeps that record.
   and the warning says which. Natural flow a caller supplies
   (`runModelWith`) gets the plain "more runoff than rainfall" warning.
 - **Days with no rainfall value** from any source are counted: the model treats
-  them as dry (0 mm), for runoff and for demand.
+  them as dry (0 mm), for runoff and for demand. Since engine 1.16.0 the
+  warning names their date ranges (the first three, then how many more
+  periods) and how many fall in the reporting window, so a reader sees when
+  "this week" ran on blank days (a logger outage before a forecast).
 - The recession-table check (W4) went with the model.
 
 The same sheet also:
