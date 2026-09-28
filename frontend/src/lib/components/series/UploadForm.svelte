@@ -15,8 +15,8 @@
 	import { CsvError, type ParsedSeries } from '$lib/series/csv';
 	import { parseSeriesFile } from '$lib/series/file';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
-	import { mergePreview, type Daily } from './coverage';
-	import { guessSeries, headerLine, seriesEnd } from './freshness';
+	import { holeBefore, mergePreview, type Daily } from './coverage';
+	import { dataEnd, guessSeries, headerLine, seriesEnd } from './freshness';
 	import { inStoredUnit, type UploadResult, type UploadSubmit } from './upload';
 	import type { SeriesWriteResult } from '$lib/api/types';
 	import { cachedValues, cacheValues, forgetValues } from './valuesCache';
@@ -115,6 +115,8 @@
 			? mergePreview(targetValues, { startDate: parsed.startDate, values: stored.values })
 			: null
 	);
+	// Days left blank between the stored data and an appended file: stored as blanks, run as dry for rain.
+	const hole = $derived(parsed && target && mode === 'merge' ? holeBefore(dataEnd(target), parsed.startDate) : null);
 	// Series are stored in their kind's canonical unit (m³/s, mm); the server converts
 	// An upload that overwrites stored days: a merge's changed days, or every stored day a replace drops.
 	const overwrite = $derived.by(() => {
@@ -266,7 +268,7 @@
 					meta,
 					added: p.added,
 					changed: p.changed,
-					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${seriesEnd(meta)}.`
+					message: `Updated “${meta.name || kindLabel(meta.kind)}”: ${fmtNum(p.added)} new day${p.added === 1 ? '' : 's'}, ${fmtNum(p.changed)} changed. Data now runs to ${dataEnd(meta)}.`
 				};
 			} else {
 				const meta = await api.series.put(projectId, {
@@ -449,6 +451,16 @@
 				<div><dt>Changed</dt><dd class:warn-text={preview.changed > 0}>{fmtNum(preview.changed)}</dd></div>
 				<div><dt>Unchanged</dt><dd>{fmtNum(preview.unchanged)}</dd></div>
 				<div><dt>Series after</dt><dd>{preview.result.startDate} → {fromEpochDay(toEpochDay(preview.result.startDate) + preview.result.values.length - 1)}</dd></div>
+				{#if hole}
+					<div class="wide">
+						<dt>Blank days</dt>
+						<dd class="warn-text" data-testid="upload-hole">
+							The series has values to {dataEnd(target!)} and this file starts {parsed.startDate}: {fmtNum(hole.days)} day{hole.days === 1 ? '' : 's'} between ({hole.from}{hole.days > 1
+								? ` to ${hole.to}`
+								: ''}) will be blank{target!.kind.startsWith('rain_') ? ', and a run treats a blank rain day as dry (0 mm)' : ''}.
+						</dd>
+					</div>
+				{/if}
 			{:else if target && mode === 'merge'}
 				<div class="wide"><dt>Comparing with the stored series…</dt><dd></dd></div>
 			{:else if target && mode === 'replace'}

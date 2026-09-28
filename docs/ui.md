@@ -570,7 +570,10 @@ role, freshness, Add data) and each tab's own header:
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
   days are added and overlapping days corrected. Days the file leaves blank
   keep their stored value. The preview counts new, changed and unchanged
-  days before anything is sent. **Replace** overwrites the whole series.
+  days before anything is sent, and warns about **blank days** between the
+  series' last value and the file's first day (`coverage.ts` `holeBefore`):
+  the merge stores them as blanks, and a run treats a blank rain day as dry.
+  **Replace** overwrites the whole series.
   **Overwrite confirm** (issue #54 item 3): an upload that would change
   stored days (a merge with changed days, or a Replace of a series holding
   values) asks first, in place of the submit button. It says how many days,
