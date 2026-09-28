@@ -2429,21 +2429,36 @@ role and not before it.
       failing at 6 workers again is the trigger to start the shown run's
       details beside the page's requests too.
 - [ ] Optional:
-      - a read-only Terraform plan role, for a real `terraform plan` in CI;
-      - a CodeQL Python leg for `scripts/wbt-import`.
+      - a read-only Terraform plan role, for a real `terraform plan` in CI.
+        Waits on the first deploy: there is no AWS account, state bucket or
+        OIDC provider to plan against yet (plan.md Phase 6), and the role
+        (read-only IAM + state read, trusted for pull requests without the
+        `production` environment) is an IAM decision for the operator.
+        Trigger: the account exists and `terraform apply` has run once.
+      - ~~a CodeQL Python leg for `scripts/wbt-import`~~ **Done (2026-09-28,
+        issue #75):** `security.yml` analyses `python` too (the importer and
+        the smaller Python tools), on Python 3.14.
 
 ## Server-side reports (WP-2.15 Phase B, issue #26)
 
-- [ ] **The renderer image has never been built or run on Lambda.** CI and
+- [ ] **The renderer image has never run on Lambda.** CI and
       the gates cover the render path with the local Chromium (the worker's
       inline renderer, MinIO, Mailpit, e2e) and the renderer Lambda's
-      message handling with stubs; `backend/renderer.Dockerfile` (Playwright
-      image + `aws-lambda-ric`) is first built by the first
-      `backend@` release. Before relying on it: build it once locally
-      (`docker build -f backend/renderer.Dockerfile backend` after
-      `infra/scripts/package-lambdas.sh`) and invoke it with the Lambda
-      runtime interface emulator against a local stack; then after the first
-      deploy, render one report in production and check its alarms (#92).
+      message handling with stubs. **Built and emulated (2026-09-28, issue
+      #75):** `pnpm check:renderer-image` (CI job `renderer-image` on every
+      PR, and `deploy-backend.yml` before it ships the image) packages the
+      Lambdas, builds `backend/renderer.Dockerfile` and runs
+      `infra/scripts/smoke-renderer-image.sh`: as a uid with no passwd entry
+      on a read-only filesystem, Chromium prints a PDF with the Lambda launch
+      flags, the handler answers an unparseable record under the Lambda
+      runtime interface emulator (pinned v1.37 by SHA-256), and the init
+      check refuses a missing `REPORTS_BUCKET`. Its first run found a real
+      bug: `aws-lambda-ric` 4 refuses to start without `LAMBDA_TASK_ROOT`,
+      which AWS's own base images set and this image didn't, so every render
+      would have failed at init; the image now sets it. Still open: a full
+      render through the handler needs the deployed site, bucket and queues
+      (the production check refuses local URLs), so after the first deploy
+      render one report in production and check its alarms (#92).
 - [x] **The DB test files ran in parallel**, although
       `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
       `db` project and several tests say "a tick here sees only this file's
@@ -2456,12 +2471,19 @@ role and not before it.
       report branch's duplicate `--no-file-parallelism` flag was dropped at
       merge. Making every tick-based test hermetic would let the files run in
       parallel again.
-- [ ] **MinIO's upstream image is gone** (the `minio/minio` Docker Hub
+- [x] **MinIO's upstream image is gone** (the `minio/minio` Docker Hub
       repository answers "pull access denied"; MinIO stopped publishing
       community images in 2025). docker-compose pins the community fork's
       build (`pgsty/minio:RELEASE.2026-08-04T00-00-00Z`, github.com/pgsty/minio,
       ~800k pulls). Re-check it on each bump; the alternative is any other
       S3-compatible local server, since the app only uses the S3 API.
+      **Re-checked 2026-09-28 (issue #75):** that build is still the fork's
+      newest (releases every one to two months since April, ~910k pulls).
+      The bumps now come to the re-check on their own: Dependabot's
+      `docker-compose` entry (`.github/dependabot.yml`) proposes each new
+      tag (the entry's comment says what to re-check), and CI's DB and e2e jobs
+      start MinIO from the bumped tag, so a fork that stops working fails
+      that PR.
 - [x] **The printed network schematic is unreadable past ~10 units
       (2026-09-27).** The report prints `NetworkSchematic` scaled to the A4
       width (`svg.schematic { max-width: 100% }`), and the tree lays every
@@ -2504,11 +2526,16 @@ role and not before it.
       prints as one, as before. `report-schematic-print.spec.ts` prints a
       25-gauge main stem (four pages) and checks every name is whole on one
       page, inside its margins, at ≥ 7 pt of type (measured from the printed width, not the word box, whose height is each font's own metric; 2026-09-28).
-- [ ] **playwright-core is pinned in two places**: `backend/package.json`
+- [x] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move
       together (the Chromium build is tied to the version); Dependabot bumps
-      them separately.
+      them separately. **Done (2026-09-28, issue #75):** Dependabot's
+      `playwright` group bumps backend's and e2e's in one PR, and `pnpm
+      check:pins` (`scripts/guards/check_playwright_pins.mjs`, CI's
+      workflow-lint job) fails until all five pins agree and are exact
+      (those two, `renderer-deps`' package.json and lockfile, and both
+      `FROM` tags); a stale image digest fails the renderer image smoke.
 
 ## Change history (WP-2.4, issue #28)
 
@@ -2929,6 +2956,9 @@ Applicant view and the Applications tab. Left:
       Durable fix: trace the slow requests in a loaded run (the API's
       per-request timing log, as #41 did) and fix whichever handler stalls;
       never a longer wait. Trigger: it recurs, in CI or a local loaded run.
+      Checked 2026-09-28 (issue #75): not recurred; the failing `main` runs
+      that day were `runs.spec.ts` (the run-cap list test), not the portfolio
+      spec.
 
 ## Landing page (issue #57)
 
