@@ -13,16 +13,29 @@
 # Pins: the Playwright image tag and playwright-core MUST equal
 # backend/package.json's playwright-core (and e2e's @playwright/test), or the
 # browser build differs from the one the driver expects.
+#
+# Everything is pinned by content, not by name (OpenSSF Scorecard,
+# Pinned-Dependencies): the image by its digest (the multi-arch index of the
+# tag; `docker buildx imagetools inspect mcr.microsoft.com/playwright:<tag>`
+# prints it), and the npm packages by renderer-deps/package-lock.json, which
+# `npm ci` installs exactly, integrity hashes checked. To move Playwright:
+# bump the tag and digest here (both FROM lines), playwright-core in
+# renderer-deps/package.json and backend/package.json, then refresh the lock
+# with `npm install --package-lock-only` in renderer-deps/.
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble AS deps
-# aws-lambda-ric compiles a native addon at install.
+FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 AS deps
+# aws-lambda-ric compiles a native addon at install (its preinstall and
+# install scripts: the ones renderer-deps/package.json's allowScripts lets
+# run, since npm 11.16+ skips every other package's); its preinstall unpacks
+# .tar.xz sources, hence xz-utils.
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends g++ make cmake autoconf automake libtool python3 unzip libcurl4-openssl-dev \
+	&& apt-get install -y --no-install-recommends g++ make cmake autoconf automake libtool python3 unzip xz-utils libcurl4-openssl-dev \
 	&& rm -rf /var/lib/apt/lists/*
 WORKDIR /deps
-RUN npm install --omit=dev --no-audit --no-fund playwright-core@1.63.0 aws-lambda-ric@4.0.2
+COPY renderer-deps/package.json renderer-deps/package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund
 
-FROM mcr.microsoft.com/playwright:v1.63.0-noble
+FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
 WORKDIR /var/task
 COPY --from=deps /deps/node_modules ./node_modules
 COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs

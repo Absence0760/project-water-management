@@ -36,6 +36,18 @@ updates:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
+  # The report renderer image's npm packages (backend/renderer.Dockerfile
+  # installs them with npm ci from this lockfile). playwright-core moves by
+  # hand, together with the image tag and digest and backend's playwright-core
+  # (the Dockerfile's header says how), so it is ignored here.
+  - package-ecosystem: npm
+    directory: "/backend/renderer-deps"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "playwright-core"
+
   # The repo's Python lives in subfolders, each with its own pinned
   # requirements.txt; "/" has none, so list the folders (a new Python tool
   # adds its folder here).
