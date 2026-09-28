@@ -498,6 +498,28 @@ Interaction details that bit:
   email*, and focus fell back to the start of the page. The sign-in pages'
   `h1` takes `tabindex="-1"` and `focusAuthTitle()` (`layout/AuthCard.svelte`)
   focuses it after the swap; test it with `toBeFocused()`.
+  Outside the sign-in card, a control that removes itself (the farm notice's
+  *I understand*, *Accept the new terms*, the banner's *Dismiss*) calls
+  `focusPageStart()` (`lib/a11y/focusPage.ts`): the new page's `h1`, or
+  `#main` while it loads.
+- **Motion that runs longer than 5 s needs a way to stop it** (WCAG 2.2.2);
+  reduced motion doesn't count. The landing hero has a pause toggle; the
+  sign-in panel's decoration simply stops after 4.8 s. Never animate text a
+  reader is meant to read: the hero's reserve tag faded in for 3 s of every
+  14, so it was hidden 76 % of the time.
+- **Don't reserve a fixed space for a control laid over a field.** The
+  password field's *Show* sat over the input's end with a 4.25rem reserve;
+  Afrikaans *Versteek* is 70 px and covered the revealed password. Let the
+  wrapper draw the field and put the control beside the input
+  (`PasswordInput.svelte`), so its space follows its words.
+- **A bar that swaps the page's colours needs its own focus ring.** The farm
+  view's offline strip is `--text` on `--bg` reversed, so the global
+  `--focus` ring was 1.67:1 on it in dark mode; its controls use the strip's
+  text colour (16:1). Compute a ring's contrast against what it sits on, in
+  both themes.
+- **A compact control in a header doesn't wrap.** The EN | AF pair wrapped
+  at 320 px and doubled the sticky farm header to 93 px; the compact switch
+  is `nowrap` now. Let a title or back link give instead.
 - **An animation's first frame is its still frame.** The landing's hero is
   prerendered on its loop's last frame (dams full, the tag shown), and the
   loop started at 0 %, so the moment the script turned motion on the dams

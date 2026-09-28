@@ -166,7 +166,11 @@ a signed-in reader on to their projects: a static page can't know the session,
 so it doesn't claim "Sign in"), a contents list (folded behind a
 **Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
 the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
-anyone signed in or out, rendered before the session is known). English
+anyone signed in or out, rendered before the session is known). Each has its
+own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
+`app.html`'s fallback title sits after the page's head, since the document's
+title is the first `<title>` and these pages run no script to correct it
+(WCAG 2.4.2; `legal.spec.ts`). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in
 `AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
@@ -260,14 +264,28 @@ under a dead-invitation warning).
   password → *Check your email* and back, reset → done or a dead link,
   unsubscribe → done or a dead link, *Sign out and accept* on an invitation
   for someone else), focus moves to the title (`focusAuthTitle`), since the
-  button that had it is gone.
+  button that had it is gone. The same holds outside the card: **I
+  understand** on the farm notice, **Accept the new terms** and the
+  confirm-email banner's **Dismiss** each remove themselves, and focus moves
+  to the new page's `h1`, or `#main` while it loads (`focusPageStart`,
+  `lib/a11y/focusPage.ts`; WCAG 2.4.3).
+- **Text** is 14 px at least (1rem of the 14 px root): labels, hints, the
+  *Forgot password?* and legal links (issue #51; `layout/authTextFloor.test.ts`
+  scans the styles, `auth-pages.spec.ts` measures every visible text in
+  English and Afrikaans).
+- **Motion.** The panel's drawing (`CatchmentScene.svelte`) moves for under
+  5 s after the page opens, then holds still (WCAG 2.2.2), and not at all
+  under reduced motion.
 - **Phones (below 900 px):** one column, the drawing an 84 px band above
   the form, so the title and first field sit in the top quarter of the
   screen, above the keyboard.
 - **Password fields** (`common/PasswordInput.svelte`, also on the account
   page) have a **Show / Hide** button inside, named *Show password* /
   *Hide password* from its content, so the field stays the only control
-  labelled "Password".
+  labelled "Password". The wrapper draws the field's border and focus ring
+  and lays the input and the button side by side, so the button takes its
+  own width and never covers the text (Afrikaans *Versteek* overran a fixed
+  reserve once; issue #51).
 
 `auth-pages.spec.ts` pins the fit, the title's place and focus at all three
 sizes in both themes, with axe scans at desktop and phone size;
@@ -4754,7 +4772,9 @@ published.
   sticky at every width, so while it's on the page it sets `--header-h` to
   its 56 px (the app shell's 0 from 900 px would leave in-page links, such
   as Why?'s "Read the notice" (`#notice`, landed once the farm has loaded)
-  and the words page's `#farm-…` entries, under it). The frame has no
+  and the words page's `#farm-…` entries, under it). It stays one 56 px row
+  down to 320 px in every language (the EN | AF pair doesn't wrap;
+  `lang-layout.spec.ts`). The frame has no
   minimum height, so a page that fits doesn't scroll (the confirm-your-email
   banner sits above it).
 - **Main page, top to bottom:** the name and the dates line ("Published by
@@ -4849,7 +4869,9 @@ published.
 - **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
   user and farm in `localStorage`, shown at once with "Updating…". Without a
   signal it stays under a dark strip ("No signal. These are the figures
-  saved on this phone at …") over a reduced view. Cleared on sign-out, on a
+  saved on this phone at …") over a reduced view; its **Try again** button's
+  focus ring takes the strip's own text colour (16:1 in both themes; the
+  page's `--focus` was 1.67:1 on the swapped dark strip). Cleared on sign-out, on a
   403/404, when another user signs in, after 30 days unused, and by the
   Menu's opt-out. No service worker, no polling: the page refetches when it
   becomes visible again.
@@ -4880,7 +4902,8 @@ digest). The modeller workspace stays English.
 - **Switch.** `lib/i18n/LanguageSwitch.svelte`, drawn from the table. With
   two languages it is "English | Afrikaans" (each name in its own language,
   the button marked with that `lang`, `aria-pressed` on the current one;
-  "EN | AF" in the phone headers, the full name as the accessible name);
+  "EN | AF" in the phone headers, the full name as the accessible name, and
+  that compact pair never wraps, so a 320 px header stays one row);
   from three it becomes a `<select>` named "Language", each `<option>` in
   its own language with its own `lang` (`LanguageSwitch.test.ts`,
   `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
