@@ -1154,7 +1154,7 @@ export function buildNetworkPlan(
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings) : undefined;
+		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
 	};
 
 	// River off-takes (engine ≥ 1.14.0, ./network/offtake.ts): each destination after its source.
@@ -1375,6 +1375,9 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 		const g = got[k]!;
 		let short = 0;
 		for (let t = 0; t < d.length; t++) if (g[t]! < d[t]! * (1 - 1e-12)) short++;
+		const s = po.schedule[k];
+		let off = 0;
+		if (s) for (let t = 0; t < s.length; t++) if (s[t] === 0) off++;
 		const avgDemand = mean(d);
 		const avgSupplied = mean(g);
 		return {
@@ -1388,7 +1391,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgReturnedM3Day: avgSupplied * po.returnShare[k]!,
-			daysShort: short
+			daysShort: short,
+			...(s ? { daysOff: off } : {})
 		};
 	});
 }

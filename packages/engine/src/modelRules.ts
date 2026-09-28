@@ -9,6 +9,7 @@ import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
 import { monthlyRatesMismatch } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
+import { DEMAND_SCHEDULE_MAX_WINDOWS, scheduleWindowProblem } from './network/demandSchedule';
 
 /**
  * Every rule a model breaks, keyed by what breaks it (ids, not names, so
@@ -67,6 +68,14 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 		if (o.sizing === 'perUnit' && (o.count === null || o.count === undefined || o.litresPerUnitDay === null || o.litresPerUnitDay === undefined))
 			add(`doPerUnit:${o.id}`, `demand object "${o.name}": a demand per unit needs a count and litres per unit per day`);
 		if (o.destination === 'external' && o.returnPct > 0) add(`doExternal:${o.id}`, `demand object "${o.name}" is piped out of the catchment, so nothing returns from it; set its return share to 0`);
+		// Its schedule (engine ≥ 1.16.0): each window runs as entered, and not too many of them.
+		if (Array.isArray(o.schedule)) {
+			if (o.schedule.length > DEMAND_SCHEDULE_MAX_WINDOWS) add(`doScheduleCount:${o.id}`, `demand object "${o.name}": its schedule has ${o.schedule.length} windows, at most ${DEMAND_SCHEDULE_MAX_WINDOWS}`);
+			o.schedule.forEach((w, i) => {
+				const bad = scheduleWindowProblem(w);
+				if (bad) add(`doSchedule:${o.id}:${i}`, `demand object "${o.name}": schedule window ${i + 1}${w.label ? ` ("${w.label}")` : ''}: ${bad}`);
+			});
+		}
 	}
 	for (const n of m.nodes) {
 		if (n.downstreamNodeId && !byId.has(n.downstreamNodeId)) add(`down:${n.id}`, `"${n.name}" drains into an unknown node`);

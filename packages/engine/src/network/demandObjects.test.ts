@@ -79,6 +79,21 @@ describe('demandObjectsByNode', () => {
 	});
 });
 
+describe('planObjects with a schedule (engine 1.16.0)', () => {
+	const sched = obj({ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [7], factor: 0 }] });
+	it('multiplies each day by its schedule factor and keeps the factors', () => {
+		// Epoch day 3 = 1970-01-04, a Sunday.
+		const po = planObjects([sched], 3, [3, 3, 3], null, 0, [], 1);
+		expect(Array.from(po.demand[0]!)).toEqual([100, 100, 0]);
+		expect(Array.from(po.schedule[0]!)).toEqual([1, 1, 0]);
+		expect(Array.from(po.total)).toEqual([100, 100, 0]);
+	});
+	it('needs the run start only when an object has a schedule', () => {
+		expect(() => planObjects([sched], 3, [3, 3, 3], null, 0, [])).toThrow(/needs the run start/);
+		expect(planObjects([obj()], 3, [3, 3, 3], null, 0, []).schedule).toEqual([null]);
+	});
+});
+
 describe('splitSupply', () => {
 	const po = planObjects(
 		[obj({ id: 'first', priority: 'first' }), obj({ id: 'shared', priority: 'shared' }), obj({ id: 'last', priority: 'last' })],

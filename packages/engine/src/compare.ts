@@ -1289,14 +1289,17 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 				? `${fmtValue(x.count ?? 0, 0)} × ${fmtValue(x.litresPerUnitDay ?? 0, 0)} l/day${x.lossPct > 0 ? `, losses ${fmtValue(x.lossPct)}` : ''}`
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
 		const describe = (x: DemandObject) =>
-			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.enabled ? '' : ', off'}`;
+			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.enabled ? '' : ', off'}`;
+		// No schedule, null and an empty one all run the same (engine ≥ 1.16.0).
+		const scheduleOf = (x: DemandObject) => (x.schedule?.length ? x.schedule : null);
 		for (const x of objs.onlyA) out.push({ area: 'network', kind: 'removed', subject: ownerA(x), text: `Demand object "${x.name}" removed from ${ownerA(x)} (was ${describe(x)})` });
 		for (const y of objs.onlyB) out.push({ area: 'network', kind: 'added', subject: ownerB(y), text: `Demand object "${y.name}" added to ${ownerB(y)} (${describe(y)})` });
 		for (const [x, y] of objs.pairs) {
 			const moved = nameKey(ownerA(x)) !== nameKey(ownerB(y));
 			const fields = ['name', 'category', 'sizing', 'monthlyM3Day', 'count', 'litresPerUnitDay', 'lossPct', 'monthlyFactor', 'returnPct', 'priority', 'destination', 'enabled'] as const;
-			if (moved || fields.some((f) => !same(x[f], y[f])))
-				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}` });
+			const scheduleChanged = !same(scheduleOf(x), scheduleOf(y));
+			if (moved || scheduleChanged || fields.some((f) => !same(x[f], y[f])))
+				out.push({ area: 'network', kind: 'changed', subject: ownerB(y), text: `${ownerB(y)}: demand object "${y.name}" ${describe(x)} → ${describe(y)}${moved ? ` (moved from ${ownerA(x)})` : ''}${x.name !== y.name ? ` (was "${x.name}")` : ''}${!same(x.monthlyM3Day, y.monthlyM3Day) || !same(x.monthlyFactor, y.monthlyFactor) ? ', monthly values changed' : ''}${scheduleChanged ? ', schedule changed' : ''}` });
 		}
 	}
 

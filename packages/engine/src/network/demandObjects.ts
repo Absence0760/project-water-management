@@ -12,6 +12,7 @@
 import { waterYearIndex } from '../calendar';
 import { cmpStr } from '../order';
 import type { DemandObject, DemandObjectPriority, ProjectModel } from '../project';
+import { scheduleFactors } from './demandSchedule';
 
 /** The priority classes in supply order: before the crops, with them, after them. */
 export const PRIORITY_TIER: Record<DemandObjectPriority, 0 | 1 | 2> = { first: 0, shared: 1, last: 2 };
@@ -136,8 +137,10 @@ export function demandObjectsByNode(model: Pick<ProjectModel, 'nodes' | 'demandO
 /** A unit's demand objects as the simulation runs them. */
 export interface PlanObjects {
 	ids: string[];
-	/** Each object's daily abstraction demand (m³/day), after any demand factor. */
+	/** Each object's daily abstraction demand (m³/day), after any demand factor and its schedule. */
 	demand: Float64Array[];
+	/** Each object's schedule factor per day (engine ≥ 1.16.0); null without a schedule that runs. */
+	schedule: (Float64Array | null)[];
 	/** Each object's return share of what it gets (0 when external). */
 	returnShare: Float64Array;
 	/** Each object's priority class: 0 before the crops, 1 with them, 2 after them. */
@@ -150,22 +153,30 @@ export interface PlanObjects {
  * A unit's objects for the plan: each one's daily demand from its month's
  * value (`wy[t]` = the day's water-year month index), times the node's
  * demand factor from run day `factorFrom` on (the demand.scale scenario op,
- * as for the crop requirement). Warnings name what runs differently from
- * what was entered.
+ * as for the crop requirement), times its schedule's factor that day
+ * (engine ≥ 1.16.0; `day0` = the run's first epoch day, needed only when an
+ * object has a schedule). Warnings name what runs differently from what was
+ * entered.
  */
-export function planObjects(objects: readonly DemandObject[], days: number, wy: ArrayLike<number>, factor: Float64Array | null, factorFrom: number, warnings: string[]): PlanObjects {
+export function planObjects(objects: readonly DemandObject[], days: number, wy: ArrayLike<number>, factor: Float64Array | null, factorFrom: number, warnings: string[], day0?: number): PlanObjects {
 	const demand: Float64Array[] = [];
+	const schedule: (Float64Array | null)[] = [];
 	const returnShare = new Float64Array(objects.length);
 	const tier = new Uint8Array(objects.length);
 	const total = new Float64Array(days);
 	objects.forEach((o, k) => {
 		const monthly = objectMonthlyM3Day(o, warnings);
+		const who = `demand object "${o.name}"`;
+		if (Array.isArray(o.schedule) && o.schedule.length && day0 === undefined) throw new Error(`planObjects: ${who} has a schedule, which needs the run start`);
+		const s = day0 === undefined ? null : scheduleFactors(o.schedule, day0, days, warnings, who);
 		const d = new Float64Array(days);
 		for (let t = 0; t < days; t++) {
 			const m = wy[t]!;
-			d[t] = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
+			const v = factor && t >= factorFrom ? monthly[m]! * factor[m]! : monthly[m]!;
+			d[t] = s ? v * s[t]! : v;
 		}
 		demand.push(d);
+		schedule.push(s);
 		returnShare[k] = objectReturnShare(o);
 		if (o.destination !== 'external' && o.destination !== 'internal') warnings.push(`demand object "${o.name}": unknown destination "${String(o.destination)}"; runs as internal`);
 		if (o.destination === 'external' && finite(o.returnPct) && o.returnPct > 0) warnings.push(`demand object "${o.name}" is piped out of the catchment, so none of it returns; its return share is ignored`);
@@ -176,7 +187,7 @@ export function planObjects(objects: readonly DemandObject[], days: number, wy: 
 		tier[k] = p ?? 1;
 	});
 	for (const d of demand) for (let t = 0; t < days; t++) total[t]! += d[t]!;
-	return { ids: objects.map((o) => o.id), demand, returnShare, tier, total };
+	return { ids: objects.map((o) => o.id), demand, schedule, returnShare, tier, total };
 }
 
 /** The daily water-year month index of each run day, from its calendar month. */
