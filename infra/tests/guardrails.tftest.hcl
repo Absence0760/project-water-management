@@ -807,6 +807,7 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.lambda_errors,
       aws_cloudwatch_metric_alarm.lambda_throttles,
       aws_cloudwatch_metric_alarm.lambda_duration,
+      aws_cloudwatch_metric_alarm.unhandled_error,
       aws_cloudwatch_metric_alarm.migrate_errors,
       aws_cloudwatch_metric_alarm.rds_cpu,
       aws_cloudwatch_metric_alarm.rds_cpu_credits,
@@ -1585,8 +1586,10 @@ run "rejects_bad_renderer_image_tag" {
 }
 
 # Email that fails to send is never silent (trySendMail logs mail_send_failed
-# and the route still answers 200), the worker's self-check failures alarm
-# like the API's, and slow-query logging never records bind values.
+# and the route still answers 200), nor is an unhandled API 500 (handleError
+# logs unhandled_error and the invocation succeeds, so Lambda Errors misses
+# it), the worker's self-check failures alarm like the API's, and slow-query
+# logging never records bind values.
 run "mail_failures_and_log_privacy" {
   command = plan
 
@@ -1622,6 +1625,31 @@ run "mail_failures_and_log_privacy" {
       contains(aws_cloudwatch_metric_alarm.mail_send_failed.alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "One failed email must page the alerts topic."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.event = \"unhandled_error\" }"
+    )
+    error_message = "unhandled_error must be counted from the API's log group, by the exact event name handleError logs."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.unhandled_error.metric_name == aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.unhandled_error.namespace == aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].namespace
+    )
+    error_message = "The unhandled-error alarm must watch the metric the filter emits."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.unhandled_error.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.unhandled_error.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.unhandled_error.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.unhandled_error.treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.unhandled_error.alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "One unhandled 500 must page the alerts topic."
   }
 
   assert {
