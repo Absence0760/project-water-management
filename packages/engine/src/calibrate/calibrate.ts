@@ -38,6 +38,7 @@ import { excludedDayMask, exclusionRanges } from './provenance';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
+import { recordRepresentativeness, type RecordRepresentativeness } from './representativeness';
 
 /** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.13.0), as runModel's WR2012 check reads it. */
 const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
@@ -201,6 +202,13 @@ export interface CalibrationReport {
 	marPenalty?: MarPenaltyResult | null;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
+	/**
+	 * How representative the scored days are of the long-term rainfall
+	 * (engine ≥ 1.18.0, calibration research CR-34): their length, each scored
+	 * water year's rain percentile, and the mean against the long-term mean.
+	 * Absent before 1.18.0; null when the run has no rain to rank against.
+	 */
+	representativeness?: RecordRepresentativeness | null;
 	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** Model runs used, over every stage. */
@@ -243,6 +251,13 @@ export interface CalibrationProblem {
 	exclusions: DateRange[];
 	/** The CHIRPS factors the rain used (engine ≥ 0.29.0), for fit provenance. */
 	chirpsFactors?: ChirpsFactorSet[] | null;
+	/**
+	 * The run's daily rain over the whole run as calibration reads it (catchment,
+	 * else bias-corrected CHIRPS, else forecast, × the areal factor; null =
+	 * missing), the long-term reference for `recordRepresentativeness`. null
+	 * without a rain series.
+	 */
+	rain?: (number | null)[] | null;
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
 	/**
@@ -294,6 +309,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is tens of ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
+	const hasRain = !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm);
+	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
 	// The warm-up cycles the *full* forcing, as runModel's does, so a
@@ -333,13 +350,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			idx[idx.length - 1]! + 1,
 			area,
 			arealRainOn(
-				runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1),
-				arealRainFactors(settings.arealRain),
+				runRain(aligned, hasRain, idx[idx.length - 1]! + 1),
+				areal,
 				month
 			)
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
+		rain: arealRainOn(runRain(aligned, hasRain, days), areal, month),
 		simulate: simulator(idx[idx.length - 1]! + 1),
 		record(k) {
 			if (!input.series?.[k]) return null;
@@ -603,7 +621,9 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		score: scored(pb, x.r.params, all).scores[objective],
 		best: x === kept
 	}));
-	const notes: string[] = [];
+	// How typical the scored years' rain is of the long-term record (CR-34).
+	const representativeness = pb.rain ? recordRepresentativeness(pb.rain, pb.startDate, all) : null;
+	const notes: string[] = [...(representativeness?.notes ?? [])];
 	let splitSample: ValidationTest | null = null;
 	let differential: DifferentialTest | null = null;
 
@@ -730,6 +750,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		marPenalty,
 		notes,
 		exclusions: pb.exclusions,
+		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		evaluations,
 		cancelled

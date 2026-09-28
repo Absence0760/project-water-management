@@ -2616,6 +2616,15 @@ which checks every catchment tab).
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
+    Under it, **How representative is the record** (engine ≥ 1.18.0, CR-34;
+    `calibration/representativeness.ts`): the record's length and its mean
+    rain as a share of the long-term mean in the heading, the engine's
+    one-sentence summary, a table of each scored water year (scored days,
+    rain, its percentile in the run's long-term water-year rain and Dry /
+    Near normal / Wet), and a key naming the reference and the 33rd / 67th
+    percentile thresholds (model.md §2.10b). Any limit it implies ("all dry:
+    it can't show how the model behaves in wet years") is among the notes
+    at the top of the result.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.

@@ -306,6 +306,23 @@ describe('calibrate', () => {
 		expect(report.notes.join(' ')).toMatch(/too few to fit on dry years and test on wet ones.*weakly constrained/);
 	});
 
+	it('states how representative the record is against the whole run’s rain (CR-34)', () => {
+		// 12 years of rain, but only the first 3 water years observed.
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 12);
+		const obs = input.series.flow_observed_m3s!;
+		obs.values = obs.values.map((v, t) => (t < 365 * 3 ? v : null));
+		const report = calibrate(input, { budget: 20, validate: false });
+		const r = report.representativeness!;
+		expect(r.scoredDays).toBe(report.fit.scores.days);
+		expect(r.waterYears).toBe(3);
+		expect(r.years.map((y) => y.waterYear)).toEqual(report.fit.waterYears);
+		// The long-term reference is the whole run's rain, not the observed years.
+		expect(r.longTerm).toMatchObject({ years: 12, firstYear: 1990, lastYear: 2001 });
+		expect(r.years.every((y) => y.percentile !== null && y.class !== null)).toBe(true);
+		expect(report.notes).toEqual(expect.arrayContaining(r.notes));
+		expect(r.notes.join(' ')).toMatch(/only 3 water years, fewer than 5/);
+	});
+
 	it('flags a record whose "wet" years are hardly wetter than its dry ones', () => {
 		// Identical rain every year: the wet half can't be wetter than the dry half.
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 1);

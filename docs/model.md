@@ -3909,6 +3909,48 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
 
   A short or unrepresentative record gets these notes rather than a
   clean bill of health.
+- **How representative is the record** (engine ≥ 1.18.0, calibration
+  research CR-34, part of CR-22; `calibrate/representativeness.ts`,
+  `report.representativeness`). A few years from one climate state can't
+  support the flow's variability (the SD behind KGE's α), its seasonal
+  pattern or a high-flow calibration, however good the scores look, so every
+  fit states the record's length and where its years sit in the long-term
+  rainfall:
+  - **The long-term reference** is the run's own daily rain as calibration
+    reads it (`runRain`: catchment rain, else bias-corrected CHIRPS, else
+    forecast, × the areal factor, §2.4g) over the whole run. By default the
+    run covers the whole rain record, CHIRPS-infilled days included, so this
+    is the longest record the project holds. Only **complete** water years
+    count: 1 October to 30 September all inside the run, with rain on at
+    least `MIN_RAIN_COVERAGE` (95 %) of the days; a year's total is the sum
+    of its recorded days.
+  - **Per scored water year** (any year with a scored day): its scored days,
+    its rain total, and its **percentile**, the mid-rank non-exceedance
+    100 × (years below + ½ × years equal) ÷ n among the long-term totals
+    (the year itself included). A scored year without complete rain has
+    neither.
+  - **Dry / near normal / wet**: below the 33rd percentile (`DRY_PERCENTILE`)
+    is dry, above the 67th (`WET_PERCENTILE`) wet, the rest near normal —
+    terciles of the rain record. These are defaults for the hydrologist to
+    confirm. (A different quantity from the run's water-year classes, §2.14,
+    which class natural flow.) With fewer than `LONG_TERM_MIN_YEARS` (10)
+    complete years the reference is too short: percentiles are still given,
+    but no year is classed.
+  - **Mean against the long-term mean**: the mean rain of the scored years
+    with complete rain ÷ the long-term mean (`meanRatio`), with how many
+    long-term years there are.
+  - `summary` always states the length and the ratio. `notes` (added to the
+    report's notes, so the fit record keeps them) say what the record can't
+    show: every classed year dry ("it can't show how the model behaves in wet
+    years"), every one wet (droughts), every one near normal, or none wet /
+    none dry; a long-term reference under 10 years; and fewer than
+    `FEW_CALIBRATION_YEARS` (5) scored water years ("too few to pin down the
+    flow's variability (its SD), its seasonal pattern or its high flows").
+    A long record that spans dry and wet years gets no note.
+
+  It reads only the rain and the scored days, so it never changes a fit or a
+  score. Fit automatically shows it as **How representative is the record**
+  ([ui.md](./ui.md)).
 - **In the app:** Settings → Flow calibration → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
