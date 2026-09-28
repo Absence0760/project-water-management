@@ -11,6 +11,7 @@ import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
 import { calibrate, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
 import { MAX_STARTS } from './params';
+import { BOOTSTRAP_LEVEL, BOOTSTRAP_RESAMPLES, CLIMATOLOGY_HALF_WINDOW } from './bootstrap';
 import { fitScores } from './objective';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
@@ -195,6 +196,27 @@ describe('calibrate', () => {
 		expect(lowHigh.objective).toBe('kgeLowHigh');
 		expect(lowHigh.fit.scores.kgeLowHigh!).toBeGreaterThanOrEqual(lowHigh.before.scores.kgeLowHigh!);
 		expect(lowHigh.startResults.every((r) => r.score === null || r.score <= lowHigh.fit.scores.kgeLowHigh! + 1e-12)).toBe(true);
+	}, 60_000);
+
+	it('every scored period carries its bootstrap intervals and benchmarks (CR-5); a start’s score does not need them', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 });
+		const r = calibrate(input, { budget: 50, seed: 2 });
+		const years = r.fit.waterYears.length;
+		expect(years).toBeGreaterThanOrEqual(3);
+		expect(r.fit.intervals).toMatchObject({ level: BOOTSTRAP_LEVEL, resamples: BOOTSTRAP_RESAMPLES, years });
+		const k = r.fit.scores.kgePrime!;
+		expect(r.fit.intervals!.kgePrime!.lo).toBeLessThanOrEqual(k);
+		expect(r.fit.intervals!.kgePrime!.hi).toBeGreaterThanOrEqual(k);
+		expect(r.fit.benchmarks!.meanFlow.kgePrime).toBeCloseTo(1 - Math.SQRT2, 9);
+		expect(r.fit.benchmarks!.halfWindowDays).toBe(CLIMATOLOGY_HALF_WINDOW);
+		// The benchmarks depend only on the observed days: the same for the current and fitted parameters.
+		expect(r.before.benchmarks).toEqual(r.fit.benchmarks);
+		for (const p of [r.splitSample!.calibration, r.splitSample!.validation]) {
+			expect(p.benchmarks).not.toBeNull();
+			expect(p.intervals === null || p.intervals.years === p.waterYears.length).toBe(true);
+		}
+		// Deterministic: the same fit gives the same intervals.
+		expect(calibrate(input, { budget: 50, seed: 2 }).fit.intervals).toEqual(r.fit.intervals);
 	}, 60_000);
 
 	it('scores only observed days inside the calibration window and outside exclusions', () => {

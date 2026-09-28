@@ -3924,6 +3924,48 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
 
   A short or unrepresentative record gets these notes rather than a
   clean bill of health.
+- **Score intervals and benchmarks** (engine ≥ 1.18.0, calibration research
+  CR-5, `calibrate/bootstrap.ts`). Every scored period of the report (fit,
+  before, both parts of each validation test, the independent record, the
+  unpenalised fit; not a start's score) carries two optional fields. A
+  report or stored fit record made before them has neither, and the app
+  shows the plain scores then.
+  - `intervals`: 90 % intervals of KGE′, NSE and the low/high-flow KGE′
+    (CR-3) by a **block bootstrap over water years** (Clark et al. 2021:
+    daily scores carry large sampling error, mostly from a few wet
+    spells). Days within a year are not independent, so whole water years
+    are drawn with replacement (as many as the period has) and the
+    resample is scored; the interval is the 5th–95th percentile (linear
+    interpolation) of `BOOTSTRAP_RESAMPLES` = 1 000 resamples. The seed is
+    fixed (`BOOTSTRAP_SEED`), so a period's intervals depend only on its
+    flows and are reproducible; `level`, `resamples`, `seed` and `years`
+    (the water years resampled) are recorded with them. Each resample is
+    scored from per-year sums, so it costs one pass over the years: 1 000
+    resamples and both benchmarks take about 35 ms on a 10-year daily
+    record (`bootstrap.perf.test.ts`, budget 200 ms). The low/high-flow
+    score keeps the whole period's ε. **Minimum: 3 water years with at
+    least 30 scored days each** (`BOOTSTRAP_MIN_YEARS`,
+    `BOOTSTRAP_MIN_DAYS`); below that `intervals` is null, since a
+    percentile over a handful of distinct resamples means little. Shorter
+    years are still resampled, they just don't count towards the minimum.
+    A score whose resamples can't be scored half the time or more gets a
+    null interval. Three years is a floor, not a recommendation: with
+    few years the interval is wide, which is the point.
+  - `benchmarks`: every score (`FitScores`) for two naive simulations on
+    the same days. `meanFlow` repeats the period's mean observed flow (KGE′
+    1 − √2 ≈ −0.41, NSE 0; Knoben et al. 2019). `climatology` gives each
+    day the period's mean observed flow on that calendar day, **smoothed
+    over a centred ±7-day window** (`CLIMATOLOGY_HALF_WINDOW`, 15 days in
+    all, circular across the new year, on a 366-day calendar so 29 February
+    has its own slot). A 10-year record has only ten values per calendar
+    day, so unsmoothed day-of-year means keep individual storms and make the
+    benchmark fit the record's own noise; 15 days smooths that while
+    keeping the seasonal cycle. Both are in-sample: built from the scored
+    period's own observations, so on a validation period the climatology
+    knows those days' flows and the model doesn't. That makes it a hard
+    benchmark, deliberately. In a strongly seasonal catchment climatology
+    is hard to beat (Schaefli & Gupta 2007), and a model that doesn't beat
+    it adds little beyond the seasonal cycle.
 - **In the app:** Settings → Flow calibration → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
