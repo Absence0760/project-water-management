@@ -400,12 +400,48 @@ jobs:
       - name: Workflow guard (pins, OIDC, environment, CI gate)
         run: node scripts/guards/check_workflows.mjs
 
+      - name: Playwright pins (backend, e2e, renderer image)
+        run: node scripts/guards/check_playwright_pins.mjs
+
       - name: Guard unit tests (scripts/guards, scripts/release)
         run: |
           if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs; then
             echo "::error::A guard's own tests failed; its verdicts elsewhere in CI cannot be trusted until they pass. Reproduce: pnpm test:guards"
             exit 1
           fi
+
+  # The report renderer's container image, built and smoke-tested the way
+  # Lambda runs it (bin/check-renderer-image.sh: the release path's packaging
+  # and docker build, then Chromium prints, the handler answers under the
+  # Lambda runtime interface emulator, the init check refuses a missing
+  # setting). Before this job the image was first built by a release, so a
+  # broken Dockerfile or runtime client failed there, not on the PR.
+  renderer-image:
+    name: Renderer image (build + Lambda smoke)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and smoke-test the renderer image
+        run: bin/check-renderer-image.sh
 
   # Committed env files stay local-only; values are never printed
   # (estate standard: feohledger env-isolation.yml, threkir env-isolation).
@@ -487,7 +523,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, env-isolation, wbt-import, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, wbt-import, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:
