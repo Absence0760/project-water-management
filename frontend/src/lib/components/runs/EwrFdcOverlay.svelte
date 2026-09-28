@@ -1,10 +1,10 @@
 <!--
-	The monthly flow-duration curves on the EWR (engine ≥ 1.18.0, calibration
+	The monthly flow-duration curves on the EWR (engine ≥ 1.19.0, calibration
 	research CR-29; docs/model.md §2.9c): for one month of the year, the run's
 	natural flow, its present-day (simulated) flow and, when given, another
 	run's flow (a scenario, or run B in a comparison) at the rule table's %
 	points, against the EWR curve. Log scale; the table under it holds the
-	values. Nothing on a run from before engine 1.18.0 (no natural curve).
+	values. Nothing on a run from before engine 1.19.0 (no natural curve).
 -->
 <script lang="ts">
 	import type { EwrAssuranceSite } from '@water-management/engine';

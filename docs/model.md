@@ -716,7 +716,7 @@ setting, so run comparison reads it as legacy.
     run warns only under `pe.kind: 'pan'`: with a monthly PE, GR4J doesn't
     use the coefficient.
   - **Testing the effect of a choice.** The sensitivity runs (§2.10g,
-    CR-21, engine ≥ 1.18.0) move the pan coefficient ±15 % with GR4J's
+    CR-21, engine ≥ 1.19.0) move the pan coefficient ±15 % with GR4J's
     parameters held fixed, beside rain, dam evaporation, abstraction and the
     dams' starting storage, and report EWR compliance as a range.
     `pnpm pan-sensitivity <project.json>`
@@ -3270,7 +3270,7 @@ test needs it. The run also stores each site's requirement as a daily series,
 `ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
 complete months), so it can be charted and downloaded beside the flow.
 
-**Reported as the gazette and CMAs report it** (engine ≥ 1.18.0,
+**Reported as the gazette and CMAs report it** (engine ≥ 1.19.0,
 calibration research CR-29). Reserve compliance is published as % of time
 and % of volume not met per month, judged on daily as well as monthly data
 (daily data shows more non-compliance), with monthly flow-duration curves of
@@ -3309,7 +3309,7 @@ adds:
   gazette's %nMAR is; it changes only with the table or the natural flow.
 
 None of it changes the monthly verdict, the charge or a result; a run from
-before engine 1.18.0 has none of the fields, and the panel and CSV leave
+before engine 1.19.0 has none of the fields, and the panel and CSV leave
 them out. Tested in `reserve/assurance.test.ts` (a worked month met on volume
 with 10 of 31 days short; %nMAR over a year, with and without a low-flow
 grid; less flow never has fewer short days or less shortfall, and leaves
@@ -3360,7 +3360,7 @@ years of a calendar month. From engine 1.11.0, a run natural MAR more than
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
 secondary measure; the Reserve compliance panel has the per-month-of-year
-table and chart, and from engine 1.18.0 the %nMAR figure, the daily table
+table and chart, and from engine 1.19.0 the %nMAR figure, the daily table
 and the FDC overlay; the summary CSV has a block per site; run comparison
 compares each site's rates and draws a scenario's (run B's) flow-duration
 curve over run A's (docs/ui.md, docs/run-comparison.md).
@@ -3778,7 +3778,7 @@ EWR results, including the EWR agreement with the observed record (§2.9b). A pr
 calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
 name. It can be charted on the Time series tab, where it serves as a regional
-wet/dry index. From engine 1.18.0 automatic calibration's dry → wet test
+wet/dry index. From engine 1.19.0 automatic calibration's dry → wet test
 ranks its water years by it (§2.10b) — its only use in the engine, and never
 as something scored.
 `reference-series.test.ts` pins all of this. If the workbook's `rUseFlow`
@@ -3839,7 +3839,7 @@ will feed an EWR (low-flow) decision, fit to the mean of KGE′(Q) and
 KGE′(1/Q) instead (Fit automatically's `kgeLowHigh` objective, §2.10b;
 calibration research CR-3).
 
-**The WR2012 five-statistic table** (engine ≥ 1.18.0, calibration research
+**The WR2012 five-statistic table** (engine ≥ 1.19.0, calibration research
 CR-28; `packages/engine/src/reference/wr2012Fit.ts`). South African practice
 with the WRSM/Pitman model judges a calibration on five statistics of
 observed and simulated flow, each as a % difference against a "good fit"
@@ -3978,7 +3978,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   - **NSE on √Q** (medium flows);
   - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows);
   - **the mean of KGE′(Q) and KGE′(1/(Q + ε))** (`kgeLowHigh`, engine ≥
-    1.18.0, calibration research CR-3), ε = 1 % of the mean observed flow,
+    1.19.0, calibration research CR-3), ε = 1 % of the mean observed flow,
     the same ε added to observed and simulated flows (Pushpalatha et al.
     2012; Garcia et al. 2017). The inverse-flow half weights recessions and
     low flows, the plain half keeps the peaks and the water balance, so
@@ -4008,7 +4008,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     year is in both. Every `ScoredPeriod` therefore carries the `waterYears`
     it scored, and the report shows this test by those years
     ("WY 2001/02, 2003/04"), never as a date range.
-    **What ranks the years** (engine ≥ 1.18.0, issue #4 phase 6, "make the
+    **What ranks the years** (engine ≥ 1.19.0, issue #4 phase 6, "make the
     logger fit identifiable" step 2; `CalibrateOptions.rankYearsBy`,
     `DifferentialTest.rankedBy`). Ranked by its own flow, the test's "wet"
     years are the years this (impacted, often short) record ran high, not
@@ -4023,7 +4023,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     pins this, and that a reference ranking the years as the record does
     gives the same test). This is the default whenever a reference exists;
     `rankYearsBy: 'observed'` keeps the record's own mean observed flow over
-    its scored days (the only ranking before 1.18.0, and the default without
+    its scored days (the only ranking before 1.19.0, and the default without
     a reference). A reference with fewer than 180 days in any candidate year
     falls back to the observed ranking, with a note naming the years it
     misses; asking for `'reference'` without one also falls back, with a
@@ -4061,7 +4061,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
 
   A short or unrepresentative record gets these notes rather than a
   clean bill of health.
-- **Score intervals and benchmarks** (engine ≥ 1.18.0, calibration research
+- **Score intervals and benchmarks** (engine ≥ 1.19.0, calibration research
   CR-5, `calibrate/bootstrap.ts`). Every scored period of the report (fit,
   before, both parts of each validation test, the independent record, the
   unpenalised fit; not a start's score) carries two optional fields. A
@@ -4103,7 +4103,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     benchmark, deliberately. In a strongly seasonal catchment climatology
     is hard to beat (Schaefli & Gupta 2007), and a model that doesn't beat
     it adds little beyond the seasonal cycle.
-- **How representative is the record** (engine ≥ 1.18.0, calibration
+- **How representative is the record** (engine ≥ 1.19.0, calibration
   research CR-34, part of CR-22; `calibrate/representativeness.ts`,
   `report.representativeness`). A few years from one climate state can't
   support the flow's variability (the SD behind KGE's α), its seasonal
@@ -4775,7 +4775,7 @@ key, no new warning (`gauges.test.ts` pins that the rest of the summary and
 every series are unchanged). The run comparison sets both runs' checks side
 by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 
-#### Recession diagnostics (engine ≥ 1.18.0, calibration-research.md CR-13)
+#### Recession diagnostics (engine ≥ 1.19.0, calibration-research.md CR-13)
 
 A fifth check, on the calibration record (`packages/engine/src/recession/`,
 kept in `RunSummary.plausibility.recession`; absent on older runs, null
@@ -5032,7 +5032,7 @@ sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#s
 The registration choices themselves, and which categories may sign or only
 warn, are `liability/registration.ts` (issue #47).
 
-### 2.10g Sensitivity runs: EWR compliance as a range (engine ≥ 1.18.0, calibration research CR-21)
+### 2.10g Sensitivity runs: EWR compliance as a range (engine ≥ 1.19.0, calibration research CR-21)
 
 The uncertainty bands (§2.10e) sample the runoff parameters the observed
 record can't rule out. Some inputs the record can't settle at all, and a

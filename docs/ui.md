@@ -2643,8 +2643,8 @@ which checks every catchment tab).
     one was chosen; the validation columns are shaded. Each column header
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
-    variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.18.0; "–" on a report made
-    before it), volume error and the FDC signatures. From engine 1.18.0
+    variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.19.0; "–" on a report made
+    before it), volume error and the FDC signatures. From engine 1.19.0
     (CR-5, model.md §2.10b) KGE′, NSE and the low/high-flow KGE′ show their
     90 % bootstrap interval in brackets ("0.62 (0.48–0.71)", "to" when a
     bound is negative), with a line saying what it is; a period of fewer than
@@ -2654,15 +2654,15 @@ which checks every catchment tab).
     over the same columns, and a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report
-    made before 1.18.0 has neither. The formatting lives in
+    made before 1.19.0 has neither. The formatting lives in
     `lib/calibration/fit.ts` (`scoreCellText`, `benchmarkRows`,
     `climatologyWarning`).
     With a dry → wet test, a line under the table says what ranked its
     years: the reference gauge (other catchment), "a regional wet/dry index
     that is never scored", or the fitted record's own mean flow (engine ≥
-    1.18.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
+    1.19.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
     fit record's dry → wet line says the same.
-    Under it, **How representative is the record** (engine ≥ 1.18.0, CR-34;
+    Under it, **How representative is the record** (engine ≥ 1.19.0, CR-34;
     `calibration/representativeness.ts`): the record's length and its mean
     rain as a share of the long-term mean in the heading, the engine's
     one-sentence summary, a table of each scored water year (scored days,
@@ -2672,7 +2672,7 @@ which checks every catchment tab).
     it can't show how the model behaves in wet years") is among the notes
     at the top of the result.
   - Under it, **WR2012 statistics** (`calibration/Wr2012FitTable.svelte`,
-    helpers in `lib/calibration/wr2012Fit.ts`; engine ≥ 1.18.0, CR-28,
+    helpers in `lib/calibration/wr2012Fit.ts`; engine ≥ 1.19.0, CR-28,
     model.md §2.10): MAR, mean of log annual flows, SD, log SD and seasonal
     index on complete water years of monthly flows, each observed, simulated,
     the signed difference, the band ("< 4 %") and a **Within** / **Outside**
@@ -2683,7 +2683,7 @@ which checks every catchment tab).
     (`WR2012_GOOD_FIT_BANDS.confirmed`) the column is headed **Indicative
     band** with a note that they come from a consultant report citing WR2012,
     not yet checked against WRC TT 689/16 and TT 690/16. A report from before
-    engine 1.18.0 shows no table.
+    engine 1.19.0 shows no table.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
@@ -3639,7 +3639,7 @@ read it before.
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
   and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
   a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled;
-  from engine 1.18.0 the same **WR2012 statistics** table as the fit results, for the run's scored
+  from engine 1.19.0 the same **WR2012 statistics** table as the fit results, for the run's scored
   days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
@@ -3781,7 +3781,7 @@ read it before.
   the share of months met per month of the year on a fixed 0–100 % axis with
   each bar's value written above it, the same by month of the year as a table
   (years, met, %, mean required and simulated flow in the table's unit, deficit,
-  FDC points met), and, from engine 1.18.0 (calibration research CR-29,
+  FDC points met), and, from engine 1.19.0 (calibration research CR-29,
   helpers in `runs/ewrReporting.ts`): a fifth figure, **EWR as % of natural
   MAR** ("50.0 %nMAR", with the mean annual EWR and the site's natural MAR in
   Mm³/a, and the low flows' % with a low-flow grid); **from daily data**
@@ -3846,7 +3846,7 @@ read it before.
   its record, the share of the catchment's natural flow above it, check 1's
   failing water years and check 4's Q90 ratio with *within* / *outside the
   factor of 2* (a failing gauge's row shaded), and a line in the check
-  list. From engine 1.18.0, after the low-flow curves, **Recession
+  list. From engine 1.19.0, after the low-flow curves, **Recession
   diagnostics** (`runs/RecessionDiagnostics.svelte`, helpers in
   `runs/recession.ts`; [model.md §2.10d](./model.md), *Recession
   diagnostics*, CR-13): the segment rules in one sentence, a verdict (the

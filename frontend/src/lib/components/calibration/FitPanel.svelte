@@ -126,7 +126,7 @@
 	const runs = $derived(totalRuns(budget ?? 0, validate, penalty, startsOk ? starts! : 1));
 	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && startsOk && status !== 'running' && status !== 'loading');
 	const columns = $derived(report ? scoreColumns(report) : []);
-	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.18.0, CR-5); none on an older report.
+	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.19.0, CR-5); none on an older report.
 	const benchCols = $derived(benchmarkColumns(columns));
 	const benchRows = $derived(report ? benchmarkRows(columns, report.objective) : []);
 	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);

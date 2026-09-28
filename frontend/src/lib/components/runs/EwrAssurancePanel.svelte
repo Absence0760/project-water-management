@@ -2,7 +2,7 @@
 	A run's Reserve compliance (RunSummary.ewrAssurance, engine ≥ 0.21.0;
 	docs/model.md §2.9c): per EWR site with a rule table, the months met, the
 	share met per month of the year (chart and table), the FDC check, and each
-	month in a collapsed table. From engine 1.18.0 (CR-29) also the EWR as
+	month in a collapsed table. From engine 1.19.0 (CR-29) also the EWR as
 	%nMAR, % of time and volume not met from daily data, and the monthly
 	flow-duration curves of natural and present-day flow on the EWR curve.
 -->

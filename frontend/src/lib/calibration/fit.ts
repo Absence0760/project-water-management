@@ -104,7 +104,7 @@ export function waterYearsText(years: readonly number[]): string {
 }
 
 /**
- * What ranked the dry → wet test's water years (engine ≥ 1.18.0), in words;
+ * What ranked the dry → wet test's water years (engine ≥ 1.19.0), in words;
  * a test from before it (no `rankedBy`) ranked by the fitted record.
  */
 export function rankedByText(d: Pick<DifferentialTest, 'rankedBy'>): string {
@@ -169,9 +169,9 @@ export interface ScoreColumn {
 	scores: FitScores;
 	/** Validation columns are scored on days the parameters were not fitted to. */
 	validation: boolean;
-	/** 90 % bootstrap intervals (engine ≥ 1.18.0, CR-5); null when too few water years or on an older report. */
+	/** 90 % bootstrap intervals (engine ≥ 1.19.0, CR-5); null when too few water years or on an older report. */
 	intervals: ScoreIntervals | null;
-	/** Mean-flow and climatology benchmark scores on the same days (engine ≥ 1.18.0, CR-5); null on an older report. */
+	/** Mean-flow and climatology benchmark scores on the same days (engine ≥ 1.19.0, CR-5); null on an older report. */
 	benchmarks: ScoreBenchmarks | null;
 }
 
@@ -240,7 +240,7 @@ export interface BenchmarkRow {
 	cells: string[];
 }
 
-/** Columns that carry benchmarks (a report from engine ≥ 1.18.0). */
+/** Columns that carry benchmarks (a report from engine ≥ 1.19.0). */
 export const benchmarkColumns = (cols: readonly ScoreColumn[]) => cols.filter((c) => c.benchmarks);
 
 /**

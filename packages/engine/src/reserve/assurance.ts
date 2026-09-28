@@ -19,9 +19,9 @@
 // curve against the EWR curve at every % point (the "flow equalled or
 // exceeded p % of the time" reading of an assurance rule; Hughes & Hannart
 // 2003, Pollard et al. 2011 Fig. 4), with the natural flow's duration curve
-// at the same points for the overlay (engine ≥ 1.18.0, CR-29).
+// at the same points for the overlay (engine ≥ 1.19.0, CR-29).
 //
-// And, as the gazette and CMAs report it (engine ≥ 1.18.0, CR-29): per
+// And, as the gazette and CMAs report it (engine ≥ 1.19.0, CR-29): per
 // calendar month, the % of *days* the flow was below that day's requirement
 // (the month's R spread evenly over its days, as `ewr_rule`) and the % of the
 // required volume not delivered, from daily data beside the monthly verdict
@@ -149,7 +149,7 @@ export interface EwrFdcPoint {
 	met: boolean | null;
 	/**
 	 * The run's natural flow duration curve at the point (table unit), for the
-	 * FDC overlay (engine ≥ 1.18.0, CR-29): always the run's own, whatever
+	 * FDC overlay (engine ≥ 1.19.0, CR-29): always the run's own, whatever
 	 * the table's natural source; null without a complete month; absent on
 	 * older runs.
 	 */
@@ -157,7 +157,7 @@ export interface EwrFdcPoint {
 }
 
 /**
- * Compliance from daily data (engine ≥ 1.18.0, CR-29): each day of a complete
+ * Compliance from daily data (engine ≥ 1.19.0, CR-29): each day of a complete
  * month against that day's requirement (the month's R ÷ its days, as the
  * `ewr_rule` series), total flow.
  */
@@ -176,7 +176,7 @@ export interface EwrDailyCompliance {
 	volumeNotMet: number | null;
 }
 
-/** The EWR as a share of the natural MAR at the site (engine ≥ 1.18.0, CR-29). */
+/** The EWR as a share of the natural MAR at the site (engine ≥ 1.19.0, CR-29). */
 export interface EwrPctNmar {
 	/** Mean annual requirement, Mm³/a: Σ over the 12 calendar months of the mean complete-month requirement. */
 	ewrMcm: number;
@@ -205,7 +205,7 @@ export interface EwrAssuranceMonthOfYear {
 	fdc: EwrFdcPoint[];
 	/** Low flows met ÷ years (engine ≥ 0.33.0); absent without a low-flow grid, null when years = 0. */
 	lowFlowRate?: number | null;
-	/** % of time and volume not met from daily data (engine ≥ 1.18.0, CR-29); absent on older runs. */
+	/** % of time and volume not met from daily data (engine ≥ 1.19.0, CR-29); absent on older runs. */
 	daily?: EwrDailyCompliance;
 }
 
@@ -257,10 +257,10 @@ export interface EwrAssuranceSite {
 	 * naturalMarMcm × scale; differencePct = 100 (run − table) ÷ table.
 	 */
 	naturalMar?: { runMcm: number; tableMcm: number; differencePct: number };
-	/** Daily compliance over every calendar month (engine ≥ 1.18.0, CR-29); absent on older runs. */
+	/** Daily compliance over every calendar month (engine ≥ 1.19.0, CR-29); absent on older runs. */
 	daily?: EwrDailyCompliance;
 	/**
-	 * The EWR as %nMAR (engine ≥ 1.18.0, CR-29): present when the run has every
+	 * The EWR as %nMAR (engine ≥ 1.19.0, CR-29): present when the run has every
 	 * calendar month at least once; absent otherwise and on older runs.
 	 */
 	ewrPctNmar?: EwrPctNmar;

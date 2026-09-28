@@ -15,7 +15,7 @@
 // - NSE on √Q and on ln(Q + ε): Nash–Sutcliffe weighted towards medium and low
 //   flows. KGE is not applied to log flows (Santos et al. 2018: the KGE
 //   components misbehave for log-transformed flows).
-// - Low/high KGE′ (engine ≥ 1.18.0, calibration research CR-3): the mean of
+// - Low/high KGE′ (engine ≥ 1.19.0, calibration research CR-3): the mean of
 //   KGE′ on Q and KGE′ on 1/(Q + ε), ε = 1 % of the mean observed flow, the
 //   same ε on both sides (Pushpalatha et al. 2012; Garcia et al. 2017). The
 //   inverse flows weight the recessions and low flows an EWR decision turns
@@ -40,7 +40,7 @@ export interface FitScores {
 	nseLog: number | null;
 	/**
 	 * Mean of KGE′(Q) and KGE′(1/(Q + ε)), ε = 1 % of the mean observed flow
-	 * (engine ≥ 1.18.0, CR-3; absent on a report made before it, read as null).
+	 * (engine ≥ 1.19.0, CR-3; absent on a report made before it, read as null).
 	 */
 	kgeLowHigh: number | null;
 	/** 100 × (Σsim − Σobs) / Σobs. */

@@ -1,4 +1,4 @@
-// Reserve compliance as the gazette and CMAs report it (engine ≥ 1.18.0,
+// Reserve compliance as the gazette and CMAs report it (engine ≥ 1.19.0,
 // calibration research CR-29, docs/model.md §2.9c): % of time and volume not
 // met per month from daily data, the EWR as %nMAR, and the monthly
 // flow-duration curves of natural, present-day and scenario flow against the
@@ -22,7 +22,7 @@ export interface EwrDailyRow {
 	hiddenByMonthly: boolean;
 }
 
-/** One row per month of the year (water-year order); null on a run from before engine 1.18.0. */
+/** One row per month of the year (water-year order); null on a run from before engine 1.19.0. */
 export function dailyRows(s: Pick<EwrAssuranceSite, 'byMonth'>): EwrDailyRow[] | null {
 	if (!s.byMonth.some((m) => m.daily)) return null;
 	return s.byMonth.map((m) => {
@@ -39,7 +39,7 @@ export function dailyRows(s: Pick<EwrAssuranceSite, 'byMonth'>): EwrDailyRow[] |
 	});
 }
 
-/** The whole run from daily data, in one sentence; null before engine 1.18.0. */
+/** The whole run from daily data, in one sentence; null before engine 1.19.0. */
 export function dailyHeadline(s: Pick<EwrAssuranceSite, 'daily'>): string | null {
 	const d = s.daily;
 	if (!d) return null;
@@ -48,7 +48,7 @@ export function dailyHeadline(s: Pick<EwrAssuranceSite, 'daily'>): string | null
 	return `Below the day’s requirement on ${fmtNum(d.daysNotMet)} of ${fmtNum(d.days)} days (${fmtPct(d.timeNotMet, 1)} of the time); ${fmtPct(d.volumeNotMet, 1)} of the required volume was not delivered.`;
 }
 
-/** The EWR as %nMAR, for a stat tile; null when the run lacks it (before engine 1.18.0, or a calendar month missing). */
+/** The EWR as %nMAR, for a stat tile; null when the run lacks it (before engine 1.19.0, or a calendar month missing). */
 export function nmarTile(s: Pick<EwrAssuranceSite, 'ewrPctNmar'>): { value: string; sub: string } | null {
 	const e = s.ewrPctNmar;
 	if (!e) return null;

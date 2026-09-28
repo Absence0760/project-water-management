@@ -1,4 +1,4 @@
-// Recession segments picked out of a daily flow record (engine ≥ 1.18.0,
+// Recession segments picked out of a daily flow record (engine ≥ 1.19.0,
 // docs/model.md §2.10d "Recession diagnostics"; calibration-research.md CR-13).
 //
 // The specification is TOSSH (Gnann et al. 2021, the Toolbox for

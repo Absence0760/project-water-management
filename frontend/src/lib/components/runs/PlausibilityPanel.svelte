@@ -3,7 +3,7 @@
 	0.25.0; docs/model.md §2.10d): natural vs observed + net abstraction per
 	water year, EWR days by rain source, the double-mass check of observed flow
 	against rain, and the dry-season low-flow duration curves, overlaid with the
-	latest run of each other runoff model; from engine 1.18.0 the recession
+	latest run of each other runoff model; from engine 1.19.0 the recession
 	diagnostics (RecessionDiagnostics.svelte). Part of the Runs tab's chunk (RunsTab.svelte).
 -->
 <script lang="ts">

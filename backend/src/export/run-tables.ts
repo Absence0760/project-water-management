@@ -336,7 +336,7 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * dry season, then natural vs observed + abstraction per water year, EWR days
  * by rain source, the double-mass check of observed flow against rain and the
  * dry-season low-flow duration curves, the recession diagnostics (engine ≥
- * 1.18.0), then the first and last of those again at each gauge node with a
+ * 1.19.0), then the first and last of those again at each gauge node with a
  * record of its own (engine ≥ 1.4.0). Unrounded.
  */
 export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
@@ -487,11 +487,11 @@ function* lowFlowLines(lf: Plausibility['lowFlow']): Generator<string> {
 	for (const c of lf.curves) yield csvRow([RECORD_TEXT[c.source] ?? c.source, c.pairedWith ? RECORD_TEXT[c.pairedWith] : 'every dry-season day', c.days, ...c.flowsM3s]);
 }
 
-/** The recession diagnostics (engine ≥ 1.18.0, model.md §2.10d, CR-13): the settings, both fits and the comparison. */
+/** The recession diagnostics (engine ≥ 1.19.0, model.md §2.10d, CR-13): the settings, both fits and the comparison. */
 function* recessionLines(r: Plausibility['recession']): Generator<string> {
 	yield csvRow(['Recession diagnostics (−dQ/dt = a·Q^b on rain-free recession segments)']);
 	if (r === undefined) {
-		yield csvRow(['Run made before engine 1.18.0: no recession diagnostics']);
+		yield csvRow(['Run made before engine 1.19.0: no recession diagnostics']);
 		return;
 	}
 	if (r === null) {
@@ -970,7 +970,7 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
 		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
 		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
-		// Engine ≥ 1.18.0 (model.md §2.9c, CR-29): daily compliance and the EWR as %nMAR, only on runs that have them.
+		// Engine ≥ 1.19.0 (model.md §2.9c, CR-29): daily compliance and the EWR as %nMAR, only on runs that have them.
 		if (r.daily)
 			yield csvRow(['From daily data: days below the day\'s requirement', r.daily.daysNotMet, 'of', r.daily.days, 'Time not met (%)', pct(r.daily.timeNotMet) as Cell, 'Volume not met (%)', pct(r.daily.volumeNotMet) as Cell]);
 		if (r.ewrPctNmar) {
@@ -1007,7 +1007,7 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 				yield csvRow([MONTH_NAMES[m.month - 1]!, d?.days ?? null, d?.daysNotMet ?? null, pct(d?.timeNotMet ?? null) as Cell, d?.requiredM3 ?? null, d?.shortfallM3 ?? null, pct(d?.volumeNotMet ?? null) as Cell]);
 			}
 		}
-		// Engine ≥ 1.18.0 (CR-29): the duration curves at each % point, for the FDC overlay.
+		// Engine ≥ 1.19.0 (CR-29): the duration curves at each % point, for the FDC overlay.
 		if (r.byMonth.some((m) => m.fdc.some((f) => f.natural !== undefined))) {
 			yield csvRow(['Month', '% point', `EWR (${u})`, `Natural flow duration (${u})`, `Simulated flow duration (${u})`, 'Met']);
 			for (const m of r.byMonth)
@@ -1113,7 +1113,7 @@ const WR2012_FIT_ROW_LABEL: Record<Wr2012FitStatKey, string> = {
 };
 
 /**
- * The WR2012 five-statistic table (CR-28, engine ≥ 1.18.0; model.md §2.10):
+ * The WR2012 five-statistic table (CR-28, engine ≥ 1.19.0; model.md §2.10):
  * absent on older runs, a line saying why when there is no complete water year.
  */
 export function* wr2012FitLines(w: Wr2012FitStats | null): Generator<string> {

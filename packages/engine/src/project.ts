@@ -781,7 +781,7 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * gauge-vs-logger agreement check and not in the EWR comparison, and it is
  * deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10). The one
  * thing that reads it is automatic calibration's dry → wet test, which ranks
- * water years by it (engine ≥ 1.18.0, CalibrateOptions.rankYearsBy); it is
+ * water years by it (engine ≥ 1.19.0, CalibrateOptions.rankYearsBy); it is
  * never scored there either.
  *
  * `rain_catchment_alt_mm` (engine ≥ 0.30.0, issue #40 (b)) is a second
@@ -1872,7 +1872,7 @@ export interface CalibrationStats {
 	fitStatus?: CalibrationFitStatus;
 	/**
 	 * The WR2012 five-statistic table on the scored days (CR-28, engine ≥
-	 * 1.18.0; reference/wr2012Fit.ts): null when no water year has all 12
+	 * 1.19.0; reference/wr2012Fit.ts): null when no water year has all 12
 	 * months scored or the run has no start date; absent on older runs.
 	 */
 	wr2012Fit?: Wr2012FitStats | null;

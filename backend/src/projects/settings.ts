@@ -361,7 +361,7 @@ const ScoredPeriod = z
 		end: isoDate,
 		waterYears: z.array(z.number().int()).max(500),
 		scores: scoreSet,
-		// Engine ≥ 1.18.0 (CR-5): bootstrap intervals and benchmark scores. Optional: a record made before them has neither.
+		// Engine ≥ 1.19.0 (CR-5): bootstrap intervals and benchmark scores. Optional: a record made before them has neither.
 		intervals: z
 			.object({
 				level: z.number().gt(0).lt(1),
@@ -380,7 +380,7 @@ const ScoredPeriod = z
 			.strict()
 			.nullable()
 			.optional(),
-		// Engine ≥ 1.18.0 (CR-28): the WR2012 five-statistic table on these days. Optional: absent on a record made before it.
+		// Engine ≥ 1.19.0 (CR-28): the WR2012 five-statistic table on these days. Optional: absent on a record made before it.
 		wr2012Fit: z
 			.object({
 				waterYears: z.array(z.number().int()).max(500),
@@ -450,7 +450,7 @@ export const FitRecord = z
 			dryYears: z.array(z.number().int()).max(500),
 			wetYears: z.array(z.number().int()).max(500),
 			wetDryRatio: z.number().finite(),
-			// Engine ≥ 1.18.0: what ranked the years (the reference gauge, or the fitted record). Optional: absent = 'observed'.
+			// Engine ≥ 1.19.0: what ranked the years (the reference gauge, or the fitted record). Optional: absent = 'observed'.
 			rankedBy: z.enum(['observed', 'reference']).optional()
 		})
 			.strict()

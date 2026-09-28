@@ -6,7 +6,7 @@
 //   3. the double-mass curve of observed flow against rain (./flowDoubleMass.ts);
 //   4. dry-season low-flow duration curves (./lowFlow.ts), in the dry season
 //      of ./season.ts;
-//   and, from engine 1.18.0, the recession diagnostics (../recession, CR-13):
+//   and, from engine 1.19.0, the recession diagnostics (../recession, CR-13):
 //   the calibration record's rain-free recessions against the simulated
 //   outflow's on the same days.
 // They only report and warn: none changes a model result.
@@ -45,9 +45,9 @@ export interface PlausibilityChecks {
 	/** Check 4; null without a dry season. */
 	lowFlow: LowFlowCurves | null;
 	/**
-	 * Recession diagnostics on the calibration record (engine ≥ 1.18.0,
+	 * Recession diagnostics on the calibration record (engine ≥ 1.19.0,
 	 * ../recession); null without one or without rain, absent on runs made
-	 * before 1.18.0.
+	 * before 1.19.0.
 	 */
 	recession?: RecessionCheck | null;
 	/**

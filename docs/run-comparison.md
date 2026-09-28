@@ -267,7 +267,7 @@ bottom:
    met, the months not met, the deficit (m³), the longest run of months not
    met and the FDC check for A and B (`RunComparison.ewrAssurance`), and,
    under it, the share of months met per month of the year. More months met
-   is better. From engine 1.18.0 (CR-29, model.md §2.9c), when either run has
+   is better. From engine 1.19.0 (CR-29, model.md §2.9c), when either run has
    them, *Days not met (daily)* and *Volume not met (daily)* (lower is
    better) and *EWR as % of natural MAR* (neutral: it moves only with the
    natural flow or the table) join the table, and under it **Flow-duration

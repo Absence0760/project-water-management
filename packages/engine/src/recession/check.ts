@@ -1,4 +1,4 @@
-// Recession diagnostics on a run (engine ≥ 1.18.0, docs/model.md §2.10d
+// Recession diagnostics on a run (engine ≥ 1.19.0, docs/model.md §2.10d
 // "Recession diagnostics"; calibration-research.md CR-13): the calibration
 // record's recession segments (./segments.ts), −dQ/dt against Q on them for
 // the observed flow and for the simulated outflow on the same days, and the
@@ -30,7 +30,7 @@ export const RECESSION_B_WARN_DIFF = 0.5;
 /** Warn when the simulated recession rate at the reference flow is more than this factor from the observed (indicative). */
 export const RECESSION_RATE_WARN_FACTOR = 2;
 
-/** RunSummary.plausibility.recession (engine ≥ 1.18.0). */
+/** RunSummary.plausibility.recession (engine ≥ 1.19.0). */
 export interface RecessionCheck {
 	/** The record the segments come from: the run's calibration record. */
 	flowKind: CalibrationFlowKind;

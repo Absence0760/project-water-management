@@ -1,5 +1,5 @@
 // Display helpers for the recession diagnostics (RunSummary.plausibility.
-// recession, engine ≥ 1.18.0; docs/model.md §2.10d "Recession diagnostics",
+// recession, engine ≥ 1.19.0; docs/model.md §2.10d "Recession diagnostics",
 // docs/ui.md). The run stores the segments and the two fits; the −dQ/dt, Q
 // points are rebuilt here from the run's stored observed and simulated
 // series with the engine's own recessionPoints, so the summary stays small.

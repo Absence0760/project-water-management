@@ -1,5 +1,5 @@
 <!--
-	Recession diagnostics (RunSummary.plausibility.recession, engine ≥ 1.18.0;
+	Recession diagnostics (RunSummary.plausibility.recession, engine ≥ 1.19.0;
 	docs/model.md §2.10d "Recession diagnostics", CR-13): −dQ/dt against Q on
 	the calibration record's rain-free recession segments, for the record and
 	for the simulated outflow on the same days, each with its fitted power law.

@@ -117,7 +117,7 @@ describe('plausibility checks in a run', () => {
 		expect(out.summary.plausibility!.drySeason!.source).toBe('natural_flow');
 	});
 
-	it('recession diagnostics (engine ≥ 1.18.0): the calibration record’s dry recessions against the simulated outflow on the same days', () => {
+	it('recession diagnostics (engine ≥ 1.19.0): the calibration record’s dry recessions against the simulated outflow on the same days', () => {
 		const { input: x, natural } = input((sim) => sim.map((v) => v / 86_400));
 		const out = runModelWith(x, () => ({ naturalFlowM3Day: natural }));
 		const r = out.summary.plausibility!.recession!;

@@ -1,4 +1,4 @@
-// How sure is a score, and does it beat a naive forecast? (engine ≥ 1.18.0,
+// How sure is a score, and does it beat a naive forecast? (engine ≥ 1.19.0,
 // calibration research CR-5.)
 //
 // - Intervals: a block bootstrap over water years. Daily scores carry large

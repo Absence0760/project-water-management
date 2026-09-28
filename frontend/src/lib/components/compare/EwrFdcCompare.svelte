@@ -1,5 +1,5 @@
 <!--
-	The monthly flow-duration curves on the EWR for two runs (engine ≥ 1.18.0,
+	The monthly flow-duration curves on the EWR for two runs (engine ≥ 1.19.0,
 	calibration research CR-29; docs/run-comparison.md): per EWR site in run
 	A, its natural and present-day curves with run B's (a scenario's) curve
 	over them, against the EWR curve. Sites are matched as the Reserve table

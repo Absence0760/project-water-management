@@ -14,7 +14,7 @@
 // - differential split-sample, where the record allows it: fit on the driest
 //   half of the water years, score the wettest half. A short, drought-heavy
 //   record can't show how the model behaves in wet years, and the report says
-//   so instead of hiding it. From engine 1.18.0 the years are ranked dry → wet
+//   so instead of hiding it. From engine 1.19.0 the years are ranked dry → wet
 //   by the project's reference gauge (flow_reference_m3s, another river) when
 //   it covers them, as a regional wet/dry index only: it is never scored;
 // - independent record, when asked (`validationRecord`): the fitted
@@ -97,7 +97,7 @@ export interface CalibrateOptions {
 	/** Also run the split-sample and differential split-sample tests. Default true. */
 	validate?: boolean;
 	/**
-	 * How the dry → wet test ranks water years (engine ≥ 1.18.0, issue #4
+	 * How the dry → wet test ranks water years (engine ≥ 1.19.0, issue #4
 	 * phase 6, "make the logger fit identifiable" step 2): 'reference' by the
 	 * reference gauge's (flow_reference_m3s) mean flow over each water year, a
 	 * regional wet/dry index that never becomes a scoring target; 'observed' by
@@ -147,15 +147,15 @@ export interface ScoredPeriod {
 	scores: FitScores;
 	/**
 	 * 90 % block-bootstrap intervals over water years of KGE′, NSE and the
-	 * low/high-flow KGE′ (engine ≥ 1.18.0, CR-5); null with fewer than
+	 * low/high-flow KGE′ (engine ≥ 1.19.0, CR-5); null with fewer than
 	 * BOOTSTRAP_MIN_YEARS water years. Absent on a report or stored record
 	 * made before them.
 	 */
 	intervals?: ScoreIntervals | null;
-	/** The same scores for the mean-flow and day-of-year climatology benchmarks on these days (engine ≥ 1.18.0, CR-5); absent before. */
+	/** The same scores for the mean-flow and day-of-year climatology benchmarks on these days (engine ≥ 1.19.0, CR-5); absent before. */
 	benchmarks?: ScoreBenchmarks | null;
 	/**
-	 * The WR2012 five-statistic table on these days (CR-28, engine ≥ 1.18.0;
+	 * The WR2012 five-statistic table on these days (CR-28, engine ≥ 1.19.0;
 	 * reference/wr2012Fit.ts): null when no water year has all 12 months
 	 * scored, absent on reports from before.
 	 */
@@ -178,7 +178,7 @@ export interface DifferentialTest extends ValidationTest {
 	wetYears: number[];
 	/** Mean observed flow (of the fitted record) of the wet years ÷ that of the dry years, however they were ranked. */
 	wetDryRatio: number;
-	/** What ranked the years (engine ≥ 1.18.0); absent on a report or fit record from before: 'observed'. */
+	/** What ranked the years (engine ≥ 1.19.0); absent on a report or fit record from before: 'observed'. */
 	rankedBy?: DsstRanking;
 }
 
@@ -239,9 +239,9 @@ export interface CalibrationReport {
 	exclusions: DateRange[];
 	/**
 	 * How representative the scored days are of the long-term rainfall
-	 * (engine ≥ 1.18.0, calibration research CR-34): their length, each scored
+	 * (engine ≥ 1.19.0, calibration research CR-34): their length, each scored
 	 * water year's rain percentile, and the mean against the long-term mean.
-	 * Absent before 1.18.0; null when the run has no rain to rank against.
+	 * Absent before 1.19.0; null when the run has no rain to rank against.
 	 */
 	representativeness?: RecordRepresentativeness | null;
 	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
@@ -281,7 +281,7 @@ export interface CalibrationProblem {
 	/**
 	 * The reference gauge (flow_reference_m3s, m³/s, NaN where missing) over
 	 * the whole run, or null without one: only ever used to rank water years
-	 * dry → wet, never scored (engine ≥ 1.18.0).
+	 * dry → wet, never scored (engine ≥ 1.19.0).
 	 */
 	reference?: Float64Array | null;
 	/** Natural flow (m³/day) of the last simulate() call, filled up to the last scored day. */

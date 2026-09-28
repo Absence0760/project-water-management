@@ -1,5 +1,5 @@
 // The WR2012 five-statistic calibration table (calibration research CR-28,
-// engine ≥ 1.18.0).
+// engine ≥ 1.19.0).
 //
 // South African practice with the WRSM/Pitman model (WR2012: Bailey & Pitman
 // 2016; Ndiritu 2009) judges a calibration on five statistics of observed and

@@ -46,7 +46,7 @@ describe('dailyRows and dailyHeadline', () => {
 		expect(dailyHeadline(s)).toBe('Below the day’s requirement on 10 of 365 days (2.7% of the time); 2.7% of the required volume was not delivered.');
 	});
 
-	it('says every day met, and gives nothing for a run from before engine 1.18.0', () => {
+	it('says every day met, and gives nothing for a run from before engine 1.19.0', () => {
 		const full = assessSite(start, days, { table: table(), nodeId: null, name: 'O', isOutlet: true, natural, impacted: natural }).report;
 		expect(dailyHeadline(full)).toBe('Every one of the 365 days met its day’s requirement.');
 		const old = structuredClone(full);

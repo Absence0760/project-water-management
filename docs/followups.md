@@ -629,7 +629,7 @@ conditions come before any client numbers:
       2. **Use the gauge as a regional wet/dry index only.** Use it to rank
          water years for the dry→wet test design and the Phase 9 forcing,
          never as a calibration or validation target for this river.
-         **Done (engine 1.18.0, issue #65):** the dry → wet test ranks water
+         **Done (engine 1.19.0, issue #65):** the dry → wet test ranks water
          years by the reference gauge's water-year mean flow when it covers
          them (`rankYearsBy`, the default when a reference exists), falls
          back to the record's own flow with a note, and never scores it
@@ -894,7 +894,7 @@ the suggested order (the IDs carry the detail):
 - [x] **Cheap first:** CR-3 KGE(Q)+KGE(1/Q) objective, CR-34
       record-representativeness note. CR-2 multi-start DDS (engine 0.13.0,
       model.md §2.10b) and CR-6 drop Moriasi words on daily scores
-      (model.md §2.10) are done. **Done (engine 1.18.0, issue #65):** CR-3
+      (model.md §2.10) are done. **Done (engine 1.19.0, issue #65):** CR-3
       is the `kgeLowHigh` objective (mean of KGE′ on Q and on 1/(Q+ε),
       ε = Q̄/100), suggested for EWR decisions, default still KGE′; CR-34
       is `report.representativeness` (scored days and water years, each
@@ -938,7 +938,7 @@ the suggested order (the IDs carry the detail):
       bootstrap CIs and benchmarks~~ → ~~CR-21 sensitivity runs and "not
       determinable"~~ → ~~CR-28 WR2012 five-statistic table~~ → ~~CR-29
       compliance as %time, %volume, FDC overlays and %nMAR~~. **Done
-      (engine 1.18.0, issue #65):**
+      (engine 1.19.0, issue #65):**
       - CR-5 (`calibrate/bootstrap.ts`): 90 % water-year block-bootstrap
         intervals on KGE′, NSE and `kgeLowHigh` (1 000 resamples, fixed
         seed, none under 3 water years of ≥ 30 days), and mean-flow and
@@ -1000,7 +1000,7 @@ the suggested order (the IDs carry the detail):
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
       dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
-      (engine 1.18.0, issue #65):** TOSSH-default recession segments with a
+      (engine 1.19.0, issue #65):** TOSSH-default recession segments with a
       1 mm/day rain rule, −dQ/dt against Q (ETS) for the observed record and
       GR4J's simulated outflow on the same days, power-law fits compared at
       the median flow (indicative warnings with 8 or more segments, "Not

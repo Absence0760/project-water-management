@@ -1,5 +1,5 @@
 // How representative the calibration record is (calibration research CR-34,
-// part of CR-22; engine 1.18.0): its length, and where its water years sit in
+// part of CR-22; engine 1.19.0): its length, and where its water years sit in
 // the long-term rainfall distribution. A few years from one climate state
 // can't support the flow's variability (the SD behind KGE's α), its seasonal
 // pattern or a high-flow calibration, however good the scores look, so the

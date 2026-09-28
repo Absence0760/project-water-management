@@ -238,10 +238,10 @@ export interface EwrAssuranceDelta {
 	lowFlowRate: MetricDelta;
 	/** Water years the high-flow components were met ÷ years they were required, summed over the components (engine ≥ 0.33.0). */
 	highFlowRate: MetricDelta;
-	/** Days below the day's requirement ÷ days, and the required volume not delivered, from daily data (engine ≥ 1.18.0, CR-29; null values on older runs). */
+	/** Days below the day's requirement ÷ days, and the required volume not delivered, from daily data (engine ≥ 1.19.0, CR-29; null values on older runs). */
 	timeNotMet?: MetricDelta;
 	volumeNotMet?: MetricDelta;
-	/** The EWR as %nMAR at the site (engine ≥ 1.18.0, CR-29). */
+	/** The EWR as %nMAR at the site (engine ≥ 1.19.0, CR-29). */
 	ewrPctNmar?: MetricDelta;
 }
 

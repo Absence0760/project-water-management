@@ -988,7 +988,7 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});
 
-	it('adds daily compliance, the EWR as %nMAR and the duration curves for the FDC overlay (engine ≥ 1.18.0, CR-29)', () => {
+	it('adds daily compliance, the EWR as %nMAR and the duration curves for the FDC overlay (engine ≥ 1.19.0, CR-29)', () => {
 		const lines = [...ewrAssuranceLines([report])];
 		// Every day of the first October is short (0.6 of 0.75 Mm³ spread evenly): 31 of the 730 days of complete months.
 		const daily = lines.find((l) => l.startsWith("From daily data: days below the day's requirement"))!.split(',');
@@ -1004,7 +1004,7 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		const oct10 = lines[fdc + 1]!.split(',');
 		expect(oct10.slice(0, 3)).toEqual(['Oct', '10', '1.5']);
 		expect(Number(oct10[3])).toBeCloseTo(1.5, 9);
-		// A run before engine 1.18.0 has none of them.
+		// A run before engine 1.19.0 has none of them.
 		const old = structuredClone(report);
 		delete old.daily;
 		delete old.ewrPctNmar;
@@ -1095,7 +1095,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Simulated recession agrees (indicative),"not judged (fewer than 8 segments, or no observed fit)"');
 	});
 
-	it('writes both recession fits and the comparison (engine ≥ 1.18.0)', () => {
+	it('writes both recession fits and the comparison (engine ≥ 1.19.0)', () => {
 		const lines = [
 			...plausibilityLines({
 				...checks,
@@ -1140,7 +1140,7 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no observed flow record');
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
-		expect(none).toContain('Run made before engine 1.18.0: no recession diagnostics');
+		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
 		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
 			'Not checked: needs an observed flow record and catchment rain'
 		);

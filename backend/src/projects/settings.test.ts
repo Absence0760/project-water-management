@@ -665,7 +665,7 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok(record)).toBe(true);
 		expect(ok(null)).toBe(true);
 		expect(ok({ ...record, splitSample: null, differential: null, independentRecord: null, notes: [] })).toBe(true);
-		// The dry → wet test's ranking (engine ≥ 1.18.0); a record from before it has none.
+		// The dry → wet test's ranking (engine ≥ 1.19.0); a record from before it has none.
 		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'reference' } })).toBe(true);
 		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'observed' } })).toBe(true);
 		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'gauge' } })).toBe(false);
@@ -684,13 +684,13 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
-	it('accepts the low/high-flow objective (CR-3, engine ≥ 1.18.0) and its score, and refuses an unknown objective', () => {
+	it('accepts the low/high-flow objective (CR-3, engine ≥ 1.19.0) and its score, and refuses an unknown objective', () => {
 		const scored = { ...period, scores: { ...period.scores, kgeLowHigh: 0.55 } };
 		expect(ok({ ...record, objective: 'kgeLowHigh', fit: scored, before: scored })).toBe(true);
 		expect(ok({ ...record, objective: 'kgeLog' })).toBe(false);
 	});
 
-	it('accepts the optional score intervals and benchmarks on a scored period (CR-5, engine ≥ 1.18.0), and a period from before them without', () => {
+	it('accepts the optional score intervals and benchmarks on a scored period (CR-5, engine ≥ 1.19.0), and a period from before them without', () => {
 		const iv = { lo: 0.4, hi: 0.7 };
 		const intervals = { level: 0.9, resamples: 1000, seed: 20_210_101, years: 5, kgePrime: iv, nse: null, kgeLowHigh: iv };
 		const benchmarks = { meanFlow: { days: 730, kgePrime: -0.41, nse: 0 }, climatology: { days: 730, kgePrime: 0.3, nse: 0.2 }, halfWindowDays: 7 };
@@ -703,7 +703,7 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, fit: { ...withBoth, benchmarks: { ...benchmarks, halfWindowDays: 400 } } })).toBe(false);
 	});
 
-	it('accepts the optional WR2012 five-statistic table on a scored period (CR-28, engine ≥ 1.18.0), and a period from before it without', () => {
+	it('accepts the optional WR2012 five-statistic table on a scored period (CR-28, engine ≥ 1.19.0), and a period from before it without', () => {
 		const stat = (key: string) => ({ key, observed: 1.2, simulated: 1.25, diffPct: 4.2, bandPct: 4, withinBand: false });
 		const wr2012Fit = { waterYears: [2015, 2016], logYears: 2, stats: ['mar', 'meanLog', 'sd', 'logSd', 'seasonalIndex'].map(stat), bandsConfirmed: false };
 		expect(ok({ ...record, fit: { ...period, wr2012Fit }, before: { ...period, wr2012Fit: null } })).toBe(true);

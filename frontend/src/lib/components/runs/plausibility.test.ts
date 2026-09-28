@@ -95,7 +95,7 @@ describe('breakHint, signedPct and findings', () => {
 		expect(findings(p).map((f) => f.ok)).toEqual([false, true, true, false]);
 	});
 
-	it('adds a recessions line from engine 1.18.0 only (null = not checked or not judged)', () => {
+	it('adds a recessions line from engine 1.19.0 only (null = not checked or not judged)', () => {
 		const none: PlausibilityChecks = { drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null };
 		expect(findings(none)).toHaveLength(4);
 		expect(findings({ ...none, recession: null }).at(-1)).toEqual({ label: 'Recessions', ok: null });

@@ -95,7 +95,7 @@ export interface Wr2012FitPeriod {
 	stats: Wr2012FitStats;
 }
 
-/** The fit's scored periods that have the table (a report from before engine 1.18.0 has none). */
+/** The fit's scored periods that have the table (a report from before engine 1.19.0 has none). */
 export function wr2012FitPeriods(r: Pick<CalibrationReport, 'fit' | 'before' | 'splitSample' | 'differential' | 'independentRecord'>): Wr2012FitPeriod[] {
 	const out: Wr2012FitPeriod[] = [];
 	const add = (id: string, label: string, stats: Wr2012FitStats | null | undefined) => {

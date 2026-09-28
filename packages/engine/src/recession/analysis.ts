@@ -1,5 +1,5 @@
 // −dQ/dt against Q on recession segments, and the power law −dQ/dt = a·Q^b
-// fitted to the whole point cloud (engine ≥ 1.18.0, docs/model.md §2.10d
+// fitted to the whole point cloud (engine ≥ 1.19.0, docs/model.md §2.10d
 // "Recession diagnostics"; calibration-research.md CR-13).
 //
 // A port of TOSSH (Gnann et al. 2021): util_dQdt.m for the rate of change and

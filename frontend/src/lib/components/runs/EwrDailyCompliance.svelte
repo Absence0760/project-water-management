@@ -1,8 +1,8 @@
 <!--
-	Reserve compliance from daily data (engine ≥ 1.18.0, calibration research
+	Reserve compliance from daily data (engine ≥ 1.19.0, calibration research
 	CR-29; docs/model.md §2.9c): per month of the year, the % of days below
 	that day's requirement and the % of the required volume not delivered,
-	beside the monthly verdict. Nothing on a run from before engine 1.18.0.
+	beside the monthly verdict. Nothing on a run from before engine 1.19.0.
 -->
 <script lang="ts">
 	import type { EwrAssuranceSite } from '@water-management/engine';
