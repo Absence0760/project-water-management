@@ -1,4 +1,4 @@
-import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
@@ -166,6 +166,24 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				priority: z.enum(DEMAND_OBJECT_PRIORITIES).default('shared'),
 				destination: z.enum(DEMAND_OBJECT_DESTINATIONS).default('internal'),
 				enabled: z.boolean().default(true),
+				// Date windows with a factor (engine 1.16.0, issue #90 Q4): the shape here, the meaning
+				// (real dates, spans in order) in the engine's modelRuleProblems. Absent = none.
+				schedule: z
+					.array(
+						z.object({
+							label: z.string().trim().max(200).default(''),
+							span: z.enum(DEMAND_SCHEDULE_SPANS),
+							from: z.string().max(10).nullable().default(null),
+							to: z.string().max(10).nullable().default(null),
+							easterFrom: z.number().int().nullable().default(null),
+							easterTo: z.number().int().nullable().default(null),
+							weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7).nullable().default(null),
+							factor: z.number().min(0).max(DEMAND_SCHEDULE_MAX_FACTOR)
+						})
+					)
+					.max(DEMAND_SCHEDULE_MAX_WINDOWS)
+					.nullable()
+					.default(null),
 				note: z.string().max(1000).default('')
 			})
 		)

@@ -1017,11 +1017,21 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, note (≤ 1000 chars) }[]`, at most 5 000. Defaults:
-other, monthly, null, null, null, 0, null, 0, shared, internal, true, ''.
-`PUT` refuses an object on a gauge, an other water user or an unknown node, a
-monthly one without 12 values, a per-unit one without a count and litres, and
-an external one with a return share above 0.
+'external'), enabled, schedule (below, or null), note (≤ 1000 chars) }[]`,
+at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
+internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
+user or an unknown node, a monthly one without 12 values, a per-unit one
+without a count and litres, and an external one with a return share above 0.
+
+A demand object's `schedule` (engine ≥ 1.16.0, migration 096, issue #90 Q4,
+[model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
+default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
+('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo
+('easter': whole days from Easter Sunday, −60 to 60; else null), weekdays (ISO
+1 = Monday … 7 = Sunday, at least one, or null = every day), factor (0–10, 0 =
+off) }`; the later of two windows covering a day wins. `PUT` refuses a date
+that doesn't exist, a span that ends before it starts and a factor out of
+range; an empty list is stored, and read back, as null.
 
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
@@ -1331,8 +1341,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
   name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
-  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort }[]`, in id
-  order). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
+  in id order; `daysOff`, engine ≥ 1.16.0, only on an object with a schedule:
+  the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
