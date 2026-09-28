@@ -83,6 +83,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	entryHref: { why: 'HistoryTab: withParam(page.url, "entry", key)', in: ['lib/components/history/HistoryTab.svelte'] },
 	reportHref: { why: 'report job page: `${base}/projects/` + encoded project id + "/report" (+ "?run=" + encoded run id)', in: ['routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	DAMS_HREF: { why: 'latestRun.ts constant "?tab=dams"', in: ['lib/components/overview/OverviewTab.svelte'] },
+	'register.registerUrl': { why: 'SignoffSection: liability/registration.ts constant https:// link to the ECSA or SACNASP public register', in: ['lib/components/liability/SignoffSection.svelte'] },
 	ARC4_URL: { why: 'crops/library.ts constant https:// link to the SABI manual', in: ['lib/components/crops/LoadCropFactorsDialog.svelte'] },
 	pictureSrc: { why: 'help pictures: "/help/<static file name>" from the SHOTS table', in: ['lib/components/help/HelpTip.svelte', 'lib/components/help/PictureTour.svelte'] },
 	pictureSrcset: { why: 'help pictures: two pictureSrc paths with widths (help/pictures.ts)', in: ['lib/components/help/PictureTour.svelte'] },

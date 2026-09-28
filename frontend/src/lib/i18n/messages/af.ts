@@ -84,7 +84,7 @@ export const af: Catalogue = {
 	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
 	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
 	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
-	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit heel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
+	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit in geheel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
 	// The Terms now start with a short version of the main points.
 	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
 	// {page} · Water Management
@@ -94,7 +94,7 @@ export const af: Catalogue = {
 	// Read what changed, then accept the new Terms of use and Privacy notice to carry on.
 	'5ad23668': 'Lees wat verander het, en aanvaar dan die nuwe Gebruiksvoorwaardes en Privaatheidskennisgewing om voort te gaan.',
 	// What changed
-	'e8345543': 'Wat het verander',
+	'e8345543': 'Wat verander het',
 	// Terms of use
 	'953dc886': 'Gebruiksvoorwaardes',
 	// Privacy notice
@@ -464,13 +464,13 @@ export const af: Catalogue = {
 	// Before you look at your farm
 	'72542aec': 'Voordat jy na jou plaas kyk',
 	// The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
-	'9343015e': 'Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV geloop word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.',
+	'9343015e': 'Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV uitgevoer word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.',
 	// They are estimates, and they can be wrong. Check your dam and your water yourself before you act on them.
-	'fc70e559': 'Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy daarop optree.',
+	'fc70e559': 'Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy op die syfers optree.',
 	// Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction. Nothing else on these pages is.
-	'5e91fa9d': 'Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is een nie.',
+	'5e91fa9d': 'Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is ’n beperking nie.',
 	// The people who run this app don’t check the WUA’s figures and, as far as the law allows, accept no responsibility for losses from relying on them. See the {terms}, section 13.
-	'39185b23': 'Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, so ver die wet toelaat, geen verantwoordelikheid vir verliese omdat daarop staatgemaak is nie. Sien die {terms}, afdeling 13.',
+	'39185b23': 'Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, sover die wet dit toelaat, geen verantwoordelikheid vir verliese wat ontstaan omdat iemand daarop staatmaak nie. Sien die {terms}, afdeling 13.',
 	// I understand
 	'678bb07e': 'Ek verstaan',
 	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA or from DWS is a restriction.
@@ -850,13 +850,13 @@ export const af: Catalogue = {
 	// The main things you agree to
 	'0a1c21b6': 'Die belangrikste dinge waartoe jy instem',
 	// Results are model estimates and can be wrong. Check them before you rely on them.
-	'b9189589': 'Die resultate is skattings van die model en kan verkeerd wees. Kyk self daarna voordat jy daarop staatmaak.',
+	'b9189589': 'Die resultate is skattings van die model en kan verkeerd wees. Gaan dit na voordat jy daarop staatmaak.',
 	// As far as the law allows, we are not responsible for losses from decisions made on the results, and our total liability to you is limited to the fees you paid in the last 12 months or US $100, whichever is more (Terms §13).
-	'4a481dd3': 'Sover die wet dit toelaat, is ons nie verantwoordelik vir verliese weens besluite wat op die resultate geneem is nie, en ons totale aanspreeklikheid teenoor jou is beperk tot die fooie wat jy in die afgelope 12 maande betaal het of US $100, watter ook al die meeste is (Voorwaardes §13).',
+	'4a481dd3': 'Sover die wet dit toelaat, is ons nie verantwoordelik vir verliese weens besluite wat op die resultate geneem is nie, en ons totale aanspreeklikheid teenoor jou is beperk tot die fooie wat jy in die afgelope 12 maande betaal het of US $100, watter bedrag ook al die grootste is (Voorwaardes §13).',
 	// If someone claims against us because of what you put in or how you used the service, you cover that claim (Terms §14).
-	'1642b612': 'As iemand ’n eis teen ons instel weens wat jy ingesit het of hoe jy die diens gebruik het, dra jy daardie eis (Voorwaardes §14).',
+	'1642b612': 'As iemand ’n eis teen ons instel weens wat jy ingevoer het of hoe jy die diens gebruik het, dra jy die koste van daardie eis (Voorwaardes §14).',
 	// If you live or are based in South Africa, South African law and South African courts apply; otherwise, Virginia law and courts. Either way, your rights under the consumer and data-protection law where you live still apply (Terms §15).
-	'7f91a8a0': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en Suid-Afrikaanse howe; andersins die reg en howe van Virginia. Hoe ook al, jou regte kragtens die verbruikers- en databeskermingswette van waar jy woon, geld steeds (Voorwaardes §15).',
+	'7f91a8a0': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en Suid-Afrikaanse howe; andersins die reg en howe van Virginia. In albei gevalle geld jou regte kragtens die verbruikers- en databeskermingsreg van die plek waar jy woon steeds (Voorwaardes §15).',
 	// The Terms are in English; this summary is in your language.
 	'782a6b6b': 'Die Voorwaardes is in Engels; hierdie opsomming is in jou taal.',
 	// River flow each month, in m³ a day
@@ -1282,7 +1282,7 @@ export const af: Catalogue = {
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
 	// A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
-	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die operateur van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
+	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// The river’s ecological reserve
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
