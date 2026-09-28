@@ -197,6 +197,33 @@ test('the audience icons are drawn without script and under reduced motion, and 
 	await expect.poll(() => dash(page)).toBe('0px');
 });
 
+test('robots.txt is a real file that lets crawlers in, not the SPA fallback', async ({ request }) => {
+	const res = await request.get('/robots.txt');
+	expect(res.status()).toBe(200);
+	const body = await res.text();
+	expect(body).not.toContain('<html');
+	expect(body).toMatch(/^User-agent: \*$/m);
+	expect(body).toMatch(/^Allow: \/$/m);
+});
+
+test('the prerendered page loads every asset it asks for, the contour texture among them, with and without script', async ({ browser, page }) => {
+	// Its base is relative ('./') until it hydrates: a url() that resolved against
+	// a stylesheet instead of the page asked for /_app/immutable/assets/landing/….
+	for (const p of [await (await browser.newContext({ javaScriptEnabled: false })).newPage(), page]) {
+		const failed: string[] = [];
+		p.on('response', (r) => {
+			// Assets, not the API (the layout's session check may answer 401).
+			if (!['fetch', 'xhr'].includes(r.request().resourceType()) && r.status() >= 400) failed.push(`${r.status()} ${r.url()}`);
+		});
+		const texture = p.waitForResponse((r) => r.url().endsWith('/landing/contours.svg'));
+		await p.goto('/welcome', { waitUntil: 'load' });
+		const res = await texture;
+		expect(new URL(res.url()).pathname).toBe('/landing/contours.svg');
+		expect(res.status()).toBe(200);
+		expect(failed).toEqual([]);
+	}
+});
+
 test('on a desktop the story’s pinned scene fits the window, and the step in the middle lights its part', async ({ page }) => {
 	await page.setViewportSize(DESKTOP);
 	await page.goto('/');

@@ -2933,8 +2933,17 @@ Applicant view and the Applications tab. Left:
 
 - [ ] **Performance budgets on the deployed site.** Lighthouse ≥ 95 in all
       four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
-      quality bar). They can't be measured on the local static server.
-      Trigger: the first deploy (Phase 6); then close #57.
+      quality bar). A local baseline (2026-09-28, the build served with gzip
+      like CloudFront; [design/landing-art.md § Quality
+      bar](./design/landing-art.md#quality-bar)) passes everything but LCP:
+      97 / 97 / 100 / 100, CLS 0, **LCP 2.4–2.6 s** on Lighthouse's mobile
+      preset. Tried locally with no effect: preloading the hero from the head,
+      and inlining the stylesheets. What is left is ~0.7 s of render delay,
+      main-thread time, so if the deployed site also misses 2.0 s the levers
+      are: less script and CSS before the landing's first paint (the root
+      layout's app-wide code), then giving phones the 800 px render (`sizes`
+      asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
+      6); measure there, then close #57.
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
