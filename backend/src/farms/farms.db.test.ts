@@ -165,7 +165,7 @@ describe('project routes for a farmer', () => {
 		expect((await farmer.call('GET', `/projects/${projectId}/publication`)).body).toEqual({ current: null, history: [] });
 		const index = await farmer.call('GET', `/projects/${projectId}/farm`);
 		expect(index.status).toBe(200);
-		expect(index.body).toEqual({ project: { id: projectId, name: 'Farm scope' }, farms: [{ nodeId: farmA.id, name: 'Farm A' }], publication: null });
+		expect(index.body).toEqual({ project: { id: projectId, name: 'Farm scope', wuaName: null }, farms: [{ nodeId: farmA.id, name: 'Farm A' }], publication: null });
 		for (const n of [farmB.id, outlet.id, ZERO]) {
 			expect((await farmer.call('GET', `/projects/${projectId}/farm/${n}`)).status, n).toBe(404);
 			expect((await farmer.call('GET', `/projects/${projectId}/farm/${n}/export.csv`)).status, n).toBe(404);
