@@ -1083,7 +1083,7 @@ min role is farmer, with RLS doing the scoping.
 - A notes drawer on a Network farm row, the Runs tab and settings groups,
   with a count badge.
 - An Overview list of recent notes.
-- In the farmer view: "Notes about your farm" (theirs and the WUA's
+- In the farmer view: "Notes about your hydrological unit" (theirs and the WUA's
   farm-visible ones).
 - Plain text only, rendered with Svelte escaping. **No `{@html}`, no
   markdown.** Line breaks are preserved with CSS `white-space: pre-line`.
@@ -2136,7 +2136,7 @@ with `409` and the failed checks when the run isn't evidence.
 - A "Report" button in the Runs tab and on the Overview published card.
 - The report page shows an on-screen "Preparing…" until
   `data-report-ready`.
-- Farmers get a one-page "My farm" print view of the farm page instead (a
+- Farmers get a one-page "My hydrological unit" print view of the farm page instead (a
   print stylesheet on WP-2.6), never the catchment report.
 
 **Tests**
