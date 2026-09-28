@@ -10,12 +10,12 @@ import { ungroup } from '../support/format.ts';
 
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
-test('add a town demand to a unit, save, reload, run, and see what it was supplied', async ({ page, owner }) => {
+test('add a town demand to a hydrological unit, save, reload, run, and see what it was supplied', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Demand objects');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const group = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(group.getByText('No demand objects on Upper farm.')).toBeVisible();
@@ -41,7 +41,7 @@ test('add a town demand to a unit, save, reload, run, and see what it was suppli
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	const again = page.getByRole('group', { name: 'Demand objects', exact: true });
 	await expect(again.getByLabel('Name')).toHaveValue('Town');
 	await expect(again.getByLabel('Demand of Town in Mar, m³/day')).toHaveValue('400');

@@ -56,7 +56,7 @@
 {/snippet}
 
 {#if comparison.farms.length === 0}
-	<p class="muted">No unit appears in both runs, so there is nothing to compare unit by unit.</p>
+	<p class="muted">No hydrological unit appears in both runs, so there is nothing to compare hydrological unit by hydrological unit.</p>
 {:else}
 	<p class="muted small">
 		Daily averages over each run. Each cell shows run B's value and, below it, the change from run A (▲ up, ▼ down; green
@@ -64,11 +64,11 @@
 	</p>
 	<div class="table-wrap">
 		<table class="data">
-			<caption class="visually-hidden">Change per unit, run B minus run A</caption>
+			<caption class="visually-hidden">Change per hydrological unit, run B minus run A</caption>
 			<thead>
 				<tr>
 					<th scope="col" aria-sort={ariaSort('name')}>
-						<button type="button" class="sort" onclick={() => click('name')}>Unit <span aria-hidden="true">{indicator('name')}</span></button>
+						<button type="button" class="sort" onclick={() => click('name')}>Hydrological unit <span aria-hidden="true">{indicator('name')}</span></button>
 					</th>
 					{#each FARM_COLUMNS as c (c.key)}
 						<th scope="col" class="num" aria-sort={ariaSort(c.key)}>
@@ -113,7 +113,7 @@
 	</div>
 	{#if zeroNotes.length}
 		<p class="muted small" data-testid="farm-feature-note">
-			{#each zeroNotes as c, i (c.key)}{i ? ' ' : ''}{c.label}: a run with {c.none} at a unit reads as 0 there (“none”).{/each}
+			{#each zeroNotes as c, i (c.key)}{i ? ' ' : ''}{c.label}: a run with {c.none} at a hydrological unit reads as 0 there (“none”).{/each}
 		</p>
 	{/if}
 {/if}

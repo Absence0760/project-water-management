@@ -3,6 +3,7 @@ import { runEvidence, type Nomination } from './evidence.js';
 
 const n = (runId: string, day: number, reason = `r${day}`): Nomination => ({
 	id: `n${day}`,
+	withdrawn: false,
 	runId,
 	runLabel: `Run ${runId.toUpperCase()}`,
 	runCreatedAt: '2026-09-01T00:00:00.000Z',
@@ -41,6 +42,17 @@ describe('runEvidence', () => {
 		const h = [n('a', 1), n('b', 2), n('a', 3)];
 		expect(runEvidence(h, 'a')).toMatchObject({ status: 'current', reason: 'r3', replacedBy: null });
 		expect(runEvidence(h, 'b')).toMatchObject({ status: 'past', replacedBy: { runId: 'a', reason: 'r3' } });
+	});
+
+	it('a withdrawal (098) makes the nomination before it past, "withdrawn" rather than replaced, and names no run', () => {
+		const w: Nomination = { ...n('x', 3, 'application lapsed'), withdrawn: true, runId: null, runLabel: null, runCreatedAt: null, runoffModel: null, engineVersion: null };
+		expect(runEvidence([n('a', 1), w], 'a')).toMatchObject({
+			status: 'past',
+			replacedBy: { withdrawn: true, runId: null, runLabel: null, nominatedAt: '2026-09-03T08:00:00.000Z', reason: 'application lapsed' }
+		});
+		// Nominated again after the withdrawal: current again, and the control (a replacement) is not a withdrawal.
+		expect(runEvidence([n('a', 1), w, n('a', 4)], 'a')).toMatchObject({ status: 'current', replacedBy: null });
+		expect(runEvidence([n('a', 1), n('b', 2)], 'a')?.replacedBy?.withdrawn).toBe(false);
 	});
 
 	it('writes timestamps as ISO strings whether pg hands back a Date or a string', () => {

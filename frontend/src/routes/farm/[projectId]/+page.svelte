@@ -82,7 +82,7 @@
 	}
 </script>
 
-<svelte:head><title>{t('{page} · My farm', { page: farm.farmName ?? t('My farm') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My hydrological unit', { page: farm.farmName ?? t('My hydrological unit') })}</title></svelte:head>
 
 <FarmPage {farm} {projectId} {asked}>
 	{#snippet children(view)}
@@ -90,7 +90,7 @@
 		{@const dam = damCard(view.farm, unit)}
 		{#if several && farm.index}
 			{#snippet switcher(farms: { nodeId: string; name: string }[])}
-				<nav class="switch" aria-label={t('Your farms in this catchment')}>
+				<nav class="switch" aria-label={t('Your hydrological units in this catchment')}>
 					{#each farms as f (f.nodeId)}
 						<a href={farmHref(base, projectId, f.nodeId, true)} aria-current={f.nodeId === farm.nodeId ? 'page' : undefined}>{f.name}</a>
 					{/each}
@@ -102,7 +102,7 @@
 				<!-- Many farms: folded, so the farm's name and the WUA's notice stay on the first screen (ui.md § Farmer view). -->
 				<details class="switch-more">
 					<!-- The nav's own (translated) name, with the count beside it: no new words to translate. -->
-					<summary>{t('Your farms in this catchment')} ({count(FARMS, farm.index.farms.length)})</summary>
+					<summary>{t('Your hydrological units in this catchment')} ({count(FARMS, farm.index.farms.length)})</summary>
 					{@render switcher(farm.index.farms)}
 				</details>
 			{/if}

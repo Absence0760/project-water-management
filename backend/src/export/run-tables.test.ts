@@ -799,13 +799,32 @@ describe('the evidence nomination rows', () => {
 				status: 'past',
 				...nominated,
 				reason: '=HYPERLINK("x")',
-				replacedBy: { runId: 'b', runLabel: '', nominatedAt: '2026-09-21T08:00:00.000Z', nominatedBy: null, reason: 'Refit, see §3' }
+				replacedBy: { withdrawn: false, runId: 'b', runLabel: '', nominatedAt: '2026-09-21T08:00:00.000Z', nominatedBy: null, reason: 'Refit, see §3' }
 			})
 		];
 		expect(lines).toEqual([
 			'Evidence nomination,"nominated before, since replaced"',
 			`Nominated,2026-09-20T08:00:00.000Z,Ann,"'=HYPERLINK(""x"")"`,
 			'Replaced by,Untitled run,2026-09-21T08:00:00.000Z,,"Refit, see §3"'
+		]);
+	});
+});
+
+describe('a withdrawn nomination (098)', () => {
+	it('says "since withdrawn" and gives the withdrawal’s date, author and reason, not a run', () => {
+		const lines = [
+			...evidenceLines({
+				status: 'past',
+				nominatedAt: '2026-09-20T08:00:00.000Z',
+				nominatedBy: 'Ann',
+				reason: 'Calibrated GR4J',
+				replacedBy: { withdrawn: true, runId: null, runLabel: null, nominatedAt: '2026-09-22T08:00:00.000Z', nominatedBy: 'Ben', reason: 'Application withdrawn' }
+			})
+		];
+		expect(lines).toEqual([
+			'Evidence nomination,"nominated before, since withdrawn"',
+			'Nominated,2026-09-20T08:00:00.000Z,Ann,Calibrated GR4J',
+			'Withdrawn,2026-09-22T08:00:00.000Z,Ben,Application withdrawn'
 		]);
 	});
 });

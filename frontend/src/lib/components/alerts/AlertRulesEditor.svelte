@@ -84,7 +84,7 @@
 	<h3 id="alert-rules-h">Alert emails for this catchment</h3>
 	<p class="muted">
 		Nothing is sent until you switch a kind on. Each alert is sent once when a figure crosses its level, and again only after it recovers. Farmers get dam
-		alerts for their own farm and the restriction notices; each person chooses how often on their account page.
+		alerts for their own hydrological unit and the restriction notices; each person chooses how often on their account page.
 	</p>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	{#if !groups}
@@ -97,7 +97,7 @@
 		{#if groups.farms.length}
 			<fieldset>
 				<legend>Dams</legend>
-				{#each groups.farms as r (key(r))}{@render rule(r, r.nodeName ?? 'Unit')}{/each}
+				{#each groups.farms as r (key(r))}{@render rule(r, r.nodeName ?? 'Hydrological unit')}{/each}
 			</fieldset>
 		{/if}
 		{#if groups.feeds.length}

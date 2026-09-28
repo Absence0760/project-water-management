@@ -150,6 +150,66 @@ describe('handler', () => {
 		});
 	});
 
+	describe('partial batch failures (ReportBatchItemFailures)', () => {
+		const ingest = (n: number) =>
+			JSON.stringify({ v: 1, type: 'ingest', fetchJobId: `00000000-0000-4000-8000-00000000000${n}`, feedId: '00000000-0000-4000-8000-000000000003', feedVersion: 'v1', result: {} });
+		const wake = JSON.stringify({ v: 1, type: 'wake', jobId: '00000000-0000-4000-8000-000000000000' });
+		afterEach(() => acceptIngestResult.mockReset().mockResolvedValue('queued'));
+
+		it('answers an all-good batch with no failures', async () => {
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			const res = await handler({ Records: [{ messageId: 'm1', body: wake }, { messageId: 'm2', body: ingest(1) }] } as never);
+			expect(res).toEqual({ batchItemFailures: [] });
+		});
+
+		it('reports only the record that threw, still handles the rest, and runs the tick', async () => {
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+			acceptIngestResult.mockResolvedValueOnce('queued').mockRejectedValueOnce(new Error('deadlock detected')).mockResolvedValueOnce('queued');
+			const res = await handler({
+				Records: [
+					{ messageId: 'm1', body: ingest(1) },
+					{ messageId: 'm2', body: ingest(2) },
+					{ messageId: 'm3', body: ingest(4) },
+					{ messageId: 'm4', body: wake }
+				]
+			} as never);
+			expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm2' }] });
+			expect(acceptIngestResult).toHaveBeenCalledTimes(3);
+			expect(runTick).toHaveBeenCalledTimes(1);
+			expect(error).toHaveBeenCalledWith(JSON.stringify({ event: 'worker_record_failed', messageId: 'm2', error: 'deadlock detected' }));
+		});
+
+		it('never reports a dropped record (unknown message, or a result for an unknown fetch): a retry cannot fix it', async () => {
+			vi.spyOn(console, 'log').mockImplementation(() => {});
+			vi.spyOn(console, 'warn').mockImplementation(() => {});
+			vi.spyOn(console, 'error').mockImplementation(() => {});
+			acceptIngestResult.mockResolvedValueOnce('unknown_fetch').mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+			const res = await handler({
+				Records: [
+					{ messageId: 'm1', body: 'garbage' },
+					{ messageId: 'm2', body: ingest(1) },
+					{ messageId: 'm3', body: ingest(2) }
+				]
+			} as never);
+			expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm3' }] });
+		});
+
+		it('fails the whole batch, without a tick, when every record threw (the database is down)', async () => {
+			vi.spyOn(console, 'error').mockImplementation(() => {});
+			acceptIngestResult.mockRejectedValueOnce(new Error('connect ECONNREFUSED')).mockRejectedValueOnce(new Error('connect ETIMEDOUT'));
+			await expect(handler({ Records: [{ messageId: 'm1', body: ingest(1) }, { messageId: 'm2', body: ingest(2) }] } as never)).rejects.toThrow('ECONNREFUSED');
+			expect(runTick).not.toHaveBeenCalled();
+		});
+
+		it('still fails the whole batch when the tick throws after a partial failure', async () => {
+			vi.spyOn(console, 'error').mockImplementation(() => {});
+			acceptIngestResult.mockRejectedValueOnce(new Error('deadlock detected'));
+			runTick.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
+			await expect(handler({ Records: [{ messageId: 'm1', body: ingest(1) }, { messageId: 'm2', body: wake }] } as never)).rejects.toThrow('ECONNREFUSED');
+		});
+	});
+
 	it('lets a failed tick throw, so SQS retries the batch (and dead-letters it after 5)', async () => {
 		runTick.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
 		await expect(handler({ Records: [] } as never)).rejects.toThrow('ECONNREFUSED');

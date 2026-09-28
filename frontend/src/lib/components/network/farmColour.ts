@@ -45,7 +45,7 @@ export function supplyColouring(nodes: readonly NetworkNode[], summary: Pick<Run
 		mode: 'supply',
 		byNode,
 		legend: bandsPresent(byNode).map((b) => ({ band: b, label: BAND_LABEL[b] })),
-		caption: `Units coloured by share of irrigation demand supplied in run “${run.name}”, ran ${run.ago}.`,
+		caption: `Hydrological units coloured by share of irrigation demand supplied in run “${run.name}”, ran ${run.ago}.`,
 		unsaved
 	};
 }
@@ -84,7 +84,7 @@ export function damColouring(nodes: readonly NetworkNode[], levels: readonly Dam
 		mode: 'dam',
 		byNode,
 		legend: present(byNode, ['met', 'short', 'low', 'none', 'absent'] as const, DAM_LABEL),
-		caption: `Units coloured by how full their dam was at the end of run “${run.name}”, ran ${run.ago}.`,
+		caption: `Hydrological units coloured by how full their dam was at the end of run “${run.name}”, ran ${run.ago}.`,
 		unsaved
 	};
 }
@@ -113,7 +113,7 @@ export function areaColouring(model: Pick<ProjectModel, 'nodes' | 'cropAreas'>):
 		mode: 'area',
 		byNode,
 		legend: present(byNode, ['area3', 'area2', 'area1', 'none'] as const, label),
-		caption: 'Units coloured by their irrigated (planted) area, as edited.',
+		caption: 'Hydrological units coloured by their irrigated (planted) area, as edited.',
 		unsaved: false
 	};
 }

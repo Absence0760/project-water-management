@@ -46,7 +46,7 @@
 		<li>
 			<DrawnIcon name="farmer" {armed} draw={seen} />
 			<h3>{t('Farmers')}</h3>
-			<p>{t('Your farm’s supply, your dam and any restriction, on your phone, in English or Afrikaans.')}</p>
+			<p>{t('Your hydrological unit’s supply, your dam and any restriction, on your phone, in English or Afrikaans.')}</p>
 		</li>
 	</ul>
 </section>

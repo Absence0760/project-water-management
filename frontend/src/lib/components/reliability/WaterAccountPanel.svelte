@@ -41,7 +41,7 @@
 		<p class="muted" data-testid="account-not-computed">{notComputedText(engineVersion)}</p>
 	{:else}
 		<p class="muted">
-			What entered the river network, where it went and what stayed in the units’ dams, per water year (October to September). In − out − change
+			What entered the river network, where it went and what stayed in the hydrological units’ dams, per water year (October to September). In − out − change
 			in storage leaves a residual that should be float noise; the largest here is {worstResidual === 0 ? 'exactly 0' : `${worstResidual.toExponential(1)} of the flows`}.
 			Dam releases are not modelled yet.
 		</p>

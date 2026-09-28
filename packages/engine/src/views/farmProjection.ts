@@ -814,6 +814,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		damCapacityM3: cap,
 		damMinPct: node.damMinPct,
 		irrigationEfficiency: runEfficiency(node, run),
+		dataFrom: run.startDate,
 		dataUntil: analysis.dataUntil,
 		season,
 		last30,

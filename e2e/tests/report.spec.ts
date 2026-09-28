@@ -19,7 +19,7 @@ const SECTIONS = [
 	'3. Calibration',
 	'4. Shortfalls and curtailment',
 	'5. EWR compliance',
-	'6. Units, warnings and checks',
+	'6. Hydrological units, warnings and checks',
 	'7. Notes',
 	'8. Validation statement',
 	'9. Professional sign-off',

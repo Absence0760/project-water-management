@@ -14,9 +14,9 @@ const toggle = (page: Page) => page.getByLabel('Show model inputs');
 
 // Applications (WP-3.3) is the assessors' list: owners and editors only, never a viewer.
 // In sidebar order: Build the model, Review, Outcomes (the operator's order, 2026-09-27; lib/workspace/tabs.ts NAV_SECTIONS).
-const EVERY_TAB = ['Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History', 'Summary', 'River & reserve', 'Units & supply', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
+const EVERY_TAB = ['Network', 'Crops & demand', 'Transfers', 'Data', 'Settings & calibration', 'Project', 'Applications', 'History', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 const VIEWER_ALL = EVERY_TAB.filter((t) => t !== 'Applications');
-const SHORT = ['Data', 'Project', 'Summary', 'River & reserve', 'Units & supply', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
+const SHORT = ['Data', 'Project', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations'];
 
 /** The strip's tab names, in order. */
 async function tabNames(page: Page) {
@@ -79,7 +79,7 @@ test('a viewer sees the short tab set and turns on "Show model inputs"', async (
 
 	// Turning it off hides the inputs again, but the open tab stays in the strip.
 	await toggle(v).uncheck();
-	await expect.poll(() => tabNames(v)).toEqual(['Network', 'Data', 'Project', 'Summary', 'River & reserve', 'Units & supply', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Network', 'Data', 'Project', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
 	await expect(strip(v).getByRole('link', { name: 'Network' })).toHaveAttribute('aria-current', 'page');
 	await strip(v).getByRole('link', { name: 'Summary' }).click();
 	await expect.poll(() => tabNames(v)).toEqual(SHORT);
@@ -96,7 +96,7 @@ test('a deep link to a hidden tab still opens it for a viewer', async ({ page, o
 	await expect(v.getByLabel('A-pan evaporation, Oct, mm')).not.toBeEditable();
 	await expect(toggle(v)).not.toBeChecked();
 	// The open tab shows in the strip, in its place, and names the tab body.
-	await expect.poll(() => tabNames(v)).toEqual(['Data', 'Settings & calibration', 'Project', 'Summary', 'River & reserve', 'Units & supply', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
+	await expect.poll(() => tabNames(v)).toEqual(['Data', 'Settings & calibration', 'Project', 'Summary', 'River & reserve', 'Hydrological units', 'Runs & results', 'Dams', 'Compare runs', 'Scenarios', 'Allocations']);
 	const current = strip(v).getByRole('link', { name: 'Settings & calibration' });
 	await expect(current).toHaveAttribute('aria-current', 'page');
 	await expect(v.getByRole('region', { name: 'Settings & calibration', exact: true })).toBeVisible();

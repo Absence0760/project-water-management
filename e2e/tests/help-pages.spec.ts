@@ -135,7 +135,7 @@ test('widened from a phone past 900 px, the text takes its column at once, besid
 	void owner;
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto('/help/guides/a-day-on-a-farm');
-	await expect(page.getByRole('heading', { level: 1, name: 'A day on one unit' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'A day on one hydrological unit' })).toBeVisible();
 	await page.setViewportSize({ width: 1440, height: 960 });
 	// Measured straight after the resize, before the contents column (and the app
 	// sidebar) arrive: the text column was the 13rem contents track, ~180 px, until then.

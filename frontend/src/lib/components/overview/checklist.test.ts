@@ -75,8 +75,8 @@ describe('checklist', () => {
 			updatedAt: '2026-01-15T00:00:00Z'
 		});
 		expect(statuses(steps)).toEqual({ network: 'done', crops: 'done', series: 'done', settings: 'done', runs: 'done' });
-		expect(steps[0]!.detail).toBe('1 unit, 1 gauge, draining to Gauge.');
-		expect(steps[1]!.detail).toBe('1 crop on 1 unit, 12.5 ha irrigated.');
+		expect(steps[0]!.detail).toBe('1 hydrological unit, 1 gauge, draining to Gauge.');
+		expect(steps[1]!.detail).toBe('1 crop on 1 hydrological unit, 12.5 ha irrigated.');
 		expect(steps[2]!.detail).toBe('Rainfall (10 years) and observed flow loaded.');
 		expect(steps[4]!.detail).toBe('2 runs, latest 2026-02-01.');
 		expect(progress(steps).complete).toBe(true);
@@ -102,7 +102,7 @@ describe('checklist', () => {
 	it('crops without planted area are partial; crops are optional', () => {
 		const steps = checklist({ model: { ...full, cropAreas: [] }, settings: settled(), series: [], runs: [] });
 		expect(steps[1]).toMatchObject({ status: 'partial', optional: true });
-		expect(steps[1]!.detail).toBe('1 crop defined, but no irrigated area on any unit yet.');
+		expect(steps[1]!.detail).toBe('1 crop defined, but no irrigated area on any hydrological unit yet.');
 	});
 
 	it('rainfall without observed flow is partial (no calibration check)', () => {

@@ -105,7 +105,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project models one river catchment day by day. Rain becomes natural flow, the flow is shared between the units, each unit fills its dam and irrigates, and whatever is left reaches the outlet. Every run answers three questions: how much water is there, can each unit’s irrigation be met, and does enough stay in the river for the [[ewr]]?'
+						text: 'A project models one river catchment day by day. Rain becomes natural flow, the flow is shared between the hydrological units, each hydrological unit fills its dam and irrigates, and whatever is left reaches the outlet. Every run answers three questions: how much water is there, can each hydrological unit’s irrigation be met, and does enough stay in the river for the [[ewr]]?'
 					},
 					{
 						type: 'diagram',
@@ -122,9 +122,9 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'**Create the project** on the Projects page. See [[guide:create-a-project|Create a project]].',
-							'**Network**: add the units and gauges, say what each drains into, and end at one outflow gauge. Give the units their areas. See [[guide:build-the-network|Build the river network]].',
-							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each unit plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
-							'**Transfers** (optional): pipelines or canals from one unit’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
+							'**Network**: add the hydrological units and gauges, say what each drains into, and end at one outflow gauge. Give the hydrological units their areas. See [[guide:build-the-network|Build the river network]].',
+							'**Crops & demand** (optional): crops with monthly crop factors, then the hectares each hydrological unit plants. Skip it if nothing is irrigated. See [[guide:set-up-crops-and-demand|Set up crops and demand]].',
+							'**Transfers** (optional): pipelines or canals from one hydrological unit’s dam to another. See [[guide:add-a-transfer|Add a transfer]].',
 							'**Data**: upload daily rainfall (required) and observed flow at the outlet (needed to calibrate). See [[guide:add-data|Upload rainfall and flow data]].',
 							'**Settings & calibration**: A-pan evaporation, the runoff model and its parameters, how rain gaps are filled, the calibration window, the EWR and the simulation period. See [[guide:set-the-ewr|Set the EWR]] and [[guide:fit-automatically|Fit the runoff model automatically]].',
 							'**Run** the model on the Runs & results tab, then read the results. See [[guide:run-and-read-results|Run the model and read the results]].',
@@ -134,7 +134,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (farms short of water, run warnings, new or old data and units with nothing planted, each a link to where it is fixed); and **Supply by unit**, where a unit’s name opens its planted areas and **More on Units & supply** opens that page. The **Dams today** card opens the **Dams** tab. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (hydrological units short of water, run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed); and **Supply by hydrological unit**, where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
 					}
 				]
 			},
@@ -143,15 +143,15 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
+						text: 'A project’s tabs are grouped in three sections. **Outcomes** is what the model says: the Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios and Allocations. **Build the model** is what it is made of, in setup order: Network, Crops & demand, Transfers, Data and Settings & calibration. **Review** holds the Project page, Applications and the History of changes.'
 					},
 					{
 						type: 'p',
-						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
+						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
 					},
 					{
 						type: 'p',
-						text: '**Dams** has a card for each unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
+						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the hydrological unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
 					},
 					{
 						type: 'p',
@@ -159,11 +159,11 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the farms and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**. On a phone the actions sit under the name in full-width rows, with **Add data** and **Run model** always side by side at the end.'
+						text: 'Each section opens with one header: its name, a line saying what it shows (the run on the Summary and on River & reserve, the hydrological units and dams on the Network, where the runoff parameters came from on Settings & calibration, how many series are behind on Data), and its actions on the right. **Rain up to** says how current the rainfall is (click it for every series). Editors also get **Add data**, which uploads a file, and, on the Summary and the pages under *Build the model* other than Data, **Run model**, which runs the saved model and opens the run in Runs & results. Runs & results has its own run form there instead: an optional **Run label**, **Run forecast** when there is forecast rain, and **Run model**. On a phone the actions sit under the name in full-width rows, with **Add data** and **Run model** always side by side at the end.'
 					},
 					{
 						type: 'p',
-						text: 'Each page adds its own actions to the header. The Network has **Grids** and **+ Add node**; Crops & demand **Grids** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Units & supply have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
+						text: 'Each page adds its own actions to the header. The Network has **Grids** and **+ Add node**; Crops & demand **Grids** and **+ Add crop**; Transfers **Show on the map** and **+ Add transfer**; Data **Preview all data**; Settings & calibration **Fit the parameters**, which jumps to the Fit automatically panel. River & reserve and Hydrological units have a menu to pick the run and a link to it in Runs & results, and Dams the same link; Scenarios has **+ New scenario**; Allocations **Download CSV**, **Import** and **+ Add volume**; Project **Download**; Applications **Decide the longest waiting**. Notices sit in one line under the header: that you can only view the project, what an upload added, or that new data has arrived since the last run, with **Re-run model** for editors.'
 					},
 					{
 						type: 'p',
@@ -172,11 +172,11 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'To change one unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the unit on the Network and follow **Irrigated** on its card beside the map, pick the unit’s name in the Summary’s **Supply by unit** (or **Its planted areas** on a unit in its **Needs attention**), its name beside its bar on Crops & demand, or **Planted areas** on its card on Units & supply or Dams. It opens beside the page and saves with the rest of the model.'
+						text: 'To change one hydrological unit’s planted areas without leaving the page you are on, open its **Planted areas**: select the hydrological unit on the Network and follow **Irrigated** on its card beside the map, pick the hydrological unit’s name in the Summary’s **Supply by hydrological unit** (or **Its planted areas** on a hydrological unit in its **Needs attention**), its name beside its bar on Crops & demand, or **Planted areas** on its card on Hydrological units or Dams. It opens beside the page and saves with the rest of the model.'
 					},
 					{
 						type: 'p',
-						text: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”) against what it is about. The speech-bubble button, with a count once there are notes, is on each node on the Network (its card beside the map and its row in the Node table), on a run’s record in Runs & results, beside each group’s heading on Settings & calibration and on **Recent notes** on the Project page. It opens the notes in a panel down the right: write a new one at the top, and the notes, newest first, scroll under it. Everyone on the project can add one; you edit your own. On a unit, **Also show to this unit’s farmers** lets its farmers read it too; every other note stays with the project team.'
+						text: 'Notes keep what lives in people’s heads (“dam raised in 2019 per owner”) against what it is about. The speech-bubble button, with a count once there are notes, is on each node on the Network (its card beside the map and its row in the Node table), on a run’s record in Runs & results, beside each group’s heading on Settings & calibration and on **Recent notes** on the Project page. It opens the notes in a panel down the right: write a new one at the top, and the notes, newest first, scroll under it. Everyone on the project can add one; you edit your own. On a hydrological unit, **Also show to this hydrological unit’s farmers** lets its farmers read it too; every other note stays with the project team.'
 					}
 				]
 			},
@@ -224,7 +224,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Each row says how its catchment is doing, from its published run (or its latest run when none is published): the EWR over the last 30 days in words, the units short this week, the lowest dam, how old the rain data is and when it last ran. **Needs attention** at the top lists the catchments to look at first (a red or amber EWR, units short, alerts firing, failing feeds, newer rain than the figures, figures over a week old), each with its reasons. The chips filter by owner, and **Sort** or a column heading orders the list; both stay in the page’s address.'
+						text: 'Each row says how its catchment is doing, from its published run (or its latest run when none is published): the EWR over the last 30 days in words, the hydrological units short this week, the lowest dam, how old the rain data is and when it last ran. **Needs attention** at the top lists the catchments to look at first (a red or amber EWR, hydrological units short, alerts firing, failing feeds, newer rain than the figures, figures over a week old), each with its reasons. The chips filter by owner, and **Sort** or a column heading orders the list; both stay in the page’s address.'
 					}
 				]
 			},
@@ -258,7 +258,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'build-the-network',
 		title: 'Build the river network',
-		summary: 'Add units and gauges, connect each one to the element it drains into, and end at one outflow gauge.',
+		summary: 'Add hydrological units and gauges, connect each one to the element it drains into, and end at one outflow gauge.',
 		kind: 'howto',
 		tab: 'network',
 		sections: [
@@ -273,7 +273,7 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'network',
 						caption:
-							'A small network. Units are circles, units with a dam are filled squares, gauges are triangles, and the outflow gauge is filled. The dashed arrow is a transfer between two dams.'
+							'A small network. Hydrological units are circles, hydrological units with a dam are filled squares, gauges are triangles, and the outflow gauge is filled. The dashed arrow is a transfer between two dams.'
 					}
 				]
 			},
@@ -284,18 +284,18 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Start with **Add outflow gauge**: the gauge at the catchment outlet.',
-							'Press **+ Add node** for each unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
+							'Press **+ Add node** for each hydrological unit (its form opens beside the map), set its **Kind**, and set **Drains into** to the element directly below it on the river. To enter many at once, use the node table (**Grids** › **Node table**).',
 							'Add gauges where you want to read flow in the middle of the catchment, for example at a weir with a record.',
-							'Give every unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
-							'For a unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
-							'Set the unit’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
+							'Give every hydrological unit its **area** (km²). With the Hi/Lo flow-share method, also split it into high-MAP and low-MAP areas.',
+							'For a hydrological unit with a dam, set the [[dam-capacity]], the [[dam-initial|initial storage]], its [[dam-min|minimum level]], and how much of the upstream inflow and of its own runoff enter the dam. A node’s full form (**Edit** on its card beside the map) also has the dam’s [[dam-evaporation|area when full]] and its [[dam-seepage|seepage]].',
+							'Set the hydrological unit’s [[irrigation-efficiency|irrigation efficiency]], the share of its losses that returns as [[return-flow|return flow]], and any [[diversion|diversion back to the dam]].',
 							'Press **Save changes** on the save bar (or in the node’s sheet).'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour units by** › **Supply, latest run**, on by default); a unit added since the run is hatched. The same menu colours the units by their dam level at the end of the latest run, or by irrigated area. A name longer than 17 characters is shortened on the map, keeping the ending when two names would otherwise look alike (hover a node, or read the list beside the map, for its full name); a transfer that can’t curve clear of the names is drawn round them.'
+						text: 'In the schematic you can drag a node onto another to change what it drains into. A drop that would make a loop, or move the outlet, is refused with the reason. In the node table (**Grids** › **Node table**), **Sort by flow path** orders the rows from each headwater down. Once the model has been run, the map shades each hydrological unit by the share of its irrigation demand that run supplied (95% or more, 70–95%, under 70%; **Colour hydrological units by** › **Supply, latest run**, on by default); a hydrological unit added since the run is hatched. The same menu colours the hydrological units by their dam level at the end of the latest run, or by irrigated area. A name longer than 17 characters is shortened on the map, keeping the ending when two names would otherwise look alike (hover a node, or read the list beside the map, for its full name); a transfer that can’t curve clear of the names is drawn round them.'
 					}
 				]
 			},
@@ -304,7 +304,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'A unit also covers two other cases, set by its parameters:'
+						text: 'A hydrological unit also covers two other cases, set by its parameters:'
 					},
 					{
 						type: 'list',
@@ -316,7 +316,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'A river that splits in two (a bifurcation) can’t be drawn. Use a transfer for the side channel, or merge the units.'
+						text: 'A river that splits in two (a bifurcation) can’t be drawn. Use a transfer for the side channel, or merge the hydrological units.'
 					}
 				]
 			}
@@ -327,7 +327,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'set-up-crops-and-demand',
 		title: 'Set up crops and irrigation demand',
-		summary: 'Crops with monthly crop factors, the hectares on each unit, A-pan evaporation and effective rain.',
+		summary: 'Crops with monthly crop factors, the hectares on each hydrological unit, A-pan evaporation and effective rain.',
 		kind: 'howto',
 		tab: 'crops',
 		sections: [
@@ -348,7 +348,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] covers the day’s demand first; what the crop can’t use that day stays in the [[soil-water-store]] (25 mm by default) and covers the following days, so wet spells need less irrigation after the rain too. The unit then abstracts more than the crop needs, to cover its application losses ([[irrigation-efficiency]]).'
+						text: 'Gross demand is the same every day of a month. Rain above the [[rain-threshold]] covers the day’s demand first; what the crop can’t use that day stays in the [[soil-water-store]] (25 mm by default) and covers the following days, so wet spells need less irrigation after the rain too. The hydrological unit then abstracts more than the crop needs, to cover its application losses ([[irrigation-efficiency]]).'
 					},
 					{
 						type: 'note',
@@ -364,22 +364,22 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'On **Crops & demand**, press **+ Add crop**: its sheet opens beside the page. Name it and enter its 12 monthly [[crop-factor|crop factors]] (Oct … Sep). Each crop then has a row in the **Crops** list, largest planted area first, with its colour, area, the month it needs most water and a small chart of its factors (Oct to Sep, the highest marked with its value; point at it to read a month); **Edit** on the row opens the sheet again. A warning icon on a row means a factor above 1.0 (hover or focus it; it opens the sheet). With more than nine crops, the smallest share one grey colour as **Other**, named in their own row.',
-							'Under **Planted area by unit**, press **Edit areas** and enter the hectares of each crop on each unit in the grid. Leave a crop blank on units that don’t grow it. Each unit then gets a bar split by crop in the list’s colours, largest unit first (hover a segment for its crop and hectares); a note under the bars names any unit with nothing planted, whose demand is zero.',
-							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per unit and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
+							'Under **Planted area by hydrological unit**, press **Edit areas** and enter the hectares of each crop on each hydrological unit in the grid. Leave a crop blank on hydrological units that don’t grow it. Each hydrological unit then gets a bar split by crop in the list’s colours, largest hydrological unit first (hover a segment for its crop and hectares); a note under the bars names any hydrological unit with nothing planted, whose demand is zero.',
+							'Check **Irrigation demand by month**: the catchment’s gross demand per month, stacked by crop, with the year’s total under it. **Show table** gives m³/day per month, the mean, and Mm³ per year per hydrological unit and for the catchment. It comes before effective rain and irrigation efficiency, which a run applies day by day.',
 							'On **Settings & calibration → Demand**, enter the 12 monthly [[apan|A-pan evaporation]] values, the [[effective-rainfall|effective-rain fraction]] and the [[soil-water-store|soil-water store]]. The [[rain-threshold]] is under **Flow calibration**.',
-							'Set each unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
+							'Set each hydrological unit’s [[irrigation-efficiency|irrigation efficiency]] on the **Network** tab.',
 							'Save each tab.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas, Irrigation demand): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas, Irrigation demand): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'With A-pan at 0 in every month the crops need no water, and every unit looks fully supplied. The Summary’s checklist warns about this.'
+						text: 'With A-pan at 0 in every month the crops need no water, and every hydrological unit looks fully supplied. The Summary’s checklist warns about this.'
 					}
 				]
 			}
@@ -452,7 +452,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'add-a-transfer',
 		title: 'Add a transfer',
-		summary: 'Move water from one unit’s dam to another in chosen months, up to a pipe or canal capacity.',
+		summary: 'Move water from one hydrological unit’s dam to another in chosen months, up to a pipe or canal capacity.',
 		kind: 'howto',
 		tab: 'transfers',
 		sections: [
@@ -462,7 +462,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **+ Add transfer** in the section header and pick its source (**From**) and destination (**To**) units.',
+							'On **Transfers**, press **+ Add transfer** in the section header and pick its source (**From**) and destination (**To**) hydrological units.',
 							'Enter its [[transfer-rate|maximum rate]] in m³/s for each [[transfer-months|month]] it runs in, Oct … Sep; leave a month blank to keep it off. **… in every month** copies the largest rate to all twelve.',
 							'Enter a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
@@ -490,7 +490,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The source’s water is yesterday’s storage above the higher of the transfer’s minimum and the dam’s own [[dam-min|minimum level]], less what earlier transfers took. The room at the destination is the free space in its dam plus that day’s irrigation demand, so water is never pumped into a full dam only to spill. Transfers move before any unit irrigates.'
+						text: 'The source’s water is yesterday’s storage above the higher of the transfer’s minimum and the dam’s own [[dam-min|minimum level]], less what earlier transfers took. The room at the destination is the free space in its dam plus that day’s irrigation demand, so water is never pumped into a full dam only to spill. Transfers move before any hydrological unit irrigates.'
 					},
 					{
 						type: 'p',
@@ -539,7 +539,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
+						text: 'The EWR is assessed at EWR sites: the outflow gauge, against the full [[pragmatic-ewr]], and every gauge, against the [[ewr-share|EWR shares]] of everything upstream of it. On a day a site falls short, the shortfall is charged to the hydrological units upstream of it in proportion to what each took that day, never more than it took; the rest is natural. That [[ewr-charge]] says which hydrological unit causes a shortfall. The results report [[ewr-days-not-met]], an EWR grid by month and, with an observed record, whether the model fails on the days the real river did ([[ewr-agreement]]).'
 					}
 				]
 			}
@@ -691,7 +691,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Save any unsaved changes.',
 							'On **Runs & results**, optionally type a **Run label** in the header (where the other pages have Run model), and press **Run model**. It needs a network and a rainfall series; until then the line under the header says what is missing.',
-							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **River & reserve** and **Units & supply** for that run.',
+							'The runs are listed on the left, newest first, beside the run shown; pick one to show it. Its header links to **River & reserve** and **Hydrological units** for that run.',
 							'The new run opens when it finishes. A run keeps a snapshot of the inputs it used, so later edits never change it.'
 						]
 					}
@@ -703,16 +703,16 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which units fell short, the fit when there is observed flow), and the headline figures. The per-unit table is on **Units & supply** (see below).',
+							'**Summary**: first what to check before relying on the run, then (folded away) notes on how the input data were handled, and a line of model checks (self-checks, plausibility, the WR2012 flag, the fit), each linking to its panel. Then a sentence or two in plain words (how often the river’s requirement was met, which hydrological units fell short, the fit when there is observed flow), and the headline figures. The table per hydrological unit is on **Hydrological units** (see below).',
 							'**Model quality**: the **Hydrograph** (simulated and observed flow; natural flow is hidden until you click it in the legend) with the **Flow duration** curve under it, **Calibration** with **Where the parameters came from**, the **Runoff model** (GR4J runs), the **WR2012 check** when set up, **EWR vs observed**, and the **Plausibility checks**.',
 							'**Record**: the run’s notes, whether it is the project’s evidence run (see below), and its publication.',
-							'**Dig deeper**: **Self-checks** (whether each unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
+							'**Dig deeper**: **Self-checks** (whether each hydrological unit’s daily balance closes and the reports add up, the water balance by water year, and **Trace a day**; see [[balance-check|the self-checks]]) and **Explore outputs**: any stored daily series, by node.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Units & supply**, **Data** and **Settings & calibration** have the same menu.'
+						text: 'The row of links under the header, **On this page**, jumps to each of these sections and marks the one you are reading; it stays in view as you scroll. In a narrower window the last few are under **More** at its end. **River & reserve**, **Hydrological units**, **Data** and **Settings & calibration** have the same menu.'
 					},
 					{
 						type: 'p',
@@ -720,12 +720,12 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Units & supply**, also under *Outcomes*, is the units’ page for one run (the newest, or pick another from the run menu in its header; the Summary’s **Supply by unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the units below 95 %, the units short on any of the run’s last 7 days (**Short this week**, which opens the curtailment over those days) and the total shortfall. Then a card per unit, least supplied first, in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared. Below them: the **Unit results** table (units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
+						text: '**Hydrological units**, also under *Outcomes*, is the hydrological units’ page for one run (the newest, or pick another from the run menu in its header; the Summary’s **Supply by hydrological unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the hydrological units below 95 %, the hydrological units short on any of the run’s last 7 days (**Short this week**, which opens the curtailment over those days) and the total shortfall. Then a card per hydrological unit, least supplied first, in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that hydrological unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared. Below them: the **Hydrological unit results** table (hydrological units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each hydrological unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
 					},
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. The two tables with a column per unit, **Fragmented flow** and **Fragmented EWR**, have a **Preview** beside them that shows the file’s table first, searchable by date, with **Download CSV** to save it. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every unit, the unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
+						text: 'The **Download** menu on a run gives the daily series and the summary as CSV, for your own checks or a report. The two tables with a column per hydrological unit, **Fragmented flow** and **Fragmented EWR**, have a **Preview** beside them that shows the file’s table first, searchable by date, with **Download CSV** to save it. **Report**, beside it, opens a printable catchment report of the run: the network, the inputs it used, calibration, curtailment, EWR compliance for the outlet and every hydrological unit, the hydrological unit table, warnings, self-checks and the run’s notes. Press **Download PDF** once it has finished preparing and choose **Save as PDF** in the print dialog; it prints on A4 in the light theme, without the app’s sidebar or menu bar. **Generate PDF** and **Email me the PDF** make the same PDF on the server instead; the emailed link opens a page that names the catchment and run, says whether the PDF is queued, being made, ready or failed, and offers **Download the PDF** for an hour. Viewers can open it too.'
 					}
 				]
 			},
@@ -769,14 +769,14 @@ export const GUIDES: Guide[] = [
 							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
 							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value (dam storage at the end of the run too, as a share of each run’s own dam capacity), and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',
-							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, farms and the daily series. There the baseline is run A and the what-if run B.',
+							'Below that, **Full comparison** has every detail for the baseline against one what-if (pick which): **What changed** (every input difference), **Headline results**, fit and validation, uncertainty, the reserve by month, hydrological units and the daily series. There the baseline is run A and the what-if run B.',
 							'To hand the result round, press **Export impact report** (with two what-ifs, pick which). It opens that what-if’s printable report with **Impact against the baseline** first: the same outcomes, takeaways and input changes. **Download PDF** saves it.'
 						]
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'Results are daily averages over each run’s own period. When runs cover different periods the page warns you, and so do the takeaways: part of the change then comes from the dates, not from your edit. A takeaway appears only for a material change (a day a year below the reserve, a point of the demand supplied, a farm crossing 95 %); the table shows everything.'
+						text: 'Results are daily averages over each run’s own period. When runs cover different periods the page warns you, and so do the takeaways: part of the change then comes from the dates, not from your edit. A takeaway appears only for a material change (a day a year below the reserve, a point of the demand supplied, a hydrological unit crossing 95 %); the table shows everything.'
 					},
 					{
 						type: 'p',
@@ -793,7 +793,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'how-the-model-works',
 		title: 'How the model works',
-		summary: 'The chain from daily rain to unit supply, dam storage, outflow and the EWR check.',
+		summary: 'The chain from daily rain to hydrological unit supply, dam storage, outflow and the EWR check.',
 		kind: 'concept',
 		sections: [
 			{
@@ -803,17 +803,17 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'pipeline',
 						caption:
-							'One run, every day of the simulation window. The runoff model makes the catchment’s natural flow; the network then routes it through units and dams to the outflow gauge, where the EWR and the calibration are checked.'
+							'One run, every day of the simulation window. The runoff model makes the catchment’s natural flow; the network then routes it through hydrological units and dams to the outflow gauge, where the EWR and the calibration are checked.'
 					},
 					{
 						type: 'steps',
 						items: [
 							'**Rain.** Each day takes the first available of catchment rain, bias-corrected CHIRPS and forecast rain. See [[guide:rain-gap-filling|How rain gaps are filled]].',
-							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no units.',
-							'**Shares.** Natural flow and the EWR are split between the units by fixed [[flow-share|flow shares]].',
-							'**Demand.** Crops, A-pan and effective rain give each unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the unit takes from its dam and the river.',
-							'**Unit balance.** Upstream first, each unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one unit]].',
-							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the units upstream of it ([[ewr-charge]]).'
+							'**Natural flow.** The [[runoff-model]] (GR4J) turns rain and evaporation into the flow the catchment would produce with no hydrological units.',
+							'**Shares.** Natural flow and the EWR are split between the hydrological units by fixed [[flow-share|flow shares]].',
+							'**Demand.** Crops, A-pan and effective rain give each hydrological unit’s [[crop-requirement|crop water requirement]]; divided by the [[irrigation-efficiency|irrigation efficiency]] it is the [[irrigation-demand|abstraction demand]], what the hydrological unit takes from its dam and the river.',
+							'**Hydrological unit balance.** Upstream first, each hydrological unit fills its dam, irrigates, spills and passes water on. See [[guide:a-day-on-a-farm|A day on one hydrological unit]].',
+							'**Outlet.** The outflow gauge’s flow is the simulated outflow. It is checked against the EWR and scored against observed flow. Every other gauge is an EWR site too, and a shortfall at any site is charged to the hydrological units upstream of it ([[ewr-charge]]).'
 						]
 					}
 				]
@@ -825,7 +825,7 @@ export const GUIDES: Guide[] = [
 						type: 'list',
 						items: [
 							'Flows and volumes are m³/day inside the model. Nothing is rounded mid-calculation; rounding is for display only.',
-							'Every unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
+							'Every hydrological unit’s daily balance closes: inflow + rain on the dam − irrigation use − dam evaporation − change in storage = outflow. Invariant tests check this on random networks, and every run checks it again on its own results (**Self-checks**).',
 							'A run is a snapshot: it records its inputs and engine version, so its results can always be explained and reproduced.',
 							'Where the engine departs from the b023 workbook, the engine audit records why.'
 						]
@@ -838,27 +838,27 @@ export const GUIDES: Guide[] = [
 	},
 	{
 		id: 'a-day-on-a-farm',
-		title: 'A day on one unit',
-		summary: 'How a unit element splits its inflows around the dam, irrigates, spills and passes water downstream.',
+		title: 'A day on one hydrological unit',
+		summary: 'How a hydrological unit element splits its inflows around the dam, irrigates, spills and passes water downstream.',
 		kind: 'concept',
 		tab: 'network',
 		sections: [
 			{
-				heading: 'One unit, up close',
+				heading: 'One hydrological unit, up close',
 				blocks: [
 					{
 						type: 'picture',
 						shot: 'farm',
-						caption: 'A unit (here a farm) on a tributary: its dam, the orchard it irrigates and the pipeline to a neighbour’s dam. Follow the numbers in the order the model works through a day.',
+						caption: 'A hydrological unit (here a farm) on a tributary: its dam, the orchard it irrigates and the pipeline to a neighbour’s dam. Follow the numbers in the order the model works through a day.',
 						stops: [
 							{ spot: 'upstream', title: 'Inflow from upstream', text: 'The stream brings the outflow of the elements above. The [[upstream-to-dam|upstream share]] of it enters the dam.' },
-							{ spot: 'runoff', title: 'The unit’s own runoff', text: 'The unit’s [[flow-share|share]] of the catchment’s natural flow. Its [[runoff-to-dam|own-runoff share]] drains into the dam.' },
+							{ spot: 'runoff', title: 'The hydrological unit’s own runoff', text: 'The hydrological unit’s [[flow-share|share]] of the catchment’s natural flow. Its [[runoff-to-dam|own-runoff share]] drains into the dam.' },
 							{ spot: 'storage', title: 'Dam storage', text: 'Yesterday’s storage plus rain on the dam, today’s captured inflow, diversion and transfers, less [[dam-evaporation|evaporation]], [[dam-seepage|seepage]] and irrigation, up to the [[dam-capacity|capacity]].' },
 							{ spot: 'spill', title: 'Spill over the wall', text: 'Water above capacity [[spill|spills]] and continues downstream the same day.' },
-							{ spot: 'irrigation', title: 'Irrigation draw', text: 'The dam supplies the unit’s [[irrigation-demand|irrigation demand]], or what it holds above its [[dam-min|minimum level]] if that is less.' },
+							{ spot: 'irrigation', title: 'Irrigation draw', text: 'The dam supplies the hydrological unit’s [[irrigation-demand|irrigation demand]], or what it holds above its [[dam-min|minimum level]] if that is less.' },
 							{ spot: 'crops', title: 'The crops', text: 'The crop gets the supply × the [[irrigation-efficiency|irrigation efficiency]]. Part of the losses runs back to the river as [[return-flow|return flow]]; the rest leaves the catchment.' },
 							{ spot: 'transfer', title: 'Transfer to a neighbour', text: 'A [[transfer]] can move water out of (or into) this dam in chosen months.' },
-							{ spot: 'outflow', title: 'Outflow', text: 'Spill, water that passed below the dam, seepage and return flow leave as the unit’s [[farm-outflow|outflow]], the next element’s inflow.' }
+							{ spot: 'outflow', title: 'Outflow', text: 'Spill, water that passed below the dam, seepage and return flow leave as the hydrological unit’s [[farm-outflow|outflow]], the next element’s inflow.' }
 						]
 					}
 				]
@@ -870,15 +870,15 @@ export const GUIDES: Guide[] = [
 						type: 'diagram',
 						id: 'farm-day',
 						caption:
-							'Water arriving from upstream and the unit’s own runoff each split into a part that enters the dam and a part that passes below it. A diversion can take some of the bypass back into the dam. Irrigation draws from the dam; spill, bypass and return flow leave downstream.'
+							'Water arriving from upstream and the hydrological unit’s own runoff each split into a part that enters the dam and a part that passes below it. A diversion can take some of the bypass back into the dam. Irrigation draws from the dam; spill, bypass and return flow leave downstream.'
 					},
 					{
 						type: 'steps',
 						items: [
 							'Upstream inflow × [[upstream-to-dam|upstream share]] enters the dam; the rest passes below it.',
-							'Unit runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
+							'Hydrological unit runoff × [[runoff-to-dam|own-runoff share]] enters the dam; the rest passes below it.',
 							'The [[diversion]] takes up to its daily capacity from the water passing below, back into the dam.',
-							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any unit irrigates.',
+							'A [[transfer]] adds to or takes from the dam. Transfers move first, before any hydrological unit irrigates.',
 							'The dam catches the rain on its surface and loses [[dam-evaporation|open-water evaporation]] and any [[dam-seepage|seepage]]; seepage reaches the river below the wall.',
 							'Irrigation takes the smaller of the [[irrigation-demand|demand]] and what the dam holds above its [[dam-min|minimum level]] (yesterday’s storage plus today’s inflows and the rain on it, less evaporation and seepage).',
 							'Storage above capacity [[spill|spills]]. [[return-flow|Return flow]] is the returning share of the irrigation losses, back to the river the same day.',
@@ -987,12 +987,12 @@ export const GUIDES: Guide[] = [
 						stops: [
 							{ spot: 'gauge', title: 'The gauging hut', text: 'A gauge or logger records the water level, turned into [[observed-flow|observed flow]] by a rating curve. High flows beyond the highest measurement are extrapolated, so they are the least certain.' },
 							{ spot: 'weir', title: 'The weir', text: 'A control that makes level and flow relate reliably. The model’s [[outflow-gauge]] stands for this point.' },
-							{ spot: 'reach', title: 'The river above it', text: 'What arrives here is the whole catchment’s outflow, units and dams included, which is why the whole model is scored, not the runoff model alone.' }
+							{ spot: 'reach', title: 'The river above it', text: 'What arrives here is the whole catchment’s outflow, hydrological units and dams included, which is why the whole model is scored, not the runoff model alone.' }
 						]
 					},
 					{
 						type: 'p',
-						text: 'An observed gauge or logger measures the river as it is, with its farms and dams. So every candidate parameter set runs the **whole model** (runoff model, then the network) and scores the simulated outflow against the observed record. The fitted parameters describe the natural catchment; the network adds the impacts.'
+						text: 'An observed gauge or logger measures the river as it is, with its hydrological units and dams. So every candidate parameter set runs the **whole model** (runoff model, then the network) and scores the simulated outflow against the observed record. The fitted parameters describe the natural catchment; the network adds the impacts.'
 					},
 					{
 						type: 'p',
@@ -1114,7 +1114,7 @@ export const GUIDES: Guide[] = [
 	{
 		id: 'curtailment-targets',
 		title: 'Curtailment targets',
-		summary: 'How the app compares each unit’s supply with a fairness benchmark and works out the cut that meets the EWR.',
+		summary: 'How the app compares each hydrological unit’s supply with a fairness benchmark and works out the cut that meets the EWR.',
 		kind: 'concept',
 		tab: 'supply',
 		sections: [
@@ -1123,7 +1123,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Over the [[report-window|reporting window]], add up what every unit asked for and what it received. Their ratio is the catchment’s [[equitable-share|equitable share of supply]] (a **fairness benchmark**): had the supplied water been shared in proportion to demand, every unit would have received that fraction.'
+						text: 'Over the [[report-window|reporting window]], add up what every hydrological unit asked for and what it received. Their ratio is the catchment’s [[equitable-share|equitable share of supply]] (a **fairness benchmark**): had the supplied water been shared in proportion to demand, every hydrological unit would have received that fraction.'
 					},
 					{
 						type: 'formula',
@@ -1131,12 +1131,12 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'The differences cancel across the units, so this only compares; a positive value is not water the unit can get. Each unit’s [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then split into [[ewr-charge-split|irrigating less and storing less]], and the supply cut for the irrigation part is added: the **total change** in supply. Negative means reduce. The volume left never goes below 0.'
+						text: 'The differences cancel across the hydrological units, so this only compares; a positive value is not water the hydrological unit can get. Each hydrological unit’s [[ewr-charge|EWR charge]] (its share of the shortfall at the EWR sites below it) is then split into [[ewr-charge-split|irrigating less and storing less]], and the supply cut for the irrigation part is added: the **total change** in supply. Negative means reduce. The volume left never goes below 0.'
 					},
 					{
 						type: 'note',
 						tone: 'caution',
-						text: 'The equitable share is a fairness benchmark only: it assumes water can move freely between units, and ignores network position, storage, licences and existing lawful use. Not an allocation or licence condition.'
+						text: 'The equitable share is a fairness benchmark only: it assumes water can move freely between hydrological units, and ignores network position, storage, licences and existing lawful use. Not an allocation or licence condition.'
 					}
 				]
 			}
@@ -1149,9 +1149,9 @@ export const GUIDES: Guide[] = [
 /** The setup path on the /help landing page: one step per workspace tab. */
 export const SETUP_STEPS: { tab: TabId; text: string; guide: string; optional?: boolean }[] = [
 	{ tab: 'overview', text: 'Create a project, or copy one for a what-if.', guide: 'create-a-project' },
-	{ tab: 'network', text: 'Units, dams and gauges, draining to one outlet.', guide: 'build-the-network' },
-	{ tab: 'crops', text: 'Crop factors and the hectares on each unit.', guide: 'set-up-crops-and-demand', optional: true },
-	{ tab: 'transfers', text: 'Pipelines or canals between units’ dams.', guide: 'add-a-transfer', optional: true },
+	{ tab: 'network', text: 'Hydrological units, dams and gauges, draining to one outlet.', guide: 'build-the-network' },
+	{ tab: 'crops', text: 'Crop factors and the hectares on each hydrological unit.', guide: 'set-up-crops-and-demand', optional: true },
+	{ tab: 'transfers', text: 'Pipelines or canals between hydrological units’ dams.', guide: 'add-a-transfer', optional: true },
 	{ tab: 'series', text: 'Daily rain, and observed flow to calibrate.', guide: 'add-data' },
 	{ tab: 'settings', text: 'Evaporation, rain gaps, runoff parameters and the EWR.', guide: 'fit-automatically' },
 	{ tab: 'runs', text: 'Run the model, read and compare results.', guide: 'run-and-read-results' }

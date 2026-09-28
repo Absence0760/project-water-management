@@ -137,7 +137,7 @@
 	}
 
 	const f2 = (v: number) => fmtNum(v, 2);
-	const eff = (e: number | null) => (e === null ? 'unit’s' : fmtPct(e, 0));
+	const eff = (e: number | null) => (e === null ? 'hydrological unit’s' : fmtPct(e, 0));
 	const sysLabel = (id: string) => LIBRARY_SYSTEMS.find((s) => s.id === id)?.label.toLowerCase() ?? id;
 </script>
 
@@ -218,7 +218,7 @@
 				</tbody>
 			</table>
 		</div>
-		<p class="muted small">Efficiencies: SABI Agricultural Design Norms 2021, Table 4 (mid-range values). Which systems the units use is yours to confirm.</p>
+		<p class="muted small">Efficiencies: SABI Agricultural Design Norms 2021, Table 4 (mid-range values). Which systems the hydrological units use is yours to confirm.</p>
 
 		{#each changes as ch (ch.cropId)}
 			{@const s = byId.get(pick[ch.cropId] ?? '')}
@@ -261,12 +261,12 @@
 
 		{#if demand}
 			<h3>Demand difference</h3>
-			<p class="muted small">Mean gross irrigation demand before rain, m³/day, now and with the changes you apply (A-pan as saved). ÷ efficiency is what the unit abstracts for it.</p>
+			<p class="muted small">Mean gross irrigation demand before rain, m³/day, now and with the changes you apply (A-pan as saved). ÷ efficiency is what the hydrological unit abstracts for it.</p>
 			<div class="table-wrap">
 				<table class="data compact" data-testid="demand-difference">
 					<thead>
 						<tr>
-							<th scope="col">Unit</th>
+							<th scope="col">Hydrological unit</th>
 							<th scope="col" class="num">Gross now</th>
 							<th scope="col" class="num">New</th>
 							<th scope="col" class="num">Change</th>

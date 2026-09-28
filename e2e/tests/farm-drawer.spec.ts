@@ -77,7 +77,7 @@ test('from the Summary: a farm with nothing planted links straight to its plante
 	await item.getByRole('link', { name: 'Set its planted areas' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?farm=${project.model.nodes[2]!.id}$`));
 	const d = drawer(page, 'Lower farm');
-	await expect(d).toContainText('Nothing planted, so this unit draws no irrigation water.');
+	await expect(d).toContainText('Nothing planted, so this hydrological unit draws no irrigation water.');
 	await d.getByLabel('Orchard on Lower farm, ha').fill('5');
 	await d.getByLabel('Orchard on Lower farm, ha').press('Tab');
 	await d.getByRole('button', { name: 'Done' }).click();
@@ -102,7 +102,7 @@ test('a viewer sees a farm’s planted areas read-only, and a farm that is gone 
 	await expect(v).not.toHaveURL(/farm=/);
 
 	await v.goto(`/projects/${project.id}?farm=not-a-farm`);
-	await expect(v.getByRole('dialog', { name: 'Unit not found' })).toContainText("This unit isn't in the model any more.");
+	await expect(v.getByRole('dialog', { name: 'Hydrological unit not found' })).toContainText("This hydrological unit isn't in the model any more.");
 });
 
 test.describe('phone', () => {

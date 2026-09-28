@@ -8,6 +8,7 @@ import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { JOB_META, type JobMeta } from '../jobs/queue.js';
+import { rank, type Role } from '../projects/access.js';
 import { loadRunInput, RunInputError } from '../runs/execute.js';
 import { checkScenario, loadBaseInput, loadScenario } from '../scenarios/execute.js';
 
@@ -77,6 +78,37 @@ export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest
 		if (err instanceof RunInputError) throw new ApiError(err.problem === 'not_found' ? 404 : 409, err.problem === 'not_found' ? 'run not found' : err.message);
 		throw err;
 	}
+}
+
+/**
+ * The input a yield runs on, for this user in this role (096_contributor_yield):
+ * an editor's is yieldInput's, on any run or scenario. A contributor (an
+ * applicant, WP-3.3) calculates only on an application they own, and only a
+ * dam of it they may see: their own farm (the application's own nodes) or a
+ * node its own `node.add` ops add. An added node that took a hidden node's id
+ * (the engine's `reIds`) is refused with the words an unknown id gets, so the
+ * answer never tells a hidden id from a free one. Anyone else is 403.
+ * Checks the node too (checkYieldNode). Used by the route and, as the acting
+ * user, by the job handler, so a job dies once its applicant loses the role.
+ */
+export async function yieldInputFor(db: Db, projectId: string, role: Role, userId: string, r: YieldRequest): Promise<ModelInput> {
+	if (rank[role] >= rank.editor) {
+		const input = await yieldInput(db, projectId, r);
+		checkYieldNode(input, r.nodeId, r.kind);
+		return input;
+	}
+	if (role !== 'contributor') throw new ApiError(403, 'requires editor role');
+	if (!r.scenarioId) throw new ApiError(403, "an applicant calculates yields on their own application, not on a saved run");
+	const scenario = await loadScenario(db, projectId, r.scenarioId);
+	if (scenario.origin !== 'applicant' || scenario.ownerUserId !== userId) throw new ApiError(403, "only the application's owner calculates its yields");
+	const base = await loadBaseInput(db, projectId, scenario.baseRunId, 'contributor');
+	const check = checkScenario(base, scenario);
+	if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
+	const baseIds = new Set(base.model.nodes.map((n) => n.id));
+	const added = scenario.ops.flatMap((o) => (o.op === 'node.add' && !baseIds.has(o.node.id) ? [o.node.id] : []));
+	if (!scenario.ownedNodeIds.includes(r.nodeId) && !added.includes(r.nodeId)) throw new ApiError(400, 'that node is not in this run or scenario');
+	checkYieldNode(check.input, r.nodeId, r.kind);
+	return check.input;
 }
 
 /** A dam node of the input, or 400 with why not. */

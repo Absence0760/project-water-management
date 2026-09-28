@@ -69,16 +69,16 @@ describe('attention', () => {
 		expect(one).toEqual([
 			{
 				id: 'short-farms',
-				title: `1 of 2 units below ${target}`,
+				title: `1 of 2 hydrological units below ${target}`,
 				tone: 'danger',
 				text: `Lower got 60% of its demand in the latest run, below the ${target} target.`,
-				action: 'See the unit results',
+				action: 'See the hydrological unit results',
 				href: '?tab=supply&run=r%2F1&unit=Lower'
 			}
 		]);
 		const two = attention(base({ summary: summary([farm('Upper', 0.9), farm('Lower', 0.5), farm('Mid', 1)]) }));
-		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 units below ${target} (of 3).`);
-		expect(two[0]!.title).toBe(`2 of 3 units below ${target}`);
+		expect(two[0]!.text).toBe(`Lower got 50% of its demand in the latest run, the least of the 2 hydrological units below ${target} (of 3).`);
+		expect(two[0]!.title).toBe(`2 of 3 hydrological units below ${target}`);
 	});
 
 	it('colours the short-farms card red when the worst farm is in the lowest supply band, amber above it', () => {
@@ -161,7 +161,7 @@ describe('attention', () => {
 		expect(attention(base({ model: m }))).toEqual([
 			{
 				id: 'unplanted',
-				title: '1 unit with no planted area',
+				title: '1 hydrological unit with no planted area',
 				tone: 'info',
 				text: 'Lower has no planted area, so it draws no irrigation water.',
 				action: 'Set its planted areas',
@@ -173,7 +173,7 @@ describe('attention', () => {
 			cropAreas: [{ nodeId: 'f1', cropId: 'c', areaM2: 1 }]
 		});
 		expect(attention(base({ model: more }))[0]).toMatchObject({
-			title: '4 units with no planted area',
+			title: '4 hydrological units with no planted area',
 			text: 'Lower, A, B and 1 more have no planted area, so they draw no irrigation water.',
 			action: 'Set crop areas',
 			href: '?tab=crops'

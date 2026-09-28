@@ -59,7 +59,7 @@ export const CreateOutlookBody = z
 		/** The season; both or neither. Neither: the project's setting (settings.outlook.season) from the base run's newest state. */
 		decisionDate: IsoDate.optional(),
 		seasonEnd: IsoDate.optional(),
-		/** (0, 1]; absent: the project's setting, else the engine's default (pending O6). */
+		/** (0, 1]; absent: the project's setting, else the engine's default (O6). */
 		planningShare: z.number().finite().gt(0, 'the planning share must be more than 0').max(1, 'the planning share is at most 1 (every year)').optional(),
 		/** Analogue water years; absent: every one the record holds but the season's own. */
 		analogueYears: z.array(z.number().int().min(1800).max(2200)).min(1).max(200).optional()

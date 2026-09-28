@@ -5,12 +5,13 @@
 	// contact line after a second failure). No raw error text (CLAUDE.md rule 6).
 	import { base } from '$app/paths';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { stateText, stillFailing } from './cards';
+	import { contactText, stateText, stillFailing } from './cards';
 
 	let {
 		kind,
 		farmName = null,
 		projectName = null,
+		wuaName = null,
 		offline = false,
 		attempts = 1,
 		retry
@@ -18,6 +19,8 @@
 		kind: 'no-publication' | 'removed' | 'error';
 		farmName?: string | null;
 		projectName?: string | null;
+		/** The WUA the contact lines name (project.wuaName); null says "your WUA". */
+		wuaName?: string | null;
 		offline?: boolean;
 		attempts?: number;
 		retry?: () => void;
@@ -29,15 +32,15 @@
 		<h1>{stateText('errorTitle')}</h1>
 		<p>{stateText('errorText')}</p>
 		{#if retry}<button type="button" class="btn btn-primary" onclick={retry}>{t('Try again')}</button>{/if}
-		{#if attempts > 1}<p>{stillFailing(offline)}</p>{/if}
+		{#if attempts > 1}<p>{stillFailing(offline, wuaName)}</p>{/if}
 	</div>
 {:else if kind === 'removed'}
-	<h1>{farmName ?? t('Your farm')}</h1>
-	<p role="alert">{stateText('removed')}</p>
-	<a class="link" href="{base}/farm">{t('Your farms')}</a>
+	<h1>{farmName ?? t('Your hydrological unit')}</h1>
+	<p role="alert">{contactText('removed', wuaName)}</p>
+	<a class="link" href="{base}/farm">{t('Your hydrological units')}</a>
 {:else}
 	<div>
-		<h1>{farmName ?? t('Your farm')}</h1>
+		<h1>{farmName ?? t('Your hydrological unit')}</h1>
 		{#if projectName}<p class="sub">{projectName}</p>{/if}
 	</div>
 	<section class="card empty" aria-labelledby="empty-h">
@@ -45,7 +48,7 @@
 		<h2 id="empty-h">{stateText('noPublication')}</h2>
 		<p>{stateText('noPublicationText')}</p>
 	</section>
-	<p class="sub">{stateText('contact')}</p>
+	<p class="sub">{contactText('contact', wuaName)}</p>
 {/if}
 
 <style>

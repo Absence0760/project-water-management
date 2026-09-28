@@ -16,7 +16,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 9 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35)
 	await expect(checks.getByRole('listitem')).toHaveCount(9);
 	// The workspace's word: the engine's "farm" reads "unit" (#54), and the checks say which engine made them.
-	await expect(checks.getByRole('listitem').first()).toContainText('Every unit balances every day');
+	await expect(checks.getByRole('listitem').first()).toContainText('Every hydrological unit balances every day');
 	await expect(checks.getByRole('listitem').filter({ hasText: /\bfarms?\b/i })).toHaveCount(0);
 	await expect(checks.getByTestId('checks-engine')).toHaveText(/^Checked by engine \d+\.\d+\.\d+ when the run was made\.$/);
 
@@ -24,13 +24,13 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });
 	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
 	// No groundwater, users, storage resets or lost seepage here: the equation names only the columns shown.
-	await expect(balance).toContainText('Start storage + unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');
+	await expect(balance).toContainText('Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');
 	await expect(balance.getByRole('columnheader')).toHaveText([
 		'Water year',
 		'Rain (mm)',
 		'Runoff coeff.',
 		'Start storage',
-		'Unit runoff',
+		'Hydrological unit runoff',
 		'Transfers',
 		'Rain on dams',
 		'Consumptive use',
@@ -42,7 +42,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	]);
 
 	const trace = page.getByRole('region', { name: /^Trace a day/ });
-	await trace.getByLabel('Unit, gauge or catchment').selectOption({ label: 'Upper farm' });
+	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Upper farm' });
 	await trace.getByLabel('Day').fill('2021-11-15');
 	await trace.getByRole('button', { name: 'Trace' }).click();
 	const table = trace.getByRole('table', { name: 'Upper farm on 2021-11-15' });
@@ -55,7 +55,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
 
 	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
-	await trace.getByLabel('Unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
+	await trace.getByLabel('Hydrological unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
 	await trace.getByRole('button', { name: 'Trace' }).click();
 	const runoff = trace.getByRole('table', { name: 'Catchment (GR4J) on 2021-11-15' });
 	await expect(runoff).toBeVisible();

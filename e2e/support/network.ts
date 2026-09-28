@@ -33,10 +33,17 @@ export async function openNodeForm(page: Page, name?: string) {
 }
 
 /** Saves the model: in the open grid or sheet's save row if one is open (it hides the save bar), else from the save bar. */
+/**
+ * Clicks Save changes (the open grid's or sheet's, else the save bar's) and
+ * waits for the model save (PUT …/model) to answer, whether it saved or was
+ * refused, so a reload or a read that follows sees what the server has.
+ */
 export async function saveModelChanges(page: Page) {
 	const modal = page.locator('dialog[open]');
+	const saved = page.waitForResponse((r) => r.request().method() === 'PUT' && /\/projects\/[^/]+\/model$/.test(new URL(r.url()).pathname));
 	if (await modal.count()) await modal.getByRole('button', { name: 'Save changes' }).click();
 	else await page.getByRole('region', { name: 'Unsaved model changes' }).getByRole('button', { name: 'Save changes' }).click();
+	return saved;
 }
 
 /** Closes the open grid or sheet with Done (Close for a viewer), leaving any edit for the save bar. */

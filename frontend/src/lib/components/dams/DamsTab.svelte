@@ -230,7 +230,7 @@
 		<section class="panel" aria-label="No dams yet">
 			<div class="empty">
 				<p>
-					No dams in this catchment's model. A dam belongs to a unit: give a unit a dam capacity and its
+					No dams in this catchment's model. A dam belongs to a hydrological unit: give a hydrological unit a dam capacity and its
 					storage shows here after the next run.
 				</p>
 				<p class="empty-links">

@@ -105,15 +105,15 @@ describe('ShareThePainBoard', () => {
 
 	it('shows the three stages with the farm totals', () => {
 		const stages = text(body.match(/<ol[\s\S]*?<\/ol>/)![0]);
-		expect(stages).toContain('Today 75% of unit demand supplied (150 of 200 m³/day)');
-		expect(stages).toContain('Equitable share * 75% of its demand for every unit: a fairness benchmark, not an allocation');
-		expect(stages).toContain('EWR met 68% of unit demand left');
+		expect(stages).toContain('Today 75% of hydrological unit demand supplied (150 of 200 m³/day)');
+		expect(stages).toContain('Equitable share * 75% of its demand for every hydrological unit: a fairness benchmark, not an allocation');
+		expect(stages).toContain('EWR met 68% of hydrological unit demand left');
 	});
 
 	it('shows each farm at the three stages, a renamed farm by its current name', () => {
 		expect(row(body, 'Upper (renamed)')).toBe('Upper (renamed) 100 100% 100 m³/day 75% 75 m³/day 60% 60 m³/day');
 		expect(row(body, 'Lower')).toBe('Lower 100 50% 50 m³/day 75% 75 m³/day 75% 75 m³/day');
-		expect(row(body, 'All units')).toBe('All units 200 75% 150 m³/day 75% 150 m³/day 68% 135 m³/day');
+		expect(row(body, 'All hydrological units')).toBe('All hydrological units 200 75% 150 m³/day 75% 150 m³/day 68% 135 m³/day');
 	});
 
 	it('shows a farm with no demand as no demand, with its charge as store less, never a negative demand', () => {
@@ -147,7 +147,7 @@ describe('CurtailmentTable with the board', () => {
 	it('leads with the board under the Curtailment targets heading when asked, and not otherwise (the printable report)', () => {
 		const withBoard = render(CurtailmentTable, { props: { summary, board: true } }).body;
 		expect(withBoard.indexOf('Curtailment targets')).toBeLessThan(withBoard.indexOf('Share the pain'));
-		expect(withBoard.indexOf('Share the pain')).toBeLessThan(withBoard.indexOf('Per unit'));
+		expect(withBoard.indexOf('Share the pain')).toBeLessThan(withBoard.indexOf('Per hydrological unit'));
 		expect(render(CurtailmentTable, { props: { summary } }).body).not.toContain('Share the pain');
 	});
 	it('shows no board for a run with no farms', () => {

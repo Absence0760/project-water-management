@@ -160,7 +160,10 @@ the farmer's list of farms, instead of the figures until the account presses
 **I understand** on the version in force (CPA s49 research, R2). The press
 is recorded on the account (`app_user.farm_notice_version` and the
 database's time, 093), is in "Download my data", and goes with the account
-when it is deleted. A new version shows it to everyone again. WUA staff
+when it is deleted. A press made without a signal is kept on that phone for
+that account and version only, the figures show, and it is sent once the
+signal is back (issue #74); the recorded time is then when it reached the
+server, never the phone's clock. A new version shows it to everyone again. WUA staff
 previewing a farm don't see it. `{terms}` is a link to the Terms of use,
 section 13 (Limitation of liability). The heading, the four points and the
 button:
@@ -229,8 +232,11 @@ view's *why* page and the farmer glossary say the same about restrictions:
 Alerts about data feeds and background jobs carry no liability line: they
 report the system's state, not a model result.
 
-The Afrikaans went through the `i18n-checker` agent; no native speaker has
-reviewed it yet (`.claude/agents/i18n/languages/af.md`).
+The Afrikaans went through the `i18n-checker` agent
+(`.claude/agents/i18n/languages/af.md`); no native speaker has reviewed it
+yet. The client confirmed (issue #90) that their native-speaker translator
+will review these lines with the rest of the Afrikaans farmer text before
+farmers are invited in Afrikaans ([followups.md § Afrikaans](../followups.md#afrikaans-wp-25)).
 
 ### Is an Afrikaans version of the report disclaimer needed?
 

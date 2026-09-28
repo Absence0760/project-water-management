@@ -6,8 +6,10 @@
 // Provenance (2026-09-26, issue #49): every entry was written by the
 // af-translator agent and reviewed by the af-checker agent
 // (.claude/agents/i18n/), then applied with `pnpm gen:i18n:apply`. No native
-// speaker has reviewed it yet; that review is open in docs/followups.md
-// § Afrikaans (WP-2.5). Corrections go straight into this file.
+// speaker has reviewed it yet: the client's native-speaker translator will,
+// before farmers are invited in Afrikaans (confirmed by the client, issue
+// #90; tracked in docs/followups.md § Afrikaans (WP-2.5)). Corrections go
+// straight into this file.
 //
 // Each entry is keyed by the message's id, the Id column of the sheet (a hash
 // of the English, $lib/i18n/msg.ts), with the English in a comment above it:
@@ -149,20 +151,20 @@ export const af: Catalogue = {
 	'18996e5e': 'Waarskuwings',
 	// Choose your alert emails
 	'ebbd21ba': 'Kies jou waarskuwings-e-posse',
-	// Notes about your farm
-	'9dd59c12': 'Notas oor jou plaas',
-	// Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm.
-	'6ee0c03c': 'Jou en die WGV se notas oor {farm}. Enigiets wat jy hier byvoeg, word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
-	// No notes about this farm yet.
-	'd2af0a62': 'Nog geen notas oor hierdie plaas nie.',
+	// Notes about your hydrological unit
+	'7541e733': 'Notas oor jou hidrologiese eenheid',
+	// Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this hydrological unit.
+	'a8cac8df': 'Jou en die WGV se notas oor {farm}. Enigiets wat jy hier byvoeg, word gelees deur die WGV en enigiemand anders wat aan hierdie hidrologiese eenheid gekoppel is.',
+	// No notes about this hydrological unit yet.
+	'9f9e3381': 'Nog geen notas oor hierdie hidrologiese eenheid nie.',
 	// Your figures will be kept on this phone.
 	'c98e5cb5': 'Jou syfers sal op hierdie foon gehou word.',
 	// Nothing is kept on this phone now.
 	'6b7e2e01': 'Niks word nou op hierdie foon gehou nie.',
-	// Your farms
-	'ed984863': 'Jou plase',
-	// My farm
-	'eea9510d': 'My plaas',
+	// Your hydrological units
+	'11948530': 'Jou hidrologiese eenhede',
+	// My hydrological unit
+	'045cd5d6': 'My hidrologiese eenheid',
 	// Menu
 	'00c6075a': 'Kieslys',
 	// What do these words mean?
@@ -175,8 +177,8 @@ export const af: Catalogue = {
 	'9ab2f19d': 'Terug na die werkruimte',
 	// Try again
 	'213e90fa': 'Probeer weer',
-	// Your farm
-	'e9c21f82': 'Jou plaas',
+	// Your hydrological unit
+	'318d6463': 'Jou hidrologiese eenheid',
 	// Forecast
 	'5f3a8bf0': 'Voorspelling',
 	// Last 12 months, in ML
@@ -187,8 +189,8 @@ export const af: Catalogue = {
 	'5cf817d2': 'Ontvang',
 	// Water you needed and received each month
 	'54a6fc83': 'Water wat jy elke maand nodig gehad en ontvang het',
-	// Your farm on the river
-	'e1a3c95e': 'Jou plaas aan die rivier',
+	// Your hydrological unit on the river
+	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
 	'8b9ca333': 'Water wat jy hierdie seisoen ontvang het',
 	// of what you needed
@@ -219,8 +221,8 @@ export const af: Catalogue = {
 	'169380a8': 'sproeiers',
 	// flood
 	'c2e71bdb': 'vloedbesproeiing',
-	// Your farm needed very little water this season.
-	'a87b6aad': 'Jou plaas het hierdie seisoen baie min water nodig gehad.',
+	// Your hydrological unit needed very little water this season.
+	'b26a5438': 'Jou hidrologiese eenheid het hierdie seisoen baie min water nodig gehad.',
 	// You weren't short of water on any day this season.
 	'6e9e3ebc': 'Jy het hierdie seisoen op geen dag te min water gehad nie.',
 	// Short on {days} in {months}
@@ -299,6 +301,8 @@ export const af: Catalogue = {
 	'3ea4ad58': 'Hoekom {pct}? Wat kan ek doen?',
 	// The model’s look back and what you can do
 	'4f85b1d2': 'Die model se terugblik en wat jy kan doen',
+	// Not available: the model’s data starts on {date}.
+	'7c85cbbd': 'Nie beskikbaar nie: die model se data begin op {date}.',
 	// Not available: the model’s data doesn’t reach back to the same dates last season.
 	'04bf0305': 'Nie beskikbaar nie: die model se data strek nie terug tot dieselfde datums verlede seisoen nie.',
 	// very little needed
@@ -309,46 +313,46 @@ export const af: Catalogue = {
 	'0be5fdfe': 'Dam op {date}',
 	// not available
 	'd50e04d5': 'nie beskikbaar nie',
-	// Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.
-	'24364e6e': 'Jou plaas se syfers word gesien deur jou, enigiemand anders wat aan hierdie plaas gekoppel is, en die WGV se personeel en modelleerder. Ander boere kan dit nie sien nie, en jy kan nie hulle s’n sien nie.',
-	// No farm is
-	'140855da': 'geen plaas',
-	// 1 farm is
-	'70cf71a0': '1 plaas',
-	// {n} farms are
-	'63385228': '{n} plase',
+	// Your hydrological unit’s figures are seen by you, anyone else linked to this hydrological unit, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.
+	'c8ca45c0': 'Jou hidrologiese eenheid se syfers word gesien deur jou, enigiemand anders wat aan hierdie hidrologiese eenheid gekoppel is, en die WGV se personeel en modelleerder. Ander boere kan dit nie sien nie, en jy kan nie hulle s’n sien nie.',
+	// No hydrological unit is
+	'c056fd09': 'geen hidrologiese eenheid',
+	// 1 hydrological unit is
+	'847be50b': '1 hidrologiese eenheid',
+	// {n} hydrological units are
+	'd6168da5': '{n} hidrologiese eenhede',
 	// none is
-	'a30f6eb1': 'geen plaas',
+	'a30f6eb1': 'geen hidrologiese eenheid',
 	// 1 is
-	'22b49fbc': '1 plaas',
+	'22b49fbc': '1 hidrologiese eenheid',
 	// {n} are
-	'c7fda361': '{n} plase',
-	// {up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm.
-	'7f35d413': 'Stroomop van jou: {up}. Stroomaf: {down}. Altesaam {count} in die opvanggebied. Dieselfde reëls geld vir elke plaas.',
+	'c7fda361': '{n} hidrologiese eenhede',
+	// {up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every hydrological unit.
+	'10e2d49e': 'Stroomop van jou: {up}. Stroomaf: {down}. Altesaam {count} in die opvanggebied. Dieselfde reëls geld vir elke hidrologiese eenheid.',
 	// River at {name}: kept its reserve on every one of the last {days}.
 	'e3636500': 'Rivier by {name}: het op elkeen van die afgelope {days} sy reserwe behou.',
 	// River at {name}: below its reserve on **all of the last {days}**.
 	'384881b5': 'Rivier by {name}: onder sy reserwe op **al die afgelope {days}**.',
 	// River at {name}: below its reserve on **{n} of the last {days}**.
 	'0e68a86a': 'Rivier by {name}: onder sy reserwe op **{n} van die afgelope {days}**.',
-	// Who can see my farm
-	'1e0d6b44': 'Wie kan my plaas sien',
+	// Who can see my hydrological unit
+	'52c6ffe9': 'Wie kan my hidrologiese eenheid sien',
 	// You
 	'b5bdd13c': 'Jy',
-	// Anyone else linked to this farm
-	'a728cd62': 'Enigiemand anders wat aan hierdie plaas gekoppel is',
+	// Anyone else linked to this hydrological unit
+	'2b753f43': 'Enigiemand anders wat aan hierdie hidrologiese eenheid gekoppel is',
 	// The WUA’s staff
 	'452a58e5': 'Die WGV se personeel',
 	// The WUA’s modeller
 	'fae0a161': 'Die WGV se modelleerder',
-	// Other farmers can’t see your farm’s figures, and you can’t see theirs.
-	'b066abfc': 'Ander boere kan nie jou plaas se syfers sien nie, en jy kan nie hulle s’n sien nie.',
+	// Other farmers can’t see your hydrological unit’s figures, and you can’t see theirs.
+	'2ba12c87': 'Ander boere kan nie jou hidrologiese eenheid se syfers sien nie, en jy kan nie hulle s’n sien nie.',
 	// Loading the names…
 	'e66cc2c6': 'Laai tans die name…',
 	// Couldn’t load the names just now. Your WUA can tell you who these people are.
 	'760d014c': 'Kon nie nou die name laai nie. Jou WGV kan vir jou sê wie hierdie mense is.',
-	// linked to this farm
-	'89c2c21d': 'gekoppel aan hierdie plaas',
+	// linked to this hydrological unit
+	'294a6fe6': 'gekoppel aan hierdie hidrologiese eenheid',
 	// WUA, can read
 	'456f91da': 'WGV, kan lees',
 	// WUA, can change the model
@@ -369,14 +373,14 @@ export const af: Catalogue = {
 	'a648e736': 'dam {pct}',
 	// no dam
 	'ddebfbe0': 'geen dam',
-	// Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.
-	'71e0b4a4': 'Elke plaas se syfers word gesien deur die mense wat daaraan gekoppel is, en deur die WGV se personeel en modelleerder. Ander boere kan dit nie sien nie.',
-	// Loading your farm…
-	'c034131c': 'Laai tans jou plaas…',
+	// Each hydrological unit’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.
+	'3798e76d': 'Elke hidrologiese eenheid se syfers word gesien deur die mense wat daaraan gekoppel is, en deur die WGV se personeel en modelleerder. Ander boere kan dit nie sien nie.',
+	// Loading your hydrological unit…
+	'179207cf': 'Laai tans jou hidrologiese eenheid…',
 	// Slow signal? This can take a moment.
 	'4148b895': 'Swak sein? Dit kan ’n oomblik duur.',
-	// We couldn’t load your farm
-	'686ff28c': 'Ons kon nie jou plaas laai nie',
+	// We couldn’t load your hydrological unit
+	'4deaa381': 'Ons kon nie jou hidrologiese eenheid laai nie',
 	// Check your signal and try again. Your figures are safe; nothing was changed.
 	'5f465ddc': 'Kyk na jou sein en probeer weer. Jou syfers is veilig; niks is verander nie.',
 	// Your WUA hasn’t published figures yet
@@ -385,12 +389,20 @@ export const af: Catalogue = {
 	'b8a972fb': 'Wanneer hulle dit doen, sien jy hier die water wat jy ontvang het, hoe jou dam lyk, en enige beperkings.',
 	// Questions? Contact your WUA.
 	'ecebdb11': 'Vrae? Kontak jou WGV.',
-	// You no longer have access to this farm. Contact your WUA.
-	'90bc6213': 'Jy het nie meer toegang tot hierdie plaas nie. Kontak jou WGV.',
+	// You no longer have access to this hydrological unit. Contact your WUA.
+	'17dd359a': 'Jy het nie meer toegang tot hierdie hidrologiese eenheid nie. Kontak jou WGV.',
+	// Questions? Contact {wua}.
+	'47121206': 'Vrae? Kontak {wua}.',
+	// You no longer have access to this hydrological unit. Contact {wua}.
+	'd85b785b': 'Jy het nie meer toegang tot hierdie hidrologiese eenheid nie. Kontak {wua}.',
 	// Charts, “Why?” and downloads need a connection.
 	'b3bbbaf7': 'Grafieke, “Hoekom?” en aflaaie het ’n verbinding nodig.',
 	// Updating…
 	'4f1bb013': 'Werk tans by…',
+	// Still no connection. If this keeps happening, contact {wua}.
+	'6d967706': 'Steeds geen verbinding nie. As dit aanhou gebeur, kontak {wua}.',
+	// Still not working. If this keeps happening, contact {wua}.
+	'38ed8fb7': 'Werk steeds nie. As dit aanhou gebeur, kontak {wua}.',
 	// Still no connection. If this keeps happening, contact your WUA.
 	'86547211': 'Steeds geen verbinding nie. As dit aanhou gebeur, kontak jou WGV.',
 	// Still not working. If this keeps happening, contact your WUA.
@@ -497,8 +509,8 @@ export const af: Catalogue = {
 	'c2d97242': { one: 'week', other: 'weke' },
 	// point / points
 	'a3e2d360': { one: 'punt', other: 'punte' },
-	// farm / farms
-	'940baade': { one: 'plaas', other: 'plase' },
+	// hydrological unit / hydrological units
+	'38fa9118': { one: 'hidrologiese eenheid', other: 'hidrologiese eenhede' },
 	// {time} on {date}
 	'060fa091': '{time} op {date}',
 	// Couldn’t load the notes. {reason}
@@ -533,8 +545,8 @@ export const af: Catalogue = {
 	'1ce96c5d': 'Voeg ’n nota by',
 	// Plain text.
 	'91c537d0': 'Gewone teks.',
-	// Read by the WUA and anyone else linked to this farm.
-	'6cff79ac': 'Word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
+	// Read by the WUA and anyone else linked to this hydrological unit.
+	'ee0d774f': 'Word gelees deur die WGV en enigiemand anders wat aan hierdie hidrologiese eenheid gekoppel is.',
 	// Add note
 	'b6439108': 'Voeg nota by',
 	// Write something first.
@@ -553,10 +565,10 @@ export const af: Catalogue = {
 	'6312837d': 'Wat die model gevind het',
 	// Why about {pct}?
 	'd8487d8c': 'Hoekom ongeveer {pct}?',
-	// Looking back over {from} to {to}, the model checks two things: was water shared fairly between farms, and did the river keep enough water flowing?
-	'4c86f524': 'Die model kyk terug oor {from} tot {to} en toets twee dinge: is water regverdig tussen plase gedeel, en het die rivier genoeg water laat vloei?',
-	// Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures.
-	'1ede5f43': 'Nie gewys nie: met so min plase in die opvanggebied kan dit ’n buurman se syfers verklap.',
+	// Looking back over {from} to {to}, the model checks two things: was water shared fairly between hydrological units, and did the river keep enough water flowing?
+	'bd04e0ad': 'Die model kyk terug oor {from} tot {to} en toets twee dinge: is water regverdig tussen hidrologiese eenhede gedeel, en het die rivier genoeg water laat vloei?',
+	// Not shown: with so few hydrological units in the catchment, it could reveal a neighbour’s figures.
+	'7c027098': 'Nie gewys nie: met so min hidrologiese eenhede in die opvanggebied kan dit ’n buurman se syfers verklap.',
 	// about an even share
 	'8babe8ec': 'ongeveer ’n gelyke deel',
 	// a little less than an even share (about {amount})
@@ -567,24 +579,24 @@ export const af: Catalogue = {
 	'af600ca5': 'Dit is nie deel van die model se terugblik nie.',
 	// It isn’t part of the {pct}.
 	'53be7341': 'Dit is nie deel van die {pct} nie.',
-	// Across the catchment, farms received **{share}** of what they needed. We call that the **even share**.
-	'db912bbe': 'Oor die hele opvanggebied het plase **{share}** ontvang van wat hulle nodig gehad het. Ons noem dit die **gelyke deel**.',
+	// Across the catchment, hydrological units received **{share}** of what they needed. We call that the **even share**.
+	'6263a49f': 'Oor die hele opvanggebied het hidrologiese eenhede **{share}** ontvang van wat hulle nodig gehad het. Ons noem dit die **gelyke deel**.',
 	// even share {pct}
 	'ab92f385': 'gelyke deel {pct}',
 	// you {pct}
 	'90f45e1f': 'jy {pct}',
 	// You received **{pct}**: {comparison}.
 	'a8445071': 'Jy het **{pct}** ontvang: {comparison}.',
-	// **This is a fairness check, not extra water for you.** Whether more water can reach your farm depends on where you are on the river and what is in your dam. {notPart}
-	'813eaac7': '**Dit is ’n regverdigheidstoets, nie ekstra water vir jou nie.** Of meer water jou plaas kan bereik, hang af van waar jy aan die rivier is en wat in jou dam is. {notPart}',
+	// **This is a fairness check, not extra water for you.** Whether more water can reach your hydrological unit depends on where you are on the river and what is in your dam. {notPart}
+	'2bddd8bc': '**Dit is ’n regverdigheidstoets, nie ekstra water vir jou nie.** Of meer water jou hidrologiese eenheid kan bereik, hang af van waar jy aan die rivier is en wat in jou dam is. {notPart}',
 	// The law keeps some water in the river so it stays healthy for everyone downstream. This is the river’s **reserve**.
 	'923c70c6': 'Die wet hou ’n deel van die water in die rivier sodat dit gesond bly vir almal stroomaf. Dit is die rivier se **reserwe**.',
-	// Farms upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.
-	'9c3f2d8e': 'Plase stroomop word gevra om dit op te maak in verhouding tot die water wat elkeen opgebruik of opgegaar het. Water wat terugvloei na die rivier tel nie teen jou nie.',
+	// Hydrological units upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.
+	'5f2f3cef': 'Hidrologiese eenhede stroomop word gevra om dit op te maak in verhouding tot die water wat elkeen opgebruik of opgegaar het. Water wat terugvloei na die rivier tel nie teen jou nie.',
 	// The river’s share of your water is more than an even share of the catchment’s supply. The WUA may need to look at this.
 	'1adee368': 'Die rivier se deel van jou water is meer as ’n gelyke deel van die opvanggebied se watervoorraad. Die WGV sal dalk hierna moet kyk.',
-	// The river kept its reserve every day this season, at every point below your farm.
-	'0c5e3afe': 'Die rivier het elke dag hierdie seisoen sy reserwe behou, by elke punt onderkant jou plaas.',
+	// The river kept its reserve every day this season, at every point below your hydrological unit.
+	'd3fc12e5': 'Die rivier het elke dag hierdie seisoen sy reserwe behou, by elke punt onderkant jou hidrologiese eenheid.',
 	// and
 	'0f29c2a6': 'en',
 	// at {name} on **{days}**
@@ -655,16 +667,16 @@ export const af: Catalogue = {
 	'424e66e1': 'Modelleer ’n nuwe dam of meer hektaar in die opvanggebied soos dit nou is, met bewyse wat ’n beoordelaar kan oopmaak en herhaal.',
 	// Farmers
 	'858cd593': 'Boere',
-	// Your farm’s supply, your dam and any restriction, on your phone, in English or Afrikaans.
-	'942f0d27': 'Die water wat jou plaas kry, jou dam en enige beperking, op jou foon, in Engels of Afrikaans.',
+	// Your hydrological unit’s supply, your dam and any restriction, on your phone, in English or Afrikaans.
+	'7b6ac5fa': 'Die water wat jou hidrologiese eenheid kry, jou dam en enige beperking, op jou foon, in Engels of Afrikaans.',
 	// An illustrated catchment: rain over the mountains, two farm dams, an orchard and a vineyard, and a river winding down to a gauging weir.
 	'eb2f0a73': '’n Tekening van ’n opvanggebied: reën oor die berge, twee plaasdamme, ’n boord en ’n wingerd, en ’n rivier wat afkronkel na ’n meetstuwal.',
 	// Catchment water balance
 	'2d2f00a3': 'Waterbalans van die opvanggebied',
 	// Every drop in the catchment, accounted for.
 	'633902ad': 'Elke druppel in die opvanggebied word verreken.',
-	// Model a catchment day by day, from rainfall to river: what each farm is supplied, what its dam holds, and whether the river keeps its ecological reserve.
-	'557501b3': 'Modelleer ’n opvanggebied dag vir dag, van reën tot rivier: hoeveel water elke plaas kry, wat in sy dam is, en of die rivier sy ekologiese reserwe behou.',
+	// Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.
+	'93960494': 'Modelleer ’n opvanggebied dag vir dag, van reën tot rivier: hoeveel water elke hidrologiese eenheid kry, wat in sy dam is, en of die rivier sy ekologiese reserwe behou.',
 	// Sign in
 	'744be623': 'Teken in',
 	// Create an account
@@ -677,16 +689,16 @@ export const af: Catalogue = {
 	'd03ba450': 'Hoe dit werk',
 	// Build the network
 	'9325094e': 'Bou die netwerk',
-	// Draw the farms, dams, transfers and gauges on the river, or import your b023 workbook as it is.
-	'ca672fee': 'Teken die plase, damme, oordragte en meetstasies op die rivier, of voer jou b023-werkboek in soos dit is.',
+	// Draw the hydrological units, dams, transfers and gauges on the river, or import your b023 workbook as it is.
+	'a5bd3aa3': 'Teken die hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, of voer jou b023-werkboek in soos dit is.',
 	// Add the data
 	'ac61f1bd': 'Voeg die data by',
 	// Upload rainfall, flow and evaporation, or let the CHIRPS and DWS feeds keep them up to date every day.
 	'3db163ba': 'Laai reënval, vloei en verdamping op, of laat die CHIRPS- en DWS-datavoere dit elke dag bywerk.',
 	// Run and compare
 	'26609b94': 'Laat loop en vergelyk',
-	// Run the model, then try a what-if and see what it changes for each farm and for the river, in plain words.
-	'ec2ecc6c': 'Laat die model loop, probeer dan ’n wat-as en sien in gewone woorde wat dit vir elke plaas en vir die rivier verander.',
+	// Run the model, then try a what-if and see what it changes for each hydrological unit and for the river, in plain words.
+	'59421acd': 'Laat die model loop, probeer dan ’n wat-as en sien in gewone woorde wat dit vir elke hidrologiese eenheid en vir die rivier verander.',
 	// Water Management: daily water balance for a catchment
 	'3dac521e': 'Water Management: daaglikse waterbalans vir ’n opvanggebied',
 	// An illustrated catchment at dusk, with the words: Every drop in the catchment, accounted for.
@@ -703,24 +715,24 @@ export const af: Catalogue = {
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
 	'f48a005d': 'Skerms uit die app self.',
-	// A catchment’s Summary: the ecological reserve, supply to each farm and the dams today.
-	'dc9eb4cd': '’n Opvanggebied se opsommingsblad (Summary): die ekologiese reserwe, die lewering aan elke plaas en die damme vandag.',
-	// A farmer’s view of their own farm on a phone: their dam, their supply and any restriction.
-	'972acdeb': 'Die plaas soos die boer dit op ’n foon sien: die dam, die water wat die plaas kry en enige beperking.',
+	// A catchment’s Summary: the ecological reserve, supply to each hydrological unit and the dams today.
+	'a2b7571e': '’n Opvanggebied se opsommingsblad (Summary): die ekologiese reserwe, die lewering aan elke hidrologiese eenheid en die damme vandag.',
+	// A farmer’s view of their own hydrological unit on a phone: their dam, their supply and any restriction.
+	'176a4d6a': '’n Boer se eie hidrologiese eenheid op ’n foon: die dam, die water wat dit kry en enige beperking.',
 	// The farmer sees their own share on their phone, in English or Afrikaans.
-	'a5ce8553': 'Die boer sien die plaas se eie deel op die foon, in Engels of Afrikaans.',
-	// The network: farms, dams and gauges on the river, upstream to downstream.
-	'c5f92701': 'Die netwerk: plase, damme en meetstasies op die rivier, van stroomop tot stroomaf.',
+	'a5ce8553': 'Boere sien hulle eie deel op hulle foon, in Engels of Afrikaans.',
+	// The network: hydrological units, dams and gauges on the river, upstream to downstream.
+	'9edf97a8': 'Die netwerk: hidrologiese eenhede, damme en meetstasies op die rivier, van stroomop tot stroomaf.',
 	// The network
 	'991c376a': 'Die netwerk',
-	// Farms, dams, transfers and gauges on the river, from the headwaters to the outlet.
-	'b710dde8': 'Plase, damme, oordragte en meetstasies op die rivier, van die oorsprong tot by die uitloop.',
+	// Hydrological units, dams, transfers and gauges on the river, from the headwaters to the outlet.
+	'133225ef': 'Hidrologiese eenhede, damme, oordragte en meetstasies op die rivier, van die oorsprong tot by die uitloop.',
 	// The river against its ecological reserve, day by day, with the days below it marked.
 	'a67f5236': 'Die rivier teenoor sy ekologiese reserwe, dag vir dag, met die dae daaronder gemerk.',
 	// River and reserve
 	'18beff9c': 'Rivier en reserwe',
-	// Flow at every gauge against the reserve, and which farms’ use it falls short by.
-	'61c83fbb': 'Vloei by elke meetstasie teenoor die reserwe, en aan watter plase se gebruik die tekort toegeskryf word.',
+	// Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.
+	'1030414c': 'Vloei by elke meetstasie teenoor die reserwe, en aan watter hidrologiese eenhede se gebruik die tekort toegeskryf word.',
 	// From rainfall to river
 	'2c4de2ff': 'Van reën tot rivier',
 	// What the model works out for every day of the record, one step at a time. The charts are the {year} water year of an example catchment, by week.
@@ -753,10 +765,10 @@ export const af: Catalogue = {
 	'5df21495': '{dam}-dam',
 	// Full through winter, down to {low} % by the end of summer.
 	'fcd5d4a5': 'Vol deur die winter, teen die einde van die somer af tot {low} %.',
-	// Farms take their share
-	'69b3583e': 'Plase kry hul deel',
-	// Crops need water by the month. The model supplies what the dam and the river can give, and counts the days a farm runs short.
-	'66ee8a7a': 'Gewasse het elke maand water nodig. Die model lewer wat die dam en die rivier kan gee, en tel die dae waarop ’n plaas te min water het.',
+	// Hydrological units take their share
+	'e78ad94d': 'Hidrologiese eenhede kry hul deel',
+	// Crops need water by the month. The model supplies what the dam and the river can give, and counts the days a hydrological unit runs short.
+	'169e5cf7': 'Gewasse het elke maand water nodig. Die model lewer wat die dam en die rivier kan gee, en tel die dae waarop ’n hidrologiese eenheid te min water het.',
 	// m³ a day
 	'd7857240': 'm³ per dag',
 	// Supplied to {farm}
@@ -793,24 +805,24 @@ export const af: Catalogue = {
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
 	// In the example catchment
 	'fb86138c': 'In die voorbeeld-opvanggebied',
-	// This is the farm as it is today. Move a slider to change it.
-	'8b81fde5': 'Dit is die plaas soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
+	// This is the hydrological unit as it is today. Move a slider to change it.
+	'be75f214': 'Dit is die hidrologiese eenheid soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve
 	'b7fe266e': 'Dit kos die rivier {days} meer dae per jaar onder die reserwe',
 	// It gives the river {days} fewer days a year below the reserve
 	'2ad50462': 'Die rivier is {days} minder dae per jaar onder die reserwe',
 	// The river is below the reserve about as often as today
 	'7f951aa0': 'Die rivier is omtrent net so dikwels soos vandag onder die reserwe',
-	// and the farm gets about as much of what it needs.
-	'140e03db': 'en die plaas kry omtrent net soveel van wat dit nodig het.',
-	// and the farm gets {points} points more of what it needs.
-	'30a8c782': 'en die plaas kry {points} punte meer van wat dit nodig het.',
-	// and the farm gets {points} points less of what it needs.
-	'5f29d43a': 'en die plaas kry {points} punte minder van wat dit nodig het.',
+	// and the hydrological unit gets about as much of what it needs.
+	'b891647e': 'en die hidrologiese eenheid kry omtrent net soveel van wat dit nodig het.',
+	// and the hydrological unit gets {points} points more of what it needs.
+	'05125579': 'en die hidrologiese eenheid kry {points} punte meer van wat dit nodig het.',
+	// and the hydrological unit gets {points} points less of what it needs.
+	'3282f521': 'en die hidrologiese eenheid kry {points} punte minder van wat dit nodig het.',
 	// Try a what-if
 	'c3eedfbb': 'Probeer ’n wat-as',
-	// {farm}, a farm in the example catchment, grows {ha} ha of apples. It wants to plant more, and could build a bigger dam. What would that do to the farm, and to the river?
-	'b258bd4a': '{farm}, ’n plaas in die voorbeeld-opvanggebied, verbou {ha} ha appels. Die plaas wil meer aanplant, en kan ’n groter dam bou. Wat sou dit aan die plaas doen, en aan die rivier?',
+	// {farm}, a hydrological unit in the example catchment, grows {ha} ha of apples. It wants to plant more, and could build a bigger dam. What would that do to the hydrological unit, and to the river?
+	'c3b7501c': '{farm}, ’n hidrologiese eenheid in die voorbeeld-opvanggebied, verbou {ha} ha appels. Dit wil meer aanplant, en kan ’n groter dam bou. Wat sou dit aan die hidrologiese eenheid doen, en aan die rivier?',
 	// Worked out in advance from {runs} runs of the model.
 	'090688fd': 'Vooraf bereken uit {runs} lopies van die model.',
 	// More apples
@@ -825,8 +837,8 @@ export const af: Catalogue = {
 	'64eb41e6': '{times} keer so groot as vandag se dam',
 	// Irrigation supplied
 	'37645529': 'Besproeiingswater gelewer',
-	// {pct} % of what the farm needs
-	'b57d6692': '{pct} % van wat die plaas nodig het',
+	// {pct} % of what the hydrological unit needs
+	'23876ff9': '{pct} % van wat die hidrologiese eenheid nodig het',
 	// Today
 	'e7c0775e': 'Vandag',
 	// This plan
@@ -843,12 +855,12 @@ export const af: Catalogue = {
 	'a156f424': 'Oor Water Management',
 	// Catchment water balance, from rainfall to river.
 	'7b2abdbd': 'Waterbalans van die opvanggebied, van reën tot rivier.',
-	// Model farms, dams and transfers on a river network.
-	'd8aeaac5': 'Modelleer plase, damme en oordragte op ’n riviernetwerk.',
+	// Model hydrological units, dams and transfers on a river network.
+	'c7938bea': 'Modelleer hidrologiese eenhede, damme en oordragte op ’n riviernetwerk.',
 	// Run decades of daily flows in seconds.
 	'd0e44714': 'Bereken dekades se daaglikse vloei in sekondes.',
-	// Check the environmental flow requirement (EWR) against every farm’s use.
-	'65909895': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke plaas se gebruik.',
+	// Check the environmental flow requirement (EWR) against every hydrological unit’s use.
+	'3c10ddb2': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke hidrologiese eenheid se gebruik.',
 	// The main things you agree to
 	'0a1c21b6': 'Die belangrikste dinge waartoe jy instem',
 	// Results are model estimates and can be wrong. Check them before you rely on them.
@@ -935,10 +947,10 @@ export const af: Catalogue = {
 	'e35608b7': 'Te veel bevestigings-e-posse is vandag na hierdie adres gestuur. Kyk in jou inkassie, of probeer môre weer.',
 	// This invitation is invalid or has expired.
 	'a2aa61f9': 'Hierdie uitnodiging is ongeldig of het verval.',
-	// You can add notes only to your own farm.
-	'84fea91c': 'Jy kan net notas by jou eie plaas voeg.',
-	// Only a note on a farm can be shown to its farmers.
-	'09cd5bcf': 'Net ’n nota op ’n plaas kan aan sy boere gewys word.',
+	// You can add notes only to your own hydrological unit.
+	'c2d73abf': 'Jy kan net notas by jou eie hidrologiese eenheid voeg.',
+	// Only a note on a hydrological unit can be shown to its farmers.
+	'6766b6ec': 'Net ’n nota op ’n hidrologiese eenheid kan aan sy boere gewys word.',
 	// Only the person who wrote a note can change it.
 	'7d1f4730': 'Net die persoon wat ’n nota geskryf het, kan dit verander.',
 	// Only the person who wrote a note, or the WUA, can delete it.
@@ -1023,10 +1035,10 @@ export const af: Catalogue = {
 	'12bb2549': 'Wagwoord verander. Elke ander toestel is uitgeteken.',
 	// Language and units
 	'65eef061': 'Taal en eenhede',
-	// Your farm pages, the sign-in pages and the emails we send you use this language.
-	'a2fc07cd': 'Jou plaasbladsye, die intekenbladsye en die e-posse wat ons vir jou stuur, gebruik hierdie taal.',
-	// Volumes on your farm pages
-	'93a111b0': 'Volumes op jou plaasbladsye',
+	// Your hydrological unit pages, the sign-in pages and the emails we send you use this language.
+	'99d10d6e': 'Die bladsye oor jou hidrologiese eenheid, die intekenbladsye en die e-posse wat ons vir jou stuur, gebruik hierdie taal.',
+	// Volumes on your hydrological unit pages
+	'b0e6620d': 'Volumes op die bladsye oor jou hidrologiese eenheid',
 	// Cubic metres (m³)
 	'66535c7a': 'Kubieke meter (m³)',
 	// Megalitres (ML)
@@ -1047,8 +1059,8 @@ export const af: Catalogue = {
 	'8c942903': 'Kies watter waarskuwings jy per e-pos kry, en hoe gereeld.',
 	// Your data
 	'0819f3fe': 'Jou data',
-	// Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.
-	'745aefa7': 'Laai ’n kopie af van wat ons oor jou hou: jou rekening, die projekte en plase waaraan jy gekoppel is, jou plase se syfers en geregistreerde volumes, notas wat jy geskryf het, en die geskiedenis van wat jy gedoen het en wat oor jou gedoen is. Dit is ’n JSON-lêer.',
+	// Download a copy of what we keep about you: your account, the projects and hydrological units you’re linked to, your hydrological units’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.
+	'2fd44bf9': 'Laai ’n kopie af van wat ons oor jou hou: jou rekening, die projekte en hidrologiese eenhede waaraan jy gekoppel is, jou hidrologiese eenhede se syfers en geregistreerde volumes, notas wat jy geskryf het, en die geskiedenis van wat jy gedoen het en wat oor jou gedoen is. Dit is ’n JSON-lêer.',
 	// The download could not be loaded. Check your connection, then reload the page.
 	'c4c6488f': 'Die aflaai kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
 	// Preparing…
@@ -1083,18 +1095,18 @@ export const af: Catalogue = {
 	'd526c5e1': 'Hierdie skakel werk nie meer nie: ’n nuwer e-pos het dit dalk vervang, of jy is dalk nie meer ’n lid van die opvanggebied nie.',
 	// This link is incomplete. Open it again from the email, or copy the whole link.
 	'aa5e9817': 'Hierdie skakel is onvolledig. Maak dit weer vanuit die e-pos oop, of kopieer die hele skakel.',
-	// {page} · My farm
-	'299fd967': '{page} · My plaas',
-	// My farms
-	'328b495a': 'My plase',
-	// No farm is linked to your account yet. Your WUA links your farm to your account.
-	'1d79071b': 'Nog geen plaas is aan jou rekening gekoppel nie. Jou WGV koppel jou plaas aan jou rekening.',
+	// {page} · My hydrological unit
+	'c1fd658c': '{page} · My hidrologiese eenheid',
+	// My hydrological units
+	'832452bf': 'My hidrologiese eenhede',
+	// No hydrological unit is linked to your account yet. Your WUA links your hydrological unit to your account.
+	'5e907c8d': 'Nog geen hidrologiese eenheid is aan jou rekening gekoppel nie. Jou WGV koppel jou hidrologiese eenheid aan jou rekening.',
 	// Your projects
 	'1ec4a724': 'Jou projekte',
 	// Not published yet
 	'b17ad0ae': 'Nog nie gepubliseer nie',
-	// Your farms in this catchment
-	'899c33fd': 'Jou plase in hierdie opvanggebied',
+	// Your hydrological units in this catchment
+	'3cf9b306': 'Jou hidrologiese eenhede in hierdie opvanggebied',
 	// WUA notice · {level}
 	'5849b249': 'WGV-kennisgewing · {level}',
 	// At a glance
@@ -1109,8 +1121,8 @@ export const af: Catalogue = {
 	'defc0d3b': 'Laai my syfers af (CSV)',
 	// {farm} has no dam in the model.
 	'189ba2c7': '{farm} het geen dam in die model nie.',
-	// Back to my farm
-	'b0f24bf9': 'Terug na my plaas',
+	// Back to my hydrological unit
+	'c3db4042': 'Terug na my hidrologiese eenheid',
 	// How full it is
 	'29b90af1': 'Hoe vol dit is',
 	// Where these figures come from
@@ -1289,12 +1301,12 @@ export const af: Catalogue = {
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
-	// The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use.
-	'c67f2840': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min plase kan die rivier se vloei ’n plaas se watergebruik verklap.',
+	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
+	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
 	// About this page
 	'254af6c5': 'Oor hierdie bladsy',
-	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.
-	'60cadb22': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen plaas se syfers nie.',
+	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
+	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.
 	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
