@@ -248,21 +248,37 @@ jobs:
           MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
         run: |
           set -euo pipefail
-          # Synchronous invoke; the function's own timeout is 300 s.
+          # Synchronous invoke; the function's own timeout is 300 s. No
+          # --log-type Tail: this log is public (the repo is), and the
+          # function's log and error text can quote SQL or data. Only names
+          # and codes are printed; the detail is in CloudWatch, which is not.
           aws lambda invoke \
             --function-name "$MIGRATE_FUNCTION_NAME" \
             --cli-binary-format raw-in-base64-out \
             --payload '{}' \
             --cli-read-timeout 320 \
-            --log-type Tail \
             migrate-result.json > migrate-meta.json
-          # Tail of the function's log (migration names only — no credentials).
-          jq -r '.LogResult // empty' migrate-meta.json | base64 -d || true
-          echo "Result: $(cat migrate-result.json)"
+          # Each field is checked against the shape it must have (a migration
+          # file name, a code, a log stream) and dropped if it doesn't match,
+          # so nothing but what lambda-migrate.ts means to report can print.
+          names='def names: [.[]? | strings | select(test("^[0-9]+_[A-Za-z0-9_.-]+[.]sql$"))] | if length == 0 then "none" else join(", ") end;
+            def safe(re): if type == "string" and test(re) then . else "unknown" end;'
           if jq -e 'has("FunctionError")' migrate-meta.json > /dev/null; then
+            # lambda-migrate.ts fails with a JSON summary as its message
+            # (MigrateFailure). A timeout or crash leaves some other message:
+            # then only the log group below is printed.
+            jq -r "$names"'
+              (.errorMessage | try fromjson catch {}) | if type == "object" then . else {} end
+              | "Code: \(.code | safe("^[a-z_]+$"))",
+                "Stopped on: \(.migrations | names)",
+                "Applied before it stopped: \(.applied | names)",
+                "Still pending: \(.pending | names)",
+                "CloudWatch stream: \(.logStream | safe("^[A-Za-z0-9/_.$#\\[\\]-]+$")) (request \(.requestId | safe("^[A-Za-z0-9-]+$")))"' migrate-result.json
+            echo "CloudWatch log group: /aws/lambda/${MIGRATE_FUNCTION_NAME} (the error itself is there; docs/deployment.md § A failed migration)"
             echo "::error::Migrate Lambda failed — API code NOT updated."
             exit 1
           fi
+          jq -r "$names"'"Applied: \(.applied | names)", "water_app role: \(.appRole | safe("^(created|updated)$"))"' migrate-result.json
 
       - name: Update API Lambda code
         env:
@@ -345,8 +361,9 @@ jobs:
           elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
             echo "::notice::The renderer Lambda doesn't exist yet. Its image ${VERSION} is in ECR: set renderer_image_tag = \"${VERSION}\" in terraform.tfvars and apply (docs/deployment.md § Reports)."
           else
-            echo "$get_err" >&2
-            echo "::error::Could not read the renderer Lambda ${RENDERER_FUNCTION_NAME} (not a ResourceNotFoundException); its image was NOT updated."
+            # Its error code only: the text names the deploy role and account.
+            code=$(grep -oE 'An error occurred \([A-Za-z]+\)' <<<"$get_err" | head -n 1 || true)
+            echo "::error::Could not read the renderer Lambda ${RENDERER_FUNCTION_NAME} (${code:-no AWS error code}, not a ResourceNotFoundException); its image was NOT updated."
             exit 1
           fi
 
