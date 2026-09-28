@@ -70,7 +70,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent, renderSession? }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -86,12 +86,18 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   role](./ui.md)), `[]` until they hide one. Only ever their own.
   `termsCurrent` is whether the account accepted the terms and privacy
   notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
-  `false` after the version changes, and for an account a script made
-  (`seed:examples`, `import:project`: they accept nothing). The app then
+  `false` after the version changes, and for an account `import:project`
+  made (it accepts nothing; `seed:examples` accepts the version in force for
+  its demo accounts on every seed). The app then
   shows its re-acceptance notice before any page, and `POST
   /auth/me/accept-terms` records the new version
   ([legal-status.md](./legal-status.md)). Only the app is gated: other
-  calls still answer.
+  calls still answer. A **render session** (the report renderer's,
+  [security.md § Render tokens](./security.md#render-tokens)) also answers
+  `renderSession: true`, and the app never gates it: it can read one report
+  and accept nothing, so the notice would stand where the report should be
+  and every PDF of an account behind on the terms (a scheduled report's
+  editor after any terms change) would time out.
   `farmNoticeCurrent` is whether the account acknowledged the farm view's
   notice now in force (`app_user.farm_notice_version` =
   `FARMER_NOTICE_VERSION`, 093): `false` until the farmer presses "I

@@ -68,3 +68,15 @@ export function routeAccess(
 	if (strip(pathname, base) === '/register' && search?.has('invite')) return 'show';
 	return isGuestPath(pathname, base) ? 'leave' : 'show';
 }
+
+/**
+ * The terms re-acceptance step (docs/legal-status.md) in place of an app
+ * page: signed in, the terms changed since the account accepted them (or it
+ * accepted none), and not a public page. Never for the report renderer's
+ * session (`renderSession` on /auth/me, reports/scope.ts): it can read one
+ * report and accept nothing, so the step would stand where the report should
+ * be and every PDF of an account that hasn't re-accepted would time out.
+ */
+export function termsGateApplies(user: Pick<User, 'termsCurrent' | 'renderSession'> | null, pathname: string, base = ''): boolean {
+	return user?.termsCurrent === false && !user.renderSession && !isPublicPath(pathname, base);
+}
