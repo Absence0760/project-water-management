@@ -3546,7 +3546,18 @@ read it before.
   hidden and its legend entry shows it, and a legend toggle survives the log
   scale and unit switches; a switched-off entry is struck through in the
   muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
-  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  scale, last 3 years or the full period). **Periods excluded from
+  calibration** (settings.calibrationExclusions, model.md §2.10) are tinted
+  behind the lines (`--warning` at 16 %, `LineChart`'s `shade`, light and
+  dark), and a key under the chart (`shadeKey`) names them in words, one line
+  each with its reason ("WY 2015/16: suspect rain"), so the tint never rests
+  on colour alone. They are the run's own exclusions, from its settings
+  snapshot (else, for a detail cached before runs carried settings, the ones
+  its calibration statistics applied), never the project's current ones, so
+  an old run shows what it was fitted and scored with. Each is clipped to the
+  hydrograph's days; one that runs past them says "(partly outside the run)",
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
   by half a window (the non-drag route, and the only one on touch). Neither
