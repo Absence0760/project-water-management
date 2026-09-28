@@ -71,7 +71,7 @@ describe('describeOp', () => {
 
 	it('says what each op changes, with the value it replaces', () => {
 		expect(d(raise)).toBe('Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³');
-		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.9 })).toBe('Lower farm: Irrigation efficiency 80 % → 90 %');
+		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.75 })).toBe('Lower farm: Irrigation efficiency 90 % → 75 %');
 		expect(d({ op: 'node.remove', nodeId: LO })).toBe('Remove “Lower farm”');
 		expect(d({ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: 250_000 })).toBe('Upper farm: Orchard 20 ha → 25 ha');
 		expect(d({ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: 0 })).toBe('Upper farm: Orchard 20 ha → none');
