@@ -1616,15 +1616,15 @@ run "mail_failures_and_log_privacy" {
 
   assert {
     condition = (
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length=0") &&
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length_on_error=0")
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_parameter_max_length=0") &&
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_parameter_max_length_on_error=0")
     )
     error_message = "Slow-statement and error logging must never record bind values (addresses, farm names, series): log_parameter_max_length(_on_error) = 0."
   }
   assert {
     condition = (
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1") &&
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_statement=none")
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1") &&
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_statement=none")
     )
     error_message = "The parameter group must keep TLS forced and log_statement = none."
   }
