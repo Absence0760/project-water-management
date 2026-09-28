@@ -5183,6 +5183,90 @@ every risk label at and beside its cut-offs, cut-off validation, the
 wording; and on random fuzz runs, every day below the EWR and every Reserve
 month of the classed years is counted exactly once.
 
+### 2.14a Licence impact by year class (issue #53 R7, engine and report)
+
+A derived view over two saved runs, not part of `runModel`: no run output
+changes, so `ENGINE_VERSION` doesn't move. Pure
+(`packages/engine/src/views/licenceImpact.ts`). The design is
+[design/planning-outputs.md §3.7](./design/planning-outputs.md#37-r7-licence-impact-by-year-class-m-inside-the-evidence-report)
+(sketch S4, finding 5); the board is on page 1 of the impact report
+([ui.md § Report](./ui.md#report)).
+
+`licenceImpactByYearClass({ background, application, siteNodeId?, yearClassMethod? })`
+compares a **background** run (what the impact is judged against: the
+impact report's baseline today, a full-allocation run once one exists) with
+the **application** run. Each run is `Pick<ModelOutput, 'startDate' | 'series' | 'summary'>`.
+
+- **Classes** come from the background run's natural flow (`classifyRunWaterYears`,
+  §2.14), so both runs are judged over the same years. A class counts only
+  the years both runs cover in full (a complete water-account row in each,
+  and the year in both runs' Reserve months or days); a warning counts the
+  years left out.
+- **Not enough years**: fewer than `OUTCOME_MIN_YEARS` = 3 years in a class
+  gives `enoughYears: false`, no waterfall, no counts and the verdict
+  `notEnoughYears`, the outcome matrix's rule.
+- **The waterfall**, mean m³ a year over the class's years, from each run's
+  water account (`summary.supplyAssurance.waterAccount`, §2.11b), at the
+  outlet:
+
+  | Step | What it is |
+  | --- | --- |
+  | natural | the background run's `naturalFlowM3` |
+  | existing use | the background run's consumptive use: `consumptiveIrrigationM3 + otherUseM3` (irrigation supplied less its return flow, plus other users' take less what they return) |
+  | proposed | the application's consumptive use − the background's (negative when it uses less) |
+  | other | natural − existing − proposed − left, broken down in `otherParts` |
+  | left | the application run's `outflowM3` (memo: the background's, `backgroundLeftM3`) |
+
+  Use is **consumptive**, not gross abstraction: it is what the river loses
+  to the users, so the waterfall ends at the outflow. The gross abstraction
+  (farms' and users' `supplied`) is larger by the return flows, which would
+  otherwise sit in "other" as a large negative. Groundwater pumped counts in
+  use (it is supplied); the river's loss to it is the stream depletion, and
+  the difference goes to "other".
+- **Other** is the rest of the application run's water account, so the
+  waterfall closes by construction and says what the gap is. `otherParts`
+  (Σ = other up to float noise): `damLossesM3` (dam evaporation + seepage lost
+  + off-take conveyance losses − rain on the dams), `storageChangeM3` (Δ dam
+  storage − storage set by a reset), `landCoverM3` (land cover + unallocated
+  natural flow), `groundwaterM3` (stream depletion − groundwater pumped),
+  `transfersM3` (− net transfers, ≈ 0), `naturalDifferenceM3` (background −
+  application natural flow, 0 unless the application changes the
+  rain-runoff) and `residualM3` (the account's float noise).
+- **Below the requirement**, per class: Reserve months not met at the site
+  (`summary.ewrAssurance`, §2.9c; the outlet, or a gauge by `siteNodeId`,
+  which then needs its table in both runs) summed over the years, background
+  and application, with the months assessed; without a rule table in both
+  runs, days below the pragmatic EWR at the outlet (`ewr_shortfall` < 0),
+  with a warning when only one run has the table. The counting is
+  `outcomeMatrix`'s (§2.14), with the two runs as its two levels.
+- **The verdict comes from the months** (or days), never from the annual
+  totals, since a waterfall can close with water to spare in a year that
+  failed every summer month (design §2 finding 5): application − background
+  > 0 is `moreBelow`, < 0 `fewerBelow`, 0 `noChange`.
+- **Wording** (`describeLicenceImpact(metric, class, names?)`) reports data,
+  never advice: "The Reserve was not met in 4 more months over 7 dry years
+  (9 in the baseline, 13 in this run)."; "The Reserve was met in every month
+  over 3 wet years in both runs."; "Only 2 wet years both runs cover: not
+  enough years to judge."
+- **Existing authorised use.** With the baseline as the background, "existing
+  use" is the use that run modelled, and the report labels it so. Existing
+  *authorised* use needs a full-allocation background run (WP-3.10
+  `allocationMode: 'fullAllocation'`, [allocations.md § Still to build](./allocations.md#still-to-build-wp-310)).
+  The view takes any background run, so when that mode lands the board
+  switches its background and its label, nothing else
+  ([followups.md § Allocations](./followups.md#allocations-wp-310)).
+- A run without a water account (engine < 0.32.0) throws; the report says to
+  run the model again.
+
+**Tests** (`licenceImpact.test.ts`, synthetic accounts; `licenceImpact.invariants.test.ts`,
+real runs): the classes, counts and verdicts for both metrics, the fallback
+and its warning, the 3-year rule, years one run doesn't cover, the gauge
+site, a skewed `TZ`, the verdict from months when the waterfalls are equal,
+the wording; on the outlook's synthetic test catchment (with a Reserve rule
+table) and on fuzz runs with every account term in play, the waterfall closes
+and Σ `otherParts` = other within 10⁻⁹ of the account's scale, the counts equal
+the runs' own Reserve months, and a run against itself changes nothing.
+
 ### 2.15 Seasonal outlook: an ESP ensemble from a decision date (issue #53 R5, engine core)
 
 "From the storage at the start of summer, how does the season go at 100,
