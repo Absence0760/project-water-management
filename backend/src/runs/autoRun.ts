@@ -14,6 +14,7 @@ import { forecastSplit, type ModelInput } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import { enqueueJob } from '../jobs/queue.js';
+import { RECORDED_RAIN_KINDS, recordedRainUntilSql } from '../series/lastDay.js';
 
 /** What a project's automatic runs do (settings.autoRun). */
 export const AUTO_RUN_PUBLISH = ['never', 'if_no_new_warnings'] as const;
@@ -98,14 +99,17 @@ export async function enqueueRerun(db: Db, projectId: string, cause: NewDataCaus
 }
 
 /**
- * The last day with a value in any input series but the forecast, or null:
- * how far the observed data reaches. Calendar days (UTC epoch arithmetic),
- * never the machine's time zone.
+ * The last day with a recorded rain value (catchment or CHIRPS), or null:
+ * how far the data that drives a run reaches, the project list's "Rain to"
+ * (series/lastDay.ts). Not the forecast, which runs ahead, nor observed flow,
+ * which only scores a run and can run months past the rain. Calendar days
+ * (UTC epoch arithmetic), never the machine's time zone.
  */
 export function observedDataEnd(series: ModelInput['series']): string | null {
 	let last: number | null = null;
-	for (const [kind, s] of Object.entries(series)) {
-		if (kind === 'rain_forecast_mm' || !s) continue;
+	for (const kind of RECORDED_RAIN_KINDS) {
+		const s = series[kind];
+		if (!s) continue;
 		let i = s.values.length - 1;
 		while (i >= 0 && s.values[i] === null) i--;
 		if (i < 0) continue;
@@ -155,4 +159,35 @@ export async function enqueueForecastRun(db: Db, projectId: string): Promise<Que
 export function forecastRunLabel(input: ModelInput): string {
 	const from = forecastSplit(input).forecastFrom;
 	return from ? `Forecast · from ${from}` : 'Forecast';
+}
+
+/**
+ * Whether the project's forecast run was made before its recorded rain last
+ * changed (a logger's push, a CHIRPS or gauge update, an upload): its
+ * history, and so its starting states, are then out of date, and after an
+ * outage it can run on weeks of blank days treated as dry. The auto re-run
+ * (jobs/handlers/rerun.ts) re-makes it then, whatever brought the rain: the
+ * forecast feed only queues one when the forecast itself changes. False with
+ * no forecast run (a person makes the first from the Runs tab, or the
+ * forecast feed does) or no recorded rain.
+ */
+export async function forecastRunBehindRain(db: Db, projectId: string): Promise<boolean> {
+	const { rows } = await db.query<{ behind: boolean | null }>(
+		`SELECT (SELECT max(r.created_at) FROM model_run r WHERE r.project_id = $1 AND r.scenario_id IS NULL AND r.trigger = 'forecast')
+			< (SELECT max(ts.updated_at) FROM time_series ts WHERE ts.project_id = $1 AND ts.kind = ANY($2::text[])) AS behind`,
+		[projectId, RECORDED_RAIN_KINDS]
+	);
+	return rows[0]?.behind === true;
+}
+
+/**
+ * The project's recorded rain end: the last day with a catchment or CHIRPS
+ * rain value (series/lastDay.ts), or null. A forecast run whose
+ * summary.forecast.lastObserved is before it ran days since recorded as dry
+ * (or on forecast rain), so nothing may alert from it (alerts/evaluate.ts
+ * ewr_forecast_fail).
+ */
+export async function recordedRainUntil(db: Db, projectId: string): Promise<string | null> {
+	const { rows } = await db.query<{ until: string | null }>(`SELECT to_char(${recordedRainUntilSql('$1')}, 'YYYY-MM-DD') AS until`, [projectId]);
+	return rows[0]?.until ?? null;
 }

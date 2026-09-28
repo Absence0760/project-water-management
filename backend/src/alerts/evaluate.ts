@@ -16,7 +16,10 @@
 //   ewr_forecast_fail      the newest forecast run's summary.forecast, while
 //                          its forecast days haven't all passed. Not while an
 //                          API key's anomalous push is held (series/hold.ts):
-//                          that forecast may rest on the held days.
+//                          that forecast may rest on the held days; nor while
+//                          that run is behind the recorded rain (its
+//                          lastObserved before the rain's last day: it ran
+//                          days since recorded as dry), until the re-made one.
 //   data_stale             one rule per data feed (057 feed_id): days that
 //                          feed is past its usual delay (feeds/health.ts
 //                          staleAfterDays); a disabled feed, or one with no
@@ -38,6 +41,7 @@ import type { Db } from '../db/tx.js';
 import { SOURCES, type FeedConfig, type FeedSource } from '../feeds/config.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { heldSinceLastRun } from '../series/hold.js';
+import { recordedRainUntil } from '../runs/autoRun.js';
 import { step, type AlertKind } from './rules.js';
 
 /** ALERTS_ENABLED=false is the kill switch (docs/deployment.md § Runbooks): events still open and clear, nothing is sent. */
@@ -175,7 +179,11 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		return () => (p ??= f());
 	};
 	const forecast = lazy(async () => {
-		const { rows } = await db.query<{ id: string; created_at: Date; f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number } | null }>(
+		const { rows } = await db.query<{
+			id: string;
+			created_at: Date;
+			f: { from: string; to: string; days: number; outletEwrDaysAtRisk: number; lastObserved?: string | null } | null;
+		}>(
 			`SELECT id, created_at, summary->'forecast' AS f
 			 FROM model_run WHERE project_id = $1 AND scenario_id IS NULL AND trigger = 'forecast'
 			 ORDER BY created_at DESC LIMIT 1`,
@@ -183,7 +191,15 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 		);
 		const r = rows[0];
 		// A forecast whose days have all passed says nothing about what's coming.
-		return r?.f && r.f.to >= today ? { runId: r.id, madeOn: localDate(r.created_at, timeZone), ...r.f } : null;
+		if (!r?.f || r.f.to < today) return null;
+		// One made before rain was recorded for days it ran as dry (or on
+		// forecast rain) describes a past that didn't happen: it can say "the
+		// river fails" where a fresh one says it doesn't. It neither opens nor
+		// clears an event; the re-made forecast run (the auto re-run queues it,
+		// jobs/handlers/rerun.ts) decides.
+		const rainUntil = r.f.lastObserved ? await recordedRainUntil(db, projectId) : null;
+		const stale = !!rainUntil && !!r.f.lastObserved && r.f.lastObserved < rainUntil;
+		return { runId: r.id, madeOn: localDate(r.created_at, timeZone), stale, ...r.f };
 	});
 	const held = lazy(() => heldSinceLastRun(db, projectId));
 	const feeds = lazy(async () => {
@@ -215,6 +231,7 @@ export async function evaluateAlerts(db: Db, projectId: string, { now = new Date
 				if (await held()) return 'skip';
 				const f = await forecast();
 				if (!f) return { value: null, detail: {}, runId: null };
+				if (f.stale) return 'skip';
 				return { value: f.outletEwrDaysAtRisk, detail: { days: f.outletEwrDaysAtRisk, of: f.days, from: f.from, to: f.to, madeOn: f.madeOn }, runId: f.runId };
 			}
 			case 'data_stale': {
