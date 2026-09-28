@@ -1652,7 +1652,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
-| `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
+| `invite_node` | The farms a pending **farmer** or **applicant** (`contributor`, 096) invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` or `contributor` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
   functions: `app_issue_email_token()` (per-address cooldown, then the daily
@@ -1666,10 +1666,10 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   updates must leave `invited_by` = the current user. `app_invite_for_token()` answers the
   public "what is this link for?" lookup; `app_accept_invites(user)` converts
   every live invite for the user's **verified** address into
-  `project_member` / `team_member` rows, links the farms of each farmer
-  invite (`farm_link` from `invite_node`, only where the membership really is
-  `farmer`: someone already on the project with another role keeps it and
-  gets no link), records `member.added` and `farmer.linked` (cause `invite`),
+  `project_member` / `team_member` rows, links the farms of each farmer or
+  applicant invite (`farm_link` from `invite_node`, only where the membership
+  really is the invite's role, 096: someone already on the project with
+  another role keeps it and gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
   sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
   never overwritten), and deletes those invites. Invites cascade away with their project or team,

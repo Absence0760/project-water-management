@@ -918,7 +918,10 @@ it scrolls, and isn't fitted to the window.
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
-  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  **Joins as** *Farmer* or *Applicant*, and for a farmer the email's
+  language; an applicant is a licence applicant who holds those farms,
+  WP-3.3, invited with the ordinary English invite email and badged
+  "applicant" in the pending list) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
   `project/farmers.ts`). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's

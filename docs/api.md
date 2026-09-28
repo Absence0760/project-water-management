@@ -659,14 +659,16 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code> }` | `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 096), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
 | POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
   displayName, role: 'farmer' | 'contributor', nodeIds }` (a contributor, an
   applicant, keeps farm links too: WP-3.3; bulk rows may add farms to one) or an `InvitedFarmer = { status: 'invited' |
-  'expired', inviteId, email, nodeIds, invitedBy, expiresAt, locale }`. An
+  'expired', inviteId, email, role, nodeIds, invitedBy, expiresAt, locale }`
+  (farmer invites, and applicant invites that carry farms; an applicant
+  invite without farms is only in `GET /invites`). An
   invite's `nodeIds` shrink when one of its farms is deleted or stops being a
   farm; it never gains one.
 - `locale` is the invite email's language, `en` by default: any code in the

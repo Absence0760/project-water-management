@@ -2924,10 +2924,15 @@ Applicant view and the Applications tab. Left:
       `test:backend:perf:db` portfolio median 114 ms (budget 500);
       `test:backend:perf`'s DB-free budgets unaffected by RLS (its GR4J
       example-run budget fails for an engine reason, tracked under Pipelines).
-- [ ] **Invite as an applicant with farms.** A contributor's farm links are
-      set by the owner after they join (`/farmers/:userId`); a farmer invite
-      carries farms, a contributor invite doesn't. Trigger: the first client
-      catchment with an irrigator applicant.
+- [x] **Invite as an applicant with farms.** Done in
+      `096_contributor_invite_farms` (issue #73): `POST /farmers` takes
+      `role: 'contributor'`, so the Invite farmers dialog's **Joins as**
+      *Applicant* adds a verified account, or invites any other address, as a
+      contributor with the farms they hold; accepting links them
+      (`app_accept_invites`, for the role the invite made them). A resend
+      from the members list keeps the farms. Tests:
+      `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
+      `farmer-invites.spec.ts`.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

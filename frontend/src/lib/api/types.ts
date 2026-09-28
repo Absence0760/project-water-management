@@ -247,13 +247,16 @@ export interface FarmAccessPerson {
 }
 
 /** A farmer member and the farm nodes they may read (GET /projects/:id/farmers). */
+/** The roles that hold farms: a farmer, or a licence applicant with their farms (contributor, WP-3.3). */
+export type FarmRole = 'farmer' | 'contributor';
+
 export interface Farmer {
 	status: 'active';
 	userId: string;
 	email: string;
 	displayName: string;
 	/** An applicant (contributor, WP-3.3) keeps farm links too; absent from servers before it. */
-	role?: 'farmer' | 'contributor';
+	role?: FarmRole;
 	nodeIds: string[];
 }
 
@@ -265,6 +268,8 @@ export interface InvitedFarmer {
 	status: 'invited' | 'expired';
 	inviteId: string;
 	email: string;
+	/** What they join as: an applicant invited with their farms (096); absent from servers before it. */
+	role?: FarmRole;
 	nodeIds: string[];
 	/** Display name of whoever (re-)sent it. */
 	invitedBy: string;
