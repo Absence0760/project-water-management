@@ -11,7 +11,19 @@ export interface MetricRow {
 	help: string;
 }
 
-const pct = (v: number | null | undefined, digits = 1) => (v == null || !Number.isFinite(v) ? '–' : `${fmtNum(v, digits)}%`);
+/**
+ * A volume bias in plain words, the calibration panel's one convention
+ * (issue #51): "57.6% too dry", "12.3% too wet", "0.0%". PBIAS (Moriasi:
+ * positive = too dry) and the volume error (positive = too wet) are the
+ * same quantity with opposite signs; side by side, "+57.6 %" and "−57.6 %"
+ * read as two different answers, so the panel shows neither sign.
+ * `simMinusObsPct`: 100 × (Σsim − Σobs) / Σobs, the volume error.
+ */
+export function volumeBiasText(simMinusObsPct: number | null | undefined): string {
+	if (simMinusObsPct == null || !Number.isFinite(simMinusObsPct)) return '–';
+	if (Math.abs(simMinusObsPct) < 0.05) return `${fmtNum(0, 1)}%`;
+	return `${fmtNum(Math.abs(simMinusObsPct), 1)}% too ${simMinusObsPct < 0 ? 'dry' : 'wet'}`;
+}
 
 /** The metric tiles, in reading order. Fields missing on old runs show "–". */
 export function metricRows(c: CalibrationStats): MetricRow[] {
@@ -30,9 +42,10 @@ export function metricRows(c: CalibrationStats): MetricRow[] {
 		},
 		{
 			key: 'pbias',
-			label: 'Percent bias (PBIAS)',
-			value: pct(c.pbias),
-			help: 'Share of observed volume the model misses; positive = model too dry, negative = too wet.'
+			label: 'Volume bias (PBIAS)',
+			// PBIAS is 100 × Σ(obs − sim)/Σobs, the volume error's negative.
+			value: volumeBiasText(c.pbias == null ? null : -c.pbias),
+			help: 'How much less water (too dry) or more (too wet) the model gives than was observed over the scored days. Exports carry it signed as PBIAS: positive = too dry.'
 		},
 		{
 			key: 'logNse',
@@ -45,12 +58,6 @@ export function metricRows(c: CalibrationStats): MetricRow[] {
 			label: 'R²',
 			value: fmtNum(c.r2, 2),
 			help: 'Share of the day-to-day variation in observed flow that the model follows.'
-		},
-		{
-			key: 'volumeErrorPct',
-			label: 'Volume error',
-			value: pct(c.volumeErrorPct),
-			help: 'Simulated minus observed volume over the window, as a share of observed.'
 		},
 		{
 			key: 'rmseM3s',

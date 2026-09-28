@@ -3472,7 +3472,10 @@ read it before.
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them; the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
-  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree),
+  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
+  the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
+  and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
+  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
