@@ -19,6 +19,21 @@
 //              role's trust policy pins (`environment:production` sub claim).
 //   gate       every job in ci.yml is in the `ci-gate` job's `needs:`, so no
 //              job can be red on a commit the gate calls green.
+//   no-cache   a workflow with a production-gated job restores no dependency
+//              cache anywhere (`cache:` on setup-node and friends,
+//              actions/cache). A cache is written by other runs, including
+//              ones that execute untrusted code on main, and a release build
+//              ships what it builds with deploy credentials.
+//   image      every `docker build` / `docker buildx build` in a workflow
+//              says --provenance=false --sbom=false --platform linux/amd64
+//              (on the command's first line). Lambda accepts one image
+//              manifest, never the image index attestations produce.
+//   push-full  ci.yml's `changes` job (the docs-only skip) emits code=true for
+//              every event but pull_request, before anything else writes
+//              `code=`, and never diffs against github.event.before. The
+//              release preflight trusts `CI gate` on the tagged commit alone,
+//              so a docs-only push to main must still run every heavy job:
+//              otherwise it goes green over code whose own run failed.
 //
 // Line-based on purpose (no YAML dependency at the root): the workflows are
 // ours and 2-space indented, and the tests pin the shapes it reads.
@@ -100,6 +115,27 @@ export function needsOf(jobLines) {
 	return out;
 }
 
+const EVENT_ENV = /^\s+EVENT_NAME:\s*\$\{\{\s*github\.event_name\s*\}\}\s*$/;
+const FULL_ON_NON_PR = /^\s+if \[ "\$EVENT_NAME" != "pull_request" \]; then echo "code=true" >> "\$GITHUB_OUTPUT"; exit 0; fi\s*$/;
+
+/**
+ * Why ci.yml's `changes` job could let a push skip the heavy jobs, or null.
+ * @param {string[]} jobLines
+ */
+export function pushFullProblem(jobLines) {
+	if (jobLines.some((l) => /github\.event\.before/.test(l))) {
+		return 'changes diffs against github.event.before; only a pull request may skip the heavy jobs, a push runs them all';
+	}
+	if (!jobLines.some((l) => EVENT_ENV.test(l))) {
+		return 'changes has no `EVENT_NAME: ${{ github.event_name }}` env, so it cannot tell a push from a pull request';
+	}
+	const firstCode = jobLines.findIndex((l) => /code=/.test(l) && !/^\s*#/.test(l));
+	if (firstCode < 0 || !FULL_ON_NON_PR.test(jobLines[firstCode])) {
+		return 'changes must start with `if [ "$EVENT_NAME" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi`, so a push to main always runs the full suite';
+	}
+	return null;
+}
+
 /**
  * @param {string} file e.g. `.github/workflows/ci.yml`
  * @param {string} text
@@ -127,6 +163,14 @@ export function checkWorkflow(file, text) {
 		}
 	});
 
+	lines.forEach((l, i) => {
+		if (/^\s*#/.test(l) || !/\bdocker\s+(buildx\s+)?build\b/.test(l)) return;
+		const missing = ['--provenance=false', '--sbom=false', '--platform linux/amd64'].filter((f) => !l.includes(f));
+		if (missing.length) {
+			out.push({ file, line: i + 1, rule: 'image', message: `docker build without ${missing.join(' ')}: an attestation-carrying image index is what Lambda rejects` });
+		}
+	});
+
 	const perms = topLevelPermissions(text);
 	if (!perms) {
 		out.push({ file, rule: 'perms', message: 'no top-level permissions: block (least-privilege default missing)' });
@@ -141,6 +185,15 @@ export function checkWorkflow(file, text) {
 		}
 	}
 
+	if (jobsOf(text).some((j) => isProductionGated(j.lines))) {
+		lines.forEach((l, i) => {
+			if (/^\s*#/.test(l)) return;
+			if (/^\s+cache:\s*\S/.test(l) || /uses:\s*actions\/cache(\/restore)?@/.test(l)) {
+				out.push({ file, line: i + 1, rule: 'no-cache', message: 'a deploy workflow restores a dependency cache; release builds install cold so a poisoned cache cannot reach production' });
+			}
+		});
+	}
+
 	if (file.endsWith('/ci.yml')) {
 		const jobs = jobsOf(text);
 		const gate = jobs.find((j) => j.id === 'ci-gate');
@@ -153,6 +206,11 @@ export function checkWorkflow(file, text) {
 					out.push({ file, line: j.startLine, rule: 'gate', message: `job ${j.id} is not in ci-gate's needs, so it can fail while the gate reports green` });
 				}
 			}
+		}
+		const changes = jobs.find((j) => j.id === 'changes');
+		if (changes) {
+			const problem = pushFullProblem(changes.lines);
+			if (problem) out.push({ file, line: changes.startLine, rule: 'push-full', message: problem });
 		}
 	}
 	return out;

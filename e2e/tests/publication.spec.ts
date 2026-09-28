@@ -27,7 +27,7 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await panel.getByRole('button', { name: 'Publish this run' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Publish this run?' });
 	await expect(dialog).toContainText('it becomes the first published baseline');
-	await expect(dialog.getByRole('status')).toHaveText(/^1 farm dam has no stop level/);
+	await expect(dialog.getByRole('status')).toHaveText(/^1 hydrological unit’s dam has no stop level/);
 	await dialog.getByLabel('Level').selectOption('advisory');
 	await dialog.getByLabel(/^Cut/).fill('10');
 	// One field per language of the table, English first, each marked with its language.
@@ -40,7 +40,7 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	await dialog.getByRole('button', { name: 'Publish', exact: true }).click();
 	await expect(dialog).toBeHidden();
 
-	await expect(panel.getByRole('status')).toHaveText('Published. 2 farm views updated.');
+	await expect(panel.getByRole('status')).toHaveText('Published. 2 farmer views updated.');
 	await expect(panel.getByRole('heading', { name: /Publication/ }).getByText('Published', { exact: true })).toBeVisible();
 	await expect(panel.getByRole('definition').first()).toHaveText('Advisory · 10 %');
 	// The next update is a calendar day, shown as one (never shifted through a timezone).

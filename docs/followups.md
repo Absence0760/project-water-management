@@ -53,6 +53,13 @@ The checklist for these is issue #62; the history scrub is #63.
       version and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
+- [ ] **Raise the Lambda concurrent-executions quota before the first apply
+      (2026-09-28, infra audit).** A new account's quota is 10 and AWS keeps
+      10 unreserved, so every reserved concurrency fails to apply until it is
+      raised, and `-1` (unreserved) is now refused by the variables'
+      validation. In af-south-1 request at least the sum of the reservations
+      + 10 (33 at the defaults; ask for 1000) and wait for the grant:
+      infra/README.md § Operator steps, step 3.
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
@@ -1543,18 +1550,23 @@ yet; each lands with the work package named.
       the language the reader chose, marked with its `lang`, or the other
       with "The WUA wrote this notice in English only" (design §7). The
       saved copy moved to `wm.farm.saved.v2` (a v1 copy is dropped).
-- [x] **"Who can see my farm" by name** (design §10.2): done (91b8b833):
+- [x] **"Who can see my hydrological unit" by name** (design §10.2): done (91b8b833):
       `GET …/farm/:nodeId/access` lists people by name and role, never an
       email, and the card falls back to roles if it fails
       (`farm-view.spec.ts` checks it).
-- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
-      `FarmIndex`; the pages say "your WUA".
+- [x] **The WUA's name** in "Contact [WUA]" lines (issue #74):
+      `project.wua_name` (095_wua_name), set as **WUA name** on the Project
+      page's details and carried as `project.wuaName` in `FarmView` and
+      `FarmIndex`; the contact lines name it, and say "your WUA" without
+      one. Not the team's name, which may be a consultancy's.
 - [x] **"Email me when …"** links for the notice and a low dam: alert emails
       (WP-2.13); the farm view's alert card and every alert email link to
       `/account/alerts`. "Email me when it's ready" (a report) is still open.
-- [ ] **"Not available: the model's data starts on …"** needs the run's
-      first date; `lastSeason` is null without it, so the page says the data
-      doesn't reach back.
+- [x] **"Not available: the model's data starts on …"** (issue #74): the
+      projection carries the run's first day (`dataFrom`; a row stored
+      before it gets it from `catchment_view.runStart`), and "Compared with
+      last season" names it. A copy saved on the phone before it still says
+      the data doesn't reach back.
 - [x] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` runs in CI's
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
@@ -1581,9 +1593,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
       green.
 - [ ] **A native speaker's review.** The Afrikaans is machine-written and
-      machine-checked. Before the first farmers are invited in Afrikaans,
-      someone fluent (the client's translator, roadmap Step 2 prerequisite
-      6) reads the three catalogues (`frontend/src/lib/i18n/messages/af.ts`,
+      machine-checked. The client confirmed (2026-09-28, issue #90) that
+      their native-speaker translator (roadmap Step 2 prerequisite 6) will
+      review it, the #47 liability lines included
+      ([legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)),
+      before the first farmers are invited in Afrikaans. They read the three
+      catalogues (`frontend/src/lib/i18n/messages/af.ts`,
       `backend/src/mail/i18n/af.ts`, `frontend/src/lib/help/content.af.ts`,
       each with the English beside every entry) and corrects them in place.
       The checker's open questions, to look at first: "Advies" for the
@@ -1607,7 +1622,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
       `share.*` keys, with the switch in its header; it still imports none
       of the workspace's code, `boundary.test.ts`), the notes list inside
-      "Notes about your farm" (`NotesList` takes a `words` prop: English
+      "Notes about your hydrological unit" (`NotesList` takes a `words` prop: English
       `notes/words.ts` for the workspace, `farm/notesWords.ts` from the
       catalogue), and the server errors a farmer can see: the API sends a
       stable `code` (`ERROR_CODES`, [api.md § Errors](./api.md#errors)) and
@@ -1983,19 +1998,17 @@ role and not before it.
         tags the exception, **Inputs not stored**, rather than badging every
         run "Reproducible"; the "Cited" lock is the existing **Published** /
         **Scenario base** tags without a ✕ (pending the hydrologist).
-  - [ ] **Withdrawing a nomination (un-nominate)**, considered and not built
-        (2026-09-26). Under #43's rule (035_project_evidence_guard: any
-        nomination row keeps the project for good) a withdrawal would not
-        make a project deletable, so its only value is honesty in the record:
-        today an applicant who drops an application can only *replace* the
-        nomination, so the history keeps claiming some run is "the evidence".
-        The durable fix, if an assessor or applicant asks for it: an
-        append-only history row with no run and a required reason (run_id,
-        runoff_model and engine_version NULL together), stamped by
-        `run_nomination_stamp`, shown as "Withdrawn on … by …" in the Runs
-        tab, compare and the summary CSV; the guard stays unchanged. Trigger:
-        a real licence application withdrawn, or an assessor asking what a
-        project stands behind after an application lapses.
+  - [x] **Withdrawing a nomination (un-nominate)**. Done in
+        `098_nomination_withdrawal` (issue #73): an append-only history row
+        with no run and a required reason (`run_id`, `runoff_model` and
+        `engine_version` NULL together), stamped by `run_nomination_stamp`,
+        allowed only while a run is nominated; `POST …/evidence/withdraw`
+        and the Evidence panel's **Withdraw the nomination…**; shown as
+        "Withdrawn on … by …" in the Runs tab's history and evidence line,
+        compare and the summary CSV. The guard (035) is unchanged: the
+        project stays undeletable. Tests: `runs/evidence.db.test.ts`
+        ("withdrawing the nomination"), the unit tests of both `evidence.ts`
+        and `export/run-tables.ts`, e2e `evidence.spec.ts`.
   - [x] **WP-2.3's publication-history trim skips cited runs' publications**
         (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
         newest 12, every publication whose run a scenario is based on, so
@@ -2344,8 +2357,14 @@ role and not before it.
         recompute ([model.md §2.7b](./model.md)). About 195 kB before
         compression (1.6 % of the run's series) on Sandspruit, nothing on
         the single-site examples.
-  - [ ] **The chart series and per-farm history routes** of WP-2.6
-        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
+  - [x] **The chart series and per-farm history routes** of WP-2.6
+        (issue #74): `GET …/farm/:nodeId/series?key=&from=&to=` (one farm
+        allowlist series from the published run, the year to `dataUntil` by
+        default, sliced in SQL) and `GET …/farm/:nodeId/history` (the farm's
+        own figures in the last 12 publications), `farms/view.ts`,
+        [api.md § Farm](./api.md#farm). The farm page keeps rendering from
+        the projection (design §12: "compared with last season" from
+        `lastSeason`, not `/history`); nothing on it calls them yet.
 
 ## Pipelines
 
@@ -2657,14 +2676,18 @@ from the WP:
       modeller enters its values by hand. Trigger: the hydrologist wants
       such a set compared (Q9), with a synthetic fixture of that shape for the
       test (never a client file).
-- [ ] **Two tables of indicative irrigation efficiencies.** The node form's
-      system helper uses the engine's `IRRIGATION_SYSTEMS` (micro 0.85,
-      sprinkler 0.75, flood 0.65, "typical values"), the dialog the SABI
-      2021 ranges with Q10's values (`crops/library.ts` `LIBRARY_SYSTEMS`:
-      micro 0.82, permanent sprinkler 0.80, surface 0.70 …). Durable fix:
-      once Q10 is answered, keep one table (SABI 2021, with its source) in
-      the engine and use it in both places; that changes what a new pick in
-      the node form sets, not any saved value. Trigger: Q10.
+- [x] **One table of irrigation efficiencies; drip the new-farm default**
+      (2026-09-28, issue #90 answering #54 Q10). The engine's
+      `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values
+      (drip 0.90, micro 0.82, pivot 0.85, permanent sprinkler 0.80, movable
+      sprinkler 0.75, surface 0.70); the crop library's `LIBRARY_SYSTEMS`
+      re-exports it and the farmer view names the nearest of it. New farms
+      start on drip (`NEW_FARM_IRRIGATION` e = 0.90; migration 099 sets the
+      column default). Saved farms keep their values (a value off the table
+      shows "Other" in the helper); no engine version change, since the run
+      reads neither ([model.md § Irrigation efficiency](./model.md)). Still
+      the hydrologist's: which system each farm's crops are under (the item
+      above).
 
 ## Demand objects and run of river (issue #54 items 2b–2d)
 
@@ -2691,6 +2714,31 @@ from the WP:
       reason carried into the return (a per-day return override) and the
       summary. Trigger: the client's answer on the schedule (fixed pattern or
       uploaded series; what off means).
+- [ ] **Demand objects: a structured demand source.** The rule is decided
+      (issue #54 Q11, confirmed by the client in issue #90): a demand comes
+      from meter records where they exist, else the reconciliation
+      strategy's AADD, else population × litres per person per day, and the
+      model records which. Today that record is the object's free-text
+      `note`, so a report can't say by rule how solid a demand is. Durable
+      fix: a `source` field on the object (`meter` | `aadd` | `perCapita` |
+      `other`, with the note kept for the detail), set by the node form and
+      the importers, shown in the run's object table and the evidence
+      report. Trigger: the evidence report (or a WUA screen) needing to
+      grade demands by source, or the first catchment with objects from
+      more than one source.
+- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
+      #54 Q13, agreed by the client in issue #90). A restriction never cuts
+      domestic supply below 25 litres per person per day; cuts follow DWS's
+      % restrictions; a municipality's own restriction levels are an
+      optional display only. Nothing applies a floor today: a curtailment or
+      `demand.scale` cut reaches a domestic object like any other demand.
+      Durable fix: a per-object floor (population × 25 l/p/d, from a
+      `perUnit` object's count, or entered) that the drought restriction
+      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
+      shortfall reported apart, and an optional municipal-level label on the
+      share-the-pain board. Trigger: building WP-3.8's drought restriction
+      rule, or the first catchment with a domestic object under a
+      restriction.
 - [ ] **A scenario op for demand objects.** Scenarios can't add, change or
       remove one (`demand.scale` on a unit scales its crops and objects
       together); override mode says an object edit can't be recorded. Durable
@@ -2831,7 +2879,7 @@ from the WP:
       "“farms short this week” opens the Runs tab at the curtailment table"
       (the link, then a reload); it failed before the fix (landed at the
       top) and passed 30/30 at `--repeat-each=30`, 12 workers.
-      Since issue #17 the panel is on Units & supply: the link is
+      Since issue #17 the panel is on Hydrological units: the link is
       `?tab=supply&run=…&window=last7#res-curtailment`, that page holds the
       fragment the same way, and the old Runs link is sent there.
 - [x] **No perf guard on the portfolio query** (done 2026-09-26). The
@@ -2843,18 +2891,18 @@ from the WP:
 
 ## Firm yield (WP-3.6)
 
-- [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
-      `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
-      they own". WP-3.3's first slice (044/045) landed the role without them:
-      a contributor reads no job and no yield result
-      (`scenarios/contributor-tables.db.test.ts`), and 045's
-      `yield_result_select` already hides a yield of an application from
-      anyone who can't read it. Trigger: the applicant's view of results
-      (followups.md § Applicants); a new migration adds those policies from
-      045's `yield_result_select` and 016's `job_insert` (023 for the job
-      kinds), with the positive-control DB test (a contributor
-      queues a yield for their own scenario, not another's or a run) and the
-      fail-closed test (the job dies once they lose the role).
+- [x] **Contributor policies.** Done in `096_contributor_yield` (issue #73):
+      a contributor queues a `yield` job as themselves on an application they
+      own, for their own farm's dam or one its `node.add` ops add, and reads,
+      inserts and trims only the results they computed; an assessor's yield
+      on the same application stays hidden from them. The API
+      (`yieldInputFor`) refuses a hidden dam with an unknown id's words, and
+      the handler re-checks as the acting user through the new
+      `JobHandler.alsoRole`, so the job dies once they lose the role or the
+      dam. Tests: `yield/contributor.db.test.ts` (positive controls and
+      fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
+      allowlist). Left for the applicant's view of results below: a Yield
+      panel on the Applicant view (the API is ready).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
       browser for an instant preview, through WP-1.17's preview worker
       (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
@@ -2975,10 +3023,15 @@ Applicant view and the Applications tab. Left:
       `test:backend:perf:db` portfolio median 114 ms (budget 500);
       `test:backend:perf`'s DB-free budgets unaffected by RLS (its GR4J
       example-run budget fails for an engine reason, tracked under Pipelines).
-- [ ] **Invite as an applicant with farms.** A contributor's farm links are
-      set by the owner after they join (`/farmers/:userId`); a farmer invite
-      carries farms, a contributor invite doesn't. Trigger: the first client
-      catchment with an irrigator applicant.
+- [x] **Invite as an applicant with farms.** Done in
+      `097_contributor_invite_farms` (issue #73): `POST /farmers` takes
+      `role: 'contributor'`, so the Invite farmers dialog's **Joins as**
+      *Applicant* adds a verified account, or invites any other address, as a
+      contributor with the farms they hold; accepting links them
+      (`app_accept_invites`, for the role the invite made them). A resend
+      from the members list keeps the farms. Tests:
+      `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
+      `farmer-invites.spec.ts`.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

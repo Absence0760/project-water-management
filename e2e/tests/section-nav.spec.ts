@@ -181,14 +181,14 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	await expect(menu.getByRole('link', { name: 'Seasonal outlook' })).toHaveAttribute('aria-current', 'location');
 });
 
-test('Units & supply has the menu: the unit detail and each table, with a jump below it', async ({ page, owner }) => {
+test('Hydrological units has the menu: the hydrological unit detail and each table, with a jump below it', async ({ page, owner }) => {
 	void owner;
 	const project = await seedSupplyProject(page.request, 'Menu supply', 6);
 	await createRun(page.request, project.id, 'Baseline');
 	await page.setViewportSize({ width: 1440, height: 960 });
 	await openSupply(page, project.id);
-	const menu = page.getByRole('navigation', { name: 'Units & supply sections' });
-	await expect(menu.getByRole('link')).toHaveText(['Unit detail', 'Unit results', 'Curtailment', 'Assurance of supply']);
+	const menu = page.getByRole('navigation', { name: 'Hydrological units sections' });
+	await expect(menu.getByRole('link')).toHaveText(['Hydrological unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
 	expect(await barRows(menu)).toBe(1);
 
 	await menu.getByRole('link', { name: 'Assurance of supply' }).click();

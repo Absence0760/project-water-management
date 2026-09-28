@@ -30,9 +30,9 @@
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>{t('{page} · My farm', { page: t('Your dam') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My hydrological unit', { page: t('Your dam') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My farm') }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My hydrological unit') }}>
 	{#snippet children(view)}
 		{@const d = damPage(view.farm, unit)}
 		<div>
@@ -43,7 +43,7 @@
 		<EstimateNote />
 		{#if !d}
 			<p>{t('{farm} has no dam in the model.', { farm: view.farm.name })}</p>
-			<a class="link" href={main}>{t('Back to my farm')}</a>
+			<a class="link" href={main}>{t('Back to my hydrological unit')}</a>
 		{:else}
 			<section class="card" aria-labelledby="now-h">
 				<h2 id="now-h" class="visually-hidden">{t('How full it is')}</h2>

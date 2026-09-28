@@ -271,10 +271,10 @@
 			{#if b.curtailment.length}
 				<div class="table-wrap">
 					<table class="data compact" aria-labelledby="{uid}-farm">
-						<caption id="{uid}-farm">Curtailment per unit: total change in supply over the reporting window, m³/day (negative = cut)</caption>
+						<caption id="{uid}-farm">Curtailment per hydrological unit: total change in supply over the reporting window, m³/day (negative = cut)</caption>
 						<thead>
 							<tr>
-								<th scope="col">Unit</th>
+								<th scope="col">Hydrological unit</th>
 								<th scope="col" class="num">5 %</th>
 								<th scope="col" class="num">Median</th>
 								<th scope="col" class="num">95 %</th>

@@ -24,9 +24,9 @@ test('running the model shows the run with a farm summary and a chart', async ({
 	const summary = page.getByRole('region', { name: 'Run summary' });
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	// The per-unit table moved to Units & supply (issue #17, supply-page.spec.ts): the run header links there for this run.
-	await expect(summary.getByRole('heading', { name: 'Units', exact: true })).toHaveCount(0);
+	await expect(summary.getByRole('heading', { name: 'Hydrological units', exact: true })).toHaveCount(0);
 	const runId = new URL(page.url()).searchParams.get('run')!;
-	await expect(page.getByRole('link', { name: 'Units & supply for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
+	await expect(page.getByRole('link', { name: 'Hydrological units for this run' })).toHaveAttribute('href', `?tab=supply&run=${runId}`);
 	const calibration = page.getByRole('region', { name: 'Calibration against observed flow' });
 	await expect(calibration.getByRole('term').filter({ hasText: 'Observations' })).toBeVisible();
 	// A gauge record is scored against the simulated outflow, not natural flow.

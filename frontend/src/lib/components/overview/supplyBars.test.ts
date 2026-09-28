@@ -39,7 +39,7 @@ describe('supplyBars', () => {
 			['x', 'low', true],
 			['dry', 'none', true]
 		]);
-		expect(rows[0]!.name).toBe('Unnamed farm');
+		expect(rows[0]!.name).toBe('Unnamed hydrological unit');
 		expect(rows[2]!.fraction).toBeNull();
 	});
 });

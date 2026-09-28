@@ -87,21 +87,21 @@
 	onMount(load);
 </script>
 
-<svelte:head><title>{t('{page} · My farm', { page: t('Your farms') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My hydrological unit', { page: t('Your hydrological units') })}</title></svelte:head>
 
-<FarmShell title={t('My farms')} busy={rows == null && !failed}>
+<FarmShell title={t('My hydrological units')} busy={rows == null && !failed}>
 	{#if failed}
 		<FarmStatus kind="error" offline={failed.offline} attempts={failed.attempts} retry={load} />
 	{:else if rows == null}
 		<FarmSkeleton />
 	{:else if rows.length === 0}
-		<h1>{t('Your farms')}</h1>
-		<p>{t('No farm is linked to your account yet. Your WUA links your farm to your account.')}</p>
+		<h1>{t('Your hydrological units')}</h1>
+		<p>{t('No hydrological unit is linked to your account yet. Your WUA links your hydrological unit to your account.')}</p>
 		{#if hasOther}<a class="link" href="{base}/">{t('Your projects')}</a>{/if}
 	{:else}
 		<!-- "Before you look at your farm" first, until acknowledged: this list carries figures too. -->
 		<FarmNoticeGate>
-			<h1>{t('Your farms')}</h1>
+			<h1>{t('Your hydrological units')}</h1>
 			<ul class="farms">
 				{#each rows as r (r.projectId + '/' + r.nodeId)}
 					<li>

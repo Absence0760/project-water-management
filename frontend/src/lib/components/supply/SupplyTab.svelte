@@ -269,12 +269,12 @@
 		<section class="panel" aria-label="No run yet">
 			<div class="empty">
 				{#if modelUnits === 0}
-					<p>No units in this catchment’s model yet. Add units on the Network; after a run, each one's supply against its demand shows here.</p>
+					<p>No hydrological units in this catchment’s model yet. Add hydrological units on the Network; after a run, each one's supply against its demand shows here.</p>
 					<p class="empty-links"><a class="btn btn-sm" href="?tab=network">Open the Network</a></p>
 				{:else if readonly}
-					<p>No run yet. Once an editor runs the model, how much of each unit’s demand was supplied shows here.</p>
+					<p>No run yet. Once an editor runs the model, how much of each hydrological unit’s demand was supplied shows here.</p>
 				{:else}
-					<p>No run yet. Run the model to see how much of each of the {fmtNum(modelUnits)} units’ demand is supplied.</p>
+					<p>No run yet. Run the model to see how much of each of the {fmtNum(modelUnits)} hydrological units’ demand is supplied.</p>
 					<p class="empty-links"><a class="btn btn-sm btn-primary" href="?tab=runs">Run the model (Runs &amp; results)</a></p>
 				{/if}
 			</div>
@@ -283,12 +283,12 @@
 		<LoadState loading={runLoading && !run} error={run ? null : runError} retry={() => runAttempt++}>
 			{#if run && summary && totals}
 				{#if cards.length === 0}
-					<section class="panel" aria-label="No units in this run">
+					<section class="panel" aria-label="No hydrological units in this run">
 						<div class="empty">
 							<p>
 								{modelUnits
-									? 'This run has no units: they were added after it. Run the model again to see their supply.'
-									: 'No units in this catchment’s model, so there is no irrigation supply to show. Add units on the Network.'}
+									? 'This run has no hydrological units: they were added after it. Run the model again to see their supply.'
+									: 'No hydrological units in this catchment’s model, so there is no irrigation supply to show. Add hydrological units on the Network.'}
 							</p>
 							<p class="empty-links">
 								<a class="btn btn-sm" href="?tab=network">Open the Network</a>
@@ -299,7 +299,7 @@
 				{:else}
 					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
 					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={SUPPLY_NAV} label="Units & supply sections" />
+					<SectionNav groups={SUPPLY_NAV} label="Hydrological units sections" />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
@@ -309,7 +309,7 @@
 							{#if supplied?.delta}<dd class="sub change"><Delta m={supplied.delta} spec={supplied.spec} /> vs previous run</dd>{/if}
 						</div>
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="below">
-							<dt>Units below {target}</dt>
+							<dt>Hydrological units below {target}</dt>
 							<dd class="value">{fmtNum(totals.below)}<small>of {fmtNum(totals.units)}</small></dd>
 							<dd class="sub">{totals.below ? `got under ${target} of their demand` : `all got ${target} or more`}</dd>
 						</div>
@@ -334,8 +334,8 @@
 
 					<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 						<section class="list" aria-labelledby="unit-cards-h">
-							<h2 id="unit-cards-h" class="visually-hidden">Each unit, least supplied first</h2>
-							<ul class="cards" aria-label="Units">
+							<h2 id="unit-cards-h" class="visually-hidden">Each hydrological unit, least supplied first</h2>
+							<ul class="cards" aria-label="Hydrological units">
 								{#each cards as c (c.nodeId)}
 									<li class="card {c.band}" class:picked={picked?.nodeId === c.nodeId} data-unit={c.nodeId} data-band={c.band}>
 										<div class="card-head">
@@ -386,7 +386,7 @@
 
 					<h2 class="group-h">Tables for this run</h2>
 					<section class="panel" id="res-farms" aria-labelledby="res-farms-h">
-						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Unit results" headingId="res-farms-h" />
+						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Hydrological unit results" headingId="res-farms-h" />
 					</section>
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->

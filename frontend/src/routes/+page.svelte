@@ -282,7 +282,7 @@
 				{#if !loading && projects.length}
 					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· EWR, last 30 days: {summaryLine}{/if}
 				{:else}
-					Each project models one catchment: its river network, units, dams and data.
+					Each project models one catchment: its river network, hydrological units, dams and data.
 				{/if}
 			</p>
 		</div>
@@ -488,13 +488,13 @@
 	{#if kept}
 		<p data-testid="evidence-kept">
 			{#if kept.run}“{kept.run.label || 'Untitled run'}” is the nominated evidence run of “{kept.project.name}”.{:else}“{kept.project.name}”
-				has a nominated evidence run.{/if}
+				has an evidence nomination history.{/if}
 			A project that has nominated evidence keeps it, with its nomination history{kept.nominations && kept.nominations > 1
 				? ` (${kept.nominations} nominations)`
 				: ''}, for good, so the evidence can still be read and reproduced.
 		</p>
 		<p class="muted">
-			A nomination can be replaced by another run but not withdrawn. To start again without it, copy the project: the model and time
+			Replacing or withdrawing a nomination keeps the history. To start again without it, copy the project: the model and time
 			series are copied, the runs and their nominations are not.
 		</p>
 		<p>

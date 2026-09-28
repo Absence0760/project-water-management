@@ -82,9 +82,9 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(ageText(row({ figuresUntil: null, figuresAgeDays: null }))).toBeNull();
 	});
 	it('farms, dams, restriction, feeds', () => {
-		expect(farmsShortText(row())).toBe('2 of 14 units short this week');
-		expect(farmsShortText(row({ farmCount: 1, farmsShort7: 0 }))).toBe('0 of 1 unit short this week');
-		expect(farmsShortText(row({ farmCount: 0, farmsShort7: 0 }))).toBe('No units');
+		expect(farmsShortText(row())).toBe('2 of 14 hydrological units short this week');
+		expect(farmsShortText(row({ farmCount: 1, farmsShort7: 0 }))).toBe('0 of 1 hydrological unit short this week');
+		expect(farmsShortText(row({ farmCount: 0, farmsShort7: 0 }))).toBe('No hydrological units');
 		expect(farmsShortText(row({ farmsShort7: null }))).toBeNull();
 		expect(farmsUnknownText(row({ source: 'run' }))).toBe('Unknown until a run is published');
 		expect(farmsUnknownText(row())).toBe('Unknown: publish again to count them');
@@ -192,7 +192,7 @@ describe('totals (the teams list, the team page and the portfolio header)', () =
 			stale: 1,
 			lastRunAt: '2026-09-24T06:00:00.000Z'
 		});
-		expect(farmsShortTotalText(t)).toBe('2 of 8 units');
+		expect(farmsShortTotalText(t)).toBe('2 of 8 hydrological units');
 	});
 
 	it('says nothing is known rather than zero when no catchment has a count', () => {
@@ -200,7 +200,7 @@ describe('totals (the teams list, the team page and the portfolio header)', () =
 		expect(t.farmsShort7).toBeNull();
 		expect(farmsShortTotalText(t)).toBeNull();
 		expect(portfolioTotals([])).toMatchObject({ catchments: 0, farmsShort7: null, lastRunAt: null, alertsFiring: 0, stale: 0 });
-		expect(farmsShortTotalText({ farmsShort7: 0, farmsCounted: 0 })).toBe('No units');
-		expect(farmsShortTotalText({ farmsShort7: 1, farmsCounted: 1 })).toBe('1 of 1 unit');
+		expect(farmsShortTotalText({ farmsShort7: 0, farmsCounted: 0 })).toBe('No hydrological units');
+		expect(farmsShortTotalText({ farmsShort7: 1, farmsCounted: 1 })).toBe('1 of 1 hydrological unit');
 	});
 });

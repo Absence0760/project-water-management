@@ -37,7 +37,7 @@
 	const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 	const nodeText = $derived(
 		[
-			plural(summary.farms, 'unit'),
+			plural(summary.farms, 'hydrological unit'),
 			plural(summary.gauges, 'gauge'),
 			...(summary.users ? [plural(summary.users, 'other water user')] : [])
 		].join(', ')

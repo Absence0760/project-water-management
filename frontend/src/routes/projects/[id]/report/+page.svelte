@@ -336,8 +336,8 @@
 								</tbody>
 							</table>
 						</div>
-						{@render table('Units, gauges and other users', ['Node', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model))}
-						{@render table('Crops and planted areas', ['Unit', 'Crop', 'Area (ha)'], [2], cropAreaRows(model))}
+						{@render table('Hydrological units, gauges and other users', ['Node', 'Kind', 'Drains into', 'Area (km²)', 'Dam (m³)', 'Irrigation efficiency'], [3, 4, 5], nodeRows(model))}
+						{@render table('Crops and planted areas', ['Hydrological unit', 'Crop', 'Area (ha)'], [2], cropAreaRows(model))}
 						{@render table('Transfers', ['From', 'To', 'Months', 'Max rate (m³/s)', 'Daily cap (m³)', 'On'], [3, 4], transferRows(model))}
 						{@render table(
 							'Data coverage (the project’s input series today; the run used them up to its end date)',

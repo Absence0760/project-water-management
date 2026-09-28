@@ -89,7 +89,7 @@
 
 	function remove(id: string, name: string) {
 		const used = editor.model.cropAreas.some((a) => a.cropId === id);
-		if (used && !confirm(`Remove crop "${name}" and its planted areas on every farm?`)) return;
+		if (used && !confirm(`Remove crop "${name}" and its planted areas on every hydrological unit?`)) return;
 		editor.removeCrop(id);
 	}
 
@@ -216,11 +216,11 @@
 <section class="panel" aria-labelledby="areas-h">
 	<div class="panel-head">
 		<h2 id="areas-h">Planted areas</h2>
-		<span class="muted small">Irrigated area per farm and crop, hectares · rows follow the network order</span>
+		<span class="muted small">Irrigated area per hydrological unit and crop, hectares · rows follow the network order</span>
 	</div>
 	{#if farms.length === 0 || crops.length === 0}
 		<p class="muted">
-			Add at least one farm (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
+			Add at least one hydrological unit (<a href="?tab=network">Network tab</a>) and one crop to enter planted areas.
 		</p>
 	{:else}
 		<div class="table-wrap">
@@ -291,7 +291,7 @@
 		</div>
 	{/if}
 	{#if farms.length === 0}
-		<p class="muted">No farms yet.</p>
+		<p class="muted">No hydrological units yet.</p>
 	{:else}
 		{#if stacks.length && demandTotal.annual > 0}
 			<figure class="demand-chart">

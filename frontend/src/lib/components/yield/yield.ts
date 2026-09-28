@@ -70,7 +70,7 @@ export function latestResults(results: readonly YieldResult[]): { firm: FirmResu
 
 /** "Constant", "This farm's demand shape" or "Custom monthly shape". */
 export function patternLabel(p: YieldResult['params']['pattern']): string {
-	return p === 'constant' ? 'constant draft' : p === 'demand' ? "this unit's demand shape" : 'custom monthly shape';
+	return p === 'constant' ? 'constant draft' : p === 'demand' ? "this hydrological unit's demand shape" : 'custom monthly shape';
 }
 
 export function assuranceLabel(a: number): string {

@@ -170,10 +170,10 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 		unit: 'of demand',
 		sub: [
 			!farms.length
-				? 'no units in the run'
+				? 'no hydrological units in the run'
 				: short
-					? `${fmtNum(short)} of ${fmtNum(farms.length)} units below ${target}`
-					: `all units ≥ ${target}`
+					? `${fmtNum(short)} of ${fmtNum(farms.length)} hydrological units below ${target}`
+					: `all hydrological units ≥ ${target}`
 		],
 		flagged: short > 0,
 		delta: previous ? change(supplyFraction(previous), supplied) : null,

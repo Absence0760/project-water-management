@@ -13,10 +13,10 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const header = (page: Page) => page.getByTestId('section-header');
 const detail = (page: Page) => page.getByTestId('allocation-unit');
-const units = (page: Page) => compareCard(page).getByRole('list', { name: 'Units, the ones to look into first' }).getByRole('listitem');
+const units = (page: Page) => compareCard(page).getByRole('list', { name: 'Hydrological units, the ones to look into first' }).getByRole('listitem');
 const RANK = { over: 0, unregistered: 1, under: 2, within: 3, none: 4 } as const;
 
-test('many units: the ones to look into first, fitting the window; picking a unit is a link, and the sheets are too', async ({ page, owner, signIn }) => {
+test('many hydrological units: the ones to look into first, fitting the window; picking a hydrological unit is a link, and the sheets are too', async ({ page, owner, signIn }) => {
 	test.setTimeout(120_000);
 	void owner;
 	const project = await seedManyAllocations(page.request, 'Allocations big');
@@ -25,7 +25,7 @@ test('many units: the ones to look into first, fitting the window; picking a uni
 
 	// One title; the header counts the volumes, the unmatched ones and the units above registered, and has the actions.
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-	await expect(header(page).getByTestId('section-context')).toHaveText(/^40 registered volumes · 4 not matched · \d+ units above registered$/);
+	await expect(header(page).getByTestId('section-context')).toHaveText(/^40 registered volumes · 4 not matched · \d+ hydrological units above registered$/);
 	await expect(header(page).getByRole('link', { name: 'Download CSV', exact: true })).toHaveAttribute('href', /\/allocations\/export\.csv$/);
 	await expect(header(page).getByRole('link', { name: 'Import', exact: true })).toBeVisible();
 	await expect(header(page).getByRole('link', { name: '+ Add volume', exact: true })).toBeVisible();
@@ -85,7 +85,7 @@ test('many units: the ones to look into first, fitting the window; picking a uni
 	await header(page).getByRole('link', { name: '+ Add volume', exact: true }).click();
 	await expect(page).toHaveURL(/volume=new/);
 	const sheet = page.getByRole('dialog', { name: 'Add a registered volume' });
-	await sheet.getByLabel('Unit or water user').selectOption({ label: farm1.name });
+	await sheet.getByLabel('Hydrological unit or water user').selectOption({ label: farm1.name });
 	await sheet.getByLabel('Water source').selectOption('groundwater');
 	await sheet.getByLabel('Volume (m³ per year)').fill('12000');
 	await sheet.getByLabel('Registration or licence number').fill('SYN-NEW');
@@ -134,7 +134,7 @@ test('many units: the ones to look into first, fitting the window; picking a uni
 	await page.setViewportSize({ width: 390, height: 844 });
 	await openAllocations(page, project.id);
 	await expect(units(page)).toHaveCount(6);
-	await compareCard(page).getByRole('button', { name: 'Show all 36 units and sources' }).click();
+	await compareCard(page).getByRole('button', { name: 'Show all 36 hydrological units and sources' }).click();
 	await expect(units(page)).toHaveCount(36);
 	await expect(volumesCard(page).getByTestId('allocation-list').locator('tbody tr')).toHaveCount(8);
 	await volumesCard(page).getByRole('button', { name: 'Show all 41 registered volumes' }).click();

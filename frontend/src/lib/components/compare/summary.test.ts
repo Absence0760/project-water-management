@@ -119,11 +119,11 @@ describe('takeaways', () => {
 		]);
 		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2))).toEqual([
 			{ tone: 'worse', text: 'What-if 1 costs the reserve 13 more days a year' },
-			{ tone: 'worse', text: "What-if 1 supplies 3.0 pp less of the units' demand" },
-			{ tone: 'worse', text: 'What-if 1 leaves 1 more unit below 95% supplied' },
+			{ tone: 'worse', text: "What-if 1 supplies 3.0 pp less of the hydrological units' demand" },
+			{ tone: 'worse', text: 'What-if 1 leaves 1 more hydrological unit below 95% supplied' },
 			{ tone: 'neutral', text: 'What-if 1 lowers the mean outflow by 10%' },
 			{ tone: 'better', text: 'What-if 2 gives the reserve back 2 days a year' },
-			{ tone: 'better', text: 'What-if 2 brings 1 unit up to 95% supplied' }
+			{ tone: 'better', text: 'What-if 2 brings 1 hydrological unit up to 95% supplied' }
 		]);
 	});
 

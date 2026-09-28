@@ -13,7 +13,7 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	await expect(page.getByRole('heading', { level: 2, name: 'Assured' })).toBeVisible();
 
 	// Assurance of supply moved to Units & supply (issue #17): the Runs page links there for this run.
-	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Units & supply for this run' }).click();
+	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Hydrological units for this run' }).click();
 	await expect(page).toHaveURL(/[?&]tab=supply&run=/);
 	const assurance = page.getByRole('region', { name: 'Assurance of supply' });
 	const reliability = assurance.getByTestId('reliability-table');

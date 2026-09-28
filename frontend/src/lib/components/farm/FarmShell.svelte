@@ -88,6 +88,16 @@
 	function onFocusOut(e: FocusEvent) {
 		if (menuOpen && menuRoot && !menuRoot.contains(e.relatedTarget as Node | null)) menuOpen = false;
 	}
+	// In-page links and focus scrolling clear the sticky header by its real
+	// height: on a phone the header's words ("My hydrological unit", longer
+	// still in Afrikaans) can wrap to two lines, taller than --header-h.
+	let headerH = $state(0);
+	$effect(() => {
+		if (!headerH) return;
+		const root = document.documentElement;
+		root.style.scrollPaddingTop = `calc(${Math.max(headerH, 56)}px + 0.75rem)`;
+		return () => root.style.removeProperty('scroll-padding-top');
+	});
 	$effect(() => {
 		if (!menuOpen) return;
 		const onDoc = (e: PointerEvent) => {
@@ -99,11 +109,11 @@
 </script>
 
 <div class="farm" class:account-page={accountPage}>
-	<header class="farm-header">
+	<header class="farm-header" bind:offsetHeight={headerH}>
 		{#if accountPage && !back}
 			<a class="back" href="{base}/farm">
 				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
-				{t('Your farms')}
+				{t('Your hydrological units')}
 			</a>
 		{:else if back}
 			<a class="back" href={back.href}>
@@ -111,7 +121,7 @@
 				{back.label}
 			</a>
 		{:else}
-			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('My farm')}</span></span>
+			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('My hydrological unit')}</span></span>
 		{/if}
 		<span class="spacer"></span>
 		{#if languageSwitch}<LanguageSwitch compact />{/if}
@@ -121,7 +131,7 @@
 				{t('Menu')}
 			</button>
 			<ul id="farm-menu" class="menu" hidden={!menuOpen}>
-				<li><a href="{base}/farm">{t('Your farms')}</a></li>
+				<li><a href="{base}/farm">{t('Your hydrological units')}</a></li>
 				<li><a href="{base}/farm/words">{t('What do these words mean?')}</a></li>
 				<li><a href="{base}/account" aria-current={accountPage ? 'page' : undefined}>{t('Account')}</a></li>
 				<!-- The privacy notice from the farm view too (issue #48): what the farm page shows and keeps is described there. -->
@@ -167,7 +177,8 @@
 
 <style>
 	/* The farm header is sticky at every width, so in-page links and focus
-	   scrolling (html's scroll-padding-top, app.css) must clear it. The app
+	   scrolling (html's scroll-padding-top: app.css, and the script above from the
+	   header's measured height when its words wrap) must clear it. The app
 	   shell sets --header-h to its own phone bar and to 0 from 900 px, where
 	   its sidebar replaces the bar; the farm pages don't use that shell. */
 	:global(:root:has(.farm-header)) {

@@ -8,7 +8,7 @@
 	<ol>
 		<li>
 			<h3>{t('Build the network')}</h3>
-			<p>{t('Draw the farms, dams, transfers and gauges on the river, or import your b023 workbook as it is.')}</p>
+			<p>{t('Draw the hydrological units, dams, transfers and gauges on the river, or import your b023 workbook as it is.')}</p>
 		</li>
 		<li>
 			<h3>{t('Add the data')}</h3>
@@ -16,7 +16,7 @@
 		</li>
 		<li>
 			<h3>{t('Run and compare')}</h3>
-			<p>{t('Run the model, then try a what-if and see what it changes for each farm and for the river, in plain words.')}</p>
+			<p>{t('Run the model, then try a what-if and see what it changes for each hydrological unit and for the river, in plain words.')}</p>
 		</li>
 	</ol>
 </section>

@@ -87,7 +87,7 @@ describe('curveChart', () => {
 describe('labels', () => {
 	it('names patterns, assurance levels and the runs a yield can use', () => {
 		expect(patternLabel('constant')).toBe('constant draft');
-		expect(patternLabel('demand')).toBe("this unit's demand shape");
+		expect(patternLabel('demand')).toBe("this hydrological unit's demand shape");
 		expect(patternLabel(new Array(12).fill(1))).toBe('custom monthly shape');
 		expect(assuranceLabel(1)).toBe('firm');
 		expect(assuranceLabel(0.95)).toBe('95 % assurance');

@@ -128,7 +128,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the address is looked at, so once throttled a taken and a free address get
   the same answer, and a refused attempt isn't counted, so hammering never
   extends the wait. The WAF's per-IP `/api/auth/*` rule (100 per 5 minutes)
-  stays in front of it.
+  stays in front of it; it matches the path after `URL_DECODE` and
+  `NORMALIZE_PATH`, so a percent-encoded spelling the API still routes to the
+  auth handlers (`/api/%61uth/login`), or one with `//` or dot segments,
+  can't slip past it.
   - *The client address* (`http/clientAddress.ts`) is the `X-Viewer-Address`
     header, which the `/api` CloudFront Function (`api_strip_prefix`,
     `infra/s3_cloudfront.tf`) sets from the connection's IP, overwriting any
@@ -1156,7 +1159,13 @@ In short:
     contributor reads only their own linked farm's farm-scoped rows (as a
     farmer does) and none of the viewer or owner tables
     (`scenarios/contributor-tables.db.test.ts`, each with a positive
-    control). The notes route treats a contributor as a farmer (a farm note
+    control). The one later exception is their own yields
+    (`096_contributor_yield`): a yield job and its result on a dam of an
+    application they own, and nothing of anyone else's
+    (`yield/contributor.db.test.ts`). The worker admits a role below a job
+    kind's own only through `JobHandler.alsoRole`, exactly that role, and the
+    handler checks the target again as them; `jobs/trust.security.db.test.ts`
+    allowlists each such kind with its reason. The notes route treats a contributor as a farmer (a farm note
     on their own farm only), and the team portfolio query now requires
     `role >= 'viewer'` rather than `role <> 'farmer'`, which a contributor
     passed.

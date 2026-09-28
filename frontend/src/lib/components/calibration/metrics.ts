@@ -99,7 +99,7 @@ export const FLOW_KIND_LABEL: Record<string, string> = {
  *  gauge or logger. `natural_flow` only appears on runs from engine ≤ 0.9.0,
  *  which could score a Pitman record (docs/engine-audit.md C1, P1). */
 export const SIMULATED_LABEL: Record<NonNullable<CalibrationStats['simulatedKey']>, string> = {
-	natural_flow: 'Simulated natural flow (before units and dams)',
+	natural_flow: 'Simulated natural flow (before hydrological units and dams)',
 	simulated_outflow: 'Simulated outflow at the outlet'
 };
 

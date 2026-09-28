@@ -19,35 +19,20 @@
 //          requirements": Tables 4.10, 4.13–4.15 (A-pan design crop factors,
 //          f = kp × kc, eq. 4.7) and Table 4.7 (season lengths).
 //   [SABI] SABI Agricultural Design Norms 2021, Table 4 "System efficiency"
-//          (adapted from Reinders et al. 2010).
+//          (adapted from Reinders et al. 2010), held in the engine as
+//          IRRIGATION_SYSTEMS.
+
+import { IRRIGATION_SYSTEMS, type IrrigationSystem, type IrrigationSystemId } from '@water-management/engine';
 
 export const ARC4_URL = 'https://sabi.co.za/wp-content/uploads/2025/04/Chapter-4-Crop-water-requirements.pdf';
 export const SABI_NORMS_URL = 'https://sabi.co.za/wp-content/uploads/2023/02/SABI-Norms-Agricultural-2021.pdf';
 export const ARC4 = 'ARC/SABI Irrigation Design Manual, ch. 4';
 
-/** An irrigation system with its SABI 2021 efficiency range and the value the dialog offers. */
-export interface LibrarySystem {
-	id: string;
-	label: string;
-	/** Table 4's minimum and maximum "proposed default system efficiency" (net to gross), as fractions. */
-	min: number;
-	max: number;
-	/**
-	 * What the dialog offers: issue #54 Q10's recommended mid-range value,
-	 * inside [min, max] but not always the midpoint (drip is its minimum).
-	 */
-	efficiency: number;
-}
-
-/** [SABI] Table 4, pp. 9–10. Surface spans its three rows (piped 80–95, lined canal 70–90, earth canal 60–83). */
-export const LIBRARY_SYSTEMS: readonly LibrarySystem[] = [
-	{ id: 'drip', label: 'Drip', min: 0.9, max: 0.95, efficiency: 0.9 },
-	{ id: 'micro', label: 'Micro-sprinkler', min: 0.8, max: 0.85, efficiency: 0.82 },
-	{ id: 'pivot', label: 'Centre pivot / linear move', min: 0.8, max: 0.9, efficiency: 0.85 },
-	{ id: 'sprinkler', label: 'Sprinkler (permanent)', min: 0.75, max: 0.9, efficiency: 0.8 },
-	{ id: 'movable', label: 'Sprinkler (movable)', min: 0.7, max: 0.83, efficiency: 0.75 },
-	{ id: 'surface', label: 'Surface', min: 0.6, max: 0.95, efficiency: 0.7 }
-];
+/**
+ * The irrigation systems the dialog offers: the engine's IRRIGATION_SYSTEMS
+ * (SABI 2021 Table 4, [SABI]), the same table the node form's helper uses.
+ */
+export const LIBRARY_SYSTEMS: readonly IrrigationSystem[] = IRRIGATION_SYSTEMS;
 
 interface Base {
 	id: string;
@@ -57,11 +42,12 @@ interface Base {
 	page: string;
 	notes: string;
 	/**
-	 * A typical system for the crop (a LIBRARY_SYSTEMS id). Not from the
-	 * manual: which systems the farms use is issue #54 Q10, so the dialog
-	 * shows it as a hint and never applies it unasked.
+	 * A typical system for the crop (an IRRIGATION_SYSTEMS id). Not from the
+	 * manual, and not the new-farm default (drip, issue #90): which system a
+	 * unit's crop uses is the hydrologist's to confirm, so the dialog shows it
+	 * as a hint and never applies it unasked.
 	 */
-	system: string;
+	system: IrrigationSystemId;
 }
 
 /** A crop whose table gives a factor per calendar month. */
@@ -82,7 +68,7 @@ export interface StagedLibraryCrop extends Base {
 export type LibraryCrop = MonthlyLibraryCrop | StagedLibraryCrop;
 
 const _ = null;
-const perennial = (id: string, name: string, calendar: (number | null)[], system: string, notes = ''): MonthlyLibraryCrop => ({
+const perennial = (id: string, name: string, calendar: (number | null)[], system: IrrigationSystemId, notes = ''): MonthlyLibraryCrop => ({
 	kind: 'monthly',
 	id,
 	name,

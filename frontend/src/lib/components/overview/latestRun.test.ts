@@ -150,7 +150,7 @@ describe('headlines', () => {
 			flagged: true,
 			delta: null
 		});
-		expect(card(hs, 'supply')).toMatchObject({ value: '80.0%', sub: ['1 of 2 units below 95%'], flagged: true });
+		expect(card(hs, 'supply')).toMatchObject({ value: '80.0%', sub: ['1 of 2 hydrological units below 95%'], flagged: true });
 		expect(card(hs, 'nse')).toMatchObject({ term: 'Calibration NSE', value: '0.62', sub: ['90 days observed', 'calibration period (in-sample)'] });
 		// In-sample only when the parameters were fitted on these days (issue #45).
 		const handSet = headlines(summary({ calibration: { ...summary().calibration!, fitStatus: 'notFitted' } }), 120, null);
@@ -198,7 +198,7 @@ describe('headlines', () => {
 		// Current run without calibration or farms: no NSE or supply change.
 		const hs = headlines(uncalibrated, 120, summary());
 		expect(card(hs, 'nse')).toMatchObject({ term: 'Calibration', value: '–', sub: ['no observed flow in the run'], delta: null });
-		expect(card(hs, 'supply')).toMatchObject({ value: '–', sub: ['no units in the run'], delta: null });
+		expect(card(hs, 'supply')).toMatchObject({ value: '–', sub: ['no hydrological units in the run'], delta: null });
 		// Previous run without calibration: none either.
 		expect(card(headlines(summary(), 120, summary({ calibration: { days: 0 } as RunSummary['calibration'] })), 'nse').delta).toBeNull();
 	});
@@ -218,7 +218,7 @@ describe('headlines', () => {
 		});
 		const hs = headlines(clean, 120, null);
 		expect(hs.some((h) => h.flagged)).toBe(false);
-		expect(card(hs, 'supply').sub).toEqual(['all units ≥ 95%']);
+		expect(card(hs, 'supply').sub).toEqual(['all hydrological units ≥ 95%']);
 		expect(card(hs, 'outflow').sub).toEqual([]);
 	});
 });
