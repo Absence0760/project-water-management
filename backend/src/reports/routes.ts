@@ -1,7 +1,8 @@
 // Server-side PDF reports (docs/api.md § Reports; WP-2.15 Phase B).
 //
 //   POST   /projects/:id/reports                        viewer   queue a PDF of a run, or its impact report (202 { jobId })
-//   GET    /projects/:id/reports/:jobId                 viewer   its status, and a download link once done
+//   GET    /projects/:id/reports/:jobId                 viewer   its status
+//   GET    /projects/:id/reports/:jobId/pdf             viewer   302 to a 60 s pre-signed GET of the PDF once done
 //   GET    /projects/:id/report-schedules               viewer   the project's schedules
 //   POST   /projects/:id/report-schedules               editor   add one
 //   PATCH  /projects/:id/report-schedules/:scheduleId   editor   change one
@@ -19,7 +20,7 @@ import { ApiError, mustChange } from '../http/errors.js';
 import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { isValidTimeZone, nextFireAt } from './due.js';
-import { downloadUrl, reportFileName } from './storage.js';
+import { downloadUrl, REPORT_RETENTION_DAYS, reportFileName } from './storage.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { createReport, membersAmong, recentReportCount, reportByJob, REPORTS_PER_HOUR } from './store.js';
 import { consumeRenderToken } from './tokens.js';
@@ -186,6 +187,24 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const jobId = c.req.param('jobId');
 		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
+		const view = await withUser(c.get('userId'), async (db) => {
+			await requireRole(db, id, 'viewer');
+			const v = await reportByJob(db, id, jobId);
+			if (!v) throw new ApiError(404, 'not found');
+			return v;
+		});
+		const { key: _key, ...report } = view;
+		return c.json({ report });
+	})
+	// The download: a fresh, one-minute pre-signed GET per click, behind the
+	// session and the project's membership, so the only lasting link to a PDF
+	// is this route (issue #126). A redirect rather than streaming the bytes:
+	// the API's Function URL buffers responses (6 MB, less after base64), and
+	// streaming would hold a VPC Lambda open for every transfer.
+	.get('/:id/reports/:jobId/pdf', async (c) => {
+		const id = c.req.param('id');
+		const jobId = c.req.param('jobId');
+		if (!UUID.test(jobId)) throw new ApiError(404, 'not found');
 		const { view, name, timeZone } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			const v = await reportByJob(db, id, jobId);
@@ -193,9 +212,13 @@ export const reportRoutes = new Hono<AuthEnv>()
 			const { rows } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 			return { view: v, name: rows[0]?.name ?? '', timeZone: rows[0]?.timeZone ?? DEFAULT_TIME_ZONE };
 		});
-		const { key, ...report } = view;
-		const url = report.status === 'done' ? await downloadUrl(key, reportFileName(name, localDate(new Date(report.finishedAt ?? Date.now()), timeZone))) : undefined;
-		return c.json({ report, ...(url ? { url } : {}) });
+		if (view.status !== 'done') throw new ApiError(409, 'the PDF is not ready');
+		// The bucket's lifecycle deletes PDFs at REPORT_RETENTION_DAYS, a day before the row goes: say so, rather than redirect to S3's error.
+		if (view.finishedAt && Date.now() - new Date(view.finishedAt).getTime() > REPORT_RETENTION_DAYS * 86_400_000) throw new ApiError(404, `the PDF has expired: PDFs are kept for ${REPORT_RETENTION_DAYS} days`);
+		const url = await downloadUrl(view.key, reportFileName(name, localDate(new Date(view.finishedAt ?? Date.now()), timeZone)));
+		c.header('Cache-Control', 'no-store');
+		c.header('Referrer-Policy', 'no-referrer');
+		return c.redirect(url, 302);
 	})
 	.get('/:id/report-schedules', async (c) => {
 		const id = c.req.param('id');

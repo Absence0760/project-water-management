@@ -1074,7 +1074,10 @@ sequenceDiagram
   W->>S: put reports/<project>/<report>.pdf
   W->>DB: report done (pages, bytes); email the link to members
   U->>API: GET /projects/:id/reports/:jobId
-  API-->>U: { status, url: pre-signed, 1 h }
+  API-->>U: { status }
+  U->>API: GET /projects/:id/reports/:jobId/pdf (viewer)
+  API-->>U: 302 pre-signed GET, 60 s
+  U->>S: GET the PDF (direct, within the minute)
 ```
 
 - **The render token** (`render_token`, the `email_token` pattern with
@@ -1102,8 +1105,10 @@ sequenceDiagram
   on first use; `s3` is the private production bucket (SSE, 7-day
   lifecycle). The key is **derived from the ids**, never stored or taken from
   a message, so no row or message can point a download at another project's
-  PDF. Downloads are pre-signed GETs, an hour, signed by the API when a
-  viewer asks for the status.
+  PDF. Downloads go through `GET /projects/:id/reports/:jobId/pdf`, which
+  checks the viewer's membership on every click and redirects to a
+  pre-signed GET that expires after 60 s (issue #126; the trade-off against
+  streaming the PDF through the API is in security.md § Reports).
 - **Email** (`reports/store.ts finishReport`): after a good render, in the
   job's transaction, to the requester if they asked and to members named at
   request time **who are still viewers or above**, through the existing mail

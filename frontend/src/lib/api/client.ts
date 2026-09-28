@@ -382,6 +382,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			access: (id: string, nodeId: string) =>
 				request<{ people: FarmAccessPerson[] }>('GET', `${p(id)}/farm/${enc(nodeId)}/access`).then((r) => r.people)
 		},
+		reports: {
+			/**
+			 * A finished report PDF (a plain link: the cookie goes with it). The
+			 * API checks membership, then redirects to a one-minute pre-signed
+			 * GET, so the link itself never expires but grants nothing alone.
+			 * The rest of the report calls are components/report/serverPdf.ts.
+			 */
+			pdfUrl: (id: string, jobId: string) => `${base}${p(id)}/reports/${enc(jobId)}/pdf`
+		},
 		teams: {
 			list: () => request<{ teams: Team[] }>('GET', '/teams').then((r) => r.teams),
 			create: (name: string) => request<{ team: Team }>('POST', '/teams', { name }).then((r) => r.team),

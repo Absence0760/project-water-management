@@ -243,7 +243,7 @@ describe('POST / GET /projects/:id/reports', () => {
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 
-	it('shows a dead render as failed with its sanitised reason, and a finished one with a download link', async () => {
+	it('shows a dead render as failed with its sanitised reason, and a finished one as done, with no link in the status', async () => {
 		vi.stubEnv('STORAGE', 'local');
 		const owner = await signUp('StateOwner');
 		const { projectId } = await withRun(owner);
@@ -252,16 +252,64 @@ describe('POST / GET /projects/:id/reports', () => {
 		const dead = await owner.call('GET', `/projects/${projectId}/reports/${jobId}`);
 		expect(dead.body.report).toMatchObject({ status: 'failed', error: 'the render took longer than 90 s' });
 		expect(dead.body.url).toBeUndefined();
+		expect((await pdf(owner, projectId, jobId)).status).toBe(409);
 
 		const { jobId: done } = (await owner.call('POST', `/projects/${projectId}/reports`, {})).body;
 		const [r] = await asOwner('SELECT id FROM report WHERE job_id = $1', [done]);
 		await withUser(owner.id, (db) => db.query(`UPDATE report SET status = 'done', pages = 9, bytes = 1000, finished_at = now() WHERE id = $1`, [r.id]));
 		const ok = await owner.call('GET', `/projects/${projectId}/reports/${done}`);
 		expect(ok.body.report).toMatchObject({ status: 'done', pages: 9 });
-		// Signed locally: no request to storage is needed to hand out the link.
-		expect(ok.body.url).toContain(`/water-reports/reports/${projectId}/${r.id}.pdf?`);
-		expect(ok.body.url).toContain('X-Amz-Expires=3600');
-		expect(ok.body.url).toContain('response-content-disposition=attachment');
+		// The status never carries a pre-signed link: the download route mints one per click (issue #126).
+		expect(ok.body).toEqual({ report: expect.objectContaining({ status: 'done' }) });
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+});
+
+/** GET the download route as `u`, without following the redirect. */
+const pdf = (u: User, projectId: string, jobId: string) =>
+	app.request(`/projects/${projectId}/reports/${jobId}/pdf`, { headers: { cookie: u.cookie, origin: ORIGIN }, redirect: 'manual' });
+
+describe('GET /projects/:id/reports/:jobId/pdf', () => {
+	it('redirects a member to a one-minute pre-signed GET, fresh each time; a stranger, a pending or an expired PDF gets none', async () => {
+		vi.stubEnv('STORAGE', 'local');
+		const owner = await signUp('PdfOwner');
+		const viewer = await signUp('PdfViewer');
+		const stranger = await signUp('PdfStranger');
+		const { projectId } = await withRun(owner);
+		await member(owner, projectId, viewer, 'viewer');
+		const { jobId } = (await owner.call('POST', `/projects/${projectId}/reports`, {})).body;
+		// Not rendered yet: nothing to download.
+		const pending = await pdf(viewer, projectId, jobId);
+		expect(pending.status).toBe(409);
+		expect(pending.headers.get('location')).toBeNull();
+
+		const [r] = await asOwner('SELECT id FROM report WHERE job_id = $1', [jobId]);
+		await withUser(owner.id, (db) => db.query(`UPDATE report SET status = 'done', pages = 9, bytes = 1000, finished_at = now() WHERE id = $1`, [r.id]));
+		// Positive control: a viewer is redirected. Signed locally: no request to storage is needed.
+		const res = await pdf(viewer, projectId, jobId);
+		expect(res.status).toBe(302);
+		expect(res.headers.get('cache-control')).toBe('no-store');
+		expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+		const location = res.headers.get('location')!;
+		expect(location).toContain(`/water-reports/reports/${projectId}/${r.id}.pdf?`);
+		expect(location).toContain('X-Amz-Expires=60&');
+		expect(location).toContain('response-content-disposition=attachment');
+		expect(location).toMatch(/filename%3D%22[\w-]+-report-\d{4}-\d{2}-\d{2}\.pdf%22/);
+
+		// No session, a stranger, another project's id, a bad or unknown job: no redirect.
+		const nobody = await app.request(`/projects/${projectId}/reports/${jobId}/pdf`, { headers: { origin: ORIGIN }, redirect: 'manual' });
+		expect(nobody.status).toBe(401);
+		expect((await pdf(stranger, projectId, jobId)).status).toBe(404);
+		const other = await project(stranger, 'Stranger’s own');
+		expect((await pdf(stranger, other, jobId)).status).toBe(404);
+		expect((await pdf(viewer, projectId, 'not-a-uuid')).status).toBe(404);
+		expect((await pdf(viewer, projectId, crypto.randomUUID())).status).toBe(404);
+
+		// Past the bucket's lifecycle the object is gone: say so instead of redirecting to S3's error.
+		await withUser(owner.id, (db) => db.query(`UPDATE report SET finished_at = now() - interval '7 days 1 hour' WHERE id = $1`, [r.id]));
+		const gone = await pdf(viewer, projectId, jobId);
+		expect(gone.status).toBe(404);
+		expect(((await gone.json()) as { error: string }).error).toBe('the PDF has expired: PDFs are kept for 7 days');
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });

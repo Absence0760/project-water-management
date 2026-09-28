@@ -2,8 +2,9 @@
 	// Where an emailed report link lands (WP-2.15 Phase B; docs/ui.md §
 	// Report): /projects/:id/reports/:jobId. Signed out, the layout sends the
 	// reader to sign in and back. A member sees which catchment and run the PDF
-	// is of, its status and, once it is ready, a fresh download link
-	// (pre-signed, an hour); anyone else gets the workspace's not-found
+	// is of, its status and, once it is ready, a download link (the API's
+	// route, which checks membership on each click and redirects to a
+	// one-minute pre-signed GET); anyone else gets the workspace's not-found
 	// message, so a forwarded email opens nothing.
 	import { onDestroy, untrack } from 'svelte';
 	import { base } from '$app/paths';
@@ -107,7 +108,7 @@
 			{#if current.url}
 				<p class="download">
 					<a class="btn btn-primary" href={current.url} rel="noopener">Download the PDF</a>
-					<span class="muted small">The link works for an hour; open this page again for a new one.</span>
+					<span class="muted small">PDFs are kept for 7 days.</span>
 				</p>
 			{:else if jobState === 'failed'}
 				<p class="small">Open the report to make the PDF again, or print it from your browser.</p>

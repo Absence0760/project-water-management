@@ -162,6 +162,7 @@ describe('route auth inventory', () => {
 		const reports = [
 			'POST /projects/:id/reports',
 			'GET /projects/:id/reports/:jobId',
+			'GET /projects/:id/reports/:jobId/pdf',
 			'GET /projects/:id/report-schedules',
 			'POST /projects/:id/report-schedules',
 			'PATCH /projects/:id/report-schedules/:scheduleId',
