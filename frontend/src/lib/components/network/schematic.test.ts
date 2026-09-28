@@ -6,11 +6,16 @@ import {
 	arcPath,
 	BAND_CUT,
 	bandCrossings,
+	distinctShortNames,
 	labelBox,
 	paperBands,
+	polylineHits,
+	routeAround,
+	routePath,
 	schematicLayout,
 	symbolBox,
 	transferArc,
+	transferPathData,
 	WRAP_GUTTER,
 	wrappedSchematicLayout,
 	type Arc,
@@ -306,5 +311,98 @@ describe('transferArc', () => {
 		const b = at(1, 0);
 		const wall = { x0: -1000, y0: -1000, x1: 1000, y1: 1000 };
 		expect(() => transferArc(a, b, [wall])).not.toThrow();
+	});
+});
+
+describe('routed transfers (no clear arc)', () => {
+	const at = (col: number, row: number): Point => ({ x: 36 + col * 150, y: 22 + row * 74 });
+	const label = (p: Point) => labelBox(p, 'Kliprivier Estat…', '12.0 km² · 1.26 Mm³');
+	// A packed grid: four columns by six rows, every node labelled; from the top left to the bottom right.
+	const grid: Point[] = [];
+	for (let r = 0; r < 6; r++) for (let c = 0; c < 4; c++) grid.push(at(c, r));
+	const bounds = { x0: 0, y0: 0, x1: 36 + 3 * 150 + 150, y1: 22 + 5 * 74 + 30 };
+	const a = grid[0]!;
+	const b = grid[grid.length - 1]!;
+	// Every label, and every symbol but the transfer's own two (as NetworkSchematic passes them).
+	const obstacles = [...grid.map(label), ...grid.filter((p) => p !== a && p !== b).map(symbolBox)];
+
+	it('finds no clear arc across a packed drawing (why routing exists)', () => {
+		expect(arcHits(transferArc(a, b, obstacles, bounds), obstacles, bounds)).toBeGreaterThan(0);
+	});
+
+	it('routes around every label and symbol, inside the drawing, from end to end', () => {
+		const route = routeAround(a, b, obstacles, bounds)!;
+		expect(route).not.toBeNull();
+		expect(route[0]).toEqual(a);
+		expect(route.at(-1)).toEqual(b);
+		expect(polylineHits(route, obstacles, bounds)).toBe(0);
+		// Straight legs only (the corners are rounded when drawn).
+		for (let i = 1; i < route.length; i++) {
+			const p = route[i - 1]!;
+			const q = route[i]!;
+			expect(Math.abs(p.x - q.x) < 0.5 || Math.abs(p.y - q.y) < 0.5).toBe(true);
+		}
+	});
+
+	it('crosses a river rather than running along it', () => {
+		const river = { a: { x: 60, y: 0 }, b: { x: 60, y: 200 } };
+		const route = routeAround({ x: 20, y: 20 }, { x: 100, y: 180 }, [], { x0: 0, y0: 0, x1: 200, y1: 200 }, [river])!;
+		// How far the route runs within 4 px of the river line.
+		let along = 0;
+		for (let i = 1; i < route.length; i++) {
+			const p = route[i - 1]!;
+			const q = route[i]!;
+			if (Math.abs(p.x - 60) <= 4 && Math.abs(q.x - 60) <= 4) along += Math.abs(q.y - p.y);
+		}
+		expect(along).toBe(0);
+	});
+
+	it('returns null when the target is walled in', () => {
+		const target = { x: 100, y: 100 };
+		const walls = [
+			{ x0: 60, y0: 60, x1: 140, y1: 70 },
+			{ x0: 60, y0: 130, x1: 140, y1: 140 },
+			{ x0: 60, y0: 60, x1: 70, y1: 140 },
+			{ x0: 130, y0: 60, x1: 140, y1: 140 }
+		];
+		expect(routeAround({ x: 10, y: 10 }, target, walls, { x0: 0, y0: 0, x1: 200, y1: 200 })).toBeNull();
+	});
+
+	it('draws the route with rounded corners and stops short of the target', () => {
+		const d = routePath([{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }]);
+		expect(d).toBe('M0,0 L92,0 Q100,0 100,8 L100,86');
+	});
+
+	it('keeps the arc when one is clear, and routes only when none is', () => {
+		const clear = transferPathData(at(0, 0), at(1, 1), [], bounds);
+		expect(clear.routed).toBe(false);
+		expect(clear.d).toMatch(/ C/);
+		const packed = transferPathData(a, b, obstacles, bounds);
+		expect(packed.routed).toBe(true);
+		expect(packed.d).not.toMatch(/ C/);
+	});
+});
+
+describe('distinctShortNames', () => {
+	it('leaves short names alone and cuts long ones at the end', () => {
+		expect(distinctShortNames(['Vaalbank', 'Kliprivier Estate North'])).toEqual(['Vaalbank', 'Kliprivier Estat…']);
+	});
+
+	it('keeps the endings of names that would otherwise read the same', () => {
+		const out = distinctShortNames(['North Sandvlakte 2', 'North Sandvlakte 7', 'North Sandvlakte 12', 'Doornbos']);
+		expect(new Set(out).size).toBe(4);
+		expect(out.slice(0, 3)).toEqual(['North Sandvlak… 2', 'North Sandvlak… 7', 'North Sandvla… 12']);
+		for (const s of out) expect(s.length).toBeLessThanOrEqual(17);
+	});
+
+	it('keeps the fewest whole words of the ending that tell names apart', () => {
+		const out = distinctShortNames(['Upper Orchards Block A1', 'Upper Orchards Block A2', 'Upper Orchards Block B1']);
+		expect(new Set(out).size).toBe(3);
+		expect(out[0]).toMatch(/… A1$/);
+		expect(out[2]).toMatch(/… B1$/);
+	});
+
+	it('leaves two identical names identical', () => {
+		expect(distinctShortNames(['Same very long unit name', 'Same very long unit name'])).toEqual(['Same very long u…', 'Same very long u…']);
 	});
 });

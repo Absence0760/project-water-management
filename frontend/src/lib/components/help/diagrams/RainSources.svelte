@@ -24,11 +24,11 @@
 	<text class="s" x="135" y="205" text-anchor="middle">a few days ahead</text>
 
 	<path class="wire" d="M60 64 V93" marker-end="url(#rs-arrow)" />
-	<text class="s" x="68" y="84">if blank</text>
+	<text class="s lbl" x="68" y="84">if blank</text>
 	<path class="wire" d="M60 139 V168" marker-end="url(#rs-arrow)" />
-	<text class="s" x="68" y="159">if blank</text>
+	<text class="s lbl" x="68" y="159">if blank</text>
 
-	<text class="s" x="430" y="70" text-anchor="middle">first series with a value</text>
+	<text class="s lbl" x="430" y="70" text-anchor="middle">first series with a value</text>
 	<rect class="box key" x="340" y="80" width="180" height="60" rx="6" />
 	<text class="t" x="430" y="106" text-anchor="middle">Final rain</text>
 	<text class="s" x="430" y="124" text-anchor="middle">for the day, mm</text>
@@ -40,7 +40,7 @@
 	<text class="t" x="430" y="198" text-anchor="middle">No value anywhere</text>
 	<text class="s" x="430" y="215" text-anchor="middle">a dry day, counted</text>
 	<path class="wire" d="M250 204 H338" marker-end="url(#rs-arrow)" />
-	<text class="s" x="294" y="222" text-anchor="middle">all blank</text>
+	<text class="s lbl" x="294" y="222" text-anchor="middle">all blank</text>
 
 	<rect class="box" x="570" y="46" width="140" height="44" rx="6" />
 	<text class="t" x="640" y="73" text-anchor="middle">Runoff model</text>
@@ -50,5 +50,5 @@
 	<path class="wire" d="M520 100 L568 72" marker-end="url(#rs-arrow)" />
 	<path class="wire" d="M520 122 L568 138" marker-end="url(#rs-arrow)" />
 
-	<text class="m" x="20" y="248">factor(month) = Σ catchment rain ÷ Σ CHIRPS, on days both have a value; kept within 0.25–4</text>
+	<text class="m lbl" x="20" y="248">factor(month) = Σ catchment rain ÷ Σ CHIRPS, on days both have a value; kept within 0.25–4</text>
 </svg>

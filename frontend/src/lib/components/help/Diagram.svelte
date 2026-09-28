@@ -31,10 +31,31 @@
 
 	let { id, caption }: { id: DiagramId; caption: string } = $props();
 	const Body = $derived(DIAGRAMS[id]);
+
+	/**
+	 * The smallest a diagram's smallest text may be drawn (px). A diagram
+	 * scales to its column, so a wide one shrank its 11 px notes to 7 px at
+	 * 1440 (the model pipeline, 920 units wide in a 565 px column); it is
+	 * never drawn narrower than this allows, and scrolls sideways instead.
+	 * 9.5 lets the 660-wide ones (GR4J, a day on a farm) fit the guide's
+	 * column whole.
+	 */
+	const MIN_TEXT_PX = 9.5;
+	let box: HTMLDivElement | undefined = $state();
+	let minWidth = $state<number | null>(null);
+	$effect(() => {
+		void Body;
+		const svg = box?.querySelector('svg');
+		if (!svg) return;
+		const w = svg.viewBox.baseVal?.width ?? 0;
+		let smallest = Infinity;
+		for (const t of svg.querySelectorAll('text')) smallest = Math.min(smallest, parseFloat(getComputedStyle(t).fontSize) || Infinity);
+		minWidth = w > 0 && Number.isFinite(smallest) ? Math.ceil((w * MIN_TEXT_PX) / smallest) : null;
+	});
 </script>
 
 <figure class="diagram" data-diagram={id}>
-	<div class="scroll" data-scroll-region data-scroll-label="Diagram">
+	<div class="scroll" data-scroll-region data-scroll-label="Diagram" bind:this={box} style:--diagram-min-w={minWidth ? `${minWidth}px` : null}>
 		<Body />
 	</div>
 	{#if caption}<figcaption>{caption}</figcaption>{/if}
@@ -43,7 +64,7 @@
 <style>
 	.diagram {
 		margin: 1rem 0 1.25rem;
-		padding: 0.75rem;
+		padding: 0.75rem 0.5rem;
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
@@ -60,7 +81,7 @@
 	.diagram :global(svg) {
 		display: block;
 		width: 100%;
-		min-width: 600px;
+		min-width: var(--diagram-min-w, 600px);
 		height: auto;
 		font-family: var(--font-sans);
 	}
@@ -100,6 +121,15 @@
 	.diagram :global(.m) {
 		fill: var(--text-muted);
 		font-size: 11px;
+	}
+	/* A label on the figure's ground, beside a wire rather than in a box: a
+	   halo in the ground's colour, so a wire passing close breaks behind the
+	   words instead of touching them. */
+	.diagram :global(.lbl) {
+		paint-order: stroke fill;
+		stroke: var(--surface);
+		stroke-width: 4px;
+		stroke-linejoin: round;
 	}
 	.diagram :global(.wire) {
 		fill: none;

@@ -115,18 +115,17 @@
 		...(colouring.other.some((id) => planted.has(id)) ? [{ id: 'other', name: 'Other', color: OTHER_COLOUR }] : [])
 	]);
 
-	// From 1100 px of page width the list and the results fill the window below the header, less what the page keeps
-	// below them (its padding, room for the save bar), as the Network's map does; measured, not assumed.
+	// From 1100 px of page width the list and the results fill the window below the header, less the page's gutter
+	// and the save bar while it shows (--dock-h), as the Network's map does. The top is measured. (Measuring what sat
+	// below as the page's scroll height less its bottom let the window's own height prop up any shorter layout, so one
+	// shrunk in a narrower window never grew back.)
 	let layoutEl: HTMLDivElement | undefined = $state();
 	let layoutTop = $state(0);
-	let layoutBelow = $state(0);
 	$effect(() => {
 		if (!layoutEl) return;
 		const measure = () => {
 			if (!layoutEl) return;
-			const r = layoutEl.getBoundingClientRect();
-			layoutTop = r.top + window.scrollY;
-			layoutBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+			layoutTop = layoutEl.getBoundingClientRect().top + window.scrollY;
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
@@ -239,7 +238,6 @@
 			class:table-open={tableOpen}
 			bind:this={layoutEl}
 			style:--layout-top="{layoutTop}px"
-			style:--layout-below="{layoutBelow}px"
 		>
 			{#if crops.length}
 				<section class="panel list-card" class:capped={!listAll} aria-labelledby="crop-list-h">
@@ -661,7 +659,7 @@
 	@container crops-page (min-width: 60rem) {
 		.layout {
 			grid-template-columns: minmax(19rem, 25rem) minmax(0, 1fr);
-			height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--layout-below, 0px)));
+			height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--dock-h, 0px) - 1rem));
 		}
 		.layout.no-list {
 			grid-template-columns: minmax(0, 1fr);
@@ -669,7 +667,7 @@
 		/* An open demand table needs the room: the row grows and the page scrolls. */
 		.layout.table-open {
 			height: auto;
-			min-height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--layout-below, 0px)));
+			min-height: max(520px, calc(100vh - var(--layout-top, 0px) - var(--dock-h, 0px) - 1rem));
 		}
 		.list-card .crop-list {
 			flex: 1;

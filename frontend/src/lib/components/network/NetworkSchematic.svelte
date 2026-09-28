@@ -12,16 +12,18 @@
 	import { fmtVolume, hasDam } from './fields';
 	import { canDrainInto, validDropTargets } from './reorder';
 	import {
-		arcPath,
 		bandCrossings,
+		distinctShortNames,
 		labelBox,
 		paperBands,
 		schematicLayout,
 		symbolBox,
-		transferArc,
+		transferPathData,
 		wrappedSchematicLayout,
+		type Point,
 		type SchematicEdge,
-		type SchematicNode
+		type SchematicNode,
+		type Segment
 	} from './schematic';
 	import type { Colouring } from './farmColour';
 
@@ -78,8 +80,13 @@
 	const supplyOf = (id: string) => colouring?.byNode.get(id);
 	const legend = $derived(colouring?.legend ?? []);
 
-	const short = (s: string, n = 17) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 	const name = (n: NetworkNode) => n.name || '(unnamed)';
+	// Names as drawn: at most 17 characters, and never two different names cut to the same text.
+	const shortNames = $derived.by(() => {
+		const cut = distinctShortNames(nodes.map(name));
+		return new Map(nodes.map((n, i) => [n.id, cut[i]!]));
+	});
+	const short = (n: NetworkNode) => shortNames.get(n.id) ?? name(n);
 	const isOutlet = (n: NetworkNode) => n.downstreamNodeId === null;
 	const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
 
@@ -155,7 +162,7 @@
 	// that no label runs into the next node on its row; they spread as far as every node's label still ends inside
 	// the box (at most FILL_MAX_SPREAD × the usual spacing); and the drawing ends at the right-most
 	// label. Elsewhere: the fixed spacing, as before.
-	const labelRight = (ln: SchematicNode) => labelBox({ x: 0, y: 0 }, short(name(ln.node)), metaText(ln)).x1 + 8;
+	const labelRight = (ln: SchematicNode) => labelBox({ x: 0, y: 0 }, short(ln.node), metaText(ln)).x1 + 8;
 	// A label only needs clearing where another node sits to its right on the same row.
 	const minColW = $derived.by(() => {
 		if (!fill) return COL_W;
@@ -187,19 +194,30 @@
 
 	const strokeFor = (id: string) => 1.5 + 4 * Math.sqrt((areaOf.get(id) ?? 0) / maxArea);
 
-	function edgePath(fromId: string, toId: string, via?: number): string {
+	/** A river's corners: down from the node, along its confluence line, down into the node it drains into. */
+	function edgePoints(fromId: string, toId: string, via?: number): Point[] {
 		const a = pos.get(fromId);
 		const b = pos.get(toId);
-		if (!a || !b) return '';
+		if (!a || !b) return [];
 		const midY = b.y - rowH / 2;
 		// A wrapped row (paper): under its own row to the gutter, down it, then into the node's confluence line.
 		if (via !== undefined) {
 			const gx = PAD_X + 12 + via * colW;
-			return `M${a.x},${a.y + 10} V${a.y + rowH / 2} H${gx} V${midY} H${b.x} V${b.y - 13}`;
+			const y = a.y + rowH / 2;
+			return [{ x: a.x, y: a.y + 10 }, { x: a.x, y }, { x: gx, y }, { x: gx, y: midY }, { x: b.x, y: midY }, { x: b.x, y: b.y - 13 }];
 		}
-		if (Math.abs(a.x - b.x) < 0.5) return `M${a.x},${a.y + 10} V${b.y - 13}`;
-		return `M${a.x},${a.y + 10} V${midY} H${b.x} V${b.y - 13}`;
+		if (Math.abs(a.x - b.x) < 0.5) return [{ x: a.x, y: a.y + 10 }, { x: a.x, y: b.y - 13 }];
+		return [{ x: a.x, y: a.y + 10 }, { x: a.x, y: midY }, { x: b.x, y: midY }, { x: b.x, y: b.y - 13 }];
 	}
+	const edgePath = (fromId: string, toId: string, via?: number) =>
+		edgePoints(fromId, toId, via).map((p, i) => `${i ? 'L' : 'M'}${p.x},${p.y}`).join(' ');
+	// Every straight piece of every river: a routed transfer may cross them but not run along them.
+	const riverSegments = $derived(
+		layout.edges.flatMap((e): Segment[] => {
+			const pts = edgePoints(e.from, e.to, e.via);
+			return pts.slice(1).map((b, i) => ({ a: pts[i]!, b }));
+		})
+	);
 
 	const metaText = (ln: SchematicNode) => {
 		const s = supplyOf(ln.node.id);
@@ -210,7 +228,7 @@
 	};
 
 	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
-	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(name(ln.node)), metaText(ln))));
+	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(ln.node), metaText(ln))));
 	const symbols = $derived(layout.nodes.map((ln) => ({ id: ln.node.id, box: symbolBox(pos.get(ln.node.id)!) })));
 
 	/**
@@ -252,12 +270,15 @@
 		}));
 	});
 
+	// Worked out once per layout, not on every redraw (a drag redraws on every pointer move).
+	const transferPaths = $derived(new Map(transfers.map((t) => [t.id, transferPath(t)])));
+
 	function transferPath(t: Transfer): string {
 		const a = pos.get(t.fromNodeId);
 		const b = pos.get(t.toNodeId);
 		if (!a || !b || t.fromNodeId === t.toNodeId) return '';
 		const others = symbols.filter((s) => s.id !== t.fromNodeId && s.id !== t.toNodeId).map((s) => s.box);
-		return arcPath(transferArc(a, b, [...labels, ...others], { x0: 0, y0: 0, x1: width, y1: height }));
+		return transferPathData(a, b, [...labels, ...others], { x0: 0, y0: 0, x1: width, y1: height }, riverSegments).d;
 	}
 
 </script>
@@ -294,7 +315,7 @@
 		{/each}
 
 		{#each transfers as t (t.id)}
-			{@const d = transferPath(t)}
+			{@const d = transferPaths.get(t.id)}
 			{#if d}
 				<path class="transfer" class:off={!t.enabled} d={d} marker-end="url(#{id}-transfer)">
 					<title>Transfer {nameOf(t.fromNodeId)} → {nameOf(t.toNodeId)}{t.enabled ? '' : ' (disabled)'}</title>
@@ -344,7 +365,7 @@
 				{:else}
 					<circle class="farm" r="8" />
 				{/if}
-				<text class="label" x="17" y="-2">{short(name(n))}</text>
+				<text class="label" x="17" y="-2">{short(n)}</text>
 				<text class="meta" x="17" y="12">{metaText(ln)}</text>
 			</g>
 		{/each}
@@ -502,6 +523,8 @@
 		--sch-node: var(--text);
 		--sch-fill: var(--surface);
 		--sch-transfer: #7a4fc4;
+		/* What the labels' halo is drawn in: the drawing's own ground. */
+		--sch-ground: var(--surface-sunken);
 	}
 	@media (prefers-color-scheme: dark) {
 		:global(:root:not([data-theme='light'])) .scroller {
@@ -529,7 +552,9 @@
 		flex: 1;
 		min-height: 0;
 		display: flex;
-		align-items: center;
+		/* Centred while it fits; top-aligned once it is taller than the box, or
+		   its top row (names and all) is cut off where the box can't scroll to. */
+		align-items: safe center;
 		overflow: auto;
 	}
 	.legend-line {
@@ -719,6 +744,18 @@
 		fill: var(--sch-fill);
 		stroke: var(--warning);
 		stroke-width: 1.8;
+		stroke-linejoin: round;
+	}
+	/* Labels: the name strong, its figure a step down in size, weight and
+	   colour (both ≥ 4.5:1 on the ground in either theme). Each carries a halo
+	   in the ground's colour, so a line that has to pass (a transfer with no
+	   clear way round, the drag preview) breaks behind the words instead of
+	   striking through them. */
+	.label,
+	.meta {
+		paint-order: stroke fill;
+		stroke: var(--sch-ground);
+		stroke-width: 4px;
 		stroke-linejoin: round;
 	}
 	.label {
