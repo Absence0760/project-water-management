@@ -3779,6 +3779,60 @@ daily fits, so the app no longer labels daily NSE or PBIAS with them
 (calibration research CR-6). The benchmark that does carry over is the mean
 flow, which scores NSE 0 and KGE −0.41 (Knoben et al. 2019).
 
+**The WR2012 five-statistic table** (engine ≥ 1.18.0, calibration research
+CR-28; `packages/engine/src/reference/wr2012Fit.ts`). South African practice
+with the WRSM/Pitman model judges a calibration on five statistics of
+observed and simulated flow, each as a % difference against a "good fit"
+band, beside the hydrograph and flow-duration curve (WR2012: Bailey & Pitman
+2016; Ndiritu 2009). The daily model's statistics above say nothing a WR2012
+reviewer reads first, so every scored period of a fit (`ScoredPeriod.wr2012Fit`:
+the fit, the current parameters, each validation) and every run's
+calibration (`CalibrationStats.wr2012Fit`) carry them, on the same scored
+days as the other statistics:
+
+- **Months.** The scored days are summed per calendar month, observed and
+  simulated on the same days. A month counts when at least **90 %** of its
+  days are scored (`WR2012_FIT_MONTH_MIN_SHARE`); its volume, both sides, is
+  the mean of those days × the month's days (February 28 or 29), so a few
+  missing days don't bias either side.
+- **Years.** A hydrological (water) year, Oct–Sep, counts only when all 12
+  months count; every statistic is over those complete years. With none the
+  field is null ("Not computed"); a split-sample half or a record with gaps
+  in every year can have none.
+
+| Statistic | Formula (Y = annual runoff of a complete year, Mm³) |
+| --- | --- |
+| MAR | mean Y |
+| Mean of logs | mean log10 Y, over years with Y > 0 on both sides (`logYears`) |
+| SD | sample SD of Y (n − 1; needs 2 years) |
+| Log SD | sample SD of log10 Y |
+| Seasonal index | 100 × Σ_m \|Q̄_m − MAR/12\| ÷ MAR, Q̄_m the mean volume of month m (Walsh & Lawler 1981 as a %: 0 even, 183 all in one month) |
+
+Each carries **% difference** = 100 × (simulated − observed) ÷ |observed|
+(the absolute value keeps "+ = simulated higher" for a negative mean of logs,
+which annual runoff under 1 Mm³ gives) and **within band** = |difference| <
+the band. The bands (`WR2012_GOOD_FIT_BANDS`) are MAR 4 %, mean of logs 4 %,
+SD 6 %, log SD 6 %, seasonal index 8 %.
+
+**Unconfirmed: the bands and the seasonal index.** The bands are the
+"good fit" guidelines a 2025 consultant hydrology report submitted to a CMA
+tabulates citing WR2012 (Dabrowski 2025, Table 4); the WR2012 manuals that
+would define them (WRC TT 689/16, the WRSM/Pitman user manual, and TT
+690/16, the theory manual) could not be reached to check them (2026-09-28:
+the WRC and WR2012 sites were out of reach from the build environment). The
+seasonal index's WRSM definition wasn't found either; the Walsh & Lawler
+form above is the app's working definition. So `confirmed: false`, the
+stored result carries `bandsConfirmed: false`, and the UI calls them
+"indicative bands (to be confirmed)". Confirming either changes only that
+constant or `seasonalIndex()`. Question for the hydrologist
+(issue #90): are these the WR2012/WRSM bands, is the seasonal
+index WRSM's own, and are the SDs sample (n − 1) or population SDs?
+
+The table never changes a result or a score, and no fit optimises it.
+Tested by hand-computed series (`reference/wr2012Fit.test.ts`), and against
+the run's and the fit's other statistics' scored days (`network/stats.test.ts`,
+`calibrate/calibrate.test.ts`).
+
 The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow
 > 0. The engine skips blank days and keeps observed zeros.

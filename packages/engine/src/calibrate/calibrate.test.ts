@@ -12,6 +12,7 @@ import { checkAll } from '../testing/invariants';
 import { calibrate, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
 import { MAX_STARTS } from './params';
 import { fitScores } from './objective';
+import { wr2012FitStats } from '../reference/wr2012Fit';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -208,6 +209,12 @@ describe('calibrate', () => {
 		const report = calibrate(input, { budget: 50, validate: false, exclusions: [{ start: '1992-01-01', end: '1992-01-31' }] });
 		expect(report.fit).toMatchObject({ start: '1991-10-01', end: '1993-09-30' });
 		expect(report.fit.scores.days).toBe(700);
+		// The WR2012 five-statistic table (CR-28) on the same days: January 1992 is
+		// excluded, so water year 1991 has a month short and only 1992 counts.
+		expect(report.fit.wr2012Fit!.waterYears).toEqual([1992]);
+		expect(report.before.wr2012Fit!.waterYears).toEqual([1992]);
+		const sim = pb.simulate(report.params);
+		expect(report.fit.wr2012Fit).toEqual(wr2012FitStats(d0, pb.observed, sim, pb.scoredDays));
 	});
 
 	it('reports the CHIRPS factors its rain used, for fit provenance (engine ≥ 0.29.0)', () => {

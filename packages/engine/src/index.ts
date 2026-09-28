@@ -19,6 +19,7 @@ export * from './calibrate/params';
 export * from './calibrate/objective';
 export * from './calibrate/objectives';
 export * from './reference/wr2012';
+export * from './reference/wr2012Fit';
 export * from './reference/wr2012Settings';
 export { resolveWr2012 } from './reference/wr2012Resolve';
 export * from './reserve/rules';

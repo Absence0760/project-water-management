@@ -24,6 +24,8 @@ import {
 	type FdcPercentileTable,
 	type RunSummary,
 	type WaterBalanceRow,
+	type Wr2012FitStatKey,
+	type Wr2012FitStats,
 	type Wr2012FlagLevel,
 	type Wr2012Scaling
 } from '@water-management/engine';
@@ -759,7 +761,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
 	if (summary.calibration) {
-		for (const row of labelledRows(summary.calibration as unknown as Record<string, unknown>, CALIBRATION_ROWS)) {
+		// The WR2012 table is a list of its own (calibrationDetailLines), not a scalar row, even when null.
+		const { wr2012Fit: _wr2012Fit, ...calibrationScalars } = summary.calibration;
+		for (const row of labelledRows(calibrationScalars as unknown as Record<string, unknown>, CALIBRATION_ROWS)) {
 			yield csvRow(row);
 		}
 		yield* calibrationDetailLines(summary.calibration);
@@ -1030,6 +1034,32 @@ export function* calibrationDetailLines(c: CalibrationStats): Generator<string> 
 		yield csvRow(['Water year', 'Days observed', 'Days in the window', 'Observed (Mm³)', 'Simulated (Mm³)', 'Simulated − observed (%)']);
 		for (const y of c.annualVolumes) yield csvRow([waterYearText(y.waterYear), y.days, y.daysInWindow, y.observedMm3, y.simulatedMm3, y.diffPct]);
 	}
+	if (c.wr2012Fit !== undefined) yield* wr2012FitLines(c.wr2012Fit);
+}
+
+const WR2012_FIT_ROW_LABEL: Record<Wr2012FitStatKey, string> = {
+	mar: 'MAR (Mm³/a)',
+	meanLog: 'Mean of log10 annual flows (log10 Mm³)',
+	sd: 'SD of annual flows (Mm³)',
+	logSd: 'SD of log10 annual flows (log10 Mm³)',
+	seasonalIndex: 'Seasonal index (%)'
+};
+
+/**
+ * The WR2012 five-statistic table (CR-28, engine ≥ 1.18.0; model.md §2.10):
+ * absent on older runs, a line saying why when there is no complete water year.
+ */
+export function* wr2012FitLines(w: Wr2012FitStats | null): Generator<string> {
+	yield csvRow(['WR2012 statistics on monthly flows (complete water years, Oct–Sep)']);
+	if (!w) {
+		yield csvRow(['Not computed: no water year has all 12 months observed (a month needs 90 % of its days)']);
+		return;
+	}
+	yield csvRow(['Water years', w.waterYears.map(waterYearText).join(' '), 'Years in the log statistics', w.logYears]);
+	yield csvRow(['Bands', w.bandsConfirmed ? 'good-fit bands' : 'indicative, to be confirmed against WRC TT 689/16 and TT 690/16']);
+	yield csvRow(['Statistic', 'Observed', 'Simulated', 'Simulated − observed (%)', 'Band (|%| below)', 'Within band']);
+	for (const x of w.stats)
+		yield csvRow([WR2012_FIT_ROW_LABEL[x.key], x.observed, x.simulated, x.diffPct, x.bandPct, x.withinBand === null ? '' : x.withinBand ? 'yes' : 'no']);
 }
 
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */

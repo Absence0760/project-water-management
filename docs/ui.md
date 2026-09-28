@@ -2616,6 +2616,19 @@ which checks every catchment tab).
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
+  - Under it, **WR2012 statistics** (`calibration/Wr2012FitTable.svelte`,
+    helpers in `lib/calibration/wr2012Fit.ts`; engine ≥ 1.18.0, CR-28,
+    model.md §2.10): MAR, mean of log annual flows, SD, log SD and seasonal
+    index on complete water years of monthly flows, each observed, simulated,
+    the signed difference, the band ("< 4 %") and a **Within** / **Outside**
+    badge in words (Outside amber), or "Not computed" (the SDs with one
+    year). A **Period** select switches between the fit, the current
+    parameters and each test part that has a complete year. Below: how many
+    are within, over which water years, and while the bands are unconfirmed
+    (`WR2012_GOOD_FIT_BANDS.confirmed`) the column is headed **Indicative
+    band** with a note that they come from a consultant report citing WR2012,
+    not yet checked against WRC TT 689/16 and TT 690/16. A report from before
+    engine 1.18.0 shows no table.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
@@ -3549,7 +3562,9 @@ read it before.
   calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
   and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
-  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled),
+  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled;
+  from engine 1.18.0 the same **WR2012 statistics** table as the fit results, for the run's scored
+  days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the

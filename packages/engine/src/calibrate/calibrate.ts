@@ -31,6 +31,7 @@ import { GR4J_NO_PET, hasPotentialEvaporation } from '../runoff/pet';
 import { hasDailyApanValue } from '../evaporation/apanDaily';
 import { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff } from '../runoff/simulate';
 import { runRain, wr2012Penalty, type Wr2012Penalty } from '../reference/wr2012';
+import { wr2012FitStats, type Wr2012FitStats } from '../reference/wr2012Fit';
 import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
 import { CALIBRATION_PARAMS, MAX_STARTS, type CalibrationBounds, type ParamSet } from './params';
@@ -129,6 +130,12 @@ export interface ScoredPeriod {
 	/** Water years (by the calendar year they start in) with at least one scored day, ascending. */
 	waterYears: number[];
 	scores: FitScores;
+	/**
+	 * The WR2012 five-statistic table on these days (CR-28, engine ≥ 1.18.0;
+	 * reference/wr2012Fit.ts): null when no water year has all 12 months
+	 * scored, absent on reports from before.
+	 */
+	wr2012Fit?: Wr2012FitStats | null;
 }
 
 export interface ValidationTest {
@@ -371,14 +378,16 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
 
 /** Score a parameter set on the given days of a record (the calibration record by default). */
 function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<RecordProblem, 'observed' | 'simulate'> = pb): ScoredPeriod {
-	const [o, s] = pair(rec.observed, rec.simulate(p), idx);
+	const sim = rec.simulate(p);
+	const [o, s] = pair(rec.observed, sim, idx);
 	const d0 = toEpochDay(pb.startDate);
 	const years = yearsOf(pb, idx);
 	return {
 		start: fromEpochDay(d0 + idx[0]!),
 		end: fromEpochDay(d0 + idx[idx.length - 1]!),
 		waterYears: [...new Set(years)].sort((a, b) => a - b),
-		scores: fitScores(o, s, years)
+		scores: fitScores(o, s, years),
+		wr2012Fit: wr2012FitStats(d0, rec.observed, sim, idx)
 	};
 }
 

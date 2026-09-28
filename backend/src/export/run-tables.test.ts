@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
@@ -181,6 +181,32 @@ describe('summary sheet', () => {
 			'Water year,Days observed,Days in the window,Observed (Mm³),Simulated (Mm³),Simulated − observed (%)',
 			'1999/00,270,274,2.5,2.75,10'
 		]);
+	});
+
+	it('writes the WR2012 five-statistic table (CR-28), and says why when there is none; never under a raw key', () => {
+		const s = structuredClone(summary);
+		const stats = wr2012FitStatsFromMonthly([
+			{ waterYear: 2001, observed: Array(12).fill(1), simulated: Array(12).fill(1.1) },
+			{ waterYear: 2002, observed: Array(12).fill(2), simulated: Array(12).fill(2.2) }
+		]);
+		s.calibration!.wr2012Fit = stats;
+		const lines = [...summaryCsvLines(meta, s)];
+		const at = lines.findIndex((l) => l.startsWith('"WR2012 statistics on monthly flows'));
+		expect(at).toBeGreaterThan(lines.indexOf('Calibration (outflow gauge vs observed)'));
+		expect(lines[at + 1]).toBe('Water years,2001/02 2002/03,Years in the log statistics,2');
+		expect(lines[at + 2]).toMatch(/^Bands,"?indicative, to be confirmed/);
+		const mar = lines[at + 4]!.split(',');
+		expect(mar[0]).toBe('MAR (Mm³/a)');
+		expect(Number(mar[1])).toBeCloseTo(18, 9);
+		expect(Number(mar[2])).toBeCloseTo(19.8, 9);
+		expect(Number(mar[3])).toBeCloseTo(10, 9);
+		expect(mar.slice(4)).toEqual(['4', 'no']);
+		expect(lines.some((l) => l.startsWith('wr2012Fit,'))).toBe(false);
+		s.calibration!.wr2012Fit = null;
+		const none = [...summaryCsvLines(meta, s)];
+		const n = none.findIndex((l) => l.startsWith('"WR2012 statistics on monthly flows'));
+		expect(none[n + 1]).toMatch(/^"?Not computed: no water year has all 12 months observed/);
+		expect(none.some((l) => l.startsWith('wr2012Fit,'))).toBe(false);
 	});
 
 	it('writes the outlet EWR test, observed vs simulated, with the catchment (issue #4)', () => {
