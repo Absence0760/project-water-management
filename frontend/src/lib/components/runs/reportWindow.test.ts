@@ -28,7 +28,7 @@ describe('the ?window= parameter', () => {
 });
 
 describe('resolveWindow', () => {
-	const ok = (c: WindowChoice, r = run) => {
+	const ok = (c: WindowChoice, r: Parameters<typeof resolveWindow>[1] = run) => {
 		const res = resolveWindow(c, r, own);
 		if (!res.ok) throw new Error(res.error);
 		return res;
