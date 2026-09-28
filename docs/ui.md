@@ -2703,7 +2703,14 @@ which checks every catchment tab).
   curtailment reporting window (also the assurance of supply's window), and
   the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
   default 90 %: a water year counts as met at that supply ratio; engine ≥
-  0.32.0).
+  0.32.0), and **Registered volumes** (engine ≥ 1.18.0, issue #72): the
+  **allocation mode** (`settings.allocationMode`: *Compare only*, the
+  default; *Cap use at the registered volume*; *Full allocation*, [model.md
+  §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72))
+  and the **comparison band** (± %, `settings.allocationTolerance`, default
+  10 %, the Allocations tab's "within band"), each with its help tip and
+  field history. Either is a model setting: saving it makes the latest run
+  out of date.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -4168,7 +4175,12 @@ to where it was opened from. A viewer opening a sheet link gets the page.
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
 finding; slim notes for volumes not matched to a unit (editors: "Change a
-volume to match it"), or matched to a unit the run doesn't have.
+volume to match it"), or matched to a unit the run doesn't have. A run made
+with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
+says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
+run capped each unit’s use at its registered volume per water year …") or a
+full allocation ("… what the river would look like if every registered user
+took their entitlement, not what they take").
 
 **Modelled use vs registered volume** is a list of each unit and water
 source with use or a volume, the ones to look into first (`unitRows`): above
@@ -4204,7 +4216,9 @@ fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
 authorisation with purpose, volume with source, storage, validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
-"Entered by hand"), and **Change** / **Delete** for editors (the form's unit
+"Entered by hand") and, when it states any, its licence conditions in one
+line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,
+the conditions themselves in its title), and **Change** / **Delete** for editors (the form's unit
 picker is how a row is matched by hand). Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
@@ -4228,7 +4242,11 @@ closing the sheet drops a preview.
 **Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
 source, purpose, volume, storage, valid from/to, registration number,
-property, the registered user (editors), reference; Save and Cancel pinned.
+property, the registered user (editors), reference, and **Licence
+conditions** (issue #72; "shown, not yet applied by the model"): the months
+water may be taken (twelve boxes in water-year order, none ticked = none
+stated, each a 24 px target), the maximum rate (m³/s) and the other
+conditions one a line; Save and Cancel pinned.
 
 **Phone and narrow windows**: one column (list, picked unit, volumes, every
 year); the list shows six rows until **Show all N hydrological units and sources** and the
