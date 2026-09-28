@@ -18,7 +18,7 @@ export function farmNames(farmer: Pick<FarmerEntry, 'nodeIds'>, farms: readonly 
 	const linked = new Set(farmer.nodeIds);
 	const names = farms.filter((f) => linked.has(f.id)).map((f) => f.name);
 	const missing = farmer.nodeIds.filter((id) => !farms.some((f) => f.id === id)).length;
-	return missing ? [...names, missing === 1 ? 'a removed farm' : `${missing} removed farms`] : names;
+	return missing ? [...names, missing === 1 ? 'a removed hydrological unit' : `${missing} removed hydrological units`] : names;
 }
 
 /** Add or remove `id`, keeping the farms' order. */

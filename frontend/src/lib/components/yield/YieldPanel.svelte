@@ -170,7 +170,7 @@
 				<label for="yield-pattern-{nodeId}">Draft pattern</label>
 				<select id="yield-pattern-{nodeId}" bind:value={pattern} disabled={busy}>
 					<option value="constant">Constant: the same every day</option>
-					<option value="demand">This unit's irrigation demand, by month</option>
+					<option value="demand">This hydrological unit's irrigation demand, by month</option>
 				</select>
 			</div>
 			<div class="field">

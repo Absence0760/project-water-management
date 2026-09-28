@@ -282,7 +282,7 @@
 				{#if !loading && projects.length}
 					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· EWR, last 30 days: {summaryLine}{/if}
 				{:else}
-					Each project models one catchment: its river network, units, dams and data.
+					Each project models one catchment: its river network, hydrological units, dams and data.
 				{/if}
 			</p>
 		</div>

@@ -275,13 +275,13 @@
 				{#if comparison}
 					{#if comparison.unmatchedAllocationIds.length}
 						<p class="alert alert-info slim">
-							{comparison.unmatchedAllocationIds.length} registered volume{comparison.unmatchedAllocationIds.length === 1 ? ' is' : 's are'} not matched to a unit yet,
+							{comparison.unmatchedAllocationIds.length} registered volume{comparison.unmatchedAllocationIds.length === 1 ? ' is' : 's are'} not matched to a hydrological unit yet,
 							so {comparison.unmatchedAllocationIds.length === 1 ? 'it is' : 'they are'} not counted.{canEdit ? ' Change a volume to match it.' : ''}
 						</p>
 					{/if}
 					{#if comparison.notInRunAllocationIds.length}
 						<p class="alert alert-info slim">
-							{comparison.notInRunAllocationIds.length} registered volume{comparison.notInRunAllocationIds.length === 1 ? ' belongs' : 's belong'} to a unit this run
+							{comparison.notInRunAllocationIds.length} registered volume{comparison.notInRunAllocationIds.length === 1 ? ' belongs' : 's belong'} to a hydrological unit this run
 							doesn't have (added or removed since it ran).
 						</p>
 					{/if}
@@ -290,9 +290,9 @@
 							<section class="panel list-card" aria-labelledby="alloc-compare-h">
 								<div class="panel-head">
 									<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
-									<span class="muted small">Each unit and source, mean water year{tally ? ` · ${tally}` : ''}</span>
+									<span class="muted small">Each hydrological unit and source, mean water year{tally ? ` · ${tally}` : ''}</span>
 								</div>
-								<ul class="units" bind:this={listEl} aria-label="Units, the ones to look into first">
+								<ul class="units" bind:this={listEl} aria-label="Hydrological units, the ones to look into first">
 									{#each shownUnits as u (u.key)}
 										<li class="unit st-{u.status}" class:picked={u.nodeId === pickedId} data-unit={u.nodeId} data-status={u.status}>
 											<p class="unit-head">
@@ -310,7 +310,7 @@
 									{/each}
 								</ul>
 								{#if shownUnits.length < units.length}
-									<button type="button" class="btn btn-sm more" onclick={() => (unitsAll = true)}>Show all {fmtNum(units.length)} units and sources</button>
+									<button type="button" class="btn btn-sm more" onclick={() => (unitsAll = true)}>Show all {fmtNum(units.length)} hydrological units and sources</button>
 								{/if}
 							</section>
 
@@ -320,7 +320,7 @@
 									{#if pickedId}
 										<p class="links small">
 											<a href="?tab=network&node={encodeURIComponent(pickedId)}" aria-label="{pickedName} on the Network">On the Network</a>
-											<a href="?tab=supply&unit={encodeURIComponent(pickedId)}" aria-label="{pickedName} in Units & supply">Units &amp; supply</a>
+											<a href="?tab=supply&unit={encodeURIComponent(pickedId)}" aria-label="{pickedName} in Hydrological units">Hydrological units</a>
 										</p>
 									{/if}
 								</div>
@@ -346,7 +346,7 @@
 											{fmtNum(pickedStorage.modelledCapacityM3)} m³
 										</p>
 									{/if}
-									<h3 class="sub-h">Registered volumes for this unit</h3>
+									<h3 class="sub-h">Registered volumes for this hydrological unit</h3>
 									{#if pickedVolumes.length}
 										<ul class="vols">
 											{#each pickedVolumes as a (a.id)}
@@ -394,7 +394,7 @@
 							<caption class="visually-hidden">Registered and licensed volumes</caption>
 							<thead>
 								<tr>
-									<th scope="col">Unit or user<span class="sub">registration</span></th>
+									<th scope="col">Hydrological unit or user<span class="sub">registration</span></th>
 									{#if data.canSeeHolders}<th scope="col">Registered user</th>{/if}
 									<th scope="col">Authorisation<span class="sub">purpose</span></th>
 									<th scope="col" class="num">Volume (m³/a)<span class="sub">source</span></th>
@@ -456,9 +456,9 @@
 	{#if comparison && rows.length}
 		<section class="panel" aria-labelledby="alloc-years-h">
 			<div class="panel-head">
-				<h2 id="alloc-years-h">Every unit and water year</h2>
+				<h2 id="alloc-years-h">Every hydrological unit and water year</h2>
 			</div>
-			<YearTable {rows} tolerance={comparison.tolerance} caption="Modelled use against the registered volume per unit, water source and water year" testid="allocation-compare-table" />
+			<YearTable {rows} tolerance={comparison.tolerance} caption="Modelled use against the registered volume per hydrological unit, water source and water year" testid="allocation-compare-table" />
 			<p class="hint muted">
 				“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the registered
 				volume prorated to them, and isn’t counted in the whole water years above.

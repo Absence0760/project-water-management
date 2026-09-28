@@ -367,7 +367,7 @@
 	/** The Map header's one line: what the network is. */
 	const summaryLine = $derived(
 		[
-			`${farms.length} unit${farms.length === 1 ? '' : 's'}`,
+			`${farms.length} hydrological unit${farms.length === 1 ? '' : 's'}`,
 			`${dams} dam${dams === 1 ? '' : 's'}`,
 			`${gauges.length} gauge${gauges.length === 1 ? '' : 's'}`,
 			...(users.length ? [`${users.length} other user${users.length === 1 ? '' : 's'}`] : []),
@@ -425,7 +425,7 @@
 {#snippet colourByControl()}
 	{#if farms.length}
 		<div class="colour-by">
-			<label for="sch-colour">Colour units by</label>
+			<label for="sch-colour">Colour hydrological units by</label>
 			<select id="sch-colour" bind:value={colourBy}>
 				<option value="none">Nothing</option>
 				{#if latestRun}<option value="supply">Supply, latest run</option>{/if}
@@ -472,13 +472,13 @@
 			<div class="empty">
 				<p>
 					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
-					and the EWR applies), then add the units and gauges that drain into it.
+					and the EWR applies), then add the hydrological units and gauges that drain into it.
 				</p>
 				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
 			</div>
 		{:else}
 		<p class="muted small intro">
-				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; units total {fmtPct(shares.sum, 2)}{/if}.
+				Percentages are shown 0–100. Flow shares {METHOD_LABEL[method]} (Settings & calibration){#if farms.length}; hydrological units total {fmtPct(shares.sum, 2)}{/if}.
 				<span class="wide-only">The ⓘ buttons and the field guide below explain</span><span class="phone-only">The field guide below explains</span> each value.
 			</p>
 			<div class="table-wrap net-wrap">
@@ -502,7 +502,7 @@
 									<span class="fh-u"><span class="u">{f.unit}</span><HelpTip key={`node.${f.key}`} label="About {f.label.toLowerCase()}" /></span>
 								</th>
 							{/each}
-							<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each unit receives with the method in Settings & calibration.">
+							<th scope="col" class="num fh" title="Share of catchment natural flow and EWR each hydrological unit receives with the method in Settings & calibration.">
 								<span class="fh-l">In use</span>
 								<span class="fh-u"><span class="u">%</span></span>
 							</th>
@@ -543,7 +543,7 @@
 								<td>
 									<span class="cell-label" aria-hidden="true">Kind</span>
 									<select aria-label="Kind of {label}" disabled={readonly} bind:value={node.kind}>
-										<option value={'farm' satisfies NodeKind}>Unit</option>
+										<option value={'farm' satisfies NodeKind}>Hydrological unit</option>
 										<option value={'gauge' satisfies NodeKind}>Gauge</option>
 										<option value={'user' satisfies NodeKind}>Other user</option>
 									</select>
@@ -624,8 +624,8 @@
 			<details class="guide">
 				<summary>Field guide</summary>
 				<dl>
-					<div><dt>Kind</dt><dd>A <strong>unit</strong> (a farm, sub-catchment or town with its own area) generates runoff, has irrigation demand and may have a dam; a stand-alone dam or natural area is also a unit. The farmer view, exports and the API call it a farm. A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
-					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a unit, which reduce its runoff: edit them in the node's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
+					<div><dt>Kind</dt><dd>A <strong>hydrological unit</strong> (a farm, sub-catchment or town with its own area) generates runoff, has irrigation demand and may have a dam; a stand-alone dam or natural area is also a hydrological unit. The workspace and the farmer view call it a hydrological unit; exports and the API call it a farm. A <strong>gauge</strong> is a measuring point that passes upstream flow through. An <strong>other user</strong> (a town, industry or unlisted irrigator) takes a monthly demand from the river where it sits; set it up under "Other water users" below.</dd></div>
+					<div><dt>Land cover</dt><dd>Invasive trees and forestry on a hydrological unit, which reduce its runoff: edit them in the node's form (<strong>Edit</strong> on its card on the map), under "Land cover".</dd></div>
 					<div><dt>Drains into</dt><dd>The node immediately downstream. Exactly one node, the outflow gauge, drains nowhere.</dd></div>
 					{#each NODE_FIELDS as f (f.key)}
 						<div><dt>{GROUPS[f.group]}: {f.label} ({f.unit})</dt><dd>{f.help}</dd></div>
@@ -665,7 +665,7 @@
 			<div class="empty">
 				<p>
 					No nodes yet. Start with the <strong>outflow gauge</strong> at the bottom of the catchment (where flow is measured
-					and the EWR applies), then add the units and gauges that drain into it.
+					and the EWR applies), then add the hydrological units and gauges that drain into it.
 				</p>
 				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add outflow gauge</button>{/if}
 			</div>
@@ -729,7 +729,7 @@
 					<button type="button" class="btn" aria-label="Previous node" disabled={editIndex <= 0} onclick={() => openEdit(nodes[editIndex - 1]!.id, true)}>‹</button>
 					<select id="node-pick" value={editing.id} onchange={(e) => openEdit(e.currentTarget.value, true)}>
 						{#each nodes as n, i (n.id)}
-							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {n.kind === 'farm' ? 'unit' : n.kind}</option>
+							<option value={n.id}>{i + 1}. {n.name || '(unnamed)'} · {n.kind === 'farm' ? 'hydrological unit' : n.kind}</option>
 						{/each}
 					</select>
 					<button type="button" class="btn" aria-label="Next node" disabled={editIndex >= nodes.length - 1} onclick={() => openEdit(nodes[editIndex + 1]!.id, true)}>›</button>

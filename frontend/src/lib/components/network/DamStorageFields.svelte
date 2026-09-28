@@ -14,7 +14,7 @@
 	let { node, readonly }: { node: NetworkNode; readonly: boolean } = $props();
 
 	const id = (k: string) => `dam-${k}-${node.id}`;
-	const label = $derived(node.name || 'this unit');
+	const label = $derived(node.name || 'this hydrological unit');
 	const RULE_LABEL: Record<DamReleaseRule, string> = {
 		none: 'None: the dam releases nothing',
 		passInflow: 'Pass inflow: up to what the river below still needs',
@@ -160,7 +160,7 @@
 				checked={useEwr}
 				onchange={(e) => (node.damReleaseM3Day = e.currentTarget.checked ? null : new Array(12).fill(0))}
 			/>
-			Pass up to the EWR required here (this unit's share and upstream shares)
+			Pass up to the EWR required here (this hydrological unit's share and upstream shares)
 		</label>
 	{/if}
 	{#if rule === 'fixed' || (rule === 'passInflow' && !useEwr)}

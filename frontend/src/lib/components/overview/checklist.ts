@@ -41,18 +41,18 @@ function networkStep(m: ProjectModel, s: ProjectSettings): ChecklistStep {
 	const gauges = m.nodes.length - farms.length;
 	const outlets = m.nodes.filter((n) => n.downstreamNodeId === null);
 	if (!m.nodes.length)
-		return { ...base, status: 'todo', detail: 'Add units and gauges, each draining to the one below, ending at the outflow gauge.' };
+		return { ...base, status: 'todo', detail: 'Add hydrological units and gauges, each draining to the one below, ending at the outflow gauge.' };
 	if (!farms.length)
-		return { ...base, status: 'partial', detail: `${plural(gauges, 'gauge')} but no units yet. Add the units that draw water.` };
+		return { ...base, status: 'partial', detail: `${plural(gauges, 'gauge')} but no hydrological units yet. Add the hydrological units that draw water.` };
 	if (outlets.length !== 1)
 		return { ...base, status: 'partial', detail: 'The network needs exactly one outflow gauge (a node that drains nowhere).' };
 	const area = farms.reduce((a, n) => a + (n.areaKm2 || 0), 0);
 	if (!(area > 0) && !(s.calibration.catchmentAreaKm2 && s.calibration.catchmentAreaKm2 > 0))
-		return { ...base, status: 'partial', detail: 'Give the units their catchment areas (km²) so rainfall can be turned into flow.' };
+		return { ...base, status: 'partial', detail: 'Give the hydrological units their catchment areas (km²) so rainfall can be turned into flow.' };
 	return {
 		...base,
 		status: 'done',
-		detail: `${plural(farms.length, 'unit')}, ${plural(gauges, 'gauge')}, draining to ${outlets[0]!.name || 'the outflow gauge'}.`
+		detail: `${plural(farms.length, 'hydrological unit')}, ${plural(gauges, 'gauge')}, draining to ${outlets[0]!.name || 'the outflow gauge'}.`
 	};
 }
 
@@ -60,14 +60,14 @@ function cropsStep(m: ProjectModel): ChecklistStep {
 	const base = { id: 'crops', tab: 'crops', title: 'Crops & irrigated areas', optional: true } as const;
 	const areaHa = m.cropAreas.reduce((a, c) => a + (c.areaM2 || 0), 0) / 10_000;
 	if (!m.crops.length)
-		return { ...base, status: 'todo', detail: 'Add crops with monthly crop factors, then the hectares planted on each unit. Skip if nothing is irrigated.' };
+		return { ...base, status: 'todo', detail: 'Add crops with monthly crop factors, then the hectares planted on each hydrological unit. Skip if nothing is irrigated.' };
 	if (!(areaHa > 0))
-		return { ...base, status: 'partial', detail: `${plural(m.crops.length, 'crop')} defined, but no irrigated area on any unit yet.` };
+		return { ...base, status: 'partial', detail: `${plural(m.crops.length, 'crop')} defined, but no irrigated area on any hydrological unit yet.` };
 	const farms = new Set(m.cropAreas.filter((c) => c.areaM2 > 0).map((c) => c.nodeId)).size;
 	return {
 		...base,
 		status: 'done',
-		detail: `${plural(m.crops.length, 'crop')} on ${plural(farms, 'unit')}, ${fmtNum(areaHa, 1, true)} ha irrigated.`
+		detail: `${plural(m.crops.length, 'crop')} on ${plural(farms, 'hydrological unit')}, ${fmtNum(areaHa, 1, true)} ha irrigated.`
 	};
 }
 
@@ -102,7 +102,7 @@ function settingsStep(s: ProjectSettings): ChecklistStep {
 function runsStep(runs: RunMeta[] | null, updatedAt?: string): ChecklistStep {
 	const base = { id: 'runs', tab: 'runs', title: 'Run the model' } as const;
 	if (runs === null) return { ...base, status: 'unknown', detail: 'Checking runs…' };
-	if (!runs.length) return { ...base, status: 'todo', detail: 'Run it to get unit supply & deficit, dam storage, spills and EWR shortfalls.' };
+	if (!runs.length) return { ...base, status: 'todo', detail: 'Run it to get hydrological unit supply & deficit, dam storage, spills and EWR shortfalls.' };
 	const last = runs.reduce((a, r) => (Date.parse(r.createdAt) > Date.parse(a.createdAt) ? r : a));
 	const when = last.createdAt.slice(0, 10);
 	if (updatedAt && Date.parse(updatedAt) > Date.parse(last.createdAt))

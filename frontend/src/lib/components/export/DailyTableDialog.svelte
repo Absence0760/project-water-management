@@ -111,14 +111,14 @@
 			<input id="{uid}-q" type="search" autocomplete="off" placeholder="Date prefix: 2015, 2015-03 or 2015-03-14" bind:value={query} />
 			<p class="muted period" role="status" aria-live="polite">
 				{#if shown.dates.length}{shown.dates[0]} → {shown.dates[shown.dates.length - 1]} ·{/if}
-				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} unit{shown.headers.length === 1 ? '' : 's'}
+				{fmtNum(rows.length)} of {fmtNum(shown.dates.length)} days · {shown.headers.length} hydrological unit{shown.headers.length === 1 ? '' : 's'}
 			</p>
 		</div>
 		<!-- Focusable, so the table scrolls from the keyboard (arrows, Page Up/Down) with nothing to focus inside it. -->
 		<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 		<div class="scroll" bind:this={scrollEl} bind:clientHeight={viewportH} onscroll={onScroll} tabindex="0" role="region" aria-label="{title}: the table">
 			<table class="data compact" aria-rowcount={rows.length + 1}>
-				<caption class="visually-hidden">{title}: one row per day, one column per unit</caption>
+				<caption class="visually-hidden">{title}: one row per day, one column per hydrological unit</caption>
 				<thead>
 					<tr aria-rowindex="1">
 						<th scope="col" class="datecol">Date</th>

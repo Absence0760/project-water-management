@@ -3,7 +3,7 @@
 <svg
 	viewBox="0 0 852 230"
 	role="img"
-	aria-label="Seven steps in order: 1 create or copy a project; 2 network of units and gauges; 3 crops and demand, optional; 4 transfers, optional; 5 rainfall and flow data; 6 settings, calibration and EWR; 7 run and read the results. From the results, a short loop goes back to settings to calibrate and run again, and a long loop goes back to the project: copy it, change one thing, run and compare runs."
+	aria-label="Seven steps in order: 1 create or copy a project; 2 network of hydrological units and gauges; 3 crops and demand, optional; 4 transfers, optional; 5 rainfall and flow data; 6 settings, calibration and EWR; 7 run and read the results. From the results, a short loop goes back to settings to calibrate and run again, and a long loop goes back to the project: copy it, change one thing, run and compare runs."
 >
 	<defs>
 		<marker id="wf-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -24,7 +24,8 @@
 
 	<rect class="box" x="130" y="40" width="104" height="64" rx="6" />
 	<text class="t" x="182" y="67" text-anchor="middle">2 · Network</text>
-	<text class="s" x="182" y="85" text-anchor="middle">units and gauges</text>
+	<text class="s" x="182" y="83" text-anchor="middle">hydrological units</text>
+	<text class="s" x="182" y="97" text-anchor="middle">and gauges</text>
 
 	<rect class="box opt" x="252" y="40" width="104" height="64" rx="6" />
 	<text class="t" x="304" y="67" text-anchor="middle">3 · Crops</text>

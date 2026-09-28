@@ -222,7 +222,7 @@ export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> 
 		start:
 			r.startStorageM3 === null
 				? null
-				: `The units’ dams held ${m3(r.startStorageM3)} of ${m3(r.capacityM3)} at the end of ${fmtDay(dayBefore(o.decisionDate))}: every year starts from there.`,
+				: `The hydrological units’ dams held ${m3(r.startStorageM3)} of ${m3(r.capacityM3)} at the end of ${fmtDay(dayBefore(o.decisionDate))}: every year starts from there.`,
 		nYears: r.nYears,
 		enoughYears: r.enoughYears,
 		tooFewYears: r.enoughYears

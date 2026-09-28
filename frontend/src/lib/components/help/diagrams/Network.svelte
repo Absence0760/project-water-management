@@ -41,9 +41,9 @@
 
 	<!-- legend -->
 	<circle class="node" cx="20" cy="196" r="6" />
-	<text class="s lbl" x="34" y="200">unit</text>
+	<text class="s lbl" x="34" y="200">hydrological unit</text>
 	<rect class="node" x="14" y="211" width="12" height="12" />
-	<text class="s lbl" x="34" y="221">unit with a dam</text>
+	<text class="s lbl" x="34" y="221">hydrological unit with a dam</text>
 	<polygon class="node-open" points="20,234 27,246 13,246" />
 	<text class="s lbl" x="34" y="244">gauge</text>
 	<polygon class="outlet" points="20,256 27,268 13,268" />
