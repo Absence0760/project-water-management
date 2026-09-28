@@ -543,10 +543,19 @@ that finds the map beside it), or feed the minified line:column to any source-ma
 
 The dependency guards at the end of the script (no dotenv, no playwright-core
 in the API/worker/fetcher, no `pg` in the fetcher/renderer) read esbuild's
-`--metafile` input list, not the bundle text: minifying drops the
-`// node_modules/…` comments the old greps matched, which would have made the
-`pg` check pass silently. Each guard first checks the metafile names the
-bundle's entry point, so a missing or reshaped metafile fails the build.
+`--metafile`, not the bundle text: minifying drops the `// node_modules/…`
+comments the old greps matched, which would have made the `pg` check pass
+silently. The rules live in `scripts/guards/check_lambda_bundle.mjs` (tests:
+`pnpm test:guards`). A bundled package shows as an *input*; an
+`--external` one never does, only as an import left in the *output*
+(`outputs[…].imports`, with its `kind`). playwright-core is external in
+every bundle, so the guard reads the output imports and refuses any import
+of it but a `dynamic-import`: the lazy `await import('playwright-core')` in
+`src/reports/render.ts`, which the API and worker bundles reach and which runs
+only where the package is installed. A static import would crash the Lambda
+at load (issue #126: the first version checked only the inputs, so it could
+never fire). Each guard first checks the metafile names the bundle's entry
+point and an output, so a missing or reshaped metafile fails the build.
 
 ### Releasing
 
