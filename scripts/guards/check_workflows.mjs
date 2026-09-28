@@ -34,6 +34,10 @@
 //              release preflight trusts `CI gate` on the tagged commit alone,
 //              so a docs-only push to main must still run every heavy job:
 //              otherwise it goes green over code whose own run failed.
+//   no-tail    no `aws lambda invoke --log-type Tail` and no reading of the
+//              `LogResult` it returns, in any workflow. Actions logs are
+//              public (the repo is), and a function's log tail can quote an
+//              error's SQL or data; the detail belongs in CloudWatch.
 //
 // Line-based on purpose (no YAML dependency at the root): the workflows are
 // ours and 2-space indented, and the tests pin the shapes it reads.
@@ -157,6 +161,9 @@ export function checkWorkflow(file, text) {
 					out.push({ file, line: i + 1, rule: 'pin', message: `${ref.split('@')[0]} is SHA-pinned but has no "# vX.Y.Z" comment saying which release it is` });
 				}
 			}
+		}
+		if (/--log-type[\s=]+['"]?Tail\b|\bLogResult\b/.test(l) && !/^\s*#/.test(l)) {
+			out.push({ file, line: i + 1, rule: 'no-tail', message: 'a Lambda log tail printed to a public Actions log; print names and codes only and leave the detail in CloudWatch' });
 		}
 		if (STATIC_KEYS.test(l) && !/^\s*#/.test(l)) {
 			out.push({ file, line: i + 1, rule: 'no-keys', message: 'static AWS credential reference; CI auth to AWS is GitHub OIDC only' });

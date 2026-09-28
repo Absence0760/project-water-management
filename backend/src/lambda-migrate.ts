@@ -16,10 +16,16 @@
 // `<dirname>/../migrations`. TLS to RDS is verified against the CA bundle at
 // NODE_EXTRA_CA_CERTS. The returned payload lists applied migration names
 // only — never credentials.
+//
+// The deploy workflow's logs are public (the repo is), so a failure's
+// payload is a summary too: a stable code, migration names and where the
+// detail is. The detail itself (Postgres's error text, which can quote SQL or
+// data) goes to this function's CloudWatch log only (failureSummary).
+import type { Context } from 'aws-lambda';
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { assertLambdaEnv } from './config/production.js';
-import { migrate } from '../scripts/migrate.js';
+import { migrate, MigrateError, type MigrateErrorCode } from '../scripts/migrate.js';
 
 // Refuse to start without its settings (config/production.ts).
 assertLambdaEnv('migrate');
@@ -32,6 +38,37 @@ interface MasterSecret {
 export interface MigrateResult {
 	applied: string[];
 	appRole: 'created' | 'updated';
+}
+
+/**
+ * What a failed run returns (as the thrown error's message, JSON), which the
+ * deploy workflow prints to its public log. Names and codes only: never an
+ * error message. `setup_failed` is anything before or around the migrations
+ * themselves (reading the secret, connecting, the water_app role).
+ */
+export interface MigrateFailure {
+	code: MigrateErrorCode | 'setup_failed';
+	migrations: string[];
+	applied: string[];
+	pending: string[];
+	logGroup: string | null;
+	logStream: string | null;
+	requestId: string | null;
+}
+
+type LogContext = Pick<Context, 'logGroupName' | 'logStreamName' | 'awsRequestId'>;
+
+export function failureSummary(err: unknown, context?: LogContext): MigrateFailure {
+	const m = err instanceof MigrateError ? err : null;
+	return {
+		code: m?.code ?? 'setup_failed',
+		migrations: m?.migrations ?? [],
+		applied: m?.applied ?? [],
+		pending: m?.pending ?? [],
+		logGroup: context?.logGroupName ?? null,
+		logStream: context?.logStreamName ?? null,
+		requestId: context?.awsRequestId ?? null
+	};
 }
 
 function requireEnv(name: string): string {
@@ -108,7 +145,22 @@ async function syncAppRole(url: string, appPassword: string): Promise<MigrateRes
 	}
 }
 
-export async function handler(): Promise<MigrateResult> {
+export async function handler(_event?: unknown, context?: LogContext): Promise<MigrateResult> {
+	try {
+		return await run();
+	} catch (err) {
+		// The full error, stack included, for the operator: CloudWatch is private.
+		console.error('migrate failed:', err);
+		// Still a failed invocation (FunctionError, the migrate-errors alarm),
+		// but its message is the summary alone.
+		const failure = new Error(JSON.stringify(failureSummary(err, context)));
+		failure.name = 'MigrateFailed';
+		failure.stack = `${failure.name}: ${failure.message}`;
+		throw failure;
+	}
+}
+
+async function run(): Promise<MigrateResult> {
 	const secret = await readMasterSecret(requireEnv('MASTER_SECRET_ARN'));
 	const url = ownerUrl(secret);
 	// Role first: 001_init's guard then skips its NOLOGIN placeholder, and the

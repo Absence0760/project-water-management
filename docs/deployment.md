@@ -463,12 +463,33 @@ the real plan stays an operator step
   deploy workflow (the workflow guard's `no-cache` rule), since a cache is
   written by other runs and the build ships with deploy credentials.
 
+### A failed migration
+
+The deploy log is public (the repo is), so the *Run migrations* step prints
+only names and codes, never the error: the code (`integrity`,
+`migration_failed`, `lock_timeout`, `statement_timeout`, or `setup_failed`
+for anything around the migrations, such as reading the master secret,
+connecting or syncing `water_app`), the file it stopped on, what that run had
+applied and what is still pending, and the CloudWatch log group
+(`/aws/lambda/<migrate function>`), stream and request id. The error itself,
+Postgres's text included, is in that CloudWatch stream, logged as
+`migrate failed:`; read it there (the AWS console, or
+`aws logs tail /aws/lambda/<migrate function> --since 1h --profile <project profile>`).
+A timeout or crash prints `unknown` for everything but the log group. The
+step never invokes with `--log-type Tail`, and the workflow guard
+(`pnpm check:workflows`, rule `no-tail`) refuses any workflow that does or
+reads `LogResult`. The payload itself carries the summary alone
+(`MigrateFailure` in `backend/src/lambda-migrate.ts`), and the step prints a
+field only if it has the shape it should (a `NNN_name.sql`, a lowercase code,
+a log stream name).
+
 ### Migration integrity
 
 The migrate Lambda refuses to apply anything, and the deploy stops before
 the new code ships, when `schema_migrations` disagrees with the migrations in
-the release ([data-model.md § Migrations](./data-model.md#migrations)). Its
-error names each file:
+the release ([data-model.md § Migrations](./data-model.md#migrations)). The
+deploy log shows code `integrity` and the files; its error, in CloudWatch
+(§ A failed migration), names each file:
 
 - **"… was applied but its contents have changed"**: someone edited a
   migration production already ran. The database is fine; the release is
