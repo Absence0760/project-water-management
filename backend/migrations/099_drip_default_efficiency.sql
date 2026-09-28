@@ -11,4 +11,4 @@
 -- saved project or run changes.
 ALTER TABLE node ALTER COLUMN irrigation_efficiency SET DEFAULT 0.9;
 COMMENT ON COLUMN node.irrigation_efficiency IS
-	'Irrigation application efficiency e (0 < e <= 1): abstraction demand = crop requirement / e. Engine >= 0.16.0. Default 0.9, drip (095).';
+	'Irrigation application efficiency e (0 < e <= 1): abstraction demand = crop requirement / e. Engine >= 0.16.0. Default 0.9, drip (099).';
