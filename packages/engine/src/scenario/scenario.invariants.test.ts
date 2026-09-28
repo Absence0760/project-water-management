@@ -26,7 +26,8 @@ const env = (globalThis as { process?: { env: Record<string, string | undefined>
 const CASES = Number(env.SCENARIO_FUZZ_CASES ?? 250);
 const SEED0 = Number(env.FUZZ_SEED ?? 1);
 // Small networks and short runs keep checkAll (four model runs a case) fast enough for `pnpm test`.
-const GEN = { maxNodes: 12, maxDays: 500 };
+// Allocations compare only: a full allocation rescales demand, which demand.scale's property is about (engine 1.16.0).
+const GEN = { maxNodes: 12, maxDays: 500, allocationModes: false };
 
 /**
  * The settings as a run stores them: merged over the defaults, as the

@@ -204,8 +204,10 @@ function probePlan(p: YieldProblem, i: number, cap: number): { plan: NetworkPlan
 	const demand = new Float64Array(p.days);
 	// The dam's own yield: its boreholes (WP-1.34), including those that pump
 	// into the dam (WP-3.9), don't count towards it (pending the hydrologist).
-	// The draft is the node's whole demand, so its demand objects (engine ≥ 1.7.0) go too.
-	const { borehole: _borehole, damCurve: _curve, objects: _objects, ...rest } = base;
+	// The draft is the node's whole demand, so its demand objects (engine ≥ 1.7.0) go too. An allocation
+	// cap on it goes as well (engine ≥ 1.16.0): a yield is what the dam can give, not what is registered;
+	// the other units keep theirs, so a capped farm upstream leaves the dam more.
+	const { borehole: _borehole, damCurve: _curve, objects: _objects, allocationCap: _cap, ...rest } = base;
 	const node: PlanNode = {
 		...rest,
 		damCapacityM3: cap,

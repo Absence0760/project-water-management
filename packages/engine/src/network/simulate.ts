@@ -63,6 +63,17 @@ export interface PlanNode {
 	initialOnRiver?: boolean;
 	initialBoreholeUsedM3?: readonly number[];
 	/**
+	 * allocationMode 'cap' (engine ≥ 1.16.0, ../allocations/mode.ts,
+	 * docs/model.md §2.12a): per water source, the registered volume (m³) of
+	 * the water year each day falls in; null = that source isn't capped.
+	 * Surface use (supplied − groundwater to the crop: the dam, the river pump
+	 * and off-take water used) and groundwater use (pumped to the crop and
+	 * into the dam) per water year stay within it. Absent = no cap.
+	 */
+	allocationCap?: { surface: Float64Array | null; groundwater: Float64Array | null };
+	/** Surface and groundwater use so far this water year, the day before (a resumed run, engine ≥ 1.16.0); absent = 0. */
+	initialAllocationUsedM3?: readonly [number, number];
+	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
 	 * 0.16.0, audit Q5). Irrigation draws only the storage above it, and
 	 * transfers keep at least this much in the source dam.
@@ -242,6 +253,13 @@ export interface NodeResult {
 	groundwaterToDam: Float64Array;
 	/** What each of the node's pumping units pumped per day (WP-3.9), in `borehole.units` order; absent without boreholes. */
 	boreholePumped?: Float64Array[];
+	/**
+	 * allocationMode 'cap' (engine ≥ 1.16.0): what each capped source may
+	 * still take this water year, at the start of each day (m³): the year's
+	 * registered volume less its use so far. null for a source without a cap;
+	 * absent on a node without one.
+	 */
+	allocationRoom?: { surface: Float64Array | null; groundwater: Float64Array | null };
 	/** Pumped from the river below the dam (WP-3.8), part of `supplied`; absent without a supply rule that can pump from the river. */
 	riverAbstraction?: Float64Array;
 	/** What each demand object was supplied (engine ≥ 1.7.0), in `objects` order, part of `supplied`; absent without demand objects. */
@@ -347,6 +365,8 @@ export interface NetworkState {
 	onRiver: Uint8Array;
 	/** Each pumping unit's volume so far this water year (before a 1 October clears it); null without boreholes. */
 	boreholeUsedM3: (number[] | null)[];
+	/** Surface and groundwater use so far this water year under an allocation cap (before a 1 October clears it); null without a cap. */
+	allocationUsedM3: ([number, number] | null)[];
 }
 
 export interface NetworkResult {
@@ -461,6 +481,23 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 	};
 }
 
+/**
+ * What a node may still take today under an allocation cap (engine ≥ 1.16.0):
+ * [surface, groundwater], each the water year's registered volume less the
+ * use so far, never below 0; Infinity for a source (or a node) without a cap.
+ * Records the room in the node's allocation_room columns.
+ */
+function allocationRoom(node: PlanNode, r: NodeResult, used: Float64Array | null, t: number): [number, number] {
+	const c = node.allocationCap;
+	if (!c || !used) return [Infinity, Infinity];
+	const room = r.allocationRoom!;
+	let s = Infinity;
+	let g = Infinity;
+	if (c.surface) s = room.surface![t] = Math.max(0, c.surface[t]! - used[0]!);
+	if (c.groundwater) g = room.groundwater![t] = Math.max(0, c.groundwater[t]! - used[1]!);
+	return [s, g];
+}
+
 export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; captureAt?: number } = {}): NetworkResult {
 	const { days, nodes, order, upstream, transfers, month, naturalFlow, ewr, lakeEvapMmDay, damRainMm } = plan;
 	const res = nodes.map((n, i) => {
@@ -471,6 +508,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		if (plan.offtakes?.some((o) => o.to === i)) r.offtakeIn = new Float64Array(days);
 		if (plan.offtakes?.some((o) => o.from === i)) r.offtakeOut = new Float64Array(days);
 		if (n.storageResetM3 !== undefined && plan.storageResetDay !== undefined) r.storageSet = new Float64Array(days);
+		if (n.allocationCap) r.allocationRoom = { surface: n.allocationCap.surface ? new Float64Array(days) : null, groundwater: n.allocationCap.groundwater ? new Float64Array(days) : null };
 		return r;
 	});
 	// The storage reset (engine ≥ 0.46.0, settings.damStorageReset): the day, −1 = none.
@@ -494,6 +532,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		return u;
 	});
+	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.16.0).
+	const allocUsed = nodes.map((n) => (n.allocationCap ? Float64Array.from(n.initialAllocationUsedM3 ?? [0, 0]) : null));
 	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 1.1.0).
 	const startsYear = (t: number) => (t === 0 && plan.continued ? month[0] === 10 && plan.continued.monthBefore !== 10 : startsWaterYear(month, t));
 	let captured: NetworkState | undefined;
@@ -502,7 +542,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		depletionStoreM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionStoreM3 ?? 0) : res[i]!.depletionStore[t - 1]!)),
 		depletionDeficitM3: Float64Array.from(nodes, (n, i) => (t === 0 ? (n.initialDepletionDeficitM3 ?? 0) : res[i]!.depletionDeficit[t - 1]!)),
 		onRiver: onRiver.slice(),
-		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null))
+		boreholeUsedM3: bhUsed.map((u) => (u ? Array.from(u) : null)),
+		allocationUsedM3: allocUsed.map((u) => (u ? [u[0]!, u[1]!] : null))
 	});
 	const work = opts.workings
 		? nodes.map((n, i) => {
@@ -654,7 +695,10 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		const nat = naturalFlow[t]!;
 		const ewrT = ewr[t]!;
 		// Annual borehole caps (WP-3.9) run per water year, October to September.
-		if (startsYear(t)) for (const u of bhUsed) u?.fill(0);
+		if (startsYear(t)) {
+			for (const u of bhUsed) u?.fill(0);
+			for (const u of allocUsed) u?.fill(0);
+		}
 		for (let oi = 0; oi < order.length; oi++) {
 			const i = order[oi]!;
 			const node = nodes[i]!;
@@ -697,12 +741,18 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// the same day. Like a gauge it has no EWR share of its own.
 				const D = node.demand[t]!;
 				const avail = node.senior ? sumU : Math.max(0, sumU - sumZs);
+				const [sRoom, gRoom] = allocationRoom(node, r, allocUsed[i]!, t);
 				// Boreholes (WP-1.34, WP-3.9): what the river can't give (or first, primary).
-				let Gs = Math.min(avail, D);
+				let Gs = Math.min(avail, D, sRoom);
 				let Ggw = 0;
 				let dGw = 0;
-				if (node.borehole) [Gs, Ggw, , dGw] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, 0, avail, 0, 0);
+				if (node.borehole) [Gs, Ggw, , dGw] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, D, 0, avail, 0, 0, 0, 1, sRoom, gRoom);
 				const G = Math.min(Gs + Ggw, D);
+				const au = allocUsed[i];
+				if (au) {
+					au[0]! += G - Ggw;
+					au[1]! += Ggw;
+				}
 				const T = (node.userReturn ?? 0) * G;
 				const Uriver = sumU - Gs + T;
 				const U = Uriver - deplete(node, r, t, dGw, Uriver);
@@ -798,12 +848,15 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const qStart = qPrev + Pd - E - Sp;
 			// River off-take water delivered here (engine ≥ 1.14.0): it meets the demand first, then tops up the
 			// dam (the rules that say so, their share of what is left), and the rest flows on below the unit.
+			// The use left under an allocation cap (engine ≥ 1.16.0); Infinity when uncapped.
+			const [sRoom, gRoom] = allocationRoom(node, r, allocUsed[i]!, t);
 			const Xin = offtakes.length ? otIn[i]! : 0;
 			let Xused = 0;
 			let XtoDam = 0;
 			let Xpass = 0;
 			if (Xin > 0) {
-				Xused = Math.min(Xin, D);
+				// Off-take water used here is surface use, within the cap.
+				Xused = Math.min(Xin, D, sRoom);
 				const rest = Xin - Xused;
 				XtoDam = rest > 0 && otInDam[i]! > 0 ? Math.min(rest, (rest * otInDam[i]!) / Xin) : 0;
 				Xpass = rest - XtoDam;
@@ -850,12 +903,18 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			let dGw = 0;
 			// What the unit's own sources still have to supply once the off-take water is used.
 			const Dl = Xused > 0 ? D - Xused : D;
-			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qPrev, avail0, node.deadStorageM3, cap, room, sup?.rule ?? 1);
-			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Dl, Math.max(avail0 - node.deadStorageM3, 0), room);
-			else Gs = Math.min(Math.max(avail0 - node.deadStorageM3, 0), Dl);
+			const sLeft = Xused > 0 ? sRoom - Xused : sRoom;
+			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qPrev, avail0, node.deadStorageM3, cap, room, sup?.rule ?? 1, sLeft, gRoom);
+			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - node.deadStorageM3, 0), room);
+			else Gs = Math.min(Math.max(avail0 - node.deadStorageM3, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;
 			// Gs + (D − Gs) can round one ulp above D.
 			const G = Xused > 0 ? Xused + Math.min(Gs + Ggw + Gr, Dl) : Math.min(Gs + Ggw + Gr, D);
+			const au = allocUsed[i];
+			if (au) {
+				au[0]! += G - Ggw;
+				au[1]! += Ggw + Gd;
+			}
 			const P = avail - Gs;
 			const Q = Math.min(P, cap);
 			const Rr = Math.max(P - cap, 0);

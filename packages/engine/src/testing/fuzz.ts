@@ -8,6 +8,7 @@
 // that start and end mid water-year) because that is where balance bugs hide.
 // Everything is a pure function of the seed: a failing seed reproduces exactly.
 import { withMonthlyRates } from '../network/transferRates';
+import type { AllocationEntry } from '../allocations/compare';
 import { irrigationFromReturnFlow, LAND_COVER_CLASSES, type Borehole, type DemandObject, type LandCoverPatch, type CropArea, type CropDef, type DailySeries, type ModelInput, type NetworkNode, type ProjectSettings, type SeriesKind, type Transfer } from '../project';
 import { fromEpochDay, toEpochDay, type Monthly } from '../calendar';
 import { Rng } from '../random';
@@ -21,6 +22,13 @@ type Shape = 'chain' | 'fan' | 'random' | 'binary' | 'twoBranches';
 export interface GenOptions {
 	maxNodes?: number;
 	maxDays?: number;
+	/**
+	 * false: keep the allocations but run them compare only (engine ≥ 1.16.0),
+	 * for properties of the demand model that a full allocation (which scales
+	 * demand to the registered volumes) or a cap would break. The random
+	 * stream, and so the rest of each seed, is unchanged.
+	 */
+	allocationModes?: boolean;
 }
 
 const monthly = (f: (m: number) => number): Monthly => Array.from({ length: 12 }, (_, m) => f(m)) as unknown as Monthly;
@@ -355,9 +363,21 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addMonthlyRates(new Rng(seed ^ 0x6a09e667), transfers);
 	// River off-takes (engine ≥ 1.14.0), from their own stream, last of all.
 	addOfftakes(new Rng(seed ^ 0xbb67ae85), nodes, transfers);
+	// Registered volumes and the allocation mode (engine ≥ 1.16.0), from their own stream, after everything else.
+	const allocations = randomAllocations(new Rng(seed ^ 0x510e527f), nodes, settings, start, days);
+	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
 	return {
 		settings,
-		model: { nodes, crops, cropAreas, transfers, ...(landCover.length ? { landCover } : {}), ...(boreholes.length ? { boreholes } : {}), ...(demandObjects.length ? { demandObjects } : {}) },
+		model: {
+			nodes,
+			crops,
+			cropAreas,
+			transfers,
+			...(landCover.length ? { landCover } : {}),
+			...(boreholes.length ? { boreholes } : {}),
+			...(demandObjects.length ? { demandObjects } : {}),
+			...(allocations.length ? { allocations } : {})
+		},
 		series
 	};
 }
@@ -549,6 +569,40 @@ function randomBoreholes(g: Rng, nodes: NetworkNode[]): Borehole[] {
 }
 
 /**
+ * Registered volumes (engine ≥ 1.16.0, issue #72) in 25 % of seeds, with the
+ * allocation mode drawn from none, cap and fullAllocation: on half the farms
+ * and users (now and then one on a gauge, on a node that doesn't exist, or
+ * unmatched, which the run leaves out), surface or groundwater, volumes from
+ * nothing to more than any demand, open or with validity dates around the
+ * run (one that ends before another starts, some outside it).
+ */
+function randomAllocations(g: Rng, nodes: NetworkNode[], settings: Partial<ProjectSettings>, start: number, days: number): AllocationEntry[] {
+	if (!g.bool(0.25)) return [];
+	settings.allocationMode = g.pick(['none', 'cap', 'cap', 'fullAllocation', 'fullAllocation'] as const);
+	if (g.bool(0.3)) settings.allocationTolerance = g.frac(0.1, 0.1) * 0.99;
+	const date = () => (g.bool(0.5) ? null : fromEpochDay(start + g.int(-400, days + 400)));
+	const out: AllocationEntry[] = [];
+	for (const n of nodes) {
+		if ((n.kind === 'gauge' && !g.bool(0.05)) || !g.bool(0.5)) continue;
+		const count = g.int(1, 3);
+		for (let k = 0; k < count; k++) {
+			let validFrom = date();
+			let validTo = date();
+			if (validFrom && validTo && validFrom > validTo) [validFrom, validTo] = [validTo, validFrom];
+			out.push({
+				id: `al-${n.id}-${k}`,
+				nodeId: g.bool(0.05) ? null : g.bool(0.03) ? 'no-such-node' : n.id,
+				waterSource: g.pick(['surface', 'surface', 'groundwater'] as const),
+				volumeM3PerYear: g.pick([0, g.logFloat(1, 1e4), g.logFloat(1e3, 1e7), 1e10]),
+				validFrom,
+				validTo
+			});
+		}
+	}
+	return out;
+}
+
+/**
  * Demand objects (engine ≥ 1.7.0, docs/model.md §2.7f) in 25 % of seeds: up
  * to three on half the farms (now and then one on a gauge or user, or one
  * switched off, which the engine skips), monthly or per unit, from a trickle
@@ -699,6 +753,7 @@ export function scrambleOrder(input: ModelInput, seed: number): ModelInput {
 	if (Array.isArray(x.settings.ewrRules)) rng.shuffle(x.settings.ewrRules);
 	if (m.landCover) rng.shuffle(m.landCover);
 	if (m.boreholes) rng.shuffle(m.boreholes);
+	if (m.allocations) rng.shuffle(m.allocations);
 	if (m.demandObjects) rng.shuffle(m.demandObjects);
 	return x;
 }
@@ -718,6 +773,11 @@ export function* shrinkCandidates(input: ModelInput): Generator<ModelInput> {
 	for (let k = 0; k < (m.landCover?.length ?? 0); k++) {
 		const x = cloneInput(input);
 		x.model.landCover!.splice(k, 1);
+		yield x;
+	}
+	for (let k = 0; k < (m.allocations?.length ?? 0); k++) {
+		const x = cloneInput(input);
+		x.model.allocations!.splice(k, 1);
 		yield x;
 	}
 	for (let k = 0; k < (m.boreholes?.length ?? 0); k++) {

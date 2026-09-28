@@ -30,6 +30,14 @@ export interface AllocationEntry {
 	validFrom?: string | null;
 	/** Last day it applies (ISO date, inclusive); null/absent = open. */
 	validTo?: string | null;
+	/**
+	 * Licence conditions (engine ≥ 1.16.0, issue #72): the calendar months
+	 * (1–12) the use may happen in, and the most it may take at once (m³/s).
+	 * Recorded and shown; neither the comparison nor allocationMode `cap`
+	 * enforces them yet (docs/allocations.md). null/absent = none stated.
+	 */
+	months?: readonly number[] | null;
+	maxRateM3s?: number | null;
 }
 
 /** A node's modelled use from a run. */
@@ -38,9 +46,9 @@ export interface AllocationUseNode {
 	name: string;
 	kind: 'farm' | 'user';
 	/** Daily water supplied (m³/day), groundwater included: the run's `supplied` series. */
-	supplied: readonly (number | null)[];
+	supplied: ArrayLike<number | null>;
 	/** Daily groundwater pumped (m³/day, part of supplied): the run's `groundwater_used` series; absent without boreholes. */
-	groundwater?: readonly (number | null)[] | null;
+	groundwater?: ArrayLike<number | null> | null;
 	/**
 	 * Daily groundwater pumped into the farm dam (m³/day; WP-3.9, engine ≥
 	 * 0.36.0): the run's `groundwater_to_dam` series; absent without dam-target
@@ -50,13 +58,13 @@ export interface AllocationUseNode {
 	 * not a second (surface) take: the surface side nets it out, at most the
 	 * water year's dam draw (docs/model.md §2.12).
 	 */
-	groundwaterToDam?: readonly (number | null)[] | null;
+	groundwaterToDam?: ArrayLike<number | null> | null;
 	/**
 	 * Daily water pumped from the river below the dam (m³/day, part of supplied;
 	 * WP-3.8): the run's `river_abstraction` series; absent without a river
 	 * pump. Only used to tell the dam draw (supplied − groundwater − river) apart.
 	 */
-	riverAbstraction?: readonly (number | null)[] | null;
+	riverAbstraction?: ArrayLike<number | null> | null;
 	/** The dam capacity the run modelled (m³), for the storage comparison. */
 	damCapacityM3?: number | null;
 }

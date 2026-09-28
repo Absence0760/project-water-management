@@ -21,7 +21,7 @@ import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
-import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex } from './calendar';
+import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
 import { computeCurtailment, otherUserCurtailment, type ReportWindow } from './network/curtailment';
@@ -39,6 +39,8 @@ import { lowFlowThreshold, resolveLandCover } from './network/landcover';
 import { flowShares, overAllocationError } from './network/shares';
 import { shortfall, simulateNetwork, type FarmWorkings, type NetworkPlan, type NodeResult, type PlanTransfer } from './network/simulate';
 import { verifyRun } from './verify/verify';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
+import { ALLOCATION_SERIES, matchAllocations, planAllocations, resolveAllocationMode, scaleDemandToAllocation, type AllocationPlan } from './allocations/mode';
 import { ewrCompliance } from './network/ewr';
 import { ewrAgreement } from './network/ewrAgreement';
 import { calibrationFitStatus, exclusionRanges } from './calibrate/provenance';
@@ -72,6 +74,9 @@ import {
 	type ProjectSettings,
 	type RunSeries,
 	type SeriesKind,
+	type RunAllocationNode,
+	type RunAllocations,
+	type RunAllocationSource,
 	type UserSummary
 } from './project';
 import { ENGINE_VERSION } from './version';
@@ -289,7 +294,7 @@ function runNetwork(
 	// --- network ----------------------------------------------------------------
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
-		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3) } : {})
+		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {})
 	});
 	const { plan, topo } = built;
 	const nodes = input.model.nodes;
@@ -303,6 +308,7 @@ function runNetwork(
 			if (r.depletionDeficitM3) p.initialDepletionDeficitM3 = r.depletionDeficitM3;
 			p.initialOnRiver = r.onRiver;
 			if (r.boreholeUsedM3) p.initialBoreholeUsedM3 = r.boreholeUsedM3;
+			if (r.allocationUsedM3 && p.allocationCap) p.initialAllocationUsedM3 = r.allocationUsedM3;
 		});
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
@@ -445,7 +451,7 @@ function runNetwork(
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
-	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut'>, string, string][] = [
+	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom'>, string, string][] = [
 		['cropRequirement', 'crop_requirement', 'Crop water requirement (net irrigation need)'],
 		['demand', 'demand', 'Irrigation demand (abstraction: crop requirement ÷ efficiency)'],
 		['supplied', 'supplied', 'Irrigation supplied'],
@@ -507,6 +513,12 @@ function runNetwork(
 			push(node.id, 'depletion_deficit', 'Stream depletion owed to the river (it had no flow left), taken off the first flow back', 'm³', r.depletionDeficit);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
+		// Registered volumes (engine ≥ 1.16.0): the cap's room at the start of each day, per capped source,
+		// and the full-allocation demand factor, so the self-checks redo each day from the stored columns.
+		if (r.allocationRoom?.surface) push(node.id, ALLOCATION_SERIES.surfaceRoom.key, ALLOCATION_SERIES.surfaceRoom.label, 'm³', r.allocationRoom.surface);
+		if (r.allocationRoom?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterRoom.key, ALLOCATION_SERIES.groundwaterRoom.label, 'm³', r.allocationRoom.groundwater);
+		const scaledBy = built.allocation.scaled.get(i);
+		if (scaledBy) push(node.id, ALLOCATION_SERIES.demandFactor.key, ALLOCATION_SERIES.demandFactor.label, 'factor', scaledBy.factor);
 		// The river pump (WP-3.8): only on a farm whose supply rule can pump from the river.
 		if (r.riverAbstraction) push(node.id, 'river_abstraction', 'Pumped from the river below the dam (part of supplied)', 'm³/day', r.riverAbstraction);
 		// River off-takes (engine ≥ 1.14.0): taken from the flow leaving a source unit, delivered to a destination.
@@ -598,6 +610,8 @@ function runNetwork(
 	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
 	// Groundwater per node and water year (WP-3.9), for the caps, the GA context and the licensing comparisons.
 	const gwAnnual = groundwaterAnnualUse(nodes, plan, sim, start);
+	// Registered volumes against the run's use (engine ≥ 1.16.0).
+	const allocations = runAllocations(input.model.allocations, built.allocation, settings, nodes, plan, sim, startDate);
 
 	// Other water users (WP-1.33): whole-run means, like FarmSummary.
 	const users: UserSummary[] = [];
@@ -831,7 +845,9 @@ function runNetwork(
 				depletionStoreM3: net.depletionStoreM3[i]!,
 				...(net.depletionDeficitM3[i]! > 0 ? { depletionDeficitM3: net.depletionDeficitM3[i]! } : {}),
 				onRiver: net.onRiver[i] === 1,
-				boreholeUsedM3: net.boreholeUsedM3[i] ?? null
+				boreholeUsedM3: net.boreholeUsedM3[i] ?? null,
+				...(net.allocationUsedM3[i] ? { allocationUsedM3: net.allocationUsedM3[i]! } : {}),
+				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
 			})),
 			pinned: {
 				lowFlowThresholdM3Day: hasCover ? lowFlowThreshold(natural.subarray(0, days)) : null,
@@ -854,6 +870,7 @@ function runNetwork(
 			...(users.length ? { users } : {}),
 			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, resume?.pinned.lowFlowThresholdM3Day ?? undefined) } : {}),
 			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
+			...(allocations ? { allocations } : {}),
 			catchment: {
 				meanNaturalFlowM3Day: mean(natural),
 				meanSimulatedOutflowM3Day: mean(simOutflow),
@@ -1053,8 +1070,8 @@ export function buildNetworkPlan(
 	 * soil-water store (m³) at the start of run day `captureAt` as
 	 * soilStoreAtM3, or start each farm's store from `soilStoreM3` (node order).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[] } = {}
-): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; soilStoreAtM3?: Float64Array } {
+	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[] } = {}
+): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
 	// Demand factors apply from this run day on (engine ≥ 0.44.0, the seasonal outlook); 0 = every day.
@@ -1144,7 +1161,14 @@ export function buildNetworkPlan(
 		);
 	}
 
-	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom);
+	// Registered volumes (engine ≥ 1.16.0, ./allocations/mode.ts): matched here, a water user's demand
+	// scaled to its volume before its claim is passed down, and the rest of the mode put into the plan below.
+	const allocationMode = resolveAllocationMode(settings.allocationMode, []);
+	const allocation = matchAllocations(model.allocations, allocationMode, nodes, warnings);
+	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.16.0).
+	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
+	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings));
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
@@ -1204,8 +1228,9 @@ export function buildNetworkPlan(
 			};
 		})
 	};
-	if (warm.captureAt === undefined) return { plan, topo };
-	return { plan, topo, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
+	planAllocations(allocation, nodes, plan.nodes, start ?? 0, days, warnings);
+	if (warm.captureAt === undefined) return { plan, topo, allocation };
+	return { plan, topo, allocation, soilStoreAtM3: Float64Array.from(demand, (d) => d.storeAtM3 ?? 0) };
 }
 
 /**
@@ -1420,7 +1445,9 @@ function otherUsers(
 	days: number,
 	month: Uint8Array,
 	warnings: string[],
-	factorFrom: number
+	factorFrom: number,
+	/** allocationMode 'fullAllocation' (engine ≥ 1.16.0): scales user i's demand in place before its claim is passed down. */
+	scale?: (i: number, demand: Float64Array) => void
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
 	const claims: (Float64Array | undefined)[] = nodes.map(() => undefined);
@@ -1441,6 +1468,7 @@ function otherUsers(
 		// A demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales it month by month, from settings.demandFactorFrom (0.44.0).
 		const factor = demandFactorOf(n, warnings);
 		if (factor) for (let t = factorFrom; t < days; t++) demand[t]! *= factor[waterYearIndex(month[t]!)]!;
+		scale?.(i, demand);
 		const r = n.userReturnPct ?? 0;
 		const returnPct = Number.isFinite(r) ? Math.min(Math.max(r, 0), 1) : 0;
 		if (returnPct !== r) warnings.push(`user "${n.name}": return share ${String(r)} is not in [0, 1]; using ${returnPct}`);
@@ -1472,6 +1500,106 @@ function otherUsers(
 		byNode.set(i, { demand, returnPct, senior, claimed });
 	}
 	return { byNode, claims };
+}
+
+/**
+ * A full allocation's factor for the water year in progress on run day `at`
+ * (a snapshot's, engine ≥ 1.16.0): the day's, or on the day after the run the
+ * last day's when that is the same water year; null without one.
+ */
+function allocationFactorAt(ap: AllocationPlan, i: number, at: number, days: number, start: number): { allocationFactor: number } | null {
+	const f = ap.scaled.get(i)?.factor;
+	if (!f || days === 0) return null;
+	if (at < days) return { allocationFactor: f[at]! };
+	return waterYearOf(start + days - 1) === waterYearOf(start + days) ? { allocationFactor: f[days - 1]! } : null;
+}
+
+/**
+ * RunSummary.allocations (engine ≥ 1.16.0, issue #72): the mode, and per farm
+ * or water user with an allocation the whole water years compared per water
+ * source (compareAllocations on the run's own series, with
+ * settings.allocationTolerance), the years a cap bound, and a full
+ * allocation's scaling. null when the input carries no allocations.
+ */
+function runAllocations(
+	raw: ModelInput['model']['allocations'],
+	ap: AllocationPlan,
+	settings: ProjectSettings,
+	nodes: readonly NetworkNode[],
+	plan: NetworkPlan,
+	sim: ReturnType<typeof simulateNetwork>,
+	startDate: string
+): RunAllocations | null {
+	if (!raw?.length) return null;
+	const units = nodes.flatMap((n, i) => (n.kind === 'farm' || n.kind === 'user' ? [i] : []));
+	const tolerance = settings.allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
+	const cmp = compareAllocations({
+		startDate,
+		tolerance,
+		allocations: ap.list,
+		nodes: units.map((i) => {
+			const r = sim.nodes[i]!;
+			const b = plan.nodes[i]!.borehole;
+			return {
+				nodeId: nodes[i]!.id,
+				name: nodes[i]!.name,
+				kind: nodes[i]!.kind as 'farm' | 'user',
+				supplied: r.supplied,
+				groundwater: b ? (r.groundwater) : null,
+				groundwaterToDam: b?.units.some((u) => u.toDam) ? (r.groundwaterToDam) : null,
+				riverAbstraction: (r.riverAbstraction ?? null)
+			};
+		})
+	});
+	const byId = new Map(cmp.nodes.map((c) => [c.nodeId, c]));
+	const index = new Map(nodes.map((n, i) => [n.id, i]));
+	const out: RunAllocationNode[] = [];
+	for (const i of [...ap.byNode.keys()].sort((a, b) => cmpStr(nodes[a]!.id, nodes[b]!.id))) {
+		const c = byId.get(nodes[i]!.id)!;
+		const sources: RunAllocationSource[] = [];
+		for (const side of [c.surface, c.groundwater]) {
+			if (!side.allocationIds.length) continue;
+			const src: RunAllocationSource = {
+				waterSource: side.waterSource,
+				wholeYears: side.wholeYears,
+				yearsOver: side.yearsOver,
+				meanModelledM3PerYear: side.meanModelledM3PerYear,
+				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear
+			};
+			const budget = plan.nodes[i]!.allocationCap?.[side.waterSource];
+			if (ap.mode === 'cap' && budget) src.capReached = capReached(budget, side.waterSource, sim.nodes[i]!, startDate);
+			sources.push(src);
+		}
+		const sc = ap.scaled.get(i);
+		out.push({ nodeId: nodes[i]!.id, name: nodes[i]!.name, sources, ...(sc ? { scaled: sc.years } : {}) });
+	}
+	const used = ap.list.filter((a) => a.nodeId != null && ap.byNode.has(index.get(a.nodeId) ?? -1)).length;
+	return { mode: ap.mode, tolerance, used, notMatched: ap.list.length - used, nodes: out };
+}
+
+/** The water years a capped source's use reached its budget (within float noise). */
+function capReached(budget: Float64Array, source: 'surface' | 'groundwater', r: NodeResult, startDate: string): { waterYear: number; budgetM3: number; usedM3: number }[] {
+	const out: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
+	const start = toEpochDay(startDate);
+	let wy = NaN;
+	let used = 0;
+	let lastT = 0;
+	const close = () => {
+		const b = budget[lastT]!;
+		if (wy === wy && b >= 0 && used >= b * (1 - 1e-9)) out.push({ waterYear: wy, budgetM3: b, usedM3: used });
+	};
+	for (let t = 0; t < budget.length; t++) {
+		const y = waterYearOf(start + t);
+		if (y !== wy) {
+			close();
+			wy = y;
+			used = 0;
+		}
+		used += source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
+		lastT = t;
+	}
+	close();
+	return out;
 }
 
 /**

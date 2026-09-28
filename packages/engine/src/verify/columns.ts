@@ -140,6 +140,25 @@ export const FARM_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, R + S + T + returned seepage + release): taken from the flow leaving the farm, so U = R + S + T + returned seepage + release − Dep', optional: true },
 	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep: depletion owed to the river while it had no flow left, carried over and taken off the first flow back (engine ≥ 1.10.0)', optional: true },
 	{
+		key: 'allocation_room_surface',
+		letter: null,
+		formula:
+			'allocation cap (engine ≥ 1.16.0): the water year’s registered surface volume − its surface use so far that year (G − GW each day), at the start of the day, never < 0; off-take water used, the river pump and the dam together give at most this',
+		optional: true
+	},
+	{
+		key: 'allocation_room_groundwater',
+		letter: null,
+		formula: 'allocation cap (engine ≥ 1.16.0): the water year’s registered groundwater volume − GW − GWd so far that year, at the start of the day; the boreholes together pump at most this',
+		optional: true
+	},
+	{
+		key: 'allocation_demand_factor',
+		letter: null,
+		formula: 'full allocation (engine ≥ 1.16.0): the registered volume over the run’s days of the water year ÷ D over them before scaling; F and the demand objects are × this',
+		optional: true
+	},
+	{
 		key: 'senior_requirement',
 		letter: 'Zs',
 		formula: "Σ Zs of the elements directly upstream + this farm's share of the senior users' demand below it (demand × share ÷ Σ shares upstream of the user); only with senior users (WP-1.33)",
@@ -168,7 +187,10 @@ export const USER_COLUMNS: readonly FarmColumn[] = [
 	{ key: 'groundwater_used', letter: 'GW', formula: 'boreholes: supplemental MIN(capacity, demand − river take), primary MIN(capacity, demand) first; part of G (WP-1.34)', optional: true },
 	{ key: 'depletion_store', letter: 'Sd', formula: 'Sd[t−1] + Σ d × pumped − due', optional: true },
 	{ key: 'baseflow_depletion', letter: 'Dep', formula: 'MIN(Dd[t−1] + due, H − river take + T); U = H − river take + T − Dep', optional: true },
-	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.10.0)', optional: true }
+	{ key: 'depletion_deficit', letter: 'Dd', formula: 'Dd[t−1] + due − Dep (engine ≥ 1.10.0)', optional: true },
+	{ key: 'allocation_room_surface', letter: null, formula: 'allocation cap (engine ≥ 1.16.0): the water year’s registered surface volume − its river take so far that year; the river gives at most this', optional: true },
+	{ key: 'allocation_room_groundwater', letter: null, formula: 'allocation cap (engine ≥ 1.16.0): the water year’s registered groundwater volume − GW so far that year', optional: true },
+	{ key: 'allocation_demand_factor', letter: null, formula: 'full allocation (engine ≥ 1.16.0): demand is × this, the registered volume over the run’s days of the water year ÷ demand over them', optional: true }
 ];
 
 /** Gauges record only these (docs/model.md §2.7, GaugeTemplate). */

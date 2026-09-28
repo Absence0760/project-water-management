@@ -2,6 +2,7 @@
 // of overrides a scenario applies to a base run's input, the per-field value
 // checks, and a zod-free runtime validator the backend can call on a request
 // body (or mirror in zod). Pure: no I/O.
+import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
 	ACCUMULATION_MODES,
@@ -301,6 +302,8 @@ export interface SettingsPathValues {
 	ewrChargeSource: EwrChargeSource;
 	/** What low flows are judged on (engine ≥ 1.3.0, issue #64): the month's total flow or its base flow. */
 	lowFlowMeasure: LowFlowMeasure;
+	/** What the registered volumes do to the run (engine ≥ 1.16.0, issue #72): compare only, cap, or a full allocation. */
+	allocationMode: AllocationMode;
 }
 export type SettingsPath = keyof SettingsPathValues;
 
@@ -363,7 +366,8 @@ const SETTINGS_CHECKS: Record<SettingsPath, Check> = {
 	calibrationEnd: nullable(isoDate),
 	calibrationFlowKind: nullable(oneOf(CALIBRATION_FLOW_KINDS)),
 	ewrChargeSource: oneOf(EWR_CHARGE_SOURCES),
-	lowFlowMeasure: oneOf(LOW_FLOW_MEASURES)
+	lowFlowMeasure: oneOf(LOW_FLOW_MEASURES),
+	allocationMode: oneOf(ALLOCATION_MODES)
 };
 
 export const SETTINGS_PATHS = Object.keys(SETTINGS_CHECKS) as SettingsPath[];

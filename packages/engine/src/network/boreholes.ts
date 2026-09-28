@@ -157,6 +157,11 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  * of the surface in step 3, before the dam under river first and trigger
  * (rules 1, 2), after it on a run-of-river farm (rule 3); a supplemental
  * dam-target unit adds only what the dam lacks for the demand the river leaves.
+ * `sRoom` and `gRoom` (engine ≥ 1.16.0, allocationMode 'cap'): the most the
+ * surface (dam and river) and the pumping units together may still give
+ * today under the node's registered volumes; Infinity = no cap. A capped
+ * surface leaves the rest of the demand to the supplemental and emergency
+ * units, within their own room.
  * Returns [from the dam Gs, groundwater to the crop, into the dam, Σ d × pumped, from the river].
  */
 export function groundwaterDay(
@@ -170,26 +175,30 @@ export function groundwaterDay(
 	dead: number,
 	cap: number,
 	river = 0,
-	rule: 1 | 2 | 3 = 1
+	rule: 1 | 2 | 3 = 1,
+	sRoom = Infinity,
+	gRoom = Infinity
 ): [number, number, number, number, number] {
 	const { units } = b;
 	let dep = 0;
+	let gLeft = gRoom;
 	const take = (k: number, v: number) => {
 		pumped[k]![t] = v;
 		used[k]! += v;
 		dep += units[k]!.depletionFrac * v;
+		gLeft -= v;
 	};
 	let g = 0;
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;
 		if (u.toDam || u.mode !== 1) continue;
-		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - g));
+		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - g, gLeft));
 		take(k, v);
 		g += v;
 	}
 	let gd = 0;
-	// The demand a dam-target unit pumps for: what the primary units and the river pump (river first) leave.
-	const rem = river > 0 && rule !== 3 ? D - g - Math.min(river, D - g) : D - g;
+	// The demand a dam-target unit pumps for: what the primary units and the river pump (river first) leave, within the surface cap.
+	const rem = river > 0 && rule !== 3 ? Math.min(D - g, sRoom) - Math.min(river, D - g, sRoom) : Math.min(D - g, sRoom);
 	// Primary and emergency dam-target units top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
 	const drawn = damDrawnFor(rem, D);
 	for (let k = 0; k < units.length; k++) {
@@ -197,19 +206,19 @@ export function groundwaterDay(
 		if (!u.toDam) continue;
 		const head = cap - (avail + gd);
 		const want = u.mode === 1 ? (drawn ? head : 0) : u.mode === 2 ? (drawn && qPrev < u.triggerM3 ? head : 0) : rem - (avail + gd - dead);
-		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), want, head));
+		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), want, head, gLeft));
 		take(k, v);
 		gd += v;
 	}
 	let Gs: number;
 	let Gr = 0;
-	if (river > 0) [Gs, Gr] = surfaceSplit(rule, D - g, Math.max(avail + gd - dead, 0), river);
-	else Gs = Math.min(Math.max(avail + gd - dead, 0), D - g);
+	if (river > 0) [Gs, Gr] = surfaceSplit(rule, Math.min(D - g, sRoom), Math.max(avail + gd - dead, 0), river);
+	else Gs = Math.min(Math.max(avail + gd - dead, 0), D - g, sRoom);
 	for (const pass of [0, 2] as const) {
 		for (let k = 0; k < units.length; k++) {
 			const u = units[k]!;
 			if (u.toDam || u.mode !== pass || (pass === 2 && !(qPrev < u.triggerM3))) continue;
-			const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - Gs - g - Gr));
+			const v = Math.max(0, Math.min(unitRoom(u, used[k]!), D - Gs - g - Gr, gLeft));
 			take(k, v);
 			g += v;
 		}
