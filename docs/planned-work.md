@@ -103,7 +103,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 | ✅ **Localisation** | Afrikaans UI if farmers become users (ask the client). — **Done early** (WP-2.5, #49, #58): English and Afrikaans for everything a farmer touches, from one language table that takes more languages ([ui.md § Language](./ui.md#language)). The modeller workspace stays English. | M |
 | ⬜ **Excel round-trip** | Export a project back to a b023-compatible workbook for users who still need Excel. | L |
 | ⬜ **Commercial model** | If the client offers this to others: organisations as tenants, plans, billing (Stripe is already on the workstation). | L |
-| 🚧 **POPIA / data governance** | Data-processing terms, retention, export and deletion of an organisation's data, hosting region (af-south-1). — **Built:** account deletion with pseudonymised audit entries (migration 048), "Download my data" (054), and the POPIA record in security.md. Left: the privacy notice and the information officer's decisions (#48), organisation-level export and deletion (WP-4.8), the hosting region (#62). | M |
+| 🚧 **POPIA / data governance** | Data-processing terms, retention, export and deletion of an organisation's data, hosting region (af-south-1). — **Built:** account deletion with pseudonymised audit entries (migration 048), "Download my data" (054), and the POPIA record in security.md. Built too: the privacy notice and terms, with consent and re-acceptance records. Left: the information officer's decisions (#90), the legal go-live gates (#103), organisation-level export and deletion (WP-4.8), the hosting region (#62). | M |
 | ⬜ **Public landing page** | Signed-out visitors land on the sign-in form with no idea what the app is (#57). | M |
 
 ---

@@ -283,6 +283,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					description?: string;
 					/** An IANA zone name (issue #45): the date in the project's download file names. */
 					timeZone?: string;
+					/** The WUA the farm pages' contact lines name (095_wua_name); '' or null clears it. */
+					wuaName?: string | null;
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;

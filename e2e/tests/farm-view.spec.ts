@@ -219,6 +219,40 @@ test('a dropped signal keeps the saved figures on screen under the offline strip
 	await context.setOffline(false);
 });
 
+// "I understand" without a signal (issue #74): the press is kept on the
+// phone and the figures show; back online, the page sends it and the
+// account records it. Its own farmer, as the notice spec above.
+test('“I understand” pressed without a signal shows the figures and is recorded once the signal is back', async ({ page, context, signIn: signInAs }) => {
+	await page.setViewportSize(PHONE);
+	const wua = await signInAs('Offline notice WUA');
+	const project = await seedRunnableProject(wua.page.request, 'Offline notice catchment');
+	const runId = await createRun(wua.page.request, project.id, 'Baseline');
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	const farmer = await register(page.context().request, 'Offline Notice Farmer', { farmNotice: false });
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	const current = async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { farmNoticeCurrent: boolean } }).user.farmNoticeCurrent;
+
+	await page.goto(`/farm/${project.id}`);
+	const title = page.getByRole('heading', { level: 1, name: 'Before you look at your farm' });
+	await expect(title).toBeVisible();
+
+	await context.setOffline(true);
+	await page.getByRole('button', { name: 'I understand' }).click();
+	await expect(title).toHaveCount(0);
+	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toBeVisible();
+	await expect(estimateNote(page)).toBeVisible();
+
+	// Back online: the page sends the kept press, and the account has it.
+	const sent = page.waitForResponse((r) => r.url().endsWith('/auth/me/farm-notice') && r.request().method() === 'POST');
+	await context.setOffline(false);
+	expect((await sent).status()).toBe(200);
+	expect(await current()).toBe(true);
+	await page.reload();
+	await expect(page.getByRole('region', { name: 'Water you received this season' })).toBeVisible();
+	await expect(title).toHaveCount(0);
+});
+
 test('WUA staff preview a farm as its farmer sees it, under a banner', async ({ page, browser }) => {
 	const farmerContext = await browser.newContext();
 	const farmer = await farmerContext.newPage();
@@ -259,7 +293,14 @@ test('a farm whose catchment has nothing published says so', async ({ page, owne
 	await farmer.page.goto('/');
 	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${project.id}`));
 	await expect(farmer.page.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();
+	await expect(farmer.page.getByText('Questions? Contact your WUA.', { exact: true })).toBeVisible();
 	await expectNoSidewaysScroll(farmer.page);
+
+	// Once the WUA's name is set (095_wua_name), the contact line names it.
+	const named = await page.context().request.patch(`${API_URL}/projects/${project.id}`, { data: { wuaName: 'Early Valley WUA' } });
+	expect(named.status(), await named.text()).toBe(200);
+	await farmer.page.reload();
+	await expect(farmer.page.getByText('Questions? Contact Early Valley WUA.', { exact: true })).toBeVisible();
 });
 
 // The farm pages sit outside the app shell (FarmShell, ui.md § Farmer view).
