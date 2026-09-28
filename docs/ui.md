@@ -4984,7 +4984,10 @@ digest). The modeller workspace stays English.
   two languages it is "English | Afrikaans" (each name in its own language,
   the button marked with that `lang`, `aria-pressed` on the current one;
   "EN | AF" in the phone headers, the full name as the accessible name, and
-  that compact pair never wraps, so a 320 px header stays one row);
+  that compact pair never wraps, so a 320 px header stays one row; below
+  360 px the farm header shows its mark, or a back link's chevron, without
+  the words "My hydrological unit", which stay for screen readers, since
+  beside EN | AF and Menu they took three lines, `FarmShell.svelte`);
   from three it becomes a `<select>` named "Language", each `<option>` in
   its own language with its own `lang` (`LanguageSwitch.test.ts`,
   `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm

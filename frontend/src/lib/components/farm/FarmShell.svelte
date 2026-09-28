@@ -113,12 +113,12 @@
 		{#if accountPage && !back}
 			<a class="back" href="{base}/farm">
 				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
-				{t('Your hydrological units')}
+				<span class="back-label">{t('Your hydrological units')}</span>
 			</a>
 		{:else if back}
 			<a class="back" href={back.href}>
 				<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19" /></svg>
-				{back.label}
+				<span class="back-label">{back.label}</span>
 			</a>
 		{:else}
 			<span class="brand"><BrandMark size={26} /><span class="title">{title ?? t('My hydrological unit')}</span></span>
@@ -226,6 +226,26 @@
 		font-family: var(--font-display);
 		font-weight: 600;
 		font-size: 17px;
+	}
+	/* At 320 px "My hydrological unit" (#90 Q6) needs three lines beside EN | AF
+	   and Menu, and the header grows past --header-h (WCAG 1.4.10, issue #51).
+	   Below 360 px the mark, and a back link's chevron, stand alone and the words
+	   stay for screen readers; the page's own heading names the unit just below. */
+	@media (max-width: 359.98px) {
+		.back {
+			min-width: var(--tap);
+			justify-content: center;
+		}
+		.title,
+		.back-label {
+			position: absolute;
+			width: 1px;
+			height: 1px;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0 0 0 0);
+			white-space: nowrap;
+		}
 	}
 	.back,
 	.menu-btn,
