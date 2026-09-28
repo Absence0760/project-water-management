@@ -84,3 +84,19 @@ describe('stripHtmlComments', () => {
 		expect(stripHtmlComments(hostile)).toBe(hostile);
 	});
 });
+
+describe('dwsTableText on hostile pages', () => {
+	it('reads the first <pre> whatever its case and attributes, and never takes <prefix> for one', () => {
+		expect(dwsTableText('<html><PRE class="t">DATE X QUAL</PRE><pre>second</pre></html>')).toBe('DATE X QUAL');
+		expect(dwsTableText('<html><prefix>no</prefix><pre>\nDATE X</pre></html>')).toBe('\nDATE X');
+		expect(dwsTableText('<html><pre>never closed</html>')).toBeNull();
+		expect(dwsTableText('\n\n  DATE X QUAL\n20210101 1 1')).toBe('\n\n  DATE X QUAL\n20210101 1 1');
+	});
+	// The regexes these replaced retried from every open "<pre" and every blank line (CodeQL
+	// js/polynomial-redos). The timeout is a hang guard, not a budget: the engine's default is 120 s.
+	it('returns at once on runs of open <pre tags and of blank lines', { timeout: 5_000 }, () => {
+		expect(dwsTableText('<pre'.repeat(200_000))).toBeNull();
+		expect(dwsTableText('<pre>a'.repeat(200_000))).toBeNull();
+		expect(dwsTableText(`${'\n'.repeat(200_000)}x`)).toBeNull();
+	});
+});
