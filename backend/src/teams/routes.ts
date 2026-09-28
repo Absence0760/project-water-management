@@ -4,7 +4,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError, mustChange } from '../http/errors.js';
-import { dropInvite, inviteByEmail } from '../invites/invites.js';
+import { countInvites, dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
@@ -142,6 +142,8 @@ export const teamRoutes = new Hono<AuthEnv>()
 		const result = await withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
+			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
+			await countInvites(c, db, 'team', id, 1);
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
 				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
 				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',

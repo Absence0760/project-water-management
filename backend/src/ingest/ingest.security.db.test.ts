@@ -42,7 +42,7 @@ const KEY_POLICIES = new Map<string, string>([
 // and holding nothing of any project or person.
 const KEY_VISIBLE = new Set(['time_series', 'series_key_days', 'language']);
 
-const rain = (startDate: string, values: number[], name: string) => ({ kind: 'rain_catchment_mm', name, unit: 'mm', startDate, values });
+const rain = (startDate: string, values: (number | null)[], name: string) => ({ kind: 'rain_catchment_mm', name, unit: 'mm', startDate, values });
 const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest();
 
 let owner: User;
@@ -108,6 +108,8 @@ beforeAll(async () => {
 	// The other project has a series too, which the key must never see.
 	expect((await owner.call('POST', `/projects/${otherProjectId}/series/merge`, rain('2020-01-01', [1], 'Allowed gauge'))).status).toBe(200);
 
+	// A person adds the key's series first: a key can't add a second rain series (series/merge.ts assertKeyMayCreate).
+	expect((await owner.call('PUT', `/projects/${projectId}/series`, rain('2020-01-01', [null], 'Allowed gauge'))).status).toBe(200);
 	key = await newKey(projectId, { allowedSeries: [{ kind: 'rain_catchment_mm', name: 'Allowed gauge' }] });
 	expect((await ingest('POST', '/series/merge', key.secret, rain('2020-01-01', [1, 2, 3], 'Allowed gauge'))).status).toBe(200);
 }, 60_000);

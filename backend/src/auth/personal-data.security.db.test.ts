@@ -46,7 +46,9 @@ const TYPED_NAME = `Typed Signer ${tag}`;
 const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Record<string, string>> = {
 	id: {
 		// 048: events about a person keep the random id, which no longer resolves; the name goes.
-		'audit_event.subject': 'pseudonymised: the event keeps a random id that resolves to no one, never the name'
+		'audit_event.subject': 'pseudonymised: the event keeps a random id that resolves to no one, never the name',
+		// 101: the daily cap on adding by email counts by the adder's id, not linked to the account.
+		'invite_throttle.bucket': 'the daily cap on adding people by email, keyed by the adder’s id; gone when its 24-hour window ends'
 	},
 	email: {
 		// Keyed by the typed address, not the account: a day without attempts forgets it.
@@ -159,6 +161,9 @@ beforeAll(async () => {
 	// A PDF the subject asked for, and one the owner mailed to them.
 	await call(subject, 'POST', `/projects/${projectId}/reports`, { email: true });
 	await call(owner, 'POST', `/projects/${projectId}/reports`, { email: [subject.id] });
+	// A second session, signed out (revoked_session, 102).
+	const second = (await anon('POST', '/auth/login', { email: subject.email, password: 'correct horse' })).headers.get('set-cookie')!.split(';')[0]!;
+	expect((await anon('POST', '/auth/logout', undefined, second)).status).toBe(204);
 	// A mistyped password (login_throttle, keyed by the address).
 	expect((await anon('POST', '/auth/login', { email: subject.email, password: 'wrong horse' })).status).toBe(401);
 	// An alert mail sent to them, and a suppressed address (057): as the schema owner, the pipeline isn't under test.

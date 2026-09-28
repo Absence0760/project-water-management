@@ -12,11 +12,14 @@ import { MAX_SERIES_ABS_VALUE, SERIES_PER_PROJECT_MAX } from './limits.js';
 
 const EMPTY_MODEL = { nodes: [], crops: [], cropAreas: [], transfers: [] };
 
-/** Fill the project with `n` series straight in the table (thousands of API calls otherwise). */
+/**
+ * Fill the project with `n` series straight in the table (thousands of API calls otherwise). CHIRPS, so a key
+ * may still add a catchment rain series (it can't add a second of a kind, series/merge.ts assertKeyMayCreate).
+ */
 const fill = (id: string, n: number) =>
 	asOwner(
 		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values")
-		 SELECT $1, 'rain_catchment_mm', 'filler ' || g, 'mm', '2020-01-01', '{1}' FROM generate_series(1, $2::int) g`,
+		 SELECT $1, 'rain_chirps_mm', 'filler ' || g, 'mm', '2020-01-01', '{1}' FROM generate_series(1, $2::int) g`,
 		[id, n]
 	);
 const seriesIn = async (id: string) => (await asOwner('SELECT count(*)::int AS n FROM time_series WHERE project_id = $1', [id]))[0].n as number;
@@ -106,26 +109,27 @@ describe('the series cap is hard (075_series_cap.sql)', () => {
 
 	it('an API key limited to one series is refused a new one in a full project, though it sees none of the others', async () => {
 		const { u, id } = await project();
-		const key = async (name: string) => {
-			const r = await u.call('POST', `/projects/${id}/api-keys`, { name: `Logger ${name}`, allowedSeries: [{ kind: 'rain_catchment_mm', name }] });
+		// Each key its own kind the project lacks, so the only rule that can refuse the second is the cap.
+		const key = async (name: string, kind: string) => {
+			const r = await u.call('POST', `/projects/${id}/api-keys`, { name: `Logger ${name}`, allowedSeries: [{ kind, name }] });
 			expect(r.status, JSON.stringify(r.body)).toBe(201);
 			return r.body as { key: { id: string }; secret: string };
 		};
-		const push = async (secret: string, name: string) =>
+		const push = async (secret: string, name: string, kind: string) =>
 			(
 				await app.request('/ingest/v1/series/merge', {
 					method: 'POST',
 					headers: { authorization: `Bearer ${secret}`, 'content-type': 'application/json' },
-					body: JSON.stringify(rain('mm', [1], name))
+					body: JSON.stringify({ ...rain('mm', [1], name), kind })
 				})
 			).status;
 		await fill(id, SERIES_PER_PROJECT_MAX - 1);
 		// Positive control: with a slot left, a limited key creates its series.
-		expect(await push((await key('logger a')).secret, 'logger a')).toBe(200);
-		const b = await key('logger b');
+		expect(await push((await key('logger a', 'rain_catchment_mm')).secret, 'logger a', 'rain_catchment_mm')).toBe(200);
+		const b = await key('logger b', 'rain_reanalysis_mm');
 		// The key sees only its own (so far absent) series; the cap counts all of them.
 		expect((await withApiKey(b.key.id, (db) => db.query('SELECT count(*)::int AS n FROM time_series'))).rows[0].n).toBe(0);
-		expect(await push(b.secret, 'logger b')).toBe(409);
+		expect(await push(b.secret, 'logger b', 'rain_reanalysis_mm')).toBe(409);
 		expect(await seriesIn(id)).toBe(SERIES_PER_PROJECT_MAX);
 	});
 

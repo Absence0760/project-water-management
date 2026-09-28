@@ -18,7 +18,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked |
-| POST | `/auth/logout` | – | `204`, clears cookie |
+| POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
@@ -29,7 +29,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
-| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
+| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
@@ -52,8 +52,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   account exists ([security.md § Authentication](./security.md#authentication)).
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
-- **`forgot-password`** answers the same `202` whether or not the address has
-  an account, and sends at most one email per address per minute and ten
+- **`forgot-password`** answers the same `202`, after the same time (at
+  least 200 ms; the email is sent without being waited for, issue #51),
+  whether or not the address has an account, and sends at most one email per address per minute and ten
   reset or verification emails per address in 24 hours (a browser trusted for
   the address has its own ten; later requests get `202` and no email).
   Requesting again replaces the previous link.
@@ -646,7 +647,7 @@ out, and a re-import of an export records itself as a `project-file` import.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
@@ -675,8 +676,8 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 097), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
-| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 097), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project; `429` past the daily cap on adding by email | owner |
+| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }`; `429` when its distinct valid addresses (a dry run's too) would pass the daily cap on adding by email | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
@@ -728,7 +729,19 @@ pre-registering a colleague's address doesn't get you added in their place.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
 Adding an address whose account *is* verified makes it a member directly and
-clears its invite.
+clears its invite (so the answer, and the members list, tell the adder that
+the address has a verified account: [followups.md § Roles and what each
+member sees](./followups.md#roles-and-what-each-member-sees), issue #51).
+
+**The daily cap on adding by email** (issue #51, `101_invite_throttle.sql`,
+`invites/invites.ts` `INVITE_CAP`): a person adds at most **300** addresses a
+day, and a project or team is added to at most 300 times a day, across
+`POST /projects/:id/members`, `/farmers`, `/farmers/bulk` (each distinct
+valid address counts, a dry run's too) and `POST /teams/:id/members`. Every
+address counts before it is looked up, whether it is then added or invited;
+past the cap the answer is `429 { error }` with `Retry-After` (seconds),
+the same for any address, and nothing is counted, added, invited or mailed.
+A window is 24 hours from its first add.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -757,7 +770,7 @@ move or copy into it). `role` in the member and invite bodies is one of
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
@@ -1935,7 +1948,10 @@ CORS (gateways aren't browsers), JSON bodies only.
 | POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
-  `mergeInto`): the series is created if it doesn't exist, only the days sent
+  `mergeInto`): the series is created if it doesn't exist (only when the
+  project has no outlet series of that kind: otherwise `409`, and a person
+  adds the series first, since a run reads the first of each kind by name
+  and a key must not be able to replace it; issue #51), only the days sent
   are touched (a `null` clears a day here, where the UI's merge keeps the
   stored value), units are converted to the kind's
   canonical unit, and the version and day-boundary guards answer `409` as
@@ -1949,10 +1965,11 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
-- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom }`
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom, newSeries }`
   when days this push carried look wrong by the engine's data-quality rules
-  (a negative rain or flow, or a value above the outlier limit), else
-  `null`. The limit needs 100 non-zero days and comes from the first of
+  (a negative rain or flow, or a value above the outlier limit), or when the
+  push created the series (`newSeries: true`, held whatever its days: it is
+  now what runs read for its kind), else `null`. The limit needs 100 non-zero days and comes from the first of
   these that has them; `limitFrom` says which (`null`: none had, so only
   negatives were checked): `others`, the series without this push's days
   and without the days this key wrote before that nobody has written
@@ -1968,7 +1985,8 @@ CORS (gateways aren't browsers), JSON bodies only.
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in
-  `allowedSeries`, or a scope the key lacks; `429` with `Retry-After`
+  `allowedSeries`, or a scope the key lacks; `409` for a new series of a
+  kind the project already has (and the version and day-boundary guards); `429` with `Retry-After`
   (seconds) past the rate limit; `400` for a body that isn't valid; `413`
   when the series would pass 60 000 days.
 - **Rate limit.** A token bucket per key: 60 requests, refilled at 60 a

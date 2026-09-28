@@ -206,14 +206,17 @@ describe('the session cookie', () => {
 	const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 	const me = (jwt: string) => anon('GET', '/auth/me', undefined, `wm_session=${jwt}`);
 	const now = () => Math.floor(Date.now() / 1000);
-	const signed = (sub: string, opts: { alg?: string; key?: Uint8Array; iss?: string; iat?: number; exp?: number; claims?: Record<string, unknown> } = {}) =>
-		new SignJWT({ iat_ms: Date.now(), ...opts.claims })
+	const signed = (sub: string, opts: { alg?: string; key?: Uint8Array; iss?: string; iat?: number; exp?: number; jti?: string | null; claims?: Record<string, unknown> } = {}) => {
+		const jwt = new SignJWT({ iat_ms: Date.now(), ...opts.claims })
 			.setProtectedHeader({ alg: opts.alg ?? 'HS256' })
 			.setSubject(sub)
 			.setIssuer(opts.iss ?? 'water-management')
 			.setIssuedAt(opts.iat ?? now())
-			.setExpirationTime(opts.exp ?? now() + 3600)
-			.sign(opts.key ?? secret());
+			.setExpirationTime(opts.exp ?? now() + 3600);
+		// Every session has an id (its jti, 102_session_revocation); null leaves it out.
+		if (opts.jti !== null) jwt.setJti(opts.jti ?? crypto.randomUUID());
+		return jwt.sign(opts.key ?? secret());
+	};
 
 	it('refuses every forged or stale shape; the well-formed one is accepted (positive control)', async () => {
 		const u = await signUp('Jwt');
@@ -227,6 +230,8 @@ describe('the session cookie', () => {
 			'another issuer': await signed(u.id, { iss: 'someone-else' }),
 			expired: await signed(u.id, { iat: now() - 8 * 24 * 3600, exp: now() - 60 }),
 			'a subject that is not a user id': await signed('admin'),
+			'no session id (jti), so it could never be signed out': await signed(u.id, { jti: null }),
+			'a session id that is not a uuid': await signed(u.id, { jti: 'session-1' }),
 			'a tampered payload': (await signed(u.id)).replace(/\.[^.]+\./, `.${b64({ sub: other.id, iss: 'water-management', iat: now(), exp: now() + 3600 })}.`)
 		};
 		for (const [shape, jwt] of Object.entries(forged)) {
