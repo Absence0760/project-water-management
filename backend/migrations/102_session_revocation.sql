@@ -33,8 +33,14 @@ CREATE TABLE revoked_session (
 CREATE INDEX revoked_session_expires_idx ON revoked_session (expires_at);
 
 ALTER TABLE revoked_session ENABLE ROW LEVEL SECURITY;
-CREATE POLICY revoked_session_none ON revoked_session USING (false) WITH CHECK (false);
-GRANT SELECT, INSERT, UPDATE, DELETE ON revoked_session TO water_app;
+-- Deny-all, one policy per command it grants: no UPDATE policy, since a row
+-- is write-once (catalogue.db.test.ts NO_UPDATE).
+CREATE POLICY revoked_session_none_select ON revoked_session FOR SELECT USING (false);
+CREATE POLICY revoked_session_none_insert ON revoked_session FOR INSERT WITH CHECK (false);
+CREATE POLICY revoked_session_none_delete ON revoked_session FOR DELETE USING (false);
+-- No UPDATE: a row is only ever inserted or aged out, and revoked_at
+-- records a one-way event (final-columns.security.db.test.ts).
+GRANT SELECT, INSERT, DELETE ON revoked_session TO water_app;
 
 -- The session check's one statement: the account's watermark (as
 -- app_session_revoked_at, 068) and whether this session was signed out.
