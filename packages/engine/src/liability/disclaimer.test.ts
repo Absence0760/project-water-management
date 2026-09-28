@@ -32,9 +32,9 @@ describe('the cover, footer and export lines', () => {
 		expect(DISCLAIMER.paragraphs.every((p, i) => i === 4 || !p.includes('{site}'))).toBe(true);
 	});
 
-	it('names the Disclaimer section, and every signer on the cover', () => {
+	it('names the Disclaimer section, and every signer on the cover (a body code by its short name, an older free-text body as typed)', () => {
 		expect(REPORT_READ_FIRST(12)).toContain('(see the Disclaimer, section 12)');
-		expect(REPORT_SIGNED_BY([{ fullName: 'A Person', registrationBody: 'ECSA', registrationNo: '123' }, { fullName: 'B Person', registrationBody: 'SACNASP', registrationNo: '9' }])).toBe(
+		expect(REPORT_SIGNED_BY([{ fullName: 'A Person', registrationBody: 'ecsa', registrationNo: '123' }, { fullName: 'B Person', registrationBody: 'SACNASP', registrationNo: '9' }])).toBe(
 			'Signed off by A Person (ECSA 123); B Person (SACNASP 9).'
 		);
 		expect(REPORT_FOOTER('Twee', 'Run 1', 12)).toBe(

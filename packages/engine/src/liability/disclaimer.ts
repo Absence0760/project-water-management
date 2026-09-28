@@ -9,6 +9,8 @@
 // pass for the agreed one. Change the words → bump `version` (a sign-off
 // records the version it was shown).
 
+import { registrationBody } from './registration';
+
 export interface Disclaimer {
 	/** Bumped whenever a word changes; sign-offs and packs record it. */
 	version: string;
@@ -45,9 +47,13 @@ export const withSite = (text: string, site: string): string => text.replaceAll(
 export const REPORT_READ_FIRST = (section: number | string): string =>
 	`Model estimates, not measurements or predictions: they can be wrong. Not an authorisation to use water. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this report (see the Disclaimer, section ${section}).`;
 
-/** The cover's sign-off status: each signer as the report's sign-off section lists them. */
+/**
+ * The cover's sign-off status: each signer as the report's sign-off section
+ * lists them. The body is a code since signoff-3 (`sacnasp`, printed
+ * SACNASP); an older sign-off's free-text body prints as it was typed.
+ */
 export const REPORT_SIGNED_BY = (signers: readonly { fullName: string; registrationBody: string; registrationNo: string }[]): string =>
-	`Signed off by ${signers.map((s) => `${s.fullName} (${s.registrationBody} ${s.registrationNo})`).join('; ')}.`;
+	`Signed off by ${signers.map((s) => `${s.fullName} (${registrationBody(s.registrationBody)?.short ?? s.registrationBody} ${s.registrationNo})`).join('; ')}.`;
 /** The cover's sign-off status when no one has signed the run. */
 export const REPORT_NOT_SIGNED = 'Not signed off by a registered professional.';
 /** Also on an unsigned run's cover when it is nominated as evidence or is an impact report (delict review §5.4). */
