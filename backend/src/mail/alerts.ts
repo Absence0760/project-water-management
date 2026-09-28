@@ -224,6 +224,7 @@ export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts
 	const { tr, lang } = translator(to.locale);
 	const { what, body } = alertLines(facts, tr, project.name, lang, project.timeZone);
 	const mail = render(
+		'alert',
 		to.email,
 		tr.t('mail.alert.subject', { what, project: project.name }),
 		{
@@ -259,6 +260,7 @@ export function digestMail(to: Recipient, project: MailProject, items: AlertFact
 	if (more > 0) paragraphs.push(tr.tn('mail.alert.digest.more', more, { more }));
 	paragraphs.push(...liabilityLines(items.map((f) => f.kind), to.farmer, tr));
 	const mail = render(
+		'alert_digest',
 		to.email,
 		tr.t('mail.alert.digest.subject', { project: project.name, product: PRODUCT }),
 		{

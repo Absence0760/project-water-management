@@ -4,7 +4,7 @@
 // and display names are user-controlled and these emails go to addresses the
 // user merely typed in.
 import { LOCALES, mailT, type Locale, type MailTranslator } from './i18n/index.js';
-import type { Mail } from './transport.js';
+import type { Mail, MailKind } from './transport.js';
 
 // The farmer-facing emails (verify, reset, the farmer invite) take their
 // words from the catalogue in ./i18n (WP-2.5). The workspace's own emails
@@ -43,7 +43,7 @@ export type Body = {
 };
 
 /** `tr` supplies the frame's words and, through `tr.lang`, the `<html lang>`; read after the body is built, so it knows whether anything fell back to English. */
-export function render(to: string, subject: string, b: Body, tr: MailTranslator = mailT('en')): Mail {
+export function render(kind: MailKind, to: string, subject: string, b: Body, tr: MailTranslator = mailT('en')): Mail {
 	const links = b.links ?? [];
 	const fallbackLine = tr.t('mail.buttonFallback');
 	const text = [
@@ -72,13 +72,14 @@ ${b.footer.map(p).join('\n')}${links.length ? `\n<p style="margin:0 0 16px;font-
 </main>
 </body>
 </html>`;
-	return { to, subject, text, html };
+	return { kind, to, subject, text, html };
 }
 
 export function verifyEmailMail(to: string, url: string, locale?: string | null): Mail {
 	const tr = mailT(locale);
 	const v = { email: to, product: PRODUCT };
 	return render(
+		'verify',
 		to,
 		tr.t('mail.verify.subject', v),
 		{
@@ -101,6 +102,7 @@ export function accountExistsMail(to: string, url: string, locale?: string | nul
 	const tr = mailT(locale);
 	const v = { email: to, product: PRODUCT };
 	return render(
+		'account_exists',
 		to,
 		tr.t('mail.exists.subject', v),
 		{
@@ -117,6 +119,7 @@ export function resetPasswordMail(to: string, url: string, locale?: string | nul
 	const tr = mailT(locale);
 	const v = { email: to, product: PRODUCT };
 	return render(
+		'reset',
 		to,
 		tr.t('mail.reset.subject', v),
 		{
@@ -146,7 +149,7 @@ export function inviteMail(
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
 	const invited = `${inviterName} invited you to ${what} as ${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}.`;
 	const confirm = mode === 'confirm';
-	return render(to, `${inviterName} invited you to ${PRODUCT}`, {
+	return render('invite', to, `${inviterName} invited you to ${PRODUCT}`, {
 		heading: `You're invited to ${PRODUCT}`,
 		paragraphs: confirm
 			? [invited, `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`]
@@ -191,6 +194,7 @@ export function farmerInviteMail(
 	const farms = facts.farms.length ? listText(facts.farms, tr.t('mail.farmer.and')) : tr.t('mail.farmer.yourFarm');
 	const v = { inviter: inviterName, farms, catchment: facts.catchment, email: to, product: PRODUCT };
 	return render(
+		'farmer_invite',
 		to,
 		tr.t('mail.farmer.subject', v),
 		{
@@ -240,7 +244,7 @@ export type ReportMailFacts = {
  */
 export function reportReadyMail(to: string, url: string, f: ReportMailFacts): Mail {
 	const pages = `${f.pages} ${f.pages === 1 ? 'page' : 'pages'}`;
-	return render(to, `Catchment report: ${f.projectName} — ${PRODUCT}`, {
+	return render('report_ready', to, `Catchment report: ${f.projectName} — ${PRODUCT}`, {
 		heading: `The report for ${f.projectName} is ready`,
 		paragraphs: [
 			f.scheduled

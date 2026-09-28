@@ -24,6 +24,7 @@
 import { pickNotice } from '@water-management/engine';
 import { hashToken } from '../auth/tokens.js';
 import { type Db, withoutUser, withUser } from '../db/tx.js';
+import { safeError } from '../logging/safeError.js';
 import { alertMail, digestMail, type AlertFacts, type MailProject, type Recipient } from '../mail/alerts.js';
 import { sendMail, type Mail } from '../mail/transport.js';
 import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
@@ -204,15 +205,19 @@ async function prepareOne(db: Db, c: Claimed, secret: string): Promise<Prepared>
 const finish = (c: Pick<Claimed, 'event_id' | 'user_id'>, status: 'sent' | 'skipped' | 'failed' | 'retry', reason: string | null = null) =>
 	withoutUser((db) => db.query('SELECT app_alert_finish($1, $2, $3, $4)', [c.event_id, c.user_id, status, reason]));
 
-/** A transport or database error, as the delivery's reason: never the raw text (it may hold an address). */
-const failureReason = (err: unknown) => `send failed (${(err as { name?: string }).name ?? 'Error'})`;
+/**
+ * A transport or database error, as the delivery's reason: never the raw text
+ * (it may hold an address). The log lines below carry the same, through
+ * safeError: the error's name and code, never its message.
+ */
+const failureReason = (err: unknown) => `send failed (${safeError(err).error})`;
 
 async function deliver(c: Claimed, secret: string, r: SendResult): Promise<void> {
 	let p: Prepared;
 	try {
 		p = await withUser(c.user_id, (db) => prepareOne(db, c, secret));
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_prepare_failed', eventId: c.event_id, error: (err as Error).message }));
+		console.error(JSON.stringify({ event: 'alert_prepare_failed', eventId: c.event_id, ...safeError(err) }));
 		await finish(c, 'retry', failureReason(err));
 		r.failed++;
 		return;
@@ -225,7 +230,7 @@ async function deliver(c: Claimed, secret: string, r: SendResult): Promise<void>
 	try {
 		await sendMail(p.mail);
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_send_failed', eventId: c.event_id, error: (err as Error).message }));
+		console.error(JSON.stringify({ event: 'alert_send_failed', eventId: c.event_id, ...safeError(err) }));
 		await finish(c, 'retry', failureReason(err));
 		r.failed++;
 		return;
@@ -278,7 +283,7 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 			return { mail, used, skipped };
 		});
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_digest_prepare_failed', userId: first.user_id, error: (err as Error).message }));
+		console.error(JSON.stringify({ event: 'alert_digest_prepare_failed', userId: first.user_id, ...safeError(err) }));
 		for (const c of lines) await finish(c, 'retry', failureReason(err));
 		r.failed += lines.length;
 		return;
@@ -293,7 +298,7 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 	try {
 		await sendMail(ready.mail);
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_digest_send_failed', userId: first.user_id, error: (err as Error).message }));
+		console.error(JSON.stringify({ event: 'alert_digest_send_failed', userId: first.user_id, ...safeError(err) }));
 		for (const c of ready.used) await finish(c, 'retry', failureReason(err));
 		r.failed += ready.used.length;
 		return;
