@@ -131,6 +131,7 @@ pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked
 
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
+pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
