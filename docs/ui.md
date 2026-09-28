@@ -1613,11 +1613,25 @@ note's link on the Summary, `notes.ts` `noteHref`).
   from**. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). The line below gives
   its mean m³/day as the engine sizes it; **Use October's demand for every
-  month** fills a monthly row. Read-only for viewers; removing the unit asks
+  month** fills a monthly row. **On/off schedule** (engine ≥ 1.16.0, issue
+  #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
+  its month's demand" until a window is added; a **Days the new window
+  covers** picker beside **+ Add window** adds one, off (factor 0), with a
+  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
+  dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
+  a label (**Window n**), **Days** (the span; changing it resets the bounds),
+  its bounds (**From** / **To**: MM-DD each year, date pickers once, days
+  from Easter Sunday), **Factor** (0 = off, up to 10), **On** Mon–Sun
+  checkboxes (all ticked = every day), **Move window n up / down** (order
+  matters: the later window wins a day two cover) and **Remove window n**. A
+  window the run couldn't use says why under it ("Not used: …"), and the
+  save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
   objects**: per object its unit, priority, demand, supplied (m³/day and %),
-  days short and returned (or "piped out").
+  days short, days off (a column only when an object has a schedule; "–" on
+  one without) and returned (or "piped out").
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);

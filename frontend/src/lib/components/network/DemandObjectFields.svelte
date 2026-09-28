@@ -4,7 +4,8 @@
 	// supplied from the unit's own dam, river pump and boreholes with its crops.
 	// Each is a monthly m³/day or a count × litres per unit per day (grossed up
 	// for losses, × a monthly profile), with a return share, a priority against
-	// the crops and a destination. The objects are the editor's own, so edits
+	// the crops, a destination and an on/off schedule by date
+	// (DemandScheduleFields, engine ≥ 1.16.0). The objects are the editor's own, so edits
 	// land in the model directly.
 	import {
 		DEMAND_NORMS,
@@ -18,6 +19,7 @@
 		type NetworkNode
 	} from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import DemandScheduleFields from './DemandScheduleFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
@@ -162,6 +164,7 @@
 							</tr>
 						</tbody>
 					</table>
+					<DemandScheduleFields object={o} {readonly} />
 					<div class="field">
 						<label for="do-note-{o.id}">Where the number comes from</label>
 						<input id="do-note-{o.id}" maxlength="1000" placeholder="e.g. meter records, a reconciliation strategy, a per-person norm" readonly={readonly} bind:value={o.note} />

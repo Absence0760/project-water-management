@@ -266,7 +266,11 @@ describe('validateModel', () => {
 			[{ monthlyM3Day: [1, 2] }, true],
 			[{ sizing: 'perUnit', monthlyM3Day: null }, true],
 			[{ sizing: 'perUnit', monthlyM3Day: null, count: 50, litresPerUnitDay: 90 }, false],
-			[{ destination: 'external', returnPct: 0.2 }, true]
+			[{ destination: 'external', returnPct: 0.2 }, true],
+			// A schedule (engine 1.16.0): a good window, a bad date, too many windows.
+			[{ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }] }, false],
+			[{ schedule: [{ label: '', span: 'yearly', from: '02-30', to: '03-01', easterFrom: null, easterTo: null, weekdays: null, factor: 0 }] }, true],
+			[{ schedule: Array.from({ length: 25 }, () => ({ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 1 })) }, true]
 		] as const) {
 			const m = model([g, a, u], { demandObjects: [o(over)] });
 			const backend = [...modelRuleIssues(m).keys()].some((k) => k.startsWith('do'));

@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -231,6 +231,12 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 		if (!inRange(o.lossPct, 0, 0.999999) || !inRange(o.returnPct, 0, 1) || (o.monthlyFactor ?? []).some((v) => !inRange(v, 0, Infinity)))
 			issues.push({ area: 'network', message: `${label}: losses are 0–99%, the return share 0–100%, and the monthly profile can't be negative.` });
 		if (o.destination === 'external' && o.returnPct > 0) issues.push({ area: 'network', message: `${label}: water piped out of the catchment returns nothing; set its return share to 0%.` });
+		// Its schedule (engine ≥ 1.16.0): the engine's own window rule, as the API applies it.
+		if ((o.schedule?.length ?? 0) > DEMAND_SCHEDULE_MAX_WINDOWS) issues.push({ area: 'network', message: `${label}: a schedule has at most ${DEMAND_SCHEDULE_MAX_WINDOWS} windows.` });
+		(o.schedule ?? []).forEach((w, i) => {
+			const bad = scheduleWindowProblem(w);
+			if (bad) issues.push({ area: 'network', message: `${label}: schedule window ${i + 1}${w.label ? ` ("${w.label}")` : ''}: ${bad}.` });
+		});
 	}
 
 	// Transfers
