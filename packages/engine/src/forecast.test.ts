@@ -4,7 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay } from './calendar';
 import { forecastSplit, runForecastChecked, withoutForecastTail } from './forecast';
-import { defaultZeroRainSettings, type ModelInput } from './project';
+import { defaultZeroRainSettings, type ModelInput, type ModelOutput } from './project';
+import { beforeForecast, fdcPercentileTable, historyDayCount } from './views/fdc';
 import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { randomInput } from './testing/fuzz';
@@ -140,5 +141,44 @@ describe('runForecastChecked', () => {
 		expect(out.summary.warnings.some((w) => w.includes('use forecast rain'))).toBe(false);
 		// Positive control: the ordinary run of the same input does warn.
 		expect(runModelChecked(x).summary.warnings.some((w) => w.includes('use forecast rain'))).toBe(true);
+	});
+});
+
+describe('flow-duration table of a forecast run (issue #51)', () => {
+	// A wet forecast: 14 days of 40 mm after the record, so the tail moves the curve if ranked.
+	const x = withRain(record(200), { startDate: '2020-07-19', values: new Array(14).fill(40) });
+	const flowsOf = (out: ModelOutput) =>
+		Object.fromEntries(
+			(
+				[
+					['natural', 'natural_flow'],
+					['simulated', 'simulated_outflow']
+				] as const
+			).map(([r, k]) => [r, out.series.find((s) => s.nodeId === null && s.key === k)!.values])
+		);
+
+	it('ranks only the history: equal to the ordinary run’s table, the forecast days counted as left out', () => {
+		const forecastRun = runForecastChecked(x);
+		const ordinary = runModelChecked(withoutForecastTail(x));
+		expect(forecastRun.forecastFrom).toBe('2020-07-19');
+		const t = fdcPercentileTable(flowsOf(forecastRun), { startDate: forecastRun.startDate, forecastFrom: forecastRun.forecastFrom });
+		const o = fdcPercentileTable(flowsOf(ordinary), { startDate: ordinary.startDate, forecastFrom: null });
+		expect(t.wholeRun).toEqual(o.wholeRun);
+		expect(t.runDays).toBe(200);
+		expect(t.forecastDays).toBe(14);
+		expect(o.forecastDays).toBe(0);
+		// Positive control: ranked with the tail, the wet forecast does move the high flows.
+		const withTail = fdcPercentileTable(flowsOf(forecastRun));
+		expect(withTail.runDays).toBe(214);
+		expect(withTail.wholeRun[0]!.q10).not.toBe(o.wholeRun[0]!.q10);
+	});
+
+	it('beforeForecast and historyDayCount cut a series at the first forecast day', () => {
+		expect(historyDayCount('2020-01-01', '2020-07-19')).toBe(200);
+		expect(historyDayCount('2020-01-01', null)).toBeNull();
+		const v = [1, 2, 3, 4];
+		expect(beforeForecast(v, '2020-01-01', '2020-01-03')).toEqual([1, 2]);
+		expect(beforeForecast(v, '2020-01-01', undefined)).toBe(v);
+		expect(beforeForecast(v, '2020-01-01', '2020-02-01')).toBe(v);
 	});
 });

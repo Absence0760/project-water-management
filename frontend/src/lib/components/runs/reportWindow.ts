@@ -76,11 +76,15 @@ function fromDays(d0: number, a: number, b: number): ResolvedWindow {
 /**
  * Resolves a choice against one run (its first and last day) and the window
  * the run itself reported over (RunSummary.curtailment's, the project
- * setting as the run applied it). "Last N days" end on the run's last day.
+ * setting as the run applied it). "Last N days" end on the run's last day,
+ * or on a forecast run (`forecastFrom`, WP-2.12) on the last day before the
+ * forecast (issue #51): the latest days of the record, never forecast days
+ * read as "this week". "Whole record" and a custom range may still reach
+ * into the forecast; forecastDaysIn says so.
  */
 export function resolveWindow(
 	choice: WindowChoice,
-	run: { startDate: string; endDate: string },
+	run: { startDate: string; endDate: string; forecastFrom?: string | null },
 	own: { reportStart: string; reportEnd: string }
 ): WindowResolution {
 	const d0 = toEpochDay(run.startDate);
@@ -89,9 +93,12 @@ export function resolveWindow(
 	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, d1), note: null };
 	const n = LAST_DAYS[choice.preset];
 	if (n) {
-		const a = Math.max(d0, d1 - n + 1);
-		const w = fromDays(d0, a, d1);
-		return { ok: true, window: w, note: w.days < n ? `The run has only ${w.days} day${w.days === 1 ? '' : 's'}, so this covers all of it.` : null };
+		const last = run.forecastFrom ? Math.max(d0, Math.min(d1, toEpochDay(run.forecastFrom) - 1)) : d1;
+		const a = Math.max(d0, last - n + 1);
+		const w = fromDays(d0, a, last);
+		const short = w.days < n ? `The run has only ${w.days} day${w.days === 1 ? '' : 's'}${last < d1 ? ' before the forecast' : ''}, so this covers all of it.` : null;
+		const forecast = last < d1 ? `It ends on ${fromEpochDay(last)}, the last day before the forecast.` : null;
+		return { ok: true, window: w, note: [short, forecast].filter(Boolean).join(' ') || null };
 	}
 	if (choice.preset !== 'custom') return { ok: false, error: 'Unknown window.' };
 	const a = toEpochDay(choice.start);

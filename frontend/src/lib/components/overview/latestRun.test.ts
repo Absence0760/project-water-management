@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, FarmSummary, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { LOW_PCT } from './damLevels';
-import { damsHeadline, headlines, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
+import { fmtNum } from '$lib/format/number';
+import { damsHeadline, headlines, historyDays, historyEnd, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
 
 const meta = (id: string, createdAt: string, over: Partial<RunMeta> = {}): RunMeta => ({
 	id,
@@ -108,6 +109,24 @@ describe('runDays', () => {
 	it('counts both ends', () => {
 		expect(runDays({ startDate: '2021-10-01', endDate: '2022-01-28' })).toBe(120);
 		expect(runDays({ startDate: '2024-02-28', endDate: '2024-03-01' })).toBe(3);
+	});
+});
+
+describe('historyDays and historyEnd (issue #51)', () => {
+	it('count a forecast run’s days before its forecast, the days its summary covers; an ordinary run’s all', () => {
+		const forecast = { startDate: '2016-10-01', endDate: '2022-10-19', forecastFrom: '2022-10-06' };
+		expect(runDays(forecast)).toBe(2210);
+		expect(historyDays(forecast)).toBe(2196);
+		expect(historyEnd(forecast)).toBe('2022-10-05');
+		const ordinary = { startDate: '2016-10-01', endDate: '2022-10-05', forecastFrom: null };
+		expect(historyDays(ordinary)).toBe(2196);
+		expect(historyEnd(ordinary)).toBe('2022-10-05');
+	});
+
+	it('give the EWR card’s denominator: X of the history’s days, not of the run to the forecast’s end', () => {
+		const forecast = { startDate: '2016-10-01', endDate: '2022-10-19', forecastFrom: '2022-10-06' };
+		const s = { catchment: { ewrDaysNotMet: 100, ewrFractionDaysNotMet: 100 / 2196 }, farms: [] } as unknown as RunSummary;
+		expect(headlines(s, historyDays(forecast), null).find((h) => h.id === 'ewr')!.sub[0]).toBe(`100 of ${fmtNum(2196)} days at the outflow gauge`);
 	});
 });
 

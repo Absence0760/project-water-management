@@ -90,7 +90,7 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	const below = (await riverTile(page, 'below').locator('dd.value').textContent())!.replace(/\D/g, '');
 	expect(Number(below)).toBeGreaterThan(0);
 	await expect(fig).toHaveAttribute('data-shaded', /^\d+$/);
-	await expect(fig).toContainText(`Shaded: the ${grouped(Number(below))} days the outflow was below the dashed EWR line (EWR not met).`);
+	await expect(fig).toContainText(`Shaded: the ${grouped(Number(below))} days the outflow was below the pragmatic EWR line (EWR not met).`);
 });
 
 test('the flow chart keeps the Runs tab’s controls: m³/s ↔ m³/day, and Earlier / Later by the window', async ({ page, owner }) => {

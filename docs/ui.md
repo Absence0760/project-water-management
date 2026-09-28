@@ -674,8 +674,15 @@ put the results first; its first screen follows board A1 of the redesign
   The **days below the reserve are shaded** (LineChart's `shade`), from the
   run's own `ewr_shortfall` series (`overview/summaryChart.ts`
   `belowReserve`: negative on a day the engine counted as EWR not met), so
-  the caption's count ("Shaded: the 23 days the outflow was below the dashed
-  EWR line") is the EWR card's; a run that always met it says so. On the
+  the caption's count ("Shaded: the 23 days the outflow was below the pragmatic
+  EWR line") is the EWR card's; a run that always met it says so. When the
+  outlet has a Reserve rule table the chart also draws its requirement
+  (the run's catchment-level `ewr_rule` series, `EWR_RULE_KEY`) as a second
+  step line, *Reserve rule requirement*, and the caption says it is each
+  month's requirement judged month by month, so the chart shows the line the
+  "Reserve rules met" headline is judged by, not only the pragmatic EWR
+  (issue #51; the printed report's EWR chart too). A rule table at another
+  site isn't drawn: this chart's flow is the outlet's. On the
   first screen it fills its panel (`fill`: the plot gets the panel's height
   less the chart's own head, legend and caption, measured from the drawn
   chart). It is its own chunk, since it pulls in uPlot, so the page's first
@@ -2188,7 +2195,10 @@ missing-data quality code (151, 165, 170, 172, 246, 247, 255), a blank value or
 a negative placeholder such as -999 is a gap, never a value. The summary adds a
 *DWS export* line (rows, the value column as the file's format block describes
 it, and how many rows were read as gaps and why) and the quality codes met; a
-sub-daily DWS export (a TIME column) is refused. In number fields, a comma is a thousands separator only in a
+sub-daily DWS export (a TIME column) is refused. A plain date,value CSV reads
+a negative value as a gap too (issue #51: every kind is a rain, flow or
+evaporation, so −999 or −1 is a "no reading" placeholder), and its summary
+adds a *Negative values* line with how many (`csv.ts` `negativeGaps`). In number fields, a comma is a thousands separator only in a
 valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years
@@ -2811,7 +2821,9 @@ part of the Settings tab's chunk; WP-2.10,
   **Switch off / on** and **Remove** (with a confirm; the series keeps its
   days) are for owners.
 - **Attach a feed** (owners): source, **Into series** (the kinds that source
-  may write), an optional series name, the schedule, and either **Grid cells**
+  may write; CHIRPS into the catchment rain series gets a hint under the
+  select, tied to it by `aria-describedby`, that CHIRPS then is the catchment
+  rain, used raw, `feeds.ts` `targetHint`, issue #51), an optional series name, the schedule, and either **Grid cells**
   (one "latitude, longitude[, weight]" per line, up to 25; the rainfall is
   their weighted mean) or a **DWS station** code (checked as `A2H012`; only river gauges, H codes).
   CHIRPS also has **Daily product** (*sat: from 1998, with preliminary
@@ -3018,7 +3030,8 @@ read it before.
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
   under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
-  deficit above float noise on any of the run's last 7 days, the reporting
+  deficit above float noise on any of the run's last 7 days, or on a
+  forecast run the 7 days before the forecast, issue #51; the reporting
   window's *Last 7 days* and the publication's own rule,
   `backend/src/publish/recent.ts`; with the number the curtailment table asks
   to cut; the tile links to the curtailment over those days); *Total
@@ -3121,12 +3134,16 @@ read it before.
   "about", in whole percent (`forecast/forecast.ts`, which a test holds to
   never saying "will"), under a "Modelled on forecast rain, not measured"
   tag, with a line saying every other figure of the run covers the days
-  before the forecast only. Every daily chart of a forecast run (EWR vs
+  before the forecast only, and every "X of N days" beside them counts N
+  over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
+  EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
   outflow, the hydrograph, dam storage, supply vs demand, the explorer)
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
   option), so the band never rests on colour alone; the figure carries
-  `data-band-from`. The flow-duration curve has no time axis, so no band.
+  `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
+  only the days before the forecast, and the caption says how many forecast
+  days it left out (issue #51).
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &
@@ -3331,7 +3348,10 @@ read it before.
   window's name and dates ("Last 7 days: daily averages over 2022-01-22 –
   2022-01-28 (7 days)", also in its caption), and the other water users and
   EWR sites tables repeat the dates. The status line adds how many of the days
-  fall in the forecast period (`RunSummary.forecastRain`). A run saved before
+  fall in the forecast period (`RunSummary.forecastRain`). On a forecast run
+  *Last 7 / 14 / 30 days* end on the day before the forecast, and the note says
+  so (issue #51): the latest days of the record, never forecast days read as
+  "this week"; *Whole record* and a custom range may still reach into it. A run saved before
   engine 0.17.0 (no EWR charge series), or missing any series the recompute
   reads, disables the picker and asks for a new run. The engine's
   `views/curtailmentOverWindow.test.ts` checks the table, binding sites
@@ -3506,7 +3526,10 @@ read it before.
   (hydrograph, flow-duration curve, EWR vs outflow, and Explore outputs while a
   flow series is picked), and one click sets all of them; the run comparison's
   overlay has its own while a flow series is picked. The calibration panel (it opens with the same
-  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree),
+  calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
+  the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
+  and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
+  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
@@ -3514,7 +3537,9 @@ read it before.
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
   PE input, CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
   CHIRPS series held another product or version, or its daily A-pan series
-  differs from the fit's, from the run's `inputSeries`), or "No fit
+  differs from the fit's, from the run's `inputSeries`, or its monthly CHIRPS
+  factors drifted more than 2 % from the fit's, from its `summary.chirpsCorrection`,
+  issue #51), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

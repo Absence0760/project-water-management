@@ -60,3 +60,26 @@ describe('flowDurationLines', () => {
 		expect([...flowDurationLines(flowDurationTable([]))].slice(1)).toEqual(['No catchment flow series stored for this run']);
 	});
 });
+
+describe('a forecast run (issue #51)', () => {
+	// The same 100 days, with 20 very wet forecast days after them from 2020-04-10.
+	const withTail = series.map((s) => ({ ...s, values: [...s.values, ...new Array(20).fill(s.key === 'observed_flow' ? null : 1000 * DAY)] }));
+	const run = { startDate: '2020-01-01', forecastFrom: '2020-04-10' };
+
+	it('ranks only the days before the forecast: the ordinary run’s table', () => {
+		const t = flowDurationTable(withTail, run);
+		const ordinary = flowDurationTable(series, { startDate: '2020-01-01', forecastFrom: null });
+		expect(t.wholeRun).toEqual(ordinary.wholeRun);
+		expect(t.onObservedDays).toEqual(ordinary.onObservedDays);
+		expect([t.runDays, t.forecastDays]).toEqual([100, 20]);
+		// Positive control: without the cut the forecast days move Q10.
+		expect(flowDurationTable(withTail).wholeRun[0]!.q10).not.toBe(ordinary.wholeRun[0]!.q10);
+	});
+
+	it('says in the CSV that the forecast days are left out', () => {
+		const lines = [...flowDurationLines(flowDurationTable(withTail, run))];
+		expect(lines[2]).toBe('The 20 forecast days are left out: every row ranks the 100 days before them');
+		expect(lines[3]).toMatch(/^Whole run before the forecast,Natural,/);
+		expect(lines).toContain(lines.find((l) => l.startsWith('Observed days only (60 of 100),Natural')));
+	});
+});
