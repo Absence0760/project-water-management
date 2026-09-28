@@ -62,6 +62,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.farmer.body': '{inviter} het jou toegang gegee tot {farms} in {catchment}.',
 	// You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.
 	'mail.farmer.privacy': 'Jy sal jou eie plaas se water, dam en enige beperkingskennisgewing sien, en niks oor jou bure se plase nie.',
+	// The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
+	'mail.farmer.estimate': 'Die syfers wat jy sal sien, is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.',
 	// your farm
 	'mail.farmer.yourFarm': 'jou plaas',
 	// and
