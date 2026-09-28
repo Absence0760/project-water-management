@@ -4403,10 +4403,15 @@ exists, says so with a link to Runs & results.
     engine-audit.md. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
-    (signer, self-declared registration, date, scope, the statement version
+    (signer, date, the self-declared registration as "Pr.Sci.Nat.
+    (Professional Natural Scientist), SACNASP, Water Resources Science, no.
+    400123/15", then **Check it**: the body's public register with its
+    address written out, since reports are printed, then the scope it
+    limits; an older sign-off prints its free-text body and number with
+    "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
     the disclaimer version), or **Not signed off.** in bold; then the ten
-    statements a signer of the current version confirms (`signoff-2`). When
+    statements a signer of the current version confirms (`signoff-3`). When
     a listed sign-off was made under an earlier version, a line says it
     confirmed that version's wording, recorded by its hash, not the
     statements below. An editor or owner gets **Sign off this
@@ -4423,9 +4428,17 @@ exists, says so with a link to Runs & results.
   Not yet: the published-by line and restriction notice (WP-2.3), changes
   since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): full name, registration body (SACNASP by default), registration
-  number and what the sign-off covers come first, since the first statement
-  is about "the person named above"; then the ten statements, each ticked on
+  opened): full name, the registration as three selects (body, SACNASP by
+  default or ECSA; category; SACNASP's field of practice or ECSA's
+  discipline, whose list follows the body, and choosing another body clears
+  both; engine `liability/registration.ts`), registration number (its
+  placeholder an example of the body's format) and what the sign-off covers
+  come first, since the first statement is about "the person named above".
+  Candidate, certificated and specified categories are listed but disabled,
+  with a note that their supervising professional signs; Pr Techni Eng, Pr
+  Cert Eng and any field but Water Resources Science (SACNASP) or Civil and
+  Agricultural (ECSA) show an inline warning and may still sign
+  (`signoffForm.ts` `registrationAdvice`). Then the ten statements, each ticked on
   its own (who signs and their registration, competence, conflicts of
   interest, input data, calibration, EWR tables, works, assurance levels,
   plausibility, limitations); the known
@@ -4442,7 +4455,8 @@ exists, says so with a link to Runs & results.
   hash; a `409` (the statement changed) shows the error and reloads the
   statement, which clears the ticks and the read state. The Runs tab tags a
   signed run **Signed off**, and the History tab reads "Signed off a run as
-  … (SACNASP …)".
+  …, Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, …" (an older
+  event: "… (SACNASP …)").
 - **Components reused, in print modes.** `LineChart`'s `print` prop draws a
   fixed `printWidth` × `height` box at 2 device pixels per CSS pixel
   (`printScale`: uPlot has no pixel-ratio option, so on a 1× screen the plot

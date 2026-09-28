@@ -1828,11 +1828,16 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   - *Who:* editors and owners, as themselves only (RLS `user_id =
     app_current_user_id()`); viewers read; farmers see nothing.
   - *What:* the server rebuilds the statement (the ten confirmations of
-    `signoff-2`, the
+    `signoff-3`, the
     limitations, the notes, the disclaimer version, the run's id and engine
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
-    ticked; a legacy run (a stored run from before engine 1.0.0, which
+    ticked. The registration is fixed choices (engine
+    `liability/registration.ts`, 092): SACNASP or ECSA, a category and a
+    field or discipline. A candidate, certificated or specified category is
+    refused (400): they work under a professional's supervision (NSP Act
+    s 22(2); Engineering Profession Act s 18(4)), so the supervising
+    professional signs. An unusual category or field only warns. A legacy run (a stored run from before engine 1.0.0, which
     removed that model) can't be signed (audit H1), nor can a run whose
     server stamp is missing or no longer matches its rows
     ([§ Run stamps](#run-stamps)).
@@ -1849,7 +1854,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     evidence nomination (035). Each sign-off is in the audit log.
   - *Limits, stated on the report and in the dialog:* the registration
     details are the **signer's own declaration** (not checked against the
-    ECSA or SACNASP register; the note says where to check them); dam
+    ECSA or SACNASP register, and printed "self-declared"; the report prints
+    the chosen register's address beside each signature); dam
     safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
     finding on lawfulness and doesn't verify the app's software; there is no MFA on
     signing yet (Step 4), so a sign-off is as strong as the signer's

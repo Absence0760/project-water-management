@@ -1657,23 +1657,33 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
   Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
   sends it back and the server recomputes it. The current version is
-  `signoff-2` (issue #47), with ten confirmation ids, in order: `identity`,
+  `signoff-3` (issue #47), with ten confirmation ids, in order: `identity`,
   `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
   `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
-  one. The signer's details are still the same three fields
-  (`fullName`, `registrationBody`, `registrationNo`) plus `scope`.
+  one. The signer's details are `fullName`, the registration as codes of
+  the engine's lists (`liability/registration.ts`: `registrationBody`
+  `sacnasp` or `ecsa`; `registrationCategory`, e.g. `pr_sci_nat`, `pr_eng`;
+  `registrationField`, a SACNASP field of practice such as
+  `water_resources` or an ECSA discipline such as `civil`),
+  `registrationNo` (free text, 1–50) and `scope`. A warn-level choice (Pr
+  Techni Eng, Pr Cert Eng, an unusual field) is the dialog's warning, not an
+  error.
 - New sign-offs are always made against the current statement. A stored
   sign-off keeps the `statementVersion` and `statementSha256` it recorded
-  (earlier ones say `signoff-1`), and is listed beside newer ones unchanged.
-- `Signoff = { id, runId, fullName, registrationBody, registrationNo, scope,
-  statementVersion, statementSha256, disclaimerVersion, signedAt, mine }`.
+  (earlier ones say `signoff-1` or `signoff-2`), and is listed beside newer
+  ones unchanged.
+- `Signoff = { id, runId, fullName, registrationBody, registrationCategory,
+  registrationField, registrationNo, scope, statementVersion,
+  statementSha256, disclaimerVersion, signedAt, mine }`. On a `signoff-1` or
+  `-2` sign-off `registrationBody` is the signer's free text and category
+  and field are `null` (not recorded).
 - There is no route to change or remove a sign-off, and RLS allows neither. A
   signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
   Each sign-off is in the project's history (`signoff.created`).

@@ -866,15 +866,28 @@ results for plausibility; and that they read its known limitations
   `model_run`, `NO ACTION`: a project delete still cascades, any other delete
   of a signed run fails), `user_id` (→ `app_user`, `SET NULL` so an account
   deletion keeps the professional record), `full_name` (1–200),
-  `registration_body` (1–100, e.g. SACNASP), `registration_no` (1–50,
+  `registration_body` (1–100: `sacnasp` or `ecsa` from `signoff-3`, the
+  signer's free text on earlier rows), `registration_category` and
+  `registration_field` (092_signoff_registration: codes of the engine's
+  `liability/registration.ts` lists, shape `^[a-z_]{1,40}$`; NULL on
+  `signoff-1` and `-2` rows), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-2` today; rows made earlier keep `signoff-1`, and every row
-  keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
+  (`signoff-3` today; rows made earlier keep `signoff-1` or `signoff-2`, and
+  every row keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
   `signoff_same_project` (`assert_same_project('run_id')`): the run is one of
   the project's.
+- **Registration recorded (092).** `signoff_registration_recorded`: a row of
+  any statement version but `signoff-1` and `signoff-2` has a `sacnasp` or
+  `ecsa` body and a category and field. The allowed codes, and which
+  categories may sign, live in the engine, not the database, so a
+  re-prescribed category list (the draft Natural Scientific Professions
+  Bill) is a code change; the route refuses a candidate, certificated or
+  specified category. The table is insert-only, so the conditional check
+  binds every new row and leaves older ones as recorded.
+  `app_subject_export` carries both columns.
 - **Immutable.** `water_app` has `SELECT, INSERT` only and no policy allows
   `UPDATE` or `DELETE` (catalogue `APPEND_ONLY`). A correction is a second
   sign-off.
