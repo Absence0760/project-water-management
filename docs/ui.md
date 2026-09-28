@@ -4617,7 +4617,9 @@ published.
   (N farms)", so the name and the WUA's notice stay on the first screen,
   which matters for WUA staff previewing, who see every farm), with `/why` ("Why about
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
-  entries in the `farmer` category ("What do these words mean?"). The root
+  entries in the `farmer` category ("What do these words mean?"; since
+  issue #47 one of them is *WUA (Water User Association)*, which says some
+  areas still have an irrigation board). The root
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
@@ -4668,14 +4670,18 @@ published.
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
-  CSV download and the disclaimer. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  CSV download and the disclaimer ("These figures are worked out by a
+  computer model of the catchment. They are estimates, not measurements or
+  instructions, and they can be wrong. Only a notice from your WUA or from
+  the Department of Water and Sanitation (DWS) is a restriction.", `cards.ts`
+  `disclaimer()`, quoted in the legal review pack, issue #47). **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge
   set it apart from the cards about what happened; "Lowest dam level
   expected: about 38 % around 20 Jan" (no dam, no line), "You may be short
   on 3 of the 14 days" (or that the model doesn't expect a short day), and
   the forecast's own dates with "Forecasts change, and this is worked out
-  by the model, not a promise. Only a notice from your WUA is a
+  by the model, not a promise. Only a notice from your WUA or from DWS is a
   restriction." A forecast made more than 3 days ago says how old it is
   first. The dam page shows the same card under its chart. That chart
   (`farm/DamChart.svelte`, "Last 12 months") says what its line is under its
@@ -4821,7 +4827,11 @@ digest). The modeller workspace stays English.
   cost nothing, and the sheet lists its rows by key beside the site's ids;
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
-  them, in the language the words came out in.
+  them, in the language the words came out in. The alert emails' liability
+  lines (`mail.alert.model`, `mail.alert.model.staff`,
+  `mail.alert.restriction.wua`, [§ Alerts](#alerts)) are quoted in the legal
+  review pack; `mail/i18n/liability.test.ts` fails when the pack's quote
+  differs.
 - **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
@@ -4955,6 +4965,20 @@ the catalogue, [§ Language](#language)); both unit-tested.
   source; failures or jobs; range-checked in the form and by the API), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
+- **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
+  kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
+  kind by kind). A dam alert (`mail.alert.model`) says it is the catchment
+  model's estimate from the figures the WUA published (true: dam_below reads
+  the current publication, `alerts/evaluate.ts`), not a measurement of the
+  dam and not an instruction, to check the dam and ask the WUA, and that
+  only a notice from the WUA or DWS is a restriction. The EWR forecast alert,
+  which only the WUA's staff can get (`mail.alert.model.staff`), says it
+  comes from the newest forecast run, which may not be published yet, and
+  is an estimate, not a measurement or a restriction; its body ends
+  "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
+  says it is the WUA's own, shown as published, and that questions go to the
+  WUA. The operational alerts (data feed behind, data feed failing,
+  background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert

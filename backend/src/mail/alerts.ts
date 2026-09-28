@@ -8,8 +8,12 @@
 //   - a one-click unsubscribe: a link to the landing page (token in the
 //     fragment) and the RFC 8058 headers pointing at POST /alerts/unsubscribe;
 //   - "why you got this" and a link to manage alerts;
-//   - the liability line: a model estimate, not an instruction (a restriction
-//     notice says it is the WUA's own words instead).
+//   - the liability line for its kind (liabilityKey): a dam alert says it is
+//     the model's estimate from the published figures, not a measurement or
+//     an instruction; an EWR forecast alert (staff only) says it comes from
+//     the newest forecast run, which may not be published; a restriction
+//     notice says it is the WUA's own words. The WUA's operational alerts
+//     (stale or failing feeds, dead jobs) are no model figure, so they get none.
 import { language } from '@water-management/engine/languages';
 import type { AlertKind } from '../alerts/rules.js';
 import { mailT, type Locale, type MailKey, type MailTranslator } from './i18n/index.js';
@@ -108,8 +112,32 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 	}
 }
 
-/** The line under every alert: a model estimate (or, for a notice, the WUA's own words). */
-const liability = (kind: AlertKind, tr: MailTranslator) => tr.t(kind === 'restriction_published' ? 'mail.alert.restriction.wua' : 'mail.alert.model');
+/**
+ * The liability line under an alert of `kind`, or null for none. dam_below
+ * reads the current publication (alerts/evaluate.ts), so "the figures your
+ * WUA published" is true of it; ewr_forecast_fail reads the newest forecast
+ * run, published or not, and reaches only the WUA's staff (051 fan-out).
+ */
+export function liabilityKey(kind: AlertKind): MailKey | null {
+	switch (kind) {
+		case 'dam_below':
+			return 'mail.alert.model';
+		case 'ewr_forecast_fail':
+			return 'mail.alert.model.staff';
+		case 'restriction_published':
+			return 'mail.alert.restriction.wua';
+		case 'data_stale':
+		case 'feed_failing':
+		case 'job_dead':
+			return null;
+	}
+}
+
+/** The liability lines for a set of alerts: each distinct one once, in kind order. */
+function liabilityLines(kinds: AlertKind[], tr: MailTranslator): string[] {
+	const keys = new Set(kinds.map(liabilityKey).filter((k): k is MailKey => k !== null));
+	return (['mail.alert.model', 'mail.alert.model.staff', 'mail.alert.restriction.wua'] as const).filter((k) => keys.has(k)).map((k) => tr.t(k));
+}
 
 function headers(u: Unsubscribe): Record<string, string> {
 	return {
@@ -144,7 +172,7 @@ export function alertMail(to: Recipient, project: { id: string; name: string }, 
 		tr.t('mail.alert.subject', { what, project: project.name }),
 		{
 			heading: what,
-			paragraphs: [...body, liability(facts.kind, tr)],
+			paragraphs: [...body, ...liabilityLines([facts.kind], tr)],
 			action: openAction(tr, to, project.id),
 			footer: [tr.t('mail.alert.why', { kind: tr.t(`mail.alert.kind.${facts.kind}` as MailKey), project: project.name })],
 			links: [
@@ -170,8 +198,7 @@ export function digestMail(to: Recipient, project: { id: string; name: string },
 		paragraphs.push(`${what}: ${body.join(' ')}`);
 	}
 	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
-	if (items.some((f) => f.kind !== 'restriction_published')) paragraphs.push(tr.t('mail.alert.model'));
-	if (items.some((f) => f.kind === 'restriction_published')) paragraphs.push(tr.t('mail.alert.restriction.wua'));
+	paragraphs.push(...liabilityLines(items.map((f) => f.kind), tr));
 	const mail = render(
 		to.email,
 		tr.t('mail.alert.digest.subject', { project: project.name, product: PRODUCT }),

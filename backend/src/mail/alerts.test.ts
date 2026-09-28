@@ -1,19 +1,31 @@
 // Alert emails (WP-2.13): escaping, both locales, the liability line, the
 // unsubscribe links and RFC 8058 headers, and what a farmer's mail can name.
 import { describe, expect, it } from 'vitest';
-import { alertMail, dateText, digestMail, pctText, type AlertFacts } from './alerts.js';
+import { ALERT_KINDS } from '../alerts/rules.js';
+import { alertMail, dateText, digestMail, liabilityKey, pctText, type AlertFacts } from './alerts.js';
+import { en } from './i18n/en.js';
 
 const unsub = { pageUrl: 'http://localhost:7777/alerts/unsubscribe#t=TOKEN', oneClickUrl: 'http://localhost:3001/alerts/unsubscribe?token=TOKEN' };
 const farmer = { email: 'f@example.com', locale: null, farmer: true };
 const project = { id: 'p1', name: 'Rustenvrede WUA' };
 const dam: AlertFacts = { kind: 'dam_below', farm: 'Farm One', pct: 0.28, threshold: 0.3, source: 'latest', date: '2026-09-20' };
+const staff = { email: 'e@example.com', locale: null, farmer: false };
+const ONE_OF_EACH: Record<AlertFacts['kind'], AlertFacts> = {
+	dam_below: dam,
+	ewr_forecast_fail: { kind: 'ewr_forecast_fail', days: 5, of: 14, from: '2026-09-27', to: '2026-10-10', madeOn: '2026-09-26', threshold: 3 },
+	data_stale: { kind: 'data_stale', threshold: 3, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 10 }] },
+	feed_failing: { kind: 'feed_failing', threshold: 3, feeds: [{ label: 'CHIRPS', failures: 4 }] },
+	job_dead: { kind: 'job_dead', count: 2 },
+	restriction_published: { kind: 'restriction_published', level: 'advisory', pct: null, notice: null, publishedAt: '2026-09-26T08:00:00Z', lifted: false }
+};
+const LIABILITY = [en['mail.alert.model'], en['mail.alert.model.staff'], en['mail.alert.restriction.wua']];
 
 describe('alertMail', () => {
 	it('says what the model estimates, below which line, with the liability line and where to go', () => {
 		const m = alertMail(farmer, project, dam, unsub);
 		expect(m.subject).toBe('Dam low on Farm One — Rustenvrede WUA');
 		expect(m.text).toContain('The model puts the dam on Farm One at about 28 % of capacity on 20 Sept 2026, below the alert level of 30 %.');
-		expect(m.text).toContain('not a measurement, and not an instruction');
+		expect(m.text).toContain('It is not a measurement of your dam and not an instruction.');
 		expect(m.text).toContain('Open your farm: http://localhost:7777/farm/p1');
 		expect(m.text).toContain('You get this email because you get dam level alerts for Rustenvrede WUA.');
 		expect(m.text).toContain('Stop these emails: http://localhost:7777/alerts/unsubscribe#t=TOKEN');
@@ -86,6 +98,42 @@ describe('alertMail', () => {
 		);
 		expect(alertMail(wua, project, { kind: 'feed_failing', threshold: 3, feeds: [{ label: 'CHIRPS', failures: 4 }] }, unsub).text).toContain('CHIRPS: 4 failures in a row');
 		expect(alertMail(wua, project, { kind: 'job_dead', count: 2 }, unsub).subject).toBe('Background jobs failed — Rustenvrede WUA');
+	});
+});
+
+describe('the liability line, per kind', () => {
+	// A dam alert reads the published figures; the EWR forecast alert reads the
+	// newest forecast run, published or not; a notice is the WUA's own words;
+	// the operational alerts are no model figure and carry no liability line.
+	const expected: Record<AlertFacts['kind'], string | null> = {
+		dam_below: en['mail.alert.model'],
+		ewr_forecast_fail: en['mail.alert.model.staff'],
+		restriction_published: en['mail.alert.restriction.wua'],
+		data_stale: null,
+		feed_failing: null,
+		job_dead: null
+	};
+
+	it.each([...ALERT_KINDS])('gives %s its own line and no other', (kind) => {
+		const m = alertMail(staff, project, ONE_OF_EACH[kind], unsub);
+		const want = expected[kind];
+		for (const line of LIABILITY) {
+			if (line === want) expect(m.text, kind).toContain(line);
+			else expect(m.text, kind).not.toContain(line);
+		}
+		expect(liabilityKey(kind) === null).toBe(want === null);
+	});
+
+	it('gives a farmer’s dam alert the published-figures line in Afrikaans too', () => {
+		const m = alertMail({ ...farmer, locale: 'af' }, project, dam, unsub);
+		expect(m.text).toContain('Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.');
+	});
+
+	it('gives a digest each distinct line once, and none for operational alerts alone', () => {
+		const ops = digestMail(staff, project, [ONE_OF_EACH.data_stale, ONE_OF_EACH.feed_failing, ONE_OF_EACH.job_dead], unsub, 5);
+		for (const line of LIABILITY) expect(ops.text).not.toContain(line);
+		const all = digestMail(staff, project, [dam, dam, ONE_OF_EACH.ewr_forecast_fail, ONE_OF_EACH.restriction_published, ONE_OF_EACH.job_dead], unsub, 5);
+		for (const line of LIABILITY) expect(all.text.split(line)).toHaveLength(2);
 	});
 });
 

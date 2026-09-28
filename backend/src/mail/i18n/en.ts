@@ -62,7 +62,9 @@ export const en = {
 	'mail.alert.openFarm': 'Open your farm',
 	'mail.alert.openProject': 'Open the catchment',
 	'mail.alert.model':
-		'This comes from the catchment model: an estimate from the figures the WUA published, not a measurement, and not an instruction. Check with your WUA before you act on it.',
+		'This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.',
+	'mail.alert.model.staff':
+		'This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.',
 	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
 	'mail.alert.unsubscribe': 'Stop these emails',
 	'mail.alert.manage': 'Manage your alerts',
@@ -88,7 +90,7 @@ export const en = {
 		'On the rain forecast of {madeOn}, the model expects the dam on {farm} to fall to about {pct} of capacity around {date}, below the alert level of {threshold}. Forecasts change.',
 	'mail.alert.ewr.what': 'River flow at risk in the forecast',
 	'mail.alert.ewr.body':
-		'On the rain forecast of {madeOn}, the model expects the river’s ecological flow (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days.',
+		'On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.',
 	'mail.alert.stale.what': 'Data feed behind',
 	'mail.alert.stale.body': 'These data feeds are more than {threshold} days later than usual:',
 	'mail.alert.stale.line': '{feed}: newest day {newest}, {overdue} days late',
@@ -107,7 +109,7 @@ export const en = {
 	'mail.alert.restriction.level.advisory': 'please use less water (advisory)',
 	'mail.alert.restriction.level.restricted': 'restricted',
 	'mail.alert.restriction.wua':
-		'This notice is the WUA’s own. It is shown here as the WUA published it.'
+		'This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.'
 } as const;
 
 export type MailKey = keyof typeof en;

@@ -90,8 +90,10 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.openFarm': 'Maak jou plaas oop',
 	// Open the catchment
 	'mail.alert.openProject': 'Maak die opvanggebied oop',
-	// This comes from the catchment model: an estimate from the figures the WUA published, not a measurement, and not an instruction. Check with your WUA before you act on it.
-	'mail.alert.model': 'Dit kom van die opvanggebied se model: ’n skatting uit die syfers wat die WGV gepubliseer het, nie ’n meting nie, en nie ’n opdrag nie. Vra eers jou WGV voordat jy daarop optree.',
+	// This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.
+	'mail.alert.model': 'Dit is ’n skatting van die opvanggebied se model, bereken uit die syfers wat jou WGV gepubliseer het. Dit is nie ’n meting van jou dam nie, en nie ’n opdrag nie. Kyk self na jou dam, en vra jou WGV as jy onseker is. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
+	// This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.
+	'mail.alert.model.staff': 'Dit kom van die opvanggebied se model se nuutste voorspellingslopie, wat dalk nog nie gepubliseer is nie. Dit is ’n skatting, nie ’n meting nie, en nie ’n beperking nie.',
 	// You get this email because you get {kind} alerts for {project}.
 	'mail.alert.why': 'Jy kry hierdie e-pos omdat jy waarskuwings oor {kind} vir {project} kry.',
 	// Stop these emails
@@ -130,8 +132,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.dam.forecast': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die dam op {farm} rondom {date} tot ongeveer {pct} van sy kapasiteit sal daal, onder die waarskuwingsvlak van {threshold}. Voorspellings verander.',
 	// River flow at risk in the forecast
 	'mail.alert.ewr.what': 'Riviervloei in gevaar volgens die voorspelling',
-	// On the rain forecast of {madeOn}, the model expects the river’s ecological flow (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days.
-	'mail.alert.ewr.body': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die rivier se ekologiese vloei (EWR) by die uitloop op {days} van die {of} voorspelde dae ({from} tot {to}) nie gehaal sal word nie. Die waarskuwing is op {threshold} dae gestel.',
+	// On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.
+	'mail.alert.ewr.body': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die rivier se ekologiese reserwe (EWR) by die uitloop op {days} van die {of} voorspelde dae ({from} tot {to}) nie gehaal sal word nie. Die waarskuwing is op {threshold} dae gestel. Voorspellings verander.',
 	// Data feed behind
 	'mail.alert.stale.what': 'Datavoer loop agter',
 	// These data feeds are more than {threshold} days later than usual:
@@ -166,6 +168,6 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.restriction.level.advisory': 'gebruik asseblief minder water (advies)',
 	// restricted
 	'mail.alert.restriction.level.restricted': 'beperk',
-	// This notice is the WUA’s own. It is shown here as the WUA published it.
-	'mail.alert.restriction.wua': 'Hierdie kennisgewing is die WGV s’n. Dit word hier gewys soos die WGV dit gepubliseer het.',
+	// This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.
+	'mail.alert.restriction.wua': 'Hierdie kennisgewing is die WGV s’n. Dit word hier gewys soos die WGV dit gepubliseer het. Rig vrae daaroor aan jou WGV.',
 };

@@ -74,4 +74,10 @@ export const HELP_AF: Record<string, HelpTranslation> = {
 		long: 'Dit hou net jou eie plaas se syfers, wat jy in elk geval mag sien. Dit word verwyder wanneer jy uitteken, wanneer iemand anders op hierdie foon inteken, wanneer jy nie meer toegang tot die plaas het nie, en wanneer dit 30 dae lank nie oopgemaak is nie.\n\nOp ’n foon wat jy deel, kies "Moenie ’n kopie op hierdie foon hou nie" in die Kieslys.',
 		sourceHash: '6cfcf9b3943e90fe604d0510c0f187b1d5376d22e433f0dd68186ca59ed9a4b4'
 	},
+	'farm-wua': {
+		term: 'WGV (Watergebruikersvereniging)',
+		short: 'Die liggaam van watergebruikers wat die watergebruik in jou gebied bestuur. Dit publiseer die syfers op hierdie bladsy, en sy eie kennisgewings.',
+		long: '’n Watergebruikersvereniging (WGV) is ’n liggaam van die watergebruikers in ’n gebied, ingevolge die Nasionale Waterwet gestig. Dit bestuur hoe water onder sy lede gedeel word, en dit reik die kennisgewings uit wat boere vra om minder water te gebruik. Sommige gebiede het nog ’n besproeiingsraad in plaas daarvan, wat dieselfde werk doen totdat dit ’n WGV word.\n\nDie syfers op jou plaasbladsy is dié wat jou WGV gepubliseer het. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Vra jou WGV as enigiets op die bladsy onduidelik is.',
+		sourceHash: 'cb9c961b61c1cabe83eece6cb0b47d77c4491eab427730b0f9088e1acb682b60'
+	},
 };

@@ -255,7 +255,7 @@ describe('a dam alert end to end', () => {
 			expect(m.text).not.toContain(other);
 			expect(m.html).not.toContain(other);
 		}
-		expect(m.text).toMatch(/not a measurement, and not an instruction/);
+		expect(m.text).toMatch(/It is not a measurement of your dam and not an instruction\./);
 		expect(m.headers?.['List-Unsubscribe']).toMatch(/^<http:\/\/localhost:7777\/api\/alerts\/unsubscribe\?token=[A-Za-z0-9_-]{43}>$/);
 		expect(m.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
 		expect(mailsTo(farmer2).map((x) => x.subject)).toEqual([expect.stringContaining('Farm Two')]);

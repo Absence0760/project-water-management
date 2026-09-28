@@ -670,10 +670,15 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
   `headers`). `sendMail` makes every header value one line and refuses a
   header name that isn't a token, so no user text can inject a header.
-- **Liability.** Every alert says it is a model estimate from the WUA's
-  published figures, not a measurement or an instruction, and to check with
-  the WUA before acting; a forecast says forecasts change; a restriction
-  notice says it is the WUA's own words.
+- **Liability.** A dam alert says it is the model's estimate from the WUA's
+  published figures, not a measurement of the dam or an instruction, to
+  check the dam and ask the WUA, and that only a notice from the WUA or DWS
+  is a restriction; the staff-only EWR forecast alert says it comes from the
+  newest forecast run, which may not be published, and is an estimate, not
+  a restriction; a forecast says forecasts change; a restriction notice
+  says it is the WUA's own words and questions go to the WUA. The
+  operational alerts (feeds, jobs) carry no liability line
+  ([ui.md § Alerts](./ui.md#alerts)).
 - **A bounced or complaining address pauses its alerts.** SES drops mail
   to an address on its suppression list; the app learns of it through the
   configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
