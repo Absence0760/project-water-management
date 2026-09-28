@@ -5,6 +5,7 @@
 import type { Page } from '@playwright/test';
 import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
@@ -41,6 +42,8 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(upperNode.locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
 	// The layout uses the screen: it reaches the bottom of the window, and a small catchment's drawing
 	// fits its card without scrolling sideways (its columns spread to the card, text at its usual size).
+	// Measured once the drawing is laid out for its box (it first draws before the box is measured, issue #138).
+	await waitForMapFit(page);
 	const viewport = page.viewportSize()!;
 	const layoutBox = (await page.locator('.map-layout').boundingBox())!;
 	expect(layoutBox.y + layoutBox.height).toBeGreaterThan(viewport.height - 40);
