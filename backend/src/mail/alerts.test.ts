@@ -174,6 +174,23 @@ describe('digestMail', () => {
 });
 
 describe('formatting', () => {
+	// Issue #51: a notice published at 01:00 on 2 October in South Africa is 23:00 on the 1st in UTC.
+	it('dates a timestamp by its day in the catchment’s zone, whatever the server’s zone', () => {
+		const tz = process.env.TZ;
+		process.env.TZ = 'America/Los_Angeles';
+		try {
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en', 'Africa/Johannesburg')).toBe('2 Oct 2026');
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en', 'UTC')).toBe('1 Oct 2026');
+			// South Africa's by default; a calendar day is never shifted.
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en')).toBe('2 Oct 2026');
+			expect(dateText('2026-10-01', 'en', 'Pacific/Kiritimati')).toBe('1 Oct 2026');
+			const m = alertMail(farmer, { ...project, timeZone: 'Africa/Johannesburg' }, { kind: 'restriction_published', level: 'advisory', pct: null, notice: null, publishedAt: '2026-10-01T23:00:00.000Z', lifted: false }, unsub);
+			expect(m.text).toContain('on 2 Oct 2026: please use less water (advisory).');
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
 	it('writes percentages the farm view’s way and dates in the mail’s language', () => {
 		expect(pctText(0.284)).toBe('28 %');
 		expect(pctText(1.2)).toBe('100 %');

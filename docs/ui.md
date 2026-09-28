@@ -4995,7 +4995,8 @@ digest). The modeller workspace stays English.
   locale (`en-ZA`, and `af-ZA` once the Afrikaans words are in), so an
   English sentence never carries Afrikaans month names. The emails date in
   the same locale (`mail/alerts.ts` `dateText`, the day without a leading
-  zero).
+  zero), and a timestamp in them (a notice's publication) by its day in the
+  project's time zone, never UTC's (issue #51).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
   entries. It was written by the `i18n-translator` agent and reviewed by the

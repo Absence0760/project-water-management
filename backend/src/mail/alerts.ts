@@ -16,6 +16,7 @@
 //     notice says it is the WUA's own words. The WUA's operational alerts
 //     (stale or failing feeds, dead jobs) are no model figure, so they get none.
 import { language } from '@water-management/engine/languages';
+import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import type { AlertKind } from '../alerts/rules.js';
 import { mailT, type Locale, type MailKey, type MailTranslator } from './i18n/index.js';
 import { PRODUCT, render, sitePage } from './templates.js';
@@ -55,13 +56,25 @@ export function pctText(fraction: number): string {
 	return `${p}${NBSP}%`;
 }
 
+/** The catchment a mail is about; `timeZone` (project.time_zone, 058) dates its timestamps. */
+export interface MailProject {
+	id: string;
+	name: string;
+	timeZone?: string;
+}
+
 /**
  * "2026-10-03" → "3 Oct 2026", in the mail's language's Intl locale (the
  * language table's). The day is written without a leading zero, as the farm
- * view writes it (en-ZA's ICU data gives "03 Oct 2026").
+ * view writes it (en-ZA's ICU data gives "03 Oct 2026"). A timestamp
+ * ("2026-10-01T23:00:00Z", a notice's published_at) is dated by the day it
+ * was in the catchment's time zone, never UTC's (01:00 on the 2nd in South
+ * Africa is the 2nd; issue #51); a calendar day is written as it is.
  */
-export function dateText(iso: string, lang: Locale): string {
-	const d = new Date(`${iso.slice(0, 10)}T00:00:00Z`);
+export function dateText(iso: string, lang: Locale, timeZone: string = DEFAULT_TIME_ZONE): string {
+	const stamp = iso.length > 10 ? new Date(iso) : null;
+	const day = stamp && !Number.isNaN(stamp.getTime()) ? localDate(stamp, timeZone) : iso.slice(0, 10);
+	const d = new Date(`${day}T00:00:00Z`);
 	if (Number.isNaN(d.getTime())) return iso;
 	return new Intl.DateTimeFormat(language(lang).intl, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 		.formatToParts(d)
@@ -70,7 +83,7 @@ export function dateText(iso: string, lang: Locale): string {
 }
 
 /** One alert's words: the subject's "what", and its sentences. */
-export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, lang: Locale): { what: string; body: string[] } {
+export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, lang: Locale, timeZone: string = DEFAULT_TIME_ZONE): { what: string; body: string[] } {
 	switch (f.kind) {
 		case 'dam_below': {
 			const v = { farm: f.farm, pct: pctText(f.pct), threshold: pctText(f.threshold), date: dateText(f.date, lang), madeOn: f.madeOn ? dateText(f.madeOn, lang) : '' };
@@ -99,7 +112,7 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 		case 'job_dead':
 			return { what: tr.t('mail.alert.jobs.what'), body: [tr.t('mail.alert.jobs.body', { count: f.count })] };
 		case 'restriction_published': {
-			const date = dateText(f.publishedAt, lang);
+			const date = dateText(f.publishedAt, lang, timeZone);
 			if (f.lifted) return { what: tr.t('mail.alert.restriction.liftedWhat'), body: [tr.t('mail.alert.restriction.lifted', { project, date })] };
 			const level = tr.t(`mail.alert.restriction.level.${f.level}` as MailKey);
 			const body = [
@@ -169,9 +182,9 @@ function translator(locale: string | null): { tr: MailTranslator; lang: Locale }
 }
 
 /** One alert, as its own email. */
-export function alertMail(to: Recipient, project: { id: string; name: string }, facts: AlertFacts, unsubscribe: Unsubscribe): Mail {
+export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts, unsubscribe: Unsubscribe): Mail {
 	const { tr, lang } = translator(to.locale);
-	const { what, body } = alertLines(facts, tr, project.name, lang);
+	const { what, body } = alertLines(facts, tr, project.name, lang, project.timeZone);
 	const mail = render(
 		to.email,
 		tr.t('mail.alert.subject', { what, project: project.name }),
@@ -195,11 +208,11 @@ export function alertMail(to: Recipient, project: { id: string; name: string }, 
  * alerts left out past the digest's line limit (alerts/send.ts
  * DIGEST_MAX_LINES), said as "and N more" pointing at the app.
  */
-export function digestMail(to: Recipient, project: { id: string; name: string }, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0): Mail {
+export function digestMail(to: Recipient, project: MailProject, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0): Mail {
 	const { tr, lang } = translator(to.locale);
 	const paragraphs = [tr.t('mail.alert.digest.intro')];
 	for (const f of items) {
-		const { what, body } = alertLines(f, tr, project.name, lang);
+		const { what, body } = alertLines(f, tr, project.name, lang, project.timeZone);
 		paragraphs.push(`${what}: ${body.join(' ')}`);
 	}
 	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
