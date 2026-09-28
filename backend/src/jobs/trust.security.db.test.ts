@@ -96,7 +96,7 @@ const LOWER_THAN_EDITOR: Partial<Record<JobKind, { role: Role; why: string }>> =
 const ALSO_ROLE: Partial<Record<JobKind, { role: Role; why: string }>> = {
 	yield: {
 		role: 'contributor',
-		why: "an applicant's yield of a dam of their own application; yieldInputFor refuses any other target (yield/contributor.db.test.ts, 095_contributor_yield)"
+		why: "an applicant's yield of a dam of their own application; yieldInputFor refuses any other target (yield/contributor.db.test.ts, 096_contributor_yield)"
 	}
 };
 

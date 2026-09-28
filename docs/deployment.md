@@ -678,14 +678,22 @@ plan-only until the first deploy):
   Chromium e2e uses, pinned by digest, plus the Lambda runtime interface
   client and playwright-core, installed with `npm ci` from the lockfile in
   `backend/renderer-deps/`; moving Playwright means the tag and digest there,
-  that package.json and backend's, and a refreshed lock), x86_64,
+  that package.json and backend's, and a refreshed lock, and `pnpm
+  check:pins` fails until all of them agree with e2e's `@playwright/test`), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,
   signs in with the render token (`POST /api/auth/render-session`), prints
   the PDF and puts it in the reports bucket. Its role can do nothing else.
 - **The image**: `deploy-backend.yml`'s build job (no AWS credentials) builds
-  it and hands it over as an artifact; the approved deploy job pushes it to
+  it, smoke-tests it as Lambda runs it (`infra/scripts/smoke-renderer-image.sh`:
+  a uid with no passwd entry and a read-only filesystem; Chromium prints a PDF
+  with the Lambda launch flags, the handler answers under the Lambda runtime
+  interface emulator, and the init check refuses a missing setting) and hands
+  it over as an artifact; CI's `renderer-image` job builds and smoke-tests it
+  on every PR, and `pnpm check:renderer-image` does the same locally (needs
+  docker only). A full render through the handler needs the deployed site,
+  bucket and queues, so it is checked after the first deploy (#92); the approved deploy job pushes it to
   the `water-management-renderer` ECR repository (tags are immutable: the
   release version) and moves the function to it. **Lambda can't be created
   from an image that doesn't exist yet**, so the function is created by

@@ -284,6 +284,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					description?: string;
 					/** An IANA zone name (issue #45): the date in the project's download file names. */
 					timeZone?: string;
+					/** The WUA the farm pages' contact lines name (095_wua_name); '' or null clears it. */
+					wuaName?: string | null;
 					settings?: Partial<ProjectSettings>;
 					/** Move into a team you're in, or null for personal. Owner only. */
 					teamId?: string | null;
@@ -503,7 +505,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Nominate a run as the project's evidence (a new history row; earlier ones stay). Answers with the whole history. */
 			nominate: (id: string, runId: string, reason: string) =>
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence`, { runId, reason }).then((r) => r.nominations),
-			/** Withdraw the current nomination (a history row with no run, 097): nothing is the evidence until a run is nominated again. Answers with the whole history. */
+			/** Withdraw the current nomination (a history row with no run, 098): nothing is the evidence until a run is nominated again. Answers with the whole history. */
 			withdrawNomination: (id: string, reason: string) =>
 				request<{ nomination: Nomination; nominations: Nomination[] }>('POST', `${p(id)}/evidence/withdraw`, { reason }).then((r) => r.nominations),
 			/** Re-run a run from its stored inputs with today's engine and compare (WP-3.1). */

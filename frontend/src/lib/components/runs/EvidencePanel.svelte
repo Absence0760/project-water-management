@@ -2,7 +2,7 @@
 	The nominated evidence run (010_run_nomination, docs/ui.md § Evidence
 	nomination): whether the shown run is the project's evidence, the action to
 	nominate it (editors, with a required reason), to withdraw the current
-	nomination (097: a history row with no run, also with a reason) and the
+	nomination (098: a history row with no run, also with a reason) and the
 	whole history. The history is append-only in the database, so replacing or
 	withdrawing a nomination keeps the earlier one on the list.
 -->

@@ -34,6 +34,8 @@ type ProjectRow = {
 	description: string;
 	/** IANA zone (058_project_time_zone): dates the project's downloads. */
 	time_zone: string;
+	/** The WUA that publishes the figures (095_wua_name), or null. */
+	wua_name: string | null;
 	team_id: string | null;
 	team_name: string | null;
 	settings: unknown;
@@ -66,6 +68,7 @@ const summary = (r: ProjectRow) => ({
 const full = (r: ProjectRow) => ({
 	...summary(r),
 	timeZone: r.time_zone,
+	wuaName: r.wua_name,
 	settings: { ...mergeSettings(r.settings), autoRun: resolveAutoRun(r.settings), outcomes: resolveOutcomes(r.settings), outlook: resolveOutlook(r.settings) },
 	rerunQueuedFor: r.rerun_queued_for ? r.rerun_queued_for.toISOString() : null
 });
@@ -74,7 +77,7 @@ const full = (r: ProjectRow) => ({
 // team); app_project_role gives the effective role. The team name is only
 // visible to team members (team RLS), so it may be null for direct members.
 const SELECT_PROJECT = `
-	SELECT p.id, p.name, p.description, p.time_zone, p.settings, p.created_at, p.updated_at, p.team_id,
+	SELECT p.id, p.name, p.description, p.time_zone, p.wua_name, p.settings, p.created_at, p.updated_at, p.team_id,
 		t.name AS team_name, app_project_role(p.id) AS role,
 		-- Data freshness and last run for the project list, in the same query
 		-- (both subqueries use the (project_id…) indexes; no N+1 from the client).
@@ -103,6 +106,15 @@ const PatchBody = z.object({
 	description: z.string().max(5000).optional(),
 	/** An IANA zone the runtime knows; dates the project's downloads (issue #45). */
 	timeZone: TimeZone.optional(),
+	/** The WUA the farm pages name in their contact lines; empty or null clears it. */
+	wuaName: z
+		.string()
+		.trim()
+		.max(200)
+		.refine((s) => !s.includes('\u0000'), 'text cannot contain NUL characters')
+		.nullable()
+		.optional()
+		.transform((s) => (s === '' ? null : s)),
 	settings: SettingsPatch.optional(),
 	/** Why the settings changed, kept with the revision (ignored without settings). */
 	reason: Reason
@@ -125,7 +137,7 @@ const PG_RESTRICT = '23001';
  * can link to it; null when the trigger caught a nomination made mid-request.
  */
 function evidenceKept(run: { runId: string | null; runLabel: string | null; nominations: number } | null) {
-	// The newest row is a withdrawal (097): no current evidence run, but the history is still kept.
+	// The newest row is a withdrawal (098): no current evidence run, but the history is still kept.
 	const named = !run
 		? 'it has a nominated evidence run'
 		: run.runId
@@ -168,6 +180,7 @@ const onlyRunPolicy = (body: z.infer<typeof PatchBody>, stored: unknown, next: u
 	body.name === undefined &&
 	body.description === undefined &&
 	body.timeZone === undefined &&
+	body.wuaName === undefined &&
 	body.teamId === undefined &&
 	next !== undefined &&
 	stableJson(withoutRunPolicy(next)) === stableJson(withoutRunPolicy(mergeSettings(stored)));
@@ -278,12 +291,14 @@ export const projectRoutes = new Hono<AuthEnv>()
 					name = COALESCE($2, name),
 					description = COALESCE($3, description),
 					time_zone = COALESCE($8, time_zone),
+					wua_name = CASE WHEN $9 THEN $10 ELSE wua_name END,
 					settings = COALESCE($4::jsonb, settings),
 					team_id = CASE WHEN $5 THEN $6::uuid ELSE team_id END,
 					updated_at = CASE WHEN $7 THEN updated_at ELSE now() END
 				 WHERE id = $1`,
 				[id, body.name ?? null, body.description ?? null, settings ? JSON.stringify(settings) : null,
-					body.teamId !== undefined, body.teamId ?? null, onlyRunPolicy(body, current.settings, settings), body.timeZone ?? null]
+					body.teamId !== undefined, body.teamId ?? null, onlyRunPolicy(body, current.settings, settings), body.timeZone ?? null,
+					body.wuaName !== undefined, body.wuaName ?? null]
 			);
 			mustChange(changed);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
@@ -291,6 +306,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 				body.name !== undefined && body.name !== current.name && 'name',
 				body.description !== undefined && body.description !== current.description && 'description',
 				body.timeZone !== undefined && body.timeZone !== current.time_zone && 'time_zone',
+				body.wuaName !== undefined && body.wuaName !== current.wua_name && 'wua_name',
 				body.teamId !== undefined && body.teamId !== current.team_id && 'team'
 			].filter((f): f is string => !!f);
 			const updated = await getProject(db, id);
@@ -299,6 +315,7 @@ export const projectRoutes = new Hono<AuthEnv>()
 					fields,
 					...(fields.includes('name') ? { from: current.name, to: updated.name } : {}),
 					...(fields.includes('time_zone') ? { timeZone: { from: current.time_zone, to: updated.time_zone } } : {}),
+					...(fields.includes('wua_name') ? { wuaName: { from: current.wua_name, to: updated.wua_name } } : {}),
 					...(fields.includes('team') ? { team: updated.team_name } : {})
 				});
 			}

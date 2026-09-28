@@ -1,7 +1,7 @@
 // `yield`: a dam's firm yield, or its storage–yield curve, on a saved run or
 // a scenario (roadmap WP-3.6, docs/model.md §2.13), as the editor who queued
 // it, under RLS, or as the applicant who queued it on their own application
-// (095_contributor_yield: yieldInputFor checks it again as they are now, so
+// (096_contributor_yield: yieldInputFor checks it again as they are now, so
 // the job dies once they lose the role or the dam). Writes one yield_result row and keeps the newest
 // YIELD_RESULTS_KEPT per run or scenario and dam.
 //

@@ -159,6 +159,8 @@ export interface OutlookSettings {
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
+	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
+	wuaName?: string | null;
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
@@ -268,7 +270,7 @@ export interface InvitedFarmer {
 	status: 'invited' | 'expired';
 	inviteId: string;
 	email: string;
-	/** What they join as: an applicant invited with their farms (096); absent from servers before it. */
+	/** What they join as: an applicant invited with their farms (097); absent from servers before it. */
 	role?: FarmRole;
 	nodeIds: string[];
 	/** Display name of whoever (re-)sent it. */
@@ -612,7 +614,7 @@ export const RUN_NOTES_MAX = 4000;
 export type EvidenceStatus = 'current' | 'past';
 
 /** One row of a project's evidence history (GET …/evidence, oldest first; the last is current). */
-/** A row of the evidence history: a run nominated, or a withdrawal of the nomination before it (097: every run field null). */
+/** A row of the evidence history: a run nominated, or a withdrawal of the nomination before it (098: every run field null). */
 export interface Nomination {
 	id: string;
 	/** A withdrawal: no run, only who, when and why. Absent from an older API (every row a nomination). */

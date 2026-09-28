@@ -58,7 +58,7 @@ export interface JobHandler<P = unknown> {
 	 * One role below `role` that may also run it (exactly that role, not the
 	 * ones between), when the handler itself checks what that role may do:
 	 * `yield`'s contributor, on their own application only (yieldInputFor,
-	 * 095_contributor_yield). Allowlisted in trust.security.db.test.ts.
+	 * 096_contributor_yield). Allowlisted in trust.security.db.test.ts.
 	 */
 	alsoRole?: Role;
 	/** Validates the stored payload. A payload that fails is dead at once. */

@@ -2,7 +2,7 @@
 // (010_run_nomination.sql, docs/data-model.md § Evidence nomination). The
 // history is append-only in the database: water_app can read and add rows,
 // never change or remove them, and a nominated run can't be deleted. A
-// withdrawal (097_nomination_withdrawal) is a row of its own with no run and
+// withdrawal (098_nomination_withdrawal) is a row of its own with no run and
 // a reason: after it nothing is the evidence until a run is nominated again.
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -151,7 +151,7 @@ export const evidenceRoutes = new Hono<AuthEnv>()
 			return c.json({ nomination: nominations.at(-1), nominations }, 201);
 		});
 	})
-	// Withdraw the current nomination (097): a history row with no run and a
+	// Withdraw the current nomination (098): a history row with no run and a
 	// reason. Nothing is the evidence until a run is nominated again.
 	.post('/:id/evidence/withdraw', async (c) => {
 		const id = c.req.param('id');

@@ -273,7 +273,7 @@ describe('a nominated run is kept', () => {
 	});
 });
 
-// 097_nomination_withdrawal: a withdrawal is its own history row, with no run.
+// 098_nomination_withdrawal: a withdrawal is its own history row, with no run.
 describe('withdrawing the nomination', () => {
 	const withdraw = (u: User, pid: string, reason: unknown = 'the licence application was withdrawn') => u.call('POST', `/projects/${pid}/evidence/withdraw`, { reason });
 

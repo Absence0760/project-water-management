@@ -81,7 +81,7 @@ export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest
 }
 
 /**
- * The input a yield runs on, for this user in this role (095_contributor_yield):
+ * The input a yield runs on, for this user in this role (096_contributor_yield):
  * an editor's is yieldInput's, on any run or scenario. A contributor (an
  * applicant, WP-3.3) calculates only on an application they own, and only a
  * dam of it they may see: their own farm (the application's own nodes) or a

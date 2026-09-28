@@ -12,7 +12,7 @@ export function runoffModelName(id: string | undefined | null): string {
 const quoted = (label: string | null | undefined) => `“${label || 'Untitled run'}”`;
 const by = (who: string | null) => (who ? ` by ${who}` : '');
 
-/** A withdrawal row (097): no run, only who, when and why. */
+/** A withdrawal row (098): no run, only who, when and why. */
 export const isWithdrawal = (n: Pick<Nomination, 'withdrawn' | 'runId'>): boolean => !!n.withdrawn || n.runId === null;
 
 /** A nomination of a run (not a withdrawal), with its run fields known. */

@@ -391,7 +391,7 @@ describe('teams client', () => {
 			'/projects/p/farmers',
 			expect.objectContaining({ method: 'POST', body: JSON.stringify({ email: 'f@example.com', nodeIds: ['n1'], locale: 'en', role: 'farmer' }) })
 		);
-		// An applicant with their farms (WP-3.3, 096).
+		// An applicant with their farms (WP-3.3, 097).
 		const applicant = mockFetch(201, { farmer });
 		await createApi('', applicant).farmers.add('p', 'a@example.com', ['n1'], 'en', 'contributor');
 		expect(applicant).toHaveBeenCalledWith(

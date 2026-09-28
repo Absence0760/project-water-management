@@ -1,4 +1,4 @@
--- 096_contributor_invite_farms — invite a licence applicant (a contributor,
+-- 097_contributor_invite_farms — invite a licence applicant (a contributor,
 -- 044/045, WP-3.3) with the farms they hold, as a farmer invite carries its
 -- farms (034_farmer_invites; docs/followups.md § Applicants, issue #73).
 -- Until now an applicant's farm links were set by the owner after they
@@ -31,7 +31,7 @@ CREATE OR REPLACE FUNCTION invite_node_check() RETURNS trigger
 	END
 	$$;
 COMMENT ON TABLE invite_node IS
-	'Which farm nodes a farmer or applicant invite links once accepted (034, 096). Owner-only, like the invite.';
+	'Which farm nodes a farmer or applicant invite links once accepted (034, 097). Owner-only, like the invite.';
 
 CREATE OR REPLACE FUNCTION app_accept_invites(p_user uuid) RETURNS integer
 	LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
@@ -66,7 +66,7 @@ CREATE OR REPLACE FUNCTION app_accept_invites(p_user uuid) RETURNS integer
 				FROM invite i
 				JOIN invite_node n ON n.invite_id = i.id
 				JOIN node nd ON nd.id = n.node_id AND nd.kind = 'farm'
-				-- 096: a contributor invite's farms too, for the role it made them (not one they held before).
+				-- 097: a contributor invite's farms too, for the role it made them (not one they held before).
 				JOIN project_member m ON m.project_id = i.project_id AND m.user_id = p_user AND m.role = i.project_role
 				WHERE i.email = v_email AND i.project_role IN ('farmer', 'contributor') AND i.expires_at > now()
 				ON CONFLICT DO NOTHING

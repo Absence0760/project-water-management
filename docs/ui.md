@@ -894,6 +894,11 @@ it scrolls, and isn't fitted to the window.
   the portfolio's ages, the feeds' health, the farm page's "not recent"
   notice and forecast date, and the alerts (their "today" and the 06:00
   digest). A zone the server doesn't know is refused with its error.
+- **WUA name** (Project details, under Time zone; issue #74): the name of
+  the Water User Association the farm pages tell a farmer to contact
+  ("Questions? Contact Vaalbank WUA."), saved with **Save details**
+  (editors); empty keeps "your WUA". Not the team's name, which may be a
+  consultancy's.
 - **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
   on a phone), then Project details, the import record, recent notes and
   recent changes on the left; on the right, "who has access": Team above
@@ -3556,7 +3561,7 @@ read it before.
   the current evidence run say why they can't be nominated instead.
   While a run is nominated, editors also get **Withdraw the nomination…**,
   which opens a required **Why the nomination is withdrawn** textarea and
-  **Withdraw the nomination** (`POST …/evidence/withdraw`, 097); afterwards
+  **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards
   the section says "The project's nomination was withdrawn: no run is its
   evidence now." and any run may be nominated again.
   Under it the **Nomination history**, newest first: "Nominated “A” on … by
@@ -4824,8 +4829,14 @@ published.
   WUA or DWS notice is a restriction; the operator doesn't check the WUA's
   figures and accepts no responsibility, with a link to the Terms of use,
   section 13). The press goes to `POST /auth/me/farm-notice` (stored on the
-  account, 093) and the figures follow at once. A new version shows it
-  again. Not shown to WUA staff previewing a farm, nor while there is
+  account, 093) and the figures follow at once. Pressed without a signal
+  (issue #74), the press is kept on the phone for that user and version
+  (`farm/noticeAck.ts`, `wm.farm.notice-ack.v1`) and the figures (the saved
+  copy) show; the page sends it when the signal is back (the `online` event,
+  or the next load), and the account's time is the server's when it
+  arrives. A refusal (the notice changed meanwhile, 409) drops it and the
+  notice shows again; another account on the phone never inherits it. A
+  new version shows it again. Not shown to WUA staff previewing a farm, nor while there is
   nothing published (the no-publication state has no figures). The words
   are bound to the version (`farmNotice.test.ts`) and quoted in
   `docs/legal/disclaimer-review.md` § 3.
@@ -4838,7 +4849,13 @@ published.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
-  also clears the saved copy.
+  also clears the saved copy. The contact lines ("Questions? Contact …",
+  the removed and second-failure lines) name the WUA when the project has
+  its name (`wuaName`, set on the Project page's details), else say "your
+  WUA" (`contactText` in `farm/cards.ts`). "Compared with last season"
+  without a year of figures says "Not available: the model's data starts
+  on 1 Jun 2023." from the projection's `dataFrom` (a copy saved before it
+  says only that the data doesn't reach back).
 - **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
   user and farm in `localStorage`, shown at once with "Updating…". Without a
   signal it stays under a dark strip ("No signal. These are the figures

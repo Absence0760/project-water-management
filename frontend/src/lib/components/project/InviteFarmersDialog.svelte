@@ -5,7 +5,7 @@
 	// (added / invited / error) in a dry run that writes and mails nothing,
 	// and only then does "Send" do it for real. Owners only (the panel hides
 	// the button from everyone else). One person may also join as a licence
-	// applicant with their farms (WP-3.3, 096_contributor_invite_farms): an
+	// applicant with their farms (WP-3.3, 097_contributor_invite_farms): an
 	// irrigator applying to raise their own dam.
 	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';

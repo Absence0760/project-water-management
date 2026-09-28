@@ -44,7 +44,7 @@ describe('runEvidence', () => {
 		expect(runEvidence(h, 'b')).toMatchObject({ status: 'past', replacedBy: { runId: 'a', reason: 'r3' } });
 	});
 
-	it('a withdrawal (097) makes the nomination before it past, "withdrawn" rather than replaced, and names no run', () => {
+	it('a withdrawal (098) makes the nomination before it past, "withdrawn" rather than replaced, and names no run', () => {
 		const w: Nomination = { ...n('x', 3, 'application lapsed'), withdrawn: true, runId: null, runLabel: null, runCreatedAt: null, runoffModel: null, engineVersion: null };
 		expect(runEvidence([n('a', 1), w], 'a')).toMatchObject({
 			status: 'past',

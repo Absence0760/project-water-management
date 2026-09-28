@@ -436,7 +436,7 @@ const WRITE_ROUTES: Entry[] = [
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
-	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (097_nomination_withdrawal.sql)' },
+	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (098_nomination_withdrawal.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty`, exempt: 'an ensemble is kept forever with its seed and changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/runs/:runId/uncertainty/:uid/result`, exempt: 'completes a kept ensemble; changes no input (014_run_uncertainty.sql)' },
 	{ route: `POST ${P}/allocations/import`, exempt: 'the import preview parses and matches a file and writes nothing; the commit records allocation.imported' },

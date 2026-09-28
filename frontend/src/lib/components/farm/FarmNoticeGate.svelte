@@ -5,17 +5,30 @@
 	// force (/auth/me `farmNoticeCurrent`, 093), a farm page shows this instead
 	// of its figures. WUA staff previewing a farm see the figures as the farmer
 	// does, without it: the notice is the farmer's to acknowledge.
-	import type { Snippet } from 'svelte';
+	// Pressed without a signal, the press is kept on the phone (noticeAck.ts)
+	// and the figures show; it is sent when the signal is back, and a refusal
+	// (the notice changed meanwhile) brings the notice back.
+	import { untrack, type Snippet } from 'svelte';
+	import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { errorText } from '$lib/i18n/apiError';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { farmNoticeButton, farmNoticePoints, farmNoticeTitle } from './farmNotice';
+	import { classify } from './load';
+	import { clearPendingAck, flushOutcome, hasPendingAck, savePendingAck } from './noticeAck';
 
 	let { preview = false, children }: { preview?: boolean; children: Snippet } = $props();
 
-	const needed = $derived(!preview && !!session.user && session.user.farmNoticeCurrent !== true);
+	// Bumped when this phone's kept press changes, so `pending` reads storage again.
+	let kept = $state(0);
+	const userId = $derived(session.user?.id ?? null);
+	const pending = $derived.by(() => {
+		void kept;
+		return !!userId && hasPendingAck(userId, FARMER_NOTICE_VERSION);
+	});
+	const needed = $derived(!preview && !!session.user && session.user.farmNoticeCurrent !== true && !pending);
 	let busy = $state(false);
 	let error = $state('');
 
@@ -25,11 +38,47 @@
 		try {
 			session.user = await api.auth.acknowledgeFarmNotice();
 		} catch (e) {
-			error = errorText(e);
+			// No signal: keep the press on the phone and show the figures; it goes when the signal is back.
+			if (classify(e) === 'offline' && userId && savePendingAck(userId, FARMER_NOTICE_VERSION)) kept++;
+			else error = errorText(e);
 		} finally {
 			busy = false;
 		}
 	}
+
+	let flushing = false;
+	/** Send a kept press. The server stamps its own time; a refusal drops the press and the notice shows again. */
+	async function flush() {
+		if (flushing || !pending || session.user?.farmNoticeCurrent === true) {
+			if (pending && session.user?.farmNoticeCurrent === true) {
+				clearPendingAck();
+				kept++;
+			}
+			return;
+		}
+		flushing = true;
+		let failure: unknown | null = null;
+		try {
+			session.user = await api.auth.acknowledgeFarmNotice();
+		} catch (e) {
+			failure = e;
+		} finally {
+			flushing = false;
+		}
+		if (flushOutcome(failure) !== 'keep') {
+			clearPendingAck();
+			kept++;
+		}
+	}
+
+	$effect(() => {
+		if (!pending) return;
+		// Only `pending` drives this: flush's own reads of the session mustn't re-run it.
+		untrack(() => void flush());
+		const online = () => void flush();
+		window.addEventListener('online', online);
+		return () => window.removeEventListener('online', online);
+	});
 </script>
 
 {#if needed}

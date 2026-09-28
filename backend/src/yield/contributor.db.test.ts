@@ -1,4 +1,4 @@
-// An applicant's yields (095_contributor_yield, WP-3.6 × WP-3.3, issue #73):
+// An applicant's yields (096_contributor_yield, WP-3.6 × WP-3.3, issue #73):
 // a contributor queues a firm yield or curve of a dam of their own
 // application (their farm, or a dam its node.add ops add), reads their own
 // jobs and results, and nothing else: not a hidden neighbour's dam (the same

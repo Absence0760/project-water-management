@@ -130,7 +130,7 @@ describe('nominateBlocker', () => {
 	});
 });
 
-// 097_nomination_withdrawal: a withdrawal row has no run.
+// 098_nomination_withdrawal: a withdrawal row has no run.
 describe('a withdrawn nomination', () => {
 	const w = (day: number): Nomination => ({
 		...nom('x', day),

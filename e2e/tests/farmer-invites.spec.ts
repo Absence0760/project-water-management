@@ -64,7 +64,7 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 	await expect(pending).toHaveCount(0);
 });
 
-// An applicant invited with the farm they hold (WP-3.3, 096_contributor_invite_farms, issue #73).
+// An applicant invited with the farm they hold (WP-3.3, 097_contributor_invite_farms, issue #73).
 test('an owner invites a licence applicant with their farm, who joins as an applicant linked to it', async ({ page, owner, browser }) => {
 	void owner;
 	const project = await createProject(page.request, 'Invite-an-applicant catchment');

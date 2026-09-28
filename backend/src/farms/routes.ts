@@ -11,7 +11,7 @@
 // rows at once, matching farms by name.
 //
 // POST /farmers also adds or invites a licence applicant (`role:
-// 'contributor'`, WP-3.3) with the farms they hold (096_contributor_invite_farms):
+// 'contributor'`, WP-3.3) with the farms they hold (097_contributor_invite_farms):
 // an irrigator applying to raise their own dam joins with their farm linked.
 //
 // A farmer leaves (or an owner removes one) through DELETE /members/:userId:
@@ -63,7 +63,7 @@ export interface ActiveFarmer {
 	nodeIds: string[];
 }
 
-/** A pending farmer invite, or an applicant's with farms (096); `expired` once past its expiry (it can be re-sent). */
+/** A pending farmer invite, or an applicant's with farms (097); `expired` once past its expiry (it can be re-sent). */
 export interface InvitedFarmer {
 	status: 'invited' | 'expired';
 	inviteId: string;

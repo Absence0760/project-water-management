@@ -810,7 +810,7 @@ describe('the evidence nomination rows', () => {
 	});
 });
 
-describe('a withdrawn nomination (097)', () => {
+describe('a withdrawn nomination (098)', () => {
 	it('says "since withdrawn" and gives the withdrawal’s date, author and reason, not a run', () => {
 		const lines = [
 			...evidenceLines({

@@ -6,7 +6,7 @@
 //   POST /projects/:id/yield/:jobId/cancel   the user who queued it, or an editor   stop a yield job
 //
 // A contributor (an applicant, WP-3.3) calculates only on an application they
-// own, for its dams they may see (yieldInputFor, 095_contributor_yield); RLS
+// own, for its dams they may see (yieldInputFor, 096_contributor_yield); RLS
 // shows them their own jobs and results only.
 //
 // Status and progress of the job: GET /projects/:id/jobs (WP-2.8).

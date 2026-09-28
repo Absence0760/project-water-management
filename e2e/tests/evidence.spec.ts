@@ -86,7 +86,7 @@ test('an editor nominates a run as evidence, replaces it, and the history keeps 
 	void owner;
 });
 
-// 097_nomination_withdrawal: withdrawing leaves no evidence run, and the history says so.
+// 098_nomination_withdrawal: withdrawing leaves no evidence run, and the history says so.
 test('an editor withdraws the nomination with a reason; the history keeps it and the run can be nominated again', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Evidence withdrawn');

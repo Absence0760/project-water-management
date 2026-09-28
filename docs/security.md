@@ -1157,7 +1157,7 @@ In short:
     farmer does) and none of the viewer or owner tables
     (`scenarios/contributor-tables.db.test.ts`, each with a positive
     control). The one later exception is their own yields
-    (`095_contributor_yield`): a yield job and its result on a dam of an
+    (`096_contributor_yield`): a yield job and its result on a dam of an
     application they own, and nothing of anyone else's
     (`yield/contributor.db.test.ts`). The worker admits a role below a job
     kind's own only through `JobHandler.alsoRole`, exactly that role, and the

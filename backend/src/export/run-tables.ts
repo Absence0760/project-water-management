@@ -617,7 +617,7 @@ export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator
 /**
  * Whether the run is the project's nominated evidence run (010_run_nomination):
  * always a status row, then this run's nomination (when, who, why) and, for a
- * replaced one, what replaced it (another run, or a withdrawal: 097). A reader of the sheet alone can tell a run
+ * replaced one, what replaced it (another run, or a withdrawal: 098). A reader of the sheet alone can tell a run
  * the project stands behind from one it has moved away from.
  */
 export function* evidenceLines(e: RunEvidence | null): Generator<string> {

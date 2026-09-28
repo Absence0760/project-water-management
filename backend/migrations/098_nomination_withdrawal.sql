@@ -1,4 +1,4 @@
--- 097_nomination_withdrawal — withdrawing the project's evidence nomination
+-- 098_nomination_withdrawal — withdrawing the project's evidence nomination
 -- (docs/followups.md § Features left half-way, issue #73; docs/data-model.md
 -- § Evidence nomination).
 --
@@ -21,8 +21,8 @@ ALTER TABLE run_nomination
 	ADD CONSTRAINT run_nomination_withdrawal CHECK ((run_id IS NULL) = (runoff_model IS NULL) AND (run_id IS NULL) = (engine_version IS NULL));
 
 COMMENT ON TABLE run_nomination IS
-	'Append-only history of the run each project nominated as evidence (010_run_nomination), and of withdrawals (097: a row with no run). The newest row is the current nomination, or none when it is a withdrawal. water_app may only SELECT and INSERT.';
-COMMENT ON COLUMN run_nomination.run_id IS 'The nominated run; NULL for a withdrawal of the nomination before it (097).';
+	'Append-only history of the run each project nominated as evidence (010_run_nomination), and of withdrawals (098: a row with no run). The newest row is the current nomination, or none when it is a withdrawal. water_app may only SELECT and INSERT.';
+COMMENT ON COLUMN run_nomination.run_id IS 'The nominated run; NULL for a withdrawal of the nomination before it (098).';
 COMMENT ON COLUMN run_nomination.reason IS 'Why this run is the evidence, or why the nomination was withdrawn (required, at most 2000 characters).';
 
 -- Redefined from 010 (its only definition). A row with a run is stamped as

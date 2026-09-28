@@ -322,7 +322,7 @@ describe('POST /farmers/bulk', () => {
 	});
 });
 
-// A licence applicant invited with the farms they hold (096_contributor_invite_farms,
+// A licence applicant invited with the farms they hold (097_contributor_invite_farms,
 // issue #73): they join as a contributor with exactly those links.
 describe('inviting an applicant with farms', () => {
 	it('invites a new address as an applicant of its farms, with the ordinary invite email; accepting links them as a contributor', async () => {

@@ -86,7 +86,7 @@ export type PendingMail = Parameters<typeof trySendMail>[0] | null;
  * `farmer`: a farmer invite (WP-2.2, 034_farmer_invites). Its farms' names go
  * into the farmer variant of the email, in `locale`; the caller writes the
  * invite's invite_node rows. A contributor invite keeps them too (an
- * applicant invited with their farms, 096_contributor_invite_farms; a resend
+ * applicant invited with their farms, 097_contributor_invite_farms; a resend
  * from the members list doesn't drop them). Any other role clears them, so
  * an address re-invited as a viewer doesn't keep a farmer invite's farms.
  */

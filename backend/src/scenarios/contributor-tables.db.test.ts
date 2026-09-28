@@ -155,7 +155,7 @@ describe('a contributor and the tables added alongside WP-3.3', () => {
 		expect((await applicant.call('GET', `${P()}/allocations`)).status).toBe(403);
 	});
 
-	// Their own yield jobs and results on their own application: yield/contributor.db.test.ts (095).
+	// Their own yield jobs and results on their own application: yield/contributor.db.test.ts (096).
 	it('reads no yield result and no job of anyone else (a viewer does)', async () => {
 		const y = await insertYield({ runId: published });
 		const job = await withUser(owner.id, async (db) => (await db.query<{ id: string }>(`INSERT INTO job (project_id, kind) VALUES ($1, 'rerun') RETURNING id`, [projectId])).rows[0]!.id);

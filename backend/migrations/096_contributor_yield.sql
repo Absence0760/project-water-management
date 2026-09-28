@@ -1,4 +1,4 @@
--- 095_contributor_yield — an applicant (a contributor, 044/045, WP-3.3)
+-- 096_contributor_yield — an applicant (a contributor, 044/045, WP-3.3)
 -- calculates the firm yield or storage–yield curve of a dam of their own
 -- application (roadmap WP-3.6: "a contributor, for a job on a scenario they
 -- own"; docs/followups.md § Firm yield; issue #73).

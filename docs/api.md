@@ -239,8 +239,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
-| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (097), or when a nomination landed during the request (the database trigger refused it) | owner |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
+| DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says the history is kept even once a nomination is withdrawn; `evidenceRun` is `null` when the newest row is a withdrawal (098), or when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
@@ -269,6 +269,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (`project.changed` with `fields: ['time_zone']` and `timeZone: { from, to }`);
   a copy keeps it, and the project document (`export.json`, `POST
   /projects/import`) carries it as `timeZone` (absent = the default).
+  `wuaName` (095_wua_name): the WUA the farm pages' contact lines name
+  ("Questions? Contact Vaalbank WUA."), trimmed, ≤ 200 characters; `""` or
+  `null` clears it (then the pages say "your WUA"). A change is audited
+  (`project.changed` with `fields: ['wua_name']` and `wuaName: { from, to }`).
+  A copy and the project document don't carry it: neither has farmers to
+  contact anyone.
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
   `startDate + length − 1`), or `null` with none. A forecast or a flow series
@@ -659,7 +665,7 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 096), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 097), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
 | POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
@@ -1169,7 +1175,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run; `409 { error: "this run can't be deleted" }` when row-level security refuses the delete of a run you can read (never a `404`); `404` only for a run that isn't there (already deleted or trimmed). The check and the delete see one locked row | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, unless it is a withdrawal (then no run is the evidence); `[]` when none. `Nomination = { id, withdrawn, runId, runLabel, runCreatedAt, runoffModel, engineVersion, reason, nominatedAt, nominatedBy }`; a withdrawal has `withdrawn: true` and every run field `null` | viewer |
 | POST | `/projects/:id/evidence` | `{ runId, reason }` | `201 { nomination, nominations }`: the new row and the whole history. `reason` is required: trimmed, 1–2 000 characters, no NUL. No other field is accepted (`400`): who, when, the runoff model and the engine version are stamped by the database. `404 run not found` for a run not in this project; `409` for a legacy-model run (a stored run from before engine 1.0.0; workbook comparison only), a run whose stored inputs have flow shares over 100 % (made before engine 0.27.1 refused them), the run that is already current, a forecast run (WP-2.12: evidence is judged on the record, and a forecast run's last days are modelled on forecast rain), or a project at its limit of 50 nominations | editor |
-| POST | `/projects/:id/evidence/withdraw` | `{ reason }` | `201 { nomination, nominations }`: withdraws the current nomination (097): a history row with no run, stamped like a nomination, the reason required (as above). Nothing is the evidence until a run is nominated again; the withdrawn run shows as past evidence and stays kept, and the project stays undeletable. `409` when no run is nominated (nothing yet, or the last row is already a withdrawal) or at the limit of 50 rows (withdrawals count) | editor |
+| POST | `/projects/:id/evidence/withdraw` | `{ reason }` | `201 { nomination, nominations }`: withdraws the current nomination (098): a history row with no run, stamped like a nomination, the reason required (as above). Nothing is the evidence until a run is nominated again; the withdrawn run shows as past evidence and stays kept, and the project stays undeletable. `409` when no run is nominated (nothing yet, or the last row is already a withdrawal) or at the limit of 50 rows (withdrawals count) | editor |
 | GET | `/projects/:id/runs/:runId/reproduce` | – | `200 Reproduction`: the run re-run on the server from its stored inputs (`loadRunInput`) with the current engine, its summary and every daily output compared with what was stored (WP-3.1). `{ status, identical, engineVersionThen, engineVersionNow, differences, truncated, message? }`: `status` is `identical`, `differs` (`differences` lists up to 50: `{ kind: 'summary', path }`, `{ kind: 'series', key, nodeId, label, days, firstDate, maxAbsDiff }`, `{ kind: 'series_missing' \| 'series_extra', key, nodeId, label }`; `truncated` counts the rest), `not_reproducible` (a run from before stored inputs, `message` says so), `inconsistent` (a stored input fails its check against the run's record: never presented as the run) or `failed` (today's engine refuses the stored input, `message` has its reason). `404` for a run not in this project | viewer |
 
 - A run the engine can't make is a `400 { error: "model run failed: …" }`
@@ -1978,9 +1984,11 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
-| GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above | farmer |
+| GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
 | GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my farm", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
 - `farm` is the stored `FarmProjection` (season and last-30 totals, the dam,
@@ -2008,8 +2016,15 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
-- The chart series route (`…/farm/:nodeId/series`) and the publication
-  history per farm (`…/history`) are not built yet (WP-2.6).
+- `project.wuaName` is the WUA's name for the contact lines (`null` =
+  "your WUA"); `farm.dataFrom` is the published run's first day, which
+  "compared with last season" names when `lastSeason` is `null` (a
+  projection stored before it existed gets it from the publication's
+  `catchment_view.runStart`).
+- `series` and `history` check the farm before the query, so any other
+  node answers `404` whatever the query. The farm page itself renders from
+  the projection (the 12 months, last season); these two are for a longer
+  or custom chart and for comparing publications (roadmap WP-2.6).
 
 ## Jobs
 
