@@ -1370,6 +1370,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
     its top row rather than centring that row above the box's edge, where
     nothing can scroll to it (Sandspruit's top row was cut off at 1440 × 960).
     The side column is `clamp(17rem, 24vw, 22rem)`.
+  - **Fit signal:** a resize reaches the drawing a frame or more later (the
+    box's size through a ResizeObserver, the 900 px breakpoint through its
+    media query's change event, the layout's height through the measured top),
+    so the schematic's scroller carries `data-fit` (`<width>x<height>`, plus
+    ` wide` from 900 px): the box the drawing on screen was laid out for. It
+    is settled once that matches the box as it is now and `--map-top` matches
+    the layout's top; e2e waits on that (`waitForMapFit`, e2e/support/diagrams.ts)
+    before measuring the map (issue #138).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.

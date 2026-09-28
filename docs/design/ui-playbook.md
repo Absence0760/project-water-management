@@ -662,6 +662,16 @@ Interaction details that bit:
   1440, 1280 and 390, and on paper (`emulateMedia({ media: 'print' })`).
   Two lines of one label are one `<text>` with a `<tspan>`, or the checker
   (and a reader) sees two labels touching.
+- **A layout that follows its box settles after the resize, not at it.**
+  `setViewportSize` returns before the page's ResizeObservers and media-query
+  change events have run, so a drawing sized from them (the Network map's
+  `fill`) is still the old width's for a frame or more; a check straight after
+  it measured the old drawing, or read the box and the labels on either side
+  of the re-layout (`diagram-labels.spec.ts` at 390, issue #138). Have the
+  component say what it was laid out for (the schematic's `data-fit`) and wait
+  until that matches the box now (`waitForMapFit`), after every resize and
+  every change that re-lays it out, never a sleep. A new layout sized from its
+  box gets the same kind of signal.
 - **A scroll box with nothing focusable inside fails axe**
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,

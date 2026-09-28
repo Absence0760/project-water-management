@@ -3,7 +3,8 @@
 // no label is cut by a box's edge, and the smallest text is drawn big enough
 // to read. Measured in the browser, on screen, after layout
 // (docs/design/ui-playbook.md § 3, "Labels on diagrams").
-import type { Locator } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
+import { mapFitSettled, type MapFitReading } from './mapFit.ts';
 
 export interface LabelReport {
 	/** Labels found (a group of lines that belong together counts once). */
@@ -129,4 +130,31 @@ export async function checkDiagramLabels(svg: Locator, opts: LabelCheckOptions =
 			slack: opts.slack ?? 1
 		}
 	);
+}
+
+/**
+ * Waits until the Network map's drawing is laid out for the window as it is
+ * now (support/mapFit.ts): after `setViewportSize`, and before measuring
+ * anything on the map. The drawing is re-laid out a frame or more after the
+ * resize, so a check straight after it can read the old width's drawing, or
+ * straddle the re-layout between two reads (issue #138).
+ */
+export async function waitForMapFit(page: Page) {
+	const scroller = page.locator('.map-card .scroller');
+	await expect
+		.poll(() =>
+			scroller.evaluate((el): MapFitReading => {
+				const layout = el.closest('.map-layout');
+				return {
+					fit: el.getAttribute('data-fit'),
+					width: el.clientWidth,
+					height: el.clientHeight,
+					wide: matchMedia('(min-width: 900px)').matches,
+					mapTop: layout instanceof HTMLElement ? layout.style.getPropertyValue('--map-top') || null : null,
+					top: layout ? layout.getBoundingClientRect().top + window.scrollY : null
+				};
+			}).then(mapFitSettled),
+			{ message: 'the map is laid out for the current window' }
+		)
+		.toBe(true);
 }
