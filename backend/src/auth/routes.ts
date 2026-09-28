@@ -19,7 +19,7 @@ import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
-import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const password = z.string().min(8).max(200);
@@ -56,6 +56,11 @@ const MeBody = z
 	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined || b.preferences !== undefined, {
 		message: 'nothing to change: send displayName, locale, volumeUnit or preferences'
 	});
+/** "I understand" on the farm view's notice (093): the version the page showed. */
+const FarmNoticeBody = z.object({ version: z.string().max(20) });
+
+/** The re-acceptance step (docs/legal-status.md): the version the notice showed, the engine's LEGAL_VERSION. */
+const AcceptTermsBody = z.object({ version: z.string().max(20) });
 const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 
 /**
@@ -103,6 +108,7 @@ type UserRow = {
 	mail_suppressed_reason: 'bounce' | 'complaint' | null;
 	preferences: unknown;
 	terms_version: string | null;
+	farm_notice_version: string | null;
 };
 const toUser = (r: UserRow) => ({
 	id: r.id,
@@ -117,9 +123,12 @@ const toUser = (r: UserRow) => ({
 	preferences: toPreferences(r.preferences),
 	// Accepted the terms and privacy notice now in force (087): false for an
 	// account from before a new version, or made by a script (accepted none).
-	termsCurrent: r.terms_version === LEGAL_VERSION
+	termsCurrent: r.terms_version === LEGAL_VERSION,
+	// Acknowledged the farm view's notice now in force (093): false until the
+	// farmer presses "I understand", and again after a new version.
+	farmNoticeCurrent: r.farm_notice_version === FARMER_NOTICE_VERSION
 });
-const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, ${PREFERENCES_COL}`;
+const USER_COLS = `id, email, display_name, email_verified_at, locale, volume_unit, mail_suppressed_at, mail_suppressed_reason, terms_version, farm_notice_version, ${PREFERENCES_COL}`;
 
 /**
  * The email for a sign-up with an address that already has an account: a
@@ -333,6 +342,45 @@ export const authRoutes = new Hono<AuthEnv>()
 				 WHERE id = $1 RETURNING ${USER_COLS}`,
 				[c.get('userId'), body.displayName ?? null, body.locale !== undefined, body.locale ?? null, body.volumeUnit ?? null]
 			);
+			return rows[0];
+		});
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+		return c.json({ user: toUser(row) });
+	})
+	// "I understand" on the farm view's "Before you look at your farm" notice
+	// (093, docs/legal/disclaimer-review.md § 3): records the version the page
+	// showed, which must be the one in force (a page loaded before the words
+	// changed sends the old one: reload and read it again). The database
+	// stamps the time.
+	.post('/me/farm-notice', requireUser, async (c) => {
+		const body = FarmNoticeBody.parse(await readJson(c));
+		if (body.version !== FARMER_NOTICE_VERSION) {
+			throw ApiError.coded(409, 'farm_notice_changed', 'the farm notice changed since the page opened — reload and read it again', { version: FARMER_NOTICE_VERSION });
+		}
+		const row = await withUser(c.get('userId'), async (db) => {
+			const { rows } = await db.query<UserRow>(`UPDATE app_user SET farm_notice_version = $2 WHERE id = $1 RETURNING ${USER_COLS}`, [
+				c.get('userId'),
+				FARMER_NOTICE_VERSION
+			]);
+			return rows[0];
+		});
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+		return c.json({ user: toUser(row) });
+	})
+	// The re-acceptance step (docs/legal-status.md): a signed-in account whose
+	// termsCurrent is false accepts the version in force. A stale version (a
+	// page opened before the terms changed again) is refused like sign-up's;
+	// app_user_terms_stamp (087) stamps the time.
+	.post('/me/accept-terms', requireUser, async (c) => {
+		const body = AcceptTermsBody.parse(await readJson(c));
+		if (body.version !== LEGAL_VERSION) {
+			throw ApiError.coded(400, 'terms_not_accepted', 'accept the current terms of use and privacy notice', { version: LEGAL_VERSION });
+		}
+		const row = await withUser(c.get('userId'), async (db) => {
+			const { rows } = await db.query<UserRow>(`UPDATE app_user SET terms_version = $2 WHERE id = $1 RETURNING ${USER_COLS}`, [
+				c.get('userId'),
+				LEGAL_VERSION
+			]);
 			return rows[0];
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');

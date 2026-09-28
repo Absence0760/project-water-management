@@ -34,7 +34,8 @@
 		canEdit,
 		applicant = false,
 		publishedRunId = null,
-		onRunsChange
+		onRunsChange,
+		reloadRuns
 	}: {
 		projectId: string;
 		runs: RunMeta[] | null;
@@ -44,6 +45,11 @@
 		/** The current publication's run: an applicant's base. */
 		publishedRunId?: string | null;
 		onRunsChange: (runs: RunMeta[]) => void;
+		/**
+		 * Re-read the shared run list (the page's loadRuns): a list read before a later change, such as a
+		 * scenario run made here (onRunsChange bumps the page's count), is asked for again, never applied (issue #77).
+		 */
+		reloadRuns: () => Promise<void>;
 	} = $props();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -129,14 +135,7 @@
 		// An applicant has no run list (the workspace's routes refuse them).
 		if (applicant) return;
 		try {
-			for (;;) {
-				const at = ranHere;
-				const list = await api.runs.list(projectId);
-				// A scenario run made meanwhile: this list predates it, so ask again rather than drop the run.
-				if (ranHere !== at) continue;
-				onRunsChange(list);
-				break;
-			}
+			await reloadRuns();
 		} catch {
 			// The lists stay as they were (see above).
 		}
@@ -155,10 +154,7 @@
 		select(null);
 		refreshRuns();
 	}
-	/** Bumped by each scenario run made here, so a runs list fetched before it is asked for again (refreshRuns). */
-	let ranHere = 0;
 	async function ran(run: Run, removedRunIds: string[]) {
-		ranHere++;
 		const { summary: _s, ...meta } = run;
 		if (!applicant) onRunsChange([meta, ...(runs ?? []).filter((x) => x.id !== run.id && !removedRunIds.includes(x.id))]);
 		// The scenario's run count and latest run come from the server.

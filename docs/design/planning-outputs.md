@@ -200,7 +200,7 @@ level (anything else would change the history the season starts from).
   side with medians, 10–90 % ranges and years met, every analogue year,
   the planning figure in the engine's words, the pending defaults marked,
   a plain note that lower demand can add days below the EWR where return
-  flow reaches the river, and the draft disclaimer (D10).
+  flow reaches the river, and the disclaimer's first and third paragraphs (D10).
 - **Still to build**: the farmer view E3 (the published level's outcome
   per farm, once the WUA publishes it; O5 decides whether farmers see it,
   and in Afrikaans), and R6's review triggers beyond their engine half

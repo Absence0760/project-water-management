@@ -120,3 +120,24 @@ export function sparkDescription(w: SparkWords, ends: readonly [string, string])
 		`${markText(w, false)} on ${labels[i] ?? ''}, ${otherWord} ${format(values[other]!)} on ${labels[other] ?? ''}`
 	);
 }
+
+/**
+ * The keyboard's read-out (a slider over the points): the point a key moves
+ * to from `at` (its index into `pts`). Right or Up is the next point, Left or
+ * Down the one before, Page Up and Page Down a tenth of the line (a month of a
+ * year's days), Home and End the ends; it stops at the ends. `undefined` for a
+ * key it doesn't handle, so the key keeps its usual job (Tab).
+ */
+export function keyStep(pts: readonly SparkPoint[], at: number, key: string): number | undefined {
+	if (pts.length === 0) return undefined;
+	const page = Math.max(1, Math.round(pts.length / 10));
+	const to =
+		key === 'ArrowRight' || key === 'ArrowUp' ? at + 1
+		: key === 'ArrowLeft' || key === 'ArrowDown' ? at - 1
+		: key === 'PageUp' ? at + page
+		: key === 'PageDown' ? at - page
+		: key === 'Home' ? 0
+		: key === 'End' ? pts.length - 1
+		: undefined;
+	return to === undefined ? undefined : Math.min(pts.length - 1, Math.max(0, to));
+}

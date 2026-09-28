@@ -7,7 +7,7 @@ Tick items off (or move them into an issue) as they are done.
 
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
-the history scrub #63, the disclaimer's legal review #47, POPIA #48,
+the history scrub #63, the legal go-live gates #103, POPIA #48,
 the hydrologist's decisions #46, applicant decisions #50, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
@@ -66,25 +66,17 @@ The checklist for these is issue #62; the history scrub is #63.
       against the live page); CHIRPS-GEFS's licence before client use
       (details under § Features left half-way).
 
-- [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
-      decision D10; issue #47).** The disclaimer on every report (engine
-      `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
-      and the five sign-off statements (`liability/signoff.ts`,
-      `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
-      not agreed wording. The report prints *Draft wording, pending the
-      client's legal review* until `DISCLAIMER.status` is `agreed`. Have the
-      client's legal adviser review both (and an Afrikaans version if the
-      farmer view shows it); then set the agreed text, bump both versions and
-      flip the status. Sign-offs made before that record the draft versions
-      they were shown. The pack to send is
-      [legal/disclaimer-review.md](./legal/disclaimer-review.md) (2026-09-27):
-      every liability text quoted word for word, including the farmer view's
-      and alert emails' own lines in English and Afrikaans, questions for the
-      adviser, and the steps once agreed; tests fail if it falls behind the
-      code. Afrikaans: the full disclaimer is shown only on English workspace
-      screens, so it needs none; the farmer lines already have Afrikaans, and
-      the adviser reviews both languages. Left: send the pack, get the
-      agreed wording, apply it (§ 5 of the pack).
+- [x] **Disclaimer and sign-off wording (WP-3.13, decision D10; issue #47).**
+      Agreed 2026-09-28: the operator accepted revised wording, as operator,
+      after three pre-counsel reviews (disclaimer, sign-off, farmer lines);
+      no external legal adviser reviewed it. `DISCLAIMER` is version
+      `2026-09-28`, status `agreed`; the sign-off statement is `signoff-2`
+      (ten confirmations); farmer and alert-email lines name DWS beside the
+      WUA, and each alert kind carries its own line. The record is
+      [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
+      changed, why, and § 6: what stays open for a lawyer, tracked in
+      [legal-status.md](./legal-status.md) under Counsel review; the go-live
+      gates and pre-fee items are issue #103).
 
 - [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
@@ -1668,21 +1660,27 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 
 ## UI
 
-- [ ] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
+- [x] **`projects.spec.ts` › *fifty projects › fit the window…* fails on
       `main`** (tracked on #76; seen 2026-09-27, not caused by it; fails the same on a clean
       checkout): at 1440 px the page itself scrolls 25 px, where the list
       should scroll inside its card and the page not at all; under load the
-      row's More-actions menu also misses `aria-expanded="true"`. Fix the
-      layout at the source (the card's height budget), not the assertion.
-      Trigger: the next session on the project list, or before the next
-      release.
+      row's More-actions menu also misses `aria-expanded="true"`. **Done
+      2026-09-28.** The menu: the list's late scroll event closed the menu
+      its own opening had scrolled into view (#101). The height budget: the
+      card measured what sits below it from the document's `scrollHeight`,
+      which counts the empty window under a short list, so after a search
+      narrowed the list and was cleared the card stayed at its 320 px floor
+      with the window empty below; it now measures to the end of the page's
+      `<main>` and observes `<main>` too (`routes/+page.svelte`; the spec
+      clears a search and checks the card refills). The 25 px page scroll
+      no longer reproduces at 1440 or 1280, idle or under full CPU load.
 - [x] **Thousands separator style** (issue #76, 2026-09-27; D10): a narrow
       no-break space (U+202F) app-wide, the original ask: the workspace's
       `fmtNum`, the farm view, the landing page and the engine's messages
       all group through `engine/src/format.ts` ([ui.md § Number
       style](./ui.md#number-style)). Pasting commas still parses. The client
       or hydrologist may reverse it; it is one constant.
-- [ ] **Sparkline read-out is mouse-only** (found with the chart labels,
+- [x] **Sparkline read-out is mouse-only** (found with the chart labels,
       2026-09-27; `charts/Sparkline.svelte`). Pointing reads out the month
       or day under the pointer ("Jul 0.40"); a screen reader gets every
       value through the accessible name, but a sighted keyboard user sees
@@ -1690,7 +1688,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       sparkline focusable with arrow keys stepping the read-out (a slider
       pattern, `aria-valuetext`), or a "Show the numbers" disclosure beside
       the Crops list and the Dams cards. Trigger: the next accessibility
-      pass, or an accessibility-persona finding on it.
+      pass, or an accessibility-persona finding on it. **Done 2026-09-28**
+      (#76): the slider. It lies over the line, takes focus with Tab, starts
+      at the mark, and the arrows, Page Up/Down (a tenth of the line) and
+      Home/End step the read-out and the dot (`keyStep` in
+      `charts/sparkline.ts`), with the point in words as `aria-valuetext`. A
+      mouse press doesn't focus it. ui-playbook § 3; `sparklines.spec.ts`.
 - [ ] **Five help diagrams scroll sideways at 1440** (2026-09-27, from the
       diagram labels work). The help `Diagram` never draws text under
       9.5 px, so at column width the model pipeline, workflow, calibration
@@ -1698,12 +1701,20 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       instead of shrinking. Durable fix: redraw those five narrower (fewer
       boxes per row, or stacked) so they fit the column whole at 1280 and
       up. Waits on the operator's choice (keep the scroll, or redraw).
-- [ ] **Deleting a scenario's released base run sometimes answers 404**
-      (issue #77, found 2026-09-28): the scenarios e2e fails ~1 in 15. The
-      run's kept check passes but the DELETE removes no row, so either RLS
-      (`app_run_kept`) and `RUN_KEPT_SQL` disagree for a moment or something
-      else removed it; the Runs tab also shows the API's raw English. Detail,
-      durable fix and trigger in the issue.
+- [x] **Deleting a scenario's released base run sometimes answers 404**
+      (issue #77, found 2026-09-28, fixed 2026-09-28): the scenarios e2e
+      failed ~1 in 15. The cause was in the browser, not RLS (an editor's
+      `model_run_delete` policy never used `app_run_kept`): the Runs tab reads
+      its list as it opens, and when the delete answered before that read, the
+      older list arrived last, put the run back and opened it, and the run's
+      `GET` answered "not found". The page and the Runs tab now count their
+      changes to the run list and read it again when a list read before a
+      change answers after it (`runs.spec.ts` holds the read past the delete
+      to pin it). The server's kept rule is now one definition
+      (`RUN_KEPT_SQL` calls `app_run_kept`); the route locks the run, answers
+      `404` only for a run that isn't there and `409` for a delete RLS refuses;
+      the Runs tab words a run that's gone instead of showing "not found", and
+      a delete of a run already gone just removes it from the list.
 - [x] **"Sign out everywhere" button** (2026-09-24): the header's account
       menu has *Sign out* and *Sign out everywhere*.
 - [x] **Account page and password change while signed in** (WP-1.9, issue
@@ -2968,8 +2979,8 @@ assume, the questions for counsel); these are the actions, with triggers.
 - [ ] **Counsel review** of `/privacy` and `/terms` and the five questions in
       legal-status.md (the CPA's reach over a free service; the Virginia
       venue clause; roles before the s21 agreement and s55 registration
-      exist; email-only contact under s18; the National Water Act wording
-      alongside the report disclaimer, #47). Trigger: before the first
+      exist; email-only contact under s18; the liability wording the
+      operator accepted without counsel, #47, disclaimer-review.md § 6). Trigger: before the first
       client's farmers are invited.
 - [ ] **Register the information officer** on the Information Regulator's
       eServices portal ([legal/information-officer.md](./legal/information-officer.md);
@@ -2979,11 +2990,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       template for counsel). Confirm the mailbox provider first: Migadu per
       the estate's DNS, but the operator's own site names Gmail (list Google
       too if mail is forwarded). Trigger: the first client going live.
-- [ ] **Re-acceptance when the terms change.** Each account records the
-      version it accepted (087) and `/auth/me` says whether it is current;
-      there is no screen yet that asks again. Durable fix in
-      legal-status.md. Trigger: the first change to `LEGAL_VERSION` after
-      real users exist (any material edit to either page must bump it).
+- [x] **Re-acceptance when the terms change.** Built 2026-09-28 (#47): an
+      account on old terms sees the re-acceptance notice before any page and
+      accepts through `POST /auth/me/accept-terms`. The material-change email
+      to existing account holders (Terms §16) is still sent by hand.
 - [ ] **Self-service account deletion** and what happens to evidence an
       account made: #48; the privacy notice discloses the current exception.
 

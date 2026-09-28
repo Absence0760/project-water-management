@@ -20,7 +20,7 @@ import {
 	forecastColumn,
 	MAX_EXPORT_BYTES,
 	seriesHeader,
-	withLegacyComment,
+	withResultComments,
 	withRunComments,
 	type DailyColumn,
 	type RunProvenance
@@ -207,7 +207,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 				},
 				run.summary
 			);
-			const body = collectCsv(withLegacyComment(run.legacy, lines));
+			const body = collectCsv(withResultComments(run.legacy, lines));
 			if (body === null) throw tooLarge('the run summary is unexpectedly large');
 			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv', timeZone));
 		});

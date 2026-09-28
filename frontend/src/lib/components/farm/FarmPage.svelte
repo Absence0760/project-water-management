@@ -8,6 +8,7 @@
 	import { base } from '$app/paths';
 	import type { FarmView } from '@water-management/engine';
 	import { previewBanner, savedStrip } from './cards';
+	import FarmNoticeGate from './FarmNoticeGate.svelte';
 	import FarmShell from './FarmShell.svelte';
 	import FarmSkeleton from './FarmSkeleton.svelte';
 	import FarmStatus from './FarmStatus.svelte';
@@ -64,6 +65,7 @@
 	{:else if farm.phase.kind === 'no-publication'}
 		<FarmStatus kind="no-publication" farmName={farm.farmName} projectName={farm.projectName} wuaName={farm.wuaName} />
 	{:else if view}
-		{@render children(view)}
+		<!-- "Before you look at your farm" instead of the figures, until acknowledged (FarmNoticeGate). -->
+		<FarmNoticeGate preview={farm.preview}>{@render children(view)}</FarmNoticeGate>
 	{/if}
 </FarmShell>

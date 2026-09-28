@@ -77,6 +77,17 @@ describe('what an item says', () => {
 		expect(eventLine(ev('signoff.created', { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
 			'Signed off a run as Dr A. Hydrologist (SACNASP 400999/20)'
 		);
+		expect(
+			eventLine(
+				ev('signoff.created', {
+					fullName: 'Dr A. Hydrologist',
+					registrationBody: 'sacnasp',
+					registrationCategory: 'pr_sci_nat',
+					registrationField: 'water_resources',
+					registrationNo: '400999/20'
+				})
+			)
+		).toBe('Signed off a run as Dr A. Hydrologist, Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, Water Resources Science, no. 400999/20');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'farmers_set' }))).toBe('Linked Cara to the unit Hilltop');
 		expect(eventLine(ev('farmer.linked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'invite' }))).toBe('Linked Cara to the unit Hilltop (from their invite)');
 		expect(eventLine(ev('farmer.unlinked', { displayName: 'Cara', nodeName: 'Hilltop', cause: 'model_saved' }))).toBe(

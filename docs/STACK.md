@@ -47,7 +47,7 @@ sides share.
   dev dependency the tests check both against (`writer.test.ts` fails if app
   code imports it), pinned as a URL dependency on its official CDN tarball
   (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`, integrity hash in
-  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand. Dev port `7777`. `frontend/.env.production` sets
+  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand. OSV can't read its version either, so `osv-scanner.toml` records the xlsx advisories 0.20.3 already fixes (with an expiry): update it with the pin. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),

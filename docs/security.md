@@ -670,10 +670,15 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
   `headers`). `sendMail` makes every header value one line and refuses a
   header name that isn't a token, so no user text can inject a header.
-- **Liability.** Every alert says it is a model estimate from the WUA's
-  published figures, not a measurement or an instruction, and to check with
-  the WUA before acting; a forecast says forecasts change; a restriction
-  notice says it is the WUA's own words.
+- **Liability.** A dam alert says it is the model's estimate from the WUA's
+  published figures, not a measurement of the dam or an instruction, to
+  check the dam and ask the WUA, and that only a notice from the WUA or DWS
+  is a restriction (to the WUA's staff, the same in the third person); the staff-only EWR forecast alert says it comes from the
+  newest forecast run, which may not be published, and is an estimate, not
+  a restriction; a forecast says forecasts change; a restriction notice
+  says it is the WUA's own words and questions go to the WUA. The
+  operational alerts (feeds, jobs) carry no liability line
+  ([ui.md § Alerts](./ui.md#alerts)).
 - **A bounced or complaining address pauses its alerts.** SES drops mail
   to an address on its suppression list; the app learns of it through the
   configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
@@ -1569,14 +1574,17 @@ by the WUA; nobody is added to a project without an owner acting.
   signed up for, and for farmers the WUA's function of managing its members'
   water use (legitimate interest or a legal duty under its constitution)
   *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
-  `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
-  the sign-up form, invitations included, says that signing up accepts
-  both, and sends the version it showed: the account records it and when
+  `/terms` (research-based, not counsel-reviewed, [legal-status.md](./legal-status.md));
+  the sign-up form, invitations included, shows the Terms' main points and
+  a required checkbox accepting both, and sends the version it showed: the
+  account records it and when
   (`app_user.terms_version` / `terms_accepted_at`, 087; a missing or stale
   version is refused, `terms_not_accepted`). The time is the database's,
   and an account can't backdate or clear its own record
-  (`app_user_terms_stamp`). Asking again after a change is open in
-  legal-status.md.
+  (`app_user_terms_stamp`). After a change, an account on an older version
+  sees a notice before any app page until it accepts
+  (`POST /auth/me/accept-terms`, which refuses a stale version the same
+  way).
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
@@ -1833,9 +1841,10 @@ keys or key-level audit of report reads.
 Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 - **Disclaimer.** Every report ends with the disclaimer (engine
-  `DISCLAIMER`, versioned). It is **draft** wording until the client's legal
-  adviser agrees it (decision D10; an operator item in followups.md §
-  Blocking releases), and the report says so in bold beside it.
+  `DISCLAIMER`, versioned). Version `2026-09-28` is agreed: the operator
+  accepted it after a pre-counsel review, not an external legal adviser
+  (decision D10). A wording marked `draft` shows a bold draft line beside
+  it on every surface.
 - **Known limitations can't be left out quietly.** The report's validation
   statement lists every open engine-audit.md item, generated from the doc;
   a test fails when the committed list and the doc differ.
@@ -1843,11 +1852,17 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   ([data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
   - *Who:* editors and owners, as themselves only (RLS `user_id =
     app_current_user_id()`); viewers read; farmers see nothing.
-  - *What:* the server rebuilds the statement (the five confirmations, the
+  - *What:* the server rebuilds the statement (the ten confirmations of
+    `signoff-3`, the
     limitations, the notes, the disclaimer version, the run's id and engine
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
-    ticked; a legacy run (a stored run from before engine 1.0.0, which
+    ticked. The registration is fixed choices (engine
+    `liability/registration.ts`, 092): SACNASP or ECSA, a category and a
+    field or discipline. A candidate, certificated or specified category is
+    refused (400): they work under a professional's supervision (NSP Act
+    s 22(2); Engineering Profession Act s 18(4)), so the supervising
+    professional signs. An unusual category or field only warns. A legacy run (a stored run from before engine 1.0.0, which
     removed that model) can't be signed (audit H1), nor can a run whose
     server stamp is missing or no longer matches its rows
     ([§ Run stamps](#run-stamps)).
@@ -1863,8 +1878,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     project still takes its sign-offs with it (cascade), unless it has an
     evidence nomination (035). Each sign-off is in the audit log.
   - *Limits, stated on the report and in the dialog:* the registration
-    number is **self-declared** (not checked against the SACNASP register);
-    dam safety classification (DW793) is for others; there is no MFA on
+    details are the **signer's own declaration** (not checked against the
+    ECSA or SACNASP register, and printed "self-declared"; the report prints
+    the chosen register's address beside each signature); dam
+    safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
+    finding on lawfulness and doesn't verify the app's software; there is no MFA on
     signing yet (Step 4), so a sign-off is as strong as the signer's
     password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row

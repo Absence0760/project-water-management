@@ -281,7 +281,7 @@
 			project = p;
 			editor.load(m);
 			series = sl;
-			runs = rl;
+			setRuns(rl);
 		} catch (e) {
 			// A farmer gets 403 from the workspace's routes: their view of this
 			// project is the farm page (WP-2.6). An applicant's is the Applicant
@@ -332,9 +332,13 @@
 			return;
 		}
 	}
-	/** Bumped by every change to the runs list after the first load (setRuns), so a list fetched before it is asked for again (loadRuns). */
+	/**
+	 * Bumped by every change to the runs list (setRuns: the first load, a run made here, and every change a tab
+	 * reports), so a list fetched before it is asked for again (loadRuns) rather than bring back a run just
+	 * deleted (issue #77) or drop one just made.
+	 */
 	let runsEdits = 0;
-	function setRuns(next: RunMeta[]) {
+	function setRuns(next: RunMeta[] | null) {
 		runs = next;
 		runsEdits++;
 	}
@@ -756,7 +760,7 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>

@@ -1,6 +1,6 @@
 // Pure helpers for the CSV / JSON download endpoints (export/routes.ts).
 // No I/O: everything here is unit-tested in csv.test.ts.
-import { fromEpochDay, toEpochDay } from '@water-management/engine';
+import { CSV_DISCLAIMER_COMMENT, fromEpochDay, toEpochDay } from '@water-management/engine';
 import { localDate } from '../projects/timeZone.js';
 
 /**
@@ -31,9 +31,17 @@ export const EOL = '\r\n';
  */
 export const LEGACY_RUN_CSV_COMMENT = '# runoff_model=legacy; workbook comparison only; not evidence (audit H1)';
 
-/** Prepend LEGACY_RUN_CSV_COMMENT ahead of `lines` when `legacy` is true; otherwise pass them through unchanged. */
-export function* withLegacyComment(legacy: boolean, lines: Iterable<string>): Generator<string> {
+/**
+ * A result CSV's leading `#` lines ahead of `lines`: LEGACY_RUN_CSV_COMMENT
+ * first when `legacy` (so row 1 still says so), then the disclaimer line
+ * every file of a run's results carries (engine CSV_DISCLAIMER_COMMENT,
+ * docs/legal/disclaimer-review.md § 1). Readers of our own CSVs skip `#`
+ * lines (the frontend's daily-table preview, the series upload); the
+ * workbook keeps them on its Summary sheet, as the CSV has them.
+ */
+export function* withResultComments(legacy: boolean, lines: Iterable<string>): Generator<string> {
 	if (legacy) yield LEGACY_RUN_CSV_COMMENT;
+	yield CSV_DISCLAIMER_COMMENT;
 	yield* lines;
 }
 
@@ -89,11 +97,11 @@ export function runProvenanceComment(p: RunProvenance): string {
 
 /**
  * A daily CSV's leading `#` lines: the legacy-run warning first when the run is
- * legacy (so row 1 still says so, as on summary.csv), then the provenance line,
- * then `lines` (the header row and the days).
+ * legacy (so row 1 still says so, as on summary.csv), the disclaimer line,
+ * then the provenance line, then `lines` (the header row and the days).
  */
 export function* withRunComments(legacy: boolean, provenance: RunProvenance, lines: Iterable<string>): Generator<string> {
-	yield* withLegacyComment(legacy, [runProvenanceComment(provenance)]);
+	yield* withResultComments(legacy, [runProvenanceComment(provenance)]);
 	yield* lines;
 }
 

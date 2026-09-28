@@ -24,7 +24,7 @@ export interface ForecastVm {
 export const FORECAST_OLD_DAYS = 3;
 
 // i18n-section: farm.forecast
-export const forecastFine = () => t('Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction.');
+export const forecastFine = () => t('Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA or from DWS is a restriction.');
 
 /** The card's view model, or null when the published run has no forecast (the card is left out). */
 export function forecastCard(farm: FarmProjection, today: string): ForecastVm | null {

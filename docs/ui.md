@@ -164,13 +164,37 @@ other signed-out route still goes to `/login?next=`.
 a slim header with the way home and **Open the app** (to `/login`, which sends
 a signed-in reader on to their projects: a static page can't know the session,
 so it doesn't claim "Sign in"), a contents list (folded behind a
-**Contents (13 sections)** disclosure on a phone, where the list alone filled
+**Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
 the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in
-`AuthCard`), and in the sign-up form's own sentence, directly above its button ("By creating an account, you agree to the Terms of use and Privacy notice"). Drafts before counsel review: what they assume
-and what is open is in [legal-status.md](./legal-status.md).
+`AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
+**The short version**: the four main points of `lib/components/legal/termsSummary.ts`,
+the same list the sign-up form and the re-acceptance notice show translated
+(`TermsSummary.svelte`). Research-based wording the operator accepted without
+counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
+
+**Sign-up assent.** Directly above the sign-up button (invitations
+included): a bordered box, **The main things you agree to**, with the four
+points in the reader's language (and, in another language, "The Terms are
+in English; this summary is in your language"), then a required, unticked
+checkbox, "I have read the main points above and accept the Terms of use
+and Privacy notice", whose label links both pages. The browser won't submit
+the form until it is ticked. With the box at body size the sign-up form is taller
+than a window, so it is the one sign-in page that scrolls (to the end of the
+form and no further; `auth-pages.spec.ts`).
+
+**Re-acceptance notice.** When the terms change (`LEGAL_VERSION`), a
+signed-in account whose `termsCurrent` is false (it accepted an older
+version, or none) sees, on any app page, a full-page notice in the sign-in
+pages' frame instead (`auth-extras/TermsUpdate.svelte`, loaded by the root
+layout): **Our terms have changed**, what changed (a short list rewritten
+with each version), links to both pages, the same main points, **Accept the
+new terms** (`POST /auth/me/accept-terms`) and **Sign out**. The URL stays
+the page asked for, which renders once accepted. The public pages (the legal
+pages, emailed links, share links) aren't held behind it. Translated.
+`e2e/tests/terms-update.spec.ts`.
 The **Effective** line under each title is `legalEffective()` of the
 engine's `LEGAL_VERSION` (`packages/engine/src/legal.ts`), the same
 version the sign-up form sends as `acceptTerms` and the account records
@@ -768,7 +792,8 @@ for every workspace tab. Its own chunk.
   captioned "% full over the run's last year", the window's first and last
   day under its ends, and between them the low with its day ("low 15% ·
   19 Dec 2023", the Dam levels table's *Lowest in its last year* to the day),
-  marked by a dot; pointing at the line reads out that day instead. In a
+  marked by a dot; pointing at the line reads out that day instead, and so
+  do the keys on its focused slider (from the low; End is the last day). In a
   narrow card (a phone's two columns) the low takes its own line under the
   dates. The line sits above the card's stretched link, and a click on it
   picks the dam as the rest of the card does. Then links
@@ -995,7 +1020,10 @@ me), one table per group with the same fixed columns.
 
 **Fits the window** from 900 × 620 up, like the portfolio: the list's card
 takes at most the height left below the strip (its top and what sits below
-it, measured by a `ResizeObserver` on `body`), the groups scroll inside it
+it, measured by a `ResizeObserver` on `body` and the page's `<main>`; below
+is measured to the end of `<main>`, not the document's height, which counts
+the empty window under a short list and left the card at its 320 px floor
+after a search was cleared), the groups scroll inside it
 with each table's header stuck, and the page keeps a 1 rem gutter and
 doesn't scroll; a short list just ends. `.groups` is `position: relative`
 so its visually hidden captions stay inside the scroll box (without it they
@@ -1669,7 +1697,9 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   ("Crop factor by month, Oct–Sep"), each has Oct and Sep under its ends and
   its highest factor between them ("max 0.80"), marked by a dot, its top at
   1.0 (or the highest factor above it); pointing at it reads out a month
-  ("Jul 0.40"), and its image name gives every month's factor. Then
+  ("Jul 0.40"), as do the arrow keys once it has focus (its slider, "Orchard:
+  Crop factor by month, Oct–Sep, read-out"), and its image name gives every
+  month's factor. Then
   **Edit** (viewers: **View**), which opens the **crop
   sheet**. A crop with a factor above 1.0 gets a warning icon, a button named
   "Factor above 1.0 in Jan: check Vines isn't an FAO Kc" whose short text
@@ -3131,7 +3161,12 @@ read it before.
   the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
-  run shown; editors delete one with its ✕. Rows are compact so several fit
+  run shown; editors delete one with its ✕ (a run already gone, deleted
+  elsewhere or trimmed, just leaves the list; a run that can't be opened
+  because it's gone says so in words, `runs/runList.ts` `runErrorText`, never
+  the API's "not found"). A list read that a change (a run made, deleted,
+  pinned) overtakes is read again, so a deleted run never comes back
+  (issue #77). Rows are compact so several fit
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
@@ -3809,8 +3844,9 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,
   over the 40-year limit, a failed member), members the engine refused,
-  the engine's warnings, and the draft disclaimer's first and third
-  paragraphs with its draft note (D10).
+  the engine's warnings, and the disclaimer's first and third paragraphs
+  (not predictions; not official restrictions or allocations), with the
+  draft note only while the wording is marked draft (D10).
 - **No recommendation.** The panel reports how past years went at each
   level and never picks one (a unit test holds the view model to that, and
   the e2e spec checks the rendered panel).
@@ -4387,7 +4423,19 @@ exists, says so with a link to Runs & results.
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
   legacy-model warning for a stored run from before engine 1.0.0, the run's
-  summary sentence, contents), then numbered
+  summary sentence, for a forecast run (WP-2.12) the engine's
+  `FORECAST_RAIN_NOTE` line, "From <first forecast day>, this run uses
+  forecast rain, not recorded rain. …", as a warning (`report/sections.ts`
+  `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
+  doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
+  `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
+  uploaded forecast; a **Read this first** box above the summary sentence
+  (`report/sections.ts` `readFirst`, the engine's `REPORT_READ_FIRST`): the
+  disclaimer's key points with the Disclaimer's section number, then who
+  signed the run, "Signed off by <name> (<body> <number>)", or "Not signed
+  off by a registered professional."; an unsigned run nominated as evidence,
+  or any unsigned impact report, adds **Not signed off: not for use as
+  evidence in a licence application.** in bold; then the contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -4427,34 +4475,62 @@ exists, says so with a link to Runs & results.
     engine-audit.md. The same component is on screen, folded shut, in a
     run's Record group and under a scenario's comparison (`ValidationPanel`).
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
-    (signer, self-declared registration, date, scope, the statement version
+    (signer, date, the self-declared registration as "Pr.Sci.Nat.
+    (Professional Natural Scientist), SACNASP, Water Resources Science, no.
+    400123/15", then **Check it**: the body's public register with its
+    address written out, since reports are printed, then the scope it
+    limits; an older sign-off prints its free-text body and number with
+    "(category and field not recorded)"; the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
-    the disclaimer version), or **Not signed off.** in bold; then the five
-    statements a signer confirms. An editor or owner gets **Sign off this
+    the disclaimer version), or **Not signed off.** in bold; then the ten
+    statements a signer of the current version confirms (`signoff-3`). When
+    a listed sign-off was made under an earlier version, a line says it
+    confirmed that version's wording, recorded by its hash, not the
+    statements below. An editor or owner gets **Sign off this
     run…** (screen only); a legacy run (from before engine 1.0.0) says why it
     can't be signed; a viewer
     sees neither. Loaded with the report (`GET …/signoffs`), so
     `data-report-ready` waits for it and the server-side PDF prints it.
-  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): the draft
-    wording with a bold *Draft wording, pending the client's legal review
-    (decision D10)* line and its version, until the wording is agreed.
+  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): its five
+    paragraphs and its version (`2026-09-28.2`, agreed: accepted by the
+    operator after a pre-counsel review). Paragraph 5 ends with the Terms of
+    use URL in full, on the site's own address (`withSite`, the page's
+    origin). While the engine marks a wording
+    `draft`, a bold *Draft wording, pending the client's legal review
+    (decision D10)* line stands above it.
 
   Not yet: the published-by line and restriction notice (WP-2.3), changes
   since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): the five statements, each ticked on its own; the known
+  opened): full name, the registration as three selects (body, SACNASP by
+  default or ECSA; category; SACNASP's field of practice or ECSA's
+  discipline, whose list follows the body, and choosing another body clears
+  both; engine `liability/registration.ts`), registration number (its
+  placeholder an example of the body's format) and what the sign-off covers
+  come first, since the first statement is about "the person named above".
+  Candidate, certificated and specified categories are listed but disabled,
+  with a note that their supervising professional signs; Pr Techni Eng, Pr
+  Cert Eng and any field but Water Resources Science (SACNASP) or Civil and
+  Agricultural (ECSA) show an inline warning and may still sign
+  (`signoffForm.ts` `registrationAdvice`). Then the ten statements, each ticked on
+  its own (who signs and their registration, competence, conflicts of
+  interest, input data, calibration, EWR tables, works, assurance levels,
+  plausibility, limitations); the known
   limitations in a focusable scroll box (keyboard-scrollable, a labelled
   region) that must be scrolled to its end (a list too short to scroll counts
   as read), with a polite live line saying whether the end was reached; the
-  notes (registration self-declared, dam safety classification by others,
-  this run only); full name, registration body (SACNASP by default),
-  registration number and what the sign-off covers. **Sign off** stays
+  notes (registration details are the signer's own declaration, with where
+  to check them on the ECSA and SACNASP registers; dam safety under NWA
+  Chapter 12 and DW793 isn't covered; no finding on lawfulness; the
+  signature relies on the app's calculations and doesn't verify its
+  software; this run only). **Sign off** stays
   disabled, described by the list of what's missing, until everything is
   done (`signoffForm.ts` `signoffBlockers`). It sends back the statement's
   hash; a `409` (the statement changed) shows the error and reloads the
   statement, which clears the ticks and the read state. The Runs tab tags a
   signed run **Signed off**, and the History tab reads "Signed off a run as
-  … (SACNASP …)".
+  …, Pr.Sci.Nat. (Professional Natural Scientist), SACNASP, …" (an older
+  event: "… (SACNASP …)").
 - **Components reused, in print modes.** `LineChart`'s `print` prop draws a
   fixed `printWidth` × `height` box at 2 device pixels per CSS pixel
   (`printScale`: uPlot has no pixel-ratio option, so on a 1× screen the plot
@@ -4493,7 +4569,13 @@ exists, says so with a link to Runs & results.
   sit beside Download PDF for any viewer. They queue a server-side render of
   the shown run: the background worker opens this same page in headless
   Chromium and prints it to A4 with `page.pdf()`, so the PDF is the same
-  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)).
+  pages this page prints ([architecture.md § Server-side reports](./architecture.md#server-side-reports)),
+  plus a running footer on every page: the page's `data-report-footer`
+  (the engine's `REPORT_FOOTER`: project · run · "Model estimates; see the
+  Disclaimer (section N, version …). The operator of this software accepts
+  no responsibility to anyone who relies on this report.") and "Page X of
+  Y" (`reports/render.ts` `footerTemplate`). The browser's own print
+  (Download PDF) has no running footer.
   The bar then follows the job's status (`role="status"`: "PDF queued: waiting
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
@@ -4648,7 +4730,9 @@ published.
   (N farms)", so the name and the WUA's notice stay on the first screen,
   which matters for WUA staff previewing, who see every farm), with `/why` ("Why about
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
-  entries in the `farmer` category ("What do these words mean?"). The root
+  entries in the `farmer` category ("What do these words mean?"; since
+  issue #47 one of them is *WUA (Water User Association)*, which says some
+  areas still have an irrigation board). The root
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
@@ -4676,7 +4760,7 @@ published.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
-  restriction from the WUA". The notice is in the language the reader
+  restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
   English, else in the first other language the WUA wrote, with "The WUA
@@ -4699,20 +4783,47 @@ published.
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
-  CSV download and the disclaimer. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  CSV download. The CSV download fetches the file and puts the estimate
+  line (`cards.ts` `disclaimer()`), in the page's language, as a leading
+  `# ` line (`farm/csvNote.ts`); a failed download says why under the
+  links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge
   set it apart from the cards about what happened; "Lowest dam level
   expected: about 38 % around 20 Jan" (no dam, no line), "You may be short
   on 3 of the 14 days" (or that the model doesn't expect a short day), and
   the forecast's own dates with "Forecasts change, and this is worked out
-  by the model, not a promise. Only a notice from your WUA is a
+  by the model, not a promise. Only a notice from your WUA or from DWS is a
   restriction." A forecast made more than 3 days ago says how old it is
   first. The dam page shows the same card under its chart. That chart
   (`farm/DamChart.svelte`, "Last 12 months") says what its line is under its
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each
   point, and a caption with the months it covers and what the dashed line is.
+- **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
+  figures are worked out by a computer model of the catchment. They are
+  estimates, not measurements or instructions, and they can be wrong. Only a
+  notice from your WUA or from the Department of Water and Sanitation (DWS)
+  is a restriction." (`cards.ts` `disclaimer()`, quoted in the legal review
+  pack, issue #47). A callout at body size with an info icon, before the
+  first figure on every farm page: on the main page right after the WUA's
+  notice, in the offline view after the notice and before "At a glance", and
+  on the dam and *Why?* pages after the header (`farm-view.spec.ts` pins the
+  order). It used to sit at the foot of the main page only.
+- **"Before you look at your farm"** (`farm/FarmNoticeGate.svelte`, words in
+  `farm/farmNotice.ts`): until the signed-in account has pressed **I
+  understand** on the version in force (`/auth/me` `farmNoticeCurrent`, the
+  engine's `FARMER_NOTICE_VERSION`), every farm page and the `/farm` list
+  show this notice in place of the figures: four points (model estimates,
+  nobody measures the dam; they can be wrong, check before you act; only a
+  WUA or DWS notice is a restriction; the operator doesn't check the WUA's
+  figures and accepts no responsibility, with a link to the Terms of use,
+  section 13). The press goes to `POST /auth/me/farm-notice` (stored on the
+  account, 093) and the figures follow at once. A new version shows it
+  again. Not shown to WUA staff previewing a farm, nor while there is
+  nothing published (the no-publication state has no figures). The words
+  are bound to the version (`farmNotice.test.ts`) and quoted in
+  `docs/legal/disclaimer-review.md` § 3.
 - **Wording.** Every visible string comes from the message catalogue
   ([§ Language](#language)); the number rules and the sentences built from
   them live in pure modules under `lib/components/farm/` (`format.ts`,
@@ -4858,7 +4969,11 @@ digest). The modeller workspace stays English.
   cost nothing, and the sheet lists its rows by key beside the site's ids;
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
-  them, in the language the words came out in.
+  them, in the language the words came out in. The alert emails' liability
+  lines (`mail.alert.model`, `mail.alert.model.dam.staff`, `mail.alert.model.staff`,
+  `mail.alert.restriction.wua`, [§ Alerts](#alerts)) are quoted in the legal
+  review pack; `mail/i18n/liability.test.ts` fails when the pack's quote
+  differs.
 - **`lang`.** `<html lang>` is `wordsLang()` on the translated routes and
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
@@ -4992,6 +5107,24 @@ the catalogue, [§ Language](#language)); both unit-tested.
   source; failures or jobs; range-checked in the form and by the API), a
   *Firing* mark, and Save. It says that nothing is sent until a kind is switched on,
   and that each alert is sent once per crossing.
+- **The emails' liability line** (`mail/alerts.ts` `liabilityKey`, one per
+  kind, each distinct line once in a digest; `mail/alerts.test.ts` pins it
+  kind by kind and reader by reader). A dam alert to a farmer
+  (`mail.alert.model`) says it is the catchment model's estimate from the
+  figures your WUA published (true: dam_below reads the current
+  publication, `alerts/evaluate.ts`), not a measurement of your dam and not
+  an instruction, to check the dam and ask the WUA, and that only a notice
+  from the WUA or DWS is a restriction. The same alert to the WUA's staff
+  (`mail.alert.model.dam.staff`, chosen by the recipient's role, `send.ts`
+  → `Recipient.farmer`) says the same in the third person, without the
+  advice to check the dam. The EWR forecast alert,
+  which only the WUA's staff can get (`mail.alert.model.staff`), says it
+  comes from the newest forecast run, which may not be published yet, and
+  is an estimate, not a measurement or a restriction; its body ends
+  "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
+  says it is the WUA's own, shown as published, and that questions go to the
+  WUA. The operational alerts (data feed behind, data feed failing,
+  background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
   (`workspace/SectionHeader`, issue #17) is the page's one title, **Alert
@@ -5077,7 +5210,11 @@ signed in or out, for someone outside the project, on a phone first.
   view's for the notice card; [§ Language](#language)), in this device's
   choice or the browser's language.
 - **Top to bottom:** the catchment's name; "Published by *name* on *date*.
-  Data up to *date*." (and the next expected update); the WUA's notice
+  Data up to *date*." (and the next expected update); in body type, "A model
+  estimate that can be wrong, not a measurement, licence or restriction. As
+  far as the law allows, the operator of this software accepts no
+  responsibility to anyone who relies on this page." (`shareCaveat()`,
+  quoted in [legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)); the WUA's notice
   (the farmer view's `NoticeCard`: warning or danger fill, or "No
   restriction from the WUA"), in the reader's language, else English, else
   another the WUA wrote, with a "not translated" line, as on the farm view (marked with its `lang` when
@@ -5089,12 +5226,18 @@ signed in or out, for someone outside the project, on a phone first.
   width, a summary sentence and a table behind "Show the numbers"), only
   when the series come back, otherwise a line saying that with so few farms
   the flows could reveal a farm's use; and **About this page** with the
-  farm count and the model disclaimer.
+  farm count, how long the link works, and that the result is no
+  authorisation, licence, allocation or restriction under the National
+  Water Act (that it is a model estimate that can be wrong is the caveat
+  under the name, not repeated here).
 - **Layout (issue #17):** one column on a phone (560 px at most). Once the
   page is 860 px wide (a container query) the result is 1120 px wide in two
   columns under the name: the notice and the reserve on the left, the flow
-  chart and About on the right, so at 1440 × 960 and 1280 × 800 it all
-  fits without a page scroll. The message states (dead link, error) stay
+  chart and About on the right, so at 1440 × 960 it all fits without a
+  page scroll (the caveat runs the full 1120 px, two lines, rather than a
+  narrower reading measure that wraps it to three; the right column has
+  little room to spare, so a longer caveat or About text needs this
+  re-checked). The message states (dead link, error) stay
   one 560 px card. `share-links.spec.ts` pins both layouts and axe in both
   themes.
 - **States:** loading; a dead link ("This link has expired or was

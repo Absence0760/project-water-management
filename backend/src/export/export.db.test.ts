@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
+import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
 import { LEGACY_RUN_CSV_COMMENT, runProvenanceComment } from './csv.js';
 import { flowDurationTable } from './fdc.js';
 import { localDate } from '../projects/timeZone.js';
@@ -18,6 +19,12 @@ async function download(u: User, path: string) {
 }
 
 const lines = (csv: string) => csv.replace(BOM, '').replace(/\r\n$/, '').split('\r\n');
+/** A result CSV's lines after its disclaimer line, which must be the first (docs/legal/disclaimer-review.md § 1). */
+const afterDisclaimer = (csv: string) => {
+	const rows = lines(csv);
+	expect(rows[0]).toBe(CSV_DISCLAIMER_COMMENT);
+	return rows.slice(1);
+};
 /** A daily CSV's table (header row first): its lines after the leading `#` lines (the run's provenance, and a legacy run's warning). */
 const table = (csv: string) => {
 	const rows = lines(csv);
@@ -147,7 +154,7 @@ describe('run daily export', () => {
 			endDate: r.endDate as string
 		};
 		const base = `/projects/${projectId}/runs/${runId}/export`;
-		const first = async (path: string) => lines((await download(viewer, path)).text).slice(0, 2);
+		const first = async (path: string) => afterDisclaimer((await download(viewer, path)).text).slice(0, 2);
 		expect(await first(`${base}/daily.csv`)).toEqual([
 			`# run=Baseline; engine=${run.engineVersion}; runoff_model=gr4j; created=${run.createdAt}; period=2024-02-15..2024-03-15`,
 			expect.stringMatching(/^date,/)
@@ -165,7 +172,7 @@ describe('run daily export', () => {
 		const label = '=HYPERLINK("http://x","y"); engine=0.0.0\r\n2024-01-01,999';
 		const made = await owner.call('POST', `/projects/${projectId}/runs`, { label });
 		expect(made.status).toBe(201);
-		const rows = lines((await download(viewer, `/projects/${projectId}/runs/${made.body.run.id}/export/daily.csv`)).text);
+		const rows = afterDisclaimer((await download(viewer, `/projects/${projectId}/runs/${made.body.run.id}/export/daily.csv`)).text);
 		expect(rows[0]).toMatch(/^# run=%3DHYPERLINK\(%22http:\/\/x%22%2C%22y%22\)%3B engine%3D0\.0\.0%0D%0A2024-01-01%2C999; engine=/);
 		expect(rows[0]).not.toMatch(/[,"]/);
 		expect(rows[1]).toMatch(/^date,/);
@@ -239,7 +246,7 @@ describe('run summary export', () => {
 		const res = await download(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-disposition')).toMatch(/_baseline_summary_\d{4}-\d{2}-\d{2}\.csv"$/);
-		const rows = lines(res.text);
+		const rows = afterDisclaimer(res.text);
 		expect(rows[0]).toBe('Project,Catchment Ä / Export');
 		expect(rows.some((r) => r.startsWith('"Farm, ""upper""",'))).toBe(true);
 		expect(rows.some((r) => r.startsWith('Farm 2,'))).toBe(true);
@@ -328,27 +335,29 @@ describe('legacy run CSV comment (audit H1)', () => {
 		await makeStoredLegacyRun(legacyRunId);
 	});
 
-	it('starts daily.csv and summary.csv with the legacy comment, the provenance line and the header after it', async () => {
+	it('starts daily.csv and summary.csv with the legacy comment, the disclaimer, the provenance line and the header after it', async () => {
 		const daily = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/daily.csv`);
 		const dailyRows = lines(daily.text);
-		// Both lines: the warning first (row 1 says so, as on summary.csv), then the run's provenance, then the header.
+		// The warning first (row 1 says so, as on summary.csv), the disclaimer, then the run's provenance, then the header.
 		expect(dailyRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
-		expect(dailyRows[1]).toMatch(/^# run=Legacy; engine=[^;]+; runoff_model=legacy; created=[^;]+; period=2024-01-01\.\.\d{4}-\d{2}-\d{2}$/);
-		expect(dailyRows[2]).toMatch(/^date,/);
+		expect(dailyRows[1]).toBe(CSV_DISCLAIMER_COMMENT);
+		expect(dailyRows[2]).toMatch(/^# run=Legacy; engine=[^;]+; runoff_model=legacy; created=[^;]+; period=2024-01-01\.\.\d{4}-\d{2}-\d{2}$/);
+		expect(dailyRows[3]).toMatch(/^date,/);
 		expect(daily.text.startsWith(BOM)).toBe(true);
 
 		const summary = await download(owner, `/projects/${legacyProjectId}/runs/${legacyRunId}/export/summary.csv`);
 		const summaryRows = lines(summary.text);
 		expect(summaryRows[0]).toBe(LEGACY_RUN_CSV_COMMENT);
-		expect(summaryRows[1]).toBe('Project,Legacy export');
+		expect(summaryRows[1]).toBe(CSV_DISCLAIMER_COMMENT);
+		expect(summaryRows[2]).toBe('Project,Legacy export');
 	});
 
 	it('does not prefix a GR4J run’s exports (positive control, the Baseline run from the outer suite)', async () => {
 		const daily = await download(owner, `/projects/${projectId}/runs/${runId}/export/daily.csv`);
-		expect(lines(daily.text)[0]).toMatch(/^# run=Baseline; /);
+		expect(afterDisclaimer(daily.text)[0]).toMatch(/^# run=Baseline; /);
 		expect(lines(daily.text)).not.toContain(LEGACY_RUN_CSV_COMMENT);
 		const summary = await download(owner, `/projects/${projectId}/runs/${runId}/export/summary.csv`);
-		expect(lines(summary.text)[0]).not.toBe(LEGACY_RUN_CSV_COMMENT);
+		expect(afterDisclaimer(summary.text)[0]).toBe('Project,Catchment Ä / Export');
 	});
 });
 

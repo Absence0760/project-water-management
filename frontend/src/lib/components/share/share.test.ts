@@ -1,7 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ShareView } from '$lib/api/types';
 import { setLocale } from '$lib/i18n/locale.svelte';
-import { farmsLine, publishedLine, readShareToken, reserveRows, shareNotice } from './share';
+import { messageId } from '$lib/i18n/msg';
+import { af } from '$lib/i18n/messages/af';
+import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from './share';
 
 /** Intl joins dates and our figures with no-break spaces; compare with plain ones. */
 const sp = (s: string | null | undefined) => s?.replace(/[  ]/g, ' ');
@@ -103,5 +106,15 @@ describe('the words', () => {
 	it('counts the farms without naming one', () => {
 		expect(sp(farmsLine(view().publication.catchmentView))).toBe('6 farms in the catchment.');
 		expect(sp(farmsLine({ ...view().publication.catchmentView, farmCount: 1 }))).toBe('1 farm in the catchment.');
+	});
+});
+
+describe('the line under the heading', () => {
+	it('is quoted, in English and Afrikaans, in the legal review pack (docs/legal/disclaimer-review.md § 3)', () => {
+		const PACK = readFileSync(new URL('../../../../../docs/legal/disclaimer-review.md', import.meta.url), 'utf8');
+		const english = shareCaveat();
+		expect(english).toContain('accepts no responsibility to anyone who relies on this page');
+		expect(PACK).toContain(`> ${english}\n`);
+		expect(PACK).toContain(`> ${af[messageId(english)] as string}\n`);
 	});
 });

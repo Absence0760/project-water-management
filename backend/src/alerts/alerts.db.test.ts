@@ -255,13 +255,18 @@ describe('a dam alert end to end', () => {
 			expect(m.text).not.toContain(other);
 			expect(m.html).not.toContain(other);
 		}
-		expect(m.text).toMatch(/not a measurement, and not an instruction/);
+		expect(m.text).toMatch(/It is not a measurement of your dam and not an instruction\./);
 		expect(m.headers?.['List-Unsubscribe']).toMatch(/^<http:\/\/localhost:7777\/api\/alerts\/unsubscribe\?token=[A-Za-z0-9_-]{43}>$/);
 		expect(m.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
 		expect(mailsTo(farmer2).map((x) => x.subject)).toEqual([expect.stringContaining('Farm Two')]);
 		expect(mailsTo(farmer2)[0]!.text).not.toContain('Farm One');
 		// The WUA: a mail per farm for the editor and the owner; the viewer didn't opt in.
 		expect(mailsTo(editor).length).toBe(3);
+		// The staff's liability line is about the WUA's figures and a member's dam, not "your dam".
+		for (const x of mailsTo(editor)) {
+			expect(x.text).toMatch(/It is not a measurement of the dam and not an instruction\. Only a notice from the WUA or from DWS is a restriction\./);
+			expect(x.text).not.toContain('your dam');
+		}
 		expect(mailsTo(viewer).length).toBe(0);
 		expect(mailsTo(stranger).length).toBe(0);
 		// The same figure next time: still firing, no second mail.

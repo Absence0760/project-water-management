@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { escapeHtml, farmerInviteMail, inviteMail, listText, reportReadyMail, resetPasswordMail, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
 
@@ -133,6 +134,16 @@ describe('farmer invite email (WP-2.2)', () => {
 		expect(mail.html).toContain(`href="${url}"`);
 		expect(mail.html).toMatch(/<html lang="en">/);
 		expect(mail.html.match(/<h1/g)).toHaveLength(1);
+	});
+
+	// The estimate line before the button, so the farmer has it before they can see a figure (CPA s49 research, R4).
+	it('says the figures are model estimates, before the sign-up or confirm button', () => {
+		for (const mode of ['sign-up', 'confirm'] as const) {
+			const mail = farmerInviteMail('farmer@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek'] }, mode);
+			const at = mail.text.indexOf(en['mail.farmer.estimate']);
+			expect(at, mode).toBeGreaterThan(-1);
+			expect(at).toBeLessThan(mail.text.indexOf(url));
+		}
 	});
 
 	it('asks an existing unverified account to confirm instead', () => {

@@ -1,6 +1,7 @@
 // The Runs rail's compact rows: a short period and the filter over labels.
 // The full dates, author and engine live in the results header, so a row
 // only needs enough to tell runs apart.
+import { ApiError } from '$lib/api/client';
 import { hasRole, type Role } from '$lib/api/types';
 
 /** A run's period as years: "1979–2024", or "2021" when it starts and ends in one year. */
@@ -39,4 +40,20 @@ export function defaultRunId(runs: readonly { id: string; published?: boolean }[
 		if (published) return published.id;
 	}
 	return runs[0]?.id ?? null;
+}
+
+/** True for the API's answer about a run it no longer has (404: deleted, or trimmed by the storage cap). */
+export const isRunGone = (err: unknown): boolean => err instanceof ApiError && err.status === 404;
+
+/** What the Runs tab says about a run that is no longer stored. */
+export const RUN_GONE = 'This run no longer exists: it was deleted, or the storage cap removed it.';
+
+/**
+ * A failed run request in words: a run that's gone as RUN_GONE, never the
+ * API's bare "not found" (issue #77); any other refusal (a kept run's 409)
+ * is the server's own sentence, which says why.
+ */
+export function runErrorText(err: unknown): string {
+	if (isRunGone(err)) return RUN_GONE;
+	return err instanceof Error ? err.message : String(err);
 }

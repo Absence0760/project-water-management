@@ -1,13 +1,16 @@
 <script lang="ts">
-	// The report's disclaimer (WP-3.13, Step 2 decision D10). The wording is a
-	// draft until the client's legal adviser agrees it, and says so where it
-	// is shown (docs/followups.md § Blocking releases).
-	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE } from '@water-management/engine';
+	// The report's disclaimer (WP-3.13, Step 2 decision D10). A wording the
+	// engine marks draft says so where it is shown. `{site}` becomes this
+	// site's address, so the Terms URL prints in full.
+	import { base } from '$app/paths';
+	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE, withSite } from '@water-management/engine';
+
+	const site = `${location.origin}${base}`;
 </script>
 
 <div class="disclaimer" data-disclaimer-version={DISCLAIMER.version}>
 	{#if DISCLAIMER.status === 'draft'}<p class="draft"><strong>{DISCLAIMER_DRAFT_NOTE}</strong></p>{/if}
-	{#each DISCLAIMER.paragraphs as p, i (i)}<p>{p}</p>{/each}
+	{#each DISCLAIMER.paragraphs as p, i (i)}<p>{withSite(p, site)}</p>{/each}
 	<p class="muted small">Disclaimer version {DISCLAIMER.version}.</p>
 </div>
 

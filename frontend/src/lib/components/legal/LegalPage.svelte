@@ -189,9 +189,6 @@
 	.doc :global(.table-wrap) {
 		overflow-x: auto;
 	}
-	.doc :global(.caps) {
-		font-size: 0.92rem;
-	}
 	.foot {
 		border-top: 1px solid var(--border);
 		padding: 1.5rem var(--gutter) 2.5rem;

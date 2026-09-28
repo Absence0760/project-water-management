@@ -18,7 +18,7 @@
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
 	import { loadShare, type ShareLoad } from '$lib/components/share/load';
-	import { farmsLine, publishedLine, readShareToken, reserveRows, shareNotice } from '$lib/components/share/share';
+	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '$lib/components/share/share';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
@@ -86,6 +86,8 @@
 				<h1>{view.project.name}</h1>
 				<p class="sub">{t('Catchment water balance, shared read-only')}</p>
 				<p class="dates">{publishedLine(view)}</p>
+				<!-- Where the reliance happens, in body type (delict review §5.3): someone here accepted no terms. -->
+				<p class="caveat" data-testid="share-caveat">{shareCaveat()}</p>
 			</div>
 
 			<!-- Phone: one column, the notice and the reserve first. From 860 px
@@ -129,7 +131,8 @@
 						<h2 id="about-h">{t('About this page')}</h2>
 						<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.')}</p>
 						<p class="sub">{farmsLine(cv)}</p>
-						<p class="fine">{t('A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.')}</p>
+						<!-- That it is a model estimate that can be wrong is the caveat under the heading. -->
+						<p class="fine">{t('This link works until it expires or is withdrawn.')}</p>
 						<!-- The one page that shows model results to someone who accepted no terms (a licence assessor, a neighbour): what the result is not, and the legal pages. -->
 						<p class="fine">{t('It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.')}</p>
 						<p class="fine legal-links"><a href="{base}/terms">{t('Terms of use')}</a> · <a href="{base}/privacy">{t('Privacy notice')}</a></p>
@@ -292,6 +295,12 @@
 		margin-top: 8px;
 		font-size: 14px;
 		color: var(--text-muted);
+	}
+	/* The page's full width, not a reading measure: at 72ch it wrapped to a
+	   third line and pushed About below a 1440 × 960 laptop screen. Two lines
+	   at 1120 px; the phone's 560 px column is narrower than any measure. */
+	.caveat {
+		margin: 8px 0 0;
 	}
 	.share :global(details > summary) {
 		min-height: var(--tap);

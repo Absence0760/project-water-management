@@ -42,6 +42,8 @@ export const en = {
 	'mail.farmer.heading': 'Your farm on {product}',
 	'mail.farmer.body': '{inviter} has given you access to {farms} in {catchment}.',
 	'mail.farmer.privacy': "You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.",
+	'mail.farmer.estimate':
+		'The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.',
 	'mail.farmer.yourFarm': 'your farm',
 	'mail.farmer.and': 'and',
 
@@ -62,7 +64,11 @@ export const en = {
 	'mail.alert.openFarm': 'Open your farm',
 	'mail.alert.openProject': 'Open the catchment',
 	'mail.alert.model':
-		'This comes from the catchment model: an estimate from the figures the WUA published, not a measurement, and not an instruction. Check with your WUA before you act on it.',
+		'This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.',
+	'mail.alert.model.dam.staff':
+		'This is the catchment model’s estimate, worked out from the figures the WUA published. It is not a measurement of the dam and not an instruction. Only a notice from the WUA or from DWS is a restriction.',
+	'mail.alert.model.staff':
+		'This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.',
 	'mail.alert.why': 'You get this email because you get {kind} alerts for {project}.',
 	'mail.alert.unsubscribe': 'Stop these emails',
 	'mail.alert.manage': 'Manage your alerts',
@@ -88,7 +94,7 @@ export const en = {
 		'On the rain forecast of {madeOn}, the model expects the dam on {farm} to fall to about {pct} of capacity around {date}, below the alert level of {threshold}. Forecasts change.',
 	'mail.alert.ewr.what': 'River flow at risk in the forecast',
 	'mail.alert.ewr.body':
-		'On the rain forecast of {madeOn}, the model expects the river’s ecological flow (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days.',
+		'On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.',
 	'mail.alert.stale.what': 'Data feed behind',
 	'mail.alert.stale.body': 'These data feeds are more than {threshold} days later than usual:',
 	'mail.alert.stale.line': '{feed}: newest day {newest}, {overdue} days late',
@@ -107,7 +113,7 @@ export const en = {
 	'mail.alert.restriction.level.advisory': 'please use less water (advisory)',
 	'mail.alert.restriction.level.restricted': 'restricted',
 	'mail.alert.restriction.wua':
-		'This notice is the WUA’s own. It is shown here as the WUA published it.'
+		'This notice is the WUA’s own. It is shown here as the WUA published it. Questions about it go to your WUA.'
 } as const;
 
 export type MailKey = keyof typeof en;
@@ -137,6 +143,8 @@ export const notes: Partial<Record<MailKey, string>> = {
 	'mail.farmer.yourFarm': 'Stands in for {farms} when the invite names no farm.',
 	'mail.farmer.and': 'Joins the last two farm names: “Vaalbank and Rustenvrede”.',
 	'mail.alert.subject': 'The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment.',
+	'mail.alert.model.dam.staff': 'Under a dam alert sent to the WUA’s staff, not the farmer: the same as mail.alert.model, about a member’s dam.',
+	'mail.alert.model.staff': 'Under the river-flow forecast alert, which only the WUA’s staff get.',
 	'mail.alert.stale.line': 'One line per data feed; {overdue} is a number of days.',
 	'mail.alert.restriction.body': '{level} is one of the level lines below.',
 	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s percentage, like “20 %”.'

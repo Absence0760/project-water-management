@@ -456,3 +456,42 @@ test('with a gauge covering the whole run there is no choice of days to make (po
 	await expect(page.locator('#res-fdc').getByRole('img', { name: /Flow-duration curve/ })).toBeVisible();
 	await expect(page.locator('#res-fdc').getByRole('group', { name: 'Days the curves rank' })).toHaveCount(0);
 });
+
+// Issue #77: the Runs tab reads its list as it opens. A run deleted before that
+// read answers stayed deleted only by luck: the older list, arriving last, put
+// the run back and opened it ("not found"). Here the read is taken before the
+// delete and held until after it, every time.
+test('a run deleted while the list is still loading stays deleted', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs delete race');
+	await createRun(page.request, project.id, 'Baseline');
+	// The workspace has loaded its shared lists (the tabs render behind that gate).
+	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	await expect(page.getByTestId('scenarios-empty')).toBeVisible();
+
+	let release = () => {};
+	const gate = new Promise<void>((r) => (release = r));
+	let served = 0;
+	await page.route(
+		(url) => url.pathname === `/projects/${project.id}/runs`,
+		async (route) => {
+			if (route.request().method() !== 'GET') return route.fallback();
+			const res = await route.fetch();
+			await gate;
+			await route.fulfill({ response: res });
+			served++;
+		}
+	);
+	page.on('dialog', (d) => d.accept());
+	await page.getByRole('link', { name: 'Runs & results' }).click();
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	await list.getByRole('listitem').filter({ hasText: /^Baseline/ }).getByRole('button', { name: /^Delete run Baseline/ }).click();
+	await expect(list.getByRole('listitem')).toHaveCount(0);
+
+	// The list read before the delete answers now: the tab sees it is stale and reads again.
+	release();
+	await expect.poll(() => served).toBe(2);
+	await expect(list.getByRole('listitem')).toHaveCount(0);
+	await expect(page.getByRole('alert').filter({ hasText: /not found|no longer exists/ })).toHaveCount(0);
+	await expect(page.getByText('No runs yet. Run the model to see results.')).toBeVisible();
+});
