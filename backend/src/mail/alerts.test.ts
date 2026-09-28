@@ -2,7 +2,7 @@
 // unsubscribe links and RFC 8058 headers, and what a farmer's mail can name.
 import { describe, expect, it } from 'vitest';
 import { ALERT_KINDS } from '../alerts/rules.js';
-import { alertMail, dateText, digestMail, liabilityKey, pctText, type AlertFacts } from './alerts.js';
+import { alertMail, cutPctText, dateText, digestMail, liabilityKey, pctText, type AlertFacts } from './alerts.js';
 import { en } from './i18n/en.js';
 
 const unsub = { pageUrl: 'http://localhost:7777/alerts/unsubscribe#t=TOKEN', oneClickUrl: 'http://localhost:3001/alerts/unsubscribe?token=TOKEN' };
@@ -174,6 +174,14 @@ describe('digestMail', () => {
 });
 
 describe('formatting', () => {
+	// Issue #51: numeric(5,2) gave "12.5 %" (a decimal point) in an Afrikaans mail while the farm page showed "13 %".
+	it('writes the WUA’s cut as the farm page does: whole, with the ends marked', () => {
+		expect([12.5, 20, 0, 0.4, 99.6, 100, 150].map((p) => cutPctText(p).replace(/\u00a0/g, ' '))).toEqual(['13 %', '20 %', '0 %', '<1 %', '>99 %', '100 %', '100 %']);
+		const m = alertMail({ ...farmer, locale: 'af' }, project, { kind: 'restriction_published', level: 'restricted', pct: 12.5, notice: null, publishedAt: '2026-09-26T08:00:00Z', lifted: false }, unsub);
+		expect(m.text).toMatch(/13\s%/);
+		expect(m.text).not.toContain('12.5');
+	});
+
 	// Issue #51: a notice published at 01:00 on 2 October in South Africa is 23:00 on the 1st in UTC.
 	it('dates a timestamp by its day in the catchment’s zone, whatever the server’s zone', () => {
 		const tz = process.env.TZ;

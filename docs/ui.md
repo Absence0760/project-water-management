@@ -5120,7 +5120,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   is an estimate, not a measurement or a restriction; its body ends
   "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
   says it is the WUA's own, shown as published, and that questions go to the
-  WUA. The operational alerts (data feed behind, data feed failing,
+  WUA; its percentage reads as a cut, "a 20 % cut in registered water use",
+  written whole as the farm page writes it (`cutPctText`: never "12.5 %"),
+  and the WUA's own words are marked with their `lang` when they are in
+  another language than the mail (issue #51). The operational alerts (data feed behind, data feed failing,
   background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header

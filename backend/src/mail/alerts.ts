@@ -64,6 +64,23 @@ export interface MailProject {
 }
 
 /**
+ * The WUA's restriction percentage (0–100, run_publication.restriction_pct,
+ * numeric(5,2)) as the farm page writes it (fmtPct of pct ÷ 100): a whole
+ * percentage, "<1 %" / ">99 %" at the ends, so never "12.5 %" with an
+ * English decimal point in an Afrikaans mail, and the same figure as the
+ * page (issue #51).
+ */
+export function cutPctText(pct: number): string {
+	if (!Number.isFinite(pct)) return '–';
+	if (pct <= 0) return `0${NBSP}%`;
+	if (pct >= 100) return `100${NBSP}%`;
+	const p = Math.round(pct);
+	if (p < 1) return `<1${NBSP}%`;
+	if (p > 99) return `>99${NBSP}%`;
+	return `${p}${NBSP}%`;
+}
+
+/**
  * "2026-10-03" → "3 Oct 2026", in the mail's language's Intl locale (the
  * language table's). The day is written without a leading zero, as the farm
  * view writes it (en-ZA's ICU data gives "03 Oct 2026"). A timestamp
@@ -118,7 +135,7 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			const body = [
 				f.pct === null
 					? tr.t('mail.alert.restriction.body', { project, date, level })
-					: tr.t('mail.alert.restriction.bodyPct', { project, date, level, pct: `${f.pct}${NBSP}%` })
+					: tr.t('mail.alert.restriction.bodyPct', { project, date, level, pct: cutPctText(f.pct) })
 			];
 			if (f.notice) body.push(tr.t('mail.alert.restriction.notice', { notice: f.notice }));
 			return { what: tr.t('mail.alert.restriction.what'), body };
