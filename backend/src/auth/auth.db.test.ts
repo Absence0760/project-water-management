@@ -170,6 +170,44 @@ describe('terms acceptance', () => {
 		expect(me.body.user.termsCurrent).toBe(false);
 	});
 
+	it('POST /auth/me/accept-terms records the current version for an account that accepted an older one, or none', async () => {
+		const u = await signUp('Reaccepter');
+		await asOwner("UPDATE app_user SET terms_version = '2020-01-01' WHERE id = $1", [u.id]);
+		const [old] = await record(u.email);
+		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(false);
+		const res = await u.call('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION });
+		expect(res.status).toBe(200);
+		expect(res.body.user.termsCurrent).toBe(true);
+		const [now] = await record(u.email);
+		expect(now!.terms_version).toBe(LEGAL_VERSION);
+		expect(now!.terms_accepted_at!.getTime()).toBeGreaterThanOrEqual(old!.terms_accepted_at!.getTime());
+		expect((await u.call('GET', '/auth/me')).body.user.termsCurrent).toBe(true);
+		// Again: nothing changes, the time included.
+		expect((await u.call('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION })).status).toBe(200);
+		expect(await record(u.email)).toEqual([now]);
+		// An account a script made (accepted nothing) accepts the same way.
+		const email = `script-${crypto.randomUUID()}@x.io`;
+		const [made] = (await asOwner("SELECT app_register($1, 'Script', 'x', NULL) AS id", [email])) as { id: string }[];
+		const cookie = `${SESSION_COOKIE}=${await signSession(made!.id)}`;
+		const scripted = await anon('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION }, cookie);
+		expect(scripted.status).toBe(200);
+		expect((await record(email))[0]!.terms_version).toBe(LEGAL_VERSION);
+	});
+
+	it('POST /auth/me/accept-terms refuses a stale or missing version, and needs a session', async () => {
+		const u = await signUp('Stale');
+		await asOwner("UPDATE app_user SET terms_version = '2020-01-01' WHERE id = $1", [u.id]);
+		for (const body of [{ version: '2020-01-01' }, { version: '' }]) {
+			const res = await u.call('POST', '/auth/me/accept-terms', body);
+			expect(res.status).toBe(400);
+			expect(res.body).toMatchObject({ code: 'terms_not_accepted', params: { version: LEGAL_VERSION } });
+		}
+		expect((await u.call('POST', '/auth/me/accept-terms', {})).status).toBe(400);
+		expect((await record(u.email))[0]!.terms_version).toBe('2020-01-01');
+		const anonymous = await anon('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION });
+		expect(anonymous.status).toBe(401);
+	});
+
 	it('the acceptance time is the database’s: an account can’t backdate or clear its own record', async () => {
 		const u = await signUp('Backdater');
 		const [before] = await record(u.email);

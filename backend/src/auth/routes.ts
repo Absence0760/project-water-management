@@ -56,6 +56,8 @@ const MeBody = z
 	.refine((b) => b.displayName !== undefined || b.locale !== undefined || b.volumeUnit !== undefined || b.preferences !== undefined, {
 		message: 'nothing to change: send displayName, locale, volumeUnit or preferences'
 	});
+/** The re-acceptance step (docs/legal-status.md): the version the notice showed, the engine's LEGAL_VERSION. */
+const AcceptTermsBody = z.object({ version: z.string().max(20) });
 const ChangePasswordBody = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 
 /**
@@ -333,6 +335,25 @@ export const authRoutes = new Hono<AuthEnv>()
 				 WHERE id = $1 RETURNING ${USER_COLS}`,
 				[c.get('userId'), body.displayName ?? null, body.locale !== undefined, body.locale ?? null, body.volumeUnit ?? null]
 			);
+			return rows[0];
+		});
+		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
+		return c.json({ user: toUser(row) });
+	})
+	// The re-acceptance step (docs/legal-status.md): a signed-in account whose
+	// termsCurrent is false accepts the version in force. A stale version (a
+	// page opened before the terms changed again) is refused like sign-up's;
+	// app_user_terms_stamp (087) stamps the time.
+	.post('/me/accept-terms', requireUser, async (c) => {
+		const body = AcceptTermsBody.parse(await readJson(c));
+		if (body.version !== LEGAL_VERSION) {
+			throw ApiError.coded(400, 'terms_not_accepted', 'accept the current terms of use and privacy notice', { version: LEGAL_VERSION });
+		}
+		const row = await withUser(c.get('userId'), async (db) => {
+			const { rows } = await db.query<UserRow>(`UPDATE app_user SET terms_version = $2 WHERE id = $1 RETURNING ${USER_COLS}`, [
+				c.get('userId'),
+				LEGAL_VERSION
+			]);
 			return rows[0];
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');

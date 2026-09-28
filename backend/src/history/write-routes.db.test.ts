@@ -634,6 +634,7 @@ const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	{ route: 'POST /auth/login', exempt: 'starts a session (auth rate limits and lockout cover abuse); changes no project' },
 	{ route: 'POST /auth/logout', exempt: 'ends the caller’s session; changes no project or its history' },
 	{ route: 'POST /auth/logout-everywhere', exempt: 'ends every session of the caller’s account; changes no project' },
+	{ route: 'POST /auth/me/accept-terms', exempt: 'records which terms the caller’s own account accepted (app_user.terms_version, stamped by the database); changes no project' },
 	{ route: 'POST /auth/change-password', exempt: 'the caller’s own credential; changes no project, and the password is never logged' },
 	{ route: 'POST /auth/forgot-password', exempt: 'emails a reset link; changes no project and must not reveal whether the account exists' },
 	{ route: 'POST /auth/reset-password', exempt: 'sets a new password from a reset token; changes no project' },
