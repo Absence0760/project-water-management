@@ -129,6 +129,41 @@ test('the hero moves only when motion is allowed, and rests on its last frame ot
 	await expect(scene).toHaveAttribute('data-playing', 'no');
 });
 
+// WCAG 2.2.2 Pause, Stop, Hide (issue #51): the loop runs for as long as the
+// hero is on screen, so the visitor can stop it, and the gauge's statistic is
+// text to read, so it never fades.
+test('the hero’s loop can be stopped on its still frame and started again, and its statistic never fades', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.goto('/');
+	const scene = page.locator('.hero .scene');
+	await expect(scene).toHaveAttribute('data-playing', 'yes');
+	const running = () => scene.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
+	expect(await running()).toBeGreaterThan(0);
+	// The statistic isn't animated at all: shown the whole loop.
+	const tag = page.locator('.hero .tag');
+	expect(await tag.evaluate((el) => el.getAnimations().length)).toBe(0);
+	await expect(tag).toHaveCSS('opacity', '1');
+	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+
+	const pause = page.getByRole('button', { name: 'Pause the animation' });
+	await expect(pause).toHaveAttribute('aria-pressed', 'false');
+	await pause.click();
+	await expect(pause).toHaveAttribute('aria-pressed', 'true');
+	await expect(scene).toHaveAttribute('data-motion', 'off');
+	expect(await running()).toBe(0);
+	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+
+	await pause.press('Enter');
+	await expect(pause).toHaveAttribute('aria-pressed', 'false');
+	await expect(scene).toHaveAttribute('data-playing', 'yes');
+	expect(await running()).toBeGreaterThan(0);
+
+	// Under reduced motion nothing moves, so there is nothing to stop.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await expect(scene).toHaveAttribute('data-motion', 'off');
+	await expect(pause).toHaveCount(0);
+});
+
 test('the hero’s first animated frame is its still frame, so turning motion on changes nothing', async ({ page }) => {
 	// What each animated part shows: its opacity and transform, and the pulse's dash.
 	const frame = () =>
@@ -301,8 +336,8 @@ test('the landing page has no a11y violations with motion on, at desktop and pho
 		await expect(headline(page)).toBeVisible();
 		await expect(page.locator('.hero .scene')).toHaveAttribute('data-motion', 'on');
 		await scrollThrough(page);
-		// The hero's loop held on its first frame: its tag fading in or out is a
-		// moment of the animation, not text anyone is asked to read.
+		// The hero's loop held on its first frame, so the scan sees the frame a
+		// still page shows (the pulse and dams mid-fill are only animation).
 		await page.evaluate(() => {
 			for (const a of document.querySelector('.hero .scene')!.getAnimations({ subtree: true })) {
 				a.pause();
