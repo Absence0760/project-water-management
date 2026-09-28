@@ -1,20 +1,20 @@
 // Cost of the role check every RLS policy makes once per row it filters
 // (app_has_role → app_project_role) in a session with no user, an API key's
-// or the job queue's (092_role_check_no_user.sql).
+// or the job queue's (094_role_check_no_user.sql).
 //
 // PL/pgSQL runs app_project_role's role query through the plan cache: a
 // custom plan for each of the first five calls, and after that the generic
 // plan only if it costs no more than the custom plans did on average. With
 // uid NULL each custom plan folds `user_id = NULL` to false and costs next to
 // nothing, so the generic plan never wins and the query is planned again on
-// every call. Before 092 that cost ~150 us a call, where the cached generic
+// every call. Before 094 that cost ~150 us a call, where the cached generic
 // plan costs a few; a key's statement over a 6,500-row table spent a second
 // on role checks, and the ingest key sweep (ingest.security.db.test.ts) timed
 // out in CI. Returning before the query when there is no user leaves only
 // the function calls.
 //
 // The guard compares two timings taken on the same connection in the same
-// run, so a slow laptop moves both sides: before 092 the no-user check cost
+// run, so a slow laptop moves both sides: before 094 the no-user check cost
 // ~300 times a bare app_current_user_id() call.
 //
 // Its own vitest project (`perf-db`, vitest.config.ts), with the portfolio's:

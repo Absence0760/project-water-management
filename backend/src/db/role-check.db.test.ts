@@ -1,7 +1,7 @@
 // The role check every RLS policy makes (app_has_role → app_project_role),
 // in a session with no user: an API key's (withApiKey) or the job queue's
 // (withoutUser). Such a session holds no role, and app_project_role answers
-// NULL before its role query (092_role_check_no_user.sql). Its cost, the
+// NULL before its role query (094_role_check_no_user.sql). Its cost, the
 // reason for that early return, is guarded in role-check.db.perf.test.ts.
 import { beforeAll, describe, expect, it } from 'vitest';
 import { signUp } from '../__tests__/helpers.js';

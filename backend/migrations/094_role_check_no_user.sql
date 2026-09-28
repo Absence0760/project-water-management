@@ -1,4 +1,4 @@
--- 092_role_check_no_user — app_project_role returns at once when the session
+-- 094_role_check_no_user — app_project_role returns at once when the session
 -- has no user. Latest definition: 026_rls_role_plpgsql (body otherwise
 -- unchanged: same signature, result, volatility, SECURITY DEFINER and pinned
 -- search_path).
