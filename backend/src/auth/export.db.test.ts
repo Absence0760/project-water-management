@@ -6,7 +6,7 @@
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
-import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import { APP_USER_EXCLUDED, APP_USER_EXPORTED, EXPORT_COOLDOWN_SECONDS, USER_FK_COVERAGE } from './export.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -52,6 +52,8 @@ beforeAll(async () => {
 		expect(res.status).toBe(201);
 	}
 	expect((await farmer.call('POST', `/projects/${projectId}/notes`, { body: 'alpha note by the farmer', nodeId: farmA.id, visibility: 'farm' })).status).toBe(201);
+	// The farmer pressed "I understand" on the farm view's notice (093); the other farmer never did.
+	expect((await farmer.call('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION })).status).toBe(200);
 	expect((await other.call('POST', `/projects/${projectId}/notes`, { body: 'bravo note by the other', nodeId: farmB.id, visibility: 'farm' })).status).toBe(201);
 	// A lapsed invite to the farmer's address, to a project they never joined (only an owner reads it under RLS).
 	secondProjectId = (await owner.call('POST', '/projects', { name: 'Invited catchment' })).body.project.id;
@@ -92,6 +94,9 @@ describe('GET /auth/me/export', () => {
 		expect(doc.account).toMatchObject({ mailSuppressedAt: null, mailSuppressedReason: null, mailResumedAt: null });
 		// The terms the account accepted at sign-up, and when (087).
 		expect(doc.account).toMatchObject({ termsVersion: LEGAL_VERSION, termsAcceptedAt: expect.any(String) });
+		// The farm view notice they acknowledged, and when (093); the other farmer's export has none (positive control's twin).
+		expect(doc.account).toMatchObject({ farmNoticeVersion: FARMER_NOTICE_VERSION, farmNoticeAcceptedAt: expect.any(String) });
+		expect((await download(other)).doc.account).toMatchObject({ farmNoticeVersion: null, farmNoticeAcceptedAt: null });
 		expect(doc.projectMemberships).toEqual([expect.objectContaining({ projectId, projectName: 'Export catchment', role: 'farmer' })]);
 		expect(doc.farms).toHaveLength(1);
 		const farm = doc.farms[0];

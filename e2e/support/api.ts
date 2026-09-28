@@ -8,9 +8,9 @@ import { sessionToken } from './session.ts';
 import { API_URL } from './env.ts';
 // The terms version the sign-up form sends (acceptTerms): the engine's, by
 // path, since this workspace has no dependency on it and legal.ts imports nothing.
-import { LEGAL_VERSION } from '../../packages/engine/src/legal.ts';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '../../packages/engine/src/legal.ts';
 
-export { LEGAL_VERSION };
+export { FARMER_NOTICE_VERSION, LEGAL_VERSION };
 
 export const PASSWORD = 'correct horse battery';
 
@@ -45,11 +45,16 @@ export function uniqueEmail(name: string): string {
  * `{ verified: false }` leaves the address unconfirmed and signs nobody in
  * (an unconfirmed account can't sign in); signInUnconfirmed gives a browser
  * such an account's session, for the pages that still meet one.
+ *
+ * A signed-in account has also pressed "I understand" on the farm view's
+ * notice (POST /auth/me/farm-notice), so a spec about the farm pages meets
+ * the figures; `{ farmNotice: false }` leaves it unacknowledged
+ * (farm-view.spec.ts tests the notice itself).
  */
 export async function register(
 	request: APIRequestContext,
 	displayName: string,
-	{ verified = true }: { verified?: boolean } = {}
+	{ verified = true, farmNotice = true }: { verified?: boolean; farmNotice?: boolean } = {}
 ): Promise<TestUser> {
 	const email = uniqueEmail(displayName);
 	const res = await request.post(`${API_URL}/auth/register`, {
@@ -61,8 +66,14 @@ export async function register(
 		const token = await plantEmailToken(email, 'verify');
 		await json(await request.post(`${API_URL}/auth/verify-email`, { data: { token } }), 200);
 		await json(await request.post(`${API_URL}/auth/login`, { data: { email, password: PASSWORD } }), 200);
+		if (farmNotice) await acknowledgeFarmNotice(request);
 	}
 	return { id, email, displayName, password: PASSWORD };
+}
+
+/** "I understand" on the farm view's notice, as the account `request` is signed in as. */
+export async function acknowledgeFarmNotice(request: APIRequestContext): Promise<void> {
+	await json(await request.post(`${API_URL}/auth/me/farm-notice`, { data: { version: FARMER_NOTICE_VERSION } }), 200);
 }
 
 /**

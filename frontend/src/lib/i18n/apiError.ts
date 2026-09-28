@@ -24,6 +24,7 @@ const CODES: Record<string, Msg> = {
 	signin_locked: msg('Too many sign-in attempts for this address. Try again in {wait}, or reset your password.'),
 	signup_throttled: msg('Too many accounts were made from your network. Try again in {wait}.'),
 	terms_not_accepted: msg('The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.'),
+	farm_notice_changed: msg('This notice changed since the page opened. Reload the page and read it again.'),
 	wrong_current_password: msg('Your current password is wrong.'),
 	password_changed_elsewhere: msg('Your password was changed somewhere else a moment ago. Sign in again.'),
 	link_invalid: msg('This link is invalid or has expired. Ask for a new one.'),

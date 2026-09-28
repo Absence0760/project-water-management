@@ -30,6 +30,7 @@ export const SECTIONS: Record<string, string> = {
 	'farm.level': 'Farm view: the WUA’s restriction level, as published by the WUA.',
 	'farm.notice': 'Farm view (and the shared view): the WUA’s notice card, first on the page.',
 	'farm.page': 'Farm view: the main page.',
+	'farm.ack': 'Farm view: a notice shown once, before a farmer first sees their farm’s figures (and again when its words change), with an “I understand” button. A legal notice: keep its exact force, especially “only a notice from your WUA or DWS is a restriction” and “accept no responsibility”.',
 	'farm.supply': 'Farm view: the “Water you received this season” card.',
 	'farm.system': 'Farm view: the irrigation system the model assumes, inside the efficiency sentence.',
 	'farm.short': 'Farm view: the days the farm was short of water. {head} is “Short on 16 days (in Nov and Dec)”.',

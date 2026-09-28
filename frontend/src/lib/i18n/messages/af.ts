@@ -129,6 +129,8 @@ export const af: Catalogue = {
 	'6ee0c03c': 'Jou en die WGV se notas oor {farm}. Enigiets wat jy hier byvoeg, word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
 	// No notes about this farm yet.
 	'd2af0a62': 'Nog geen notas oor hierdie plaas nie.',
+	// Terms of use
+	'953dc886': 'Gebruiksvoorwaardes',
 	// Your figures will be kept on this phone.
 	'c98e5cb5': 'Jou syfers sal op hierdie foon gehou word.',
 	// Nothing is kept on this phone now.
@@ -439,6 +441,18 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
+	// Before you look at your farm
+	'72542aec': 'Voordat jy na jou plaas kyk',
+	// The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
+	'9343015e': 'Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV geloop word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.',
+	// They are estimates, and they can be wrong. Check your dam and your water yourself before you act on them.
+	'fc70e559': 'Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy daarop optree.',
+	// Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction. Nothing else on these pages is.
+	'5e91fa9d': 'Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is een nie.',
+	// The people who run this app don’t check the WUA’s figures and, as far as the law allows, accept no responsibility for losses from relying on them. See the {terms}, section 13.
+	'39185b23': 'Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, so ver die wet toelaat, geen verantwoordelikheid vir verliese omdat daarop staatgemaak is nie. Sien die {terms}, afdeling 13.',
+	// I understand
+	'678bb07e': 'Ek verstaan',
 	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA or from DWS is a restriction.
 	'bcdaf277': 'Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
 	// Next {days}
@@ -665,8 +679,6 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
-	// Terms of use
-	'953dc886': 'Gebruiksvoorwaardes',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
@@ -873,6 +885,8 @@ export const af: Catalogue = {
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
 	// The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.
 	'c3395d0e': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy, lees hulle en registreer weer.',
+	// This notice changed since the page opened. Reload the page and read it again.
+	'e8f9dfe9': 'Hierdie kennisgewing het verander sedert die bladsy oopgemaak is. Herlaai die bladsy en lees dit weer.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.

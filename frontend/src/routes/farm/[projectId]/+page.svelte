@@ -15,6 +15,7 @@
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
 	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
@@ -23,7 +24,7 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
 	import { withNoteLine } from '$lib/components/farm/csvNote';
@@ -119,6 +120,8 @@
 				<h2 id="o-notice">{t('WUA notice · {level}', { level: levelWord(view.publication.restriction.level) })}</h2>
 				{#if notice?.title}<p lang={notice.lang && notice.lang !== wordsLang() ? notice.lang : undefined}>{notice.title}</p>{/if}
 			</section>
+			<!-- The estimate line before any figure (EstimateNote), here as on the full page. -->
+			<EstimateNote />
 			<section class="card" aria-labelledby="o-glance">
 				<h2 id="o-glance">{t('At a glance')}</h2>
 				<div class="glance">
@@ -131,6 +134,8 @@
 			<p class="sub">{stateText('needsConnection')}</p>
 		{:else}
 			<NoticeCard {notice} noneText={noRestriction()} pageLang={wordsLang()} />
+			<!-- The estimate line: after the WUA's notice, before the first figure (EstimateNote). -->
+			<EstimateNote />
 			<!-- The farm's own dam alert, while it is firing (WP-2.13). -->
 			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
 			<SupplyCard farm={view.farm} bind:unit />
@@ -150,7 +155,6 @@
 				<a href="{base}/farm/words">{t('What do these words mean?')}</a>
 			</nav>
 			{#if csvError}<p class="fine" role="alert">{csvError}</p>{/if}
-			<p class="fine">{disclaimer()}</p>
 		{/if}
 	{/snippet}
 </FarmPage>

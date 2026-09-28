@@ -22,6 +22,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
+| POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -68,7 +69,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -87,6 +88,12 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `false` after the version changes, and for an account a script made
   (`seed:examples`, `import:project`: they accept nothing). Nothing asks
   again yet ([legal-status.md](./legal-status.md)).
+  `farmNoticeCurrent` is whether the account acknowledged the farm view's
+  notice now in force (`app_user.farm_notice_version` =
+  `FARMER_NOTICE_VERSION`, 093): `false` until the farmer presses "I
+  understand" (`POST /auth/me/farm-notice`), and again after the version
+  changes; the farm pages show the notice instead of the figures until then
+  ([ui.md § Farmer view](./ui.md)).
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
@@ -97,7 +104,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   or `[]` if they never saved any. `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
-  087). `farms` is one entry per farm
+  087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
+  notice acknowledged, 093). `farms` is one entry per farm
   linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
   with the registered volumes matched to that farm (`allocations`, holder
   name included) and the current publication's figures for it as the farm
@@ -187,6 +195,7 @@ unless it is listed there with why its status says enough.
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
 | `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or with a version that isn't the current one (a sign-up page loaded before the terms changed); `params.version` is the current one. Checked before the sign-up throttle counts |
+| `farm_notice_changed` | 409 | `POST /auth/me/farm-notice` with a version that isn't the current one (a farm page loaded before the notice changed); `params.version` is the current one |
 | `wrong_current_password` | 403 | `POST /auth/change-password` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |

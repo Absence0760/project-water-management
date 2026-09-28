@@ -74,7 +74,7 @@ describe('route auth inventory', () => {
 	// The account page (WP-1.9): renaming and changing the password need a session (auth/auth.db.test.ts),
 	// and so does "download my data" (POPIA; auth/export.db.test.ts).
 	it('inventories the account routes as auth-gated', () => {
-		for (const r of ['PATCH /auth/me', 'POST /auth/change-password', 'GET /auth/me/export']) {
+		for (const r of ['PATCH /auth/me', 'POST /auth/change-password', 'GET /auth/me/export', 'POST /auth/me/farm-notice']) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}

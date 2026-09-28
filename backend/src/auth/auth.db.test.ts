@@ -1,4 +1,4 @@
-import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
 import { anon, app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -15,7 +15,7 @@ describe('auth', () => {
 		const u = await signUp('Ann', { verified: false });
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
-		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
+		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
 		expect(JSON.stringify(me.body)).not.toContain('password');
 	});
 
@@ -185,6 +185,71 @@ describe('terms acceptance', () => {
 	});
 });
 
+// "I understand" on the farm view's notice (093; docs/legal/disclaimer-review.md
+// § 3): the page sends the version it showed; the server refuses any other,
+// stores it with the database's time, and /auth/me says whether it's current.
+describe('farm notice acknowledgement', () => {
+	const record = async (id: string) =>
+		(await asOwner('SELECT farm_notice_version, farm_notice_accepted_at FROM app_user WHERE id = $1', [id])) as {
+			farm_notice_version: string | null;
+			farm_notice_accepted_at: Date | null;
+		}[];
+
+	it('needs a session', async () => {
+		expect((await anon('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION })).status).toBe(401);
+	});
+
+	it('refuses any version but the current one (409 farm_notice_changed) and records nothing', async () => {
+		const u = await signUp('Noticeold');
+		for (const version of ['2020-01-01', '']) {
+			const res = await u.call('POST', '/auth/me/farm-notice', { version });
+			expect(res.status).toBe(409);
+			expect(res.body).toMatchObject({ code: 'farm_notice_changed', params: { version: FARMER_NOTICE_VERSION } });
+		}
+		expect((await u.call('POST', '/auth/me/farm-notice', {})).status).toBe(400);
+		expect(await record(u.id)).toEqual([{ farm_notice_version: null, farm_notice_accepted_at: null }]);
+		expect((await u.call('GET', '/auth/me')).body.user.farmNoticeCurrent).toBe(false);
+	});
+
+	it('records the current version with the database’s time, and /auth/me turns current (positive control)', async () => {
+		const u = await signUp('Noticenow');
+		const before = Date.now();
+		const res = await u.call('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION });
+		expect(res.status).toBe(200);
+		expect(res.body.user.farmNoticeCurrent).toBe(true);
+		const [row] = await record(u.id);
+		expect(row!.farm_notice_version).toBe(FARMER_NOTICE_VERSION);
+		expect(row!.farm_notice_accepted_at!.getTime()).toBeGreaterThanOrEqual(before - 5_000);
+		expect(row!.farm_notice_accepted_at!.getTime()).toBeLessThanOrEqual(Date.now() + 5_000);
+		expect((await u.call('GET', '/auth/me')).body.user.farmNoticeCurrent).toBe(true);
+	});
+
+	it('an older acknowledged version is not current: the notice shows again', async () => {
+		const u = await signUp('Noticebump');
+		await asOwner('UPDATE app_user SET farm_notice_version = $2 WHERE id = $1', [u.id, '2020-01-01']);
+		expect((await u.call('GET', '/auth/me')).body.user.farmNoticeCurrent).toBe(false);
+	});
+
+	it('writes only the caller’s own row', async () => {
+		const u = await signUp('Noticeme');
+		const other = await signUp('Noticeother');
+		await u.call('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION });
+		expect(await record(other.id)).toEqual([{ farm_notice_version: null, farm_notice_accepted_at: null }]);
+		// RLS: another account's row is out of reach of an UPDATE as this one.
+		const res = await withUser(u.id, (db) => db.query('UPDATE app_user SET farm_notice_version = $2 WHERE id = $1', [other.id, FARMER_NOTICE_VERSION]));
+		expect(res.rowCount).toBe(0);
+	});
+
+	it('the time is the database’s: an account can’t backdate or clear its own record', async () => {
+		const u = await signUp('Noticeback');
+		await u.call('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION });
+		const [before] = await record(u.id);
+		await withUser(u.id, (db) => db.query("UPDATE app_user SET farm_notice_accepted_at = '2000-01-01' WHERE id = $1", [u.id]));
+		await withUser(u.id, (db) => db.query('UPDATE app_user SET farm_notice_version = NULL WHERE id = $1', [u.id]));
+		expect(await record(u.id)).toEqual([before]);
+	});
+});
+
 describe('sign-in lockout', () => {
 	const login = (email: string, password: string) => anon('POST', '/auth/login', { email, password });
 
@@ -294,7 +359,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		const u = await signUp('Renamed');
 		const res = await u.call('PATCH', '/auth/me', { displayName: '  Dr Renamed  ' });
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
@@ -312,7 +377,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 
 		const res = await change(u.cookie, 'correct horse', 'battery staple');
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
 		const fresh = cookieOf(res);
 		expect(fresh).toMatch(/^wm_session=.+/);
 

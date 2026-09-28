@@ -9,6 +9,7 @@
 	import { localIsoDate } from '$lib/format/number';
 	import DamChart from '$lib/components/farm/DamChart.svelte';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
@@ -39,6 +40,7 @@
 			<p class="sub">{view.farm.name}</p>
 			<DatesLine line={datesLine(view, today)} />
 		</div>
+		<EstimateNote />
 		{#if !d}
 			<p>{t('{farm} has no dam in the model.', { farm: view.farm.name })}</p>
 			<a class="link" href={main}>{t('Back to my farm')}</a>

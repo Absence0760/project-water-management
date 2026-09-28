@@ -42,6 +42,8 @@ export const en = {
 	'mail.farmer.heading': 'Your farm on {product}',
 	'mail.farmer.body': '{inviter} has given you access to {farms} in {catchment}.',
 	'mail.farmer.privacy': "You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.",
+	'mail.farmer.estimate':
+		'The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.',
 	'mail.farmer.yourFarm': 'your farm',
 	'mail.farmer.and': 'and',
 

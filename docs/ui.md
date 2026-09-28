@@ -4694,7 +4694,7 @@ published.
 - **Main page, top to bottom:** the name and the dates line ("Published by
   the WUA on …. Data up to …", amber with its age when stale); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
-  restriction from the WUA". The notice is in the language the reader
+  restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while
   the page's words are still English, and carries `lang="af"`), else in
   English, else in the first other language the WUA wrote, with "The WUA
@@ -4717,14 +4717,10 @@ published.
   privacy sentence and "Who can see my farm", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
-  CSV download and the disclaimer ("These figures are worked out by a
-  computer model of the catchment. They are estimates, not measurements or
-  instructions, and they can be wrong. Only a notice from your WUA or from
-  the Department of Water and Sanitation (DWS) is a restriction.", `cards.ts`
-  `disclaimer()`, quoted in the legal review pack, issue #47). The CSV
-  download fetches the file and puts that line, in the page's language, as
-  a leading `# ` line (`farm/csvNote.ts`); a failed download says why under
-  the links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  CSV download. The CSV download fetches the file and puts the estimate
+  line (`cards.ts` `disclaimer()`), in the page's language, as a leading
+  `# ` line (`farm/csvNote.ts`); a failed download says why under the
+  links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge
   set it apart from the cards about what happened; "Lowest dam level
@@ -4738,6 +4734,30 @@ published.
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each
   point, and a caption with the months it covers and what the dashed line is.
+- **The estimate line** (`farm/EstimateNote.svelte`, `role="note"`): "These
+  figures are worked out by a computer model of the catchment. They are
+  estimates, not measurements or instructions, and they can be wrong. Only a
+  notice from your WUA or from the Department of Water and Sanitation (DWS)
+  is a restriction." (`cards.ts` `disclaimer()`, quoted in the legal review
+  pack, issue #47). A callout at body size with an info icon, before the
+  first figure on every farm page: on the main page right after the WUA's
+  notice, in the offline view after the notice and before "At a glance", and
+  on the dam and *Why?* pages after the header (`farm-view.spec.ts` pins the
+  order). It used to sit at the foot of the main page only.
+- **"Before you look at your farm"** (`farm/FarmNoticeGate.svelte`, words in
+  `farm/farmNotice.ts`): until the signed-in account has pressed **I
+  understand** on the version in force (`/auth/me` `farmNoticeCurrent`, the
+  engine's `FARMER_NOTICE_VERSION`), every farm page and the `/farm` list
+  show this notice in place of the figures: four points (model estimates,
+  nobody measures the dam; they can be wrong, check before you act; only a
+  WUA or DWS notice is a restriction; the operator doesn't check the WUA's
+  figures and accepts no responsibility, with a link to the Terms of use,
+  section 13). The press goes to `POST /auth/me/farm-notice` (stored on the
+  account, 093) and the figures follow at once. A new version shows it
+  again. Not shown to WUA staff previewing a farm, nor while there is
+  nothing published (the no-publication state has no figures). The words
+  are bound to the version (`farmNotice.test.ts`) and quoted in
+  `docs/legal/disclaimer-review.md` § 3.
 - **Wording.** Every visible string comes from the message catalogue
   ([§ Language](#language)); the number rules and the sentences built from
   them live in pure modules under `lib/components/farm/` (`format.ts`,

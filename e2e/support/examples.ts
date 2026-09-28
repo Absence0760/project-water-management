@@ -5,7 +5,8 @@
 // advisory lock and the second caller finds it done.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { APIRequestContext } from '@playwright/test';
+import { request as playwrightRequest, type APIRequestContext } from '@playwright/test';
+import { acknowledgeFarmNotice } from './api.ts';
 import { withSetupLock } from './db.ts';
 import { API_URL, APP_E2E_URL } from './env.ts';
 
@@ -30,11 +31,23 @@ const SEED_LOCK = 25_014;
 export async function seedExamplesOnce(request: APIRequestContext): Promise<void> {
 	await withSetupLock(SEED_LOCK, async () => {
 		const probe = await request.post(`${API_URL}/auth/login`, { data: DEMO });
-		if (probe.ok()) return; // already seeded earlier in this run (another spec, or --repeat-each)
-		execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
-			cwd: backendDir,
-			env: { ...process.env, DATABASE_URL: APP_E2E_URL },
-			stdio: 'pipe'
-		});
+		// Unless already seeded earlier in this run (another spec, or --repeat-each).
+		if (!probe.ok()) {
+			execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
+				cwd: backendDir,
+				env: { ...process.env, DATABASE_URL: APP_E2E_URL },
+				stdio: 'pipe'
+			});
+		}
+		// Either way, the seed's farmers have pressed "I understand" on the farm view's
+		// notice, so the specs that use them meet their figures (each in its
+		// own context, leaving the caller's session alone).
+		for (const farmer of [FARMER1, FARMER2]) {
+			const ctx = await playwrightRequest.newContext();
+			const login = await ctx.post(`${API_URL}/auth/login`, { data: farmer });
+			if (!login.ok()) throw new Error(`seeded farmer sign-in: ${login.status()}`);
+			await acknowledgeFarmNotice(ctx);
+			await ctx.dispose();
+		}
 	});
 }

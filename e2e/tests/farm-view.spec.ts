@@ -8,10 +8,10 @@
 // tests assert shapes and order, not the design doc's Vaalbank numbers (those
 // pin the wording in the unit tests, lib/components/farm/*.test.ts).
 import { readFile } from 'node:fs/promises';
-import type { BrowserContext, Page } from '@playwright/test';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, putModel, putSeries, sampleModel, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { createProject, createRun, putModel, putSeries, register, sampleModel, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -46,6 +46,15 @@ async function farmOf(context: BrowserContext) {
 	};
 	return { projectId: project.id, index };
 }
+
+/** `a` comes before `b` in the document. */
+async function expectBefore(a: Locator, b: Locator) {
+	const handle = await b.elementHandle();
+	expect(await a.evaluate((x, y) => !!(x.compareDocumentPosition(y!) & Node.DOCUMENT_POSITION_FOLLOWING), handle)).toBe(true);
+}
+
+/** The estimate line (EstimateNote): before the first figure on every farm page. */
+const estimateNote = (page: Page) => page.getByRole('note').filter({ hasText: /These figures are worked out by a computer model of the catchment\./ });
 
 async function expectNoSidewaysScroll(page: Page) {
 	const [scroll, inner] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
@@ -113,6 +122,60 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(page.getByRole('table')).toContainText('Dam full');
 });
 
+// "Before you look at your farm" (CPA s49 research R2, ui.md § Farmer view):
+// a farmer who hasn't pressed "I understand" meets the notice, not their
+// figures, on every farm page; pressing it records the version on the
+// account and shows the figures, with the estimate line (R1) before the
+// first of them. Its own catchment and a fresh farmer, so the seeded
+// farmers' acknowledgement stays as the other specs expect.
+test('a farmer sees “Before you look at your farm” first; after I understand, the estimate line precedes every figure', async ({ page, signIn: signInAs }) => {
+	await page.setViewportSize(PHONE);
+	const wua = await signInAs('Notice WUA');
+	const project = await seedRunnableProject(wua.page.request, 'Notice catchment');
+	const runId = await createRun(wua.page.request, project.id, 'Baseline');
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	const farmer = await register(page.context().request, 'Notice Farmer', { farmNotice: false });
+	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
+	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	const current = async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { farmNoticeCurrent: boolean } }).user.farmNoticeCurrent;
+
+	const title = page.getByRole('heading', { level: 1, name: 'Before you look at your farm' });
+	const supply = page.getByRole('region', { name: 'Water you received this season' });
+	// Every farm page shows the notice in place of the figures.
+	for (const path of ['/dam', '/why', '']) {
+		await page.goto(`/farm/${project.id}${path}`);
+		await expect(title).toBeVisible();
+		await expect(page.getByText(/\d\s%/)).toHaveCount(0);
+	}
+	await expect(supply).toHaveCount(0);
+	await expect(page.getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', /\/terms#liability$/);
+	await expectNoViolations(page);
+	expect(await current()).toBe(false);
+
+	await page.getByRole('button', { name: 'I understand' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toBeVisible();
+	await expect(title).toHaveCount(0);
+	expect(await current()).toBe(true);
+	// Main page: the WUA's notice, then the estimate line, then the first figure card.
+	await expect(estimateNote(page)).toBeVisible();
+	await expectBefore(page.locator('#notice'), estimateNote(page));
+	await expectBefore(estimateNote(page), supply);
+	await expect(page.getByRole('main').getByRole('region').first()).toHaveAttribute('id', 'notice');
+	await expectNoViolations(page);
+	// Recorded on the account: a reload goes straight to the figures.
+	await page.reload();
+	await expect(supply).toBeVisible();
+	await expect(title).toHaveCount(0);
+
+	// The dam and Why? pages: the line right after the header, before any card.
+	for (const path of ['/dam', '/why']) {
+		await page.goto(`/farm/${project.id}${path}`);
+		await expect(estimateNote(page)).toBeVisible();
+		await expectBefore(page.getByRole('heading', { level: 1 }), estimateNote(page));
+		await expectBefore(estimateNote(page), page.getByRole('main').locator('section').first());
+	}
+});
+
 test('no page scrolls sideways at 360 px or on a desktop, in light and dark', async ({ page }) => {
 	await signIn(page, FARMER1);
 	const { projectId } = await farmOf(page.context());
@@ -150,6 +213,9 @@ test('a dropped signal keeps the saved figures on screen under the offline strip
 	await expect(page.getByRole('status').filter({ hasText: /No signal\.\sThese are the figures saved on this phone at/ })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'At a glance' })).toContainText(new RegExp(`\\b${pct}\\s%`));
 	await expect(page.getByText('Charts, “Why?” and downloads need a connection.')).toBeVisible();
+	// The estimate line here too: after the WUA's notice, before "At a glance".
+	await expectBefore(page.getByRole('region', { name: /^WUA notice · / }), estimateNote(page));
+	await expectBefore(estimateNote(page), page.getByRole('region', { name: 'At a glance' }));
 	await context.setOffline(false);
 });
 

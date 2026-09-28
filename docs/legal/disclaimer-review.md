@@ -124,14 +124,61 @@ Notes printed with the statement:
 ## 3. What a farmer or WUA staff member sees (English and Afrikaans)
 
 The farm view and the alert emails don't show the report disclaimer. They
-carry their own short lines, translated into Afrikaans. These are not
-versioned; this file and its tests are their record.
+carry their own short lines, translated into Afrikaans. Only the farm view's
+acknowledgement notice and its estimate line are versioned
+(`FARMER_NOTICE_VERSION`, below); for the rest, this file and its tests are
+their record.
 
-**Farm view**, under the farm's figures (`frontend/src/lib/components/farm/cards.ts`, `disclaimer()`), and as the first `# ` line of the farmer's "Download my figures (CSV)", in the page's language:
+**Farm view estimate line** (`frontend/src/lib/components/farm/cards.ts`,
+`disclaimer()`, shown by `EstimateNote.svelte`). Where it is shown: a
+callout at body size, before the first figure on every farm page: on the
+main page directly after the WUA's notice card, in the offline (saved copy)
+view after the notice and before "At a glance", and on the dam and *Why?*
+pages after the page header (CPA s49 research, R1; `farm-view.spec.ts`
+pins the order). It no longer sits under the figures at the foot of the
+page. It is also the first `# ` line of the farmer's "Download my figures
+(CSV)", in the page's language:
 
 > These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
 
 > Hierdie syfers is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.
+
+**Farm view acknowledgement, "Before you look at your farm"**
+(`frontend/src/lib/components/farm/farmNotice.ts`, shown by
+`FarmNoticeGate.svelte`), version `2026-09-28` (`FARMER_NOTICE_VERSION`,
+`packages/engine/src/legal.ts`). Where it is shown: on every farm page, and
+the farmer's list of farms, instead of the figures until the account presses
+**I understand** on the version in force (CPA s49 research, R2). The press
+is recorded on the account (`app_user.farm_notice_version` and the
+database's time, 093), is in "Download my data", and goes with the account
+when it is deleted. A new version shows it to everyone again. WUA staff
+previewing a farm don't see it. `{terms}` is a link to the Terms of use,
+section 13 (Limitation of liability). The heading, the four points and the
+button:
+
+> Before you look at your farm
+> - The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
+> - They are estimates, and they can be wrong. Check your dam and your water yourself before you act on them.
+> - Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction. Nothing else on these pages is.
+> - The people who run this app don’t check the WUA’s figures and, as far as the law allows, accept no responsibility for losses from relying on them. See the {terms}, section 13.
+>
+> [I understand]
+
+> Voordat jy na jou plaas kyk
+> - Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV geloop word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.
+> - Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy daarop optree.
+> - Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is een nie.
+> - Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, so ver die wet toelaat, geen verantwoordelikheid vir verliese omdat daarop staatgemaak is nie. Sien die {terms}, afdeling 13.
+>
+> [Ek verstaan]
+
+**Farmer invitation email** (`backend/src/mail/i18n/en.ts`,
+`mail.farmer.estimate`), before the sign-up button, so the farmer has the
+estimate line before they can see a figure (CPA s49 research, R4):
+
+> The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
+
+> Die syfers wat jy sal sien, is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.
 
 **Farm view forecast card** (`forecastCard.ts`, `forecastFine()`); the farm
 view's *why* page and the farmer glossary say the same about restrictions:

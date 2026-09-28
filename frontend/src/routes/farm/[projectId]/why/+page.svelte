@@ -9,6 +9,7 @@
 	import { session } from '$lib/auth/session.svelte';
 	import { localIsoDate } from '$lib/format/number';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import Rich from '$lib/i18n/Rich.svelte';
 	import { datesLine } from '$lib/components/farm/cards';
@@ -36,6 +37,7 @@
 			<div><p class="sub">{view.farm.name}</p><DatesLine line={datesLine(view, today)} /></div>
 			<p>{whyIntro(view.farm)}</p>
 		</div>
+		<EstimateNote />
 
 		<section class="card" aria-labelledby="s1-h">
 			<h2 id="s1-h">{t('1. Was water shared fairly?')}</h2>
