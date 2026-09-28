@@ -19,6 +19,11 @@
 //              role's trust policy pins (`environment:production` sub claim).
 //   gate       every job in ci.yml is in the `ci-gate` job's `needs:`, so no
 //              job can be red on a commit the gate calls green.
+//   no-cache   a workflow with a production-gated job restores no dependency
+//              cache anywhere (`cache:` on setup-node and friends,
+//              actions/cache). A cache is written by other runs, including
+//              ones that execute untrusted code on main, and a release build
+//              ships what it builds with deploy credentials.
 //   push-full  ci.yml's `changes` job (the docs-only skip) emits code=true for
 //              every event but pull_request, before anything else writes
 //              `code=`, and never diffs against github.event.before. The
@@ -166,6 +171,15 @@ export function checkWorkflow(file, text) {
 		if (/uses:\s*aws-actions\/configure-aws-credentials@/.test(body) && !isProductionGated(job.lines)) {
 			out.push({ file, line: job.startLine, rule: 'oidc-env', message: `job ${job.id} assumes an AWS role but is not gated on environment: production` });
 		}
+	}
+
+	if (jobsOf(text).some((j) => isProductionGated(j.lines))) {
+		lines.forEach((l, i) => {
+			if (/^\s*#/.test(l)) return;
+			if (/^\s+cache:\s*\S/.test(l) || /uses:\s*actions\/cache(\/restore)?@/.test(l)) {
+				out.push({ file, line: i + 1, rule: 'no-cache', message: 'a deploy workflow restores a dependency cache; release builds install cold so a poisoned cache cannot reach production' });
+			}
+		});
 	}
 
 	if (file.endsWith('/ci.yml')) {

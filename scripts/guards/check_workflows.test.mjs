@@ -107,3 +107,15 @@ test('pushFullProblem accepts the real ci.yml shape', () => {
 	const lines = ['        env:', '          EVENT_NAME: ${{ github.event_name }}', '        run: |', FULL.trimEnd()];
 	assert.equal(pushFullProblem(lines), null);
 });
+
+test('a workflow with a production job may not restore a dependency cache', () => {
+	const build = '  build:\n    runs-on: x\n    steps:\n      - uses: actions/setup-node@' + SHA + ' # v7.0.0\n        with:\n          node-version: 24\n          cache: pnpm\n';
+	const withBuild = good.replace('jobs:\n', 'jobs:\n' + build);
+	assert.deepEqual(rules(withBuild), ['no-cache']);
+	assert.deepEqual(rules(good.replace('jobs:\n', 'jobs:\n  build2:\n    steps:\n      - uses: actions/cache@' + SHA + ' # v6.1.0\n')), ['no-cache']);
+	// Commented out, or in a workflow that never deploys: fine.
+	assert.deepEqual(rules(withBuild.replace('          cache: pnpm', '          # cache: pnpm')), []);
+	assert.deepEqual(rules(withBuild.replace('    environment: production\n', '').replace(/  deploy:[\s\S]*/, '')), []);
+	// Cache-Control headers in a run: script are not a cache restore.
+	assert.deepEqual(rules(good + '      - run: aws s3 sync --cache-control "max-age=60" x y\n'), []);
+});
