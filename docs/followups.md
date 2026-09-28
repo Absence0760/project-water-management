@@ -7,7 +7,8 @@ Tick items off (or move them into an issue) as they are done.
 
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
-the history scrub #63, the legal go-live gates #103, POPIA #48,
+the history scrub #63, the legal go-live gates #103, the information officer's POPIA
+questions #90,
 the hydrologist's decisions #46, applicant decisions #50, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
@@ -1546,14 +1547,19 @@ yet; each lands with the work package named.
       `GET …/farm/:nodeId/access` lists people by name and role, never an
       email, and the card falls back to roles if it fails
       (`farm-view.spec.ts` checks it).
-- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
-      `FarmIndex`; the pages say "your WUA".
+- [x] **The WUA's name** in "Contact [WUA]" lines (issue #74):
+      `project.wua_name` (095_wua_name), set as **WUA name** on the Project
+      page's details and carried as `project.wuaName` in `FarmView` and
+      `FarmIndex`; the contact lines name it, and say "your WUA" without
+      one. Not the team's name, which may be a consultancy's.
 - [x] **"Email me when …"** links for the notice and a low dam: alert emails
       (WP-2.13); the farm view's alert card and every alert email link to
       `/account/alerts`. "Email me when it's ready" (a report) is still open.
-- [ ] **"Not available: the model's data starts on …"** needs the run's
-      first date; `lastSeason` is null without it, so the page says the data
-      doesn't reach back.
+- [x] **"Not available: the model's data starts on …"** (issue #74): the
+      projection carries the run's first day (`dataFrom`; a row stored
+      before it gets it from `catchment_view.runStart`), and "Compared with
+      last season" names it. A copy saved on the phone before it still says
+      the data doesn't reach back.
 - [x] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` runs in CI's
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
@@ -2323,8 +2329,14 @@ role and not before it.
         recompute ([model.md §2.7b](./model.md)). About 195 kB before
         compression (1.6 % of the run's series) on Sandspruit, nothing on
         the single-site examples.
-  - [ ] **The chart series and per-farm history routes** of WP-2.6
-        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
+  - [x] **The chart series and per-farm history routes** of WP-2.6
+        (issue #74): `GET …/farm/:nodeId/series?key=&from=&to=` (one farm
+        allowlist series from the published run, the year to `dataUntil` by
+        default, sliced in SQL) and `GET …/farm/:nodeId/history` (the farm's
+        own figures in the last 12 publications), `farms/view.ts`,
+        [api.md § Farm](./api.md#farm). The farm page keeps rendering from
+        the projection (design §12: "compared with last season" from
+        `lastSeason`, not `/history`); nothing on it calls them yet.
 
 ## Pipelines
 
@@ -3046,7 +3058,7 @@ assume, the questions for counsel); these are the actions, with triggers.
       accepts through `POST /auth/me/accept-terms`. The material-change email
       to existing account holders (Terms §16) is still sent by hand.
 - [ ] **Self-service account deletion** and what happens to evidence an
-      account made: #48; the privacy notice discloses the current exception.
+      account made: #90; the privacy notice discloses the current exception.
 
 ## Housekeeping
 
@@ -3188,7 +3200,12 @@ Left, each with its trigger:
       locally. Trigger: farmers ask for it after a season of email.
 ## POPIA and the Step 2 release (WP-2.16)
 
-The decisions for the client's information officer are tracked in [issue #48](https://github.com/Absence0760/project-water-management/issues/48).
+The questions for the client's information officer are in [issue #90](https://github.com/Absence0760/project-water-management/issues/90)
+(§ For the client's information officer), with what each answer changes in
+the code in a comment there; the operator's actions (registering the
+information officer, the signed operator agreement) are the go-live gates in
+[issue #103](https://github.com/Absence0760/project-water-management/issues/103).
+Issue #48 closed 2026-09-28 with its engineering done.
 
 The Step 2 release-hardening pass (2026-09-26,
 [step-2 § WP-2.16](./roadmap/step-2-shared-catchment.md#wp-216-release-hardening-for-step-2))
@@ -3198,13 +3215,16 @@ and fixed what it could in code (048_account_deletion). These need the
 client, its information officer or legal, and none is a code change on its
 own. Loop in the CISO or security analyst before acting on any of them.
 
-- [ ] **Privacy notice for farmers and members.** What is collected (the
+- [x] **Privacy notice for farmers and members.** What is collected (the
       security.md table), why, who sees a farm's figures (D1, FV-D5), the
       retention periods, the rights and how to exercise them, and the
       responsible party's contact. Needs the client's information officer
       and the Afrikaans translation (WP-2.5). Then a link on sign-up, the
       invite email and the farm view. Trigger: **blocking** before the first
-      farmer is invited on production.
+      farmer is invited on production. **Done 2026-09-27:** `/privacy` and
+      `/terms`, linked from sign-up, the invite emails, the sign-in pages
+      and the farm menu, with the consent record (087) and re-acceptance
+      (2026-09-28); counsel review is gate D in legal-status.md (#103).
 - [ ] **Confirm the lawful basis** for each row marked *(confirm)* in
       security.md: farmers' accounts and farm links (the WUA's function or
       legitimate interest, not consent), notes and the audit log kept for
@@ -3212,7 +3232,7 @@ own. Loop in the CISO or security analyst before acting on any of them.
       on per catchment, each person choosing how often (WP-2.13).
       Who: the client's information officer. Trigger: with the privacy
       notice.
-- [ ] **Operator agreement** (POPIA s20–21) between the client as
+- [ ] **Operator agreement** (POPIA s20–21, gate B in #103) between the client as
       responsible party and the operator: security measures, sub-processors
       (AWS), breach notification to the client. Who: operator + client
       legal. Trigger: before production holds client data.
@@ -3253,10 +3273,12 @@ own. Loop in the CISO or security analyst before acting on any of them.
       information officer confirms it (or asks for full deletion of the
       events, which would weaken the regulator's trail). Trigger: with the
       privacy notice.
-- [ ] **Personal-information incident procedure** for the "a farmer sees the
+- [x] **Personal-information incident procedure** for the "a farmer sees the
       wrong farm" runbook (deployment.md § Runbooks, item 4): who at the
       WUA decides on notifying the Information Regulator and the data
       subject (s22), and in what time. Who: client. Trigger: before go-live.
+      **Drafted:** [legal/incident-procedure.md](./legal/incident-procedure.md);
+      the WUA's named decider goes in each operator agreement.
 - [x] **The ingest hold's outlier limit still counts a key's earlier
       pushes.** Fixed in 053_series_key_days.sql: `series_key_days` records,
       per (series, key), the days a key changed that nobody has written

@@ -8,7 +8,7 @@ import { readSaved, SAVED_KEY, writeSaved } from './savedCopy';
 const P = 'p-sandspruit';
 const N = 'n-vaalbank';
 const index = (publication: FarmIndex['publication'] = { publishedAt: '2024-01-12T08:00:00Z', restriction: { level: 'advisory' } }): FarmIndex => ({
-	project: { id: P, name: 'Sandspruit (example catchment)' },
+	project: { id: P, name: 'Sandspruit (example catchment)', wuaName: 'Sandspruit WUA' },
 	farms: [{ nodeId: N, name: 'Vaalbank (example)' }],
 	publication
 });
@@ -122,6 +122,20 @@ describe('FarmState', () => {
 		expect(s.phase).toEqual({ kind: 'no-publication' });
 		expect(s.farmName).toBe('Vaalbank (example)');
 		expect(s.projectName).toBe('Sandspruit (example catchment)');
+		// The contact line names the WUA from the index before any view (095_wua_name).
+		expect(s.wuaName).toBe('Sandspruit WUA');
+	});
+
+	it('takes the WUA’s name from the view once it arrives, and none from a copy saved before it existed', async () => {
+		const named = new FarmState(fakeApi({ view: async () => ({ ...vaalbankFixture(), project: { ...vaalbankFixture().project, wuaName: 'Vaalbank WUA' } }) }), () => 'u1');
+		await named.load(P, N);
+		expect(named.wuaName).toBe('Vaalbank WUA');
+		const old = new FarmState(
+			fakeApi({ index: async () => ({ ...index(), project: { id: P, name: 'X' } as FarmIndex['project'] }), view: async () => ({ ...vaalbankFixture(), project: { id: P, name: 'X' } as FarmView['project'] }) }),
+			() => 'u-old-copy'
+		);
+		await old.load(P, N);
+		expect(old.wuaName).toBeNull();
 	});
 
 	it('marks a viewer+ as previewing and keeps no copy for them', async () => {

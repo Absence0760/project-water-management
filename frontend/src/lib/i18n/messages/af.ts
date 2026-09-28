@@ -301,6 +301,8 @@ export const af: Catalogue = {
 	'3ea4ad58': 'Hoekom {pct}? Wat kan ek doen?',
 	// The model’s look back and what you can do
 	'4f85b1d2': 'Die model se terugblik en wat jy kan doen',
+	// Not available: the model’s data starts on {date}.
+	'7c85cbbd': 'Nie beskikbaar nie: die model se data begin op {date}.',
 	// Not available: the model’s data doesn’t reach back to the same dates last season.
 	'04bf0305': 'Nie beskikbaar nie: die model se data strek nie terug tot dieselfde datums verlede seisoen nie.',
 	// very little needed
@@ -389,10 +391,18 @@ export const af: Catalogue = {
 	'ecebdb11': 'Vrae? Kontak jou WGV.',
 	// You no longer have access to this farm. Contact your WUA.
 	'90bc6213': 'Jy het nie meer toegang tot hierdie plaas nie. Kontak jou WGV.',
+	// Questions? Contact {wua}.
+	'47121206': 'Vrae? Kontak {wua}.',
+	// You no longer have access to this farm. Contact {wua}.
+	'dda149e0': 'Jy het nie meer toegang tot hierdie plaas nie. Kontak {wua}.',
 	// Charts, “Why?” and downloads need a connection.
 	'b3bbbaf7': 'Grafieke, “Hoekom?” en aflaaie het ’n verbinding nodig.',
 	// Updating…
 	'4f1bb013': 'Werk tans by…',
+	// Still no connection. If this keeps happening, contact {wua}.
+	'6d967706': 'Steeds geen verbinding nie. As dit aanhou gebeur, kontak {wua}.',
+	// Still not working. If this keeps happening, contact {wua}.
+	'38ed8fb7': 'Werk steeds nie. As dit aanhou gebeur, kontak {wua}.',
 	// Still no connection. If this keeps happening, contact your WUA.
 	'86547211': 'Steeds geen verbinding nie. As dit aanhou gebeur, kontak jou WGV.',
 	// Still not working. If this keeps happening, contact your WUA.

@@ -160,7 +160,10 @@ the farmer's list of farms, instead of the figures until the account presses
 **I understand** on the version in force (CPA s49 research, R2). The press
 is recorded on the account (`app_user.farm_notice_version` and the
 database's time, 093), is in "Download my data", and goes with the account
-when it is deleted. A new version shows it to everyone again. WUA staff
+when it is deleted. A press made without a signal is kept on that phone for
+that account and version only, the figures show, and it is sent once the
+signal is back (issue #74); the recorded time is then when it reached the
+server, never the phone's clock. A new version shows it to everyone again. WUA staff
 previewing a farm don't see it. `{terms}` is a link to the Terms of use,
 section 13 (Limitation of liability). The heading, the four points and the
 button:

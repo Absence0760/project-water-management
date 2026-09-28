@@ -24,13 +24,14 @@ const MONTHS: [string, number, number, number][] = [
 
 export function vaalbankFixture(): FarmView {
 	return {
-		project: { id: 'p-sandspruit', name: 'Sandspruit (example catchment)' },
+		project: { id: 'p-sandspruit', name: 'Sandspruit (example catchment)', wuaName: null },
 		farm: {
 			nodeId: 'n-vaalbank',
 			name: 'Vaalbank (example)',
 			damCapacityM3: 350_000,
 			damMinPct: 0.15,
 			irrigationEfficiency: 0.75,
+			dataFrom: '2014-10-01',
 			dataUntil: '2024-01-10',
 			season: {
 				from: '2023-10-01',

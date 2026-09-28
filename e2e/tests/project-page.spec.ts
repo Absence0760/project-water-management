@@ -77,6 +77,13 @@ test('the Summary links here and Back returns; details save from here', async ({
 	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
 	await expect(page.getByTestId('project-name')).toHaveText('Project renamed');
 
+	// The WUA's name, which the farm pages' contact lines use (095_wua_name).
+	await page.getByLabel('WUA name').fill('Summary Valley WUA');
+	await page.getByRole('button', { name: 'Save details' }).click();
+	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
+	await page.reload();
+	await expect(page.getByLabel('WUA name')).toHaveValue('Summary Valley WUA');
+
 	await page.goBack();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
 	await expect(summaryLink(page)).toBeVisible();

@@ -23,6 +23,7 @@ import {
 	systemName,
 	accessLine,
 	bandChip,
+	contactText,
 	levelWord,
 	stateText
 } from './cards';
@@ -277,8 +278,18 @@ describe('Compared with last season', () => {
 		});
 	});
 
-	it('says when the run doesn’t reach back', () => {
+	it('names the day the model’s data starts when it doesn’t reach back (design §6.5)', () => {
 		const c = compareCard(withFarm((f) => (f.lastSeason = null)).farm);
+		expect(c).toEqual({ available: false, text: 'Not available: the model’s data starts on 1 Oct 2014.' });
+	});
+
+	it('says only that it doesn’t reach back on a copy saved before dataFrom existed', () => {
+		const c = compareCard(
+			withFarm((f) => {
+				f.lastSeason = null;
+				delete (f as Partial<FarmProjection>).dataFrom;
+			}).farm
+		);
 		expect(c).toEqual({ available: false, text: 'Not available: the model’s data doesn’t reach back to the same dates last season.' });
 	});
 });
@@ -333,6 +344,8 @@ describe('the states', () => {
 	it('adds a contact line after a second failure', () => {
 		expect(stillFailing(true)).toBe('Still no connection. If this keeps happening, contact your WUA.');
 		expect(stillFailing(false)).toBe('Still not working. If this keeps happening, contact your WUA.');
+		expect(stillFailing(true, 'Vaalbank WUA')).toBe('Still no connection. If this keeps happening, contact Vaalbank WUA.');
+		expect(stillFailing(false, 'Vaalbank WUA')).toBe('Still not working. If this keeps happening, contact Vaalbank WUA.');
 		expect(previewBanner('Vaalbank (example)')).toBe('You’re previewing Vaalbank (example) as its farmer sees it');
 	});
 });
@@ -370,5 +383,12 @@ describe('words picked by value', () => {
 			'Charts, “Why?” and downloads need a connection.',
 			'Updating…'
 		]);
+	});
+
+	it('names the WUA in the contact lines when the project has its name, else “your WUA”', () => {
+		expect(contactText('contact', 'Vaalbank WUA')).toBe('Questions? Contact Vaalbank WUA.');
+		expect(contactText('removed', 'Vaalbank WUA')).toBe('You no longer have access to this farm. Contact Vaalbank WUA.');
+		expect(contactText('contact', null)).toBe('Questions? Contact your WUA.');
+		expect(contactText('removed', '')).toBe('You no longer have access to this farm. Contact your WUA.');
 	});
 });
