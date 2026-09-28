@@ -13,9 +13,11 @@ import { KNOWN_LIMITATIONS } from './limitations.generated';
 /**
  * Bumped whenever a statement's wording or the statement's shape changes. A
  * stored sign-off keeps the version and hash it was made under (signoff-1
- * rows keep theirs); new sign-offs are made against this one only.
+ * and signoff-2 rows keep theirs); new sign-offs are made against this one
+ * only. signoff-3 (issue #47): the identity confirmation covers the category
+ * and field recorded with the registration (registration.ts).
  */
-export const SIGNOFF_STATEMENT_VERSION = 'signoff-2';
+export const SIGNOFF_STATEMENT_VERSION = 'signoff-3';
 
 export interface SignoffConfirmation {
 	id: 'identity' | 'competence' | 'conflict' | 'inputs' | 'calibration' | 'ewr' | 'works' | 'assurance' | 'plausibility' | 'limitations';
@@ -55,7 +57,7 @@ export function signoffStatement(run: SignoffRun, limitations: readonly Limitati
 		confirmations: [
 			{
 				id: 'identity',
-				text: 'I am the person named above, and I am currently registered with the professional body shown, under the registration number shown.'
+				text: 'I am the person named above, and I am currently registered with the body, in the category and field, and under the registration number shown.'
 			},
 			{ id: 'competence', text: 'This work is within my competence and the category of my registration, and I did it or supervised it.' },
 			{
@@ -83,7 +85,7 @@ export function signoffStatement(run: SignoffRun, limitations: readonly Limitati
 		],
 		limitations,
 		notes: [
-			'The registration details are the signer’s own declaration. This app does not check them. You can check them on the public register: ECSA “Find a Registered Person”, or the SACNASP database of registered scientists.',
+			'The registration details are the signer’s own declaration. This app does not check them. You can check them on the public register, whose address the report prints beside each signature: ECSA “Find a Registered Person”, or the SACNASP database of registered scientists.',
 			'A dam that can hold more than 50 000 m³ and has a wall more than 5 m high, or one the Minister has declared, is a dam with a safety risk (National Water Act, Chapter 12). The Department of Water and Sanitation must classify it; for a licence application that is form DW793. It also needs its own dam safety approvals. This sign-off does not cover dam safety.',
 			'This sign-off makes no finding on whether any water use or works are lawful.',
 			'The signature covers professional judgement on this run’s inputs and results. It relies on the app’s calculations and does not verify its software.',

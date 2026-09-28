@@ -103,7 +103,9 @@ describe('signoffStatement', () => {
 
 	it('asks for the ten confirmations, and words the works one for a baseline or a scenario', () => {
 		const base = signoffStatement(run);
-		expect(base.version).toBe('signoff-2');
+		expect(base.version).toBe('signoff-3');
+		// signoff-3: the identity confirmation covers the category and field recorded (registration.ts).
+		expect(base.confirmations[0]!.text).toMatch(/in the category and field, and under the registration number shown\.$/);
 		expect(base.confirmations.map((c) => c.id)).toEqual([
 			'identity',
 			'competence',
