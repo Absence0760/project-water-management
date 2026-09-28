@@ -56,8 +56,9 @@
 # it under `node --enable-source-maps` (docs/deployment.md § Lambda bundles).
 #
 # The dependency guards at the end read esbuild's --metafile (the input files
-# that went into each bundle), not the bundle text: minifying strips the
-# `// node_modules/...` path comments a grep would look for.
+# that went into each bundle, and the external imports left in each output),
+# not the bundle text: minifying strips the `// node_modules/...` path comments
+# a grep would look for.
 set -euo pipefail
 
 repo_root="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
@@ -115,45 +116,36 @@ esbuild renderer "$backend/src/lambda-renderer.ts" "$out/renderer/lambda-rendere
 esbuild fetcher "$backend/src/lambda-fetcher.ts" "$stage/fetcher/lambda-fetcher.mjs" --external:playwright-core
 (cd "$stage/fetcher" && zip -q -9 -X -r "$out/fetcher.zip" .)
 
-# forbid <bundle> <package> <why>: refuse a bundle whose metafile lists an
-# input file from node_modules/<package>/. It first checks that the metafile
-# names the bundle's own src/lambda*.ts entry, so an empty or reshaped
-# metafile fails loudly instead of passing every check.
-forbid() {
-  # shellcheck disable=SC2016 # the ${…} are JavaScript template literals
-  node -e '
-    const [file, name, pkg, why] = process.argv.slice(1);
-    const inputs = Object.keys(JSON.parse(require("fs").readFileSync(file, "utf8")).inputs ?? {});
-    if (!inputs.some((p) => /(^|\/)src\/lambda[\w-]*\.ts$/.test(p))) {
-      console.error(`error: ${name}: the metafile lists no src/lambda*.ts entry, so the bundle guards cannot run`);
-      process.exit(1);
-    }
-    const hits = inputs.filter((p) => p.includes(`node_modules/${pkg}/`));
-    if (hits.length) {
-      console.error(`error: the ${name} bundle carries ${pkg} (${why}):\n  ${hits.slice(0, 5).join("\n  ")}`);
-      process.exit(1);
-    }
-  ' "$meta/$1.json" "$1" "$2" "$3"
+# guard <bundle> [--forbid|--forbid-static <package> <why>]…: refuse a bundle
+# whose metafile shows the package, either bundled (its files are inputs) or
+# imported as an external (the import left in the output). --forbid-static
+# still allows a lazy `import()` of it. scripts/guards/check_lambda_bundle.mjs
+# holds the rules and its node:test suite (pnpm test:guards); it also fails a
+# metafile that names no src/lambda*.ts entry, so a reshaped metafile can't
+# pass every check.
+guard() {
+  local name=$1; shift
+  node "$repo_root/scripts/guards/check_lambda_bundle.mjs" "$meta/$name.json" "$name" "$@"
 }
 
 # No Lambda bundle may carry dotenv: it would read env files from the
 # package in production (docs/STACK.md § Two backend entry points). Migrate is
 # exempt, as it always was: it bundles backend/scripts/migrate.ts, whose CLI
 # branch (never taken in the Lambda) calls dotenv's config().
-for b in api worker fetcher renderer; do
-  forbid "$b" dotenv 'docs/STACK.md § Two backend entry points'
-done
-
+dotenv=(--forbid dotenv 'docs/STACK.md § Two backend entry points')
 # Nor may the API, worker and fetcher carry Chromium's driver (see above).
-for b in api worker fetcher; do
-  forbid "$b" playwright-core 'only the renderer image ships it'
-  forbid "$b" chromium-bidi 'only the renderer image ships it'
-done
-
+# playwright-core is --external in all of them, so it is never an input: the
+# guard reads the output's imports, and refuses any but the lazy
+# `await import('playwright-core')` in src/reports/render.ts, which the API and
+# worker reach and which only runs where the package is installed.
+chromium=(--forbid-static playwright-core 'only the renderer image ships it' --forbid chromium-bidi 'only the renderer image ships it')
 # The fetcher and renderer have no database, so no pg (issue #34; lambda-fetcher.test.ts checks the import graph).
-for b in fetcher renderer; do
-  forbid "$b" pg 'no database'
-done
+pg=(--forbid pg 'no database')
+
+guard api "${dotenv[@]}" "${chromium[@]}"
+guard worker "${dotenv[@]}" "${chromium[@]}"
+guard fetcher "${dotenv[@]}" "${chromium[@]}" "${pg[@]}"
+guard renderer "${dotenv[@]}" "${pg[@]}"
 
 for z in lambda migrate worker fetcher; do
   echo "== $z.zip ($(du -h "$out/$z.zip" | cut -f1))"
