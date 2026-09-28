@@ -2183,7 +2183,7 @@ section), WP-2.7 (notes). D9, D10.
 **Goal.** New public surfaces and a new user class ship reviewed.
 
 - Run `/audit/auth` (farmer scope, API keys, share links, unsubscribe),
-  `/audit/xss` (notes, notices, share page, mail templates) and `/audit/gdpr`
+  `/audit/xss` (notes, notices, share page, mail templates) and `/audit/popia`
   (farmers, alerts, audit-log retention). Fix every finding or track it as an
   issue (confirm before creating).
 - Run `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
@@ -2245,7 +2245,7 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | What is kept, why, how long, what deletion does | ✅ | [security.md § Personal information](../security.md#personal-information-popia) |
 | Privacy notice, lawful basis, operator agreement, region, deleted-note bodies, backups | ⏳ | followups.md § POPIA and the Step 2 release (client / information officer) |
 | Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm: runbook 3, WP-2.13) |
-| `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (the unsubscribe: [security.md § Alerts](../security.md#alerts)) |
+| `/audit/auth`, `/audit/xss`, `/audit/popia` over the built surfaces | ✅ | The threat and deletion rows above (the unsubscribe: [security.md § Alerts](../security.md#alerts)) |
 | Personas (§9) and load checks | ⏳ | Now that WP-2.5, WP-2.12 and WP-2.13 are built (three personas judge those); issue #51 |
 
 **Size.** S. **Depends on.** Everything above.

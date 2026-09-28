@@ -600,7 +600,7 @@ run in parallel after WP-4.1.
   control before). The hard delete leaves no row with that `organisation_id`
   in any table (a catalogue-driven test that lists every table with an org or
   project FK). *Integration:* the export → `import:project` round trip gives
-  the same model document. *Audits:* `/audit/gdpr`,
+  the same model document. *Audits:* `/audit/popia`,
   `/audit/data-export-completeness`, `/audit/account-deletion-completeness`,
   `/audit/third-party-data-flows`, `/audit/cookie-consent` (only the session
   cookie; no banner needed, confirm).
@@ -1254,7 +1254,7 @@ Run before building (`/persona …`) and record each **Need verdict** here.
 - **Governance.** A DPA/operator agreement and a sub-processor list are
   published. Tenant export and deletion are proven complete by
   `/audit/data-export-completeness` and
-  `/audit/account-deletion-completeness`. `/audit/gdpr` and `/audit/all`
+  `/audit/account-deletion-completeness`. `/audit/popia` and `/audit/all`
   are clean.
 - **Operations.** SLOs are measured on a dashboard for 30 days and met.
   Per-tenant budgets have stopped a synthetic runaway tenant. The runbooks
