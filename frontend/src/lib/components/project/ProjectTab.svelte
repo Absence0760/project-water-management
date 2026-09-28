@@ -261,6 +261,9 @@
 	}
 	.col {
 		display: grid;
+		/* One track no wider than the column: an implicit (auto) track grows to its widest panel's min-content,
+		   and in a wide font (DejaVu Sans) that pushed every panel 6 px past a phone's edge. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0;
 		min-width: 0;
 	}

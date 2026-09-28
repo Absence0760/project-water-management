@@ -18,6 +18,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { grouped } from '../support/format.ts';
 
 const START = '2006-10-01';
 /** Rain multiplier per water year, 2006/07 … 2017/18 (invented). */
@@ -68,7 +69,7 @@ function percentile(sorted: number[], p: number) {
 	return lo + 1 < sorted.length ? sorted[lo]! + (h - lo) * (sorted[lo + 1]! - sorted[lo]!) : sorted[lo]!;
 }
 const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const m3 = (v: number) => `${whole.format(v)} m³`;
+const m3 = (v: number) => `${grouped(v)} m³`;
 const pct = (v: number) => `${whole.format(v * 100)} %`;
 function stat(values: (number | null)[], f: (v: number) => string) {
 	const v = values.filter((x): x is number => x !== null).sort((a, b) => a - b);

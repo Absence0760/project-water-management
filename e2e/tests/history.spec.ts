@@ -94,7 +94,7 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 	const since = page.getByRole('region', { name: 'Changes since this run' });
 	await since.getByText('Changes since this run').click();
 	// The net difference, then the change recorded since the run.
-	await expect(since.getByRole('listitem').filter({ hasText: /^Changed Upper farm: dam capacity 150 000 m³ → 175 000 m³$/ })).toBeVisible();
+	await expect(since.getByRole('listitem').filter({ hasText: /^Changed Upper farm: dam capacity 150\u202f000 m³ → 175\u202f000 m³$/ })).toBeVisible();
 	await expect(since.getByRole('listitem').filter({ hasText: 'Model changed: Upper farm: dam capacity 150\u202f000 m³ → 175\u202f000 m³' })).toBeVisible();
 	await page.getByRole('button', { name: 'Restore these inputs' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Restore this run’s inputs?' });
