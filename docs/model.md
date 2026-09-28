@@ -2851,7 +2851,7 @@ regression suite is unchanged.
 | `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
-| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.16.0, migration 096; below); null or empty = every day at its month's demand |
+| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.16.0, migration 098; below); null or empty = every day at its month's demand |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,
