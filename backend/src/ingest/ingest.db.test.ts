@@ -589,6 +589,8 @@ describe('a key canâ€™t add a series the model would read in place of a personâ€
 			const res = await merge(key.secret, rain('2024-01-01', [900, 900, 900], 'AAA'));
 			expect(res.status, JSON.stringify(res.body)).toBe(409);
 			expect(res.body.error).toMatch(/already has a rain_catchment_mm series/);
+			// It asks for the record so far, never "one day": a short series is checked for negatives only (series/hold.ts).
+			expect(res.body.error).toMatch(/with the record so far .*at least 100 non-zero days/);
 		}
 		expect(await rainNames()).toEqual(['Weir']);
 		expect(await pending()).toBe(0);
