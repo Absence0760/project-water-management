@@ -603,6 +603,12 @@ describe('diffInputs', () => {
 		const b = structuredClone(a);
 		b.model.demandObjects![0]!.schedule = [];
 		expect(texts(a, b)).toEqual([]);
+		// The same window with its keys in another order (as jsonb reads it back) is no change.
+		a.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		const c = structuredClone(a);
+		c.model.demandObjects![0]!.schedule = [{ factor: 0, to: null, span: 'always', from: null, label: 'Weekends', weekdays: [6, 7], easterTo: null, easterFrom: null }];
+		expect(texts(a, c)).toEqual([]);
+		delete a.model.demandObjects![0]!.schedule;
 		b.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
 		expect(texts(a, b)).toEqual([
 			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first, 1 schedule window, schedule changed'
