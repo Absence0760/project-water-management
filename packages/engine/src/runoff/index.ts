@@ -12,3 +12,13 @@ export { resolveParams, resolveWarmupDays, runoffForcing, simulateRunoff, type R
 export const NATURAL_FLOW: Record<RunoffModelId, NaturalFlowGenerator> = {
 	gr4j: gr4jNaturalFlow
 };
+
+/**
+ * NATURAL_FLOW's generator for `id`, or a plain error for a model the engine
+ * doesn't have. Settings arrive from stored JSON: an unchecked lookup would
+ * call whatever `id` names on the object (`toString`, `constructor`).
+ */
+export function naturalFlowFor(id: RunoffModelId): NaturalFlowGenerator {
+	if (!Object.hasOwn(NATURAL_FLOW, id)) throw new Error(`unknown runoff model "${String(id)}"`);
+	return NATURAL_FLOW[id];
+}

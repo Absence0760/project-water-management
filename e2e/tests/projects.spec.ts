@@ -403,9 +403,15 @@ test.describe('fifty projects', () => {
 			await expect(page.getByRole('region', { name: 'Needs attention' })).toBeInViewport();
 		}
 		await expectNoViolations(page);
-		// With a menu open, too.
+		// With a menu open, too. Its row starts below the fold: opening it scrolls the list, and the
+		// scroll event, a frame later, must not close the menu it just opened.
 		await openRowMenu(page, 'Big published catchment');
 		await expectNoViolations(page);
+		// A real scroll moves the ⋯ away from the fixed menu, so the menu closes.
+		const more = row(page, 'Big published catchment').getByRole('button', { name: 'More actions for Big published catchment', exact: true });
+		await page.locator('.groups').evaluate((el) => el.scrollBy(0, 120));
+		await expect(more).toHaveAttribute('aria-expanded', 'false');
+		await openRowMenu(page, 'Big published catchment');
 		await page.keyboard.press('Escape');
 
 		await page.getByLabel('Search projects').fill('Big scoping catchment 49');

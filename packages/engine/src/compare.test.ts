@@ -3,6 +3,7 @@ import { withMonthlyRates } from './network/transferRates';
 import {
 	compareRuns,
 	describeCalendarMonths,
+	describeFitRecord,
 	diffInputs,
 	sharedDaysChange,
 	matchByIdThenName,
@@ -1368,5 +1369,20 @@ describe('field history tables (settingsChangePaths, nodeChangeFields)', () => {
 		};
 		expect(diffInputs(a, b).map((c) => keyOf(c.text))).toEqual(['damCapacityM3', 'irrigationEfficiency']);
 		expect(new Set(labels.map(([l]) => l)).size).toBe(labels.length);
+	});
+});
+
+describe('describeFitRecord', () => {
+	it('names the model, the time, the objective without its gloss, and the seed', () => {
+		expect(describeFitRecord({ model: 'gr4j', fittedAt: '2026-09-24T14:05:31.123Z', objective: 'kgePrime', seed: 1 })).toBe('GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)');
+	});
+	// An objective the engine doesn't know is shown as stored. Its trailing "(…)" is dropped without
+	// backtracking: `/ \(.*\)$/` rescanned to the end from every " (" (CodeQL js/polynomial-redos).
+	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.
+	it('shows an unknown stored objective, and a long run of " (" returns at once', { timeout: 5_000 }, () => {
+		const fit = (objective: string) => describeFitRecord({ model: 'gr4j', fittedAt: null as unknown as string, objective: objective as 'kgePrime', seed: 2 });
+		expect(fit('custom (old)')).toBe('GR4J fit of unknown time (custom, seed 2)');
+		const run = ' ('.repeat(200_000);
+		expect(fit(run)).toBe(`GR4J fit of unknown time (${run}, seed 2)`);
 	});
 });

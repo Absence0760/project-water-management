@@ -15,6 +15,11 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
+# SSE-S3, not a customer-managed key: the bucket holds the public static site,
+# served to everyone through CloudFront, and a CMK would need a key policy for
+# CloudFront's origin access control for no secrecy gained.
+# docs/security.md § Accepted IaC findings.
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
   bucket = aws_s3_bucket.frontend.id
 

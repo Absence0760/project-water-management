@@ -1039,8 +1039,10 @@ the upload dialog (`?add=data`). The **⋯** button ("More actions for
 *name*") opens a small disclosure menu with **Copy…** (anyone) and
 **Delete…** (owners); it's drawn `position: fixed` so the scrolling list
 never clips it, opens upward near the window's bottom, and closes on
-Escape (focus back on ⋯), a click outside, focus leaving, a scroll or a
-resize. One menu is open at a time.
+Escape (focus back on ⋯), a click outside, focus leaving, a scroll that
+moves ⋯ (not the one that brought an off-screen ⋯ into view: its event
+arrives a frame after the menu opened) or a resize. One menu is open at a
+time.
 
 **Delete** asks for confirmation, then deletes. A project that has nominated
 an evidence run is kept for good (issue #43, [data-model.md](./data-model.md)

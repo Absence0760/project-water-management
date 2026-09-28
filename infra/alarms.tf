@@ -14,6 +14,11 @@
 
 # Budget alerts go through SNS so a single subscription covers budget +
 # per-resource CloudWatch alarms.
+# Not KMS-encrypted, deliberately: AWS Budgets and CloudWatch alarms can publish
+# to an encrypted topic only through a customer-managed key whose policy grants
+# them (the AWS-managed alias/aws/sns refuses both), and the messages are
+# threshold notices with no client data. See docs/security.md § Accepted IaC findings.
+#trivy:ignore:AWS-0095
 resource "aws_sns_topic" "alerts" {
   name = "${local.project}-prod-alerts"
 }
@@ -337,6 +342,8 @@ resource "aws_cloudwatch_metric_alarm" "ses_complaint_rate" {
 # A CloudWatch alarm can only notify an SNS topic in its own region, so the
 # us-east-1 alarm gets its own topic (same subscriber).
 
+# Not KMS-encrypted, as aws_sns_topic.alerts (docs/security.md § Accepted IaC findings).
+#trivy:ignore:AWS-0095
 resource "aws_sns_topic" "alerts_us_east_1" {
   provider = aws.us_east_1
   name     = "${local.project}-prod-alerts"
