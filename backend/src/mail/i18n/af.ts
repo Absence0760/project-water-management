@@ -160,8 +160,6 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.restriction.liftedWhat': 'Beperking opgehef',
 	// The WUA published a notice for {project} on {date}: {level}.
 	'mail.alert.restriction.body': 'Die WGV het op {date} ’n kennisgewing vir {project} gepubliseer: {level}.',
-	// The WUA published a notice for {project} on {date}: {level}, {pct} less water.
-	'mail.alert.restriction.bodyPct': 'Die WGV het op {date} ’n kennisgewing vir {project} gepubliseer: {level}, {pct} minder water.',
 	// The WUA lifted the restriction for {project} on {date}.
 	'mail.alert.restriction.lifted': 'Die WGV het die beperking vir {project} op {date} opgehef.',
 	// The WUA’s notice: “{notice}”

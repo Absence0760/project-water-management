@@ -55,6 +55,8 @@ describe('alertMail', () => {
 		const n = alertMail(farmer, project, { kind: 'restriction_published', level: 'restricted', pct: 20, notice: '<img src=x onerror=alert(1)>', publishedAt: '2026-09-26T08:00:00Z', lifted: false }, unsub);
 		expect(n.html).not.toContain('<img');
 		expect(n.text).toContain('The WUA’s notice: “<img src=x onerror=alert(1)>”');
+		// A cut, as the WUA entered it and the farm page says it (never “20 % of registered use”, which reads as an allowance).
+		expect(n.text).toMatch(/: restricted, a 20\s% cut in registered water use\./);
 	});
 
 	it('sends Afrikaans readers Afrikaans, marked lang="af", with Afrikaans dates; English readers English', () => {

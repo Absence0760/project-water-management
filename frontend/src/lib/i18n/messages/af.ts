@@ -207,8 +207,6 @@ export const af: Catalogue = {
 	'19024a1a': 'Volgende bywerking word omstreeks {date} verwag.',
 	// Notice from the WUA · {level}
 	'692d3ef2': 'Kennisgewing van die WGV · {level}',
-	// Set by the WUA: {pct} of registered use.
-	'091d4149': 'Deur die WGV bepaal: {pct} van geregistreerde gebruik.',
 	// No restriction from the WUA
 	'82c3a5ec': 'Geen beperking van die WGV nie',
 	// drip

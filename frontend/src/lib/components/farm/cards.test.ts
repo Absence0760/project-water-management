@@ -80,7 +80,7 @@ describe('the notice', () => {
 		const n = noticeCard(v)!;
 		expect(n.heading).toBe('Notice from the WUA · Restriction');
 		expect(n.label).toBeNull();
-		expect(sp(n.pctLine)).toBe('Set by the WUA: 20 % of registered use.');
+		expect(sp(n.pctLine)).toBe('Set by the WUA: a 20 % cut in registered water use.');
 	});
 
 	describe('in the language the reader chose (design §7)', () => {

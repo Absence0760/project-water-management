@@ -106,7 +106,7 @@ export const en = {
 	'mail.alert.restriction.what': 'New restriction notice',
 	'mail.alert.restriction.liftedWhat': 'Restriction lifted',
 	'mail.alert.restriction.body': 'The WUA published a notice for {project} on {date}: {level}.',
-	'mail.alert.restriction.bodyPct': 'The WUA published a notice for {project} on {date}: {level}, {pct} less water.',
+	'mail.alert.restriction.bodyPct': 'The WUA published a notice for {project} on {date}: {level}, a {pct} cut in registered water use.',
 	'mail.alert.restriction.lifted': 'The WUA lifted the restriction for {project} on {date}.',
 	'mail.alert.restriction.notice': 'The WUA’s notice: “{notice}”',
 	'mail.alert.restriction.level.none': 'no restriction',
@@ -147,5 +147,5 @@ export const notes: Partial<Record<MailKey, string>> = {
 	'mail.alert.model.staff': 'Under the river-flow forecast alert, which only the WUA’s staff get.',
 	'mail.alert.stale.line': 'One line per data feed; {overdue} is a number of days.',
 	'mail.alert.restriction.body': '{level} is one of the level lines below.',
-	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s percentage, like “20 %”.'
+	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s cut, like “20 %”: use that much less than the registered water use. The farm page says it the same way.'
 };

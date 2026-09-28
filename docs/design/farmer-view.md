@@ -103,7 +103,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 
 | Line on screen | Source | Notes |
 | --- | --- | --- |
-| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself |
+| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself. With no text, the percentage alone reads as a cut, "Set by the WUA: a 20 % cut in registered water use.", the same words as the alert email (issue #51), never "20 % of registered use", which reads as an allowance |
 | "No restriction from the WUA" (success tokens, check icon) | level `none` | The official answer stays first and loud even when there's nothing to say (§11 F8) |
 | Model card "Looking back: 1 Oct to 10 Jan", chip "Model: watch", "If you had pumped less on the days the river needed it, you would have had about 83 % of the water you needed." | **E7**: (`CF.suppliedM3Day` − \|`CF.ewrSupplyCutM3Day`\|) ÷ `CF.demandM3Day` [(3 179 − 121) ÷ 3 691 = 83 %] | whole %. Band §6.2. Past tense. Under a `restricted` notice the card collapses to one link line, so only the WUA's percentage competes for attention |
 | "The model's estimate, not an official restriction" | fixed text (D10) | Always on the model card |
