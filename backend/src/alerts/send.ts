@@ -174,12 +174,14 @@ async function facts(db: Db, c: Claimed): Promise<AlertFacts | string> {
 			if (!p[0]) return 'cannot see the publication';
 			const { rows: me } = await db.query<{ locale: string | null }>('SELECT locale FROM app_user WHERE id = app_current_user_id()');
 			// The notice in the reader's language, else English, else any (the farm view's rule).
-			const notice = pickNotice(p[0].notice, me[0]?.locale)?.text ?? null;
+			const picked = pickNotice(p[0].notice, me[0]?.locale);
 			return {
 				kind: 'restriction_published',
 				level: d.level ?? p[0].restriction_level,
 				pct: d.pct === null || d.pct === undefined ? null : Number(d.pct),
-				notice,
+				notice: picked?.text ?? null,
+				// Its language, so the mail marks it when it isn't the mail's (WCAG 3.1.2, issue #51).
+				noticeLang: picked?.lang ?? null,
 				publishedAt: p[0].published_at.toISOString(),
 				lifted: d.lifted === true
 			};

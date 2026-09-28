@@ -155,6 +155,31 @@ describe('the liability line, per kind', () => {
 	});
 });
 
+// Issue #51 (WCAG 3.1.2): the notice falls back to another language than the mail's; it keeps its own lang.
+describe('the WUA’s notice in another language', () => {
+	const notice = (noticeLang: string | null, text = 'Irrigate at night.'): AlertFacts => ({ kind: 'restriction_published', level: 'advisory', pct: null, notice: text, noticeLang, publishedAt: '2026-09-26T08:00:00Z', lifted: false });
+	const af = { ...farmer, locale: 'af' };
+
+	it('marks an English notice in an Afrikaans mail with lang="en", in the one alert and in the digest', () => {
+		const m = alertMail(af, project, notice('en'), unsub);
+		expect(m.html).toContain('<html lang="af">');
+		expect(m.html).toMatch(/“<span lang="en">Irrigate at night\.<\/span>”/);
+		expect(m.text).toContain('“Irrigate at night.”');
+		const d = digestMail(af, project, [dam, notice('en')], unsub, 5);
+		expect(d.html).toContain('<span lang="en">Irrigate at night.</span>');
+		expect(d.text).toContain('“Irrigate at night.”');
+	});
+
+	it('leaves a notice in the mail’s own language unmarked, and escapes both the words and the code', () => {
+		expect(alertMail(af, project, notice('af'), unsub).html).not.toContain('<span lang=');
+		expect(alertMail(farmer, project, notice('en'), unsub).html).not.toContain('<span lang=');
+		const x = alertMail(af, project, notice('en"><script>', '<b>x</b>'), unsub).html;
+		expect(x).not.toContain('<script>');
+		expect(x).not.toContain('<b>x</b>');
+		expect(x).toContain('<span lang="en&quot;&gt;&lt;script&gt;">&lt;b&gt;x&lt;/b&gt;</span>');
+	});
+});
+
 describe('digestMail', () => {
 	it('lists every alert in one email with one unsubscribe for the project, and says why it came', () => {
 		const m = digestMail(farmer, project, [dam, { ...dam, pct: 0.2 }], unsub, 5);

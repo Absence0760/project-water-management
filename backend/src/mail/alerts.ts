@@ -19,7 +19,7 @@ import { language } from '@water-management/engine/languages';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import type { AlertKind } from '../alerts/rules.js';
 import { mailT, type Locale, type MailKey, type MailTranslator } from './i18n/index.js';
-import { PRODUCT, render, sitePage } from './templates.js';
+import { paraText, PRODUCT, render, sitePage, type Inline, type Para } from './templates.js';
 import type { Mail } from './transport.js';
 
 export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
@@ -31,7 +31,16 @@ export type AlertFacts =
 	| { kind: 'data_stale'; threshold: number; feeds: { label: string; newest: string; overdue: number }[] }
 	| { kind: 'feed_failing'; threshold: number; feeds: { label: string; failures: number }[] }
 	| { kind: 'job_dead'; count: number }
-	| { kind: 'restriction_published'; level: RestrictionLevel; pct: number | null; notice: string | null; publishedAt: string; lifted: boolean };
+	| {
+			kind: 'restriction_published';
+			level: RestrictionLevel;
+			pct: number | null;
+			notice: string | null;
+			/** The language the notice's words are in (pickNotice: the reader's, else English, else another); null for none. */
+			noticeLang?: string | null;
+			publishedAt: string;
+			lifted: boolean;
+	  };
 
 export interface Recipient {
 	email: string;
@@ -99,8 +108,20 @@ export function dateText(iso: string, lang: Locale, timeZone: string = DEFAULT_T
 		.join('');
 }
 
+/**
+ * "The WUA's notice: “…”", with the WUA's words marked as their own
+ * language when it isn't the mail's (issue #51, WCAG 3.1.2): an English
+ * notice in an Afrikaans mail is read out in English.
+ */
+function noticeLine(tr: MailTranslator, notice: string, noticeLang: string | null, lang: Locale): Para {
+	if (!noticeLang || noticeLang === lang) return tr.t('mail.alert.restriction.notice', { notice });
+	const MARK = '\u0001';
+	const [before = '', after = ''] = tr.t('mail.alert.restriction.notice', { notice: MARK }).split(MARK);
+	return [before, { text: notice, lang: noticeLang }, after].filter((x) => x !== '');
+}
+
 /** One alert's words: the subject's "what", and its sentences. */
-export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, lang: Locale, timeZone: string = DEFAULT_TIME_ZONE): { what: string; body: string[] } {
+export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, lang: Locale, timeZone: string = DEFAULT_TIME_ZONE): { what: string; body: Para[] } {
 	switch (f.kind) {
 		case 'dam_below': {
 			const v = { farm: f.farm, pct: pctText(f.pct), threshold: pctText(f.threshold), date: dateText(f.date, lang), madeOn: f.madeOn ? dateText(f.madeOn, lang) : '' };
@@ -132,12 +153,12 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			const date = dateText(f.publishedAt, lang, timeZone);
 			if (f.lifted) return { what: tr.t('mail.alert.restriction.liftedWhat'), body: [tr.t('mail.alert.restriction.lifted', { project, date })] };
 			const level = tr.t(`mail.alert.restriction.level.${f.level}` as MailKey);
-			const body = [
+			const body: Para[] = [
 				f.pct === null
 					? tr.t('mail.alert.restriction.body', { project, date, level })
 					: tr.t('mail.alert.restriction.bodyPct', { project, date, level, pct: cutPctText(f.pct) })
 			];
-			if (f.notice) body.push(tr.t('mail.alert.restriction.notice', { notice: f.notice }));
+			if (f.notice) body.push(noticeLine(tr, f.notice, f.noticeLang ?? null, lang));
 			return { what: tr.t('mail.alert.restriction.what'), body };
 		}
 	}
@@ -227,10 +248,13 @@ export function alertMail(to: Recipient, project: MailProject, facts: AlertFacts
  */
 export function digestMail(to: Recipient, project: MailProject, items: AlertFacts[], unsubscribe: Unsubscribe, cap: number, more = 0): Mail {
 	const { tr, lang } = translator(to.locale);
-	const paragraphs = [tr.t('mail.alert.digest.intro')];
+	const paragraphs: Para[] = [tr.t('mail.alert.digest.intro')];
 	for (const f of items) {
 		const { what, body } = alertLines(f, tr, project.name, lang, project.timeZone);
-		paragraphs.push(`${what}: ${body.join(' ')}`);
+		// One line per alert, each paragraph's runs kept (a notice keeps its lang).
+		const line: Inline[] = [`${what}: `];
+		body.forEach((p, i) => line.push(...(i ? [' '] : []), ...(typeof p === 'string' ? [p] : p)));
+		paragraphs.push(line.every((x) => typeof x === 'string') ? paraText(line) : line);
 	}
 	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
 	paragraphs.push(...liabilityLines(items.map((f) => f.kind), to.farmer, tr));

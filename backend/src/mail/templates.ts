@@ -22,9 +22,20 @@ export function siteLink(path: string, token: string, param = 'token'): string {
 	return `${base}${path}?${param}=${encodeURIComponent(token)}`;
 }
 
+/** A run of text in another language than the mail's (a WUA notice written in English in an Afrikaans mail): `<span lang>` in HTML (WCAG 3.1.2). */
+export type Inline = string | { text: string; lang: string };
+/** A paragraph: plain text, or runs of which some carry their own language. */
+export type Para = string | Inline[];
+
+/** A paragraph as plain text (the text part, and the digest's one-line items). */
+export const paraText = (p: Para): string => (typeof p === 'string' ? p : p.map((x) => (typeof x === 'string' ? x : x.text)).join(''));
+
+const paraHtml = (p: Para): string =>
+	typeof p === 'string' ? escapeHtml(p) : p.map((x) => (typeof x === 'string' ? escapeHtml(x) : `<span lang="${escapeHtml(x.lang)}">${escapeHtml(x.text)}</span>`)).join('');
+
 export type Body = {
 	heading: string;
-	paragraphs: string[];
+	paragraphs: Para[];
 	action: { label: string; url: string };
 	footer: string[];
 	/** Small links under the footer (an alert's unsubscribe and manage links), as real links in HTML and "label: url" in text. */
@@ -38,14 +49,14 @@ export function render(to: string, subject: string, b: Body, tr: MailTranslator 
 	const text = [
 		b.heading,
 		'',
-		...b.paragraphs.flatMap((p) => [p, '']),
+		...b.paragraphs.flatMap((p) => [paraText(p), '']),
 		`${b.action.label}: ${b.action.url}`,
 		'',
 		...b.footer.flatMap((p) => [p, '']),
 		...links.flatMap((l) => [`${l.label}: ${l.url}`, '']),
 		`— ${PRODUCT}`
 	].join('\n');
-	const p = (s: string) => `<p style="margin:0 0 16px">${escapeHtml(s)}</p>`;
+	const p = (s: Para) => `<p style="margin:0 0 16px">${paraHtml(s)}</p>`;
 	const url = escapeHtml(b.action.url);
 	const html = `<!doctype html>
 <html lang="${tr.lang}">
