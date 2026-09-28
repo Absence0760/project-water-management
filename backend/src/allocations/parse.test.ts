@@ -129,7 +129,7 @@ describe('parseAllocationTable', () => {
 	});
 });
 
-describe('licence conditions (095, issue #72)', () => {
+describe('licence conditions (096, issue #72)', () => {
 	it('reads months as numbers, names and ranges over the new year', () => {
 		expect(parseMonths('')).toBeNull();
 		expect(parseMonths('10 11 12 1 2 3')).toEqual([1, 2, 3, 10, 11, 12]);

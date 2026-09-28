@@ -19,6 +19,14 @@ updates:
       interval: weekly
     open-pull-requests-limit: 10
     groups:
+      # backend's playwright-core and e2e's @playwright/test in one PR: the
+      # Chromium build is tied to the version. The renderer image's pins
+      # (renderer-deps, the Dockerfile's tag and digest) move by hand in that
+      # PR; until they do, `pnpm check:pins` fails it
+      # (scripts/guards/check_playwright_pins.mjs). Listed before
+      # minor-and-patch so it takes these two.
+      playwright:
+        patterns: ["playwright-core", "@playwright/test"]
       minor-and-patch:
         update-types: ["minor", "patch"]
     ignore:
@@ -61,6 +69,21 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+
+  # The local-dev services (docker-compose.yml; CI starts MinIO and Mailpit
+  # from it). A MinIO bump is the moment to re-check the community fork
+  # (pgsty/minio; upstream stopped publishing images, docs/followups.md
+  # § Server-side reports): still maintained, still S3-compatible for the
+  # report tests. Postgres majors are ignored: production runs RDS Postgres
+  # 17 (infra/), and local dev and CI stay on the same major.
+  - package-ecosystem: docker-compose
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    ignore:
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: terraform
     directory: "/infra"

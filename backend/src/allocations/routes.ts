@@ -71,7 +71,7 @@ const FIELDS = {
 	validFrom: isoDate.nullable(),
 	validTo: isoDate.nullable(),
 	reference: text(500),
-	// Licence conditions (095, issue #72): shown, not yet enforced by the engine.
+	// Licence conditions (096, issue #72): shown, not yet enforced by the engine.
 	months: z
 		.array(z.number().int().min(1).max(12))
 		.min(1)
@@ -163,7 +163,7 @@ export interface AllocationRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (095): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. */
+	/** Licence conditions (096): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];

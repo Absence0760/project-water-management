@@ -31,9 +31,9 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
 | Reference | free text: the letter, the extract, a note |
 | Source | the imported file (name and SHA-256), or none when typed in by hand |
-| Months | licence condition (095): the calendar months the use may happen in; none = none stated |
-| Maximum rate | licence condition (095): the most it may take at once, m³/s; optional |
-| Conditions | licence conditions in words (095), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
+| Months | licence condition (096): the calendar months the use may happen in; none = none stated |
+| Maximum rate | licence condition (096): the most it may take at once, m³/s; optional |
+| Conditions | licence conditions in words (096), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
 
 Licence conditions are recorded and shown (the list sums them up in one
 line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions") but **not applied**
@@ -43,7 +43,7 @@ A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
 the farm and source on each day.
 
-Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql).
+Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql-096_allocation_conditionssql).
 
 ## Importing
 

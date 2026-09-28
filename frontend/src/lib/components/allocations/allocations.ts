@@ -46,7 +46,7 @@ export const WATER_YEAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9] as cons
 export const monthShort = (m: number) => MONTH_SHORT[m - 1] ?? String(m);
 
 /**
- * A licence's months of use in words (095, issue #72): runs of consecutive
+ * A licence's months of use in words (096, issue #72): runs of consecutive
  * months, over the new year too ("Oct–Mar"), from the first in the water
  * year; "all year" for twelve; '' for none stated.
  */

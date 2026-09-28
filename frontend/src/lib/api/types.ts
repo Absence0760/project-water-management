@@ -159,6 +159,8 @@ export interface OutlookSettings {
 export interface Project extends ProjectSummary {
 	/** IANA zone (058_project_time_zone, Africa/Johannesburg by default): dates the project's downloads. Absent from an older API. */
 	timeZone?: string;
+	/** The WUA that publishes the figures (095_wua_name): the farm pages name it in their contact lines. null = "your WUA". Absent from an older API. */
+	wuaName?: string | null;
 	settings: ProjectSettings & { autoRun?: AutoRunSettings; outcomes?: OutcomeSettings; outlook?: OutlookSettings };
 	/** When the project's pending re-run (manual or automatic) is due, ISO; null when none. Absent from an older API. */
 	rerunQueuedFor?: string | null;
@@ -1299,7 +1301,7 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (095, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
+	/** Licence conditions (096, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];

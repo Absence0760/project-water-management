@@ -21,7 +21,11 @@
 # `npm ci` installs exactly, integrity hashes checked. To move Playwright:
 # bump the tag and digest here (both FROM lines), playwright-core in
 # renderer-deps/package.json and backend/package.json, then refresh the lock
-# with `npm install --package-lock-only` in renderer-deps/.
+# with `npm install --package-lock-only` in renderer-deps/. `pnpm check:pins`
+# (scripts/guards/check_playwright_pins.mjs) fails until every pin agrees;
+# a digest left on the old version fails `pnpm check:renderer-image`
+# (infra/scripts/smoke-renderer-image.sh) whenever the new version brings a
+# new Chromium build, which the image then lacks. CI runs both on every PR.
 
 FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 AS deps
 # aws-lambda-ric compiles a native addon at install (its preinstall and
@@ -40,7 +44,12 @@ WORKDIR /var/task
 COPY --from=deps /deps/node_modules ./node_modules
 COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs
 # Lambda's filesystem is read-only except /tmp; Chromium writes its profile under HOME.
-ENV HOME=/tmp \
+# aws-lambda-ric 4 loads the handler from LAMBDA_TASK_ROOT and refuses to start
+# without it; the runtime sets only _HANDLER (from CMD), and AWS's own base
+# images set LAMBDA_TASK_ROOT in the image, so this one does too
+# (infra/scripts/smoke-renderer-image.sh caught it).
+ENV LAMBDA_TASK_ROOT=/var/task \
+	HOME=/tmp \
 	NODE_ENV=production \
 	PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 # Not root (Trivy DS-0002): the Playwright image's own user. Lambda runs the

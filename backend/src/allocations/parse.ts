@@ -61,7 +61,7 @@ export const HEADER_ALIASES: Record<Field, readonly string[]> = {
 	validFrom: ['validfrom', 'startdate', 'from', 'issuedate', 'datefrom'],
 	validTo: ['validto', 'enddate', 'to', 'expirydate', 'expiry', 'dateto'],
 	reference: ['reference', 'ref', 'comment', 'comments', 'notes'],
-	// Licence conditions (095, issue #72).
+	// Licence conditions (096, issue #72).
 	months: ['months', 'abstractionmonths', 'permittedmonths', 'monthsofuse', 'usemonths'],
 	maxRateM3s: ['maxratem3s', 'maxrate', 'maximumrate', 'maximumratem3s', 'maxabstractionrate', 'maxabstractionratem3s', 'ratem3s'],
 	conditions: ['conditions', 'licenceconditions', 'licenseconditions', 'otherconditions']
@@ -86,7 +86,7 @@ export const TEMPLATE_HEADERS = [
 	'conditions'
 ] as const;
 
-/** Most conditions in words on one allocation, and the longest one (095). */
+/** Most conditions in words on one allocation, and the longest one (096). */
 export const CONDITIONS_MAX = 20;
 export const CONDITION_MAX_CHARS = 500;
 /** The conditions cell's separator, in the template and the export: `|` (a comma or semicolon would split the CSV cell). */
@@ -117,7 +117,7 @@ export interface ParsedRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (095): the calendar months of use, null = none stated; the most it may take at once (m³/s); conditions in words. */
+	/** Licence conditions (096): the calendar months of use, null = none stated; the most it may take at once (m³/s); conditions in words. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
@@ -228,7 +228,7 @@ function monthOf(v: string): number | undefined {
 }
 
 /**
- * The months of use (a licence condition, 095): month numbers or names
+ * The months of use (a licence condition, 096): month numbers or names
  * separated by spaces, commas, semicolons, slashes or `|`, and ranges that
  * may run over the new year ("Oct-Mar" is October to March). Ascending and
  * without repeats; null for an empty cell; undefined for anything else.
@@ -373,7 +373,7 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 		}
 		if (row.validFrom && row.validTo && row.validFrom > row.validTo) errors.push('valid from is after valid to');
 
-		// Licence conditions (095).
+		// Licence conditions (096).
 		const months = parseMonths(get('months'));
 		if (months === undefined) errors.push(`${columns.months} “${get('months')}” are not months (e.g. “Oct-Mar” or “10 11 12 1 2 3”)`);
 		else row.months = months;

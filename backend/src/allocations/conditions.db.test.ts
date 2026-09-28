@@ -1,4 +1,4 @@
-// Allocations, second slice (issue #72; 095_allocation_conditions.sql,
+// Allocations, second slice (issue #72; 096_allocation_conditions.sql,
 // docs/allocations.md): licence conditions through the API and the table's
 // CHECKs, the allocations every run's input now carries (without names), the
 // project's comparison band (settings.allocationTolerance) and a capped run
@@ -30,7 +30,7 @@ beforeAll(async () => {
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
 }, 60_000);
 
-describe('licence conditions (095)', () => {
+describe('licence conditions (096)', () => {
 	it('stores months (sorted), the maximum rate and conditions in words, and clears them', async () => {
 		const res = await owner.call('POST', `/projects/${projectId}/allocations`, {
 			...base,
@@ -46,7 +46,7 @@ describe('licence conditions (095)', () => {
 		const cleared = await owner.call('PATCH', `/projects/${projectId}/allocations/${aid}`, { months: null, maxRateM3s: null, conditions: [] });
 		expect(cleared.status).toBe(200);
 		expect(cleared.body.allocation).toMatchObject({ months: null, maxRateM3s: null, conditions: [] });
-		// A row entered before 095, or without them: none stated.
+		// A row entered before 096, or without them: none stated.
 		const plain = await owner.call('POST', `/projects/${projectId}/allocations`, { ...base, nodeId: farmB.id, registrationNo: 'COND-2' });
 		expect(plain.body.allocation).toMatchObject({ months: null, maxRateM3s: null, conditions: [] });
 		for (const id of [aid, plain.body.allocation.id]) expect((await owner.call('DELETE', `/projects/${projectId}/allocations/${id}`)).status).toBe(204);
