@@ -14,12 +14,14 @@
 // - differential split-sample, where the record allows it: fit on the driest
 //   half of the water years, score the wettest half. A short, drought-heavy
 //   record can't show how the model behaves in wet years, and the report says
-//   so instead of hiding it;
+//   so instead of hiding it. From engine 1.18.0 the years are ranked dry → wet
+//   by the project's reference gauge (flow_reference_m3s, another river) when
+//   it covers them, as a regional wet/dry index only: it is never scored;
 // - independent record, when asked (`validationRecord`): the fitted
 //   parameters scored against another observed record (a logger when the fit
 //   used the gauge, or the reverse), over that record's own days. It tests
 //   the fit against a second instrument, not just a second period.
-import { fromEpochDay, toEpochDay, waterYearIndex, waterYearOf } from '../calendar';
+import { fromEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from '../calendar';
 import { simulateNetwork } from '../network/simulate';
 import { arealRainFactors, type CalibrationFlowKind, type ModelInput } from '../project';
 import { buildNetworkPlan, pickObservedKind } from '../run';
@@ -39,6 +41,7 @@ import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIn
 import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
+import { recordRepresentativeness, type RecordRepresentativeness } from './representativeness';
 
 /** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.13.0), as runModel's WR2012 check reads it. */
 const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
@@ -92,6 +95,17 @@ export interface CalibrateOptions {
 	exclusions?: DateRange[];
 	/** Also run the split-sample and differential split-sample tests. Default true. */
 	validate?: boolean;
+	/**
+	 * How the dry → wet test ranks water years (engine ≥ 1.18.0, issue #4
+	 * phase 6, "make the logger fit identifiable" step 2): 'reference' by the
+	 * reference gauge's (flow_reference_m3s) mean flow over each water year, a
+	 * regional wet/dry index that never becomes a scoring target; 'observed' by
+	 * the fitted record's own mean flow over its scored days. Default:
+	 * 'reference' when the project has a reference gauge, else 'observed'. A
+	 * reference that doesn't cover every candidate year (MIN_DAYS_PER_YEAR
+	 * days each) falls back to 'observed', with a note.
+	 */
+	rankYearsBy?: DsstRanking;
 	/**
 	 * Another observed record to validate the fit against (e.g. the logger
 	 * when the fit uses the gauge). Scored over that record's own observed
@@ -148,12 +162,17 @@ export interface ValidationTest {
 	validation: ScoredPeriod;
 }
 
+/** What ranked the dry → wet test's water years: the fitted record's own flow, or the reference gauge. */
+export type DsstRanking = 'observed' | 'reference';
+
 export interface DifferentialTest extends ValidationTest {
 	/** Water years (by the calendar year they start in) fitted, and validated. */
 	dryYears: number[];
 	wetYears: number[];
-	/** Mean observed flow of the wet years ÷ that of the dry years. */
+	/** Mean observed flow (of the fitted record) of the wet years ÷ that of the dry years, however they were ranked. */
 	wetDryRatio: number;
+	/** What ranked the years (engine ≥ 1.18.0); absent on a report or fit record from before: 'observed'. */
+	rankedBy?: DsstRanking;
 }
 
 /** The fitted parameters scored against a second observed record (`validationRecord`). */
@@ -211,6 +230,13 @@ export interface CalibrationReport {
 	marPenalty?: MarPenaltyResult | null;
 	/** Every period left out of the scores: the stored exclusions, then `exclusions`. */
 	exclusions: DateRange[];
+	/**
+	 * How representative the scored days are of the long-term rainfall
+	 * (engine ≥ 1.18.0, calibration research CR-34): their length, each scored
+	 * water year's rain percentile, and the mean against the long-term mean.
+	 * Absent before 1.18.0; null when the run has no rain to rank against.
+	 */
+	representativeness?: RecordRepresentativeness | null;
 	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** Model runs used, over every stage. */
@@ -245,6 +271,12 @@ export interface CalibrationProblem {
 	observed: Float64Array;
 	/** Day indices scored: observed, inside the calibration window, outside every exclusion. */
 	scoredDays: Int32Array;
+	/**
+	 * The reference gauge (flow_reference_m3s, m³/s, NaN where missing) over
+	 * the whole run, or null without one: only ever used to rank water years
+	 * dry → wet, never scored (engine ≥ 1.18.0).
+	 */
+	reference?: Float64Array | null;
 	/** Natural flow (m³/day) of the last simulate() call, filled up to the last scored day. */
 	natural: Float64Array;
 	/** The WR2012 MAR penalty when settings.wr2012.calibrationPenalty is on (and there is a reference), else null. */
@@ -253,6 +285,13 @@ export interface CalibrationProblem {
 	exclusions: DateRange[];
 	/** The CHIRPS factors the rain used (engine ≥ 0.29.0), for fit provenance. */
 	chirpsFactors?: ChirpsFactorSet[] | null;
+	/**
+	 * The run's daily rain over the whole run as calibration reads it (catchment,
+	 * else bias-corrected CHIRPS, else forecast, × the areal factor; null =
+	 * missing), the long-term reference for `recordRepresentativeness`. null
+	 * without a rain series.
+	 */
+	rain?: (number | null)[] | null;
 	/** The simulated series to score (m³/day) for a parameter set. */
 	simulate(p: ParamSet): Float64Array;
 	/**
@@ -304,6 +343,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// score, so each evaluation stops there (a full run is tens of ms on a
 	// multi-decade record; a record that ends early saves the rest).
 	const toM3 = area * 1000;
+	const hasRain = !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm);
+	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
 	// The warm-up cycles the *full* forcing, as runModel's does, so a
@@ -335,6 +376,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		flowKind: kind,
 		observed,
 		scoredDays: Int32Array.from(idx),
+		reference: input.series?.flow_reference_m3s ? Float64Array.from(aligned('flow_reference_m3s'), (v) => (v === null ? NaN : v)) : null,
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised.
 		marPenalty: wr2012Penalty(
@@ -343,13 +385,14 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			idx[idx.length - 1]! + 1,
 			area,
 			arealRainOn(
-				runRain(aligned, !!(input.series?.rain_catchment_mm || input.series?.rain_chirps_mm || input.series?.rain_forecast_mm), idx[idx.length - 1]! + 1),
-				arealRainFactors(settings.arealRain),
+				runRain(aligned, hasRain, idx[idx.length - 1]! + 1),
+				areal,
 				month
 			)
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
+		rain: arealRainOn(runRain(aligned, hasRain, days), areal, month),
 		simulate: simulator(idx[idx.length - 1]! + 1),
 		record(k) {
 			if (!input.series?.[k]) return null;
@@ -519,6 +562,29 @@ function waterYears(pb: CalibrationProblem, minDays: number): { year: number; id
 		.map(([year, idx]) => ({ year, idx, mean: idx.reduce((a, t) => a + pb.observed[t]!, 0) / idx.length }));
 }
 
+/**
+ * Mean reference flow of each water year of the run with at least `minDays`
+ * reference days (over the whole water year, whatever the calibration
+ * window: a regional index of how wet the year was).
+ */
+export function referenceYearMeans(reference: ArrayLike<number>, startDate: string, minDays: number): Map<number, number> {
+	const d0 = toEpochDay(startDate);
+	const by = new Map<number, { sum: number; n: number }>();
+	for (let t = 0; t < reference.length; t++) {
+		const v = reference[t]!;
+		if (!Number.isFinite(v)) continue;
+		const wy = waterYearOf(d0 + t);
+		const y = by.get(wy);
+		if (y) {
+			y.sum += v;
+			y.n++;
+		} else by.set(wy, { sum: v, n: 1 });
+	}
+	const out = new Map<number, number>();
+	for (const [wy, y] of by) if (y.n >= minDays) out.set(wy, y.sum / y.n);
+	return out;
+}
+
 /** How a record is named in the notes. */
 const RECORD_NAME: Record<CalibrationFlowKind, string> = {
 	flow_observed_m3s: 'gauge record',
@@ -625,7 +691,9 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		score: scored(pb, x.r.params, all, pb, true).scores[objective],
 		best: x === kept
 	}));
-	const notes: string[] = [];
+	// How typical the scored years' rain is of the long-term record (CR-34).
+	const representativeness = pb.rain ? recordRepresentativeness(pb.rain, pb.startDate, all) : null;
+	const notes: string[] = [...(representativeness?.notes ?? [])];
 	let splitSample: ValidationTest | null = null;
 	let differential: DifferentialTest | null = null;
 
@@ -638,8 +706,31 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		splitSample = { params: p1, calibration: scored(pb, p1, a), validation: scored(pb, p1, b) };
 	}
 	if (opts.validate !== false && !cancelled) {
-		// Differential split-sample: driest half of the water years vs the wettest.
-		const years = waterYears(pb, MIN_DAYS_PER_YEAR).sort((x, y) => x.mean - y.mean);
+		// Differential split-sample: driest half of the water years vs the wettest,
+		// ranked by the reference gauge when it covers them (a regional index,
+		// never scored), else by the fitted record's own flow.
+		const years = waterYears(pb, MIN_DAYS_PER_YEAR);
+		const want: DsstRanking = opts.rankYearsBy ?? (pb.reference ? 'reference' : 'observed');
+		let rankedBy: DsstRanking = 'observed';
+		let rankOf = new Map(years.map((y) => [y.year, y.mean]));
+		if (want === 'reference' && years.length >= 4) {
+			if (!pb.reference) {
+				notes.push('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
+			} else {
+				const ref = referenceYearMeans(pb.reference, pb.startDate, MIN_DAYS_PER_YEAR);
+				const missing = years.filter((y) => !ref.has(y.year)).map((y) => y.year);
+				if (missing.length) {
+					notes.push(
+						`The reference gauge has fewer than ${MIN_DAYS_PER_YEAR} days in ${missing.length} of the ${years.length} water years the dry → wet test uses ` +
+							`(${missing.map((y) => `WY ${waterYearLabel(y)}`).join(', ')}), so it ranks them by their own observed flow instead.`
+					);
+				} else {
+					rankOf = ref;
+					rankedBy = 'reference';
+				}
+			}
+		}
+		years.sort((x, y) => rankOf.get(x.year)! - rankOf.get(y.year)!);
 		if (years.length < 4) {
 			notes.push(
 				`The record has ${years.length} water year${years.length === 1 ? '' : 's'} with at least ${MIN_DAYS_PER_YEAR} observed days, too few to fit on dry years and test on wet ones. ` +
@@ -661,11 +752,14 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 				validation: scored(pb, pd, wi),
 				dryYears: dry.map((y) => y.year).sort((p, q) => p - q),
 				wetYears: wet.map((y) => y.year).sort((p, q) => p - q),
-				wetDryRatio: ratio
+				wetDryRatio: ratio,
+				rankedBy
 			};
 			if (ratio < WET_DRY_CONTRAST) {
 				notes.push(
-					`The wettest years in the record carry only ${ratio.toFixed(1)}× the flow of the driest, so there are no clearly wet years to test on. ` +
+					(rankedBy === 'reference'
+						? `The years the reference gauge ranks wettest carry only ${ratio.toFixed(1)}× the observed flow of those it ranks driest, so there are no clearly wet years to test on. `
+						: `The wettest years in the record carry only ${ratio.toFixed(1)}× the flow of the driest, so there are no clearly wet years to test on. `) +
 						'How the model behaves in wet years is weakly constrained.'
 				);
 			}
@@ -752,6 +846,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		marPenalty,
 		notes,
 		exclusions: pb.exclusions,
+		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
 		evaluations,
 		cancelled

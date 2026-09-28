@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
-	import { fittedAtText, objectiveName, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
+	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
@@ -178,7 +178,10 @@
 			<p class="alert alert-warning small">This fit was not validated: nothing shows how it does on days it wasn’t fitted to.</p>
 		{/if}
 		{#if record.differential}
-			<p class="muted small">Dry → wet: fitted on {waterYearsText(record.differential.dryYears)}, scored on {waterYearsText(record.differential.wetYears)}.</p>
+			<p class="muted small">
+				Dry → wet: fitted on {waterYearsText(record.differential.dryYears)}, scored on {waterYearsText(record.differential.wetYears)};
+				{rankedByText(record.differential)}.
+			</p>
 		{/if}
 		{#each record.notes as n (n)}<p class="muted small note">{n}</p>{/each}
 	{/if}

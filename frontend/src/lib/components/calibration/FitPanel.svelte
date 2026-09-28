@@ -38,6 +38,7 @@
 		marPenaltyOn,
 		objectiveName,
 		progressFraction,
+		rankedByText,
 		SCORE_ROWS,
 		scoreCellText,
 		scoreColumns,
@@ -49,6 +50,7 @@
 	} from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
+	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import { FitCancelled, startFit, type FitHandle } from '$lib/calibration/runner';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
@@ -380,8 +382,47 @@
 					</div>
 					{#if climWarning}<p class="alert alert-warning small" data-testid="fit-climatology-warning">{climWarning}</p>{/if}
 				{/if}
+				{#if report.differential}
+					<p class="muted small" data-testid="fit-dsst-ranking">Dry → wet test: {rankedByText(report.differential)}.</p>
+				{/if}
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
+				{/if}
+				{#if report.representativeness}
+					{@const rep = report.representativeness}
+					<!-- Calibration research CR-34: the record's length and where its years sit in the long-term rain. -->
+					<section class="rep" aria-labelledby="{uid}-rep-h" data-testid="fit-representativeness">
+						<h5 id="{uid}-rep-h">How representative is the record <span class="muted gist">{representativenessGist(rep)}</span></h5>
+						<p class="small">{rep.summary}</p>
+						{#if rep.years.length}
+							<div class="table-wrap">
+								<table class="data compact">
+									<caption class="visually-hidden">Rain of each scored water year against the long-term record</caption>
+									<thead>
+										<tr>
+											<th scope="col">Water year</th>
+											<th scope="col" class="num">Scored days</th>
+											<th scope="col" class="num">Rain</th>
+											<th scope="col" class="num">Percentile</th>
+											<th scope="col">Class</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each representativenessRows(rep) as row (row.year)}
+											<tr>
+												<th scope="row">{row.year}</th>
+												<td class="num">{row.scoredDays}</td>
+												<td class="num">{row.rain}</td>
+												<td class="num">{row.percentile}</td>
+												<td>{row.klass}</td>
+											</tr>
+										{/each}
+									</tbody>
+								</table>
+							</div>
+						{/if}
+						<p class="muted small">{representativenessKey(rep)} Any limit this implies is listed with the notes above.</p>
+					</section>
 				{/if}
 				<p class="muted small">
 					Judge the fit by the validation columns: they score days the parameters never saw. KGE of the mean flow is −0.41, so a
@@ -481,6 +522,14 @@
 	tr.kept th,
 	tr.kept td {
 		font-weight: 600;
+	}
+	.rep h5 {
+		margin: 0.75rem 0 0.25rem;
+		font-size: 0.9rem;
+	}
+	.gist {
+		font-weight: 400;
+		font-size: 0.8rem;
 	}
 	.period {
 		font-weight: 400;

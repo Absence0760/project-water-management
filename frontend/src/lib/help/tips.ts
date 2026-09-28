@@ -999,7 +999,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'reference-gauge',
 		term: 'Reference gauge (other catchment)',
-		short: 'A gauge on a different river, such as a neighbouring sub-catchment. A regional wet/dry index only; the model never reads it.',
+		short: 'A gauge on another river: a regional wet/dry index. Runs never read it; Fit automatically ranks water years by it, never fits to it.',
 		units: 'm³/s',
 		category: 'data',
 		fields: ['series.flow_reference_m3s']

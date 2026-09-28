@@ -2629,6 +2629,20 @@ which checks every catchment tab).
     made before 1.18.0 has neither. The formatting lives in
     `lib/calibration/fit.ts` (`scoreCellText`, `benchmarkRows`,
     `climatologyWarning`).
+    With a dry → wet test, a line under the table says what ranked its
+    years: the reference gauge (other catchment), "a regional wet/dry index
+    that is never scored", or the fitted record's own mean flow (engine ≥
+    1.18.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
+    fit record's dry → wet line says the same.
+    Under it, **How representative is the record** (engine ≥ 1.18.0, CR-34;
+    `calibration/representativeness.ts`): the record's length and its mean
+    rain as a share of the long-term mean in the heading, the engine's
+    one-sentence summary, a table of each scored water year (scored days,
+    rain, its percentile in the run's long-term water-year rain and Dry /
+    Near normal / Wet), and a key naming the reference and the 33rd / 67th
+    percentile thresholds (model.md §2.10b). Any limit it implies ("all dry:
+    it can't show how the model behaves in wet years") is among the notes
+    at the top of the result.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
@@ -3545,7 +3559,18 @@ read it before.
   hidden and its legend entry shows it, and a legend toggle survives the log
   scale and unit switches; a switched-off entry is struck through in the
   muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
-  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  scale, last 3 years or the full period). **Periods excluded from
+  calibration** (settings.calibrationExclusions, model.md §2.10) are tinted
+  behind the lines (`--warning` at 16 %, `LineChart`'s `shade`, light and
+  dark), and a key under the chart (`shadeKey`) names them in words, one line
+  each with its reason ("WY 2015/16: suspect rain"), so the tint never rests
+  on colour alone. They are the run's own exclusions, from its settings
+  snapshot (else, for a detail cached before runs carried settings, the ones
+  its calibration statistics applied), never the project's current ones, so
+  an old run shows what it was fitted and scored with. Each is clipped to the
+  hydrograph's days; one that runs past them says "(partly outside the run)",
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
   by half a window (the non-drag route, and the only one on touch). Neither

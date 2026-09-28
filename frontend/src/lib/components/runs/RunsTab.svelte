@@ -50,6 +50,7 @@
 	import ReproducePanel from './ReproducePanel.svelte';
 	import PublicationPanel from './PublicationPanel.svelte';
 	import RunInputsPanel from '$lib/components/history/RunInputsPanel.svelte';
+	import { runExclusions } from './exclusionShading';
 	// The WR2012 report: its own chunk, only a run that has one loads it.
 	const loadWr2012Panel = () => import('./Wr2012Panel.svelte');
 	// Reserve compliance, EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix, the
@@ -659,6 +660,7 @@
 				{nodeNames}
 				{nodeOrder}
 				forecastFrom={summary.forecast?.from ?? null}
+				exclusions={runExclusions(shownSettings, summary.calibration?.exclusions)}
 			>
 				{#snippet modelTail()}
 					<div class="panel" id="res-calibration">

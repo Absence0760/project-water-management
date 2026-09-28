@@ -14,6 +14,7 @@ import {
 	type CalibrationProgress,
 	type CalibrationReport,
 	type CalibrationStage,
+	type DifferentialTest,
 	type FitScores,
 	type ScoreInterval,
 	type ScoreBenchmarks,
@@ -100,6 +101,16 @@ export function validationRecordOptions(seriesKinds: readonly string[] | null, c
 /** "WY 2001/02, 2004/05": a set of water years, never a date envelope (the years need not be consecutive). */
 export function waterYearsText(years: readonly number[]): string {
 	return years.length ? `WY ${years.map(waterYearLabel).join(', ')}` : '–';
+}
+
+/**
+ * What ranked the dry → wet test's water years (engine ≥ 1.18.0), in words;
+ * a test from before it (no `rankedBy`) ranked by the fitted record.
+ */
+export function rankedByText(d: Pick<DifferentialTest, 'rankedBy'>): string {
+	return d.rankedBy === 'reference'
+		? 'years ranked dry → wet by the reference gauge (other catchment), a regional wet/dry index that is never scored'
+		: 'years ranked dry → wet by the fitted record’s own mean flow';
 }
 
 /** Runs the fit will make: one optimisation per start, two more with validation, plus one without the WR2012 penalty when it is on. */

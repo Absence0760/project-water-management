@@ -12,6 +12,7 @@ import {
 	intervalText,
 	marPenaltyOn,
 	progressFraction,
+	rankedByText,
 	SCORE_ROWS,
 	scoreCellText,
 	scoreColumns,
@@ -182,6 +183,12 @@ describe('scoreColumns', () => {
 		for (const c of [dry!, wet!]) expect(c.period).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 		expect(waterYearsText([1999])).toBe('WY 1999/00');
 		expect(waterYearsText([])).toBe('–');
+	});
+
+	it('says what ranked the dry → wet years: the reference gauge, else the fitted record (also for a test from before rankedBy)', () => {
+		expect(rankedByText({ rankedBy: 'reference' })).toBe('years ranked dry → wet by the reference gauge (other catchment), a regional wet/dry index that is never scored');
+		expect(rankedByText({ rankedBy: 'observed' })).toBe('years ranked dry → wet by the fitted record’s own mean flow');
+		expect(rankedByText({})).toBe(rankedByText({ rankedBy: 'observed' }));
 	});
 
 	it('adds the independent-record validation column when the report has one', () => {

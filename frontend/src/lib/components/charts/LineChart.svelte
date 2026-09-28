@@ -27,6 +27,7 @@
 		toolbar,
 		caption,
 		shade = [],
+		shadeKey,
 		band,
 		pannable = true,
 		print = false,
@@ -57,8 +58,14 @@
 		windows?: readonly { label: string; days: number | null }[];
 		toolbar?: Snippet;
 		caption?: string;
-		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption`). */
+		/** Daily charts: inclusive date ranges drawn as a tinted band behind the lines (say what they mean in `caption` or `shadeKey`). */
 		shade?: { start: string; end: string }[];
+		/**
+		 * A text key for `shade` under the plot: a swatch, what the tint means,
+		 * and one line per range, so it never rests on colour alone (the Runs
+		 * hydrograph's calibration exclusions).
+		 */
+		shadeKey?: { label: string; items: string[] };
 		/**
 		 * Daily charts: one labelled band behind the lines from `from` (to `to`,
 		 * else the end), hatched, named on the plot and in a text key under it,
@@ -498,6 +505,14 @@
 	{:else}
 		<div class="plot" bind:this={host} role="img" aria-label={a11yName}></div>
 	{/if}
+	{#if shadeKey && shade.length && isTime && hasData}
+		<div class="shade-key">
+			<p><i aria-hidden="true"></i><strong>{shadeKey.label}</strong> (tinted)</p>
+			<ul>
+				{#each shadeKey.items as item (item)}<li>{item}</li>{/each}
+			</ul>
+		</div>
+	{/if}
 	{#if band && isTime && hasData && bandSpan(band, aligned.x)}
 		<p class="band-key"><i aria-hidden="true"></i><span><strong>{band.label}</strong> (hatched, from {band.from}): {band.note}</span></p>
 	{/if}
@@ -596,6 +611,30 @@
 		.print-box {
 			overflow: visible;
 		}
+	}
+	.shade-key {
+		margin: 0.25rem 0 0;
+		font-size: 0.8125rem;
+	}
+	.shade-key p {
+		margin: 0;
+		display: flex;
+		gap: 0.4rem;
+		align-items: baseline;
+	}
+	.shade-key i {
+		flex: none;
+		display: inline-block;
+		width: 1.1rem;
+		height: 0.7rem;
+		/* The tint drawShade paints (--warning at 16 %), edged so it shows on any ground. */
+		background: color-mix(in srgb, var(--warning) 16%, transparent);
+		border: 1px solid var(--warning);
+	}
+	.shade-key ul {
+		margin: 0.1rem 0 0 1.5rem;
+		padding: 0 0 0 1rem;
+		color: var(--text-2);
 	}
 	.band-key {
 		margin: 0.25rem 0 0;

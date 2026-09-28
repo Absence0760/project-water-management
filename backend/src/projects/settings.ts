@@ -424,7 +424,9 @@ export const FitRecord = z
 		differential: ValidationTest.extend({
 			dryYears: z.array(z.number().int()).max(500),
 			wetYears: z.array(z.number().int()).max(500),
-			wetDryRatio: z.number().finite()
+			wetDryRatio: z.number().finite(),
+			// Engine ≥ 1.18.0: what ranked the years (the reference gauge, or the fitted record). Optional: absent = 'observed'.
+			rankedBy: z.enum(['observed', 'reference']).optional()
 		})
 			.strict()
 			.nullable(),
