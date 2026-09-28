@@ -203,7 +203,10 @@
 	.spacer {
 		flex: 1;
 	}
+	/* EN | AF stays one row (LanguageSwitch's compact pair doesn't wrap); what
+	   gives at 320 px is the title or back link, which may wrap within itself. */
 	.brand {
+		min-width: 0;
 		display: flex;
 		align-items: center;
 		gap: 8px;
@@ -315,6 +318,13 @@
 		border: 1px solid var(--bg);
 		border-radius: var(--radius-sm);
 		cursor: pointer;
+	}
+	/* The global ring (--focus) is drawn for the page's ground, not this
+	   swapped one: on the strip it was 3.07:1 in light and 1.67:1 in dark. The
+	   strip's own text colour is 16.4:1 (light) and 16.0:1 (dark) against it
+	   (WCAG 1.4.11 / 2.4.7). */
+	.strip :focus-visible {
+		outline-color: var(--bg);
 	}
 	.farm-main {
 		max-width: 560px;

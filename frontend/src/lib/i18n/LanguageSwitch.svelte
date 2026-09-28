@@ -91,6 +91,12 @@
 		border-color: var(--accent);
 		font-weight: 600;
 	}
+	/* The compact pair sits in a header (the farm view, the sign-in pages, the
+	   landing page, /share): kept on one row, so at 320 px it doesn't stack EN
+	   over AF and double the sticky header's height (WCAG 1.4.10). */
+	.lang.compact {
+		flex-wrap: nowrap;
+	}
 	.lang.compact button {
 		padding: 0 8px;
 		font-size: 14px;
