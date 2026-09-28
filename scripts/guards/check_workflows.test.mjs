@@ -50,6 +50,14 @@ test('static AWS keys fail anywhere but a comment', () => {
 	assert.deepEqual(rules(good + '# never use AWS_SECRET_ACCESS_KEY\n'), []);
 });
 
+test('a Lambda log tail may not reach a public Actions log; a comment may name it', () => {
+	const step = (run) => good + `      - run: |\n${run.map((l) => `          ${l}\n`).join('')}`;
+	assert.deepEqual(rules(step(['aws lambda invoke --function-name f --log-type Tail out.json'])), ['no-tail']);
+	assert.deepEqual(rules(step(['aws lambda invoke --function-name f --log-type=Tail out.json'])), ['no-tail']);
+	assert.deepEqual(rules(step(["jq -r '.LogResult' meta.json | base64 -d"])), ['no-tail']);
+	assert.deepEqual(rules(step(['# no --log-type Tail: this log is public', 'aws lambda invoke --function-name f out.json'])), []);
+});
+
 test('top-level permissions are required and may not grant id-token', () => {
 	assert.deepEqual(rules(good.replace('permissions:\n  contents: read\n', '')), ['perms']);
 	assert.deepEqual(rules(good.replace('  contents: read\n', '  contents: read\n  id-token: write\n')), ['perms']);
