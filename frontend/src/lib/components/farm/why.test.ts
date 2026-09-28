@@ -1,6 +1,8 @@
 // The "Why about 83 %?" page (board 4: docs/design/farmer-view-prototype/Why.dc.html)
 // with the Vaalbank fixture, and the design's rules for the other cases.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import type { FarmProjection } from '@water-management/engine';
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
@@ -172,5 +174,17 @@ describe('what the WUA decided; what this is not', () => {
 			'Not a forecast. It looks back over 1 Oct to 10 Jan.',
 			'Not measured. It comes from a model of the catchment, which can be wrong.'
 		]);
+	});
+});
+
+// Issue #51: af-ZA abbreviates months with a dot, so a sentence ending on a date read "…tot 10 Jan..".
+describe('Afrikaans dates at the end of a sentence', () => {
+	afterEach(() => setLocale('en'));
+
+	it('end with one full stop', async () => {
+		await setLocale('af', await markedCatalogue());
+		const notForecast = whatThisIsNot(farm())[1]!;
+		expect(notForecast).toMatch(/10 Jan\.$/);
+		expect(notForecast).not.toMatch(/\.\.$/);
 	});
 });

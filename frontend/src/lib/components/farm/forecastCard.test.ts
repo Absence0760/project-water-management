@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import { vaalbankFixture } from './fixture';
 import { forecastCard, forecastFine } from './forecastCard';
 
@@ -37,5 +39,17 @@ describe('forecastCard (Next 14 days, WP-2.12)', () => {
 	it('never words a forecast as certain', () => {
 		const vm = forecastCard(withForecast(), '2024-01-20')!;
 		expect(Object.values(vm).join(' ')).not.toMatch(/\bwill\b|guarantee|certain/i);
+	});
+});
+
+// Issue #51: "…vir 11 Jan. tot 24 Jan.." in Afrikaans, where months are abbreviated with a dot.
+describe('forecastCard in Afrikaans', () => {
+	afterEach(() => setLocale('en'));
+
+	it('ends the dates sentence with one full stop', async () => {
+		await setLocale('af', await markedCatalogue());
+		const vm = forecastCard(withForecast(), '2024-01-12')!;
+		expect(vm.fine).toContain('24 Jan. ');
+		expect(vm.fine).not.toContain('..');
 	});
 });

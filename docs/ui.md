@@ -4952,6 +4952,9 @@ digest). The modeller workspace stays English.
   returns a `Rich` sentence where `**…**` and `{ b }` values are bold
   (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
   `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
+  `t()` and `tRich()` drop a full stop that comes straight after a value
+  already ending in one, since af-ZA abbreviates months with a dot and a
+  sentence ending on "31 Des." must not read "31 Des.." (issue #51).
   They read runes, so a template that calls them re-renders on a switch.
   The backend's emails keep a keyed catalogue, `backend/src/mail/i18n/`
   (`mailT(locale)` → `{ t, lang }`): the server ships no bundle, so its keys

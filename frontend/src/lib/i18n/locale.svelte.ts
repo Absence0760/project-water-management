@@ -93,9 +93,20 @@ export async function setLocale(locale: Locale, supplied?: Catalogue): Promise<v
 	i18n.complete = isComplete(loaded);
 }
 
+/**
+ * A full stop straight after a value that already ends in one is dropped:
+ * Afrikaans abbreviates months with a dot ("31 Des."), and a sentence ending
+ * on one reads "…tot 31 Des." rather than "…tot 31 Des.." (issue #51).
+ */
+const joinStop = (value: string, after: string) => (value.endsWith('.') && after.startsWith('.') ? after.slice(1) : after);
+
 /** `{name}` → vars.name. An unknown placeholder is left as written, so a typo shows rather than vanishing. */
 export function fill(template: string, vars: Record<string, string | number> = {}): string {
-	return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in vars ? String(vars[name]) : whole));
+	return template.replace(/\{(\w+)\}(\.?)/g, (whole, name: string, stop: string) => {
+		if (!(name in vars)) return whole;
+		const v = String(vars[name]);
+		return v + joinStop(v, stop);
+	});
 }
 
 let listed: Set<string> | undefined;
@@ -177,12 +188,14 @@ export function tRich<S extends string>(english: English<S>, vars: Record<string
 		.forEach((segment, i) => {
 			const bold = i % 2 === 1;
 			const parts = segment.split(/\{(\w+)\}/);
+			// The text of the value before each literal part, for joinStop.
+			const before = (j: number) => (j > 0 && parts[j - 1]! in vars ? text(vars[parts[j - 1]!]!) : '');
 			if (bold) {
-				push({ b: parts.map((p, j) => (j % 2 ? (p in vars ? text(vars[p]!) : `{${p}}`) : p)).join('') });
+				push({ b: parts.map((p, j) => (j % 2 ? (p in vars ? text(vars[p]!) : `{${p}}`) : joinStop(before(j), p))).join('') });
 				return;
 			}
 			parts.forEach((p, j) => {
-				if (j % 2 === 0) return push(p);
+				if (j % 2 === 0) return push(joinStop(before(j), p));
 				const v = vars[p];
 				if (v === undefined) push(`{${p}}`);
 				else if (typeof v === 'string' || typeof v === 'number') push(String(v));
