@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
 
 # PRs: only the tip is worth building, so a new push cancels the old run.
-# main: every commit keeps its own run (per-SHA group, never cancelled). The
-# operator pushes straight to main, and a release is refused unless `CI gate`
-# passed on the tagged commit (scripts/release/preflight.mjs), so a push
+# main: every commit keeps its own run (per-SHA group, never cancelled).
+# Changes reach main by merging PRs, and a release is refused unless `CI gate`
+# passed on the tagged commit (scripts/release/preflight.mjs), so a merge
 # must not cancel the previous commit's run (estate standard: threkir ci.yml).
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || github.event_name }}

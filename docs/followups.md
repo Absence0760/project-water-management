@@ -3008,8 +3008,9 @@ assume, the questions for counsel); these are the actions, with triggers.
       no run-time imports, tips and articles cover the same ids in order.
       Issue #9's last checkbox.
 
-- During early development, work is pushed straight to `main`, without PRs, at
-  the operator's request.
+- Since 2026-09-28 every change reaches `main` through a pull request: `main`
+  is protected on GitHub (PRs only, admins included) and the git guard hook
+  blocks pushes to it (CLAUDE.md, "Working alongside other Claude sessions").
 - Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database.
   It holds three invented catchments, a demo team, two demo users, and client
   catchment if the workbook is present.

@@ -1,5 +1,5 @@
 ---
-description: Hunt for real performance problems — N+1 queries, missing/unused indexes, O(n²) loops, per-event recompute storms, oversized payloads, render thrash — measure each before and after, fix the root cause, and guard with a test where it fits. Commits scoped; never pushes.
+description: Hunt for real performance problems — N+1 queries, missing/unused indexes, O(n²) loops, per-event recompute storms, oversized payloads, render thrash — measure each before and after, fix the root cause, and guard with a test where it fits. Commits scoped; lands through a PR, never pushes `main`.
 argument-hint: "[optional scope — a route, query, layer, or page, e.g. a list endpoint, a hot ingestion path, a data-heavy page; omit to profile the hot paths]"
 ---
 
@@ -13,7 +13,7 @@ Find performance problems that **actually bite at realistic scale** and fix them
 - **Correctness is not negotiable for speed.** A faster path must return identical results and preserve every invariant — especially any access-control or tenancy scoping. Never drop a scoped query for a bare unscoped one to save a hop, never widen a query past its authorization boundary, never cache across tenants/users. (Rails 5, 11.)
 - **Fix the root cause, not the symptom.** Add the missing index / batch the N+1 / hoist the invariant work out of the loop — don't paper over a slow path with a cache that then needs invalidation, unless caching genuinely is the right answer (and then invalidation is part of the fix).
 - **Prove the scale matters.** A microsecond on a 10-row dev table is noise. Reason about (or seed) realistic row counts; state the n at which the problem bites. Skip changes that only help at sizes the product never reaches.
-- **Docs-as-code; commit scoped; never push.** A new index ships in a migration (`/safe-migration` discipline — `IF NOT EXISTS`, access-control unaffected, type-sync as applicable); doc any changed perf-relevant convention. Fix and any test as separate path-scoped commits. (Rails 12; git workflow.)
+- **Docs-as-code; commit scoped; PRs only, never push `main`.** A new index ships in a migration (`/safe-migration` discipline — `IF NOT EXISTS`, access-control unaffected, type-sync as applicable); doc any changed perf-relevant convention. Fix and any test as separate path-scoped commits. (Rails 12; git workflow.)
 
 ## Where the cost usually lives
 
@@ -32,7 +32,7 @@ Find performance problems that **actually bite at realistic scale** and fix them
 4. **Re-measure.** Same workload, same method. Report before→after (plan node, ms, bytes, rows scanned). If the delta is noise at realistic scale, **revert** — a non-improving change is not a fix.
 5. **Guard it** where a test fits: a smoke test asserting the result is unchanged and (where meaningful) that the query issues one round-trip not N; a migration's index is covered by the schema. Don't write a flaky wall-clock assertion — assert the structural win (one query, bounded rows), not a raw millisecond threshold.
 6. **Verify + review.** Type gate; new/nearby tests pass (report counts). Index migrations: apply locally and confirm via `/safe-migration` discipline. For anything touching access-control/tenancy or a gate signal, run the `code-reviewer` agent.
-7. **Commit** scoped (migration, fix, test as separate commits as applicable); **never push**.
+7. **Commit** scoped (migration, fix, test as separate commits as applicable); push the branch and open a PR, **never push `main`**.
 
 ## Report
 

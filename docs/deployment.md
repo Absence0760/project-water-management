@@ -350,8 +350,9 @@ no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 
 ### What runs on every push to `main` and every pull request
 
-The operator currently pushes straight to `main`, so the push run is the
-complete check. PRs (Dependabot's, or anyone's) get the same run.
+Every change reaches `main` through a pull request (`main` is protected: PRs
+only, admins included), so each PR gets the full run before it merges, and the
+push run on `main` checks the merged result. Dependabot's PRs get the same run.
 
 | Workflow / job | What it checks |
 | --- | --- |
