@@ -1,5 +1,5 @@
 // Guard: TypeScript in a `.svelte` <script lang="ts"> must compile to JS that
-// Rollup can parse, for both the client and the server (SSR) pass.
+// the bundler (Rolldown, via Vite) can parse, for both the client and the server (SSR) pass.
 //
 // svelte-check type-checks the TS but never compiles it, so a compiler bug in
 // type stripping passes `pnpm check` and only surfaces in `vite build` (every

@@ -181,7 +181,7 @@ the DB tests use this checkout's `water_test…`; e2e uses its own
 background commands in parallel. Run `pnpm build:frontend && pnpm
 check:bundle` when you added or moved frontend code. The DB project stays
 serial *inside* itself (its queue and feed tests claim jobs globally;
-`backend/vitest.workspace.ts` pins it to one fork). The perf projects
+`backend/vitest.config.ts` pins it to one worker, `maxWorkers: 1`). The perf projects
 (`test:*:perf`) run alone, never alongside anything, since they assert
 wall-clock budgets.
 
@@ -294,7 +294,7 @@ Prefer reading these over guessing. Update them when behaviour changes.
   site alike) while `check` stays green. Svelte 5.56.0–5.56.3 left `?` on
   optional parameters (sveltejs/svelte#18455). The guard is
   `frontend/src/lib/components/__fixtures__/tsSyntax.test.ts`: it compiles a
-  fixture through `svelte.config.js`'s preprocess and Rollup's parser. Add a
+  fixture through `svelte.config.js`'s preprocess and Vite's parser (Rolldown's). Add a
   case to its fixture when a new TS form breaks a build.
 - **Postgres on 5434**, because this workstation's 5432 (Supabase) and 5433
   (native) are taken.

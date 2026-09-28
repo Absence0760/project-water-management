@@ -15,6 +15,12 @@ export default defineConfig({
 	},
 	test: {
 		include: ['src/**/*.test.ts'],
-		environment: 'node'
+		environment: 'node',
+		// The unit tests make no wall-clock claim, so the timeout only catches a
+		// hang. Vitest 2 never timed out a synchronous test; vitest 4+ fails one
+		// that returns after the timeout, and the source-scanning guards
+		// (chartLabels, the engine-backed component tests) take 2–3 s alone and
+		// past the default 5 s with every file in parallel on a loaded machine.
+		testTimeout: 60_000
 	}
 });

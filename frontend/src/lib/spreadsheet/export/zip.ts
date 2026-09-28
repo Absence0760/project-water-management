@@ -13,7 +13,7 @@
 export interface ZipEntry {
 	/** Path inside the zip, no leading slash: "xl/worksheets/sheet1.xml". */
 	name: string;
-	data: Uint8Array;
+	data: Uint8Array<ArrayBuffer>;
 }
 
 const CRC_TABLE = (() => {
@@ -37,7 +37,7 @@ export function crc32(data: Uint8Array, crc = 0): number {
 }
 
 /** Raw deflate (RFC 1951) through the platform's CompressionStream. */
-export async function deflateRaw(data: Uint8Array): Promise<Uint8Array> {
+export async function deflateRaw(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
 	const stream = new Blob([data]).stream().pipeThrough(new CompressionStream('deflate-raw'));
 	return new Uint8Array(await new Response(stream).arrayBuffer());
 }
@@ -48,7 +48,7 @@ const DOS_DATE = (0 << 9) | (1 << 5) | 1;
 const MAX_U32 = 0xffffffff;
 
 /** The entries as one zip file, each deflated. */
-export async function zip(entries: readonly ZipEntry[]): Promise<Uint8Array> {
+export async function zip(entries: readonly ZipEntry[]): Promise<Uint8Array<ArrayBuffer>> {
 	const parts: Uint8Array[] = [];
 	const central: Uint8Array[] = [];
 	let offset = 0;

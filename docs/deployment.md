@@ -675,7 +675,10 @@ plan-only until the first deploy):
 - **Renderer Lambda** (`backend/src/lambda-renderer.ts`, handler
   `lambda-renderer.handler`): a **container image** built from
   `backend/renderer.Dockerfile` (Playwright's image `v1.63.0-noble`, the
-  Chromium e2e uses, plus the Lambda runtime interface client), x86_64,
+  Chromium e2e uses, pinned by digest, plus the Lambda runtime interface
+  client and playwright-core, installed with `npm ci` from the lockfile in
+  `backend/renderer-deps/`; moving Playwright means the tag and digest there,
+  that package.json and backend's, and a refreshed lock), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,

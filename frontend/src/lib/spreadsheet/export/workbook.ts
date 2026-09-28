@@ -246,7 +246,7 @@ export function workbookPlan(input: WorkbookInput): SheetPlan[] {
 }
 
 /** The workbook as .xlsx bytes. */
-export async function buildWorkbook(input: WorkbookInput): Promise<Uint8Array> {
+export async function buildWorkbook(input: WorkbookInput): Promise<Uint8Array<ArrayBuffer>> {
 	const book = new XlsxWorkbook();
 	for (const sheet of workbookPlan(input)) {
 		if ('daily' in sheet) {

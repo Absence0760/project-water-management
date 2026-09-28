@@ -1,6 +1,6 @@
 // Guard: no engine module does anything when it loads.
 //
-// frontend/vite.config.ts tells Rollup the engine has no module side effects
+// frontend/vite.config.ts tells Rolldown the engine has no module side effects
 // (`treeshake.moduleSideEffects`), so a module none of whose exports a chunk
 // uses is dropped from that chunk's dependencies (issue #9: ~13 KB off the
 // farm and share pages, ~8 KB off a catchment's first load). That is only safe
@@ -72,10 +72,10 @@ describe('the engine has no module side effects (vite.config.ts treeshake.module
 describe('vite.config.ts applies the rule to every build', () => {
 	type Treeshake = { treeshake?: { moduleSideEffects?: (id: string) => boolean } };
 	it('treats engine modules as pure in the page build and in the spreadsheet workers', async () => {
-		const config = (await import('../../vite.config')).default as { build: { rollupOptions: Treeshake }; worker: { rollupOptions: Treeshake } };
-		// The workers built with `new Worker(new URL(…))` are separate Rollup builds that ignore
-		// build.rollupOptions; without their own rule the import worker kept engine code it never calls.
-		for (const rule of [config.build.rollupOptions.treeshake?.moduleSideEffects, config.worker.rollupOptions.treeshake?.moduleSideEffects]) {
+		const config = (await import('../../vite.config')).default as { build: { rolldownOptions: Treeshake }; worker: { rolldownOptions: Treeshake } };
+		// The workers built with `new Worker(new URL(…))` are separate Rolldown builds that ignore
+		// build.rolldownOptions; without their own rule the import worker kept engine code it never calls.
+		for (const rule of [config.build.rolldownOptions.treeshake?.moduleSideEffects, config.worker.rolldownOptions.treeshake?.moduleSideEffects]) {
 			expect(rule?.('/repo/packages/engine/src/run.ts')).toBe(false);
 			expect(rule?.('/repo/frontend/src/lib/api/client.ts')).toBe(true);
 		}
