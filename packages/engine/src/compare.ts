@@ -1041,7 +1041,7 @@ const MODEL_NAME: Record<string, string> = { gr4j: 'GR4J', legacy: 'legacy' };
 /** "GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)". */
 export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed'>): string {
 	const when = typeof r.fittedAt === 'string' ? r.fittedAt.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC') : 'unknown time';
-	const objective = (OBJECTIVE_LABELS[r.objective as ObjectiveId] ?? String(r.objective)).replace(/ \(.*\)$/, '');
+	const objective = (OBJECTIVE_LABELS[r.objective as ObjectiveId] ?? String(r.objective)).replace(/ \([^()]*\)$/, '');
 	return `${MODEL_NAME[r.model] ?? String(r.model)} fit of ${when} (${objective}, seed ${r.seed})`;
 }
 

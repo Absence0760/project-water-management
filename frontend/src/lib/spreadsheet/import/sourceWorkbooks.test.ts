@@ -16,7 +16,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, it } from 'vitest';
 import { type ExtractOptions, type GaugeScaling, extractProject, readWorkbook } from './index';
 import { jsonDiff, projectNotes } from './parity';
 import { readWorkbookWithSheetJS, readerDifference } from './sheetjsReference';

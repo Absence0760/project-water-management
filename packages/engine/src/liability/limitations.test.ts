@@ -75,3 +75,14 @@ describe('plainMarkdown', () => {
 		expect(plainMarkdown('**Bold** *it* `code` [text](./x.md) runoff ([Beven 2012]) and [WR2012]')).toBe('Bold it code text runoff and WR2012');
 	});
 });
+
+describe('plainMarkdown on a run of brackets', () => {
+	// Link text could contain "[", so each "[" of a long run rescanned the rest (CodeQL js/polynomial-redos).
+	it('returns it unchanged, and still unwraps a link after it', () => {
+		const run = '['.repeat(200_000);
+		expect(plainMarkdown(run)).toBe(run);
+		expect(plainMarkdown(`[[[ [text](./x.md)`)).toBe('[[[ text');
+		expect(plainMarkdown(`a${' '.repeat(200_000)}b`)).toBe('a b');
+		expect(plainMarkdown('runoff \n\t ([Beven 2012]) and [[WR2012]]')).toBe('runoff and [WR2012]');
+	});
+});

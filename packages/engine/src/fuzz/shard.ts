@@ -20,7 +20,7 @@ const SEED0 = Number(env.FUZZ_SEED ?? 1);
 const MAX_FAILURES = Number(env.FUZZ_MAX_FAILURES ?? 3);
 
 /** The rule a failure message names, without node ids and day numbers, so shrinking keeps the same failure. */
-const ruleOf = (msg: string) => msg.split(':')[0]!.replace(/n\d+ day \d+|day \d+|\(seed \d+[^)]*\)/g, '').trim();
+const ruleOf = (msg: string) => msg.split(':')[0]!.replace(/n\d+ day \d+|day \d+|\(seed \d[^)]*\)/g, '').trim();
 
 /** Seeds [from, to) of shard `i` (1-based) of `n`. */
 export function shardRange(i: number, n: number, cases = CASES, seed0 = SEED0): [number, number] {
