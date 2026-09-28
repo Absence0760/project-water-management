@@ -168,7 +168,7 @@ test('a viewer sees every rule and the months, with nothing to change', async ({
 	await expect(monthsCard(v).getByRole('listitem')).toHaveCount(12);
 });
 
-test('empty states: no rules yet offers Add transfer; fewer than two units points to the Network', async ({ page, owner }) => {
+test('empty states: no rules yet offers Add transfer; fewer than two hydrological units points to the Network', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Transfers empty');

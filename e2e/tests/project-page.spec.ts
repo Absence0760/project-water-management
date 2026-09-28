@@ -33,7 +33,7 @@ test('the page: one title, its context and Download in the header, the facts, de
 
 	// The model's facts, each counting from the page's lists.
 	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toBeVisible();
-	await expect(fact(page, 'Units')).toHaveText('2+ 1 gauge');
+	await expect(fact(page, 'Hydrological units')).toHaveText('2+ 1 gauge');
 	await expect(fact(page, 'Time series')).toHaveText('2');
 	await expect(fact(page, 'Model runs')).toHaveText('1');
 	await expect(fact(page, 'Outflow gauge')).toHaveText('Outflow gauge');
@@ -134,13 +134,13 @@ test('a fresh project: every fact at zero, and each fact opens the tab behind it
 	void owner;
 	const project = await createProject(page.request, 'Project facts');
 	await openProject(page, project.id);
-	await expect(fact(page, 'Units')).toHaveText('0+ 0 gauges');
+	await expect(fact(page, 'Hydrological units')).toHaveText('0+ 0 gauges');
 	await expect(fact(page, 'Time series')).toHaveText('0');
 	await expect(fact(page, 'Model runs')).toHaveText('0');
 	await expect(fact(page, 'Outflow gauge')).toHaveText('–');
 
 	const tabs: [string, string][] = [
-		['Units', 'Network'],
+		['Hydrological units', 'Network'],
 		['Irrigated area', 'Crops & demand'],
 		['Active transfers', 'Transfers'],
 		['Time series', 'Data'],

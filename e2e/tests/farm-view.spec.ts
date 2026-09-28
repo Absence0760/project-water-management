@@ -80,10 +80,10 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(page.getByRole('region', { name: 'Your dam' })).toContainText(/\d+\s%\s*full/);
 	await expect(page.getByRole('region', { name: /^Looking back/ })).toContainText('Model:');
 
-	// Who can see my farm: the people by name and what they can do, never an email.
-	await page.getByRole('button', { name: 'Who can see my farm' }).click();
+	// Who can see my hydrological unit: the people by name and what they can do, never an email.
+	await page.getByRole('button', { name: 'Who can see my hydrological unit' }).click();
 	const who = page.locator('#who-can-see');
-	await expect(who).toContainText('Demo Farmer (you) · linked to this farm');
+	await expect(who).toContainText('Demo Farmer (you) · linked to this hydrological unit');
 	await expect(who).toContainText('Demo Analyst · WUA, manages who has access');
 	await expect(who).not.toContainText('@example.com');
 
@@ -110,7 +110,7 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	for (const h of ['1. Was water shared fairly?', '2. Did the river keep flowing?', 'What the WUA decided', 'What this is not']) {
 		await expect(page.getByRole('heading', { level: 2, name: h })).toBeVisible();
 	}
-	await page.getByRole('link', { name: 'My farm' }).click();
+	await page.getByRole('link', { name: 'My hydrological unit' }).click();
 	await page.getByRole('link', { name: 'Dam details' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Your dam' })).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Where these figures come from' })).toBeVisible();
@@ -237,7 +237,7 @@ test('a farmer with farms in two catchments sees them listed, each with its figu
 	await page.setViewportSize(PHONE);
 	await signIn(page, FARMER2);
 	await expect(page).toHaveURL(/\/farm$/);
-	await expect(page.getByRole('heading', { level: 1, name: 'Your farms' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Your hydrological units' })).toBeVisible();
 	for (const farm of [/Rietspruit/, /Kareebos/]) await expect(page.getByRole('link', { name: farm })).toContainText('% of water needed');
 	await page.getByRole('link', { name: /Kareebos/ }).click();
 	await expect(page.getByRole('heading', { level: 1, name: /^Kareebos/ })).toBeVisible();
@@ -353,9 +353,9 @@ test('many farms in one catchment fold the switcher; the notice stays on the fir
 	await fp.goto(`/farm/${project.id}?node=${farms[0]!.id}`);
 	await expect(fp.getByRole('heading', { level: 1, name: 'Farm 1 with a longer name' })).toBeInViewport();
 	await expect(fp.locator('#notice')).toBeInViewport();
-	const switcher = fp.getByRole('navigation', { name: 'Your farms in this catchment' });
+	const switcher = fp.getByRole('navigation', { name: 'Your hydrological units in this catchment' });
 	await expect(switcher).toBeHidden();
-	await fp.getByText('Your farms in this catchment (14 farms)', { exact: true }).click();
+	await fp.getByText('Your hydrological units in this catchment (14 hydrological units)', { exact: true }).click();
 	await expect(switcher.getByRole('link')).toHaveCount(14);
 	await expect(switcher.getByRole('link', { name: 'Farm 1 with a longer name' })).toHaveAttribute('aria-current', 'page');
 	await switcher.getByRole('link', { name: 'Farm 14 with a longer name' }).click();

@@ -134,7 +134,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 		await page.setViewportSize(size);
 		// Each colouring changes the figure under every name (the width of the labels).
 		for (const colourBy of ['supply', 'dam', 'area', 'none']) {
-			await page.getByLabel('Colour units by').selectOption(colourBy);
+			await page.getByLabel('Colour hydrological units by').selectOption(colourBy);
 			await expectCleanSchematic(page, `map at ${size.width}, coloured by ${colourBy}`);
 		}
 		// The node list: what a node drains into never squeezes its name, and nothing runs past the card.

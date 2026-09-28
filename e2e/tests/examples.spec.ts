@@ -67,8 +67,8 @@ test('a shared example opens read-only with its seeded run', async ({ page }) =>
 	await expect(page.getByRole('region', { name: 'Run summary' }).getByRole('heading', { name: 'Catchment' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Run model' })).toHaveCount(0);
 	// The per-unit table is on Units & supply (issue #17), which a viewer sees too.
-	await page.getByRole('link', { name: 'Units & supply', exact: true }).click();
-	await expect(page.getByRole('heading', { level: 3, name: 'Unit results' })).toBeVisible();
+	await page.getByRole('link', { name: 'Hydrological units', exact: true }).click();
+	await expect(page.getByRole('heading', { level: 3, name: 'Hydrological unit results' })).toBeVisible();
 });
 
 // WP-2.1: the seeded farmers, as the owner manages them and as a farmer's own list shows them.

@@ -23,7 +23,7 @@ async function farmFigures(table: Locator): Promise<string[][]> {
 	);
 }
 
-test('a viewer picks the last 7 days on Units & supply: worked out from the run, kept in the URL, the project setting untouched', async ({ page, owner, signIn }) => {
+test('a viewer picks the last 7 days on Hydrological units: worked out from the run, kept in the URL, the project setting untouched', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Report window');
 	await updateSettings(page.request, project.id, { reportStart: '2021-11-01', reportEnd: '2021-12-31', ewrPragmaticM3PerDay: new Array(12).fill(1_000_000) });
@@ -38,7 +38,7 @@ test('a viewer picks the last 7 days on Units & supply: worked out from the run,
 	const v = viewer.page;
 	const panel = v.locator('#res-curtailment');
 	const period = panel.getByTestId('curtailment-period');
-	const table = panel.getByRole('table', { name: /^Curtailment targets per unit/ });
+	const table = panel.getByRole('table', { name: /^Curtailment targets per hydrological unit/ });
 	const picker = panel.getByLabel('Reporting window');
 
 	await v.goto(`/projects/${project.id}?tab=supply&run=${second}`);

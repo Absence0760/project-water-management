@@ -22,7 +22,7 @@ const OWNER_TABS = [
 	'History',
 	'Summary',
 	'River & reserve',
-	'Units & supply',
+	'Hydrological units',
 	'Runs & results',
 	'Dams',
 	'Compare runs',

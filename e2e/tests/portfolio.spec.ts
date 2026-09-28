@@ -63,7 +63,7 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(pr).toContainText(/Figures to \d+ \w{3} 20\d\d, [\d\u202f]+ days ago/);
 	await expect(pr).toContainText('Stale: over 7 days old');
 	await expect(pr).toContainText('Advisory · 15 %');
-	await expect(pr).toContainText(/\d+ of \d+ units? short this week/);
+	await expect(pr).toContainText(/\d+ of \d+ hydrological units? short this week/);
 
 	// Run only: the EWR from the run, farms and dams honestly unknown.
 	const rr = tableRow(page, 'Pf run only A');
@@ -123,7 +123,7 @@ test('the page states which thresholds apply, and judges by the team’s once an
 // the Runs tab before issue #17): the panels render after the run's details
 // load, past the browser's own jump, so the page scrolls there itself and moves
 // focus to the table's heading.
-test('“units short this week” opens Units & supply at the curtailment table, over the last 7 days; an old Runs link lands there too', async ({ page, owner }) => {
+test('“hydrological units short this week” opens Hydrological units at the curtailment table, over the last 7 days; an old Runs link lands there too', async ({ page, owner }) => {
 	void owner;
 	// A published team catchment whose orchards are far too big for the water: its farms go short.
 	const request = page.request;
@@ -151,7 +151,7 @@ test('“units short this week” opens Units & supply at the curtailment table,
 	await page.goto(`/teams/${team.id}/portfolio`);
 	await tableRow(page, 'Pf short D').getByRole('link', { name: /units? short this week$/ }).click();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=supply&run=${runId}&window=last7#res-curtailment$`));
-	await expect(page.getByRole('heading', { level: 1, name: 'Units & supply' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();
 	await landed();
 
 	// Opened afresh (a bookmark, a new tab): the same.

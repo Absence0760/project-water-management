@@ -27,11 +27,11 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 	await menuButton.click();
 	// A preview only on the two all-farms tables.
 	await expect(page.getByRole('button', { name: /^Preview / })).toHaveCount(2);
-	await page.getByRole('button', { name: 'Preview Fragmented flow — all units (CSV)' }).click();
+	await page.getByRole('button', { name: 'Preview Fragmented flow — all hydrological units (CSV)' }).click();
 
-	const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all units' });
+	const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all hydrological units' });
 	await expect(dialog).toBeVisible();
-	await expect(dialog).toContainText(`${body.length} of ${body.length} days · 2 units`);
+	await expect(dialog).toContainText(`${body.length} of ${body.length} days · 2 hydrological units`);
 	await expect(dialog.locator('thead th')).toHaveText(['Date', ...farms]);
 
 	// The first day's values are the file's, to the shown precision; numbers line up right under their headers.
@@ -63,8 +63,8 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 
 	// The EWR table opens in the same dialog with its own file.
 	await menuButton.click();
-	await page.getByRole('button', { name: 'Preview Fragmented EWR — all units (CSV)' }).click();
-	const ewr = page.getByRole('dialog', { name: 'Fragmented EWR — all units' });
+	await page.getByRole('button', { name: 'Preview Fragmented EWR — all hydrological units (CSV)' }).click();
+	const ewr = page.getByRole('dialog', { name: 'Fragmented EWR — all hydrological units' });
 	await expect(ewr.locator('thead th').nth(1)).toHaveText(/\[Y\] \(m³\/day\)$/);
 });
 
@@ -76,16 +76,16 @@ for (const size of [
 	{ name: 'desktop', width: 1440, height: 960 },
 	{ name: 'phone', width: 390, height: 844 }
 ]) {
-	test(`30 units × 730 days: the table scrolls in the dialog, rows line up to the last day, no a11y violations (${size.name})`, async ({ page, owner }) => {
+	test(`30 hydrological units × 730 days: the table scrolls in the dialog, rows line up to the last day, no a11y violations (${size.name})`, async ({ page, owner }) => {
 		void owner;
 		await page.setViewportSize({ width: size.width, height: size.height });
 		const project = await seedSupplyProject(page.request, `Download preview big ${size.name}`, 28, 730);
 		await createRun(page.request, project.id, 'Baseline');
 		await page.goto(`/projects/${project.id}?tab=runs`);
 		await page.getByRole('button', { name: 'Download' }).click();
-		await page.getByRole('button', { name: 'Preview Fragmented flow — all units (CSV)' }).click();
-		const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all units' });
-		await expect(dialog).toContainText('2019-10-01 → 2021-09-29 · 730 of 730 days · 30 units');
+		await page.getByRole('button', { name: 'Preview Fragmented flow — all hydrological units (CSV)' }).click();
+		const dialog = page.getByRole('dialog', { name: 'Fragmented flow — all hydrological units' });
+		await expect(dialog).toContainText('2019-10-01 → 2021-09-29 · 730 of 730 days · 30 hydrological units');
 		await expect(dialog.locator('thead th')).toHaveCount(31);
 
 		// Inside the window, Download CSV in view; nothing scrolls sideways but the table.

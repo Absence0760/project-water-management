@@ -15,7 +15,7 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	const project = await seedRunnableProject(page.request, 'Invaded');
 	await page.goto(`/projects/${project.id}?tab=network`);
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 
 	const cover = page.getByRole('group', { name: 'Land cover' });
 	await expect(cover.getByText('No land cover on Upper farm.')).toBeVisible();
@@ -25,13 +25,13 @@ test('add invasive trees to a farm, run, and compare with a copy that clears the
 	await cover.getByLabel('Condensed cover (%)').fill('50');
 	await expect(cover.getByText('Class reductions at full cover: 50 % of flows, 60 % of low flows.')).toBeVisible();
 	// Upper farm is 12 km²: 3 × 50 % = 1.5 km², 13 %.
-	await expect(cover.getByText(/Condensed cover 13 % of the unit's 12 km²/)).toBeVisible();
+	await expect(cover.getByText(/Condensed cover 13 % of the hydrological unit's 12 km²/)).toBeVisible();
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toHaveCount(0);
 
 	await page.reload();
 	await openNodeForm(page);
-	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 	await expect(page.getByRole('group', { name: 'Land cover' }).getByLabel('Area (km²)')).toHaveValue('3');
 
 	await page.goto(`/projects/${project.id}?tab=runs`);
