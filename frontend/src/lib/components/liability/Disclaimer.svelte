@@ -1,7 +1,6 @@
 <script lang="ts">
-	// The report's disclaimer (WP-3.13, Step 2 decision D10). The wording is a
-	// draft until the client's legal adviser agrees it, and says so where it
-	// is shown (docs/followups.md § Blocking releases).
+	// The report's disclaimer (WP-3.13, Step 2 decision D10). A wording the
+	// engine marks draft says so where it is shown.
 	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE } from '@water-management/engine';
 </script>
 

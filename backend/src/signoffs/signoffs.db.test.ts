@@ -1,7 +1,7 @@
 // Sign-offs on a run (036_signoff.sql, WP-3.13): who may sign, what binds a
 // signature to the statement shown, and that a sign-off can't be changed,
 // removed or forged, at the route and at RLS.
-import { signoffStatement, signoffStatementText } from '@water-management/engine';
+import { DISCLAIMER, signoffStatement, signoffStatementText } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -66,7 +66,7 @@ describe('GET /projects/:id/runs/:runId/signoffs', () => {
 		// The hash is the engine statement's, recomputed independently here.
 		const expected = sha256(signoffStatementText(signoffStatement({ id: runId, engineVersion: res.body.statement.engineVersion, scenario: false })));
 		expect(res.body.statementSha256).toBe(expected);
-		expect(res.body.disclaimer.status).toBe('draft');
+		expect(res.body.disclaimer).toEqual({ version: DISCLAIMER.version, status: DISCLAIMER.status });
 		expect(res.body.cannotSign).toBe('requires editor role');
 		expect((await editor.call('GET', path())).body.cannotSign).toBeNull();
 		expect((await editor.call('GET', path(legacyRunId))).body.cannotSign).toMatch(/legacy/);

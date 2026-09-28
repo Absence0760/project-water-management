@@ -1,5 +1,5 @@
 // Liability and credibility on the report (WP-3.13, docs/ui.md § Report): the
-// validation statement with its generated limitations, the draft disclaimer,
+// validation statement with its generated limitations, the agreed disclaimer,
 // and the professional sign-off flow — every statement ticked, the whole
 // limitations list scrolled, then a permanent sign-off printed on the report
 // and shown to a viewer, who can't sign.
@@ -18,12 +18,15 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await page.goto(url);
 	await ready(page);
 
-	// The validation statement and the draft disclaimer, before anyone signs.
+	// The validation statement and the disclaimer (agreed 2026-09-28, so no draft line), before anyone signs.
 	const validation = page.locator('#rep-validation');
 	await expect(validation.getByRole('heading', { name: 'Known limitations' })).toBeVisible();
 	await expect(validation.getByRole('rowheader', { name: 'N1', exact: true })).toBeVisible();
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
-	await expect(page.locator('#rep-disclaimer')).toContainText('Draft wording, pending the client’s legal review');
+	const disclaimer = page.locator('#rep-disclaimer');
+	await expect(disclaimer).toContainText('It is not an authorisation to use water.');
+	await expect(disclaimer).toContainText('Disclaimer version 2026-09-28.');
+	await expect(disclaimer).not.toContainText('Draft wording');
 	const signoff = page.locator('#rep-signoff');
 	await expect(signoff).toContainText('Not signed off.');
 

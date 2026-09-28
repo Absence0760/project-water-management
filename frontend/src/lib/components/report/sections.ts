@@ -6,10 +6,13 @@
 // exist yet (the published-by line and restriction notice wait for WP-2.3,
 // changes since the last publication for WP-2.4). Three sections close every
 // report (WP-3.13): the validation statement, the professional sign-off
-// (saying plainly when there is none) and the disclaimer (D10, draft).
+// (saying plainly when there is none) and the disclaimer (D10). A forecast
+// run's report says on its cover that its days from the first forecast day
+// use forecast rain (forecastNote).
 // Opened from Compare runs' Export impact report (`against`, issue #17 A4),
 // it is an impact report: an "Impact against the baseline" section right
 // after the cover.
+import { FORECAST_RAIN_NOTE } from '@water-management/engine';
 import type { Run } from '$lib/api/types';
 
 export type ReportSectionId = 'cover' | 'impact' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
@@ -40,6 +43,10 @@ export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}):
 	out.push({ id: 'disclaimer', title: 'Disclaimer' });
 	return out;
 }
+
+/** The cover's forecast-rain line: only for a forecast run (summary.forecast, WP-2.12), from its first forecast day; else null. */
+export const forecastNote = (summary: Pick<Run['summary'], 'forecast'>): string | null =>
+	summary.forecast ? FORECAST_RAIN_NOTE(summary.forecast.from) : null;
 
 /** The charts drawn by these sections. */
 export function reportCharts(sections: readonly ReportSection[]): ReportChartId[] {

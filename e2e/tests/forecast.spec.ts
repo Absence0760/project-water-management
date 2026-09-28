@@ -2,7 +2,8 @@
 // forecast on a project with a forecast series past its record; the run is
 // tagged, its forecast days get their own panel, every daily chart shades them
 // with a text key (not colour alone, axe-clean), and the daily CSV marks them
-// F. Published, the forecast run gives the linked farmer a "Next 14 days"
+// F; its report says on the cover that those days use forecast rain.
+// Published, the forecast run gives the linked farmer a "Next 14 days"
 // card; an ordinary run of the same data stops at the record.
 import { putSeries, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -70,6 +71,14 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	expect(flag.get(FROM)).toBe('F');
 	expect(flag.get(TO)).toBe('F');
 
+	// Its report says, on the cover, that the days from the first forecast day use forecast rain.
+	await page.goto(`/projects/${project.id}/report?run=${runId}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('report-forecast-note')).toHaveText(
+		`From ${FROM}, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`
+	);
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
+
 	// An ordinary run of the same data stops at the record, with no band.
 	await page.getByLabel(/^Run label/).fill('Record only');
 	await page.getByRole('button', { name: 'Run model' }).click();
@@ -78,6 +87,10 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(page.locator('#res-hydrograph figure')).toHaveAttribute('data-ready', 'true');
 	await expect(page.locator('#res-hydrograph figure')).not.toHaveAttribute('data-band-from');
 	await expect(page.getByTestId('forecast-panel')).toHaveCount(0);
+	// …and its report has no forecast-rain line.
+	await page.goto(`/projects/${project.id}/report?run=${new URL(page.url()).searchParams.get('run')}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('report-forecast-note')).toHaveCount(0);
 
 	// Published, the forecast run gives the linked farmer their Next 14 days.
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);

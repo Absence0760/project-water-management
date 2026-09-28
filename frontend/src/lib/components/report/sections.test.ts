@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Run } from '$lib/api/types';
-import { isReportReady, reportCharts, reportSections } from './sections';
+import { FORECAST_RAIN_NOTE } from '@water-management/engine';
+import { forecastNote, isReportReady, reportCharts, reportSections } from './sections';
 
 type R = Pick<Run, 'summary' | 'model' | 'notes'>;
 const run = (over: { curtailment?: boolean; nodes?: number; notes?: string } = {}): R =>
@@ -74,5 +75,17 @@ describe('isReportReady', () => {
 
 	it('is ready at once when the data is in and there is nothing to draw', () => {
 		expect(isReportReady(true, [], {})).toBe(true);
+	});
+});
+
+describe('forecastNote', () => {
+	it('gives a forecast run the forecast-rain line from its first forecast day', () => {
+		const summary = { forecast: { from: '2022-01-29', to: '2022-02-11' } } as unknown as Pick<Run['summary'], 'forecast'>;
+		expect(forecastNote(summary)).toBe(FORECAST_RAIN_NOTE('2022-01-29'));
+		expect(forecastNote(summary)).toMatch(/^From 2022-01-29, this run uses forecast rain \(CHIRPS-GEFS/);
+	});
+
+	it('gives any other run none', () => {
+		expect(forecastNote({} as Pick<Run['summary'], 'forecast'>)).toBeNull();
 	});
 });

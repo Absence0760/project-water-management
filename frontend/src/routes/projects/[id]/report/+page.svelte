@@ -36,7 +36,7 @@
 	import { supplyColouring } from '$lib/components/network/farmColour';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
+	import { forecastNote, isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
@@ -281,6 +281,8 @@
 						</p>
 					{/if}
 					<p class="lede">{runSentence(summary)}</p>
+					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain. -->
+					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(summary)}</p>{/if}
 					<nav aria-label="Contents">
 						<ol>
 							{#each sections.slice(1) as c (c.id)}<li><a href="#rep-{c.id}">{c.title}</a></li>{/each}

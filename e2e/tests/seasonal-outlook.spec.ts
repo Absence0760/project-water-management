@@ -17,6 +17,7 @@ import { addMember, createProject, createRun, putModel, putSeries, sampleModel, 
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { grouped } from '../support/format.ts';
 import { runJobsTick } from '../support/jobs.ts';
 
 const START = '2006-10-01';
@@ -68,7 +69,8 @@ function percentile(sorted: number[], p: number) {
 	return lo + 1 < sorted.length ? sorted[lo]! + (h - lo) * (sorted[lo + 1]! - sorted[lo]!) : sorted[lo]!;
 }
 const whole = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const m3 = (v: number) => `${whole.format(v)} m³`;
+// The app groups thousands with a narrow no-break space (fmtNum), not a comma.
+const m3 = (v: number) => `${grouped(v)} m³`;
 const pct = (v: number) => `${whole.format(v * 100)} %`;
 function stat(values: (number | null)[], f: (v: number) => string) {
 	const v = values.filter((x): x is number => x !== null).sort((a, b) => a - b);
@@ -174,7 +176,8 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await panel.getByText('Every analogue year').click();
 	await expect(panel.getByTestId('outlook-years-table').locator('tbody tr')).toHaveCount(n);
 	await expect(panel.getByTestId('return-flow-note')).toContainText('taking less from the dam can leave the river lower on dry days');
-	await expect(panel.getByTestId('outlook-disclaimer')).toContainText('They are estimates made from the historical record');
+	await expect(panel.getByTestId('outlook-disclaimer')).toContainText('They are not measurements or predictions of what will happen');
+	await expect(panel.getByTestId('outlook-disclaimer')).toContainText('are not official restrictions or allocations');
 	await expect(panel.getByText(/recommend|likely|should|best|optimal/i)).toHaveCount(0);
 	await expectNoViolations(page, { include: '[data-testid="seasonal-outlook"]' });
 
