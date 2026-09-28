@@ -233,6 +233,15 @@ Fixed content, in this order (mock-up sheet 1):
    rule), printed in full, verbatim from `ensembleDecisionRule` and
    `summarisePaired`.
 
+**Impact by year class** (planning-outputs R7, issue #53) goes on page 1
+after item 4: per dry / normal / wet class, the annual waterfall and the
+Reserve months not met, baseline vs application, the verdict from the
+months. It is built on the impact report already
+([ui.md § Report](../ui.md#report),
+[model.md §2.14a](../model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report));
+Phase C reuses its component. Its "existing authorised use" waits on a
+full-allocation background run (WP-3.10).
+
 ### 4.2 Sections
 
 | § | Title | Holds | Checklist |

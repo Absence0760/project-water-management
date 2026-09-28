@@ -26,7 +26,7 @@ it is marked **(judgement)**.
 | S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The three-stage board, equal share ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
 | S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | 🚧 Forecast mode (engine 0.37.0, model.md §2.4f, 14 days only); the backlog's *Seasonal outlook* (farmer-view ask E3) | The season-long ensemble, the demand comparison, the triggers (WP-3.8) |
-| S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | 🚧 The evidence report design ([evidence-report.md](./evidence-report.md), issue #15), allocations (WP-3.10) | Year classes, the full-allocation run, the summary board |
+| S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | ✅ The impact report's board by year class (R7, §3.7), the verdict from the months; 🚧 existing *authorised* use needs the full-allocation run (WP-3.10) | Year classes, the full-allocation run, the summary board |
 
 Two things in the sketches the app should **not** copy:
 
@@ -300,6 +300,32 @@ column per year class (R4), with two rows per class: the annual waterfall
 Reserve, baseline vs application. The verdict comes from the months, not the
 annual total (§2 finding 5). "Existing authorised" needs the full-allocation
 run (allocations.md § Still to build).
+
+**Status: built** for the impact report (engine view
+`packages/engine/src/views/licenceImpact.ts`, the board on page 1 of the
+impact report, `report/LicenceImpactBoard.svelte`; method, the waterfall's
+terms and the wording in
+[model.md §2.14a](../model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report),
+the screen in [ui.md § Report](../ui.md#report)). The view compares any
+*background* run with the application: today the report's baseline, so the
+board labels its use "existing use in the baseline", not "existing
+authorised". Choices, each marked in model.md:
+- **use is consumptive** (supplied less return flows, from the water
+  account), so the waterfall ends at the outflow; the rest of the account
+  (dams, storage, groundwater, land cover) is its own "other" step, broken
+  down, so the waterfall closes (**judgement**);
+- **the years are the background's classes**, counted only where both runs
+  cover them in full; fewer than 3 in a class → "not enough years", no
+  numbers;
+- **the verdict** is from the Reserve months (days below the pragmatic EWR
+  without a rule table), as data: "more / fewer / no change in months
+  below", never "acceptable".
+
+Still to build: the full-allocation background (WP-3.10 `allocationMode:
+'fullAllocation'`, PR #116): when it lands, the report's background becomes
+the baseline's full-allocation run and the label "existing authorised use"
+([followups.md § Allocations](../followups.md#allocations-wp-310)); the
+evidence report's page 1 (issue #15, Phase C) takes the same board.
 
 ### Order
 
