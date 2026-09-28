@@ -11,7 +11,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (`bcryptjs`, cost 12; 4 under vitest and on the e2e API server, which sets `PASSWORD_HASH_COST=4`, an override Lambda refuses at startup; `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
-  the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
+  the user id and a random session id (`jti`, required: a token without one
+  is refused, since it could never be signed out) and has a 7-day expiry. It sits in the **`wm_session` cookie**,
   which is `HttpOnly`, `SameSite=Lax` and `Secure` (Secure can be turned off
   only for plain-http local dev). JavaScript never sees the token.
 - **Same-origin in production.** CloudFront serves the site and proxies
@@ -34,8 +35,13 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   update to an earlier time or to NULL keeps the later one, so no update can
   revive a signed-out session. It then
   re-issues this device's cookie, so only the device that changed it stays
-  signed in. Plain logout clears the cookie only
-  (that one token stays valid until expiry if it was copied). Rotating
+  signed in. **Plain logout** (`POST /auth/logout`) signs that one session
+  out on the server as well as clearing its cookie (issue #51): its `jti`
+  goes into `revoked_session` (102, through `app_revoke_session`, under the
+  signed-in account only) until the token would have expired, and the same
+  one-statement check reads it (`app_session_state`), so a copied cookie
+  stops working at sign-out, not 7 days later. The account's other sessions
+  stay signed in. Tests: `auth/session.db.test.ts` "signing out". Rotating
   `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
 - **Sign-in lockout** (`login_throttle`, `backend/src/auth/routes.ts`
@@ -241,7 +247,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the raw tokens just mailed; pins the 1 h / 48 h / 7 day lifetimes (a re-sent
   invite included); races `app_consume_email_token` across two open
   transactions; refuses forged session JWTs (unsigned, other key, HS512, other
-  issuer, expired, non-uuid subject, tampered) and pins the 7-day cookie; and
+  issuer, expired, non-uuid subject, tampered, no or a malformed session id)
+  and pins the 7-day cookie; and
   checks that adding a member, team member or farmer (single and bulk) and
   signing in answer the same for an unknown address and an unverified or
   wrong-password one.
@@ -1671,6 +1678,8 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
+| Ids of sessions the person signed out (102) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |

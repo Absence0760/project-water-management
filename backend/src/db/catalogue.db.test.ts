@@ -186,6 +186,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'report_schedule.acting_user_id': 'set null',
 	'report_schedule.created_by': 'set null',
 	'report_schedule_recipient.user_id': 'cascade',
+	'revoked_session.user_id': 'cascade',
 	'run_nomination.nominated_by': 'restrict',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',

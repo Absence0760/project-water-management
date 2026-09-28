@@ -12,7 +12,7 @@ import { attachment } from '../export/csv.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
-import { clearSession, issueSession } from './session.js';
+import { clearSession, issueSession, revokeSession } from './session.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
@@ -288,7 +288,10 @@ export const authRoutes = new Hono<AuthEnv>()
 		issueDevice(c, row.email, row.sessions_revoked_at);
 		return c.json({ user: toUser(user) });
 	})
-	.post('/logout', (c) => {
+	// Signs this session out on the server too (its id is revoked, session.ts
+	// revokeSession), so a copied cookie stops working with the one cleared here.
+	.post('/logout', async (c) => {
+		await revokeSession(c);
 		clearSession(c);
 		return c.body(null, 204);
 	})
