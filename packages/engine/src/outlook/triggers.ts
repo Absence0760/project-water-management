@@ -399,23 +399,42 @@ export interface ReviewTriggerOptions {
 	snapshot?: ModelStateSnapshot;
 }
 
-/**
- * The review triggers: the outlook from every storage band at the review
- * date, bands × analogue years × levels member runs of the season, from the
- * one snapshot of the history (warmStart). Needs a farm dam.
- */
-export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptions): ReviewTriggers {
-	const season: OutlookSeason = { decisionDate: options.reviewDate, seasonEnd: options.seasonEnd };
-	resolveSeason(season);
+/** What reviewTriggerBands needs: the options that set the bands. */
+export type ReviewTriggerBandOptions = Pick<ReviewTriggerOptions, 'reviewDate' | 'seasonEnd' | 'decisionDate' | 'edgesM3' | 'representative'>;
+
+/** The bands a trigger table runs from, before any member runs (reviewTriggerBands). */
+export interface ReviewTriggerBandPlan {
+	/** Σ farm dam capacity. */
+	capacityM3: number;
+	/** Emptiest band first, each with the storage it starts from and its split over the dams. */
+	bands: Omit<TriggerBandMembers, 'levels'>[];
+	representative: TriggerRepresentative;
+	bandSource: TriggerBandSource;
+	/** The history the default edges came from (empty with explicit edges). */
+	history: ReviewStorageSample[];
+	/** The lowest storage on record the lowest band runs from; null = empty dams. */
+	lowestOnRecordM3: number | null;
+	bandWarnings: string[];
+}
+
+/** Throw when the review date isn't after the season's decision date, or there is no farm dam. */
+function checkReview(input: ModelInput, options: ReviewTriggerBandOptions): void {
+	resolveSeason({ decisionDate: options.reviewDate, seasonEnd: options.seasonEnd });
 	if (options.decisionDate !== undefined && toEpochDay(resolveSeason({ decisionDate: options.decisionDate, seasonEnd: options.seasonEnd }).decisionDate) >= toEpochDay(options.reviewDate))
 		throw new RangeError(`the review date ${options.reviewDate} is not after the season's decision date ${options.decisionDate}`);
-	const dams = farmDams(input);
-	if (!dams.length) throw new Error('review triggers need a farm dam: the bands are dam storage');
-	const capacity = dams.reduce((a, n) => a + n.damCapacityM3, 0);
-	const warm = options.warmStart !== false;
-	const got = warm ? outlookBaseAndSnapshot(input, options.reviewDate, options) : null;
-	const baseRun = got?.baseRun ?? options.baseRun ?? runModelWithoutChecks(input);
-	const snapshot = got?.snapshot ?? null;
+	if (!farmDams(input).length) throw new Error('review triggers need a farm dam: the bands are dam storage');
+}
+
+/**
+ * The storage bands on the review date and the storage each starts from,
+ * from the base run: the first half of runReviewTriggers, for a job that
+ * then runs the members one by one and hands them to reviewTriggerTable
+ * (the backend's outlook job, issue #53 R6). Throws as runReviewTriggers
+ * does for the dates and the dams.
+ */
+export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
+	checkReview(input, options);
+	const capacity = farmDams(input).reduce((a, n) => a + n.damCapacityM3, 0);
 	const representative = options.representative ?? 'lowerEdge';
 	const bandWarnings: string[] = [];
 	let history: ReviewStorageSample[] = [];
@@ -436,17 +455,37 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 	// The lowest band's floor (engine ≥ 1.11.0): the lowest storage on record for the review date, whatever drew the edges.
 	const floor = lowestBandFloor(bandSource === 'explicit' ? reviewStorageHistory(input, baseRun, options.reviewDate) : history, drawn.bands[0]!);
 	if (floor.warning) bandWarnings.push(floor.warning);
-	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
-	const bands: TriggerBandMembers[] = drawn.bands.map((band, i) => {
+	const bands = drawn.bands.map((band, i) => {
 		const fromRecord = i === 0 && floor.fromRecord;
 		const start = bandStartStorage(input, fromRecord ? { fromM3: floor.floorM3, toM3: band.toM3 } : band, representative);
+		return { band, startStorageM3: start.totalM3, storageM3ByDam: start.storageM3ByDam, ...(fromRecord ? { startFrom: 'lowestOnRecord' as const } : {}) };
+	});
+	return { capacityM3: capacity, bands, representative, bandSource, history, lowestOnRecordM3: floor.fromRecord ? floor.floorM3 : null, bandWarnings };
+}
+
+/**
+ * The review triggers: the outlook from every storage band at the review
+ * date, bands × analogue years × levels member runs of the season, from the
+ * one snapshot of the history (warmStart). Needs a farm dam.
+ */
+export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptions): ReviewTriggers {
+	const season: OutlookSeason = { decisionDate: options.reviewDate, seasonEnd: options.seasonEnd };
+	// The dates and the dams first, before the history runs.
+	checkReview(input, options);
+	const warm = options.warmStart !== false;
+	const got = warm ? outlookBaseAndSnapshot(input, options.reviewDate, options) : null;
+	const baseRun = got?.baseRun ?? options.baseRun ?? runModelWithoutChecks(input);
+	const snapshot = got?.snapshot ?? null;
+	const plan = reviewTriggerBands(input, baseRun, options);
+	const { analogues, excluded } = outlookAnalogues(baseRun, season, options.analogueYears);
+	const bands: TriggerBandMembers[] = plan.bands.map((b) => {
 		// The band's storage in the snapshot's dams: every band shares the one history.
-		const bandSnapshot = snapshot ? withDamStorage(snapshot, input, start.storageM3ByDam) : null;
+		const bandSnapshot = snapshot ? withDamStorage(snapshot, input, b.storageM3ByDam) : null;
 		const levels = options.levels.map((level) => {
 			let problems = outlookLevelProblems(level);
 			const members: OutlookMember[] = [];
 			for (const a of problems.length ? [] : analogues) {
-				const m = bandSnapshot ? outlookSeasonInput(input, baseRun, season, a, level.ops) : outlookMemberInput(input, baseRun, season, a, level.ops, { storageM3: start.storageM3ByDam });
+				const m = bandSnapshot ? outlookSeasonInput(input, baseRun, season, a, level.ops) : outlookMemberInput(input, baseRun, season, a, level.ops, { storageM3: b.storageM3ByDam });
 				if (m.problems.length) {
 					problems = m.problems;
 					members.length = 0;
@@ -456,7 +495,7 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 			}
 			return { id: level.id, label: level.label, problems, members };
 		});
-		return { band, startStorageM3: start.totalM3, storageM3ByDam: start.storageM3ByDam, ...(fromRecord ? { startFrom: 'lowestOnRecord' as const } : {}), levels };
+		return { ...b, levels };
 	});
 	return reviewTriggerTable({
 		reviewDate: options.reviewDate,
@@ -465,11 +504,11 @@ export function runReviewTriggers(input: ModelInput, options: ReviewTriggerOptio
 		analogues,
 		excluded,
 		bands,
-		representative,
-		bandSource,
-		history,
-		lowestOnRecordM3: floor.fromRecord ? floor.floorM3 : null,
-		bandWarnings,
+		representative: plan.representative,
+		bandSource: plan.bandSource,
+		history: plan.history,
+		lowestOnRecordM3: plan.lowestOnRecordM3,
+		bandWarnings: plan.bandWarnings,
 		...(options.metric !== undefined ? { metric: options.metric } : {}),
 		siteNodeId: options.siteNodeId ?? null,
 		...(options.planningShare !== undefined ? { planningShare: options.planningShare } : {})

@@ -8,6 +8,7 @@
 // a run; the frontend (WP-2.6) formats them. Volumes are m³ and m³/day,
 // fractions 0–1, dates ISO 'YYYY-MM-DD', months 'YYYY-MM'. Nothing here
 // names or counts another farm except FarmContext's anonymised counts.
+import type { FarmOutlookProjection } from './farmOutlook';
 import type { NoticeText } from './notice';
 
 /** Totals over a window of days (inclusive). */
@@ -188,6 +189,12 @@ export interface FarmView {
 	outlet30: { name: string; daysNotMet: number; days: number };
 	/** dataUntil older than STALE_DAYS (the frontend's freshness rule) when the response was built. */
 	stale: boolean;
+	/**
+	 * The seasonal outlook the WUA published for this farm (issue #53 R5, E3),
+	 * with when; absent or null when there is none, it was withdrawn, or its
+	 * season has ended.
+	 */
+	outlook?: (FarmOutlookProjection & { publishedAt: string }) | null;
 }
 
 /** GET /projects/:id/farm (WP-2.6): the farmer's farms in one project, and whether anything is published. */

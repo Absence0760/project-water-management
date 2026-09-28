@@ -74,6 +74,7 @@ export {
 export * from './views/farmView';
 export * from './views/notice';
 export * from './views/farmProjection';
+export * from './views/farmOutlook';
 export * from './views/fdc';
 export * from './views/yearClasses';
 export * from './views/outcomeMatrix';
