@@ -361,7 +361,7 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `ci.yml` `e2e-build`, `e2e`, `e2e-report` | Playwright (Chromium) in 14 shards: the site is built once and shared, each shard runs `--shard=N/14` against its own Postgres, and the shards' blob reports merge into one HTML `playwright-report` ([e2e/README.md § CI](../e2e/README.md#ci-14-shards)) |
 | `ci.yml` `workflow-lint` | actionlint v1.7.12, the workflow guard, and the unit tests of every guard (`pnpm test:guards`) |
 | `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |
-| `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy IaC scan (advisory: HIGH/CRITICAL findings go to the Security tab, never fail the job) |
+| `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy config scan of Terraform and the renderer Dockerfile (advisory: HIGH/CRITICAL findings go to the Security tab, never fail the job; accepted ones in [security.md § Accepted IaC findings](./security.md#accepted-iac-findings)) |
 | `ci.yml` `gitleaks` → `gitleaks.yml` | secret scan; runs on docs-only diffs too |
 | `ci.yml` `ci-gate` | **the one required check**: fails if any job above failed |
 | `compliance-drift.yml` | only when migrations, `backend/src`, `frontend/src`, a `package.json` or the two docs change; advisory: personal-data columns, outside hosts or telemetry SDKs added without the matching `docs/data-model.md` / `docs/security.md` change (`pnpm check:compliance`) |

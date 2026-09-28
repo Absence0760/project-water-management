@@ -42,8 +42,8 @@ function sameValue(a: unknown, b: unknown, path: string, scale = 1, volume = 1):
 		const demand = Math.min(...[ra.demandM3Day, rb.demandM3Day, ra.avgDemandM3Day, rb.avgDemandM3Day].filter((v): v is number => typeof v === 'number').map(Math.abs));
 		const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
 		for (const k of keys) {
-			const isVolume = /M3|Mm3|Ls$/.test(k);
-			const ofDemand = /^fraction|Fraction$/.test(k) && demand > 0 && Number.isFinite(demand);
+			const isVolume = /M3|Mm3/.test(k) || k.endsWith('Ls');
+			const ofDemand = (k.startsWith('fraction') || k.endsWith('Fraction')) && demand > 0 && Number.isFinite(demand);
 			const d = sameValue(ra[k], rb[k], `${path}.${k}`, isVolume ? volume : ofDemand ? volume / demand : scale, volume);
 			if (d) return d;
 		}

@@ -48,7 +48,7 @@ import { cmpStr } from './order';
 import { runRain, wr2012Report } from './reference/wr2012';
 import { ewrRuleTableNotes } from './reserve/rules';
 import { assessSite, assuranceWarnings, baseflowHistoryAt, monthCarryAt, type EwrAssuranceSite, type MonthCarry } from './reserve/assurance';
-import { NATURAL_FLOW, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
+import { naturalFlowFor, resolveCatchmentAreaKm2, type NaturalFlowInput, type RunContext } from './runoff';
 import {
 	AREAL_RAIN_COLUMN,
 	arealRainFactors,
@@ -114,7 +114,7 @@ export { resolveCatchmentAreaKm2 } from './runoff';
 
 /** Run the full model: natural flow from the selected runoff model (./runoff), then the network. */
 export function runModel(input: ModelInput): ModelOutput {
-	return runModelWith(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx));
+	return runModelWith(input, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx));
 }
 
 /**
@@ -127,7 +127,7 @@ export function runModel(input: ModelInput): ModelOutput {
  * only runs ensembles (the browser's calibration worker) leaves that code out.
  */
 export function runModelWithoutChecks(input: ModelInput): ModelOutput {
-	return runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null, null);
+	return runNetwork(input, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx), null, null);
 }
 
 /**
@@ -141,7 +141,7 @@ export function runModelWithoutChecks(input: ModelInput): ModelOutput {
 export function runModelCapturing(input: ModelInput, at: string): { output: ModelOutput; snapshot: ModelStateSnapshot } {
 	if (typeof at !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(at) || fromEpochDay(toEpochDay(at)) !== at) throw new RangeError(`capture date "${String(at)}" is not an ISO date (YYYY-MM-DD)`);
 	const sink: WarmRun['sink'] = {};
-	const output = runNetwork(input, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](input, ctx), null, null, { captureDay: toEpochDay(at), sink });
+	const output = runNetwork(input, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(input, ctx), null, null, { captureDay: toEpochDay(at), sink });
 	const state = sink.state!;
 	// Columns a run carries only when a day of it needs them: a resumed run keeps them, as zeros when none of its days do.
 	output.series.forEach((x, i) => {
@@ -186,7 +186,7 @@ export function runModelFrom(snapshot: ModelStateSnapshot, input: ModelInput): M
 	const end = settings.simulationEnd;
 	if (typeof end === 'string' && end < snapshot.date) throw new ModelStateMismatchError('window', `the run ends (${end}) before the snapshot's day ${snapshot.date}`);
 	const resumed: ModelInput = { ...input, settings };
-	const output = runNetwork(resumed, (ctx) => NATURAL_FLOW[ctx.settings.runoffModel](resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart) });
+	const output = runNetwork(resumed, (ctx) => naturalFlowFor(ctx.settings.runoffModel)(resumed, ctx), null, null, { resume: state, continued: day > toEpochDay(snapshot.runStart) });
 	if (output.startDate !== snapshot.date) throw new Error(`the resumed run starts on ${output.startDate}, not the snapshot's day ${snapshot.date}`);
 	for (const c of state.columns) {
 		const has = (nodeId: string | null, key: string) => output.series.findIndex((x) => x.nodeId === nodeId && x.key === key);

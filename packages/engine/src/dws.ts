@@ -42,7 +42,20 @@ const decode = (s: string) =>
 		.replace(/&amp;/g, '&');
 
 /** HTML comments removed: one that mentions <pre> must not be taken for the table. */
-export const stripHtmlComments = (raw: string) => raw.replace(/<!--[\s\S]*?-->/g, '');
+export function stripHtmlComments(raw: string): string {
+	// A scan, not /<!--[\s\S]*?-->/g: that retries from every unclosed "<!--", quadratic on a hostile page.
+	let out = '';
+	let at = 0;
+	for (;;) {
+		const open = raw.indexOf('<!--', at);
+		if (open < 0) return out + raw.slice(at);
+		out += raw.slice(at, open);
+		const close = raw.indexOf('-->', open + 4);
+		// An unclosed comment runs to the end, as the regex's non-match left it in place: keep that.
+		if (close < 0) return out + raw.slice(open);
+		at = close + 3;
+	}
+}
 
 /**
  * The table text of a page: the decoded <pre> of a saved HyData.aspx page, or

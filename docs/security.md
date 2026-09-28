@@ -818,7 +818,13 @@ In short:
   `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
   again on every call, and a policy calls them once per row (writing a run's
   hundreds of series spent 0.8 ms a row on them). Keep new role helpers in PL/pgSQL
-  for the same reason.
+  for the same reason. And return before the query when there is no user
+  (`app_current_user_id()` NULL: an API key's session, the job queue's), as
+  `app_project_role` does since 094_role_check_no_user and `app_user_visible`
+  always has: with the user NULL every custom plan of the query folds to
+  "false" and looks cheaper than the generic plan, so PL/pgSQL's plan cache
+  plans it again on every call (~150 µs a row; the ingest key sweep over
+  every table timed out in CI). `role-check.db.perf.test.ts` guards it.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every
@@ -1737,8 +1743,8 @@ readable by anyone. The rules:
   role after a human approves the run.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
-  `/welcome`, issue #57) and the legal pages (`/privacy`, `/terms`,
-  [legal-status.md](./legal-status.md)) are static: it calls no API but `/auth/me` (the
+  `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,
+  [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but
@@ -1805,6 +1811,22 @@ readable by anyone. The rules:
   `self_check_failed`) notifies the same alerts SNS topic as every other
   alarm, so a model bug in production is paged, not just shown as a warning
   on the one run.
+
+
+### Accepted IaC findings
+
+CI's Trivy config scan (`terraform.yml`, Terraform and
+`backend/renderer.Dockerfile`, HIGH/CRITICAL to the Security tab) flags these
+on purpose-built resources. Each carries a `#trivy:ignore:<ID>` with its reason
+beside the resource; a new ignore needs a line here too.
+
+| Finding | Resources | Why it stays |
+| --- | --- | --- |
+| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
+
+Revisit AWS-0132 for `reports` if a client contract asks for customer-held
+keys or key-level audit of report reads.
 
 ## Liability
 

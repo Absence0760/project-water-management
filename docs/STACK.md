@@ -36,7 +36,7 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's).
+  query's and the RLS role check's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
@@ -116,7 +116,7 @@ pnpm test:engine | test:frontend | test:backend   # test:backend includes the ro
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password

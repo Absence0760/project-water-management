@@ -1,0 +1,9 @@
+# CodeQL configuration for this project (security.yml's init step reads it).
+#
+# docs/design/ holds static HTML design prototypes (the farmer view, the
+# licensing report, …): mock-ups drawn before a build, never shipped or served.
+# CodeQL's quality queries flag their inline demo scripts, and every edit to a
+# prototype re-raised the alerts. Tests and dev scripts stay in scope: an alert
+# there after a real edit is cheap to re-check, and they can hold real bugs.
+paths-ignore:
+  - docs/design/**

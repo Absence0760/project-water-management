@@ -54,6 +54,11 @@ resource "aws_s3_bucket_public_access_block" "reports" {
   restrict_public_buckets = true
 }
 
+# SSE-S3, not a customer-managed key: the bucket is private (public access
+# blocked, reached only by the API and renderer roles and short presigned
+# URLs), and a CMK would add a key and kms grants to both roles for no change
+# in who can read a PDF. docs/security.md § Accepted IaC findings.
+#trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "reports" {
   bucket = aws_s3_bucket.reports.id
 
