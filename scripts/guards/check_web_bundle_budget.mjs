@@ -1095,6 +1095,9 @@
 //             form helpers, the help entry, the fit-provenance and report
 //             lines, and the engine's areal-rain code shared by the run and
 //             fit workers. No new dependency. Headroom ~3 KB.
+// 2026-09-27  total 1049 → 1055 KB (measured 1052 on main merging the areal
+//             rainfall correction (above) with the work that landed beside it,
+//             each measured without the other). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1105,7 +1108,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1049,
+	totalCodeKb: 1055,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
