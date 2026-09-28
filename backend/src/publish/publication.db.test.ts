@@ -456,9 +456,16 @@ describe('the aggregate rule on the even share', () => {
 		expect(hidden).toMatchObject({ equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false });
 		// Farmer2 sees farmer (farm 1) and farms 5, 6 = 3: hidden too.
 		expect((await share(farmer2, farms[2]!.id)).equitableFraction).toBeNull();
-		// Stored as computed; a viewer (who links nothing: six holders) sees it.
-		expect((await share(viewer, farms[0]!.id)).equitableFraction).toBe(shown.equitableFraction);
+		// "Preview as farmer" (issue #51): the viewer sees each farm as its own farmer does, hidden here too.
+		expect((await share(viewer, farms[0]!.id)).equitableFraction).toBeNull();
+		expect((await share(viewer, farms[2]!.id)).equitableFraction).toBeNull();
+		// An unlinked farm, counted as if it had a holder of its own: farmer, farmer2, farm 5 = 3 < 4.
+		expect((await share(viewer, farms[5]!.id)).equitableFraction).toBeNull();
 		expect((await owner.call('PUT', `/projects/${projectId}/farmers/${farmer2.id}`, { nodeIds: [farms[1]!.id] })).status).toBe(200);
+		// Positive controls: stored as computed, and the preview shows it where the farmer would (5 others), and on the
+		// unlinked farm (farmer, farmer2, farms 3–5 = 5).
+		expect((await share(viewer, farms[0]!.id)).equitableFraction).toBe(shown.equitableFraction);
+		expect((await share(viewer, farms[5]!.id)).equitableFraction).not.toBeNull();
 	});
 });
 

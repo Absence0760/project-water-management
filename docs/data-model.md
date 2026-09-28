@@ -1085,7 +1085,12 @@ Only an owner adds or changes links (`POST` / `PUT /projects/:id/farmers`,
   farmer-facing aggregate of farm quantities (totals, the even share) is shown
   only when it is at least `k − 1` (`k = 5`, pending the client). One owner
   holding three of five farms therefore can't read the other two's combined
-  figures.
+  figures. `app_other_farm_holders(project, node)` (096, issue #51) is the
+  count as `node`'s own farmer meets it, the smallest over its linked
+  farmers, or for an unlinked farm the holders of every other farm: the farm
+  view calls it, so the WUA's "Preview as farmer" hides the even share where
+  that farmer's page does. A farmer gets their own count whatever node they
+  pass.
 - Guards: `src/farms/farms.db.test.ts` (every table, with positive controls),
   `src/projects/role-ladder.db.test.ts` (every `/projects/:id` route but the
   `BELOW_VIEWER` ones answering a farmer `403` at the role check), and a

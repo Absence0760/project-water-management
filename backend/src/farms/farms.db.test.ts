@@ -149,6 +149,20 @@ describe('anonymised farm context and the holder count', () => {
 		expect(await holders(viewer)).toEqual([{ n: 2 }]); // links nothing: both holders
 		expect(await holders(stranger)).toEqual([{ n: null }]);
 	});
+
+	// "Preview as farmer" (096, issue #51): a viewer gets the count the farm's own farmer gets.
+	it('counts for a previewed farm as its farmer would, and a farmer only ever from their own point of view', async () => {
+		const forNode = (u: User, nodeId: string) => rowsAs<{ n: number | null }>(u, 'SELECT app_other_farm_holders($1, $2) AS n', [projectId, nodeId]);
+		expect(await forNode(viewer, farmA.id)).toEqual([{ n: 1 }]); // farmer's view: farmer2 holds B and C
+		expect(await forNode(viewer, farmB.id)).toEqual([{ n: 1 }]); // farmer2's view: farmer holds A
+		expect(await forNode(viewer, farmC.id)).toEqual([{ n: 1 }]);
+		// A farmer's own count, whatever node they pass (no probing another farm's holders).
+		expect(await forNode(farmer, farmB.id)).toEqual([{ n: 1 }]);
+		expect(await forNode(farmer2, farmA.id)).toEqual([{ n: 1 }]);
+		expect(await forNode(stranger, farmA.id)).toEqual([{ n: null }]);
+		// Positive control: the one-argument form still counts from the viewer's own point of view.
+		expect(await rowsAs(viewer, 'SELECT app_other_farm_holders($1) AS n', [projectId])).toEqual([{ n: 2 }]);
+	});
 });
 
 // Which routes admit a farmer (and that every other one refuses them at the

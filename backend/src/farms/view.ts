@@ -86,10 +86,12 @@ export async function currentFor(db: Db, projectId: string, nodeId: string): Pro
  * (D2, design §10.3): the even share is a catchment ratio, shown only with at
  * least k − 1 other holders. cutBeyondShare is measured against that share,
  * so it goes with it (it would bound K_tot). The farm page and the
- * data-subject export (auth/export.ts) both go through here.
+ * data-subject export (auth/export.ts) both go through here. Counted as
+ * `nodeId`'s own farmer would count it (096), so the WUA's "Preview as
+ * farmer" hides the even share where that farmer's page does.
  */
-export async function farmerProjection(db: Db, projectId: string, view: FarmProjection): Promise<FarmProjection> {
-	const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1) AS n', [projectId]);
+export async function farmerProjection(db: Db, projectId: string, nodeId: string, view: FarmProjection): Promise<FarmProjection> {
+	const { rows: h } = await db.query<{ n: number | null }>('SELECT app_other_farm_holders($1, $2) AS n', [projectId, nodeId]);
 	if ((h[0]?.n ?? 0) >= FARMER_K - 1) return view;
 	return { ...view, river: { ...view.river, equitableFraction: null, aboveBelowShareM3Day: null, cutBeyondShare: false } };
 }
@@ -121,7 +123,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
 			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
-			const farm = await farmerProjection(db, id, cur.view);
+			const farm = await farmerProjection(db, id, nodeId, cur.view);
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
 				'SELECT farms_upstream, farms_downstream, farm_count FROM app_farm_context($1, $2)',
 				[id, nodeId]
