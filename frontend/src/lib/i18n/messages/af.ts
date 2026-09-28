@@ -479,10 +479,6 @@ export const af: Catalogue = {
 	'45d78280': 'Laagste damvlak verwag: ongeveer {pct} rondom {date}',
 	// Lowest dam level expected: about {pct}
 	'eafa9db3': 'Laagste damvlak verwag: ongeveer {pct}',
-	// The model doesn’t expect you to be short on any of these {days} days.
-	'f0f4c8d4': 'Die model verwag nie dat jy op enige van hierdie {days} dae te min water sal hê nie.',
-	// You may be short on {n} of the {days} days.
-	'9d644bd9': 'Jy kan dalk op {n} van die {days} dae te min water hê.',
 	// From the rain forecast of {made}, for {from} to {to}.
 	'd81d6b5a': 'Volgens die reënvoorspelling van {made}, vir {from} tot {to}.',
 	// This forecast is {age} old. Your WUA may publish a newer one.
