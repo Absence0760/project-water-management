@@ -70,12 +70,15 @@
 	let menuFor = $state<string | null>(null);
 	let menuPos = $state<{ top?: number; bottom?: number; right: number }>({ right: 0 });
 	let trigger: HTMLButtonElement | null = null;
+	/** Where the trigger was when the menu opened (viewport px): a scroll that leaves it there moved nothing. */
+	let openedAt = { top: 0, right: 0 };
 	let menuEl: HTMLUListElement | undefined = $state();
 
 	function toggleMenu(p: ProjectSummary, el: HTMLButtonElement) {
 		if (menuFor === p.id) return closeMenu();
 		trigger = el;
 		const r = el.getBoundingClientRect();
+		openedAt = { top: r.top, right: r.right };
 		const right = Math.max(8, window.innerWidth - r.right);
 		// Opens upward when there's no room for its two items below.
 		menuPos = window.innerHeight - r.bottom < 110 ? { bottom: window.innerHeight - r.top + 4, right } : { top: r.bottom + 4, right };
@@ -91,9 +94,14 @@
 			const t = e.target as Node;
 			if (!menuEl?.contains(t) && !trigger?.contains(t)) closeMenu();
 		};
-		// The menu is fixed: close it rather than leave it behind when the list scrolls.
+		// The menu is fixed: close it rather than leave it behind when the list scrolls. Only if the
+		// trigger moved: a scroll event arrives a frame after its scroll, so the one from bringing an
+		// off-screen ⋯ into view (Tab to it, or a click that scrolls it in) lands after the menu opened.
 		const onScroll = (e: Event) => {
-			if (!menuEl?.contains(e.target as Node)) closeMenu();
+			if (menuEl?.contains(e.target as Node)) return;
+			const r = trigger?.getBoundingClientRect();
+			if (r && Math.abs(r.top - openedAt.top) < 1 && Math.abs(r.right - openedAt.right) < 1) return;
+			closeMenu();
 		};
 		const onResize = () => closeMenu();
 		document.addEventListener('pointerdown', onDoc);
