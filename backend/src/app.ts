@@ -15,6 +15,7 @@ import { farmViewRoutes } from './farms/view.js';
 import { historyRoutes } from './history/routes.js';
 import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
+import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
@@ -75,6 +76,12 @@ export function createApp() {
 			await next();
 		});
 	}
+
+	// Before anything reads c.req.path (the CSRF and body-limit exemptions
+	// below, the router, a render session's scope): refuse a path whose
+	// percent-encoding could route it where the WAF didn't see it going, such
+	// as `/%61uth/login` (http/rawPath.ts, docs/security.md § Infrastructure).
+	app.use('*', refuseAmbiguousPaths);
 
 	const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? 'http://localhost:7777')
 		.split(',')
