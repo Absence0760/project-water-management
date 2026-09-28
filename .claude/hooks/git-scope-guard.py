@@ -31,7 +31,6 @@ git stash push -- <path>, git push -u origin <branch>, and all read-only git.
 
 import json
 import os
-import re
 import shlex
 import subprocess
 import sys
