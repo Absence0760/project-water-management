@@ -21,7 +21,11 @@
 		{ label: 'FDC check: points met', m: s.fdcRate, spec: { format: 'fraction', better: 'higher', digits: 0 } },
 		// Engine ≥ 0.33.0, shown only when either run has them.
 		...(present(s.lowFlowRate) ? [{ label: 'Low flows: months met', m: s.lowFlowRate!, spec: { format: 'fraction', better: 'higher' } as MetricSpec }] : []),
-		...(present(s.highFlowRate) ? [{ label: 'High flows: years met', m: s.highFlowRate!, spec: { format: 'fraction', better: 'higher', digits: 0 } as MetricSpec }] : [])
+		...(present(s.highFlowRate) ? [{ label: 'High flows: years met', m: s.highFlowRate!, spec: { format: 'fraction', better: 'higher', digits: 0 } as MetricSpec }] : []),
+		// Engine ≥ 1.18.0 (CR-29), shown only when either run has them.
+		...(present(s.timeNotMet) ? [{ label: 'Days not met (daily)', m: s.timeNotMet!, spec: { format: 'fraction', better: 'lower' } as MetricSpec }] : []),
+		...(present(s.volumeNotMet) ? [{ label: 'Volume not met (daily)', m: s.volumeNotMet!, spec: { format: 'fraction', better: 'lower' } as MetricSpec }] : []),
+		...(present(s.ewrPctNmar) ? [{ label: 'EWR as % of natural MAR', m: s.ewrPctNmar!, spec: { format: 'percent', better: 'neutral', digits: 1 } as MetricSpec }] : [])
 	];
 	const present = (m: MetricDelta | undefined) => !!m && (m.a !== null || m.b !== null);
 	const monthSpec: MetricSpec = { format: 'fraction', better: 'higher', digits: 0 };

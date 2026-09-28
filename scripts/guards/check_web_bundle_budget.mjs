@@ -1158,6 +1158,14 @@
 //             entry. Lazy-loading the editor would not lower this figure:
 //             the total sums every chunk, so a split only moves the bytes and
 //             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
+// 2026-09-28  total 1094 → 1102 KB (measured 1099). Issue #65's calibration
+//             research CR-28 and CR-29 (engine 1.18.0): the WR2012
+//             five-statistic table (Wr2012FitTable, in the fit results and
+//             the run's calibration panel) with its engine statistics; the
+//             Reserve panel's daily compliance table, %nMAR tile and the
+//             monthly flow-duration overlay on the EWR (EwrDailyCompliance,
+//             EwrFdcOverlay, reused on the compare page for a scenario). No
+//             new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1168,7 +1176,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1094,
+	totalCodeKb: 1102,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

@@ -988,6 +988,34 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});
 
+	it('adds daily compliance, the EWR as %nMAR and the duration curves for the FDC overlay (engine ≥ 1.18.0, CR-29)', () => {
+		const lines = [...ewrAssuranceLines([report])];
+		// Every day of the first October is short (0.6 of 0.75 Mm³ spread evenly): 31 of the 730 days of complete months.
+		const daily = lines.find((l) => l.startsWith("From daily data: days below the day's requirement"))!.split(',');
+		expect(daily.slice(1, 5)).toEqual(['31', 'of', '730', 'Time not met (%)']);
+		expect(Number(daily[5])).toBeCloseTo((100 * 31) / 730, 6);
+		expect(Number(daily[7])).toBeCloseTo((100 * 0.15e6) / report.daily!.requiredM3, 6);
+		const nmar = lines.find((l) => l.startsWith('EWR as % of natural MAR'))!.split(',');
+		expect(Number(nmar[1])).toBeCloseTo((100 * report.ewrPctNmar!.ewrMcm) / report.ewrPctNmar!.naturalMarMcm, 9);
+		const byDay = lines.indexOf('Month,Days assessed,Days not met,Time not met (%),Required (m³),Shortfall (m³),Volume not met (%)');
+		expect(lines[byDay + 1]!.split(',').slice(0, 4)).toEqual(['Oct', '62', '31', '50']);
+		const fdc = lines.indexOf('Month,% point,EWR (Mm³),Natural flow duration (Mm³),Simulated flow duration (Mm³),Met');
+		expect(lines.slice(fdc + 1, fdc + 37).map((l) => l.split(',')[0])).toEqual(['Oct', 'Oct', 'Oct', 'Nov', 'Nov', 'Nov', 'Dec', 'Dec', 'Dec', 'Jan', 'Jan', 'Jan', 'Feb', 'Feb', 'Feb', 'Mar', 'Mar', 'Mar', 'Apr', 'Apr', 'Apr', 'May', 'May', 'May', 'Jun', 'Jun', 'Jun', 'Jul', 'Jul', 'Jul', 'Aug', 'Aug', 'Aug', 'Sep', 'Sep', 'Sep']);
+		const oct10 = lines[fdc + 1]!.split(',');
+		expect(oct10.slice(0, 3)).toEqual(['Oct', '10', '1.5']);
+		expect(Number(oct10[3])).toBeCloseTo(1.5, 9);
+		// A run before engine 1.18.0 has none of them.
+		const old = structuredClone(report);
+		delete old.daily;
+		delete old.ewrPctNmar;
+		for (const m of old.byMonth) {
+			delete m.daily;
+			for (const f of m.fdc) delete f.natural;
+		}
+		const oldLines = [...ewrAssuranceLines([old])];
+		expect(oldLines.some((l) => /^(From daily data|EWR as %|Month,Days assessed|Month,% point)/.test(l))).toBe(false);
+	});
+
 	it("compares the run's natural MAR with the determination's only when the table records one (engine ≥ 1.11.0)", () => {
 		expect([...ewrAssuranceLines([report])].some((l) => l.startsWith('Natural MAR'))).toBe(false);
 		const r = assessSite(start, days, { table: { ...table, naturalMarMcm: 10 }, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;

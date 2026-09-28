@@ -924,6 +924,14 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
 		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
 		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
+		// Engine ≥ 1.18.0 (model.md §2.9c, CR-29): daily compliance and the EWR as %nMAR, only on runs that have them.
+		if (r.daily)
+			yield csvRow(['From daily data: days below the day\'s requirement', r.daily.daysNotMet, 'of', r.daily.days, 'Time not met (%)', pct(r.daily.timeNotMet) as Cell, 'Volume not met (%)', pct(r.daily.volumeNotMet) as Cell]);
+		if (r.ewrPctNmar) {
+			const e = r.ewrPctNmar;
+			yield csvRow(['EWR as % of natural MAR', e.pct, 'EWR (Mm³/a)', e.ewrMcm, 'Natural MAR at the site (Mm³/a)', e.naturalMarMcm]);
+			if (e.lowFlowMcm !== undefined) yield csvRow(['Low flows as % of natural MAR', e.lowFlowPct ?? null, 'Low flows (Mm³/a)', e.lowFlowMcm]);
+		}
 		// Engine ≥ 0.33.0 (model.md §2.9d): the low flows of a total table, as extra lines and columns only when the table has them.
 		const low = r.lowFlow;
 		if (low) {
@@ -945,6 +953,19 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 				m.years ? `${fdcMet} of ${m.fdc.length}` : '',
 				...(low ? [pct(m.lowFlowRate ?? null) as Cell] : [])
 			]);
+		}
+		if (r.byMonth.some((m) => m.daily)) {
+			yield csvRow(['Month', 'Days assessed', 'Days not met', 'Time not met (%)', 'Required (m³)', 'Shortfall (m³)', 'Volume not met (%)']);
+			for (const m of r.byMonth) {
+				const d = m.daily;
+				yield csvRow([MONTH_NAMES[m.month - 1]!, d?.days ?? null, d?.daysNotMet ?? null, pct(d?.timeNotMet ?? null) as Cell, d?.requiredM3 ?? null, d?.shortfallM3 ?? null, pct(d?.volumeNotMet ?? null) as Cell]);
+			}
+		}
+		// Engine ≥ 1.18.0 (CR-29): the duration curves at each % point, for the FDC overlay.
+		if (r.byMonth.some((m) => m.fdc.some((f) => f.natural !== undefined))) {
+			yield csvRow(['Month', '% point', `EWR (${u})`, `Natural flow duration (${u})`, `Simulated flow duration (${u})`, 'Met']);
+			for (const m of r.byMonth)
+				for (const f of m.fdc) yield csvRow([MONTH_NAMES[m.month - 1]!, f.point, f.required, f.natural ?? null, f.impacted, f.met === null ? '' : f.met ? 'yes' : 'no']);
 		}
 		yield csvRow([
 			'Year',

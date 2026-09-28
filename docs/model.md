@@ -3265,6 +3265,52 @@ test needs it. The run also stores each site's requirement as a daily series,
 `ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
 complete months), so it can be charted and downloaded beside the flow.
 
+**Reported as the gazette and CMAs report it** (engine ≥ 1.18.0,
+calibration research CR-29). Reserve compliance is published as % of time
+and % of volume not met per month, judged on daily as well as monthly data
+(daily data shows more non-compliance), with monthly flow-duration curves of
+natural, present-day and scenario flow drawn on the EWR, and the Reserve
+itself stated as %nMAR (Pollard et al. 2011; Riddell et al. 2014). Each site
+adds:
+
+- **From daily data** (`EwrAssuranceSite.daily` and `byMonth[].daily`):
+  every day of a complete month against that day's requirement, R_day = the
+  month's R ÷ its days (the `ewr_rule` series), on the day's total flow A_t:
+
+  ```
+  not met      A_t < R_day                                   (relative float tolerance 1e-9, as the month)
+  time not met = days not met ÷ days assessed
+  volume not met = Σ MAX(R_day − A_t, 0) ÷ Σ R_day
+  ```
+
+  Per calendar month over the run, and over the whole run. A month met on
+  volume can still have short days, and the panel marks a month of the year
+  whose every month was met but had short days. A `lowFlow` table judged on
+  base flow (`lowFlowMeasure: 'baseflow'`) still counts days on total flow:
+  a base-flow filter has no daily reading of its own. A resumed run's first
+  month, only part of which is in the run, is left out of the daily figures.
+- **The FDC overlay** (`byMonth[].fdc[].natural`): the run's *natural* flow
+  duration curve at each % point beside the simulated one (`impacted`) and
+  the EWR curve (`required`), always from the run's natural flow, whatever
+  the table's natural source (the `naturalCurve` is the one the requirement
+  is read from). A scenario's curve is the scenario run's own `impacted` at
+  the same site; the compare page draws it over run A's (run-comparison.md).
+- **The EWR as %nMAR** (`ewrPctNmar`, when every calendar month has a
+  complete year): the mean annual requirement, Σ over the 12 calendar months
+  of the mean complete-month R (m³), over the run's natural MAR at the site
+  computed the same way (as `naturalMar.runMcm`), × 100; with a low-flow
+  grid, the low flows alone the same way (`lowFlowPct`). Because R follows
+  the natural flow, it is the long-term share the rule asks for, as a
+  gazette's %nMAR is; it changes only with the table or the natural flow.
+
+None of it changes the monthly verdict, the charge or a result; a run from
+before engine 1.18.0 has none of the fields, and the panel and CSV leave
+them out. Tested in `reserve/assurance.test.ts` (a worked month met on volume
+with 10 of 31 days short; %nMAR over a year, with and without a low-flow
+grid; less flow never has fewer short days or less shortfall, and leaves
+%nMAR and the natural curve unchanged; the months of the year add up to the
+whole).
+
 **Warnings.** A table that isn't usable (validation below) is skipped; so is
 one whose site is missing or isn't the outlet or a gauge. When a site has
 two usable tables (the API refuses that; stored settings can still carry it),
@@ -3309,8 +3355,10 @@ years of a calendar month. From engine 1.11.0, a run natural MAR more than
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
 secondary measure; the Reserve compliance panel has the per-month-of-year
-table and chart; the summary CSV has a block per site; run comparison compares
-each site's rates (docs/ui.md, docs/run-comparison.md).
+table and chart, and from engine 1.18.0 the %nMAR figure, the daily table
+and the FDC overlay; the summary CSV has a block per site; run comparison
+compares each site's rates and draws a scenario's (run B's) flow-duration
+curve over run A's (docs/ui.md, docs/run-comparison.md).
 
 **The charge from the rule table** (engine ≥ 1.3.0, issue #64;
 `settings.ewrChargeSource`, `'pragmatic'` by default). With `'ruleTable'`,

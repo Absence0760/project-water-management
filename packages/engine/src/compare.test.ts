@@ -1243,6 +1243,13 @@ describe('Reserve compliance in run comparison (engine ≥ 0.21.0)', () => {
 		// Jan is water-year month 3.
 		expect(row!.byMonth[3]).toEqual({ a: 1, b: 0, delta: -1 });
 		expect(row!.byMonth[0]).toEqual({ a: 1, b: 1, delta: 0 });
+		// From daily data (CR-29): B is short every day of Jan–Mar, 180 of 730 days, and 1.2 of 24 Mm³ required.
+		expect(row!.timeNotMet).toEqual({ a: 0, b: 180 / 730, delta: 180 / 730 });
+		expect(row!.volumeNotMet!.a).toBe(0);
+		expect(row!.volumeNotMet!.b).toBeCloseTo(0.05, 9);
+		// The EWR as %nMAR depends only on natural flow: 12 of 24 Mm³ in both.
+		expect(row!.ewrPctNmar!.a).toBeCloseTo(50, 9);
+		expect(row!.ewrPctNmar!.delta).toBeCloseTo(0, 9);
 	});
 
 	it('matches a gauge by id, then by name across a copy; flags a site in one run only and a changed table', () => {

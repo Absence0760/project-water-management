@@ -29,6 +29,7 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import EwrAgreementCompare from '$lib/components/compare/EwrAgreementCompare.svelte';
 	import EwrAssuranceCompare from '$lib/components/compare/EwrAssuranceCompare.svelte';
+	import EwrFdcCompare from '$lib/components/compare/EwrFdcCompare.svelte';
 	import FarmDeltaTable from '$lib/components/compare/FarmDeltaTable.svelte';
 	import HeadlineDeltas from '$lib/components/compare/HeadlineDeltas.svelte';
 	import FitValidationCompare from '$lib/components/compare/FitValidationCompare.svelte';
@@ -709,6 +710,7 @@
 					<section class="panel" aria-labelledby="reserve-h">
 						<div class="panel-head"><h2 id="reserve-h">Reserve compliance by month</h2></div>
 						<EwrAssuranceCompare sites={data.comparison.ewrAssurance} />
+						<EwrFdcCompare a={data.a.run.summary.ewrAssurance ?? []} b={data.b.run.summary.ewrAssurance ?? []} labelA="Run A" labelB={data.b.scenario ? `Run B: scenario “${data.b.scenario.name}”` : 'Run B'} />
 					</section>
 				{/if}
 
