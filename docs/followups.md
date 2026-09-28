@@ -3428,8 +3428,42 @@ own. Loop in the CISO or security analyst before acting on any of them.
       produces. While the account exists, clearing or changing
       `decided_by` is still refused. `auth/account-deletion.db.test.ts`
       covers both.
-- [ ] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51); WP-2.16 items not run in this
-      pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
-      with the verdicts recorded in step-2 §9, and the 60-farm load
-      timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
-      since three of the personas judge those.
+- [x] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51)):
+      the six personas' verdicts are in step-2 §9 "Build verdicts" (first
+      pass 2026-09-28, fixes in #127, #129, #130, #134, #135 and the PR that
+      closed #51, re-checked at 81db5ed), and the 60-farm load timings in
+      step-2 WP-2.16 "Load checks" (manual run ≈ 8.7 s on the API Lambda,
+      under the 10 s trigger; storage flat over 30 days).
+- [ ] **Hold a key's pushes into a short series?** A series with fewer than
+      100 non-zero days has no outlier limit, so a key's push into it is
+      checked for negatives only (security.md § API keys, Limits). Holding
+      every such push is safer but holds a new logger's automatic runs
+      until a person runs the model, every day, for months on a dry rain
+      record. Who: operator,
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      Trigger: before the first gateway key is issued on production.
+- [ ] **The WUA's cut % beside its own notice.** The farm page and `/share`
+      show "a 20 % cut in registered water use" only when the WUA wrote no
+      notice text; the alert email shows both. Make them agree (both, or
+      neither). Who: operator,
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      Trigger: before farmers are invited.
+- [ ] **A stale EWR-forecast alert says nothing.** A firing
+      `ewr_forecast_fail` event is left as it is while its forecast is behind
+      the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast
+      neither opens nor clears), but when no new forecast is made (the
+      forecast feed failing) the workspace's Active alerts shows it as
+      current. Show "forecast out of date since …" on the event (the
+      `feed_failing` alert already fires for the feed). Trigger: before a
+      forecast feed runs on production.
+- [ ] **A log of restriction decisions** (WUA persona): which restriction
+      the WUA published, when, and by whom, for members and the CMA. The
+      publication history holds it; a page that lists it doesn't exist.
+      Trigger: a WUA asks, or Step 3's licensing evidence needs it.
+- [ ] **One guard for views over a run's stored series.** Every view that
+      reads a run's daily series (not its summary) must cut a forecast run
+      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
+      that didn't, one at a time. A guard test listing each
+      `api.runs.series` / `run_series` consumer and how it treats a forecast
+      run would stop the next one. Trigger: the next view over stored
+      series.
