@@ -1,5 +1,5 @@
 ---
-description: Pre-commit gate — runs code-reviewer + test-gap-checker + doc-hygiene-checker in parallel against the working diff (plus migration-coordinator for SQL and ui-designer review for screens). Advisory output. Cheaper than /safe-edit; use it before every non-trivial commit.
+description: Pre-commit gate — runs code-reviewer + test-gap-checker + doc-hygiene-checker in parallel against the working diff (plus engine-reviewer for the model, migration-coordinator for SQL and ui-designer review for screens). Advisory output. Cheaper than /safe-edit; use it before every non-trivial commit.
 ---
 
 Run a parallel agent audit on the working diff, aggregate findings, and report. Advisory only — you don't apply fixes here, the user decides which to land.
@@ -40,6 +40,7 @@ Send a single message with one Agent call each:
 
 Add one more when the diff touches its surface:
 
+- `packages/engine/` → `engine-reviewer` — prompt: "Review the engine changes in the working diff. Output the strict format from your spec."
 - `backend/migrations/*.sql` → `migration-coordinator` — prompt: "Coordinate the migration at `<file>`. Output the format from your spec."
 - A screen or component under `frontend/src/` (markup or styles, not only logic) → `ui-designer` — prompt: "review: the working diff".
 
@@ -66,7 +67,7 @@ Status: <CLEAN | NEEDS_CHANGES>
 ### Doc gaps (`doc-hygiene-checker`)
 <verbatim verdicts list, or "doc set is clean">
 
-### Migration (`migration-coordinator`) / UI review (`ui-designer`), when run
+### Engine (`engine-reviewer`) / Migration (`migration-coordinator`) / UI review (`ui-designer`), when run
 <verbatim report>
 
 ### Recommendation

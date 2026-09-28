@@ -48,7 +48,7 @@ Walk these in order. Stop at about five findings; quality over quantity.
 
 **Engine** (rule 10):
 - `packages/engine` stays pure: no `fetch`, DB, Node or DOM APIs.
-- A change in model behaviour bumps `ENGINE_VERSION`. A departure from the b023 workbook is justified in `docs/engine-audit.md` and listed in the client catchment regression suite's deviation list.
+- A change in model behaviour bumps `ENGINE_VERSION`. A departure from the b023 workbook is justified in `docs/engine-audit.md` and listed in the client catchment regression suite's deviation list. The hydrology itself is `engine-reviewer`'s; leave mass balance, units and the deviation list to it.
 
 **Frontend**:
 - Static SPA only: no SSR adapter, no server load functions, no `$env/dynamic/private`, no secret-bearing service called from the browser.
