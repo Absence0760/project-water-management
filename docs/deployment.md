@@ -331,8 +331,8 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line (a saved run
   failing one of the engine's own invariant checks — docs/security.md §
-  Infrastructure), and the job queue's four (DLQ depth, worker errors,
-  backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
+  Infrastructure), and the job queue's five (DLQ depth, worker errors and
+  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
@@ -538,19 +538,29 @@ plan-only until the first deploy):
   a job by at most one tick.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
-  concurrency 2, connecting as `water_app` (pool of 2) with verified TLS.
+  concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
+  SQS triggers' `maximum_concurrency`, 4 × 2, or throttled pollers burn
+  receive counts into the DLQs), connecting as `water_app` (pool of 2) with
+  verified TLS.
   Each invocation runs one tick within its remaining time (less a minute);
   jobs lease for 6 minutes, longer than the function can run.
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.
 - **Retries and the DLQ:** a job's own failure is recorded in the table (with
-  backoff, then `dead`), not thrown, so it never redelivers a message. A tick
-  that itself fails (the database unreachable) fails the batch; SQS retries
-  it, and after 5 receives it lands in the `jobs-dlq` (14 days' retention).
+  backoff, then `dead`), not thrown, so it never redelivers a message. The
+  worker's SQS triggers report partial batch failures
+  (`ReportBatchItemFailures`): a record that throws while being queued (a
+  database error) is retried alone, and the rest of its batch is done with; a
+  record that can never succeed (an unknown message, a result for an unknown
+  fetch or report) is logged and dropped. When every record in a batch
+  throws, or the tick itself fails (the database unreachable), the whole
+  batch fails; SQS retries it, and after 5 receives it lands in the
+  `jobs-dlq` (14 days' retention).
   The jobs are still in the table and run on the next good tick; inspect the
   worker's logs, then redrive or purge the DLQ.
 - **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
+  worker throttles > 0 (it hit its reserved concurrency);
   the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
