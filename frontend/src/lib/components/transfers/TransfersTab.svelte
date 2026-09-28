@@ -67,7 +67,7 @@
 	{#if nodes.length < 2}
 		<section class="panel" aria-label="Transfer rules">
 			<p class="muted">
-				Transfers need at least two units in the network. Add them on the <a href="?tab=network">Network tab</a>.
+				Transfers need at least two hydrological units in the network. Add them on the <a href="?tab=network">Network tab</a>.
 			</p>
 		</section>
 	{:else if transfers.length === 0}
@@ -75,8 +75,8 @@
 			<div class="empty">
 				<p>No transfer rules.</p>
 				<p class="small">
-					A transfer moves water from one unit’s dam to another, at a maximum rate you set for each month, such as a
-					pipeline pumping from a river dam to a unit’s dam in summer. A river off-take takes from the river instead, like a
+					A transfer moves water from one hydrological unit’s dam to another, at a maximum rate you set for each month, such as a
+					pipeline pumping from a river dam to a hydrological unit’s dam in summer. A river off-take takes from the river instead, like a
 					canal fed from a weir. Most catchments have none.
 				</p>
 				{#if !readonly}<button type="button" class="btn btn-primary" onclick={add}>Add transfer</button>{/if}
@@ -86,7 +86,7 @@
 		<section class="panel rules-card" aria-labelledby="tr-h">
 			<div class="panel-head">
 				<h2 id="tr-h">Transfer rules</h2>
-				<span class="muted small">Water moved from one unit’s dam, or from the river there, to another unit, up to each month’s rate</span>
+				<span class="muted small">Water moved from one hydrological unit’s dam, or from the river there, to another hydrological unit, up to each month’s rate</span>
 			</div>
 			<div class="table-wrap">
 				<table class="data compact rules" class:editable={!readonly}>

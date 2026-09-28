@@ -29,11 +29,11 @@
 {#if rows.length}
 	<section class="panel supply" aria-labelledby="supply-h">
 		<div class="head">
-			<h2 id="supply-h">Supply by unit</h2>
+			<h2 id="supply-h">Supply by hydrological unit</h2>
 			{#if more}<a class="small" href={more.href}>{more.label}</a>{/if}
 		</div>
 		<!-- What the bars and the % measure (ui-playbook § 3, "Label every chart"). -->
-		<p class="what" data-testid="supply-bars-what">Share of each unit's irrigation demand supplied, latest run</p>
+		<p class="what" data-testid="supply-bars-what">Share of each hydrological unit's irrigation demand supplied, latest run</p>
 		<ul class="rows">
 			{#each rows as r (r.nodeId)}
 				<li data-farm={r.nodeId} data-band={r.band}>

@@ -77,7 +77,7 @@
 			onimported(
 				`Imported ${fmtNum(r.imported)} row${r.imported === 1 ? '' : 's'} from ${r.source.fileName}` +
 					(r.skipped ? `; ${fmtNum(r.skipped)} with problems were left out` : '') +
-					(r.unmatched ? `; ${fmtNum(r.unmatched)} not matched to a unit yet` : '') +
+					(r.unmatched ? `; ${fmtNum(r.unmatched)} not matched to a hydrological unit yet` : '') +
 					'.'
 			);
 		} catch (err) {
@@ -113,7 +113,7 @@
 			{#if phase === 'reading'}<p class="muted" role="status">Reading the file…</p>{/if}
 		{:else if preview}
 			<p role="status" data-testid="allocation-preview-summary">
-				<strong>{preview.fileName}</strong>: {fmtNum(preview.summary.rows)} rows, {fmtNum(valid.length - unmatched)} matched to a unit,
+				<strong>{preview.fileName}</strong>: {fmtNum(preview.summary.rows)} rows, {fmtNum(valid.length - unmatched)} matched to a hydrological unit,
 				{fmtNum(unmatched)} not matched{preview.summary.invalid ? `, ${fmtNum(preview.summary.invalid)} with problems (they won't be imported)` : ''}.
 			</p>
 			{#if preview.ignoredColumns.length}
@@ -145,7 +145,7 @@
 										<span class="err">{r.errors.join('; ')}</span>
 									{:else}
 										<select
-											aria-label="Unit for line {r.line}"
+											aria-label="Hydrological unit for line {r.line}"
 											value={nodeOf(r.line, r.nodeId) ?? ''}
 											onchange={(e) => (matches = { ...matches, [String(r.line)]: e.currentTarget.value })}
 										>

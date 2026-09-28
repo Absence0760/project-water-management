@@ -53,7 +53,7 @@ const pumped = pumpedCatchment();
 const pumpedBase = runModelWithoutChecks(pumped);
 
 describe('the review date', () => {
-	it('defaults to the first of the month holding the season’s middle day, pending O3', () => {
+	it('defaults to the first of the month holding the season’s middle day (O3, confirmed by the client)', () => {
 		expect(defaultReviewDate({ decisionDate: '2012-10-01', seasonEnd: '2013-04-30' })).toBe('2013-01-01');
 		// 15 November – 15 May, middle 14 February 2012: 1 February.
 		expect(defaultReviewDate({ decisionDate: '2011-11-15', seasonEnd: '2012-05-15' })).toBe('2012-02-01');

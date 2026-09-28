@@ -253,7 +253,7 @@
 		</div>
 		<dl class="p-facts">
 			<div>
-				<dt>Units short</dt>
+				<dt>Hydrological units short</dt>
 				<dd>
 					{#if short}
 						{#if p.farmsShort7 && p.sourceRunId}<a href={curtailmentHref(p, base)}>{short}</a>{:else}{short}{/if}
@@ -320,7 +320,7 @@
 									<dd><StatusBar counts={totals.counts} /></dd>
 								</div>
 								<div class="kpi">
-									<dt>Units short this week</dt>
+									<dt>Hydrological units short this week</dt>
 									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
 								</div>
 								<div class="kpi">

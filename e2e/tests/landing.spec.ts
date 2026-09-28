@@ -90,7 +90,7 @@ test('the what-if answers from the precomputed runs, in words and figures', asyn
 	await page.goto('/');
 	const card = page.getByRole('region', { name: 'Try a what-if' });
 	await card.scrollIntoViewIfNeeded();
-	await expect(card.getByText('This is the farm as it is today. Move a slider to change it.')).toBeVisible();
+	await expect(card.getByText('This is the hydrological unit as it is today. Move a slider to change it.')).toBeVisible();
 
 	// The most apples, today's dam.
 	const apples = card.getByRole('slider', { name: /More apples/ });
@@ -98,17 +98,17 @@ test('the what-if answers from the precomputed runs, in words and figures', asyn
 	await page.keyboard.press('End');
 	await expect(apples).toHaveAttribute('aria-valuetext', `${w.extraHa.at(-1)} more hectares`);
 	const most = w.grid[w.extraHa.length - 1]![0]!;
-	await expect(card.getByText(`${Math.round(most.supplied)} % of what the farm needs`)).toBeVisible();
+	await expect(card.getByText(`${Math.round(most.supplied)} % of what the hydrological unit needs`)).toBeVisible();
 	const days = Math.round(most.reserveDays - today.reserveDays);
 	const points = Math.round(today.supplied - most.supplied);
-	await expect(card.getByText(`It costs the river ${days} more days a year below the reserve, and the farm gets ${points} points less of what it needs.`)).toBeVisible();
+	await expect(card.getByText(`It costs the river ${days} more days a year below the reserve, and the hydrological unit gets ${points} points less of what it needs.`)).toBeVisible();
 
 	// A dam twice the size gives the farm back much of it.
 	const dam = card.getByRole('slider', { name: /Dam size/ });
 	await dam.focus();
 	await page.keyboard.press('End');
 	const both = w.grid[w.extraHa.length - 1]![w.damScale.length - 1]!;
-	await expect(card.getByText(`${Math.round(both.supplied)} % of what the farm needs`)).toBeVisible();
+	await expect(card.getByText(`${Math.round(both.supplied)} % of what the hydrological unit needs`)).toBeVisible();
 	await expect(card.getByText(`${Math.round(both.reserveDays)} days a year`)).toBeVisible();
 });
 

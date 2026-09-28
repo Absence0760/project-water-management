@@ -31,8 +31,8 @@ describe('errorText', () => {
 		verification_sent_recently: 'A confirmation email was sent a moment ago. Check your inbox, or try again in a minute.',
 		verification_limit: 'Too many confirmation emails were sent to this address today. Check your inbox, or try again tomorrow.',
 		invite_invalid: 'This invitation is invalid or has expired.',
-		note_farmer_own_farm: 'You can add notes only to your own farm.',
-		note_farm_visibility: 'Only a note on a farm can be shown to its farmers.',
+		note_farmer_own_farm: 'You can add notes only to your own hydrological unit.',
+		note_farm_visibility: 'Only a note on a hydrological unit can be shown to its farmers.',
 		note_author_only: 'Only the person who wrote a note can change it.',
 		note_delete_denied: 'Only the person who wrote a note, or the WUA, can delete it.',
 		unsubscribe_link_gone: 'This link doesn’t work any more.',
@@ -55,7 +55,7 @@ describe('errorText', () => {
 		expect(errorText(new ApiError(400, 'this link is invalid or has expired — request a new one', undefined, 'link_invalid'))).toBe(
 			'This link is invalid or has expired. Ask for a new one.'
 		);
-		expect(errorText(new ApiError(403, 'x', undefined, 'note_farmer_own_farm'))).toBe('You can add notes only to your own farm.');
+		expect(errorText(new ApiError(403, 'x', undefined, 'note_farmer_own_farm'))).toBe('You can add notes only to your own hydrological unit.');
 	});
 
 	it('says how long a sign-in lock lasts, in whole minutes', () => {

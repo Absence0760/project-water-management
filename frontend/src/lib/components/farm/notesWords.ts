@@ -25,7 +25,7 @@ export function farmNotesWords(): NotesWords {
 		confirmDelete: (n) => (n.mine ? t('Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.') : t('Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.', { author: n.author ?? t('A former member') })),
 		add: t('Add a note'),
 		plainText: t('Plain text.'),
-		farmerAudience: t('Read by the WUA and anyone else linked to this farm.'),
+		farmerAudience: t('Read by the WUA and anyone else linked to this hydrological unit.'),
 		submit: t('Add note'),
 		saving: t('Saving…'),
 		writeFirst: t('Write something first.'),

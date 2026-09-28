@@ -23,7 +23,7 @@ it is marked **(judgement)**.
 
 | # | Sketch | What it shows | Already built | Gap |
 | --- | --- | --- | --- | --- |
-| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The three-stage board, equal share ([ui.md § Share the pain](../ui.md#share-the-pain)); per-category cuts wait for O4 (§3.3) |
+| S1 | **Share the pain** | Per user group: today's supply % of demand → an equal share for every group → further cuts so the EWR is met, with totals per stage | ✅ The numbers: `CurtailmentTable` (equitable share, above/below it, the EWR charge, bounded *Demand left %*; model.md §2.11, §2.7b, §2.7c) | ✅ The three-stage board, equal share ([ui.md § Share the pain](../ui.md#share-the-pain)); the client confirmed one equal % for every category (O4, issue #90, §3.3) |
 | S2 | **Outcome matrix** | Rows: irrigation demand at 100 / 85 / 70 % of today; columns: classes of annual natural water availability (very dry … very wet); each cell a risk label for the EWR | 🚧 Scenarios (WP-3.2), Reserve compliance (engine 0.21.0, 0.33.0) | A demand-scaling op, a batch of runs, year classes, the matrix view |
 | S3 | **Seasonal irrigation outlook** | From storage and wet-season inflow at the start of the irrigation season: a recommended demand level, the season at 100 / 85 / 70 %, a monthly operating plan, storage-triggered review rules for a mid-season date, and the projected water balance | 🚧 Forecast mode (engine 0.37.0, model.md §2.4f, 14 days only); the backlog's *Seasonal outlook* (farmer-view ask E3) | The season-long ensemble, the demand comparison, the triggers (WP-3.8) |
 | S4 | **Licence impact at dry / typical / wet** | For each of three year types: natural flow − existing authorised use − the proposed abstraction = flow left, against the EWR, with a met / not met verdict | 🚧 The evidence report design ([evidence-report.md](./evidence-report.md), issue #15), allocations (WP-3.10) | Year classes, the full-allocation run, the summary board |
@@ -127,11 +127,16 @@ judgement)** Because SA practice cuts per category (§2 finding 1), add a
 irrigation, industry) instead of one equal share, labelled as a what-if
 until the authorisation-based allocation (model.md §2.11) exists.
 
-**Built (equal share only):** `curtailment/ShareThePainBoard.svelte` leads
+**Built (equal share):** `curtailment/ShareThePainBoard.svelte` leads
 the Runs tab's curtailment panel
-([ui.md § Share the pain](../ui.md#share-the-pain)). The category
-restriction waits for plan.md O4; the view model's `ShareRule` is where it
-goes (a second rule kind, labelled as a what-if).
+([ui.md § Share the pain](../ui.md#share-the-pain)). **Decided
+2026-09-28 (plan.md O4, issue #90):** the client wants every category cut
+by the same %, which is the built `ShareRule { kind: 'equal' }`, so the
+per-category restriction above is not built. Still open to the client:
+whether the town's uses count as domestic or irrigation (it decides which
+row a town's demand object sits in, not how the share is cut). Should a
+per-category what-if be wanted later, `ShareRule` is where it goes (a
+second rule kind, labelled as a what-if).
 
 ### 3.4 R4: year classes and the outcome matrix (**M**)
 
@@ -140,8 +145,9 @@ goes (a second rule kind, labelled as a what-if).
 [model.md §2.14](../model.md#214-water-year-classes-and-the-outcome-matrix-issue-53-r4-engine-half)).
 The settings: `settings.outcomes`, the year-class method and the risk
 cut-offs per measure, editable in Settings → Outcome matrix, with the
-engine's defaults marked *pending the hydrologist* until O1 / O2 are
-answered ([ui.md § Settings](../ui.md#settings--calibration), [api.md
+cut-offs' defaults marked *pending the hydrologist* until the hydrologist
+confirms them (O1: the client agreed, issue #90; the class method's
+default, O2, is confirmed) ([ui.md § Settings](../ui.md#settings--calibration), [api.md
 § Projects](../api.md#projects)). The screen: the Runs tab's **Outcome
 matrix** panel ([ui.md § Outcome matrix](../ui.md#outcome-matrix)), the
 first screen that reads a sweep: an editor starts a demand sweep of the
@@ -188,9 +194,9 @@ level (anything else would change the history the season starts from).
   snapshot of the decision date (engine 1.1.0, model.md §2.16,
   `runOutlookMember`).
 - **The settings** (`settings.outlook`, Settings → Seasonal outlook): the
-  season as a month and day each end (default 1 October – 30 April,
-  pending the client's O3) and the planning share (default 80 %, pending
-  O6), each marked *pending the client* while the default is used. The
+  season as a month and day each end (default 1 October – 30 April, O3)
+  and the planning share (default 80 %, O6), both confirmed by the client
+  (issue #90), so no longer marked pending. The
   decision date is the latest one of that month and day the base run's
   state reaches. The 10-year minimum for percentiles still waits on the
   hydrologist.
@@ -250,8 +256,8 @@ smoothed). `describeTriggerRow` words a row: "At or above 400 000 m³ on
 1 January 2013: 70 % met the EWR on every day of the season in 10 of 12
 analogue years." Choices, each marked in model.md:
 - **the review date** defaults to the first of the month holding the
-  season's middle day (1 January for the default season)
-  **(judgement, pending O3)**;
+  season's middle day (1 January for the default season), confirmed by
+  the client (O3, issue #90);
 - **the bands** are given as edges in m³ of total farm dam storage, or
   default to the terciles of the base run's storage on the review date
   across the record, three bands as S3 has **(judgement**, the tercile

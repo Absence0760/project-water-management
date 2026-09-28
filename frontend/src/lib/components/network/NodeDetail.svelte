@@ -101,7 +101,7 @@
 		<div class="field">
 			<span class="lbl"><label for={id('kind')}>Kind</label><HelpTip key="node.kind" /></span>
 			<select id={id('kind')} disabled={readonly} bind:value={node.kind}>
-				<option value={'farm' satisfies NodeKind}>Unit (farm, sub-catchment or stand-alone dam)</option>
+				<option value={'farm' satisfies NodeKind}>Hydrological unit (farm, sub-catchment or stand-alone dam)</option>
 				<option value={'gauge' satisfies NodeKind}>Gauge</option>
 				<option value={'user' satisfies NodeKind}>Other water user (town, industry, unlisted)</option>
 			</select>
@@ -129,7 +129,7 @@
 	</div>
 
 	{#if farmersNote}<p class="hint gauge-note" role="note">{farmersNote}</p>{/if}
-	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this unit’s farm page as its farmer sees it, from the current publication.</p>{/if}
+	{#if previewHref}<p class="hint gauge-note"><a href={previewHref}>Preview as farmer</a>: this hydrological unit’s page in the farmer view, as its farmer sees it, from the current publication.</p>{/if}
 	{#if showEwrSite}
 		<div class="field ewr-site">
 			<label class="check">
@@ -148,7 +148,7 @@
 					? 'The outlet is always an EWR site.'
 					: node.ewrSite === false
 						? 'Measures flow only: its EWR shortfall is shown but charges nobody, and a Reserve rule table here is skipped.'
-						: 'The EWR is assessed here: a shortfall is charged to the units upstream. Untick for a gauge that only records flow.'}
+						: 'The EWR is assessed here: a shortfall is charged to the hydrological units upstream. Untick for a gauge that only records flow.'}
 			</span>
 			{#if ewrSiteProblem}<p class="problem" role="alert">{ewrSiteProblem.charAt(0).toUpperCase() + ewrSiteProblem.slice(1)}</p>{/if}
 			<FieldHistoryLine field="node:{node.id}:ewrSite" {unit} />

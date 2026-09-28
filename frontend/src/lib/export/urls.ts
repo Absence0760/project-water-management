@@ -79,15 +79,15 @@ export function farmTableItems(urls: ExportUrls, projectId: string, runId: strin
 	return [
 		{
 			key: 'runoff',
-			label: 'Fragmented flow — all units (CSV)',
+			label: 'Fragmented flow — all hydrological units (CSV)',
 			url: urls.runFarms(projectId, runId, 'runoff'),
-			hint: 'Each unit’s runoff [I], a column per unit, like the workbook sheet'
+			hint: 'Each hydrological unit’s runoff [I], a column per hydrological unit, like the workbook sheet'
 		},
 		{
 			key: 'ewr',
-			label: 'Fragmented EWR — all units (CSV)',
+			label: 'Fragmented EWR — all hydrological units (CSV)',
 			url: urls.runFarms(projectId, runId, 'ewr'),
-			hint: 'Each unit’s EWR share [Y], a column per unit, like the workbook sheet'
+			hint: 'Each hydrological unit’s EWR share [Y], a column per hydrological unit, like the workbook sheet'
 		}
 	];
 }

@@ -25,13 +25,13 @@
 	} = $props();
 
 	const share = $derived(coverShare(node, patches));
-	const label = $derived(node.name || 'this unit');
+	const label = $derived(node.name || 'this hydrological unit');
 </script>
 
 <div class="cover" data-testid="land-cover-{node.id}">
 	<p class="hint">
 		Invasive alien trees and forestry use more water than the natural vegetation. Each patch removes its class's share of
-		the unit's runoff at full cover, times its area × condensed cover. Class reductions are {LAND_COVER_DEFAULTS_SOURCE}.
+		the hydrological unit's runoff at full cover, times its area × condensed cover. Class reductions are {LAND_COVER_DEFAULTS_SOURCE}.
 		<HelpTip key="land-cover" />
 	</p>
 	{#if patches.length === 0}
@@ -87,7 +87,7 @@
 			{/each}
 		</ul>
 		<p class="muted small" class:warn={share > 1}>
-			Condensed cover {Math.round(share * 100)} % of the unit's {node.areaKm2} km²{share > 1 ? ': more than the unit; the run scales it down' : ''}.
+			Condensed cover {Math.round(share * 100)} % of the hydrological unit's {node.areaKm2} km²{share > 1 ? ': more than the hydrological unit; the run scales it down' : ''}.
 		</p>
 	{/if}
 	{#if !readonly && onadd}

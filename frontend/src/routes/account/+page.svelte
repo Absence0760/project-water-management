@@ -294,10 +294,10 @@
 					<div class="pref">
 						<p class="pref-label">{t('Language')}</p>
 						<LanguageSwitch segmented />
-						<p class="hint">{t('Your farm pages, the sign-in pages and the emails we send you use this language.')}</p>
+						<p class="hint">{t('Your hydrological unit pages, the sign-in pages and the emails we send you use this language.')}</p>
 					</div>
 					<fieldset class="pref">
-						<legend class="pref-label">{t('Volumes on your farm pages')}</legend>
+						<legend class="pref-label">{t('Volumes on your hydrological unit pages')}</legend>
 						{#if unitError}<div class="alert alert-error" role="alert">{unitError}</div>{/if}
 						<div class="radios">
 							<label class="radio">
@@ -332,7 +332,7 @@
 
 				<section class="panel" aria-labelledby="data-h">
 					<h2 id="data-h">{t('Your data')}</h2>
-					<p class="muted intro">{t('Download a copy of what we keep about you: your account, the projects and farms you’re linked to, your farms’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.')}</p>
+					<p class="muted intro">{t('Download a copy of what we keep about you: your account, the projects and hydrological units you’re linked to, your hydrological units’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.')}</p>
 					{#if exportError}<div class="alert alert-error" role="alert">{exportError}</div>{/if}
 					{#if exportChunkFailed}
 						<ChunkFailed text={t('The download could not be loaded. Check your connection, then reload the page.')} reload={t('Reload page')} />

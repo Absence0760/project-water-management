@@ -15,15 +15,15 @@
 </script>
 
 <section class="card" aria-labelledby="farm-notes-h">
-	<h2 id="farm-notes-h">{t('Notes about your farm')}</h2>
-	<p class="sub">{t('Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this farm.', { farm: farmName })}</p>
+	<h2 id="farm-notes-h">{t('Notes about your hydrological unit')}</h2>
+	<p class="sub">{t('Your notes and the WUA’s on {farm}. Anything you add here is read by the WUA and anyone else linked to this hydrological unit.', { farm: farmName })}</p>
 	<NotesList
 		{projectId}
 		target={{ kind: 'node', nodeId, name: farmName, isFarm: true }}
 		farmer
 		farmOnly={preview}
 		canWrite={!preview}
-		emptyText={t('No notes about this farm yet.')}
+		emptyText={t('No notes about this hydrological unit yet.')}
 		words={farmNotesWords()}
 	/>
 </section>

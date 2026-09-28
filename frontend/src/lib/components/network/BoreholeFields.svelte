@@ -31,7 +31,7 @@
 		none: 'None: on record, never pumps'
 	};
 	const hasDam = $derived(node.kind === 'farm' && node.damCapacityM3 > 0);
-	const label = $derived(node.name || (node.kind === 'user' ? 'this user' : 'this unit'));
+	const label = $derived(node.name || (node.kind === 'user' ? 'this user' : 'this hydrological unit'));
 	// The GN 538 volume for the property (engine ≥ 1.12.0): area × Table 2 rate, at most 40 000 m³/a; else the ceiling.
 	const ga = $derived(ga538VolumeM3(node));
 	const capped = $derived(boreholes.filter((b) => b.mode !== 'none').reduce<number | null>((s, b) => (s === null || b.annualCapM3 === null ? null : s + b.annualCapM3), 0));
@@ -81,7 +81,7 @@
 								<label for="bh-target-{b.id}">Pumps into</label>
 								<select id="bh-target-{b.id}" disabled={readonly} value={b.target} onchange={(e) => (b.target = e.currentTarget.value as BoreholeTarget)}>
 									<option value="direct">The crop (straight to irrigation)</option>
-									<option value="dam" disabled={!hasDam}>The unit's dam</option>
+									<option value="dam" disabled={!hasDam}>The hydrological unit's dam</option>
 								</select>
 							</div>
 						{/if}

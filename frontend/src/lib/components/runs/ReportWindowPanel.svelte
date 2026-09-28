@@ -206,7 +206,7 @@
 				{/if}
 				{#if resolution?.ok && resolution.note}{resolution.note}{/if}
 				{#if forecastDays}{forecastDays} of these days fall in the forecast period, where the rain is forecast, not recorded.{/if}
-				{#if windowed?.bindingApproximate}The transfer rules form a loop, so the EWR site setting each unit's charge is approximate.{/if}
+				{#if windowed?.bindingApproximate}The transfer rules form a loop, so the EWR site setting each hydrological unit's charge is approximate.{/if}
 			</p>
 		{/if}
 	</div>

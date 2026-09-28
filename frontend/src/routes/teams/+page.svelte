@@ -97,7 +97,7 @@
 					<div><dt>Projects</dt><dd>{t.projectCount}</dd></div>
 					<div><dt>Members</dt><dd>{t.memberCount}</dd></div>
 					<div>
-						<dt>Units short this week</dt>
+						<dt>Hydrological units short this week</dt>
 						<dd>
 							{#if totals}{farmsShortTotalText(totals) ?? '–'}{:else if pf === null}–{:else}<span class="muted">…</span>{/if}
 						</dd>
@@ -177,7 +177,7 @@
 				</dl>
 				<p class="small muted">
 					Add colleagues on the team's page by the email they registered with; anyone without an account gets an invitation.
-					Each team's portfolio shows every catchment's EWR status, farms and dams on one screen.
+					Each team's portfolio shows every catchment's EWR status, hydrological units and dams on one screen.
 				</p>
 			</aside>
 		</div>

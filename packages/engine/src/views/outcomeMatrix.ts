@@ -51,7 +51,8 @@ export interface OutcomeRiskCutoffs {
 }
 
 /**
- * PLACEHOLDER DEFAULTS, PENDING THE HYDROLOGIST (client question O1). Days
+ * PLACEHOLDER DEFAULTS, PENDING THE HYDROLOGIST (question O1: the client
+ * agreed to them, issue #90; the hydrologist's confirmation is open). Days
  * below the EWR use the portfolio traffic lights' 5 % / 20 % (roadmap D11,
  * also unconfirmed); months met 90 % / 75 % are a judgement. The project
  * setting `settings.outcomes.riskCutoffs` overrides them per metric.
@@ -61,7 +62,7 @@ export const DEFAULT_OUTCOME_RISK_CUTOFFS: Readonly<OutcomeRiskCutoffs> = Object
 	daysBelowEwr: Object.freeze({ lower: 0.05, increasing: 0.2 })
 });
 
-/** True while DEFAULT_OUTCOME_RISK_CUTOFFS are unconfirmed; a surface showing them should say so. */
+/** True while the hydrologist hasn't confirmed DEFAULT_OUTCOME_RISK_CUTOFFS (O1; the client agreed, issue #90); a surface showing them should say so. */
 export const OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST = true;
 
 /** A demand level: an id, a label ("100 %") and its run. */

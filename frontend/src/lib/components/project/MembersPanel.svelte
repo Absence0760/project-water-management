@@ -245,7 +245,7 @@
 		<p class="added" role="status" aria-live="polite">{added ?? ''}</p>
 		<p class="muted small add-hint">
 			Anyone without an account gets an email invitation to sign up. Viewers can read; editors can change the model and
-			run it; owners also manage members. An applicant sees only the published baseline, their own farms and their own
+			run it; owners also manage members. An applicant sees only the published baseline, their own hydrological units and their own
 			applications (a licence applicant or their consultant). Put an applicant and their consultant in the same applying
 			party: they can share applications only with each other.
 		</p>

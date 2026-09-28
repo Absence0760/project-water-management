@@ -40,7 +40,7 @@
 	{:else if notes === null}
 		<p class="muted" aria-busy="true">Loading notes…</p>
 	{:else if notes.length === 0}
-		<p class="muted">No notes yet. Add one on a unit in Network, a run, a settings group or the project itself.</p>
+		<p class="muted">No notes yet. Add one on a hydrological unit in Network, a run, a settings group or the project itself.</p>
 	{:else}
 		<ul class="recent">
 			{#each notes as n (n.id)}
@@ -48,7 +48,7 @@
 				<li>
 					<p class="about">
 						{#if href}<a {href}>{noteAbout(n)}</a>{:else}{noteAbout(n)}{/if}
-						{#if n.visibility === 'farm'}<span class="badge">Shown to the farm</span>{/if}
+						{#if n.visibility === 'farm'}<span class="badge">Shown to its farmers</span>{/if}
 					</p>
 					<p class="body">{n.body}</p>
 					<p class="muted small">{n.mine ? 'You' : (n.author ?? 'A former member')} · <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time></p>

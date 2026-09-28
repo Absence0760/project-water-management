@@ -11,7 +11,7 @@ import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { purgeInvites } from '../invites/invites.js';
 import { safeError, stackFrames } from '../logging/safeError.js';
-import { requireRole } from '../projects/access.js';
+import { rank, requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JobError, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
@@ -29,13 +29,15 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 	try {
 		if (!handler) throw new JobError(`no handler for "${job.kind}" jobs`, { retry: false });
 		return await withUser(job.actingUserId, async (db) => {
-			await requireRole(db, job.projectId, handler.role).catch((err) => {
+			const refused = () => new JobError(`the user who queued this job no longer has the ${handler.role} role on the project`, { retry: false });
+			const least = handler.alsoRole && rank[handler.alsoRole] < rank[handler.role] ? handler.alsoRole : handler.role;
+			const role = await requireRole(db, job.projectId, least).catch((err) => {
 				// Fail closed: whoever queued it can no longer do this. No retry.
-				if (err instanceof ApiError) {
-					throw new JobError(`the user who queued this job no longer has the ${handler.role} role on the project`, { retry: false });
-				}
+				if (err instanceof ApiError) throw refused();
 				throw err;
 			});
+			// Between alsoRole and role (an editor demoted to viewer, for a contributor's kind): refused too.
+			if (rank[role] < rank[handler.role] && role !== handler.alsoRole) throw refused();
 			const payload = handler.payload.parse(await readPayload(db, job.id));
 			await handler.run({ db, job, payload, progress: (pct) => reportProgress(job, pct) });
 			// Same transaction as the work: both commit, or neither.
