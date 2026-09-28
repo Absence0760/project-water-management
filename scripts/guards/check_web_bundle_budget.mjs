@@ -1095,6 +1095,13 @@
 //             form helpers, the help entry, the fit-provenance and report
 //             lines, and the engine's areal-rain code shared by the run and
 //             fit workers. No new dependency. Headroom ~3 KB.
+// 2026-09-27  total 1049 → 1057 KB (measured 1054). main @ e2ee9fb7 already
+//             measured 1052, over the ceiling: the merges after the areal
+//             rainfall entry were measured apart. Distinct diagram labels
+//             add ~2 KB: the schematic's transfer router (a grid path round
+//             every name when no arc is clear) and its distinct short names
+//             (NetworkSchematic's chunk), and the help diagrams' minimum
+//             drawn text size (Diagram). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1105,7 +1112,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1049,
+	totalCodeKb: 1057,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
