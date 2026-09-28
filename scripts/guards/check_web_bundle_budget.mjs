@@ -1129,6 +1129,11 @@
 //             the Terms' main-points box on sign-up (0.5 KB), their
 //             Afrikaans words, and the longer prerendered Terms page. No
 //             new dependency. Headroom ~3 KB.
+// 2026-09-28  total 1075 → 1079 KB (measured 1076 with all of #47 merged).
+//             The signer's registration selects and warnings (signoff-3),
+//             the report's "Read this first" box and footer text, the
+//             share-page line and the workbook's disclaimer sheet (+~1 KB
+//             beyond the two entries above). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1139,7 +1144,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1075,
+	totalCodeKb: 1079,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
