@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay, waterYearOf } from '../calendar';
 import { analogueStart, defaultOutlookSeason, outlookAnalogue, resolveSeason, seasonWaterYear } from './season';
 
-describe('defaultOutlookSeason (pending O3)', () => {
+describe('defaultOutlookSeason (O3, confirmed by the client)', () => {
 	it('is the next 1 October to 30 April, on or after the day asked', () => {
 		expect(defaultOutlookSeason('2026-09-26')).toEqual({ decisionDate: '2026-10-01', seasonEnd: '2027-04-30' });
 		expect(defaultOutlookSeason('2026-10-01')).toEqual({ decisionDate: '2026-10-01', seasonEnd: '2027-04-30' });

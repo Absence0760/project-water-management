@@ -2725,22 +2725,23 @@ which checks every catchment tab).
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
   the two cut-offs are editable in %, starting from the defaults; cut-offs
   out of order or outside 0–100 % block Save (the engine's
-  `validateOutcomeCutoffs`, as the API checks them). The defaults are
-  placeholders until the client answers O1 and O2 (plan.md §
-  Decision-support outputs). Viewers see the group read-only. Like
+  `validateOutcomeCutoffs`, as the API checks them). The cut-offs'
+  defaults are placeholders until the hydrologist confirms them (O1; the
+  client agreed, issue #90); the class method's default is confirmed (O2,
+  plan.md § Decision-support outputs). Viewers see the group read-only. Like
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
 - **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
   `outlook/OutlookSettingsSection.svelte`, part of the form, like the
   outcome matrix's): how the Runs tab's
   [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
-  the default season (1 Oct – 30 Apr)** ticked by default and a **Default
-  pending the client** badge while it is (O3); unticked, the decision date
-  and the season end as a month and a day each (29 February and a one-day
-  season block Save). **Planning share**, with **Use the default planning
-  share (80 %)** and the same badge (O6); unticked, a % of analogue years
-  in (0, 100]. The defaults are the engine's (`DEFAULT_OUTLOOK_SEASON`,
-  `DEFAULT_PLANNING_SHARE`). Viewers see it read-only; saving only this
+  the default season (1 Oct – 30 Apr)** ticked by default (O3); unticked,
+  the decision date and the season end as a month and a day each
+  (29 February and a one-day season block Save). **Planning share**, with
+  **Use the default planning share (80 %)** (O6); unticked, a % of
+  analogue years in (0, 100]. The defaults are the engine's
+  (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`), confirmed by the
+  client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
 
 ### Data feeds
@@ -3409,8 +3410,10 @@ read it before.
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
   cut beyond its equitable share, a senior user's charge that stands, or a
   junior user's charge beyond what it takes. The middle stage is a
-  `ShareRule` (only `{ kind: 'equal' }` today); a per-category restriction
-  waits for client question O4 ([plan.md](./plan.md#decision-support-outputs-2026-09-26)).
+  `ShareRule` (`{ kind: 'equal' }`): every category is cut by the same %,
+  which the client confirmed (O4, issue #90,
+  [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
+  the client: whether the town's uses count as domestic or irrigation.
   Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
   equal share, and seeded engine runs whose totals match the engine's),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
@@ -3816,10 +3819,8 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   demand level in every analogue year…* with a progress bar, a retry, or,
   for an outlook whose job died, why it couldn't run. The panel carries
   `data-state` (`loading`, `empty`, `pending`, `stuck`, `complete`).
-- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*) and
-  **Season pending the client** while it is the engine's default and the
-  project hasn't set one; the planning share (*80 % of analogue years*)
-  and **Planning share pending the client** while it is the default; the
+- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*); the
+  planning share (*80 % of analogue years*); the
   measure (days below the pragmatic EWR at the outlet, or Reserve months
   met with a rule table there); the number of analogue years. Then the
   farm dams' storage on the day before the decision date, which every year

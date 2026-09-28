@@ -7,11 +7,10 @@
 // (runs/execute.ts) and saving it alone leaves updated_at alone
 // (projects/routes.ts).
 //
-// Both defaults are the engine's and wait on the client: the season
-// DEFAULT_OUTLOOK_SEASON, 1 October – 30 April (O3), and the planning share
-// DEFAULT_PLANNING_SHARE, 80 % (O6). A null field uses the default, and a
-// surface says it is pending the client; a project that sets its own has
-// chosen, so the badge goes.
+// Both defaults are the engine's, confirmed by the client (issue #90): the
+// season DEFAULT_OUTLOOK_SEASON, 1 October – 30 April (O3), and the planning
+// share DEFAULT_PLANNING_SHARE, 80 % (O6). A null field uses the default; a
+// project may set its own.
 import { DEFAULT_OUTLOOK_SEASON, fromEpochDay, OUTLOOK_SEASON_MAX_DAYS, toEpochDay } from '@water-management/engine';
 import { z } from 'zod';
 
@@ -24,7 +23,7 @@ export interface OutlookSeasonSetting {
 }
 
 export interface OutlookSettings {
-	/** null = the engine's DEFAULT_OUTLOOK_SEASON (pending the client's O3). */
+	/** null = the engine's DEFAULT_OUTLOOK_SEASON (O3). */
 	season: OutlookSeasonSetting | null;
 	/** Share of analogue years the planning figure's level must meet the requirement in, (0, 1]; null = DEFAULT_PLANNING_SHARE (O6). */
 	planningShare: number | null;

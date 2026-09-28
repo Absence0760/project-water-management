@@ -4989,9 +4989,10 @@ The design and its research are in
 [design/planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m).
 The screen (Runs tab → Outcome matrix, [ui.md](./ui.md)) reads a demand
 sweep (R1/R2), and the project settings `settings.outcomes` choose the class
-method, the risk cut-offs and the Reserve site. The defaults below still wait
-on the client's O1 and O2
-([plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
+method, the risk cut-offs and the Reserve site. The client confirmed the
+year-class default (O2) and agreed to the risk cut-offs (O1), whose
+confirmation by the hydrologist is still open (issue #90,
+[plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
 
 **Year classes** (`classifyWaterYears`, `classifyRunWaterYears`). The
 classes are the catchment's own: its water years ranked by the annual total
@@ -5005,8 +5006,8 @@ of the run's natural flow at the outlet (`natural_flow`, m³).
 - **Method.** `terciles` (dry / normal / wet) or `quintiles` (very dry …
   very wet); `auto` (the default) takes quintiles from
   `YEAR_CLASS_QUINTILE_MIN_YEARS` = 25 complete years, else terciles
-  **(judgement, pending O2)**. The method is a parameter, so O2's answer
-  changes a default, not code.
+  (confirmed by the client, O2, issue #90). The method is a parameter, so a
+  project may fix either.
 - **Bounds** (`boundsM3`, rising, k − 1 of them for k classes). The annual
   totals sorted wettest first; the bound between class j − 1 and j is the
   total at exceedance rank h = (k − j)(n + 1) ÷ k: Weibull plotting
@@ -5057,7 +5058,8 @@ exists), one column per class. Per cell:
   | `daysBelowEwr` | ≤ 0.05 | ≤ 0.20 | above |
 
   These defaults (`DEFAULT_OUTCOME_RISK_CUTOFFS`) are **placeholders
-  pending the hydrologist** (`OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
+  pending the hydrologist** (the client agreed to them, O1, issue #90;
+  `OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
   and `cutoffsAreDefault` on the result, so a surface can say so). Days
   below reuse the portfolio traffic lights' 5 % / 20 % (roadmap D11, also
   unconfirmed); 90 % / 75 % of months is a judgement.
@@ -5100,8 +5102,8 @@ is not built yet (design §3.5).
 end of the day before) and a season end, inclusive, at most 366 days.
 `defaultOutlookSeason(asOf)` gives the next **1 October to 30 April** (the
 summer irrigation months of a winter-rainfall catchment; 1 October is the
-start of the water year, when the wet season's storage is known), a
-**judgement pending the client's O3** (`OUTLOOK_SEASON_PENDING_CLIENT`).
+start of the water year, when the wet season's storage is known),
+confirmed by the client (O3, issue #90).
 
 **Analogue years and the day mapping** (`outlook/season.ts`). An analogue
 is a contiguous stretch of the record as long as the season. Analogue
@@ -5202,7 +5204,7 @@ says so; the years are still returned.
 order, so a monthly plan ranks by the water it asks for. The planning
 figure is the first level whose requirement was met in at least
 `planningShare` of the analogue years (default `DEFAULT_PLANNING_SHARE` =
-0.8, **pending the client's O6**, `shareIsDefault` on the result; at the cut
+0.8, confirmed by the client, O6, issue #90; `shareIsDefault` on the result; at the cut
 counts). It is data: `describePlanningFigure` counts years ("85 %: met the
 EWR on every day of the season in 17 of 21 analogue years, the highest
 demand level to do so in at least 80 % of them") and never says "likely"
@@ -5299,7 +5301,7 @@ holding the season's middle day (1 January for the default 1 October –
 30 April season), or the middle day itself when that month starts on or
 before the decision date: half the season left to act on a cut, and a
 month's first day so a monthly plan and the Reserve's whole months start
-there. A **judgement pending the client's O3** (`REVIEW_DATE_PENDING_CLIENT`).
+there. Confirmed by the client (O3, issue #90: review on 1 January).
 
 **The bands.** Total farm dam storage (Σ over farms with a dam), in m³.
 Given as inner edges (thresholds): `[200 000, 400 000]` makes
@@ -5349,7 +5351,7 @@ with the band's start, summarised by `summariseOutlook`; the metric is the
 first band's choice for every band, so all are judged alike. The row
 holds the band, the start (total and per dam), the level picked (the
 highest by mean season demand meeting the requirement in at least the
-planning share of the years, default 80 % pending O6) or null, the reason
+planning share of the years, default 80 %, O6) or null, the reason
 (`met`, `noLevelMeets`, `notEnoughYears`, `noLevels`), the years met and
 the number of years, every level's years met, whether it clears the share,
 season-end storage and demand met (percentiles), and the band's whole
