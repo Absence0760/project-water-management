@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { toEpochDay, waterYearOf } from '../calendar';
 import { testCatchment } from '../outlook/testCatchment';
 import type { ModelInput, ModelOutput } from '../project';
-import { runModel, runModelChecked, runModelWithoutChecks } from '../run';
+import { captureModelState, runModel, runModelChecked, runModelFrom, runModelWithoutChecks } from '../run';
 import { applyScenario } from '../scenario';
 import { checkResume } from '../testing/warmstartInvariants';
 import type { AllocationEntry } from './compare';
@@ -130,6 +130,18 @@ describe("allocationMode 'cap'", () => {
 			expect(checkResume(input, toEpochDay(at) - toEpochDay(full.startDate), full)).toBeNull();
 		});
 	}
+
+	it('a run resumed inside a water year counts the year’s use before the snapshot in its cap summary', () => {
+		const full = runModelWithoutChecks(input);
+		const tail = runModelFrom(captureModelState(input, '2009-05-17'), input);
+		const reached = (o: ModelOutput) => o.summary.allocations!.nodes[0]!.sources[0]!.capReached!;
+		// 2008/09 bound in the uninterrupted run; the resumed run, 4½ months from its end, still says so, with the same use.
+		const y2008 = reached(full).find((r) => r.waterYear === 2008)!;
+		expect(y2008).toBeDefined();
+		const resumed = reached(tail).find((r) => r.waterYear === 2008)!;
+		expect(resumed.usedM3).toBeCloseTo(y2008.usedM3, 6);
+		expect(reached(tail).map((r) => r.waterYear)).toEqual(reached(full).map((r) => r.waterYear).filter((y) => y >= 2008));
+	});
 });
 
 describe("allocationMode 'fullAllocation'", () => {

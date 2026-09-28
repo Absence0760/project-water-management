@@ -13,6 +13,10 @@
 //    the year ÷ the year's days), so a run that starts or ends inside a year
 //    doesn't shrink it, and a farm may take its volume early. A source with
 //    no allocation isn't capped (a run warning names them).
+//    Every draw from the dam counts as surface use, groundwater pumped into
+//    it included, so that water uses up both volumes; the comparison nets it
+//    (docs/model.md §2.12). Pending the hydrologist (followups.md §
+//    Allocations, issue #90).
 //  - 'fullAllocation': "what if every lawful user took their entitlement"
 //    (WP-3.11's background run): each unit's abstraction demand (crops and
 //    demand objects) is scaled, per water year, so it adds up to the

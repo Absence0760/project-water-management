@@ -9,8 +9,9 @@
 -- doesn't enforce them yet (allocationMode 'cap' caps the volume per water
 -- year only, engine 1.16.0).
 --
---  * months: the calendar months (1–12) the use may happen in, ascending and
---    without repeats; NULL = none stated (all year).
+--  * months: the calendar months (1–12) the use may happen in; NULL = none
+--    stated (all year). The CHECK holds each to 1–12 with no NULLs; the API
+--    and the importer store them ascending and without repeats.
 --  * max_rate_m3s: the most it may take at once, m³/s; NULL = none stated.
 --  * conditions: the other conditions as written, a JSON array of up to 20
 --    strings of 1–500 characters each; [] = none.

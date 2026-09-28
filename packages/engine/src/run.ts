@@ -1567,7 +1567,7 @@ function runAllocations(
 				meanRegisteredM3PerYear: side.meanRegisteredM3PerYear
 			};
 			const budget = plan.nodes[i]!.allocationCap?.[side.waterSource];
-			if (ap.mode === 'cap' && budget) src.capReached = capReached(budget, side.waterSource, sim.nodes[i]!, startDate);
+			if (ap.mode === 'cap' && budget) src.capReached = capReached(budget, side.waterSource, sim.nodes[i]!, startDate, plan.nodes[i]!.initialAllocationUsedM3);
 			sources.push(src);
 		}
 		const sc = ap.scaled.get(i);
@@ -1577,8 +1577,18 @@ function runAllocations(
 	return { mode: ap.mode, tolerance, used, notMatched: ap.list.length - used, nodes: out };
 }
 
-/** The water years a capped source's use reached its budget (within float noise). */
-function capReached(budget: Float64Array, source: 'surface' | 'groundwater', r: NodeResult, startDate: string): { waterYear: number; budgetM3: number; usedM3: number }[] {
+/**
+ * The water years a capped source's use reached its budget (within float
+ * noise). A run resumed inside a water year (`before`, the snapshot's use so
+ * far that year) counts the year's use before the snapshot too, as the cap did.
+ */
+function capReached(
+	budget: Float64Array,
+	source: 'surface' | 'groundwater',
+	r: NodeResult,
+	startDate: string,
+	before?: readonly [number, number]
+): { waterYear: number; budgetM3: number; usedM3: number }[] {
 	const out: { waterYear: number; budgetM3: number; usedM3: number }[] = [];
 	const start = toEpochDay(startDate);
 	let wy = NaN;
@@ -1592,8 +1602,9 @@ function capReached(budget: Float64Array, source: 'surface' | 'groundwater', r: 
 		const y = waterYearOf(start + t);
 		if (y !== wy) {
 			close();
+			// A run that starts on 1 October starts the year afresh (simulateNetwork clears the use then too).
+			used = t === 0 && before && startDate.slice(5) !== '10-01' ? before[source === 'surface' ? 0 : 1] : 0;
 			wy = y;
-			used = 0;
 		}
 		used += source === 'surface' ? r.supplied[t]! - r.groundwater[t]! : r.groundwater[t]! + r.groundwaterToDam[t]!;
 		lastT = t;
