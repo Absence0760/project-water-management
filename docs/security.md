@@ -1154,7 +1154,7 @@ In short:
     `applyScenario`'s `mask`), so its messages quote no hidden name or id
     without any text redaction, count nothing hidden, and a rule broken
     because of hidden data reads only "doesn't apply to the catchment as
-    modelled" (wording pending the client, issue #50). The DB test scans everything the applicant
+    modelled" (wording pending the client, issue #90). The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -1242,7 +1242,7 @@ In short:
     shares over 100 %, no catchment area left) says only that the op
     doesn't apply to the catchment as modelled. Whether it applies can't be
     hidden (a model that breaks a save rule can't run); the words are the
-    client's call (issue #50).
+    client's call (issue #90).
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.

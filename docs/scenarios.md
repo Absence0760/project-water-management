@@ -743,7 +743,7 @@ scenario is `'team'`, and behaves exactly as above).
     own range-checked value can't break alone) reads only `op N (…):
     doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
     wording is the recommended default, **pending the client**
-    ([issue #50](https://github.com/Absence0760/project-water-management/issues/50));
+    ([issue #90](https://github.com/Absence0760/project-water-management/issues/90));
     rules about the network's shape and names keep their words.
 
   Afterwards each hidden node and crop gets its real name back, suffixed
