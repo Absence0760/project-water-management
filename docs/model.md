@@ -1054,6 +1054,26 @@ forecast tail out, and a forecast run keeps it apart (§2.4f). Because the feed
 stores raw CHIRPS, keep `'monthly'` for a fed series; `'none'` is for a series
 already corrected before upload. The engine needs no change for fed data.
 
+**A CHIRPS feed into the catchment rain series** (issue #51). The feed may
+also target `rain_catchment_mm` (Settings → Data feeds, *Into series*; a
+series that already holds data is replaced only after an owner confirms).
+Then CHIRPS *is* the catchment rain, and everything above that treats CHIRPS
+as the gap-filler stops applying to it:
+- it is used **as published**: the monthly bias correction (§2.4b) corrects
+  `rain_chirps_mm` against the catchment series, so it never touches CHIRPS
+  written into the catchment series itself;
+- the checks that use CHIRPS as the reference for the catchment rain, the
+  low-vs-CHIRPS warning and the double-mass check (§2.10a), compare it with
+  nothing independent, or with itself if the same product is also in
+  `rain_chirps_mm`;
+- GR4J (§2.4a) is calibrated on raw satellite rain, whose areal bias the
+  parameters absorb.
+That can be the right choice for an ungauged catchment, with the areal
+correction (§2.4g) scaling the product to the catchment's rain, but it is a
+modelling decision, not a default: with any gauge, write CHIRPS into
+`rain_chirps_mm` and let it fill the gauge's gaps. The feed form says so under
+*Into series* when this target is picked (`feeds.ts` `targetHint`).
+
 **One CHIRPS product and version per series** (issue #40 part c). The
 factors are fitted on whatever the CHIRPS series holds, so they are only as
 good as its homogeneity. CHIRPS v2.0 and v3.0 differ by an era-dependent
