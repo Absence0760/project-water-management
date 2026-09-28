@@ -7,7 +7,7 @@ Tick items off (or move them into an issue) as they are done.
 
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
-the history scrub #63, the disclaimer's legal review #47, POPIA #48,
+the history scrub #63, POPIA #48,
 the hydrologist's decisions #46, applicant decisions #50, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
@@ -66,25 +66,16 @@ The checklist for these is issue #62; the history scrub is #63.
       against the live page); CHIRPS-GEFS's licence before client use
       (details under § Features left half-way).
 
-- [ ] **Disclaimer and sign-off wording: the client's legal review (WP-3.13,
-      decision D10; issue #47).** The disclaimer on every report (engine
-      `liability/disclaimer.ts`, `DISCLAIMER`, version `draft-2026-09-26`)
-      and the five sign-off statements (`liability/signoff.ts`,
-      `signoff-1`) are drafts written from the roadmap (Step 3 § WP-3.13),
-      not agreed wording. The report prints *Draft wording, pending the
-      client's legal review* until `DISCLAIMER.status` is `agreed`. Have the
-      client's legal adviser review both (and an Afrikaans version if the
-      farmer view shows it); then set the agreed text, bump both versions and
-      flip the status. Sign-offs made before that record the draft versions
-      they were shown. The pack to send is
-      [legal/disclaimer-review.md](./legal/disclaimer-review.md) (2026-09-27):
-      every liability text quoted word for word, including the farmer view's
-      and alert emails' own lines in English and Afrikaans, questions for the
-      adviser, and the steps once agreed; tests fail if it falls behind the
-      code. Afrikaans: the full disclaimer is shown only on English workspace
-      screens, so it needs none; the farmer lines already have Afrikaans, and
-      the adviser reviews both languages. Left: send the pack, get the
-      agreed wording, apply it (§ 5 of the pack).
+- [x] **Disclaimer and sign-off wording (WP-3.13, decision D10; issue #47).**
+      Agreed 2026-09-28: the operator accepted revised wording, as operator,
+      after three pre-counsel reviews (disclaimer, sign-off, farmer lines);
+      no external legal adviser reviewed it. `DISCLAIMER` is version
+      `2026-09-28`, status `agreed`; the sign-off statement is `signoff-2`
+      (ten confirmations); farmer and alert-email lines name DWS beside the
+      WUA, and each alert kind carries its own line. The record is
+      [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
+      changed, why, and § 6: what stays open for a lawyer, tracked in
+      [legal-status.md](./legal-status.md) under Counsel review).
 
 - [ ] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
@@ -2950,8 +2941,8 @@ assume, the questions for counsel); these are the actions, with triggers.
 - [ ] **Counsel review** of `/privacy` and `/terms` and the five questions in
       legal-status.md (the CPA's reach over a free service; the Virginia
       venue clause; roles before the s21 agreement and s55 registration
-      exist; email-only contact under s18; the National Water Act wording
-      alongside the report disclaimer, #47). Trigger: before the first
+      exist; email-only contact under s18; the liability wording the
+      operator accepted without counsel, #47, disclaimer-review.md § 6). Trigger: before the first
       client's farmers are invited.
 - [ ] **Register the information officer** on the Information Regulator's
       eServices portal ([legal/information-officer.md](./legal/information-officer.md);

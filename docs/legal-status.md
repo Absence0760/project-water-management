@@ -65,9 +65,14 @@ client goes live. Not customer-facing.
   3. Must the s21 operator agreement and the s55 registration exist before
      the notice describes the roles (it describes them as they will be)?
   4. Is an email address enough as the responsible party's address (s18)?
-  5. Should Terms §3 carry the same National Water Act citation as the
-     report disclaimer (it now refers to it), and should both go through
-     the disclaimer review together (docs/legal/disclaimer-review.md)?
+  5. The liability wording (report disclaimer, sign-off statement, farmer
+     and alert lines) was accepted by the operator on 2026-09-28 without
+     counsel (#47). Does paragraph 5 of the disclaimer hold against a claim
+     in delict by someone who relied on a report, and is the farm view's
+     line conspicuous enough if the CPA applies? The rest is in
+     [legal/disclaimer-review.md § 6](./legal/disclaimer-review.md#6-still-for-a-lawyer).
+     (Terms §3 now cites the same National Water Act sections as the
+     disclaimer: 22, 27 and 41.)
 - [ ] **Operator agreement** with each client (POPIA s21): a written
   agreement that we process its members' information only on its
   instructions, with security measures. **Template drafted** (2026-09-27):
