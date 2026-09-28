@@ -5,7 +5,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { inputFlowShares, overAllocationError, toEpochDay, type SeriesMeta } from '@water-management/engine';
-	import { apanDailyOfInput, chirpsSourceOfInput, rebuildingNote } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, rebuildingNote, runChirpsFactors } from '$lib/series/provenance';
 	import { kindLabel } from '$lib/series/kinds';
 	import { api, PINNED_RUNS_MAX, type Nomination, type Project, type Publication, type PublicationMeta, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -32,7 +32,7 @@
 	import { movedHref, resultGroups } from './sections';
 	import { supplyHref } from '$lib/components/supply/links';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { ranAgo } from '$lib/components/overview/latestRun';
+	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
@@ -642,7 +642,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
+					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -669,7 +669,7 @@
 						/>
 						{#if shownSettings}
 							<div class="provenance">
-								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} />
+								<FitProvenance record={shownSettings.fitRecord} settings={shownSettings} chirpsSource={chirpsSourceOfInput(shownRun.inputSeries)} apanDaily={apanDailyOfInput(shownRun.inputSeries)} chirpsFactors={runChirpsFactors(shownRun.summary)} />
 							</div>
 						{/if}
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}

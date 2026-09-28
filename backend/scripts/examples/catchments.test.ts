@@ -155,7 +155,8 @@ describe('example catchments: showcase the current features', () => {
 			flowKindChanged: false,
 			forcingChanged: false,
 			chirpsSourceChanged: false,
-			apanDailyChanged: false
+			apanDailyChanged: false,
+			chirpsFactorsChanged: false
 		});
 	});
 

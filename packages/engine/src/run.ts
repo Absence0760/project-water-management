@@ -76,7 +76,7 @@ import {
 } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
-import { alignSeries, monthly, prepareRun } from './prepare';
+import { alignFlow, alignSeries, monthly, prepareRun } from './prepare';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -1018,7 +1018,7 @@ function gaugeSites(
 		const cover = new Float64Array(hasCover ? days : 0);
 		if (hasCover) for (const j of byId) if (above[j]) for (let t = 0; t < days; t++) cover[t]! += sim.nodes[j]!.landCoverReduction[t]!;
 		const observed: Partial<Record<CalibrationFlowKind, (number | null)[]>> = {};
-		for (const kind of CALIBRATION_FLOW_KINDS) if (recs[kind]) observed[kind] = alignSeries(recs[kind], start, days);
+		for (const kind of CALIBRATION_FLOW_KINDS) if (recs[kind]) observed[kind] = alignFlow(recs[kind], start, days);
 		sites.push({
 			nodeId: nodes[g]!.id,
 			name: nodes[g]!.name,

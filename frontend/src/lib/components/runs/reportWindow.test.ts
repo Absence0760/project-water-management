@@ -28,7 +28,7 @@ describe('the ?window= parameter', () => {
 });
 
 describe('resolveWindow', () => {
-	const ok = (c: WindowChoice, r = run) => {
+	const ok = (c: WindowChoice, r: Parameters<typeof resolveWindow>[1] = run) => {
 		const res = resolveWindow(c, r, own);
 		if (!res.ok) throw new Error(res.error);
 		return res;
@@ -41,6 +41,18 @@ describe('resolveWindow', () => {
 		expect(ok({ preset: 'last14' }).window).toMatchObject({ reportStart: '2022-01-15', days: 14 });
 		expect(ok({ preset: 'last30' }).window).toMatchObject({ reportStart: '2021-12-30', days: 30 });
 		expect(ok({ preset: 'last30' }).note).toBeNull();
+	});
+
+	it('ends the last N days on the day before a forecast run’s forecast, and says so (issue #51)', () => {
+		// The run's last 14 days (2022-01-15 … 01-28) are forecast days.
+		const forecast = { ...run, forecastFrom: '2022-01-15' };
+		const w = ok({ preset: 'last7' }, forecast);
+		expect(w.window).toMatchObject({ from: 99, to: 105, reportStart: '2022-01-08', reportEnd: '2022-01-14', days: 7 });
+		expect(w.note).toBe('It ends on 2022-01-14, the last day before the forecast.');
+		// The whole record and a custom range still reach into the forecast (forecastDaysIn discloses them).
+		expect(ok({ preset: 'all' }, forecast).window.reportEnd).toBe('2022-01-28');
+		// Positive control: an ordinary run's last 7 days end on its last day.
+		expect(ok({ preset: 'last7' }, { ...run, forecastFrom: null }).window.reportEnd).toBe('2022-01-28');
 	});
 
 	it('says so when the run is shorter than the preset', () => {

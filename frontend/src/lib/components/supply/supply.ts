@@ -30,8 +30,9 @@ export const NOISE_M3 = 1e-6;
 
 /**
  * "This week": the reporting window's "Last 7 days" (reportWindow.ts), the 7
- * days to the run's last day of recorded rain: the publication's count, which
- * the portfolio shows and links here.
+ * days to the run's last day of recorded rain, which on a forecast run is the
+ * day before the forecast (issue #51): the publication's count, which the
+ * portfolio shows and links here.
  */
 export function weekWindow(run: WindowRun): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
 	const r = resolveWindow({ preset: 'last7' }, run, { reportStart: run.startDate, reportEnd: run.endDate });

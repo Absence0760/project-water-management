@@ -79,7 +79,12 @@ export interface WindowRun {
 	endDate: string;
 	inputSeries?: Partial<Record<string, { startDate: string; length: number }>> | null;
 	summary?: { forecast?: { from: string } | null } | null;
+	/** A forecast run's first forecast day (RunMeta.forecastFrom, WP-2.12); the summary's `forecast.from` says the same. */
+	forecastFrom?: string | null;
 }
+
+/** A forecast run's first forecast day, from the run's meta or its summary; null for an ordinary run. */
+const forecastStart = (run: WindowRun): string | null => run.forecastFrom ?? run.summary?.forecast?.from ?? null;
 
 /**
  * The run's last day of recorded rain, clamped to the run: the day before a
@@ -94,7 +99,7 @@ export function runDataUntil(run: WindowRun): string {
 	const d0 = toEpochDay(run.startDate);
 	const d1 = toEpochDay(run.endDate);
 	let end: number | null = null;
-	const from = run.summary?.forecast?.from;
+	const from = forecastStart(run);
 	if (from) end = toEpochDay(from) - 1;
 	else {
 		for (const kind of ['rain_catchment_mm', 'rain_chirps_mm']) {
@@ -111,7 +116,11 @@ export function runDataUntil(run: WindowRun): string {
  * Resolves a choice against one run (its first and last day) and the window
  * the run itself reported over (RunSummary.curtailment's, the project
  * setting as the run applied it). "Last N days" end on the run's last day of
- * recorded rain (runDataUntil), with a note when the run goes on past it.
+ * recorded rain (runDataUntil), with a note when the run goes on past it. On a
+ * forecast run (`forecastFrom`, WP-2.12) that is the last day before the
+ * forecast (issue #51): the latest days of the record, never forecast days
+ * read as "this week". "Whole record" and a custom range may still reach into
+ * the forecast; forecastDaysIn says so.
  */
 export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { reportStart: string; reportEnd: string }): WindowResolution {
 	const d0 = toEpochDay(run.startDate);
@@ -124,9 +133,16 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 		const e = toEpochDay(until);
 		const a = Math.max(d0, e - n + 1);
 		const w = fromDays(d0, a, e);
+		const forecast = e < d1 && forecastStart(run) !== null;
 		const notes = [
-			w.days < n ? `The run has only ${w.days} day${w.days === 1 ? '' : 's'} of recorded rain, so this covers all of it.` : null,
-			e < d1 ? `Ends on the last day of recorded rain, ${until}; the run goes on to ${run.endDate} without it.` : null
+			w.days < n
+				? `The run has only ${w.days} day${w.days === 1 ? '' : 's'}${forecast ? ' before the forecast' : ' of recorded rain'}, so this covers all of it.`
+				: null,
+			e < d1
+				? forecast
+					? `It ends on ${until}, the last day before the forecast.`
+					: `Ends on the last day of recorded rain, ${until}; the run goes on to ${run.endDate} without it.`
+				: null
 		].filter((x): x is string => x !== null);
 		return { ok: true, window: w, note: notes.length ? notes.join(' ') : null };
 	}

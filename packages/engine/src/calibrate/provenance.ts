@@ -403,6 +403,50 @@ export interface FitRecordStatus {
 	 * `forcingChanged`.
 	 */
 	apanDailyChanged: boolean;
+	/**
+	 * The monthly CHIRPS factors the run applies drifted from those the fit
+	 * recorded (`forcing.chirpsFactors`) by more than CHIRPS_FACTOR_TOLERANCE
+	 * in some month, with the same bias-correction mode, fit period and CHIRPS
+	 * product (issue #51): the factors are fitted on every day the catchment
+	 * rain and CHIRPS share, so a logger reporting beside a daily CHIRPS feed,
+	 * or preliminary CHIRPS turning final, moves them run to run, and with
+	 * them the rain on every gap CHIRPS fills. False when the record or the
+	 * caller doesn't know the factors, and when one of those settings (or the
+	 * product) changed, which forcingChanged / chirpsSourceChanged already
+	 * say. Also sets `forcingChanged`.
+	 */
+	chirpsFactorsChanged: boolean;
+}
+
+/**
+ * How far a monthly CHIRPS factor may move from the fit's before the fit's
+ * forcing counts as changed (issue #51): 2 % relative. Below it the drift of
+ * a growing overlap is noise against the factors' own uncertainty (§2.4b
+ * fits each on at least 90 shared days); above it the gap-filled rain moves
+ * by more than a gauge's typical catch error.
+ */
+export const CHIRPS_FACTOR_TOLERANCE = 0.02;
+
+/**
+ * Whether two CHIRPS factor sets (the fit's and a run's, rain.ts
+ * chirpsFactorSets) differ beyond the tolerance: another number of fit
+ * ranges, a month with a factor on one side only, or a month whose factor
+ * moved by more than CHIRPS_FACTOR_TOLERANCE of the fit's. Null (no monthly
+ * correction) on both sides is the same.
+ */
+export function chirpsFactorsDrifted(then: readonly ChirpsFactorSet[] | null, now: readonly ChirpsFactorSet[] | null, tolerance = CHIRPS_FACTOR_TOLERANCE): boolean {
+	if (!then || !now) return !then !== !now;
+	if (then.length !== now.length) return true;
+	return then.some((set, i) => {
+		const a = set.factors;
+		const b = now[i]!.factors;
+		if (a.length !== b.length) return true;
+		return a.some((f, m) => {
+			const g = b[m];
+			if (f == null || g == null) return (f == null) !== (g == null);
+			return Math.abs(g - f) > tolerance * Math.abs(f);
+		});
+	});
 }
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -485,6 +529,12 @@ function forcingDiff(
 /** What the settings don't hold but a fit's forcing depends on: the CHIRPS series' product and version now (omit when not known). */
 export interface FitForcingNow {
 	chirpsSource?: SeriesProvenance | null;
+	/**
+	 * The CHIRPS factor sets a run applied (rain.ts chirpsFactorSets of its
+	 * summary.chirpsCorrection; null = no monthly correction); omit when not
+	 * known (the Settings form, which has no run).
+	 */
+	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The daily A-pan series a run would read now (null = none); omit when not known. */
 	apanDaily?: ApanDailyFingerprint | null;
 }
@@ -504,6 +554,15 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		apanThen !== undefined &&
 		now.apanDaily !== undefined &&
 		!sameApanDaily(apanThen, now.apanDaily);
+	// The factors drifted with the settings and product the same: a change of those is said already (issue #51).
+	const factorsThen = record.forcing?.chirpsFactors;
+	const chirpsFactorsChanged =
+		factorsThen !== undefined &&
+		now.chirpsFactors !== undefined &&
+		!chirpsSourceChanged &&
+		!forcing?.chirpsBiasCorrection &&
+		!forcing?.chirpsFitPeriod &&
+		chirpsFactorsDrifted(factorsThen, now.chirpsFactors);
 	return {
 		editedParams: editedParams(settings, record),
 		otherModel: (record.model as string) !== 'gr4j',
@@ -514,9 +573,11 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		forcingChanged:
 			chirpsSourceChanged ||
 			apanDailyChanged ||
+			chirpsFactorsChanged ||
 			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
 		chirpsSourceChanged,
-		apanDailyChanged
+		apanDailyChanged,
+		chirpsFactorsChanged
 	};
 }
 
@@ -557,7 +618,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 			'The daily A-pan evaporation series has been added, replaced or removed since the fit, so the potential evaporation GR4J runs on changed on the days it covers. GR4J’s parameters trade off against evaporation: refit before relying on them.'
 		);
 	}
-	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged) {
+	if (status.chirpsFactorsChanged) {
+		out.push(
+			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Settings → CHIRPS fit period).`
+		);
+	}
+	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'
 		);
