@@ -88,5 +88,13 @@ export function reserveRows(cv: SharedCatchmentView): ReserveRow[] {
 	});
 }
 
+/**
+ * The line under the page's heading (delict review §5.3): a reader here
+ * accepted no terms, so what the result is not, and that the operator accepts
+ * no responsibility for relying on it. Quoted in docs/legal/disclaimer-review.md § 3.
+ */
+export const shareCaveat = () =>
+	t('A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.');
+
 /** "6 farms in the catchment." A count only, never which. */
 export const farmsLine = (cv: SharedCatchmentView) => t('{farms} in the catchment.', { farms: count(FARMS, cv.farmCount) });

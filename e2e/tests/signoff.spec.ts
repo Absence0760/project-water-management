@@ -26,10 +26,19 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expect(validation.getByText(/set for monthly flows/)).toBeVisible();
 	const disclaimer = page.locator('#rep-disclaimer');
 	await expect(disclaimer).toContainText('It is not an authorisation to use water.');
-	await expect(disclaimer).toContainText('Disclaimer version 2026-09-28.');
+	await expect(disclaimer).toContainText('Disclaimer version 2026-09-28.2.');
 	await expect(disclaimer).not.toContainText('Draft wording');
+	// The Terms URL prints in full, on this site's own address.
+	await expect(disclaimer).toContainText(`Terms of use: ${new URL(page.url()).origin}/terms.`);
 	const signoff = page.locator('#rep-signoff');
 	await expect(signoff).toContainText('Not signed off.');
+	// The cover's box says so too, and points to the Disclaimer; not nominated as evidence, so no licence line.
+	const readFirst = page.getByRole('note', { name: 'Read this first' });
+	await expect(readFirst).toContainText(/\(see the Disclaimer, section \d+\)\./);
+	await expect(readFirst).toContainText('Not signed off by a registered professional.');
+	await expect(readFirst).not.toContainText('not for use as evidence');
+	// The server PDF's running footer comes from the page.
+	await expect(page.locator('main')).toHaveAttribute('data-report-footer', /^Sign-off catchment · Baseline · Model estimates; see the Disclaimer \(section \d+, version 2026-09-28\.2\)\./);
 
 	await signoff.getByRole('button', { name: 'Sign off this run…' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Sign off this run' });
@@ -80,6 +89,7 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	// The register's address is printed, not only linked: reports are printed to PDF.
 	await expect(signoff.getByRole('link', { name: 'https://www.sacnasp.org.za/scientists' })).toBeVisible();
 	await expect(signoff).not.toContainText('Not signed off.');
+	await expect(readFirst).toContainText('Signed off by Dr A. Hydrologist (SACNASP 400999/20).');
 
 	// A viewer sees the same sign-off after a reload, and has no way to sign.
 	const viewer = await signIn('Sign-off viewer');

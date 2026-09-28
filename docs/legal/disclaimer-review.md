@@ -23,12 +23,18 @@ beside the disclaimer.
 ## 1. The report disclaimer
 
 Source: `packages/engine/src/liability/disclaimer.ts`, `DISCLAIMER`.
-Version `2026-09-28`, status `agreed`. English only.
+Version `2026-09-28.2`, status `agreed`. English only.
 
 Where it is shown:
 
 - The last section of every catchment report (the report page and the
-  server-rendered PDF), all five paragraphs, with its version.
+  server-rendered PDF), all five paragraphs, with its version. `{site}` is
+  the site's own address, filled in where the report is shown, so the Terms
+  URL prints in full.
+- Its key points on every report's cover, in a "Read this first" box, and on
+  every page of the server PDF, in a running footer (both below).
+- One `#` line at the top of every CSV of a run's results, and a first
+  "Read this first" sheet (all five paragraphs) in the run's .xlsx workbook.
 - The seasonal outlook panel on the River tab: paragraphs 1 and 3 only.
 - A sign-off records the disclaimer version the signer was shown.
 
@@ -40,7 +46,33 @@ same sections of the National Water Act.
 > 2. This report supports, and does not replace, the specialist hydrology report. It is not an authorisation to use water. Only the responsible authority decides that, under the National Water Act, 1998 (sections 22, 27 and 41).
 > 3. Modelled shortfalls, curtailment and equitable shares are not official restrictions or allocations. Only a notice from a body with the legal power to make one, such as the responsible authority or the water user association, is.
 > 4. The person who made this run chose its inputs and settings. Where the run is signed off, the signature is that professional’s own statement.
-> 5. This software is provided as it is. Its operator did not prepare this report, checks none of its inputs or results, and, as far as the law allows, accepts no responsibility to anyone who relies on it. Have the results checked by a qualified hydrologist before you act on them. Account holders’ use of the service is governed by its Terms of use.
+> 5. This software is provided as it is. Its operator did not prepare this report and checks none of its inputs or results. As far as the law allows, the operator accepts no responsibility to anyone who relies on this report for any error in it, whether the error comes from the inputs, the settings or the software, and including an error caused by negligence. Have the results checked by a qualified hydrologist before you act on them. Nothing in this report covers the safety of a dam. Account holders’ use of the service is governed by its Terms of use: {site}/terms.
+
+**Report cover.** Every report's cover has a "Read this first" box, above
+the contents, where `{n}` is the Disclaimer's section number:
+
+> Model estimates, not measurements or predictions: they can be wrong. Not an authorisation to use water. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this report (see the Disclaimer, section {n}).
+
+Then the run's sign-off status, one of:
+
+> Signed off by {name} ({body} {number}).
+
+> Not signed off by a registered professional.
+
+And, in bold, when the run is not signed off and is nominated as evidence or
+the report is an impact report:
+
+> Not signed off: not for use as evidence in a licence application.
+
+**PDF footer.** Every page of the server-rendered PDF, followed by
+"Page X of Y":
+
+> {project} · {run} · Model estimates; see the Disclaimer (section {n}, version 2026-09-28.2). The operator of this software accepts no responsibility to anyone who relies on this report.
+
+**CSV exports.** The first line of every CSV of a run's results (daily,
+all-farms and summary):
+
+> # model estimates that can be wrong; not an authorisation to use water; as far as the law allows the operator of this software accepts no responsibility to anyone who relies on this file; see the report disclaimer (version 2026-09-28.2)
 
 **Forecast runs.** A forecast run's report also prints, on its cover, one of
 two lines (`FORECAST_RAIN_NOTE(from, source)`). When a CHIRPS-GEFS data feed
@@ -95,7 +127,7 @@ The farm view and the alert emails don't show the report disclaimer. They
 carry their own short lines, translated into Afrikaans. These are not
 versioned; this file and its tests are their record.
 
-**Farm view**, under the farm's figures (`frontend/src/lib/components/farm/cards.ts`, `disclaimer()`):
+**Farm view**, under the farm's figures (`frontend/src/lib/components/farm/cards.ts`, `disclaimer()`), and as the first `# ` line of the farmer's "Download my figures (CSV)", in the page's language:
 
 > These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
 
@@ -119,6 +151,12 @@ view's *why* page and the farmer glossary say the same about restrictions:
 > This is the catchment model’s estimate, worked out from the figures the WUA published. It is not a measurement of the dam and not an instruction. Only a notice from the WUA or from DWS is a restriction.
 
 > Dit is ’n skatting van die opvanggebied se model, bereken uit die syfers wat die WGV gepubliseer het. Dit is nie ’n meting van die dam nie, en nie ’n opdrag nie. Net ’n kennisgewing van die WGV of van die DWS is ’n beperking.
+
+**Share page**, directly under the heading, in body type (`frontend/src/lib/components/share/share.ts`, `shareCaveat()`); its reader may have accepted no terms:
+
+> A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
+
+> ’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die operateur van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.
 
 **River-flow (EWR) forecast alerts, WUA staff only** (`mail.alert.model.staff`):
 
@@ -159,6 +197,14 @@ shows the full disclaimer, it needs an Afrikaans version too.
   allows, advises a hydrologist's check, and points account holders to the
   Terms of use. A reader who accepted no terms can only claim in delict, and
   there a clear "no responsibility to readers" statement is what counts.
+- **Paragraph 5 (`2026-09-28.2`, after the delict review).** It now says
+  it covers errors from the inputs, the settings or the software, including
+  one caused by negligence; that nothing in the report covers the safety of
+  a dam; and it prints the Terms URL in full. The same points now sit where
+  a reader relies on the results: a "Read this first" box and the sign-off
+  status on every report cover, a running footer on every PDF page, a line
+  under the share page's heading, a `#` line on result CSVs and a first
+  sheet in the workbook.
 - **Forecast line.** New; CHIRPS-GEFS is credited (its licence asks for the
   DOI) only when its feed wrote the forecast.
 - **Sign-off.** Five confirmations became ten: identity and current

@@ -18,7 +18,7 @@
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
 	import FlowChart from '$lib/components/share/FlowChart.svelte';
 	import { loadShare, type ShareLoad } from '$lib/components/share/load';
-	import { farmsLine, publishedLine, readShareToken, reserveRows, shareNotice } from '$lib/components/share/share';
+	import { farmsLine, publishedLine, readShareToken, reserveRows, shareCaveat, shareNotice } from '$lib/components/share/share';
 	import LanguageSwitch from '$lib/i18n/LanguageSwitch.svelte';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
@@ -86,6 +86,8 @@
 				<h1>{view.project.name}</h1>
 				<p class="sub">{t('Catchment water balance, shared read-only')}</p>
 				<p class="dates">{publishedLine(view)}</p>
+				<!-- Where the reliance happens, in body type (delict review §5.3): someone here accepted no terms. -->
+				<p class="caveat" data-testid="share-caveat">{shareCaveat()}</p>
 			</div>
 
 			<!-- Phone: one column, the notice and the reserve first. From 860 px
@@ -292,6 +294,10 @@
 		margin-top: 8px;
 		font-size: 14px;
 		color: var(--text-muted);
+	}
+	.caveat {
+		margin: 8px 0 0;
+		max-width: 72ch;
 	}
 	.share :global(details > summary) {
 		min-height: var(--tap);

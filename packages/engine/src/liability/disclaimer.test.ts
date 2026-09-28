@@ -3,7 +3,17 @@
 // a changed word fails here until the pack sent to the adviser says it too.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DISCLAIMER, FORECAST_RAIN_NOTE } from './disclaimer';
+import {
+	CSV_DISCLAIMER_COMMENT,
+	DISCLAIMER,
+	FORECAST_RAIN_NOTE,
+	REPORT_FOOTER,
+	REPORT_NOT_EVIDENCE,
+	REPORT_NOT_SIGNED,
+	REPORT_READ_FIRST,
+	REPORT_SIGNED_BY,
+	withSite
+} from './disclaimer';
 import { SIGNOFF_STATEMENT_VERSION, signoffStatement } from './signoff';
 
 const PACK = readFileSync(new URL('../../../../docs/legal/disclaimer-review.md', import.meta.url), 'utf8');
@@ -13,6 +23,29 @@ describe('DISCLAIMER', () => {
 		// Flipping to agreed without a new version (or the reverse) would let
 		// a sign-off record a draft version for agreed words.
 		expect(DISCLAIMER.version.startsWith('draft-')).toBe(DISCLAIMER.status === 'draft');
+	});
+});
+
+describe('the cover, footer and export lines', () => {
+	it('fills in the site address, so the Terms URL prints in full', () => {
+		expect(withSite(DISCLAIMER.paragraphs[4]!, 'https://water.example.com/')).toMatch(/Terms of use: https:\/\/water\.example\.com\/terms\.$/);
+		expect(DISCLAIMER.paragraphs.every((p, i) => i === 4 || !p.includes('{site}'))).toBe(true);
+	});
+
+	it('names the Disclaimer section, and every signer on the cover', () => {
+		expect(REPORT_READ_FIRST(12)).toContain('(see the Disclaimer, section 12)');
+		expect(REPORT_SIGNED_BY([{ fullName: 'A Person', registrationBody: 'ECSA', registrationNo: '123' }, { fullName: 'B Person', registrationBody: 'SACNASP', registrationNo: '9' }])).toBe(
+			'Signed off by A Person (ECSA 123); B Person (SACNASP 9).'
+		);
+		expect(REPORT_FOOTER('Twee', 'Run 1', 12)).toBe(
+			`Twee · Run 1 · Model estimates; see the Disclaimer (section 12, version ${DISCLAIMER.version}). The operator of this software accepts no responsibility to anyone who relies on this report.`
+		);
+	});
+
+	it('keeps the CSV comment one harmless text cell: no comma, quote or =', () => {
+		expect(CSV_DISCLAIMER_COMMENT.startsWith('# ')).toBe(true);
+		expect(CSV_DISCLAIMER_COMMENT).not.toMatch(/[,"=\r\n]/);
+		expect(CSV_DISCLAIMER_COMMENT).toContain(DISCLAIMER.version);
 	});
 });
 
@@ -36,6 +69,11 @@ describe('the legal review pack (docs/legal/disclaimer-review.md)', () => {
 	it('quotes every disclaimer paragraph, its version and status', () => {
 		DISCLAIMER.paragraphs.forEach((p, i) => expect(PACK, `paragraph ${i + 1}`).toContain(`> ${i + 1}. ${p}\n`));
 		expect(PACK).toContain(`Version \`${DISCLAIMER.version}\`, status \`${DISCLAIMER.status}\``);
+	});
+
+	it('quotes the report cover box, its sign-off lines, the PDF footer and the CSV line', () => {
+		for (const line of [REPORT_READ_FIRST('{n}'), REPORT_SIGNED_BY([{ fullName: '{name}', registrationBody: '{body}', registrationNo: '{number}' }]), REPORT_NOT_SIGNED, REPORT_NOT_EVIDENCE, REPORT_FOOTER('{project}', '{run}', '{n}'), CSV_DISCLAIMER_COMMENT])
+			expect(PACK).toContain(`> ${line}\n`);
 	});
 
 	it('quotes every sign-off confirmation (both works variants) and note, and the statement version', () => {

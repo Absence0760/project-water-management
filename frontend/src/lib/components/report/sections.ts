@@ -12,8 +12,8 @@
 // Opened from Compare runs' Export impact report (`against`, issue #17 A4),
 // it is an impact report: an "Impact against the baseline" section right
 // after the cover.
-import { FORECAST_RAIN_NOTE } from '@water-management/engine';
-import type { Run } from '$lib/api/types';
+import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED, REPORT_READ_FIRST, REPORT_SIGNED_BY } from '@water-management/engine';
+import type { Run, Signoff } from '$lib/api/types';
 
 export type ReportSectionId = 'cover' | 'impact' | 'network' | 'inputs' | 'calibration' | 'curtailment' | 'ewr' | 'farms' | 'notes' | 'validation' | 'signoff' | 'disclaimer';
 
@@ -51,6 +51,27 @@ export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}):
  */
 export const forecastNote = (run: Pick<Run, 'summary' | 'forecastRainSource'>): string | null =>
 	run.summary.forecast ? FORECAST_RAIN_NOTE(run.summary.forecast.from, run.forecastRainSource) : null;
+
+/** The Disclaimer's section number (the cover counts as 0, as the headings do). */
+export const disclaimerSection = (sections: readonly ReportSection[]): number => sections.findIndex((s) => s.id === 'disclaimer');
+
+/**
+ * The cover's "Read this first" box (docs/legal/disclaimer-review.md § 1):
+ * the disclaimer's key points, the sign-off status, and, for an unsigned run
+ * used as evidence (nominated, or an impact report), that it is not for use
+ * as evidence in a licence application; else `notEvidence` is null.
+ */
+export function readFirst(
+	sections: readonly ReportSection[],
+	signoffs: readonly Pick<Signoff, 'fullName' | 'registrationBody' | 'registrationNo'>[],
+	evidenceUse: boolean
+): { text: string; status: string; notEvidence: string | null } {
+	return {
+		text: REPORT_READ_FIRST(disclaimerSection(sections)),
+		status: signoffs.length ? REPORT_SIGNED_BY(signoffs) : REPORT_NOT_SIGNED,
+		notEvidence: !signoffs.length && evidenceUse ? REPORT_NOT_EVIDENCE : null
+	};
+}
 
 /** The charts drawn by these sections. */
 export function reportCharts(sections: readonly ReportSection[]): ReportChartId[] {

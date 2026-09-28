@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
 import { localDate } from '../projects/timeZone.js';
 import {
 	attachment,
@@ -15,7 +16,7 @@ import {
 	seriesHeader,
 	slugify,
 	textCell,
-	withLegacyComment,
+	withResultComments,
 	withRunComments,
 	type RunProvenance
 } from './csv.js';
@@ -81,17 +82,17 @@ describe('daily table', () => {
 	});
 });
 
-describe('legacy-run CSV comment (audit H1)', () => {
-	it('prepends the comment only when legacy, leaving the header row first otherwise', () => {
+describe('result CSV comments: legacy run (audit H1) and disclaimer', () => {
+	it('prepends the legacy comment only when legacy, then the disclaimer line always, then the header row', () => {
 		const lines = ['date,Flow (m³/day)', '2020-01-01,1'];
-		expect([...withLegacyComment(true, lines)]).toEqual([LEGACY_RUN_CSV_COMMENT, ...lines]);
-		expect([...withLegacyComment(false, lines)]).toEqual(lines);
+		expect([...withResultComments(true, lines)]).toEqual([LEGACY_RUN_CSV_COMMENT, CSV_DISCLAIMER_COMMENT, ...lines]);
+		expect([...withResultComments(false, lines)]).toEqual([CSV_DISCLAIMER_COMMENT, ...lines]);
 		expect(LEGACY_RUN_CSV_COMMENT).toMatch(/^# runoff_model=legacy;/);
 	});
 
 	it('lands as the first line of the collected CSV body, ahead of the BOM-prefixed header', () => {
-		const body = collectCsv(withLegacyComment(true, ['date,x', '2020-01-01,1']));
-		expect(body).toBe(`${BOM}${LEGACY_RUN_CSV_COMMENT}\r\ndate,x\r\n2020-01-01,1\r\n`);
+		const body = collectCsv(withResultComments(true, ['date,x', '2020-01-01,1']));
+		expect(body).toBe(`${BOM}${LEGACY_RUN_CSV_COMMENT}\r\n${CSV_DISCLAIMER_COMMENT}\r\ndate,x\r\n2020-01-01,1\r\n`);
 	});
 });
 
@@ -155,8 +156,8 @@ describe('run provenance line on the daily CSVs', () => {
 	it('puts the legacy warning first when the run is legacy, then the provenance line, then the table', () => {
 		const table = ['date,x', '2020-01-01,1'];
 		const legacy = { ...run, runoffModel: 'legacy' };
-		expect([...withRunComments(true, legacy, table)]).toEqual([LEGACY_RUN_CSV_COMMENT, runProvenanceComment(legacy), ...table]);
-		expect([...withRunComments(false, run, table)]).toEqual([runProvenanceComment(run), ...table]);
+		expect([...withRunComments(true, legacy, table)]).toEqual([LEGACY_RUN_CSV_COMMENT, CSV_DISCLAIMER_COMMENT, runProvenanceComment(legacy), ...table]);
+		expect([...withRunComments(false, run, table)]).toEqual([CSV_DISCLAIMER_COMMENT, runProvenanceComment(run), ...table]);
 	});
 });
 

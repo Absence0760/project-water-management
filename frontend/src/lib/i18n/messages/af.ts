@@ -1241,6 +1241,8 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
+	// A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
+	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die operateur van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// The river’s ecological reserve
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.

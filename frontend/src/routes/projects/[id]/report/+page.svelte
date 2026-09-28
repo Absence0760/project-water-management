@@ -16,7 +16,7 @@
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
-	import { fdcPercentileTable, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
+	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
@@ -36,7 +36,7 @@
 	import { supplyColouring } from '$lib/components/network/farmColour';
 	import { coverageRows, cropAreaRows, effectiveSettings, monthlyRows, nodeRows, settingsRows, transferRows } from '$lib/components/report/inputs';
 	import { forceLightForPrint, restoreThemeAfterPrint } from '$lib/components/report/printTheme';
-	import { forecastNote, isReportReady, reportCharts, reportSections } from '$lib/components/report/sections';
+	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
 	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
@@ -194,11 +194,15 @@
 	const nodeOrder = $derived(new Map(nodes.map((n) => [n.id, n.sortOrder] as [string, number])));
 	const runName = $derived(run ? run.label || `Run of ${fmtDate(run.createdAt, true)}` : '');
 	const prepared = fmtDate(new Date().toISOString(), true);
+	// The cover box; an unsigned run nominated as evidence, or an impact report, says it isn't evidence.
+	const box = $derived(readFirst(sections, signoffs?.signoffs ?? [], run?.evidence === 'current' || !!againstParam));
+	// The server PDF prints this on every page (backend reports/render.ts reads it).
+	const footer = $derived(project && run ? REPORT_FOOTER(project.name, runName, disclaimerSection(sections)) : undefined);
 
 	// Printing is A4, in the light theme, without the app's header (see the styles).
 	$effect(() => {
 		const pageRule = document.createElement('style');
-		pageRule.textContent = '@page { size: A4; margin: 14mm 12mm; }';
+		pageRule.textContent = '@page { size: A4; margin: 14mm 12mm 18mm; }';
 		document.head.append(pageRule);
 		const before = () => forceLightForPrint();
 		const after = () => restoreThemeAfterPrint();
@@ -215,7 +219,7 @@
 
 <svelte:head><title>{project ? `Report · ${project.name} · ` : ''}Water Management</title></svelte:head>
 
-<main class="page report" data-report-ready={ready || undefined} aria-busy={!ready && status === 'loading'}>
+<main class="page report" data-report-ready={ready || undefined} data-report-footer={footer} aria-busy={!ready && status === 'loading'}>
 	{#if status === 'not-found'}
 		<div class="alert alert-error" role="alert">
 			This project doesn't exist or you don't have access to it. <a href="{base}/">Back to projects</a>
@@ -280,6 +284,14 @@
 							Workbook comparison only, not evidence.
 						</p>
 					{/if}
+					<!-- Read this first (delict review §5.2, docs/legal/disclaimer-review.md § 1): the disclaimer's key points and the sign-off status, in normal type. -->
+					<div class="read-first" role="note" aria-labelledby="rep-read-first-h" data-testid="report-read-first">
+						<!-- Not a heading: the report's h2s are its numbered sections. -->
+						<p id="rep-read-first-h" class="rf-title">Read this first</p>
+						<p>{box.text}</p>
+						<p>{box.status}</p>
+						{#if box.notEvidence}<p><strong>{box.notEvidence}</strong></p>{/if}
+					</div>
 					<p class="lede">{runSentence(summary)}</p>
 					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain (CHIRPS-GEFS named only when it was the source). -->
 					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(run)}</p>{/if}
@@ -470,6 +482,23 @@
 		display: inline-block;
 		min-height: 24px;
 		line-height: 24px;
+	}
+	.read-first {
+		max-width: 72ch;
+		margin: 0 0 1rem;
+		padding: 0.6rem 0.9rem;
+		border: 1px solid var(--border);
+		border-left: 4px solid var(--warning);
+		border-radius: 4px;
+		line-height: 1.5;
+		break-inside: avoid;
+	}
+	.read-first .rf-title {
+		margin: 0;
+		font-weight: 700;
+	}
+	.read-first p {
+		margin: 0.3rem 0 0;
 	}
 	.lede {
 		max-width: 72ch;

@@ -7,6 +7,7 @@
 // the figures are real engine output for that season and already stale; the
 // tests assert shapes and order, not the design doc's Vaalbank numbers (those
 // pin the wording in the unit tests, lib/components/farm/*.test.ts).
+import { readFile } from 'node:fs/promises';
 import type { BrowserContext, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -87,6 +88,12 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	// Back to m³, the seeded farmer's default, for the other specs.
 	await supplyAgain.getByRole('button', { name: 'm³' }).click();
 	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
+
+	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table.
+	const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download my figures (CSV)' }).click()]);
+	const lines = (await readFile((await csv.path())!, 'utf8')).replace(/^\uFEFF/, '').split('\r\n');
+	expect(lines[0]).toBe('# These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.');
+	expect(lines[1]).toMatch(/^date,/);
 
 	// Why? and the dam page, and back.
 	await page.getByRole('link', { name: /^Why .*What can I do\?$/ }).click();
