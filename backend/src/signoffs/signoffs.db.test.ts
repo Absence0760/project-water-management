@@ -17,7 +17,9 @@ let projectId: string;
 let runId: string;
 let legacyRunId: string;
 
-const ALL = ['calibration', 'ewr', 'works', 'assurance', 'limitations'];
+const ALL = ['identity', 'competence', 'conflict', 'inputs', 'calibration', 'ewr', 'works', 'assurance', 'plausibility', 'limitations'];
+/** The confirmations of the first statement version, signoff-1. */
+const SIGNOFF_1 = ['calibration', 'ewr', 'works', 'assurance', 'limitations'];
 const path = (rid = runId, pid = projectId) => `/projects/${pid}/runs/${rid}/signoffs`;
 const body = (hash: string, over: Record<string, unknown> = {}) => ({
 	fullName: 'Dr A. Hydrologist',
@@ -94,9 +96,13 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 		const stale = await editor.call('POST', path(), body('0'.repeat(64)));
 		expect(stale.status).toBe(409);
 		expect(stale.body.error).toMatch(/statement has changed/);
-		const partial = await editor.call('POST', path(), body(hash, { confirmed: ALL.slice(0, 4) }));
+		const partial = await editor.call('POST', path(), body(hash, { confirmed: ALL.slice(0, 9) }));
 		expect(partial.status).toBe(400);
-		expect(partial.body.error).toMatch(/limitations/);
+		expect(partial.body.error).toMatch(/missing: limitations$/);
+		// The five confirmations of signoff-1 are not enough for the current statement.
+		const old = await editor.call('POST', path(), body(hash, { confirmed: SIGNOFF_1 }));
+		expect(old.status).toBe(400);
+		expect(old.body.error).toMatch(/missing: identity, competence, conflict, inputs, plausibility$/);
 		const legacyHash = (await editor.call('GET', path(legacyRunId))).body.statementSha256;
 		expect((await editor.call('POST', path(legacyRunId), body(legacyHash))).status).toBe(409);
 		expect((await editor.call('POST', path(), body(hash, { fullName: '   ' }))).status).toBe(400);
@@ -111,7 +117,7 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 			fullName: 'Dr A. Hydrologist',
 			registrationBody: 'SACNASP',
 			registrationNo: '400999/20',
-			statementVersion: 'signoff-1',
+			statementVersion: 'signoff-2',
 			statementSha256: hash,
 			mine: true
 		});
@@ -135,6 +141,26 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 	it('lets the owner add a second sign-off (a correction is a new row, not an edit)', async () => {
 		expect((await owner.call('POST', path(), body(hash, { fullName: 'Ms B. Reviewer' }))).status).toBe(201);
 		expect((await owner.call('GET', path())).body.signoffs.map((s: { fullName: string }) => s.fullName)).toEqual(['Dr A. Hydrologist', 'Ms B. Reviewer']);
+	});
+
+	it('keeps a sign-off made under signoff-1 as it was recorded, beside new ones under the current statement', async () => {
+		const oldHash = 'b'.repeat(64);
+		// A sign-off stored before the statement moved to signoff-2 (the route can only make current ones).
+		await withUser(editor.id, (db) =>
+			db.query(
+				`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version, signed_at)
+				 VALUES ($1, $2, $3, 'Dr C. Earlier', 'SACNASP', '400111/10', 'scope', 'signoff-1', $4, 'disclaimer-1', now() - interval '1 day')`,
+				[projectId, runId, editor.id, oldHash]
+			)
+		);
+		const res = await viewer.call('GET', path());
+		expect(res.body.statement.version).toBe('signoff-2');
+		expect(res.body.statementSha256).toBe(hash);
+		expect(res.body.signoffs.map((s: { fullName: string; statementVersion: string; statementSha256: string }) => [s.fullName, s.statementVersion, s.statementSha256])).toEqual([
+			['Dr C. Earlier', 'signoff-1', oldHash],
+			['Dr A. Hydrologist', 'signoff-2', hash],
+			['Ms B. Reviewer', 'signoff-2', hash]
+		]);
 	});
 });
 

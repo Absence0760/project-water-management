@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { scrolledToEnd, shortHash, signoffBlockers, type SignoffFields } from './signoffForm';
 
-const IDS = ['calibration', 'ewr', 'works', 'assurance', 'limitations'];
+const IDS = ['identity', 'competence', 'conflict', 'inputs', 'calibration', 'ewr', 'works', 'assurance', 'plausibility', 'limitations'];
 const full: SignoffFields = { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20', scope: 'Hydrology of a WULA' };
 
 describe('signoffBlockers', () => {
@@ -10,7 +10,7 @@ describe('signoffBlockers', () => {
 	});
 
 	it('needs every statement ticked on its own', () => {
-		expect(signoffBlockers(full, IDS, new Set(IDS.slice(0, 3)), true)).toEqual(['Tick each of the 2 statements still open.']);
+		expect(signoffBlockers(full, IDS, new Set(IDS.slice(0, 8)), true)).toEqual(['Tick each of the 2 statements still open.']);
 		expect(signoffBlockers(full, IDS, new Set(IDS.slice(1)), true)).toEqual(['Tick the last statement.']);
 		// A tick for something that isn't a statement doesn't count.
 		expect(signoffBlockers(full, IDS, new Set([...IDS.slice(1), 'other']), true)).toHaveLength(1);

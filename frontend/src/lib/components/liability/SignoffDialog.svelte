@@ -1,7 +1,9 @@
 <script lang="ts">
-	// Sign a run off (WP-3.13, docs/ui.md § Report). Every statement is ticked
-	// on its own and the whole known-limitations list must be scrolled through
-	// before it can be submitted. The server gets back the hash of the
+	// Sign a run off (WP-3.13, docs/ui.md § Report). The signer's name and
+	// registration come first (the first statement is about "the person named
+	// above"), then every statement is ticked on its own and the whole
+	// known-limitations list must be scrolled through before it can be
+	// submitted. The server gets back the hash of the
 	// statement shown here and refuses a sign-off if the statement has changed
 	// since (onstale reloads it).
 	import { tick, untrack } from 'svelte';
@@ -95,6 +97,13 @@
 			You sign as a registered professional, for this run as it was made (engine {statement.engineVersion}). A sign-off is permanent: it can’t be
 			changed or withdrawn, only followed by another.
 		</p>
+		<!-- Before the confirmations: the first refers to "the person named above". -->
+		<div class="grid">
+			<label>Full name <input bind:value={fullName} maxlength="200" autocomplete="name" required /></label>
+			<label>Registration body <input bind:value={registrationBody} maxlength="100" required /></label>
+			<label>Registration number <input bind:value={registrationNo} maxlength="50" required /></label>
+		</div>
+		<label>What this sign-off covers <textarea bind:value={scope} maxlength="1000" rows="2" required placeholder="e.g. the hydrology section of the WULA technical report for the proposed dam"></textarea></label>
 		<fieldset>
 			<legend>I confirm that:</legend>
 			{#each statement.confirmations as c (c.id)}
@@ -119,13 +128,6 @@
 			{#each statement.notes as n, i (i)}<li>{n}</li>{/each}
 		</ul>
 
-		<div class="grid">
-			<label>Full name <input bind:value={fullName} maxlength="200" autocomplete="name" required /></label>
-			<label>Registration body <input bind:value={registrationBody} maxlength="100" required /></label>
-			<label>Registration number <input bind:value={registrationNo} maxlength="50" required /></label>
-		</div>
-		<label>What this sign-off covers <textarea bind:value={scope} maxlength="1000" rows="2" required placeholder="e.g. the hydrology section of the WULA technical report for the proposed dam"></textarea></label>
-
 		{#if list.disclaimer.status === 'draft'}
 			<p class="muted small">The report’s disclaimer (version {list.disclaimer.version}) is draft wording, pending the client’s legal review.</p>
 		{/if}
@@ -148,7 +150,7 @@
 	fieldset {
 		border: 0;
 		padding: 0;
-		margin: 0 0 1rem;
+		margin: 0.75rem 0 1rem;
 	}
 	legend {
 		font-weight: 600;

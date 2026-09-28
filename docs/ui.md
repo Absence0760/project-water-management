@@ -4398,8 +4398,11 @@ exists, says so with a link to Runs & results.
   - **Professional sign-off** (`SignoffSection.svelte`): each sign-off
     (signer, self-declared registration, date, scope, the statement version
     and a 12-digit prefix of its SHA-256 with the full hash as the title,
-    the disclaimer version), or **Not signed off.** in bold; then the five
-    statements a signer confirms. An editor or owner gets **Sign off this
+    the disclaimer version), or **Not signed off.** in bold; then the ten
+    statements a signer of the current version confirms (`signoff-2`). When
+    a listed sign-off was made under an earlier version, a line says it
+    confirmed that version's wording, recorded by its hash, not the
+    statements below. An editor or owner gets **Sign off this
     run…** (screen only); a legacy run (from before engine 1.0.0) says why it
     can't be signed; a viewer
     sees neither. Loaded with the report (`GET …/signoffs`), so
@@ -4411,13 +4414,20 @@ exists, says so with a link to Runs & results.
   Not yet: the published-by line and restriction notice (WP-2.3), changes
   since the previous publication (WP-2.4).
 - **Sign-off dialog** (`SignoffDialog.svelte`, its own chunk, loaded when
-  opened): the five statements, each ticked on its own; the known
+  opened): full name, registration body (SACNASP by default), registration
+  number and what the sign-off covers come first, since the first statement
+  is about "the person named above"; then the ten statements, each ticked on
+  its own (who signs and their registration, competence, conflicts of
+  interest, input data, calibration, EWR tables, works, assurance levels,
+  plausibility, limitations); the known
   limitations in a focusable scroll box (keyboard-scrollable, a labelled
   region) that must be scrolled to its end (a list too short to scroll counts
   as read), with a polite live line saying whether the end was reached; the
-  notes (registration self-declared, dam safety classification by others,
-  this run only); full name, registration body (SACNASP by default),
-  registration number and what the sign-off covers. **Sign off** stays
+  notes (registration details are the signer's own declaration, with where
+  to check them on the ECSA and SACNASP registers; dam safety under NWA
+  Chapter 12 and DW793 isn't covered; no finding on lawfulness; the
+  signature relies on the app's calculations and doesn't verify its
+  software; this run only). **Sign off** stays
   disabled, described by the list of what's missing, until everything is
   done (`signoffForm.ts` `signoffBlockers`). It sends back the statement's
   hash; a `409` (the statement changed) shows the error and reloads the

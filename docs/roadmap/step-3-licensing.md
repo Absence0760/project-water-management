@@ -1511,6 +1511,10 @@ must build WP-2.15 Phase B.
   pack target (WP-3.14), the on-screen panel, MFA, the POPIA export. The
   sign-off route is on the run rather than `…/scenarios/:sid/signoff`: a
   scenario is signed through its run, which is what a pack cites.
+  2026-09-28 (issue #47): the statement is `signoff-2`, ten confirmations
+  (adding identity and registration, competence, conflicts of interest,
+  input data and plausibility to the five below) and fuller notes; the
+  signer's fields are unchanged.
 - **Goal.** A pack says exactly how far it can be trusted and who is
   professionally responsible for it.
 - **Changes**

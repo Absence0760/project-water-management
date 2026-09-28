@@ -35,9 +35,16 @@
 			</dl>
 		{/each}
 		<p class="muted small">
-			Each signer confirmed the five statements below for this run as it was made, and read its known limitations. Registration numbers are
-			self-declared: this app does not check them against the professional body’s register. A sign-off can’t be changed or withdrawn.
+			Each signer confirmed, for this run as it was made, the statement of the version recorded with their sign-off, and read its known limitations.
+			Registration details are the signer’s own declaration: this app does not check them against the professional body’s register. A
+			sign-off can’t be changed or withdrawn.
 		</p>
+		{#if list.signoffs.some((s) => s.statementVersion !== list.statement.version)}
+			<p class="muted small">
+				A sign-off made under an earlier statement version confirmed that version’s wording, recorded by its SHA-256, not the statements
+				below ({list.statement.version}).
+			</p>
+		{/if}
 	{:else}
 		<p><strong>Not signed off.</strong> No registered professional has signed this run.</p>
 	{/if}

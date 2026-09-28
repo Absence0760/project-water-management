@@ -33,11 +33,14 @@ test('an editor signs a run off from its report; a viewer sees the sign-off and 
 	await expectNoViolations(page, { include: 'dialog[open]' });
 
 	const submit = dialog.getByRole('button', { name: 'Sign off', exact: true });
-	await dialog.getByLabel('Full name').fill('Dr A. Hydrologist');
-	await dialog.getByLabel('Registration number').fill('400999/20');
-	await dialog.getByLabel('What this sign-off covers').fill('Hydrology section of a synthetic WULA');
+	await dialog.getByLabel('Full name', { exact: true }).fill('Dr A. Hydrologist');
+	await dialog.getByLabel('Registration number', { exact: true }).fill('400999/20');
+	await dialog.getByLabel('What this sign-off covers', { exact: true }).fill('Hydrology section of a synthetic WULA');
 	const boxes = dialog.getByRole('checkbox');
-	await expect(boxes).toHaveCount(5);
+	await expect(boxes).toHaveCount(10);
+	await expect(boxes.first()).toHaveAccessibleName(/^I am the person named above/);
+	// What the signature does not cover is printed with the statement, not ticked.
+	await expect(dialog.getByText('This sign-off makes no finding on whether any water use or works are lawful.')).toBeVisible();
 	for (const box of await boxes.all()) await box.check();
 	// Still disabled: the limitations list hasn't been read to the end.
 	await expect(submit).toBeDisabled();

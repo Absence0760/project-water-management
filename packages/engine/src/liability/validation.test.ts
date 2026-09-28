@@ -101,14 +101,35 @@ describe('validationStatement', () => {
 describe('signoffStatement', () => {
 	const run = { id: '00000000-0000-4000-8000-000000000001', engineVersion: '0.31.2', scenario: false };
 
-	it('asks for the five confirmations, and words the works one for a baseline or a scenario', () => {
+	it('asks for the ten confirmations, and words the works one for a baseline or a scenario', () => {
 		const base = signoffStatement(run);
-		expect(base.confirmations.map((c) => c.id)).toEqual(['calibration', 'ewr', 'works', 'assurance', 'limitations']);
-		expect(base.confirmations[2]!.text).toMatch(/existing works/);
-		expect(signoffStatement({ ...run, scenario: true }).confirmations[2]!.text).toMatch(/proposed works/);
+		expect(base.version).toBe('signoff-2');
+		expect(base.confirmations.map((c) => c.id)).toEqual([
+			'identity',
+			'competence',
+			'conflict',
+			'inputs',
+			'calibration',
+			'ewr',
+			'works',
+			'assurance',
+			'plausibility',
+			'limitations'
+		]);
+		const works = (s: typeof base) => s.confirmations.find((c) => c.id === 'works')!.text;
+		expect(works(base)).toMatch(/existing works/);
+		const scenario = signoffStatement({ ...run, scenario: true });
+		expect(works(scenario)).toMatch(/proposed works/);
+		// Only the works confirmation differs between a baseline and a scenario.
+		expect(scenario.confirmations.filter((c, i) => c.text !== base.confirmations[i]!.text).map((c) => c.id)).toEqual(['works']);
 		expect(base.limitations).toBe(KNOWN_LIMITATIONS);
 		expect(base.disclaimerVersion).toBe(DISCLAIMER.version);
-		expect(base.notes.join(' ')).toMatch(/self-declared/);
+		const notes = base.notes.join(' ');
+		expect(notes).toMatch(/signer’s own declaration\. This app does not check them/);
+		expect(notes).toMatch(/DW793/);
+		expect(notes).toMatch(/no finding on whether any water use or works are lawful/);
+		expect(notes).toMatch(/does not verify its software/);
+		expect(notes).toMatch(/covers this run only/);
 	});
 
 	it('gives the same text for the same run, and a different one when anything it binds changes', () => {

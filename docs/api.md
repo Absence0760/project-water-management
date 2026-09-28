@@ -1663,7 +1663,15 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
   engineVersion, scenario, confirmations: { id, text }[], limitations:
   Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
-  sends it back and the server recomputes it.
+  sends it back and the server recomputes it. The current version is
+  `signoff-2` (issue #47), with ten confirmation ids, in order: `identity`,
+  `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
+  `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
+  one. The signer's details are still the same three fields
+  (`fullName`, `registrationBody`, `registrationNo`) plus `scope`.
+- New sign-offs are always made against the current statement. A stored
+  sign-off keeps the `statementVersion` and `statementSha256` it recorded
+  (earlier ones say `signoff-1`), and is listed beside newer ones unchanged.
 - `Signoff = { id, runId, fullName, registrationBody, registrationNo, scope,
   statementVersion, statementSha256, disclaimerVersion, signedAt, mine }`.
 - There is no route to change or remove a sign-off, and RLS allows neither. A

@@ -850,9 +850,11 @@ run's stored input (above), never the live model.
 
 ### Sign-offs (036_signoff.sql)
 
-Roadmap WP-3.13. A registered professional's signature on one run: that its
-calibration, EWR tables, network (or scenario) and assurance levels are
-appropriate, and that they read its known limitations
+Roadmap WP-3.13. A registered professional's signature on one run: who they
+are and that the work is within their competence, free of an undisclosed
+conflict; that its input data, calibration, EWR tables, network (or
+scenario) and assurance levels are appropriate; that they reviewed the
+results for plausibility; and that they read its known limitations
 ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
 
 - **`signoff`**: `id`, `project_id` (→ `project`, cascade), `run_id` (→
@@ -862,7 +864,8 @@ appropriate, and that they read its known limitations
   `registration_body` (1–100, e.g. SACNASP), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-1`), `statement_sha256` (hex: the SHA-256 of the engine
+  (`signoff-2` today; rows made earlier keep `signoff-1`, and every row
+  keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
   `signoff_same_project` (`assert_same_project('run_id')`): the run is one of

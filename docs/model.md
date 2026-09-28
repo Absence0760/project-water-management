@@ -4531,7 +4531,10 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
 
 The same module holds the draft disclaimer (`DISCLAIMER`, versioned, marked
 draft until the client's legal review, Step 2 D10) and the sign-off
-statement (`signoffStatement(run)`): the five confirmations of WP-3.13, the
+statement (`signoffStatement(run)`, `signoff-2`): the ten confirmations (the
+signer's identity and registration, competence, conflicts of interest, the
+input data, then WP-3.13's calibration, EWR tables, works, assurance levels,
+plus plausibility and the limitations), the
 limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
 
