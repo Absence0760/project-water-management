@@ -78,6 +78,7 @@ export * from './views/farmOutlook';
 export * from './views/fdc';
 export * from './views/yearClasses';
 export * from './views/outcomeMatrix';
+export * from './views/licenceImpact';
 export * from './views/reserveYears';
 export * from './outlook';
 export * from './outlook/triggers';

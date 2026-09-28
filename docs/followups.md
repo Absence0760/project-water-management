@@ -2655,6 +2655,16 @@ from the WP:
       allocation over its monthly pattern. Durable fix for "what if every
       lawful user took their entitlement" (WP-3.11's background run).
       Trigger: WP-3.11 (cumulative impact) or an assessor asking.
+- [ ] **Licence impact board on a full-allocation background** (issue #53
+      R7, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+      Today the impact report's board uses the baseline run as its
+      background, so its "existing use" is the use that run modelled, and
+      it says so. Durable fix: make the background the baseline's
+      full-allocation run (a run of the baseline's inputs with
+      `allocationMode: 'fullAllocation'`), fetch it beside the baseline, and
+      relabel the step "existing authorised use"; `licenceImpactByYearClass`
+      already takes any background run. Trigger: PR #116 (`allocationMode`)
+      merges.
 - [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
       (default 0.1, pending the hydrologist). Trigger: the first client asking
       for another band.

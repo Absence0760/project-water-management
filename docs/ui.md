@@ -4500,6 +4500,33 @@ exists, says so with a link to Runs & results.
   baseline (`against`, 082), and the renderer opens this route with it. A
   baseline that can't be read has no server PDF (the API would refuse it);
   **Download PDF** (the browser's print) stays.
+- **Impact by year class** (issue #53 R7, `report/LicenceImpactBoard.svelte`,
+  view model `report/licenceImpact.ts`, in the impact section's chunk): the
+  impact section opens with this board, the baseline as the background run.
+  One column per water-year class of the baseline's natural flow (the
+  project's `settings.outcomes.yearClassMethod`, terciles by default; the
+  header shows the bounds and the years compared), and three rows: the
+  **annual waterfall** at the outlet, mean m³ a year (Natural flow, Existing
+  use in the baseline “<label>”, Proposed use (this run − baseline), Other:
+  dams, storage, groundwater, land cover, Flow left at the outlet), the
+  **months below the Reserve** at the project's Reserve site (the outcome
+  matrix's `settings.outcomes.siteNodeId`; the outlet, with a note, when a run
+  has no results there), or days below the pragmatic EWR without a rule
+  table in both runs, baseline, this run and the change, and the
+  **verdict** in words (`describeLicenceImpact`: "The Reserve was not met in
+  4 more months over 7 dry years (…)"), from the months, never from the
+  annual totals, and with no verdict colour. A class with fewer than 3
+  years reads *Not enough years* in every row. A note under the board says
+  existing use is the baseline's as that run modelled it, and that existing
+  *authorised* use needs a baseline at every holder's full registered volume
+  (a full-allocation run, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+  The route fetches the board's three series before `data-report-ready`
+  (`report/impactSeries.ts`: the baseline's `natural_flow` and
+  `ewr_shortfall`, this run's `ewr_shortfall`); one that can't be read, or a
+  run from before the water account (engine 0.32.0), shows the reason in
+  place of the board. The server PDF prints it too: an impact report's
+  render session may read those two baseline series by key
+  ([security.md § Render tokens](./security.md#render-tokens)).
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a

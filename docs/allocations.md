@@ -162,6 +162,10 @@ Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
   monthly pattern) with `RunSummary.allocations`, the `checkAllocations`
   invariant in `runModel`, and a full-allocation scenario for cumulative
   assessment (WP-3.11).
+  The impact report's licence-impact board (issue #53 R7,
+  [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report))
+  waits on `fullAllocation` for *existing authorised* use: until then its
+  background is the baseline run and it says so.
 - `settings.allocationTolerance` instead of the query parameter.
 - XLSX import and a column-mapping step for extracts whose headings the alias
   table doesn't know; licence conditions (`months`, `maxRateM3s`,
