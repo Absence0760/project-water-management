@@ -286,6 +286,15 @@ protection cap is appropriate)*.
 12.3 Nothing in this agreement limits a data subject's rights under POPIA,
 or either party's liability where the law does not allow it to be limited.
 
+12.4 **Farm figures shown to the Client's members.** Where the Client
+publishes farm figures to its members (the farm view, share links, alert
+emails), the Client presents them as model estimates, not measurements,
+and keeps the service's notices on them in place (the estimate line and
+the "Before you look at your farm" acknowledgement). The Client is
+responsible for its own notices to its members, including as their
+supplier where the Consumer Protection Act 68 of 2008 treats its supply of
+the farm view to them as a transaction (section 5(6)(a)).
+
 ## 13. General
 
 13.1 **Order of precedence.** For the Client's personal information, this
