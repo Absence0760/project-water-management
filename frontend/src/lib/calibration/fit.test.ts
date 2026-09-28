@@ -1,4 +1,4 @@
-import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
+import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, stageText, totalRuns, validationRecordOptions, waterYearsText } from './fit';
 
@@ -377,5 +377,34 @@ describe('fitRecordFor', () => {
 	it('shows the fit time in UTC to the minute', () => {
 		expect(fittedAtText('2026-09-24T10:05:33.120Z')).toBe('2026-09-24 10:05 UTC');
 		expect(fittedAtText('2026-09-24T10:05:33Z')).toBe('2026-09-24 10:05 UTC');
+	});
+});
+
+describe('fitInput leaves the forecast tail out (issue #51)', () => {
+	const DAYS = 200; // catchment rain 2020-01-01 … 2020-07-18
+	const server = (forecastStart: string) =>
+		({
+			settings: defaultProjectSettings(),
+			model: { nodes: [], crops: [], cropAreas: [], transfers: [] },
+			series: {
+				rain_catchment_mm: { startDate: '2020-01-01', values: Array.from({ length: DAYS }, (_, i) => (i % 5 === 0 ? 4 : 0)) },
+				rain_forecast_mm: { startDate: forecastStart, values: new Array(14).fill(30) }
+			}
+		}) as unknown as ModelInput;
+
+	it('fits the record only, as an ordinary run: the forecast series cut and the run ending the day before it', () => {
+		const input = fitInput(server('2020-07-19'), defaultProjectSettings());
+		expect(forecastSplit(input).forecastFrom).toBeNull();
+		expect(input.series.rain_forecast_mm).toBeUndefined();
+		expect(input.settings.simulationEnd).toBe('2020-07-18');
+		// Positive control: the server's input has the tail the fit leaves out.
+		expect(forecastSplit(server('2020-07-19')).forecastFrom).toBe('2020-07-19');
+	});
+
+	it('keeps dry days between the last rain and a later forecast in the record, and the form’s other settings', () => {
+		const form = { ...defaultProjectSettings(), runoffModel: 'gr4j' as const };
+		const input = fitInput(server('2020-07-25'), form);
+		expect(input.settings.simulationEnd).toBe('2020-07-24');
+		expect(input.settings.runoffModel).toBe('gr4j');
 	});
 });

@@ -1449,7 +1449,12 @@ back in:
   forecastFrom })` cuts every record at `forecastFrom` and reports the days it
   left out (`forecastDays`); a chart drawing the curves cuts its series with
   `beforeForecast` (`views/fdc.ts`). A forecast run's table is the ordinary
-  run's to the bit.
+  run's to the bit;
+- the automatic fit (§2.10b): the browser's `fitInput` (`frontend/src/lib/calibration/fit.ts`)
+  applies `withoutForecastTail` to the live input (`GET /model-input`, which
+  carries the forecast series whole) after the form's settings are in, as a
+  saved run does after the project's, so the fit and its "before" scores see
+  the record only and agree with an ordinary run's.
 
 **Why two runs: the model is not causal.** The plan assumed a run with a
 tail and one without agree on every shared day because the simulation is
