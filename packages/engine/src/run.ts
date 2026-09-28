@@ -626,6 +626,7 @@ function runNetwork(
 
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
+	missingRainWarning(input, aligned, start, days, window, warnings);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -1537,8 +1538,8 @@ function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficien
 /**
  * Natural-flow volume / rain volume over the run (null without rain). A value
  * above 1 means the catchment gives back more water than fell on it, which no
- * catchment can do over a whole record: warn (audit H1, W1). Also counts the
- * days without any rainfall value, which the model silently treats as dry (W2).
+ * catchment can do over a whole record: warn (audit H1, W1). The days without
+ * any rainfall value are missingRainWarning's (W2).
  */
 function catchmentRunoffCoefficient(
 	input: ModelInput,
@@ -1555,16 +1556,9 @@ function catchmentRunoffCoefficient(
 	if (!kinds.some((k) => input.series?.[k])) return null;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	let rainMm = 0;
-	let missing = 0;
 	for (let t = 0; t < natural.length; t++) {
 		const v = c[t] ?? ch[t] ?? f[t] ?? null;
-		if (v === null) missing++;
-		else if (v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
-	}
-	if (missing > 0) {
-		warnings.push(
-			`${missing} of ${natural.length} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm)`
-		);
+		if (v !== null && v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
 	}
 	const area = resolveCatchmentAreaKm2(settings.calibration, input);
 	if (!(rainMm > 0) || !(area > 0)) return null;
@@ -1787,6 +1781,52 @@ function forecastRainDays(
 			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd}), so curtailment and the EWR sites cover forecast days` : '')
 	);
 	return { days: count, from, to, inReport, lastRecorded: lastRecorded >= 0 ? fromEpochDay(start + lastRecorded) : null };
+}
+
+/** How many blank-rain date ranges the W2 warning names before "and N more". */
+export const MISSING_RAIN_RANGES_LISTED = 3;
+
+/**
+ * W2: the days without any rainfall value (catchment, CHIRPS or forecast),
+ * which the model treats as dry (0 mm). The warning names their date ranges
+ * (the first MISSING_RAIN_RANGES_LISTED, then how many more) and how many
+ * fall in the reporting window, so a reader sees that "this week" ran on
+ * blank days, not only that some day somewhere did (engine ≥ 1.16.0).
+ * Nothing without a rain series.
+ */
+function missingRainWarning(
+	input: ModelInput,
+	aligned: (k: SeriesKind) => (number | null)[],
+	start: number,
+	days: number,
+	window: { from: number; to: number; reportStart: string; reportEnd: string },
+	warnings: string[]
+): void {
+	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+	if (!kinds.some((k) => input.series?.[k])) return;
+	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
+	const ranges: [number, number][] = [];
+	let missing = 0;
+	let inReport = 0;
+	for (let t = 0; t < days; t++) {
+		if ((c[t] ?? ch[t] ?? f[t] ?? null) !== null) continue;
+		missing++;
+		if (t >= window.from && t <= window.to) inReport++;
+		const last = ranges.at(-1);
+		if (last && last[1] === t - 1) last[1] = t;
+		else ranges.push([t, t]);
+	}
+	if (!missing) return;
+	const day = (t: number) => fromEpochDay(start + t);
+	const named = ranges.slice(0, MISSING_RAIN_RANGES_LISTED).map(([a, b]) => (a === b ? day(a) : `${day(a)} to ${day(b)}`));
+	const more = ranges.length - named.length;
+	const whole = window.from === 0 && window.to === days - 1;
+	warnings.push(
+		`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
+			named.join(', ') +
+			(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
+			(whole ? '' : `; ${inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd})`)
+	);
 }
 
 /**

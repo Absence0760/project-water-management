@@ -161,3 +161,17 @@ export function mergePreview(existing: Daily | null, incoming: Daily): MergePrev
 	});
 	return { added, changed, changes, unchanged, result: { startDate: fromEpochDay(start), values: out } };
 }
+
+/**
+ * The blank days an append leaves between the stored data and the file:
+ * from the day after the series' last value (`lastValue`, series/freshness.ts
+ * dataEnd) to the day before the file's first day. The merge stores them as
+ * blanks, and a run treats a blank rain day as dry, so the Add data preview
+ * says so before the upload. null when the file starts on or before the day
+ * after the last value.
+ */
+export function holeBefore(lastValue: string, fileStart: string): { from: string; to: string; days: number } | null {
+	const a = toEpochDay(lastValue) + 1;
+	const b = toEpochDay(fileStart) - 1;
+	return b >= a ? { from: fromEpochDay(a), to: fromEpochDay(b), days: b - a + 1 } : null;
+}

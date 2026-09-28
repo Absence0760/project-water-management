@@ -27,6 +27,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
 import { loadMyOutcomes } from '../portfolio/portfolio.js';
+import { recordedRainUntilSql } from '../series/lastDay.js';
 
 type ProjectRow = {
 	id: string;
@@ -84,8 +85,9 @@ const SELECT_PROJECT = `
 		-- Freshness is recorded rain (catchment or CHIRPS): what a run is driven
 		-- by. A forecast runs into the future and observed flow only scores a
 		-- run, so either one would read "up to date" while the rain lags.
-		(SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
-			WHERE ts.project_id = p.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0) AS data_until,
+		-- To the last day with a value, not the last day stored: blank days a
+		-- logger sends for a dead sensor are no data (series/lastDay.ts).
+		${recordedRainUntilSql('p.id')} AS data_until,
 		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at,
 		-- The current publication's date (022_publication; its partial unique
 		-- index answers it). Every member reads run_publication, farmers too.

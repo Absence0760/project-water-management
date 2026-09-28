@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview } from './coverage';
+import { coverageBins, coverageStats, daysBetween, describeAge, holeBefore, mergePreview } from './coverage';
 
 describe('coverageStats', () => {
 	it('reports period, gaps and the mean of the days present', () => {
@@ -117,5 +117,17 @@ describe('mergePreview', () => {
 	it('treats a missing series as all new', () => {
 		const p = mergePreview(null, { startDate: '2021-01-01', values: [1, null, 3] });
 		expect(p).toEqual({ added: 2, changed: 0, changes: [], unchanged: 0, result: { startDate: '2021-01-01', values: [1, null, 3] } });
+	});
+});
+
+describe('holeBefore', () => {
+	it('counts the blank days between the last stored value and the file’s first day, across a month end', () => {
+		expect(holeBefore('2025-01-07', '2025-01-10')).toEqual({ from: '2025-01-08', to: '2025-01-09', days: 2 });
+		expect(holeBefore('2024-02-28', '2024-03-02')).toEqual({ from: '2024-02-29', to: '2024-03-01', days: 2 });
+	});
+
+	it('is null when the file starts the next day or overlaps', () => {
+		expect(holeBefore('2025-01-07', '2025-01-08')).toBeNull();
+		expect(holeBefore('2025-01-07', '2025-01-01')).toBeNull();
 	});
 });

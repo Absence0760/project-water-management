@@ -2831,6 +2831,16 @@ from the WP:
 
 ## Portfolio dashboard (WP-2.14)
 
+- [ ] **The project list's data age counts to the viewer's day, not the
+      project's** (WUA-manager persona, #51, Low). `projects/freshness.ts`
+      `daysSince` uses the browser's calendar date, while the portfolio's and
+      the outcome columns' `figuresAgeDays` / `stale` count to the project's
+      `today` (`project.time_zone`). The same `ProjectTable` row shows both,
+      so outside SAST they disagree by a day for part of each day. Durable
+      fix: pass the project's `today` (the outcomes row already carries it)
+      into `dataFreshness` and count to it, with a TZ-skewed unit test (rule
+      7). Do it with the next change to the project list.
+
 - [x] **Traffic-light thresholds per team (D11)** (2026-09-26).
       `055_team_settings` adds `team.settings` with a validated
       `portfolio.thresholds` (green and amber cut-offs, 0–100 %, green <

@@ -11,6 +11,16 @@ type Meta = SeriesMeta & { updatedAt?: string };
 export const seriesEnd = (s: Pick<SeriesMeta, 'startDate' | 'length'>) =>
 	fromEpochDay(toEpochDay(s.startDate) + Math.max(s.length, 1) - 1);
 
+/**
+ * How far a series' data reaches: its last day with a value (the API's
+ * `lastValueDate`), not the last day it stores. Blank days after it (a
+ * logger's "no reading" for a dead sensor) are no data, so they never make a
+ * series look fresh. A series with no value at all "ends" the day before it
+ * starts. Without the field (an older payload), the stored end.
+ */
+export const dataEnd = (s: Pick<SeriesMeta, 'startDate' | 'length' | 'lastValueDate'>) =>
+	s.lastValueDate === undefined ? seriesEnd(s) : (s.lastValueDate ?? fromEpochDay(toEpochDay(s.startDate) - 1));
+
 /** Kinds that drive a run (rainfall, daily A-pan evaporation); observed flow only scores it. */
 export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === 'evap_apan_mm';
 
@@ -23,7 +33,7 @@ export const isDriver = (kind: string) => kind.startsWith('rain_') || kind === '
 export const isRecordedRain = (kind: string) => kind === 'rain_catchment_mm' || kind === 'rain_chirps_mm';
 
 export interface Freshness {
-	/** Latest end of the recorded rain; null when there is none. */
+	/** Latest last-value day of the recorded rain (dataEnd); null when there is none. */
 	latest: string | null;
 	/** Days from `latest` to today; null without recorded rain. */
 	age: number | null;
@@ -47,7 +57,7 @@ export function freshness(list: readonly SeriesMeta[], today: string, staleDays 
 	if (!list.length) return null;
 	const perSeries = list
 		.map((s) => {
-			const end = seriesEnd(s);
+			const end = dataEnd(s);
 			return { id: s.id, kind: s.kind, name: s.name, end, age: toEpochDay(today) - toEpochDay(end) };
 		})
 		.sort((a, b) => b.end.localeCompare(a.end));
@@ -78,12 +88,12 @@ export function freshnessOrder<T extends { id: string }>(
 
 /**
  * Driver series changed since `run`: updated after it was made (when the API
- * reports updatedAt) or reaching past its end date.
+ * reports updatedAt) or with data past its end date (blank days don't count).
  */
 export function newDataSinceRun(list: readonly Meta[], run: Pick<RunMeta, 'createdAt' | 'endDate'> | null): Meta[] {
 	if (!run) return [];
 	return list.filter(
-		(s) => isDriver(s.kind) && ((s.updatedAt !== undefined && s.updatedAt > run.createdAt) || seriesEnd(s) > run.endDate)
+		(s) => isDriver(s.kind) && ((s.updatedAt !== undefined && s.updatedAt > run.createdAt) || dataEnd(s) > run.endDate)
 	);
 }
 

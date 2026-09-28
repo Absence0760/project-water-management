@@ -19,6 +19,12 @@
 // since it was queued does nothing, and so does one while an API key's
 // anomalous push is held for review (series/hold.ts heldSinceLastRun).
 //
+// An auto run whose recorded rain changed after the newest forecast run was
+// made also queues the forecast run again (runs/autoRun.ts
+// forecastRunBehindRain), whatever brought the rain (a key, a feed, an
+// upload): otherwise the forecast, and the EWR alert read from it, would keep
+// running on days since recorded as if they were dry.
+//
 // After an auto run or a forecast run it queues `alert_eval` (WP-2.13,
 // alerts/queue.ts; nothing when the project has no alert on), which runs
 // next in the same tick and sees the new run (and publication).
@@ -26,7 +32,7 @@ import { z } from 'zod';
 import { ApiError } from '../../http/errors.js';
 import { queueAlertEval } from '../../alerts/queue.js';
 import { autoPublish } from '../../publish/autoPublish.js';
-import { autoRunLabel, forecastRunLabel, NEW_DATA_CAUSES, resolveAutoRun } from '../../runs/autoRun.js';
+import { autoRunLabel, enqueueForecastRun, forecastRunBehindRain, forecastRunLabel, NEW_DATA_CAUSES, resolveAutoRun } from '../../runs/autoRun.js';
 import { executeRun, NoForecastRainError, trimRuns } from '../../runs/execute.js';
 import { heldSinceLastRun } from '../../series/hold.js';
 import { JobError } from '../errors.js';
@@ -74,6 +80,9 @@ export const rerunHandler = defineHandler({
 		if (!run) return;
 		await trimRuns(db, job.projectId);
 		if (publish) await autoPublish(db, job.projectId, run.id);
+		// New recorded rain re-makes the forecast run too: it continues from the
+		// history this run just caught up on (runs/autoRun.ts forecastRunBehindRain).
+		if (trigger === 'auto' && (await forecastRunBehindRain(db, job.projectId))) await enqueueForecastRun(db, job.projectId);
 		if (trigger !== 'manual') await queueAlertEval(db, job.projectId, trigger);
 	}
 });

@@ -309,7 +309,11 @@ export const authRoutes = new Hono<AuthEnv>()
 			return rows[0];
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
-		return c.json({ user: toUser(row) });
+		// The report renderer's session (reports/scope.ts) says so: the page
+		// renders the report route for it, never the terms re-acceptance step
+		// (+layout.svelte termsGate), which only a person can pass. It can read
+		// one report and nothing else, and can't accept anything.
+		return c.json({ user: { ...toUser(row), ...(c.get('renderSession') ? { renderSession: true } : {}) } });
 	})
 	// "Download my data" (POPIA access; auth/export.ts): everything the app
 	// keeps about the signed-in person, as a JSON file. One a minute per account.

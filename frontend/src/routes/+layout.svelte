@@ -8,7 +8,7 @@
 	import { watchScrollRegions } from '$lib/a11y/scrollRegions';
 	import { stylesheetsReady } from '$lib/nav/stylesheets';
 	import { isAccountPath, isFarmerOnly } from '$lib/auth/frame';
-	import { isLandingRoot, isPublicPath, routeAccess, session, STATIC_PATHS } from '$lib/auth/session.svelte';
+	import { isLandingRoot, isPublicPath, routeAccess, session, STATIC_PATHS, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
@@ -74,8 +74,9 @@
 	// and privacy notice changed since this account accepted them (or it
 	// accepted none): a full-page notice in place of any app page until it
 	// accepts (TermsUpdate, its own chunk). The public pages stay open, so the
-	// legal pages can be read from it.
-	const termsGate = $derived(session.user?.termsCurrent === false && !isPublicPath(page.url.pathname, base));
+	// legal pages can be read from it, and the report renderer's session renders
+	// its report (it can accept nothing; termsGateApplies).
+	const termsGate = $derived(termsGateApplies(session.user, page.url.pathname, base));
 
 	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
 	// even when a signed-in user opens a reset or confirmation link; so does the

@@ -519,6 +519,39 @@ describe('scheduled forecast runs (a forecast feed’s new days, WP-2.12)', () =
 		await cleanUp(overtaken.pid);
 	});
 
+	it('new recorded rain re-makes a forecast run that ran those days as dry; observed flow does not', async () => {
+		// Rain recorded to 5 days ago: the forecast run's history runs 4 blank days as dry before today's issue.
+		const { u, pid, ingest } = await gefsProject('ForecastFollowsRain', { enabled: true, debounceMinutes: 0 }, -5);
+		await ingest(issue(0, 4));
+		await runTick();
+		await runTick();
+		const lastObserved = async () =>
+			(
+				(await asOwner(
+					`SELECT summary->'forecast'->>'lastObserved' AS last FROM model_run WHERE project_id = $1 AND trigger = 'forecast' ORDER BY created_at DESC LIMIT 1`,
+					[pid]
+				)) as { last: string }[]
+			)[0]?.last;
+		expect(await lastObserved()).toBe(day(-5));
+		const made = (await forecastJobs(pid)).length;
+
+		// Observed flow only scores a run: the auto re-run runs, the forecast run stays.
+		expect((await u.call('PUT', `/projects/${pid}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: day(-30), values: new Array(30).fill(0.2) })).status).toBe(200);
+		await runTick();
+		await runTick();
+		expect(await forecastJobs(pid)).toHaveLength(made);
+		expect(await lastObserved()).toBe(day(-5));
+
+		// Positive control: the logger's missing 4 days arrive (a person's merge here; a key's or a feed's is the same auto re-run).
+		expect((await merge(u, pid, day(-4), [0, 3, 0, 1])).status).toBe(200);
+		await runTick();
+		await runTick();
+		expect(await forecastJobs(pid)).toHaveLength(made + 1);
+		expect(await lastObserved()).toBe(day(-1));
+		expect(await forecastRuns(pid)).toHaveLength(1);
+		await cleanUp(pid);
+	});
+
 	it('only a forecast feed queues one: observed data, a person’s forecast upload and an API key’s push do not', async () => {
 		const u = await signUp('ForecastOnlyFeed');
 		const pid = await runnable(u, { enabled: true });

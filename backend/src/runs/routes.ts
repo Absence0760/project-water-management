@@ -6,6 +6,8 @@ import { type Db, withUser } from '../db/tx.js';
 import { readJson } from '../http/body.js';
 import { ApiError } from '../http/errors.js';
 import { recordAudit } from '../history/record.js';
+import { queueAlertEval } from '../alerts/queue.js';
+import { wakeWorker } from '../jobs/wake.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadDailyScope } from '../export/daily-columns.js';
 import { bulkPage } from './bulk.js';
@@ -70,12 +72,17 @@ export const runRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		// Inputs read in one transaction, the engine run with none open, the run
 		// stored in a second (runLiveModel): a long run holds no pooled connection.
-		const result = await runLiveModel(c.get('userId'), id, body.label, body.forecast ? 'forecast' : 'manual', async (db, run) => {
+		const { alertJob, ...result } = await runLiveModel(c.get('userId'), id, body.label, body.forecast ? 'forecast' : 'manual', async (db, run) => {
 			// Keep the newest N manual runs per project (the new one included), and the newest unkept run of each automatic trigger (a forecast run replaces the last).
 			const removedRunIds = await trimRuns(db, id);
 			const { rows } = await db.query(`SELECT ${RUN_META}, r.summary ${FROM_RUN} WHERE r.id = $1`, [run.id]);
-			return { run: rows[0], removedRunIds };
+			// A forecast run made by hand replaces the scheduled one, so the EWR
+			// forecast alert is re-checked against it, as after a scheduled one
+			// (jobs/handlers/rerun.ts): nothing queued when alerts are off.
+			const alertJob = body.forecast ? await queueAlertEval(db, id, 'forecast') : null;
+			return { run: rows[0], removedRunIds, alertJob };
 		}).catch(runFailure);
+		if (alertJob?.created) await wakeWorker(alertJob.id);
 		return c.json(result, 201);
 	})
 	// The exact input a run would use (merged settings, the model, the first

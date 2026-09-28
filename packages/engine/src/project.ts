@@ -1529,6 +1529,12 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/**
+	 * The last day with a value (null: every day is blank): how far the data
+	 * reaches, where startDate + length − 1 counts the blank days a logger's
+	 * "no reading" stores. Absent from older clients' fixtures.
+	 */
+	lastValueDate?: string | null;
 	/** Sub-daily readings added up into days in this window (033_series_day_boundary.sql); null = daily values as uploaded. */
 	dayBoundary?: DayBoundary | null;
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */

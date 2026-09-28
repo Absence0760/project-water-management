@@ -286,6 +286,13 @@ buys a **render session** that can read one report and nothing else.
   full one. RLS still applies underneath: the session is the requester's, so
   it sees at most what they see. It is also revoked with every other session
   of the account (the `sessions_revoked_at` watermark).
+  `/auth/me` answers `renderSession: true` for it, and the app skips the
+  terms re-acceptance step for it (`termsGateApplies`): the step is a
+  person's, and a session that can accept nothing would otherwise render
+  the step instead of the report and time out. Refusing at queue time
+  instead would stop every scheduled report after a terms change until its
+  editor signed in; the report's readers are members under their own
+  acceptance.
 - **Tests:** `reports/reports.db.test.ts` checks single use, expiry, the
   scope on another project, another run and every other kind of route, with a
   positive control (the report's own reads answer `200`), a requester who
