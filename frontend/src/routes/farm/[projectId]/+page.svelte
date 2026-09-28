@@ -26,7 +26,10 @@
 	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
+	import { withNoteLine } from '$lib/components/farm/csvNote';
 	import { farmHref } from '$lib/components/farm/load';
+	import { fetchDownload, saveBlob } from '$lib/export/download';
+	import { errorText } from '$lib/i18n/apiError';
 	import { readUnit } from '$lib/components/farm/savedCopy';
 	import { holdAnchor } from '$lib/help/anchor';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
@@ -63,6 +66,19 @@
 		};
 	});
 	const href = (sub: string) => farmHref(base, projectId, farm.nodeId, several || !!asked, sub);
+
+	// The CSV goes through fetch so the farm disclaimer, in the reader's language, leads the file (csvNote.ts).
+	let csvError = $state('');
+	async function downloadCsv(e: MouseEvent, url: string) {
+		e.preventDefault();
+		csvError = '';
+		try {
+			const { blob, filename } = await fetchDownload(url);
+			saveBlob(new Blob([withNoteLine(await blob.text(), disclaimer())], { type: 'text/csv;charset=utf-8' }), filename);
+		} catch (err) {
+			csvError = errorText(err);
+		}
+	}
 </script>
 
 <svelte:head><title>{t('{page} · My farm', { page: farm.farmName ?? t('My farm') })}</title></svelte:head>
@@ -128,9 +144,12 @@
 			<RiverCard {view} />
 			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />
 			<nav class="more" aria-label={t('More')}>
-				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download>{t('Download my figures (CSV)')}</a>
+				<a href={api.farm.exportUrl(projectId, view.farm.nodeId)} download onclick={(e) => downloadCsv(e, api.farm.exportUrl(projectId, view.farm.nodeId))}
+					>{t('Download my figures (CSV)')}</a
+				>
 				<a href="{base}/farm/words">{t('What do these words mean?')}</a>
 			</nav>
+			{#if csvError}<p class="fine" role="alert">{csvError}</p>{/if}
 			<p class="fine">{disclaimer()}</p>
 		{/if}
 	{/snippet}

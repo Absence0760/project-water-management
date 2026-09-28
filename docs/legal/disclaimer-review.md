@@ -127,7 +127,7 @@ The farm view and the alert emails don't show the report disclaimer. They
 carry their own short lines, translated into Afrikaans. These are not
 versioned; this file and its tests are their record.
 
-**Farm view**, under the farm's figures (`frontend/src/lib/components/farm/cards.ts`, `disclaimer()`):
+**Farm view**, under the farm's figures (`frontend/src/lib/components/farm/cards.ts`, `disclaimer()`), and as the first `# ` line of the farmer's "Download my figures (CSV)", in the page's language:
 
 > These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
 

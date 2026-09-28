@@ -2492,7 +2492,8 @@ ahead of the usual header row.
 
 **Disclaimer line.** Every CSV of a run's results (`daily.csv`, `farms.csv`,
 `summary.csv`; not the input series' `export.csv`, the allocations export or
-the farm view's own CSV) carries the report disclaimer's key point on a `#`
+the farm view's `…/farm/:nodeId/export.csv`, whose download on the farm view
+gets the farm view's own translated disclaimer line added by the page) carries the report disclaimer's key point on a `#`
 line (engine `CSV_DISCLAIMER_COMMENT`, quoted in
 [legal/disclaimer-review.md § 1](./legal/disclaimer-review.md)), after a
 legacy run's warning and before the provenance line:

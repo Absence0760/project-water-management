@@ -4707,7 +4707,10 @@ published.
   computer model of the catchment. They are estimates, not measurements or
   instructions, and they can be wrong. Only a notice from your WUA or from
   the Department of Water and Sanitation (DWS) is a restriction.", `cards.ts`
-  `disclaimer()`, quoted in the legal review pack, issue #47). **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
+  `disclaimer()`, quoted in the legal review pack, issue #47). The CSV
+  download fetches the file and puts that line, in the page's language, as
+  a leading `# ` line (`farm/csvNote.ts`); a failed download says why under
+  the links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge
   set it apart from the cards about what happened; "Lowest dam level
