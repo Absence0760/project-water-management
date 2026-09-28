@@ -2061,7 +2061,7 @@ role and not before it.
   CHIRPS, CHIRPS-GEFS and DWS parsers on synthetic fixtures, `018_feeds`,
   the jobs, the routes, Settings → Data feeds, the fetcher Lambda and its
   queues (plan only). Left open:
-  - [ ] **DWS is unverified against the live site** (on #62's first-deploy list). It answers HTTP 403 to
+  - [ ] **DWS is unverified against the live site** (on #62's first-deploy list; the check itself is #92). It answers HTTP 403 to
         our (non-South-African) network, so the parser follows the request two
         open-source clients make (RivRetrieve-Python, aquascope) and the
         layout of an archived daily page (web.archive.org, 2024: the header
@@ -2442,7 +2442,7 @@ role and not before it.
       (`docker build -f backend/renderer.Dockerfile backend` after
       `infra/scripts/package-lambdas.sh`) and invoke it with the Lambda
       runtime interface emulator against a local stack; then after the first
-      deploy, render one report in production and check its alarms.
+      deploy, render one report in production and check its alarms (#92).
 - [x] **The DB test files ran in parallel**, although
       `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
       `db` project and several tests say "a tick here sees only this file's
@@ -2943,7 +2943,7 @@ Applicant view and the Applications tab. Left:
       are: less script and CSS before the landing's first paint (the root
       layout's app-wide code), then giving phones the 800 px render (`sizes`
       asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
-      6); measure there, then close #57.
+      6), tracked on #92; measure there, then close #57.
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
@@ -3108,7 +3108,7 @@ Left, each with its trigger:
       before WhatsApp/SMS): nothing measures them. Durable fix: SES open and
       click tracking on the configuration set (POPIA: say so in the privacy
       notice) or a "Was this useful?" link. Trigger: one season of alerts on
-      production.
+      production (#92).
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.
