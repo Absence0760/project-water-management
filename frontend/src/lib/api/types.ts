@@ -404,6 +404,8 @@ export interface AlertChoice {
 	chosen: boolean;
 	/** The catchment has this alert switched on; off, you get nothing whatever you choose. */
 	ruleOn: boolean;
+	/** A farm's dam alert: the level it warns below, a fraction (0.3 = 30 %), the WUA's; null otherwise. */
+	threshold: number | null;
 }
 
 /** GET /me/alerts: one catchment's choices. */

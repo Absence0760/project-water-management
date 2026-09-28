@@ -46,6 +46,12 @@ export interface AlertChoice {
 	chosen: boolean;
 	/** The project has this alert switched on (a rule): off, you get nothing whatever you choose. */
 	ruleOn: boolean;
+	/**
+	 * A farm's dam alert: the level it warns below, a fraction of the dam
+	 * (0.3 = 30 %), the WUA's rule for that farm (issue #51); null for every
+	 * other choice, and for a farm with no rule.
+	 */
+	threshold: number | null;
 }
 
 export interface ProjectAlerts {
@@ -82,8 +88,9 @@ async function projectAlerts(db: Db, p: { id: string; name: string; role: Role }
 		else slots.push({ kind, nodeId: null, nodeName: null, defaultMode: d });
 	}
 	// One query for every slot's effective mode (the audience's own rule), its row and its rule.
-	const { rows } = await db.query<{ i: number; mode: AlertMode | null; chosen: boolean; rule_on: boolean }>(
+	const { rows } = await db.query<{ i: number; mode: AlertMode | null; chosen: boolean; rule_on: boolean; threshold: number | null }>(
 		`SELECT s.i, app_alert_my_mode($1, s.kind, s.node) AS mode,
+			(SELECT r.threshold FROM alert_rule r WHERE r.project_id = $1 AND r.kind = 'dam_below' AND s.kind = 'dam_below' AND r.node_id = s.node) AS threshold,
 			EXISTS (SELECT 1 FROM alert_subscription a WHERE a.user_id = app_current_user_id() AND a.project_id = $1
 				AND a.kind = s.kind AND a.node_id IS NOT DISTINCT FROM s.node) AS chosen,
 			EXISTS (SELECT 1 FROM alert_rule r WHERE r.project_id = $1 AND r.kind = s.kind AND r.enabled
@@ -103,7 +110,7 @@ async function projectAlerts(db: Db, p: { id: string; name: string; role: Role }
 		muted: muted[0]?.muted === true,
 		choices: slots.map((s, i) => {
 			const r = byI.get(i + 1);
-			return { ...s, mode: r?.mode ?? s.defaultMode, chosen: r?.chosen ?? false, ruleOn: r?.rule_on ?? false };
+			return { ...s, mode: r?.mode ?? s.defaultMode, chosen: r?.chosen ?? false, ruleOn: r?.rule_on ?? false, threshold: r?.threshold ?? null };
 		})
 	};
 }

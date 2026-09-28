@@ -2,7 +2,7 @@
 // unsubscribe links and RFC 8058 headers, and what a farmer's mail can name.
 import { describe, expect, it } from 'vitest';
 import { ALERT_KINDS } from '../alerts/rules.js';
-import { alertMail, dateText, digestMail, liabilityKey, pctText, type AlertFacts } from './alerts.js';
+import { alertMail, cutPctText, dateText, digestMail, liabilityKey, pctText, type AlertFacts } from './alerts.js';
 import { en } from './i18n/en.js';
 
 const unsub = { pageUrl: 'http://localhost:7777/alerts/unsubscribe#t=TOKEN', oneClickUrl: 'http://localhost:3001/alerts/unsubscribe?token=TOKEN' };
@@ -55,6 +55,8 @@ describe('alertMail', () => {
 		const n = alertMail(farmer, project, { kind: 'restriction_published', level: 'restricted', pct: 20, notice: '<img src=x onerror=alert(1)>', publishedAt: '2026-09-26T08:00:00Z', lifted: false }, unsub);
 		expect(n.html).not.toContain('<img');
 		expect(n.text).toContain('The WUA’s notice: “<img src=x onerror=alert(1)>”');
+		// A cut, as the WUA entered it and the farm page says it (never “20 % of registered use”, which reads as an allowance).
+		expect(n.text).toMatch(/: restricted, a 20\s% cut in registered water use\./);
 	});
 
 	it('sends Afrikaans readers Afrikaans, marked lang="af", with Afrikaans dates; English readers English', () => {
@@ -97,6 +99,13 @@ describe('alertMail', () => {
 			'DWS gauge flow: newest day 2 Jan 2026, 10 days late'
 		);
 		expect(alertMail(wua, project, { kind: 'feed_failing', threshold: 3, feeds: [{ label: 'CHIRPS', failures: 4 }] }, unsub).text).toContain('CHIRPS: 4 failures in a row');
+		// Counted (issue #51): never "1 days", "1 failures", "1 background jobs".
+		const one = alertMail(wua, project, { kind: 'data_stale', threshold: 1, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 1 }] }, unsub).text;
+		expect(one).toContain('more than 1 day later than usual');
+		expect(one).toContain('DWS gauge flow: newest day 2 Jan 2026, 1 day late');
+		expect(alertMail(wua, project, { kind: 'feed_failing', threshold: 1, feeds: [{ label: 'CHIRPS', failures: 1 }] }, unsub).text).toContain('CHIRPS: 1 failure in a row');
+		expect(alertMail(wua, project, { kind: 'job_dead', count: 1 }, unsub).text).toContain('1 background job failed for good');
+		expect(digestMail(farmer, project, [dam], unsub, 5, 1).text).toContain('…and 1 more alert. Open the catchment to see it.');
 		expect(alertMail(wua, project, { kind: 'job_dead', count: 2 }, unsub).subject).toBe('Background jobs failed — Rustenvrede WUA');
 	});
 });
@@ -153,6 +162,31 @@ describe('the liability line, per kind', () => {
 	});
 });
 
+// Issue #51 (WCAG 3.1.2): the notice falls back to another language than the mail's; it keeps its own lang.
+describe('the WUA’s notice in another language', () => {
+	const notice = (noticeLang: string | null, text = 'Irrigate at night.'): AlertFacts => ({ kind: 'restriction_published', level: 'advisory', pct: null, notice: text, noticeLang, publishedAt: '2026-09-26T08:00:00Z', lifted: false });
+	const af = { ...farmer, locale: 'af' };
+
+	it('marks an English notice in an Afrikaans mail with lang="en", in the one alert and in the digest', () => {
+		const m = alertMail(af, project, notice('en'), unsub);
+		expect(m.html).toContain('<html lang="af">');
+		expect(m.html).toMatch(/“<span lang="en">Irrigate at night\.<\/span>”/);
+		expect(m.text).toContain('“Irrigate at night.”');
+		const d = digestMail(af, project, [dam, notice('en')], unsub, 5);
+		expect(d.html).toContain('<span lang="en">Irrigate at night.</span>');
+		expect(d.text).toContain('“Irrigate at night.”');
+	});
+
+	it('leaves a notice in the mail’s own language unmarked, and escapes both the words and the code', () => {
+		expect(alertMail(af, project, notice('af'), unsub).html).not.toContain('<span lang=');
+		expect(alertMail(farmer, project, notice('en'), unsub).html).not.toContain('<span lang=');
+		const x = alertMail(af, project, notice('en"><script>', '<b>x</b>'), unsub).html;
+		expect(x).not.toContain('<script>');
+		expect(x).not.toContain('<b>x</b>');
+		expect(x).toContain('<span lang="en&quot;&gt;&lt;script&gt;">&lt;b&gt;x&lt;/b&gt;</span>');
+	});
+});
+
 describe('digestMail', () => {
 	it('lists every alert in one email with one unsubscribe for the project, and says why it came', () => {
 		const m = digestMail(farmer, project, [dam, { ...dam, pct: 0.2 }], unsub, 5);
@@ -172,6 +206,31 @@ describe('digestMail', () => {
 });
 
 describe('formatting', () => {
+	// Issue #51: numeric(5,2) gave "12.5 %" (a decimal point) in an Afrikaans mail while the farm page showed "13 %".
+	it('writes the WUA’s cut as the farm page does: whole, with the ends marked', () => {
+		expect([12.5, 20, 0, 0.4, 99.6, 100, 150].map((p) => cutPctText(p).replace(/\u00a0/g, ' '))).toEqual(['13 %', '20 %', '0 %', '<1 %', '>99 %', '100 %', '100 %']);
+		const m = alertMail({ ...farmer, locale: 'af' }, project, { kind: 'restriction_published', level: 'restricted', pct: 12.5, notice: null, publishedAt: '2026-09-26T08:00:00Z', lifted: false }, unsub);
+		expect(m.text).toMatch(/13\s%/);
+		expect(m.text).not.toContain('12.5');
+	});
+
+	// Issue #51: a notice published at 01:00 on 2 October in South Africa is 23:00 on the 1st in UTC.
+	it('dates a timestamp by its day in the catchment’s zone, whatever the server’s zone', () => {
+		const tz = process.env.TZ;
+		process.env.TZ = 'America/Los_Angeles';
+		try {
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en', 'Africa/Johannesburg')).toBe('2 Oct 2026');
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en', 'UTC')).toBe('1 Oct 2026');
+			// South Africa's by default; a calendar day is never shifted.
+			expect(dateText('2026-10-01T23:00:00.000Z', 'en')).toBe('2 Oct 2026');
+			expect(dateText('2026-10-01', 'en', 'Pacific/Kiritimati')).toBe('1 Oct 2026');
+			const m = alertMail(farmer, { ...project, timeZone: 'Africa/Johannesburg' }, { kind: 'restriction_published', level: 'advisory', pct: null, notice: null, publishedAt: '2026-10-01T23:00:00.000Z', lifted: false }, unsub);
+			expect(m.text).toContain('on 2 Oct 2026: please use less water (advisory).');
+		} finally {
+			process.env.TZ = tz;
+		}
+	});
+
 	it('writes percentages the farm view’s way and dates in the mail’s language', () => {
 		expect(pctText(0.284)).toBe('28 %');
 		expect(pctText(1.2)).toBe('100 %');

@@ -37,6 +37,19 @@ describe('t', () => {
 		expect(fill('{a} and {b}', { a: 1 })).toBe('1 and {b}');
 	});
 
+	// Issue #51: af-ZA abbreviates months with a dot ("Des."), so a sentence ending on one read "…31 Des..".
+	it('drops the full stop after a value that already ends in one, and only then', () => {
+		expect(fill('It looks back over {span}.', { span: '1 Okt. tot 31 Des.' })).toBe('It looks back over 1 Okt. tot 31 Des.');
+		expect(fill('Up to {date}. Ask.', { date: '31 Des.' })).toBe('Up to 31 Des. Ask.');
+		expect(fill('Up to {date}.', { date: '31 Dec' })).toBe('Up to 31 Dec.');
+		expect(fill('{x}, then {y}.', { x: 'Okt.', y: 'Nov.' })).toBe('Okt., then Nov.');
+		expect(fill('{missing}.', {})).toBe('{missing}.');
+		// tRich the same, for a plain value and a bold one.
+		expect(plainText(tRich('River at {name}: kept its reserve on every one of the last {days}.', { name: 'Weir', days: '3 Des.' }))).toBe('River at Weir: kept its reserve on every one of the last 3 Des.');
+		expect(plainText(tRich('River at {name}: kept its reserve on every one of the last {days}.', { name: 'Weir', days: { b: '3 Des.' } }))).toBe('River at Weir: kept its reserve on every one of the last 3 Des.');
+		expect(plainText(tRich('River at {name}: kept its reserve on every one of the last {days}.', { name: 'Weir', days: '30 days' }))).toBe('River at Weir: kept its reserve on every one of the last 30 days.');
+	});
+
 	it('throws (under test) on English the translation sheet doesn’t list, rather than never translating it', () => {
 		expect(() => t('No such message')).toThrow(/"No such message" isn't on the translation sheet/);
 		// A table without msg() would reach t() the same way.

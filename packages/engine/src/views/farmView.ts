@@ -161,12 +161,16 @@ export interface FarmProject {
 
 /** GET /projects/:id/farm/:nodeId (WP-2.6): everything the farm page renders, in one response. */
 export interface FarmView {
-	project: FarmProject;
+	/** `timeZone`: the project's IANA zone (project.time_zone, 058), where "today" is counted. */
+	project: FarmProject & { timeZone: string };
+	/** Today's date where the catchment is (the project's zone) when the response was built: the page's "today" if it can't work it out itself. */
+	today: string;
 	farm: FarmProjection;
 	context: FarmContext;
 	publication: {
 		publishedAt: string;
-		publishedBy: string;
+		/** The publisher's display name; null once that account is gone (the page says "A former member" in the reader's language). */
+		publishedBy: string | null;
 		engineVersion: string;
 		restriction: {
 			level: RestrictionLevel;

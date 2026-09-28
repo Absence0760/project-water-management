@@ -3128,6 +3128,21 @@ Applicant view and the Applications tab. Left:
       layout's app-wide code), then giving phones the 800 px render (`sizes`
       asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
       6), tracked on #92; measure there, then close #57.
+- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+      international persona). The page is prerendered once, in English, and
+      `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
+      `lang` switch together only once the app hydrates and loads the
+      catalogue. `lang="en"` is correct for what is on the page before then
+      (the words are English), so setting `lang="af"` early from the stored
+      choice would claim Afrikaans for English text, and an inline script
+      would also need its own hash in the meta CSP (`kit.csp` hash mode,
+      `infra/scripts/check-csp.mjs`). Durable fix: prerender the landing
+      page once per language (`/welcome` and an Afrikaans `/af/welcome`, or
+      the language as a path parameter with `entries`), each with its own
+      `lang`, `hreflang` links between them, and the root sending a stored
+      or browser choice to the right one. Trigger: the landing page is
+      linked from somewhere Afrikaans readers arrive first (a WUA's
+      Afrikaans newsletter), or a screen-reader user reports it.
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
@@ -3293,6 +3308,16 @@ Left, each with its trigger:
       click tracking on the configuration set (POPIA: say so in the privacy
       notice) or a "Was this useful?" link. Trigger: one season of alerts on
       production (#92).
+- [ ] **A farmer's own dam alert level** (issue #51, the farmer persona:
+      "40 %, chosen by me, before my planting decision"). The page now
+      shows the WUA's level for each farm (`AlertChoice.threshold`), but only
+      the WUA sets it (`alert_rule`, one per farm, editors). Letting a farmer
+      pick their own warning level (a per-subscription threshold on
+      `alert_subscription`, beside the WUA's) is a
+      decision for the WUA, not a build: an alert at a farmer's level is
+      still the model's estimate, and a level above the WUA's could read as
+      an earlier restriction. Trigger: the client decides whether farmers
+      may set their own level (plan.md §9 questions).
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.

@@ -94,8 +94,16 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await page.reload();
 	const supplyAgain = page.getByRole('region', { name: 'Water you received this season' });
 	await expect(supplyAgain.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
+	// The 12-month table follows the chosen unit too (issue #51); the chart's axis stays in ML.
+	const months = page.getByRole('region', { name: 'Last 12 months, in ML' });
+	await months.getByText('Show the numbers', { exact: true }).click();
+	const monthsTable = months.getByRole('table');
+	await expect(monthsTable).toContainText(/\sML/);
+	await expect(monthsTable).not.toContainText('m³');
 	// Back to m³, the seeded farmer's default, for the other specs.
 	await supplyAgain.getByRole('button', { name: 'm³' }).click();
+	await expect(monthsTable).toContainText(/\sm³/);
+	await expect(monthsTable).not.toContainText('ML');
 	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
 
 	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table.

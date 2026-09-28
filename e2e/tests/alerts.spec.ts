@@ -52,6 +52,9 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	await expect(notice.locator('legend')).toHaveText('Restriction notices from the WUA*');
 	await expect(dam).not.toHaveAccessibleDescription(off);
 	await expect(dam.locator('legend')).toHaveText('Dam running low: Lower farm');
+	// The level it warns below, the WUA's 30 % (issue #51), read out as the row's description.
+	await expect(dam).toHaveAccessibleDescription(/^Warns when the model puts your dam below 30\s%\. Your WUA sets this level\.$/);
+	await expect(notice.getByText(/Warns when/)).toHaveCount(0);
 	await expect(section.getByText(off)).toBeVisible();
 	await expectNoViolations(p);
 

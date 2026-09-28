@@ -11,11 +11,11 @@
 // claims to be in another language. Values are filled in raw; the template
 // escapes the finished string for the HTML part. The languages are the
 // engine's one table; each one's catalogue is a line in ./catalogues.ts.
-import { DEFAULT_LOCALE, isLocale, type Locale } from '@water-management/engine/languages';
+import { DEFAULT_LOCALE, isLocale, language, type Locale } from '@water-management/engine/languages';
 import { CATALOGUES } from './catalogues.js';
-import { en, type MailKey } from './en.js';
+import { en, type MailKey, type MailPluralBase } from './en.js';
 
-export type { MailKey } from './en.js';
+export type { MailKey, MailPluralBase } from './en.js';
 
 /** Languages a person or an invite can have (app_user.locale, invite.locale: the `language` table, synced from this list). */
 export { LOCALES, type Locale } from '@water-management/engine/languages';
@@ -30,8 +30,22 @@ export function fill(template: string, vars: Record<string, string | number> = {
 	return template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in vars ? String(vars[name]) : whole));
 }
 
+const rules = new Map<Locale, Intl.PluralRules>();
+const pluralRules = (lang: Locale) => {
+	let r = rules.get(lang);
+	if (!r) rules.set(lang, (r = new Intl.PluralRules(language(lang).intl)));
+	return r;
+};
+
 export interface MailTranslator {
 	t(key: MailKey, vars?: Record<string, string | number>): string;
+	/**
+	 * A counted message: the form `<base>.<category>` for `n` by the
+	 * language's plural rules (Intl.PluralRules in the language table's
+	 * locale), `{n}` and `vars` filled in. A language missing that form
+	 * falls back to English, with English's rules, like any missing key.
+	 */
+	tn(base: MailPluralBase, n: number, vars?: Record<string, string | number>): string;
 	/** The language the words used so far are in: the requested locale, or 'en' once anything fell back. */
 	readonly lang: Locale;
 }
@@ -39,11 +53,23 @@ export interface MailTranslator {
 export function mailT(locale: string | null | undefined): MailTranslator {
 	const want = mailLocale(locale);
 	let fellBack = false;
+	const form = (base: MailPluralBase, lang: Locale, n: number) => {
+		const cat = pluralRules(lang).select(n);
+		const words = lang === DEFAULT_LOCALE ? en : (CATALOGUES[lang] ?? {});
+		const exact = words[`${base}.${cat}` as MailKey];
+		// English lacks the category (a language with `few`, say): its `other`.
+		return exact ?? (`${base}.${cat}` in en ? undefined : words[`${base}.other` as MailKey]);
+	};
 	return {
 		t(key, vars) {
 			const own = want === DEFAULT_LOCALE ? en[key] : CATALOGUES[want]?.[key];
 			if (own == null) fellBack ||= want !== DEFAULT_LOCALE;
 			return fill(own ?? en[key], vars);
+		},
+		tn(base, n, vars = {}) {
+			const own = form(base, want, n);
+			if (own == null) fellBack ||= want !== DEFAULT_LOCALE;
+			return fill(own ?? form(base, DEFAULT_LOCALE, n) ?? en[`${base}.other` as MailKey], { n, ...vars });
 		},
 		get lang() {
 			return fellBack ? DEFAULT_LOCALE : want;
