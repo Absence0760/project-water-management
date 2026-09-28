@@ -52,7 +52,7 @@ describe('synthetic b023 workbook: parity with extract_project.py', () => {
 	it('lists what it could not map', () => {
 		const { unmapped } = extractProject(wb, { fileName: 'synthetic_b023.xlsx' });
 		const codes = unmapped.map((u) => `${u.code}:${u.element ?? ''}`);
-		// The conveyance-loss InOut formula on Echo (=S7*0.9-V7), the blank Specific share, the M1 lists, the skipped columns.
+		// The conveyance-loss InOut formula on Echo (=U7*0.9-X7), the blank Specific share, the M1 lists, the skipped columns.
 		expect(codes).toContain('transfer-inout-formula:Echo Farm');
 		expect(codes).toContain('flow-share-missing:Charlie Farm');
 		expect(codes).toContain('transfer-months-substring:Foxtrot Farm');
