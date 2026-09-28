@@ -16,7 +16,7 @@
 	import { downloads, runDownloadItems, type FarmTableItem } from '$lib/export';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { newDataSinceRun, seriesEnd } from '$lib/components/series/freshness';
+	import { dataEnd, newDataSinceRun } from '$lib/components/series/freshness';
 	import { detailCache, forgetRun, prefetchSeries } from './cache';
 	import { CATCHMENT_FLOW_KEYS } from './flowSeries';
 	import { notesPreview } from './notes';
@@ -369,7 +369,7 @@
 		const reasons: string[] = [];
 		if (project.updatedAt > latest.createdAt) reasons.push('the model or settings were saved');
 		const newer = project.settings.simulationEnd ? [] : newDataSinceRun(series ?? [], latest);
-		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(seriesEnd).sort().pop()}`);
+		if (newer.length) reasons.push(`new data in ${newer.map((x) => x.name || x.kind.replace(/_/g, ' ')).join(', ')}, now to ${newer.map(dataEnd).sort().pop()}`);
 		return reasons.length ? reasons : null;
 	});
 	// A forecast run needs forecast rain (a forecast series, uploaded or fed by CHIRPS-GEFS); the server says if none is past the record.

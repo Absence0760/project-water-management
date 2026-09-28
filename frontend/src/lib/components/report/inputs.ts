@@ -2,12 +2,13 @@
 // and transfers the run used (its own snapshot, never today's model), and the
 // coverage of each input series over the run's period. Pure, so the page stays
 // a thin template.
-import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, resolveArealRain, fromEpochDay, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
+import { arealRainText, defaultProjectSettings, fitPeriodText, hasMonthlyRates, isRiverOfftake, resolveArealRain, rainSourceText, toEpochDay, transferRatesM3s, type ProjectModel, type ProjectSettings, type SeriesMeta, type StoredRunoffModelId } from '@water-management/engine';
 import { describeWindow, FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peText } from '$lib/components/settings/peInput';
+import { dataEnd } from '$lib/components/series/freshness';
 
 type RawSettings = Partial<Omit<ProjectSettings, 'runoffModel'>> & { runoffModel?: StoredRunoffModelId } & Record<string, unknown>;
 
@@ -124,7 +125,8 @@ export function transferRows(model: Partial<ProjectModel>): string[][] {
 /**
  * Each input series as stored now, with the days of it inside the run's
  * period. A run doesn't keep a copy of its series, so a series extended since
- * the run reaches past the run's end.
+ * the run reaches past the run's end. "Ends" is the last day with a value
+ * (series/freshness.ts dataEnd): blank days stored after it are no data.
  */
 export function coverageRows(series: readonly SeriesMeta[], run: { startDate: string; endDate: string }): string[][] {
 	const r0 = toEpochDay(run.startDate);
@@ -135,6 +137,6 @@ export function coverageRows(series: readonly SeriesMeta[], run: { startDate: st
 			const s0 = toEpochDay(s.startDate);
 			const s1 = s0 + Math.max(s.length, 1) - 1;
 			const inRun = Math.max(0, Math.min(s1, r1) - Math.max(s0, r0) + 1);
-			return [kindLabel(s.kind) + (s.name ? ` · ${s.name}` : ''), s.startDate, fromEpochDay(s1), fmtNum(s.length), fmtNum(inRun)];
+			return [kindLabel(s.kind) + (s.name ? ` · ${s.name}` : ''), s.startDate, dataEnd(s), fmtNum(s.length), fmtNum(inRun)];
 		});
 }

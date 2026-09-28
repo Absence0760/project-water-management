@@ -277,7 +277,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   contact anyone.
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
-  `startDate + length − 1`), or `null` with none. A forecast or a flow series
+  last day **with a value**, `lastValueDate`), or `null` with none. Blank
+  days stored after it (a logger's "no reading" for a dead sensor) are no
+  data, so they never make a project look fresh (`series/lastDay.ts`). A forecast or a flow series
   doesn't count: a forecast runs into the future and flow only scores a run.
   `lastRunAt` — ISO timestamp of the newest run, or `null`. `publishedAt` —
   ISO timestamp of the current publication ([§ Publication](#publication)), or
@@ -799,8 +801,11 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     source run's last day of observed rain) and its age; `stale` when older
     than 7 days (the farm page's rule). `behindData`: the project holds
     recorded rain after `figuresUntil`. `dataUntil` is that newest day of
-    recorded rain (the project list's rule). `newerRun`: a baseline run
-    newer than the published one exists.
+    recorded rain (the project list's rule, to the last day with a value).
+    `newerRun`: a baseline run newer than the published one exists. A
+    forecast run never counts as one (with a CHIRPS-GEFS feed one is made
+    every day), nor as the source run or `lastRunAt`: it is guidance beside
+    the runs.
   - `ewr = { status: 'green' | 'amber' | 'red' | 'unknown', daysNotMet30, days30, fraction30, reason? }`:
     the outlet EWR over the 30 days to `figuresUntil` (the publication's
     `catchmentView`, or, for `source: 'run'`, counted in SQL from that run's
@@ -855,7 +860,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   | `kind` | Fires when (hysteresis: re-arms only after recovery) | `threshold` | Default: right away | May opt in |
   | --- | --- | --- | --- | --- |
   | `dam_below` (per farm) | the published projection's dam level on its last day of data, or the published forecast's lowest, is below the threshold; re-arms at threshold + 5 points | 0 < t < 1 (0.3) | that farm's farmers, editors, owners | viewers |
-  | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2 | whole days 1–60 (3) | editors, owners | viewers |
+  | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2. A forecast run behind the recorded rain (its `lastObserved` before the last day with a catchment or CHIRPS value) is ignored: it neither opens nor clears an event until the re-made one | whole days 1–60 (3) | editors, owners | viewers |
   | `data_stale` (per feed) | that feed, enabled, is more than t days past its own usual delay (`feeds/health.ts` `staleAfterDays`, or the feed's config); re-arms under t | whole days 1–60 (by source: CHIRPS 3, CHIRPS-GEFS 2, DWS 30) | editors, owners | – |
   | `restriction_published` | the current publication's restriction level, percentage or notice changes (a lift too) | 0 | farmers, viewers and up | – |
   | `feed_failing` | an enabled feed failed t times in a row; re-arms at 0 | 1–20 (3) | owners | editors |
@@ -1079,7 +1084,9 @@ naming `startDate`, not a server error).
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }` | `SeriesMeta`: says what an existing series holds, or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, dayBoundary, siteNodeId, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, rebuilding }` —
+`lastValueDate` is the last day with a value (`null` when every day is blank): how far the data reaches, where `startDate + length − 1`
+counts the blank days a merge stores (the Data page's freshness, "Data now runs to", the report's data coverage);
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
@@ -1209,7 +1216,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `409`: all three are judged on the record), and its uncertainty bands run on
   its input without the tail. Made on request, and, when the project has
   automatic runs on (`settings.autoRun.enabled`), after each forecast feed
-  (CHIRPS-GEFS) ingest that changes days: a `rerun` job with `trigger:
+  (CHIRPS-GEFS) ingest that changes days, and after an auto re-run when the
+  recorded rain changed since the newest forecast run: a `rerun` job with `trigger:
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).

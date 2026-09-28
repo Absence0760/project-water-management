@@ -8,6 +8,7 @@ import { MAX_SERIES_ABS_VALUE, MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, Series
 import type { QueuedRerun } from '../runs/autoRun.js';
 import { acceptedInput, anomalousPushedDays, type HeldDays, othersSuffice } from './hold.js';
 import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
+import { lastValueDaySql } from './lastDay.js';
 
 export { MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate };
 
@@ -99,9 +100,12 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
 // "new data since the last run" even for corrections inside the run period.
 // product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
+// lastValueDate: the last day with a value (series/lastDay.ts), null when
+// every day is blank: "data up to", where startDate + length counts blanks.
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
+	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
@@ -258,6 +262,8 @@ export interface SeriesMetaRow {
 	startDate: string;
 	length: number;
 	updatedAt: string;
+	/** The last day with a value; null when every day is blank. */
+	lastValueDate: string | null;
 	product: string | null;
 	productVersion: string | null;
 	dayBoundary: string | null;
