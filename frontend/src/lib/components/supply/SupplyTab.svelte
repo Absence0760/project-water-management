@@ -23,7 +23,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 	import { runHref } from '$lib/components/overview/attention';
-	import { headlines, pickRuns, ranAgo, runDays } from '$lib/components/overview/latestRun';
+	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
@@ -172,7 +172,7 @@
 	const cards = $derived(summary ? unitCards(summary, modelFarmIds, names, weekShort) : []);
 	const totals = $derived(summary ? supplyTotals(summary, cards, weekShort !== null) : null);
 	/** Irrigation supplied as the Summary's card has it, with its change from the run before. */
-	const supplied = $derived(run ? (headlines(run.summary, runDays(run), previous?.summary ?? null).find((h) => h.id === 'supply') ?? null) : null);
+	const supplied = $derived(run ? (headlines(run.summary, historyDays(run), previous?.summary ?? null).find((h) => h.id === 'supply') ?? null) : null);
 	const unitParam = $derived(page.url.searchParams.get(UNIT_PARAM));
 	const picked = $derived(pickUnit(cards, unitParam));
 	const pickedFarm = $derived(picked ? (summary?.farms.find((f) => f.nodeId === picked.nodeId) ?? null) : null);
@@ -386,7 +386,7 @@
 
 					<h2 class="group-h">Tables for this run</h2>
 					<section class="panel" id="res-farms" aria-labelledby="res-farms-h">
-						<UnitResultsTable farms={summary.farms} days={runDays(run)} {nodeOrder} startDate={run.startDate} endDate={run.endDate} title="Hydrological unit results" headingId="res-farms-h" />
+						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Hydrological unit results" headingId="res-farms-h" />
 					</section>
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
