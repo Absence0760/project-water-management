@@ -1469,7 +1469,7 @@ export interface Outlook {
 	baseRun: { id: string; label: string; createdAt: string };
 	decisionDate: string;
 	seasonEnd: string;
-	/** null = the engine's default share (pending the client's O6). */
+	/** null = the engine's default share (O6). */
 	planningShare: number | null;
 	levels: { id: string; label: string; ops: ScenarioOp[] }[];
 	analogueYears: number[] | null;

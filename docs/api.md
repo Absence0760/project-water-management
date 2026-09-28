@@ -305,7 +305,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   is always present too, defaults `{ yearClassMethod: 'auto', riskCutoffs:
   { reserveMonthsMet: null, daysBelowEwr: null }, siteNodeId: null }` (null
   cut-offs = the engine's `DEFAULT_OUTCOME_RISK_CUTOFFS`, placeholders
-  pending the hydrologist, plan.md O1). `PATCH` takes any field:
+  pending the hydrologist, plan.md O1, which the client agreed to, issue
+  #90). `PATCH` takes any field:
   `yearClassMethod` `auto` | `terciles` | `quintiles`; `riskCutoffs` whole,
   both metrics, each null or `{ lower, increasing }` shares 0–1 in the
   metric's own order (months met: `lower ≥ increasing`; days below the EWR:
@@ -324,8 +325,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `settings.outlook = { season, planningShare }` (issue #53 R5,
   `projects/outlookSettings.ts`, [ui.md § Seasonal outlook](./ui.md#seasonal-outlook))
   is always present too, defaults `{ season: null, planningShare: null }`:
-  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April,
-  pending the client's O3) and `DEFAULT_PLANNING_SHARE` (0.8, pending O6).
+  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April, O3)
+  and `DEFAULT_PLANNING_SHARE` (0.8, O6), both confirmed by the client
+  (issue #90).
   `PATCH` takes either field: `season` null or `{ startMonth, startDay,
   endMonth, endDay }` (the decision date and the season end as a month and
   day; whole, each a real day of a common year, so not 29 February, and

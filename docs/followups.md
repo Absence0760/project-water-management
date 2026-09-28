@@ -1593,9 +1593,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       page in Afrikaans: `e2e/tests/af-layout.spec.ts`, light and dark, all
       green.
 - [ ] **A native speaker's review.** The Afrikaans is machine-written and
-      machine-checked. Before the first farmers are invited in Afrikaans,
-      someone fluent (the client's translator, roadmap Step 2 prerequisite
-      6) reads the three catalogues (`frontend/src/lib/i18n/messages/af.ts`,
+      machine-checked. The client confirmed (2026-09-28, issue #90) that
+      their native-speaker translator (roadmap Step 2 prerequisite 6) will
+      review it, the #47 liability lines included
+      ([legal/disclaimer-review.md § 3](./legal/disclaimer-review.md)),
+      before the first farmers are invited in Afrikaans. They read the three
+      catalogues (`frontend/src/lib/i18n/messages/af.ts`,
       `backend/src/mail/i18n/af.ts`, `frontend/src/lib/help/content.af.ts`,
       each with the English beside every entry) and corrects them in place.
       The checker's open questions, to look at first: "Advies" for the
@@ -2652,14 +2655,18 @@ from the WP:
       modeller enters its values by hand. Trigger: the hydrologist wants
       such a set compared (Q9), with a synthetic fixture of that shape for the
       test (never a client file).
-- [ ] **Two tables of indicative irrigation efficiencies.** The node form's
-      system helper uses the engine's `IRRIGATION_SYSTEMS` (micro 0.85,
-      sprinkler 0.75, flood 0.65, "typical values"), the dialog the SABI
-      2021 ranges with Q10's values (`crops/library.ts` `LIBRARY_SYSTEMS`:
-      micro 0.82, permanent sprinkler 0.80, surface 0.70 …). Durable fix:
-      once Q10 is answered, keep one table (SABI 2021, with its source) in
-      the engine and use it in both places; that changes what a new pick in
-      the node form sets, not any saved value. Trigger: Q10.
+- [x] **One table of irrigation efficiencies; drip the new-farm default**
+      (2026-09-28, issue #90 answering #54 Q10). The engine's
+      `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values
+      (drip 0.90, micro 0.82, pivot 0.85, permanent sprinkler 0.80, movable
+      sprinkler 0.75, surface 0.70); the crop library's `LIBRARY_SYSTEMS`
+      re-exports it and the farmer view names the nearest of it. New farms
+      start on drip (`NEW_FARM_IRRIGATION` e = 0.90; migration 099 sets the
+      column default). Saved farms keep their values (a value off the table
+      shows "Other" in the helper); no engine version change, since the run
+      reads neither ([model.md § Irrigation efficiency](./model.md)). Still
+      the hydrologist's: which system each farm's crops are under (the item
+      above).
 
 ## Demand objects and run of river (issue #54 items 2b–2d)
 
@@ -2686,6 +2693,31 @@ from the WP:
       reason carried into the return (a per-day return override) and the
       summary. Trigger: the client's answer on the schedule (fixed pattern or
       uploaded series; what off means).
+- [ ] **Demand objects: a structured demand source.** The rule is decided
+      (issue #54 Q11, confirmed by the client in issue #90): a demand comes
+      from meter records where they exist, else the reconciliation
+      strategy's AADD, else population × litres per person per day, and the
+      model records which. Today that record is the object's free-text
+      `note`, so a report can't say by rule how solid a demand is. Durable
+      fix: a `source` field on the object (`meter` | `aadd` | `perCapita` |
+      `other`, with the note kept for the detail), set by the node form and
+      the importers, shown in the run's object table and the evidence
+      report. Trigger: the evidence report (or a WUA screen) needing to
+      grade demands by source, or the first catchment with objects from
+      more than one source.
+- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
+      #54 Q13, agreed by the client in issue #90). A restriction never cuts
+      domestic supply below 25 litres per person per day; cuts follow DWS's
+      % restrictions; a municipality's own restriction levels are an
+      optional display only. Nothing applies a floor today: a curtailment or
+      `demand.scale` cut reaches a domestic object like any other demand.
+      Durable fix: a per-object floor (population × 25 l/p/d, from a
+      `perUnit` object's count, or entered) that the drought restriction
+      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
+      shortfall reported apart, and an optional municipal-level label on the
+      share-the-pain board. Trigger: building WP-3.8's drought restriction
+      rule, or the first catchment with a domestic object under a
+      restriction.
 - [ ] **A scenario op for demand objects.** Scenarios can't add, change or
       remove one (`demand.scale` on a unit scales its crops and objects
       together); override mode says an object edit can't be recorded. Durable

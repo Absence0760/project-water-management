@@ -10,12 +10,10 @@ import {
 	DEMAND_SCALE_MAX,
 	describePlanningFigure,
 	OUTLOOK_MIN_YEARS,
-	OUTLOOK_SEASON_PENDING_CLIENT,
-	PLANNING_SHARE_PENDING_CLIENT,
 	type OutlookStat,
 	type ScenarioOp
 } from '@water-management/engine';
-import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting, OutlookSettings } from '$lib/api/types';
+import type { Outlook, OutlookExcludedYear, OutlookRequest, OutlookResult, OutlookSeasonSetting } from '$lib/api/types';
 import { monthName } from '$lib/format/months';
 import { fmtDay, fmtNum } from '$lib/format/number';
 
@@ -143,11 +141,8 @@ export interface OutlookYearRow {
 
 export interface OutlookView {
 	season: string;
-	/** The outlook ran the engine's default season, and the project still uses it (pending the client, O3). */
-	seasonPending: boolean;
-	/** The planning share, and whether it is the engine's default (pending the client, O6). */
+	/** The planning share. */
 	share: string;
-	sharePending: boolean;
 	metric: OutlookResult['metric'];
 	metricLabel: string;
 	/** The requirement column's heading. */
@@ -173,15 +168,11 @@ const METRIC_LABEL: Record<OutlookResult['metric'], string> = {
 	daysBelowEwr: 'Days below the pragmatic EWR at the outlet'
 };
 
-const md = (iso: string) => ({ m: Number(iso.slice(5, 7)), d: Number(iso.slice(8, 10)) });
 const dayBefore = (iso: string) => new Date(Date.parse(`${iso}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
 
-/** A complete outlook's result in words, with the project's current settings for the pending badges. */
-export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> & { result: OutlookResult }, settings: OutlookSettings): OutlookView {
+/** A complete outlook's result in words. */
+export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> & { result: OutlookResult }): OutlookView {
 	const r = o.result;
-	const s = md(o.decisionDate);
-	const e = md(o.seasonEnd);
-	const d = DEFAULT_OUTLOOK_SEASON;
 	const reserve = r.metric === 'reserveMonthsMet';
 	const m3 = (v: number) => `${fmtNum(v)} m³`;
 	const ran = r.levels.filter((l) => !l.problems.length);
@@ -212,10 +203,7 @@ export function buildOutlookView(o: Pick<Outlook, 'decisionDate' | 'seasonEnd'> 
 	}));
 	return {
 		season: `${fmtDay(o.decisionDate)} – ${fmtDay(o.seasonEnd)} (${r.days} days)`,
-		seasonPending:
-			OUTLOOK_SEASON_PENDING_CLIENT && settings.season === null && s.m === d.startMonth && s.d === d.startDay && e.m === d.endMonth && e.d === d.endDay,
 		share: `${pct(r.planning.share)} of analogue years`,
-		sharePending: PLANNING_SHARE_PENDING_CLIENT && r.planning.shareIsDefault,
 		metric: r.metric,
 		metricLabel: METRIC_LABEL[r.metric],
 		ewrHeading: reserve ? 'Reserve months met' : 'Days below the EWR',

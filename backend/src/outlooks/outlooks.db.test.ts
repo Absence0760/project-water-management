@@ -71,7 +71,7 @@ describe('settings.outlook', () => {
 		const c = await catchment(owner);
 		await member(owner, c.projectId, viewer, 'viewer');
 		const before = (await owner.call('GET', `/projects/${c.projectId}`)).body.project;
-		// The defaults, pending the client (O3, O6), from the start.
+		// The defaults (O3, O6, confirmed by the client), from the start.
 		expect(before.settings.outlook).toEqual({ season: null, planningShare: null });
 
 		const outlook = { season: { startMonth: 11, startDay: 1, endMonth: 3, endDay: 31 }, planningShare: 0.7 };
@@ -102,7 +102,7 @@ describe('POST /projects/:id/outlooks', () => {
 		const res = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));
 		expect(res.status, JSON.stringify(res.body)).toBe(202);
 		const { outlook, jobId } = res.body;
-		// The default season (1 October – 30 April, pending O3) from the day after the run's last.
+		// The default season (1 October – 30 April, O3) from the day after the run's last.
 		expect(outlook).toMatchObject({
 			name: 'Summer outlook',
 			baseRunId: c.runId,

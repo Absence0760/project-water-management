@@ -115,7 +115,7 @@ interface FarmSpec {
 	upstreamToDam?: number;
 	runoffToDam?: number;
 	divertM3Day?: number;
-	/** Irrigation system: its indicative efficiency (IRRIGATION_SYSTEMS) is the farm's (audit N1). Default NEW_FARM_IRRIGATION. */
+	/** Irrigation system: its SABI 2021 efficiency (IRRIGATION_SYSTEMS) is the farm's (audit N1). Default NEW_FARM_IRRIGATION. */
 	system?: IrrigationSystem;
 	/** Share of the application losses returning to the river. Default NEW_FARM_IRRIGATION's. */
 	lossReturn?: number;
@@ -482,8 +482,8 @@ const DROEVLEI: CatchmentSpec = {
 	logger: { from: '2016-01-01', drift: { waterYear: 2020, factor: 1.9 } },
 	farms: [
 		{ name: 'Droëvlei Gauge', kind: 'gauge', into: null },
-		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, divertM3Day: 1500, system: 'sprinkler', crops: ha({ Citrus: 110, Lucerne: 40 }) },
-		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, divertM3Day: 1200, system: 'flood', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
+		{ name: 'Kareebos', into: 'Droëvlei Gauge', areaKm2: 12, damM3: 60_000, damDepthM: 2.5, divertM3Day: 1500, system: 'movable', crops: ha({ Citrus: 110, Lucerne: 40 }) },
+		{ name: 'Sandkraal', into: 'Kareebos', areaKm2: 10, damM3: 40_000, damDepthM: 2.5, damMin: 0.2, seepage: 0.001, divertM3Day: 1200, system: 'surface', lossReturn: 0.6, crops: ha({ Lucerne: 80 }) },
 		{ name: 'Brakfontein', into: 'Sandkraal', areaKm2: 9, damM3: 80_000, damDepthM: 3, divertM3Day: 1000, system: 'micro', crops: ha({ Citrus: 70 }) }
 	]
 };
@@ -513,9 +513,9 @@ const SANDSPRUIT: CatchmentSpec = {
 		{ name: 'Melkhout Gauge', kind: 'gauge', into: 'Uitkyk' },
 		{ name: 'Uitkyk', into: 'Sandspruit Outlet', areaKm2: 20, damM3: 300_000, damDepthM: 4, divertM3Day: 4000, system: 'pivot', crops: ha({ Maize: 80, Lucerne: 30 }) },
 		{ name: 'Lemoenkraal', into: 'Melkhout Gauge', areaKm2: 24, damM3: 500_000, damDepthM: 5, divertM3Day: 5000, system: 'pivot', crops: ha({ Maize: 120 }) },
-		{ name: 'Vaalbank', into: 'Lemoenkraal', areaKm2: 30, damM3: 350_000, damDepthM: 4, divertM3Day: 4000, system: 'sprinkler', crops: ha({ Lucerne: 60, Vegetables: 15 }) },
+		{ name: 'Vaalbank', into: 'Lemoenkraal', areaKm2: 30, damM3: 350_000, damDepthM: 4, divertM3Day: 4000, system: 'movable', crops: ha({ Lucerne: 60, Vegetables: 15 }) },
 		{ name: 'Klipdrift', into: 'Vaalbank', areaKm2: 26, damM3: 60_000, damDepthM: 3, divertM3Day: 1200, system: 'pivot', crops: ha({ Maize: 170 }) },
-		{ name: 'Wilgerivier', into: 'Melkhout Gauge', areaKm2: 22, damM3: 450_000, damDepthM: 4.5, divertM3Day: 4500, system: 'sprinkler', crops: ha({ Vegetables: 25, Lucerne: 40 }) },
+		{ name: 'Wilgerivier', into: 'Melkhout Gauge', areaKm2: 22, damM3: 450_000, damDepthM: 4.5, divertM3Day: 4500, system: 'movable', crops: ha({ Vegetables: 25, Lucerne: 40 }) },
 		{ name: 'Grootdraai', into: 'Wilgerivier', areaKm2: 28, damM3: 800_000, damDepthM: 6, divertM3Day: 6000, system: 'pivot', crops: ha({ Maize: 60 }) },
 		{ name: 'Bosrand', into: 'Grootdraai', areaKm2: 18, damM3: 150_000, damDepthM: 3.5, divertM3Day: 2000, system: 'drip', crops: ha({ Vegetables: 30 }) },
 		{ name: 'Rietspruit', into: 'Uitkyk', areaKm2: 16, damM3: 120_000, damDepthM: 3.5, divertM3Day: 2000, system: 'pivot', crops: ha({ Lucerne: 45 }) }

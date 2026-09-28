@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { IRRIGATION_SYSTEMS, type NetworkNode } from '@water-management/engine';
+import { IRRIGATION_SYSTEMS, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -310,10 +310,12 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 }
 
 /**
- * The irrigation system whose indicative efficiency (IRRIGATION_SYSTEMS) this
- * value is, for the node form's helper; null for any other value.
+ * The irrigation system whose SABI 2021 efficiency (IRRIGATION_SYSTEMS) this
+ * value is, for the node form's helper; null for any other value (a farm
+ * saved with an efficiency from before the table was unified, 0.65 say,
+ * shows "Other" and keeps its value).
  */
-export function systemOf(efficiency: number): (typeof IRRIGATION_SYSTEMS)[number]['id'] | null {
+export function systemOf(efficiency: number): IrrigationSystemId | null {
 	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
 }
 

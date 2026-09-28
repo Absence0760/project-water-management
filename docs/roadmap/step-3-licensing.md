@@ -1362,6 +1362,11 @@ must build WP-2.15 Phase B.
   - place farms, dams and gauges;
   - see the network over a basemap;
   - derive farm areas from polygons.
+- **Data (decided with the client, issue #90, #54 Q7).** Open data only:
+  the Copernicus DEM GLO-30 (30 m, with its attribution), WR2012 and other
+  openly licensed layers; no licensed layers. Anything derived (an area, a
+  place on the network) is proposed and the modeller confirms it before it
+  enters the model (the `node.area_source 'map'` accept step below).
 - **Estate pattern.** The sibling running app (planned-work.md calls it
   project-running; its checkout here is `../threkir`) runs Protomaps
   locally:

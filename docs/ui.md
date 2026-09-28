@@ -1501,10 +1501,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   reach above the scrolling form in the sheet's fixed sub-header.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
-  **Irrigation system** select that sets an indicative efficiency (drip 90 %,
-  micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
-  `IRRIGATION_SYSTEMS` in the engine), labelled indicative; "Other" keeps the
-  value as typed. New farms start at 80 % and 50 %.
+  **Irrigation system** select that sets the system's SABI 2021 efficiency
+  (drip 90 %, micro-sprinkler 82 %, centre pivot / linear move 85 %,
+  permanent sprinkler 80 %, movable sprinkler 75 %, surface 70 %,
+  `IRRIGATION_SYSTEMS` in the engine, the same table as [Load crop
+  factors](#load-crop-factors)), labelled indicative; "Other" keeps the value
+  as typed (and is what a farm saved with a value off the table, e.g. the old
+  flood 65 %, shows). New farms start on drip, 90 % and 50 % (the client's
+  default, issue #90).
 - **Dam** fields also hold the area when full (m², empty = unknown), the area
   exponent (default 0.7) and seepage (% of storage per day) for dam
   evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
@@ -2726,22 +2730,23 @@ which checks every catchment tab).
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
   the two cut-offs are editable in %, starting from the defaults; cut-offs
   out of order or outside 0–100 % block Save (the engine's
-  `validateOutcomeCutoffs`, as the API checks them). The defaults are
-  placeholders until the client answers O1 and O2 (plan.md §
-  Decision-support outputs). Viewers see the group read-only. Like
+  `validateOutcomeCutoffs`, as the API checks them). The cut-offs'
+  defaults are placeholders until the hydrologist confirms them (O1; the
+  client agreed, issue #90); the class method's default is confirmed (O2,
+  plan.md § Decision-support outputs). Viewers see the group read-only. Like
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
 - **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
   `outlook/OutlookSettingsSection.svelte`, part of the form, like the
   outcome matrix's): how the Runs tab's
   [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
-  the default season (1 Oct – 30 Apr)** ticked by default and a **Default
-  pending the client** badge while it is (O3); unticked, the decision date
-  and the season end as a month and a day each (29 February and a one-day
-  season block Save). **Planning share**, with **Use the default planning
-  share (80 %)** and the same badge (O6); unticked, a % of analogue years
-  in (0, 100]. The defaults are the engine's (`DEFAULT_OUTLOOK_SEASON`,
-  `DEFAULT_PLANNING_SHARE`). Viewers see it read-only; saving only this
+  the default season (1 Oct – 30 Apr)** ticked by default (O3); unticked,
+  the decision date and the season end as a month and a day each
+  (29 February and a one-day season block Save). **Planning share**, with
+  **Use the default planning share (80 %)** (O6); unticked, a % of
+  analogue years in (0, 100]. The defaults are the engine's
+  (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`), confirmed by the
+  client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
 
 ### Data feeds
@@ -3410,8 +3415,10 @@ read it before.
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
   cut beyond its equitable share, a senior user's charge that stands, or a
   junior user's charge beyond what it takes. The middle stage is a
-  `ShareRule` (only `{ kind: 'equal' }` today); a per-category restriction
-  waits for client question O4 ([plan.md](./plan.md#decision-support-outputs-2026-09-26)).
+  `ShareRule` (`{ kind: 'equal' }`): every category is cut by the same %,
+  which the client confirmed (O4, issue #90,
+  [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
+  the client: whether the town's uses count as domestic or irrigation.
   Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
   equal share, and seeded engine runs whose totals match the engine's),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
@@ -3817,10 +3824,8 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   demand level in every analogue year…* with a progress bar, a retry, or,
   for an outlook whose job died, why it couldn't run. The panel carries
   `data-state` (`loading`, `empty`, `pending`, `stuck`, `complete`).
-- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*) and
-  **Season pending the client** while it is the engine's default and the
-  project hasn't set one; the planning share (*80 % of analogue years*)
-  and **Planning share pending the client** while it is the default; the
+- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*); the
+  planning share (*80 % of analogue years*); the
   measure (days below the pragmatic EWR at the outlet, or Reserve months
   met with a rule table there); the number of analogue years. Then the
   farm dams' storage on the day before the decision date, which every year
@@ -5015,8 +5020,10 @@ digest). The modeller workspace stays English.
   terminology, `.claude/agents/i18n/languages/<code>.md`: meaning,
   placeholders, bold, plural forms, register, and one term for one English
   word across the whole set, with §5.1 of `docs/design/farmer-view.md` as
-  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet
-  (docs/followups.md § Afrikaans). The wording goes to real farmers, so a
+  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet.
+  The client's native-speaker translator will, before farmers are invited
+  in Afrikaans (confirmed by the client, issue #90; docs/followups.md
+  § Afrikaans). The wording goes to real farmers, so a
   new string in any language goes through the same two steps:
   `pnpm gen:i18n:export <lang> <dir>` writes what's still on that language's
   sheet as JSON batches, the translator agent fills them, the checker

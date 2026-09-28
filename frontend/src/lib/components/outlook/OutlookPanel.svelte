@@ -75,7 +75,7 @@
 	const shown = $derived(outlook ? outlookState(outlook) : null);
 	const view = $derived.by((): OutlookView | null => {
 		if (!outlook || shown?.kind !== 'complete' || !outlook.result) return null;
-		return buildOutlookView({ ...outlook, result: outlook.result }, settings);
+		return buildOutlookView({ ...outlook, result: outlook.result });
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 
@@ -209,9 +209,7 @@
 			</p>
 			<div class="badges">
 				<span class="badge" data-testid="outlook-season">Season: {view.season}</span>
-				{#if view.seasonPending}<span class="badge badge-warn" data-testid="outlook-season-pending">Season pending the client</span>{/if}
 				<span class="badge" data-testid="outlook-share">Planning share: {view.share}</span>
-				{#if view.sharePending}<span class="badge badge-warn" data-testid="outlook-share-pending">Planning share pending the client</span>{/if}
 				<span class="badge" data-testid="outlook-metric">Measure: {view.metricLabel}</span>
 				<span class="badge" data-testid="outlook-years">{view.nYears} analogue {view.nYears === 1 ? 'year' : 'years'}</span>
 			</div>

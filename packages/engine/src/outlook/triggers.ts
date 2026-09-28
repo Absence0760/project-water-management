@@ -47,15 +47,12 @@ import {
 } from './outlook';
 import { analogueStart, resolveSeason, type OutlookSeason } from './season';
 
-/** True while the default review date (defaultReviewDate) is unconfirmed (the client's O3); a surface showing it should say so. */
-export const REVIEW_DATE_PENDING_CLIENT = true;
-
 /**
  * The default review date for a season: the first day of the calendar month
  * holding the season's middle day (1 January for the default 1 October –
  * 30 April season), or the middle day itself when that month starts on or
- * before the decision date. A **judgement, pending the client's O3**: half
- * the season left to act on a cut, and a month's first day so a monthly plan
+ * before the decision date. Confirmed by the client (O3, issue #90: review
+ * on 1 January): half the season left to act on a cut, and a month's first day so a monthly plan
  * (R1's `months` form) and the Reserve's whole months start there.
  */
 export function defaultReviewDate(season: OutlookSeason): string {
