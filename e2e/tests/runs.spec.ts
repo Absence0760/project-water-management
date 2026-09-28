@@ -312,6 +312,46 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
 });
 
+test('a runs list that answers after a new run never puts back the list from before it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs late list');
+	await createRun(page.request, project.id, 'First');
+	// The page's first load shows the list; the Runs tab then asks again on its own. Hold that
+	// answer (fetched now, so it is the list from before the new run) until the new run is in.
+	const listUrl = `/projects/${project.id}/runs`;
+	let release!: () => void;
+	const released = new Promise<void>((resolve) => (release = resolve));
+	let lists = 0;
+	await page.route(
+		(url) => url.pathname.endsWith(listUrl),
+		async (route) => {
+			if (route.request().method() !== 'GET' || ++lists === 1) return route.continue();
+			const response = await route.fetch();
+			await released;
+			await route.fulfill({ response });
+		}
+	);
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	await expect(list.getByRole('button', { name: /^First/ })).toBeVisible();
+	await expect.poll(() => lists).toBeGreaterThanOrEqual(2);
+
+	await page.getByLabel(/^Run label/).fill('Newest');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
+
+	let answered = 0;
+	page.on('response', (r) => {
+		if (r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(listUrl)) answered++;
+	});
+	release();
+	// The late answer predates the run: the tab asks again rather than showing it, and shows the fresh answer.
+	await expect.poll(() => answered).toBeGreaterThanOrEqual(2);
+	expect(lists).toBeGreaterThanOrEqual(3);
+	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
+	await expect(list.getByRole('button', { name: /^First/ })).toBeVisible();
+});
+
 test('with a long runs list the runs rail and the whole results menu stay in view on a laptop screen', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs rail');
