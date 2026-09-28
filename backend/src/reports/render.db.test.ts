@@ -54,16 +54,20 @@ const stubPage = (apiBase: string) => `<!doctype html>
 	const r = q.get('run');
 	const against = q.get('against');
 	const get = (path) => fetch(api + path, { credentials: 'include' }).then((x) => x.status);
-	const [me, run, list, cmp] = await Promise.all([
+	const baseline = against ? '/projects/' + against.split(':')[0] + '/runs/' + against.split(':')[1] : null;
+	const [me, run, list, cmp, natural, other] = await Promise.all([
 		get('/auth/me'),
 		get('/projects/' + p + '/runs/' + r),
 		get('/projects'),
-		// An impact report's one extra read: the comparison with its baseline.
-		against ? get('/compare/runs?' + new URLSearchParams({ a: against, b: p + ':' + r })) : 200
+		// An impact report's extra reads: the comparison with its baseline, and the licence-impact board's baseline series
+		// (natural_flow, ewr_shortfall), by key only: any other baseline series is refused.
+		against ? get('/compare/runs?' + new URLSearchParams({ a: against, b: p + ':' + r })) : 200,
+		baseline ? get(baseline + '/series?key=natural_flow') : 200,
+		baseline ? get(baseline + '/series?key=simulated_outflow') : 403
 	]);
 	const main = document.querySelector('main');
-	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list + ', compare ' + cmp;
-	if (me === 200 && run === 200 && list === 403 && cmp === 200) main.setAttribute('data-report-ready', 'true');
+	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list + ', compare ' + cmp + ', baseline natural ' + natural + ', baseline other ' + other;
+	if (me === 200 && run === 200 && list === 403 && cmp === 200 && natural === 200 && other === 403) main.setAttribute('data-report-ready', 'true');
 	else { const a = document.createElement('div'); a.setAttribute('role', 'alert'); a.textContent = 'stub: ' + document.getElementById('s').textContent; main.prepend(a); }
 })();
 </script></body></html>`;
