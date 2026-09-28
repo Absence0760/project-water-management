@@ -85,4 +85,11 @@ describe('plainMarkdown on a run of brackets', () => {
 		expect(plainMarkdown(`a${' '.repeat(200_000)}b`)).toBe('a b');
 		expect(plainMarkdown('runoff \n\t ([Beven 2012]) and [[WR2012]]')).toBe('runoff and [WR2012]');
 	});
+
+	// A link target could contain "(", so each "[(](" rescanned the rest of the cell: ~15 s for this
+	// string before; the timeout is a hang guard, not a budget (linear time takes a millisecond).
+	it('handles a long run of "[(](" with no ")" (a link target excludes "(")', () => {
+		const links = `[Z](${'[(]('.repeat(100_000)}`;
+		expect(plainMarkdown(links)).toBe(`Z(${'(('.repeat(100_000)}`);
+	}, 5_000);
 });

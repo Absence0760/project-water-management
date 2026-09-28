@@ -26,11 +26,12 @@ export interface Limitation {
 
 /** Plain text from a table cell: no bold, italics, code ticks or link targets. */
 export function plainMarkdown(s: string): string {
-	// Bracketed spans exclude "[" and whitespace is collapsed first: a long run of "[" or of spaces
-	// otherwise made each pattern rescan the rest of the cell from every position (CodeQL js/polynomial-redos).
+	// Bracketed spans exclude "[", a link target excludes "(", and whitespace is collapsed first: a long
+	// run of "[", of "[(](" or of spaces otherwise made each pattern rescan the rest of the cell from every
+	// position (CodeQL js/polynomial-redos). A target with "(" in it was already cut at its first ")".
 	return s
 		.replace(/\s+/g, ' ')
-		.replace(/\[([^[\]]+)\]\([^)]*\)/g, '$1')
+		.replace(/\[([^[\]]+)\]\([^()]*\)/g, '$1')
 		// Reference-style citations ([Beven 2012]) are for the doc's reader, not a limitation list.
 		.replace(/ ?\(\[[^[\]]+\]\)/g, '')
 		.replace(/\[([^[\]]+)\]/g, '$1')
