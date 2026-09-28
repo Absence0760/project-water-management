@@ -128,13 +128,17 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await expectNoSidewaysScroll(page);
 });
 
-test('thirty rules scroll inside their card at 1440 and 1280; the page does not scroll either way', async ({ page, owner }) => {
-	void owner;
-	const project = await seedManyTransfers(page.request, 'Transfers big');
-	for (const [width, height] of [
-		[1440, 960],
-		[1280, 800]
-	] as const) {
+// One viewport per test, and the axe scan in a test of its own (as a11y.spec.ts does). Thirty rules make a
+// 4,400-element page (sixteen fields a rule) whose WCAG scan takes 1.75 s idle and 6 s at a 4× CPU throttle,
+// color-contrast two thirds of it and growing with every row: on top of two page loads that left a loaded run
+// (twelve workers) too little of the 30 s budget.
+for (const [width, height] of [
+	[1440, 960],
+	[1280, 800]
+] as const) {
+	test(`thirty rules scroll inside their card at ${width} × ${height}; the page does not scroll`, async ({ page, owner }) => {
+		void owner;
+		const project = await seedManyTransfers(page.request, 'Transfers big');
 		await page.setViewportSize({ width, height });
 		await openTransfers(page, project.id);
 		await expect(page.getByLabel('Source of transfer 30', { exact: true })).toBeAttached();
@@ -152,7 +156,22 @@ test('thirty rules scroll inside their card at 1440 and 1280; the page does not 
 		expect(months.y + months.height).toBeLessThanOrEqual(height);
 		expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(height);
 		await expectNoSidewaysScroll(page);
-	}
+	});
+}
+
+// The scan needs the rules scrolling inside their card, not thirty of them: twelve scroll at 1280 × 800 and hold
+// every kind of row the thirty do (each month pattern, a daily cap or none, two rules off) in 2,000 elements, and
+// scan in about half the time (0.98 s idle). Each row's own markup, a river off-take's fields and the phone's cards
+// are scanned in "no accessibility violations" below.
+test('a dozen rules, scrolling inside their card at 1280 × 800: no accessibility violations', async ({ page, owner }) => {
+	void owner;
+	const project = await seedManyTransfers(page.request, 'Transfers a11y many', 14, 12);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await openTransfers(page, project.id);
+	await expect(header(page).getByTestId('section-context')).toHaveText('12 transfer rules · 10 active');
+	await expect(page.getByRole('rowheader', { name: /^\d+ off$/ })).toHaveCount(2);
+	// The state the scan is for: the rules scroll inside their card (scrollable-region-focusable, target-size).
+	expect(await rulesCard(page).locator('.table-wrap').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
 	await expectNoViolations(page);
 });
 
