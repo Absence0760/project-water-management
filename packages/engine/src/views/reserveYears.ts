@@ -11,7 +11,12 @@
 // either end (`complete: false`), so a short run still has a bar; a part
 // year's count covers only its simulated days, and the caller says so. A
 // missing (null / non-finite) day is counted in `missing`, never as met.
+//
+// A forecast run's days from `forecastFrom` on ran on forecast rain: they
+// are left out (issue #51), as the summary leaves them out of its EWR days,
+// so the bars still add up to it.
 import { toEpochDay, waterYearOf } from '../calendar';
+import { beforeForecast } from './fdc';
 
 export interface ReserveYear {
 	/** Water year, labelled by the year it starts in (2016 = Oct 2016 – Sep 2017). */
@@ -28,7 +33,8 @@ export interface ReserveYear {
 
 const yearLength = (wy: number) => toEpochDay(`${wy + 1}-10-01`) - toEpochDay(`${wy}-10-01`);
 
-export function reserveDaysByWaterYear(startDate: string, shortfall: ArrayLike<number | null>): ReserveYear[] {
+export function reserveDaysByWaterYear(startDate: string, all: ArrayLike<number | null>, forecastFrom: string | null = null): ReserveYear[] {
+	const shortfall = beforeForecast(all, startDate, forecastFrom);
 	const d0 = toEpochDay(startDate);
 	const out: ReserveYear[] = [];
 	let cur: ReserveYear | null = null;
