@@ -159,9 +159,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the same answer, and a refused attempt isn't counted, so hammering never
   extends the wait. The WAF's per-IP `/api/auth/*` rule (100 per 5 minutes)
   stays in front of it; it matches the path after `URL_DECODE` and
-  `NORMALIZE_PATH`, so a percent-encoded spelling the API still routes to the
+  `NORMALIZE_PATH`, so a percent-encoded spelling the API would route to the
   auth handlers (`/api/%61uth/login`), or one with `//` or dot segments,
-  can't slip past it.
+  can't slip past it. The API refuses those spellings itself as well
+  (`400`, [§ Infrastructure](#infrastructure), ambiguous paths), and the
+  per-account limits don't depend on the WAF at all
+  ([§ Throttles that don't depend on the WAF](#throttles-that-dont-depend-on-the-waf)).
   - *The client address* (`http/clientAddress.ts`) is the `X-Viewer-Address`
     header, which the `/api` CloudFront Function (`api_strip_prefix`,
     `infra/s3_cloudfront.tf`) sets from the connection's IP, overwriting any
@@ -268,6 +271,33 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   checks that adding a member, team member or farmer (single and bulk) and
   signing in answer the same for an unknown address and an unverified or
   wrong-password one.
+
+### Throttles that don't depend on the WAF
+
+The WAF's `/api/auth/*` limit is per IP and matches the path, so it can be
+spread over many client addresses
+or, before the path check below, dodged with an encoded path. Every
+credential-guessing or mail-sending auth route therefore has its own limit
+in Postgres, keyed by the **account address** (the typed, trimmed,
+lower-cased email), never by the client address or the path, so it holds
+across Lambda instances and whatever the request came through (issue #126):
+
+| Route | Limit | Where |
+|---|---|---|
+| `POST /auth/login` (and `change-password`'s current-password check) | 5 free attempts, then a lock of 1 minute doubling to 15 minutes; a trusted device counts on its own record | `005_login_throttle.sql`, `070_login_device_trust.sql`, `auth/routes.ts` `LOGIN_THROTTLE` ([§ Authentication](#authentication)) |
+| `POST /auth/forgot-password` | 1 reset email a minute, 10 a day (plus 10 per trusted device) | `app_issue_email_token`, `078_account_mail_cap.sql` (Mail-bombing throttle above) |
+| `POST /auth/resend-confirmation`, `POST /auth/resend-verification`, a sign-up with a taken address | the same cooldown and daily cap, on verification emails | the same |
+| `POST /auth/reset-password`, `POST /auth/verify-email` | none per account, by design: the account isn't known until a token matches, and a token is 256 random bits, single-use and short-lived, so guessing one is not a feasible attack at any rate; malformed tokens are refused before any database work | `auth/tokens.ts`, `auth/email-routes.ts` |
+
+`POST /auth/register` is the one auth limit keyed by client address (sign-up
+has no account yet; above), with a global ceiling that doesn't depend on it.
+`auth/per-account-throttles.security.db.test.ts` sends every request from a
+different viewer address through an edge-verified app, so a limit keyed on the
+client would never engage, and checks that the sign-in lock, the reset
+cooldown and the verification cooldown each still do (with positive
+controls), and that `/%61uth/login` is refused before it is counted.
+Spraying one password across many accounts from many addresses is still only
+slowed by the WAF's per-IP limits; each account is limited on its own.
 
 ## Render tokens
 
@@ -1213,7 +1243,7 @@ In short:
     `applyScenario`'s `mask`), so its messages quote no hidden name or id
     without any text redaction, count nothing hidden, and a rule broken
     because of hidden data reads only "doesn't apply to the catchment as
-    modelled" (wording pending the client, issue #50). The DB test scans everything the applicant
+    modelled" (wording pending the client, issue #90). The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -1301,7 +1331,7 @@ In short:
     shares over 100 %, no catchment area left) says only that the op
     doesn't apply to the catchment as modelled. Whether it applies can't be
     hidden (a model that breaks a save rule can't run); the words are the
-    client's call (issue #50).
+    client's call (issue #90).
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.
@@ -1630,7 +1660,17 @@ database:
   counts, never names. The export's `holder` column is only in an editor's
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
-  cells (`'` prefix), as every export does.
+  cells (`'` prefix), as every export does. A licence condition in words
+  (103) is checked like the holder: a 13-digit number there is a row problem.
+- **Run inputs** (engine ≥ 1.18.0, issue #72): every run's stored input
+  carries the project's allocations so the run replays, but only what the
+  engine reads (id, unit, source, volume, storage, validity, months, maximum
+  rate), never the holder's name, the registration number or the property
+  (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
+  appears). A viewer reads a run's input and could read the volumes anyway;
+  an applicant's projection of a published base keeps only the allocations on
+  their own units (`scenarios/applicant.ts`), and a contributor never reads a
+  run's summary, whose comparison names every unit.
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to
@@ -1878,6 +1918,27 @@ readable by anyone. The rules:
 - **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
   limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
   default 1000 per 5 minutes) covering the whole site and `/api/*`.
+- **Ambiguous paths are refused by the API** (`backend/src/http/rawPath.ts`,
+  issue #126). The WAF matches rules on the raw path and Hono routes on a
+  decoded one (`decodeURI`), so `/api/%61uth/login` is `/auth/login` to the
+  router; building a `Request` also resolves dot segments, `%2e%2e`
+  included. Before anything reads the path (the router, the CSRF and
+  body-limit exemptions, a render session's scope), the app answers
+  `400 { error: "bad request path" }` for an escaped unreserved character
+  (`A–Z a–z 0–9 - . _ ~`, which no client needs to encode), an escaped `/`,
+  `\` or `%` (double encoding), an escaped control character, a malformed
+  escape, or a raw `.`/`..` segment or `\`. It checks the path as the runtime
+  received it (the Function URL event's `rawPath`, the Node server's request
+  target) as well as the `Request` URL, since only the former still shows a
+  dot segment. Other escapes pass: a space (`%20`), non-ASCII (`%C3%A9`) and
+  reserved characters such as `%3A` stay usable in a path parameter (every
+  current one is a UUID). Tests: `http/rawPath.test.ts` (the rule),
+  `http/rawPath.security.test.ts` (through the app, a real Node server and
+  the Lambda adapter, with positive controls). **Operator check after the
+  first deploy:** send one `GET /api/%61uth/me` through CloudFront and confirm
+  CloudFront and the Function URL pass the escape through (the API answers
+  `400 bad request path`, not `401`) and the WAF's auth rule counts it (its
+  sampled requests).
 - **Response headers** (CloudFront, both behaviours): CSP (`default-src
   'self'`, `object-src 'none'`, `frame-ancestors 'none'`, no third-party
   origins; `default-src 'none'` on `/api/*`), HSTS 2 years, nosniff,

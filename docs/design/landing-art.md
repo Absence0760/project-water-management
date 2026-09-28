@@ -75,8 +75,14 @@ that contradicts itself.
   layer drawn from `overlay.json` so the motion sits on the picture: rain
   streaks drift from the clouds to the ridges, a pulse of water runs down the
   tributary and the river (`stroke-dashoffset`), the dams fill (a `scaleY`
-  from the waterline), the gauge's needle settles and its tag fades in with
-  the example's reserve figure. One loop is about 10 s, then 4 s of rest.
+  from the waterline), the gauge's needle settles. The gauge's tag, the
+  example's reserve figure, never moves: it is text to read (it used to fade
+  in for the loop's last ~3 s, so it was hidden 76 % of the time; issue #51).
+  One loop is about 10 s, then 4 s of rest. A round **pause** toggle
+  (*Pause the animation*, `aria-pressed`) sits in the art's bottom-right
+  corner wherever the scene can move: pressed, the scene shows its still
+  frame until pressed again (WCAG 2.2.2 Pause, Stop, Hide: the loop runs
+  longer than 5 s).
   Every loop starts 11.2 s in (80 %, inside the rest), which is exactly the
   still frame the prerendered page shows, so the moment the script turns
   motion on nothing moves; the rest runs out and the rain starts. (It first
@@ -147,7 +153,10 @@ that contradicts itself.
    are final. The sliders still work.
 4. CSS, SVG and a few lines of script only: no GSAP, Lottie, Three.js or video.
    Only `transform`, `opacity`, `stroke-dashoffset` and a scale animate. The
-   hero pauses off screen and when the tab is hidden.
+   hero pauses off screen and when the tab is hidden, and the visitor can stop
+   it (its pause toggle). The sign-in panel's scene (`CatchmentScene.svelte`)
+   is decoration, so it has no button: it moves for under 5 s and then holds
+   still (WCAG 2.2.2).
 5. The copy is readable at first paint; motion starts after load.
 
 ## Quality bar
@@ -182,7 +191,6 @@ that contradicts itself.
   the render from the head (per colour scheme), and inlining the stylesheets
   (`kit.inlineStyleThreshold`; the prerendered page kept its links). What
   remains is ~0.7 s of render delay, main-thread time (followups.md §
-  Landing page). Accessibility's 97 is the hero's gauge tag caught mid-fade
-  by the scan: hidden for 70 % of its 14 s loop, it is fully legible whenever
-  it shows. That same pass found and fixed two defects: no `robots.txt` (the
+  Landing page). Accessibility's 97 was the hero's gauge tag caught mid-fade
+  by the scan; the tag no longer animates (issue #51). That same pass found and fixed two defects: no `robots.txt` (the
   SPA fallback served HTML there) and the contour texture's 404 below.

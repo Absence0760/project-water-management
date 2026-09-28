@@ -26,6 +26,25 @@ for (const p of PAGES) {
 	});
 }
 
+// WCAG 2.4.2 Page Titled (issue #51): each prerendered page names itself, in
+// its HTML and in the browser. The document's title is the first <title>, and
+// the legal and methods pages run no script to correct it, so app.html's
+// fallback must come after the page's own.
+const TITLED = [
+	{ path: '/privacy', title: 'Privacy notice · Water Management' },
+	{ path: '/terms', title: 'Terms of use · Water Management' },
+	{ path: '/methods', title: 'How the model is checked · Water Management' },
+	{ path: '/welcome', title: 'Water Management: daily water balance for a catchment' }
+];
+test('every prerendered page names itself, before and without any script', async ({ request, page }) => {
+	for (const p of TITLED) {
+		const html = await (await request.get(p.path)).text();
+		expect(/<title>([^<]*)<\/title>/.exec(html)?.[1], p.path).toBe(p.title);
+		await page.goto(p.path);
+		await expect(page).toHaveTitle(p.title);
+	}
+});
+
 test('the legal pages open signed out and signed in, and pass an a11y scan on a desktop and a phone', async ({ page, signIn }) => {
 	test.setTimeout(60_000);
 	for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {

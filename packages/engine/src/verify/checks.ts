@@ -6,7 +6,9 @@
 // balance (mass conservation, bounds, limits honoured, totals that add up),
 // not what the workbook happens to produce, so they stay valid when the
 // algorithms change. See docs/model.md §6 "Verification".
-import { monthOfEpochDay, toEpochDay } from '../calendar';
+import { monthOfEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations/compare';
+import { ALLOCATION_SERIES, matchAllocations, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
@@ -244,8 +246,10 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
  * annual cap − what it pumped since 1 October). A farm's river pump (WP-3.8,
  * `river` what it may take today) is part of the surface: before the dam
  * under rules 1 and 2, after it under run of river (rule 3); a supplemental
- * dam-target unit fills only for the demand the river leaves. Call it once
- * per day, in order.
+ * dam-target unit fills only for the demand the river leaves. Under an
+ * allocation cap (engine ≥ 1.18.0) the surface gives at most `sRoom` and the
+ * units together pump at most `gRoom` (the day's allocation_room columns;
+ * Infinity without a cap). Call it once per day, in order.
  */
 function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const used = b ? b.units.map(() => 0) : [];
@@ -254,18 +258,20 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 	const primary = ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 1);
 	const toDam = ks.filter((k) => units[k]!.toDam);
 	const later = [...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 0), ...ks.filter((k) => !units[k]!.toDam && units[k]!.mode === 2)];
-	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1) => {
+	return (t: number, D: number, qPrev: number, avail: number, dead: number, cap: number, river = 0, rule: PlanSupply['rule'] = 1, sRoom = Infinity, gRoom = Infinity) => {
 		if (monthOfEpochDay(day0 + t) === 10 && (t === 0 || monthOfEpochDay(day0 + t - 1) !== 10)) used.fill(0);
+		let gLeft = gRoom;
 		const pump = (k: number, want: number) => {
 			const u = units[k]!;
-			const v = Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - used[k]!, want));
+			const v = Math.max(0, Math.min(u.capacityM3Day, u.annualCapM3 - used[k]!, want, gLeft));
 			used[k]! += v;
+			gLeft -= v;
 			return v;
 		};
 		let direct = 0;
 		for (const k of primary) direct += pump(k, D - direct);
 		let dam = 0;
-		const left = rule !== 3 ? D - direct - Math.min(river, D - direct) : D - direct;
+		const left = rule !== 3 ? Math.min(D - direct, sRoom) - Math.min(river, D - direct, sRoom) : Math.min(D - direct, sRoom);
 		for (const k of toDam) {
 			const u = units[k]!;
 			const room = cap - avail - dam;
@@ -277,12 +283,13 @@ function boreholeReplay(b: PlanBorehole | undefined, day0: number) {
 		const fromDam = Math.max(avail + dam - dead, 0);
 		let surface: number;
 		let fromRiver: number;
+		const want = Math.min(D - direct, sRoom);
 		if (rule === 3) {
-			surface = Math.min(fromDam, D - direct);
-			fromRiver = Math.max(0, Math.min(river, D - direct - surface));
+			surface = Math.min(fromDam, want);
+			fromRiver = Math.max(0, Math.min(river, want - surface));
 		} else {
-			fromRiver = Math.max(0, Math.min(river, D - direct));
-			surface = Math.min(fromDam, D - direct - fromRiver);
+			fromRiver = Math.max(0, Math.min(river, want));
+			surface = Math.min(fromDam, want - fromRiver);
 		}
 		for (const k of later) if (units[k]!.mode === 0 || qPrev < units[k]!.triggerM3) direct += pump(k, D - surface - fromRiver - direct);
 		return { direct, dam, surface, river: fromRiver };
@@ -310,6 +317,9 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 	const DEP = g('baseflow_depletion');
 	const bore = boreholeOf(n, own, []).borehole;
 	const replay = boreholeReplay(bore, day0);
+	// An allocation cap (engine ≥ 1.18.0): what the river and the boreholes may still give this water year.
+	const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+	const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 	for (let t = 0; t < days; t++) {
 		const where = `${n.id} day ${t}`;
 		let zIn = 0;
@@ -320,7 +330,7 @@ function checkUserDay(n: ModelInput['model']['nodes'][number], own: NonNullable<
 		const dep = DEP?.[t] ?? 0;
 		const river = senior ? h : Math.max(0, h - zIn);
 		// Primary boreholes pump first; otherwise the river goes first and groundwater tops it up.
-		const rp = replay(t, d, 0, river, 0, 0);
+		const rp = replay(t, d, 0, river, 0, 0, 0, 1, RS?.[t] ?? Infinity, RG?.[t] ?? Infinity);
 		const wantGw = rp.direct;
 		const want = rp.surface + wantGw;
 		if (G[t]! < 0 || G[t]! > d + tol(d) || Math.abs(G[t]! - want) > tol(Math.max(h, d, zIn))) return `${where}: user took ${G[t]} ≠ MIN(demand ${d}, ${senior ? 'inflow' : 'inflow − senior requirement'} ${senior ? h : h - zIn})${bore ? ` + groundwater ${wantGw}` : ''}`;
@@ -906,6 +916,10 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const dff = input.settings?.demandFactorFrom;
 		const factorFrom = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, out.days) : 0;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
+		// Registered volumes (engine ≥ 1.18.0): a full allocation's factor on the demand, a cap's room per source.
+		const KF = g(ALLOCATION_SERIES.demandFactor.key);
+		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
@@ -929,9 +943,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			const df = factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1;
+			const df = (factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (KF ? KF[t]! : 1);
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
-				return `${where}: crop requirement ${f} ≠ ${factor ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor ? ')' : ''}`;
+				return `${where}: crop requirement ${f} ≠ ${factor || KF ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor || KF ? ')' : ''}`;
 			if (objs) {
 				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where);
 				if (bad) return bad;
@@ -975,7 +989,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					if (r.topUp) toppers += v;
 				}
 				if (!near(xin, delivered, delivered)) return `${where}: off-take water in ${xin} ≠ what its rules took less their losses, ${delivered}`;
-				if (!near(xused, Math.min(xin, d), Math.max(xin, d))) return `${where}: off-take water used ${xused} ≠ MIN(what arrived ${xin}, demand ${d})`;
+				if (!near(xused, Math.min(xin, d, RS?.[t] ?? Infinity), Math.max(xin, d))) return `${where}: off-take water used ${xused} ≠ MIN(what arrived ${xin}, demand ${d}${RS ? `, the allocation room ${RS[t]}` : ''})`;
 				const rest = xin - xused;
 				const wantDam = rest > 0 && toppers > 0 ? Math.min(rest, (rest * toppers) / xin) : 0;
 				if (!near(xdam, wantDam, xin)) return `${where}: off-take water into the dam ${xdam} ≠ ${wantDam} (the top-up rules' share of the ${rest} left)`;
@@ -1016,18 +1030,21 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 				if (gRiv > Math.max(0, ss - keep) + tol(Math.max(ss, keep))) return `${where}: pumped ${gRiv} from the river, more than the ${ss} below the dam less the ${keep} that must pass`;
 			}
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
-			const rp = replay(t, dl, qPrev, avail, dead, cap, room, sup?.rule ?? 1);
+			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
+			const sLeft = (RS?.[t] ?? Infinity) - xused;
+			const rp = replay(t, dl, qPrev, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity);
 			let wantGs: number;
 			let wantGr = 0;
+			const dsl = Math.min(dl, sLeft);
 			if (bore) {
 				wantGs = rp.surface;
 				wantGr = rp.river;
 			} else if (sup && sup.rule === 3) {
-				wantGs = Math.min(surface, dl);
-				wantGr = Math.max(0, Math.min(room, dl - wantGs));
+				wantGs = Math.min(surface, dsl);
+				wantGr = Math.max(0, Math.min(room, dsl - wantGs));
 			} else {
-				wantGr = Math.max(0, Math.min(room, dl));
-				wantGs = Math.min(surface, dl - wantGr);
+				wantGr = Math.max(0, Math.min(room, dsl));
+				wantGs = Math.min(surface, dsl - wantGr);
 			}
 			if (!near(gRiv, wantGr, Math.max(ss, d, keep))) return `${where}: pumped ${gRiv} from the river ≠ ${wantGr} (supply rule ${sup?.rule}, ${onRiver ? 'on the river' : 'on the dam'})`;
 			if (!near(gw, rp.direct, Math.max(availScale, d))) return `${where}: groundwater ${gw} ≠ ${rp.direct} (borehole supply order and caps)`;
@@ -1617,6 +1634,126 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
 		checkReportTotals(input, out) ??
 		checkEwrAttribution(input, out) ??
 		checkGroundwater(input, out) ??
-		checkLandCover(input, out)
+		checkLandCover(input, out) ??
+		checkAllocations(input, out)
 	);
+}
+
+/**
+ * Registered volumes (engine ≥ 1.18.0, issue #72, ../allocations/mode.ts,
+ * docs/model.md §2.12a), on every farm and water user:
+ * - an allocation cap ('cap'): a room column only for a source the unit has
+ *   a volume of; within a water year the room falls by exactly the day's use
+ *   (surface: supplied − groundwater to the crop; groundwater: pumped to the
+ *   crop + into the dam), the day's use never exceeds it, it never goes below
+ *   0, and on 1 October it starts again at the year's registered volume
+ *   (recomputed here from the input's allocations), which it never exceeds;
+ * - a full allocation ('fullAllocation'): the demand factor is one number per
+ *   water year, and a scaled unit's demand over the run's days of a year adds
+ *   up to the volume registered for it over them (none when it had no demand);
+ * - no mode column in a run of another mode;
+ * - RunSummary.allocations is there exactly when the input has allocations,
+ *   with the mode the run used, and its per-source whole-year figures are
+ *   compareAllocations of the run's own series.
+ */
+export function checkAllocations(input: ModelInput, out: ModelOutput): string | null {
+	const get = seriesMap(out);
+	const nodes = input.model.nodes;
+	const mode = resolveAllocationMode(input.settings?.allocationMode, []);
+	const plan = matchAllocations(input.model.allocations, mode, nodes, []);
+	const day0 = toEpochDay(out.startDate);
+	const tolerance = typeof input.settings?.allocationTolerance === 'number' && input.settings.allocationTolerance >= 0 && input.settings.allocationTolerance < 1 ? input.settings.allocationTolerance : DEFAULT_ALLOCATION_TOLERANCE;
+	for (let i = 0; i < nodes.length; i++) {
+		const n = nodes[i]!;
+		const g = (k: string) => get.get(`${n.id}|${k}`);
+		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
+		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
+		const KF = g(ALLOCATION_SERIES.demandFactor.key);
+		const allocs = plan.byNode.get(i) ?? [];
+		if (mode !== 'cap' && (RS || RG)) return `${n.id}: allocation room columns in a run whose allocation mode is ${mode}`;
+		if (mode !== 'fullAllocation' && KF) return `${n.id}: an allocation demand factor in a run whose allocation mode is ${mode}`;
+		if (mode === 'cap') {
+			for (const [source, room] of [['surface', RS], ['groundwater', RG]] as const) {
+				const budget = yearBudgets(allocs, source, day0, out.days);
+				if (!!budget !== !!room) return `${n.id}: ${room ? 'an' : 'no'} allocation_room_${source} column for a unit with ${budget ? 'a' : 'no'} ${source} volume`;
+				if (!budget || !room) continue;
+				const G = g('supplied');
+				const GW = g('groundwater_used');
+				const GD = g('groundwater_to_dam');
+				if (!G) return `${n.id}: supplied series missing`;
+				const useOn = (t: number) => (source === 'surface' ? G[t]! - (GW?.[t] ?? 0) : (GW?.[t] ?? 0) + (GD?.[t] ?? 0));
+				for (let t = 0; t < out.days; t++) {
+					const where = `${n.id} day ${t}`;
+					const use = useOn(t);
+					const b = budget[t]!;
+					const eps = tol(Math.max(b, Math.abs(use)));
+					if (room[t]! < 0 || room[t]! > b + eps) return `${where}: ${source} allocation room ${room[t]} outside [0, the year's registered ${b}]`;
+					if (use > room[t]! + eps) return `${where}: took ${use} of ${source} water with only ${room[t]} of its registered volume left this water year`;
+					const newYear = t > 0 && monthOfEpochDay(day0 + t) === 10 && monthOfEpochDay(day0 + t - 1) !== 10;
+					if (newYear && Math.abs(room[t]! - b) > eps) return `${where}: the ${source} allocation room starts the water year at ${room[t]}, not its registered ${b}`;
+					if (t > 0 && !newYear) {
+						const was = useOn(t - 1);
+						const want = Math.max(0, room[t - 1]! - was);
+						if (Math.abs(room[t]! - want) > tol(Math.max(b, room[t - 1]!))) return `${where}: ${source} allocation room ${room[t]} ≠ the day before's ${room[t - 1]} − its use ${was}`;
+					}
+				}
+			}
+		}
+		if (mode === 'fullAllocation' && KF) {
+			const D = g('demand');
+			if (!D) return `${n.id}: demand series missing`;
+			for (let t = 0; t < out.days; ) {
+				const wy = waterYearOf(day0 + t);
+				const end = toEpochDay(`${wy + 1}-10-01`) - 1;
+				const last = Math.min(out.days - 1, end - day0);
+				let d = 0;
+				for (let k = t; k <= last; k++) {
+					if (KF[k] !== KF[t]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
+					d += D[k]!;
+				}
+				const reg = registeredOver(allocs, wy, day0 + t, day0 + last);
+				const want = KF[t]! > 0 ? reg : 0;
+				if (Math.abs(d - want) > tol(Math.max(d, reg))) return `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run`;
+				t = last + 1;
+			}
+		} else if (mode === 'fullAllocation' && allocs.length && (n.kind === 'farm' || n.kind === 'user')) {
+			return `${n.id}: a unit with a registered volume has no full-allocation demand factor`;
+		}
+	}
+	const s = out.summary.allocations;
+	if (!input.model.allocations?.length) return s ? 'RunSummary.allocations without allocations in the input' : null;
+	if (!s) return 'RunSummary.allocations missing for an input with allocations';
+	if (s.mode !== mode) return `RunSummary.allocations says mode ${s.mode}, the run used ${mode}`;
+	const units = nodes.filter((n) => n.kind === 'farm' || n.kind === 'user');
+	const cmp = compareAllocations({
+		startDate: out.startDate,
+		tolerance,
+		allocations: plan.list,
+		nodes: units.flatMap((n) => {
+			const supplied = get.get(`${n.id}|supplied`);
+			if (!supplied) return [];
+			return [
+				{
+					nodeId: n.id,
+					name: n.name,
+					kind: n.kind as 'farm' | 'user',
+					supplied,
+					groundwater: get.get(`${n.id}|groundwater_used`) ?? null,
+					groundwaterToDam: get.get(`${n.id}|groundwater_to_dam`) ?? null,
+					riverAbstraction: get.get(`${n.id}|river_abstraction`) ?? null
+				}
+			];
+		})
+	});
+	for (const row of s.nodes) {
+		const c = cmp.nodes.find((x) => x.nodeId === row.nodeId);
+		if (!c) return `RunSummary.allocations lists ${row.nodeId}, which the run has no series for`;
+		for (const src of row.sources) {
+			const side = src.waterSource === 'surface' ? c.surface : c.groundwater;
+			const close = (a: number | null, b: number | null) => (a === null || b === null ? a === b : Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b))));
+			if (src.wholeYears !== side.wholeYears || src.yearsOver !== side.yearsOver || !close(src.meanModelledM3PerYear, side.meanModelledM3PerYear) || !close(src.meanRegisteredM3PerYear, side.meanRegisteredM3PerYear))
+				return `RunSummary.allocations for ${row.nodeId} (${src.waterSource}) doesn't match the comparison of the run's own series`;
+		}
+	}
+	return null;
 }

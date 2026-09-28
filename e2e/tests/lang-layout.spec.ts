@@ -101,3 +101,41 @@ for (const lang of LANGS) {
 		});
 	});
 }
+
+// At 320 px (WCAG 1.4.10, issue #51) the EN | AF pair stays on one row, in
+// English and every language: it stacked, and the sticky farm header grew from
+// 56 to 93 px, a third of a 320 px screen and more than the scroll padding
+// (--header-h) clears for a focused control.
+for (const code of ['en', ...LANGS.map((l) => l.code)]) {
+	test(`the headers keep one row at 320 px, ${code}`, async ({ page, playwright }) => {
+		test.setTimeout(60_000);
+		await page.setViewportSize({ width: 320, height: 640 });
+		await page.addInitScript((c) => localStorage.setItem('wm.locale', c), code);
+		/** The language pair's buttons all sit on one row. */
+		const oneRow = () =>
+			page.locator('.lang.compact').evaluate((el) => new Set([...el.querySelectorAll('button')].map((b) => Math.round(b.getBoundingClientRect().top))).size);
+
+		for (const path of ['/login', '/welcome']) {
+			await page.goto(path);
+			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			expect(await oneRow(), path).toBe(1);
+			await expectNoSidewaysScroll(page);
+		}
+
+		const api = await playwright.request.newContext();
+		await seedExamplesOnce(api);
+		await api.dispose();
+		const login = await page.request.post(`${API_URL}/auth/login`, { data: FARMER1 });
+		expect(login.status(), await login.text()).toBe(200);
+		const { projects } = (await (await page.request.get(`${API_URL}/projects`)).json()) as { projects: { id: string; role: string }[] };
+		const projectId = projects.find((p) => p.role === 'farmer')!.id;
+		for (const path of ['/farm', `/farm/${projectId}`, `/farm/${projectId}/why`, `/farm/${projectId}/dam`]) {
+			await page.goto(path);
+			await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+			expect(await oneRow(), path).toBe(1);
+			const header = await page.locator('.farm-header').evaluate((el) => el.getBoundingClientRect().height);
+			expect(header, `${path}: the header's height`).toBe(56);
+			await expectNoSidewaysScroll(page);
+		}
+	});
+}

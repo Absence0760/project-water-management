@@ -6,7 +6,7 @@
 	import { api, type Allocation, type AllocationInput } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { parseNum } from '$lib/format/number';
-	import { AUTHORISATION_LABEL, PURPOSE_LABEL, SOURCE_LABEL } from './allocations';
+	import { AUTHORISATION_LABEL, conditionsFromText, monthShort, PURPOSE_LABEL, SOURCE_LABEL, WATER_YEAR_MONTHS } from './allocations';
 
 	let {
 		projectId,
@@ -37,7 +37,11 @@
 		storage: a?.storageM3 == null ? '' : String(a.storageM3),
 		validFrom: a?.validFrom ?? '',
 		validTo: a?.validTo ?? '',
-		reference: a?.reference ?? ''
+		reference: a?.reference ?? '',
+		// Licence conditions (issue #72): none ticked = none stated.
+		months: [...(a?.months ?? [])],
+		maxRate: a?.maxRateM3s == null ? '' : String(a.maxRateM3s),
+		conditions: (a?.conditions ?? []).join('\n')
 	});
 	// A fresh draft each time the sheet opens on a volume (or on a new one).
 	let draft = $state(draftOf(null));
@@ -61,6 +65,16 @@
 			formError = 'Storage is a number of m³, or empty.';
 			return;
 		}
+		const maxRate = draft.maxRate.trim() === '' ? null : parseNum(draft.maxRate);
+		if (draft.maxRate.trim() !== '' && (maxRate === null || maxRate < 0)) {
+			formError = 'The maximum rate is a number of m³/s, or empty.';
+			return;
+		}
+		const conditions = conditionsFromText(draft.conditions);
+		if (conditions.length > 20 || conditions.some((c) => c.length > 500)) {
+			formError = 'At most 20 conditions, one a line, each up to 500 characters.';
+			return;
+		}
 		const body: AllocationInput = {
 			nodeId: draft.nodeId || null,
 			registrationNo: draft.registrationNo,
@@ -73,6 +87,9 @@
 			validFrom: draft.validFrom || null,
 			validTo: draft.validTo || null,
 			reference: draft.reference,
+			months: draft.months.length ? [...draft.months].sort((a, b) => a - b) : null,
+			maxRateM3s: maxRate,
+			conditions,
 			// Only an editor sees names; a viewer can't reach this form.
 			...(canSeeHolders ? { holder: draft.holder } : {})
 		};
@@ -154,6 +171,27 @@
 			<label for="af-ref">Reference</label>
 			<input id="af-ref" type="text" maxlength="500" bind:value={draft.reference} />
 		</div>
+		<fieldset class="conditions">
+			<legend>Licence conditions <span class="muted">(optional; shown, not yet applied by the model)</span></legend>
+			<div class="field">
+				<span class="lbl" id="af-months-l">Months water may be taken</span>
+				<div class="months" role="group" aria-labelledby="af-months-l" data-testid="allocation-months">
+					{#each WATER_YEAR_MONTHS as m (m)}
+						<label class="month"><input type="checkbox" value={m} bind:group={draft.months} />{monthShort(m)}</label>
+					{/each}
+				</div>
+				<span class="hint">None ticked: no months stated (all year).</span>
+			</div>
+			<div class="field">
+				<label for="af-rate">Maximum rate (m³/s)</label>
+				<input id="af-rate" type="text" inputmode="decimal" bind:value={draft.maxRate} />
+			</div>
+			<div class="field">
+				<label for="af-conditions">Other conditions, one a line</label>
+				<textarea id="af-conditions" rows="3" bind:value={draft.conditions} aria-describedby="af-conditions-h"></textarea>
+				<span class="hint" id="af-conditions-h">As the licence words them, e.g. “No abstraction when the flow at the weir is below 0.2 m³/s”.</span>
+			</div>
+		</fieldset>
 		{#if formError}<p class="alert alert-error" role="alert">{formError}</p>{/if}
 	</form>
 	{#snippet actions()}
@@ -174,5 +212,26 @@
 	}
 	.field {
 		margin: 0;
+	}
+	.conditions {
+		display: grid;
+		gap: 0.75rem;
+		margin: 0;
+		padding: 0.75rem;
+		border: 1px solid var(--border);
+		border-radius: var(--radius);
+	}
+	/* Each month a 24 px row and well apart, so every box keeps a 24 px target (WCAG 2.2 2.5.8). */
+	.months {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+	}
+	.month {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		min-height: 1.5rem;
+		font-weight: normal;
 	}
 </style>

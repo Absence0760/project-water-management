@@ -2,9 +2,12 @@
 
 Roadmap [WP-3.10](./roadmap/step-3-licensing.md#wp-310-water-use-allocations-warms-vs-modelled-use),
 planned-work row **Water-use licences / allocations**, issue #45 ("No
-registered/licensed volume per water user (WARMS)"). This page covers the
-first slice: storing the volumes, importing them, and comparing them with a
-run's modelled use. What is still to build is at the end.
+registered/licensed volume per water user (WARMS)"). This page covers
+storing the volumes, importing them, comparing them with a run's modelled
+use (the first slice), and, from the second (issue #72, engine 1.18.0),
+licence conditions, the project's comparison band and the **allocation
+mode** that caps a run at the volumes or scales it to them. What is still to
+build is at the end.
 
 This is not legal advice, and the app never decides whether a use is lawful.
 It stores what an authorisation says and puts the model's abstraction beside
@@ -28,12 +31,19 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
 | Reference | free text: the letter, the extract, a note |
 | Source | the imported file (name and SHA-256), or none when typed in by hand |
+| Months | licence condition (103): the calendar months the use may happen in; none = none stated |
+| Maximum rate | licence condition (103): the most it may take at once, m³/s; optional |
+| Conditions | licence conditions in words (103), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
+
+Licence conditions are recorded and shown (the list sums them up in one
+line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions") but **not applied**
+yet: neither the comparison nor the allocation mode reads them.
 
 A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
 the farm and source on each day.
 
-Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql).
+Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql-103_allocation_conditionssql).
 
 ## Importing
 
@@ -43,7 +53,9 @@ so the importer finds columns **by their heading** through an alias table
 Number", "Registered Volume (m3/a)", "Resource Type", "Water Use Sector" and
 so on, or the app's own template headings (`registration_no`, `farm`,
 `holder`, `authorisation`, `purpose`, `water_source`, `volume_m3_year`,
-`storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`). The
+`storage_m3`, `valid_from`, `valid_to`, `reference`, `property_ref`, and the
+licence conditions `months` (numbers or names, ranges over the new year:
+`Oct-Mar`), `max_rate_m3s` and `conditions`, separated by `|`). The
 template is downloadable from the Allocations page's Import sheet. The aliases are **pending a real
 extract** from the client (followups.md): a column the importer doesn't know
 is listed as "not read", never guessed.
@@ -117,8 +129,10 @@ For a run, per farm or water user, per water source and per **water year**
   volume, marked **part**, and isn't counted in the summary. A forecast
   run (WP-2.12) is compared on its record only, the days before its
   forecast (issue #51), so its last water year may end as a part year.
-- **Status**, with a tolerance of ±10 % (`?tolerance=` on the API; a project
-  setting is a follow-up): *above registered* (modelled > registered × 1.1),
+- **Status**, with the project's band, ±10 % unless set (Settings ›
+  Registered volumes, `settings.allocationTolerance`, pending the
+  hydrologist; `?tolerance=` on the API overrides it for one request):
+  *above registered* (modelled > registered × 1.1),
   *within band*, *below registered* (< × 0.9), *no registered volume*
   (modelled use with nothing in force), *no use, none registered*.
 - **Storage**: the sum of the farm's registered storage beside the dam
@@ -126,13 +140,38 @@ For a run, per farm or water user, per water source and per **water year**
 - Allocations not matched to a node, or matched to a node the run doesn't
   have, are counted and named, not compared.
 
+### The allocation mode (engine ≥ 1.18.0)
+
+Settings › Registered volumes › **Allocation mode** (`settings.allocationMode`)
+decides what the volumes do to a run
+([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
+
+- **Compare only** (the default): nothing; every run with volumes carries
+  the comparison's whole-year figures in its summary.
+- **Cap use at the registered volume**: each unit's surface-water use and
+  groundwater use per water year stay within its volumes. The budget is the
+  whole year's volume, so a unit may take it early; its boreholes cover what
+  a capped surface can't, within the groundwater volume. A source with no
+  volume isn't capped. What a cap does is visible: the run warns about the
+  units it leaves alone, and the Allocations tab says the run was capped.
+- **Full allocation**: each unit's demand is scaled, year by year, to ask
+  for exactly its volumes, keeping its seasonal shape: the river if every
+  registered user took their entitlement, the background of a cumulative
+  assessment (WP-3.11). A scenario can switch it on for one run
+  (`settings.set allocationMode`, [scenarios.md](./scenarios.md)).
+
+Since every run's input carries the volumes (never the names), a stored run
+replays with the volumes it ran on, a change to a volume makes the latest run
+out of date, and comparing two runs lists the volumes that changed.
+
 ### What the comparison is not
 
 - Not a finding. The model's supply is what the calibrated model would take
   with the demand it was given, not a meter reading. A registered volume can
   be missing, out of date or held by someone else.
 - Not the whole entitlement picture: the Reserve, other users' priority and
-  licence conditions (`months`, rates) aren't applied here.
+  licence conditions (`months`, rates) aren't applied here, nor by the
+  allocation mode.
 - Pending the hydrologist: the ±10 % band, and counting supply from the
   farm's own dam as abstraction (the WP says so; a hydrologist may want dam
   filling, s21b, compared with storage instead).
@@ -159,15 +198,12 @@ registration numbers and counts, never names.
 
 Tracked in [followups.md § Allocations](./followups.md#allocations-wp-310):
 
-- Engine `allocationMode`: `cap` (supply limited to the allocation per water
-  year) and `fullAllocation` (demand replaced by the allocation over its
-  monthly pattern) with `RunSummary.allocations`, the `checkAllocations`
-  invariant in `runModel`, and a full-allocation scenario for cumulative
-  assessment (WP-3.11).
-- `settings.allocationTolerance` instead of the query parameter.
+- Applying licence conditions: the cap to keep to the months of use and the
+  maximum rate.
 - XLSX import and a column-mapping step for extracts whose headings the alias
-  table doesn't know; licence conditions (`months`, `maxRateM3s`,
-  `conditions jsonb`).
+  table doesn't know (waits on a real WARMS extract).
 - The farm view (and share views, D3 (c)) showing a farmer their own
-  registered volume beside their modelled use.
+  registered volume beside their modelled use (waits on D3).
+- Dam filling vs registered storage (s21b), and how the cap counts water
+  drawn from a dam that boreholes filled (pending the hydrologist, issue #90).
 - An over/under-use chart; in the evidence pack.

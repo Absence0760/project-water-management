@@ -267,8 +267,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   out. The same pair for the job worker: `jobs/worker.ts` (local, dotenv) and
   `lambda-worker.ts` (AWS, never dotenv), and `lambda-fetcher.ts` and
   `lambda-renderer.ts` are AWS only; `infra/scripts/package-lambdas.sh`
-  refuses a Lambda bundle that contains dotenv, and keeps `playwright-core`
-  out of every bundle but the renderer's.
+  refuses a Lambda bundle that contains dotenv, and any static import of
+  `playwright-core` in a bundle but the renderer's (the lazy `import()` in
+  `reports/render.ts` is the one allowed path; `scripts/guards/check_lambda_bundle.mjs`).
 - **Static SPA frontend only.** No SSR adapters. Routes render client-side from
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).

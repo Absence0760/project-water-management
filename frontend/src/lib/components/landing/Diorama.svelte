@@ -10,8 +10,11 @@
 	// gauge fall (ART.overlay, projected through the render's camera), so the
 	// motion sits on the picture. Two uses:
 	//   hero   one ~10 s loop, then a rest: rain over the ridges, a pulse of
-	//          water down the rivers, the dams filling, the gauge's tag. Only
-	//          while on screen and the tab is visible; off under reduced motion.
+	//          water down the rivers, the dams filling. Only while on screen
+	//          and the tab is visible; off under reduced motion, and when the
+	//          page's pause button (Hero) sets `paused` (WCAG 2.2.2: it runs
+	//          longer than 5 s). The gauge's tag never moves: it is text to
+	//          read, so it shows the whole time.
 	//   story  no loop; `step` lights its part of the scene (the rain, the
 	//          slopes and streams, the dams, the farms, the river below).
 	// Before the script runs, and under reduced motion, it is the loop's last
@@ -25,8 +28,19 @@
 		mode,
 		step = null,
 		priority = false,
+		paused = false,
+		canMove = $bindable(false),
 		tag
-	}: { mode: 'hero' | 'story'; step?: StepId | null; priority?: boolean; tag?: Snippet } = $props();
+	}: {
+		mode: 'hero' | 'story';
+		step?: StepId | null;
+		priority?: boolean;
+		/** The visitor stopped the hero's loop: it shows its still frame. */
+		paused?: boolean;
+		/** Out: the hero may move (motion allowed and the script running), so a pause button means something. */
+		canMove?: boolean;
+		tag?: Snippet;
+	} = $props();
 
 	const { hero, overlay } = ART;
 	// viewBox units: 1000 across, the picture's own shape.
@@ -69,17 +83,18 @@
 		img.addEventListener('load', done);
 		return () => img?.removeEventListener('load', done);
 	});
-	/** The loop runs: motion allowed, the scene on screen, the tab visible. */
-	let playing = $state(false);
-	let motion = $state(false);
+	/** The loop runs: motion allowed and not paused, the scene on screen, the tab visible. */
+	let onScreen = $state(false);
+	const motion = $derived(canMove && !paused);
+	const playing = $derived(motion && onScreen);
 
 	onMount(() => {
 		if (mode !== 'hero' || !root) return;
 		const reduce = matchMedia('(prefers-reduced-motion: reduce)');
 		let visible = false;
 		const update = () => {
-			motion = !reduce.matches;
-			playing = motion && visible && document.visibilityState === 'visible';
+			canMove = !reduce.matches;
+			onScreen = visible && document.visibilityState === 'visible';
 		};
 		const io = new IntersectionObserver(([e]) => {
 			visible = !!e?.isIntersecting;
@@ -259,7 +274,7 @@
 
 	/* ---- hero: one loop of about 10 s, then a 4 s rest ----
 	   Every 14 s loop starts 11.2 s in (80 %, inside the rest: the dams full, the
-	   rivers lit, the needle settled, the tag shown), which is the still frame the
+	   rivers lit, the needle settled), which is the still frame the
 	   page shows before the script runs. So turning motion on changes nothing on
 	   screen; the rest runs out and the next loop begins with the rain. */
 	.hero [data-motion='on'] {
@@ -289,10 +304,6 @@
 		transform-box: fill-box;
 		transform-origin: 0 100%;
 		animation: needle 14s ease-out infinite;
-		animation-delay: var(--rest);
-	}
-	.hero [data-motion='on'] .tag {
-		animation: tag 14s ease-out infinite;
 		animation-delay: var(--rest);
 	}
 	.hero [data-playing='no'] *,
@@ -370,23 +381,6 @@
 			transform: rotate(0deg);
 		}
 	}
-	@keyframes tag {
-		0%,
-		70% {
-			opacity: 0;
-			translate: 0 6px;
-		}
-		76%,
-		94% {
-			opacity: 1;
-			translate: 0 0;
-		}
-		100% {
-			opacity: 0;
-			translate: 0 0;
-		}
-	}
-
 	/* ---- story: each step lights its part ---- */
 	.story .dams path {
 		opacity: 0.12;

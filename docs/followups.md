@@ -8,8 +8,8 @@ Tick items off (or move them into an issue) as they are done.
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
 the history scrub #63, the legal go-live gates #103, the information officer's POPIA
-questions #90,
-the hydrologist's decisions #46, applicant decisions #50, the Step 2
+questions and the applicant decisions (D1–D3, WP-3.3) #90,
+the hydrologist's decisions #46, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
 The buildable work is filed in batches by area, one issue per batch, so a
@@ -2648,22 +2648,38 @@ The first slice (2026-09-26: migration 038, engine `compareAllocations`,
 stores registered volumes and compares them with a run's modelled use. Left,
 from the WP:
 
-- [ ] **Engine `allocationMode`** (`cap` | `fullAllocation`, default `none`)
-      with `RunSummary.allocations` and a `checkAllocations` invariant in
-      `runModel`; bumps `ENGINE_VERSION`. `cap`: cumulative supply per water
-      year ≤ the allocation; `fullAllocation`: demand replaced by the
-      allocation over its monthly pattern. Durable fix for "what if every
-      lawful user took their entitlement" (WP-3.11's background run).
-      Trigger: WP-3.11 (cumulative impact) or an assessor asking.
-- [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
-      (default 0.1, pending the hydrologist). Trigger: the first client asking
-      for another band.
+- [x] **Engine `allocationMode`** (2026-09-28, engine 1.18.0, issue #72):
+      `none` | `cap` | `fullAllocation`, with `RunSummary.allocations`, the
+      `allocations` self-check (`checkAllocations`, also in the fuzz's
+      invariants) and every run's input carrying the volumes (no names).
+      `cap`: each unit's surface and groundwater use per water year within
+      its whole-year registered volumes; `fullAllocation`: its demand scaled
+      per water year to them, keeping its own seasonal shape (not the
+      licence's months: those aren't applied yet, below). Warm starts carry
+      both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+- [ ] **How the cap counts water drawn from a dam boreholes filled.** The
+      cap counts every dam draw as surface use, so groundwater pumped into a
+      dam and drawn out uses both volumes, where the comparison nets it
+      (§2.12). The durable fix is a per-day provenance of stored water (the
+      pumped share of each dam's storage) so the cap nets it the same way.
+      Trigger: the hydrologist's answer on s21b and the netting (#90).
+- [x] **`settings.allocationTolerance`** (2026-09-28, issue #72): the
+      comparison's band as a project setting (Settings › Registered volumes,
+      default 0.1, pending the hydrologist); `?tolerance=` still overrides it
+      for one request.
 - [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
       extract (plan.md questions).
-- [ ] **Licence conditions**: `months`, `maxRateM3s`, a `conditions jsonb`
-      (the WP's `Allocation` shape), shown and later enforced by `cap`.
+- [x] **Licence conditions** (2026-09-28, migration 103, issue #72):
+      `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
+      form, the list, the import template and the export, and on the run's
+      input.
+- [ ] **Apply licence conditions in the cap**: no supply outside the months
+      of use, and a unit's daily take at most its maximum rate × 86 400. The
+      engine already receives them (`AllocationEntry.months`, `maxRateM3s`).
+      Trigger: a licence whose conditions bind in a scenario an assessor
+      runs, or the client asking.
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
@@ -3026,7 +3042,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #50](https://github.com/Absence0760/project-water-management/issues/50); step-3 § 11), built on the
+- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
@@ -3061,7 +3077,7 @@ Applicant view and the Applications tab. Left:
       `scenarios/oracles.db.test.ts` ("ids and counts"), each with its
       positive control ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 - [ ] **The wording of a value rule refused because of hidden data**
-      ([issue #50](https://github.com/Absence0760/project-water-management/issues/50)).
+      ([issue #90](https://github.com/Absence0760/project-water-management/issues/90)).
       Built on the recommended default: the applicant is told only "doesn't
       apply to the catchment as modelled" (`MASKED_RULE`), never which rule
       or the hidden values; the assessors, checking the same application,
@@ -3069,14 +3085,15 @@ Applicant view and the Applications tab. Left:
       namespace). **Pending the client**: whether an applicant may be told
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
-      Trigger: the client's answer on issue #50.
+      Trigger: the client's answer on issue #90.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
-      are gauge data). Pending the hydrologist.
+      are gauge data). Pending the hydrologist and the licensing authority
+      (issue #90).
 - [x] **Performance of `run_series_select`.** Every viewer read of run series
       now evaluates `app_hidden_scenario_runs()` and the contributor policy's
       two helpers once per query (hashed subplans; the contributor ones exit

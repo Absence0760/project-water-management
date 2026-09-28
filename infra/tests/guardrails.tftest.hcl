@@ -462,6 +462,19 @@ run "production_guardrails" {
     condition     = aws_db_instance.main.engine == "postgres" && aws_db_instance.main.engine_version == "17"
     error_message = "Database must be PostgreSQL 17 (same major as local dev)."
   }
+  # A major upgrade replaces the parameter group (new family), so it must be
+  # create-before-destroy under a generated name: a fixed `name` collides with
+  # the group the instance is still using (rds.tf § locals).
+  # Lifecycle settings aren't plan attributes, so that half reads the source
+  # (the resource block, up to its closing brace at column 0).
+  assert {
+    condition = (
+      aws_db_parameter_group.main.name_prefix == "water-management-pg17-"
+      && aws_db_parameter_group.main.family == "postgres17"
+      && can(regex("create_before_destroy\\s*=\\s*true", regex("(?s)resource \"aws_db_parameter_group\" \"main\" \\{.*?\\n\\}", file("rds.tf"))))
+    )
+    error_message = "The DB parameter group must use name_prefix (never a fixed name), the postgres17 family, and lifecycle { create_before_destroy = true }."
+  }
   assert {
     condition     = aws_db_instance.main.instance_class == "db.t4g.micro" && aws_db_instance.main.multi_az == false
     error_message = "Default DB must be single-AZ db.t4g.micro."
@@ -805,6 +818,8 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.jobs_dlq_depth,
       aws_cloudwatch_metric_alarm.worker_errors,
       aws_cloudwatch_metric_alarm.worker_throttles,
+      aws_cloudwatch_metric_alarm.worker_heartbeat,
+      aws_cloudwatch_metric_alarm.worker_tick_failed,
       aws_cloudwatch_metric_alarm.jobs_backlog,
       aws_cloudwatch_metric_alarm.job_dead,
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth,
@@ -981,6 +996,29 @@ run "background_jobs" {
   assert {
     condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
     error_message = "The backlog alarm must read the metric lambda-worker.ts emits (METRIC_NAMESPACE, OldestDueJobAgeSeconds)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_heartbeat.namespace == "AWS/Lambda" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.metric_name == "Invocations" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.comparison_operator == "LessThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.threshold == 1 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.period * aws_cloudwatch_metric_alarm.worker_heartbeat.evaluation_periods == 900 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.treat_missing_data == "breaching"
+    )
+    error_message = "The worker heartbeat must alarm on < 1 invocation in 15 minutes (three ticks), with missing data breaching: a stopped worker emits no data."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_tick_failed.namespace == "AWS/Events" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.metric_name == "FailedInvocations" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.dimensions["RuleName"] == aws_cloudwatch_event_rule.worker_tick.name &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.threshold == 0
+    )
+    error_message = "EventBridge failing to deliver the worker tick must alarm (FailedInvocations > 0 on the worker-tick rule)."
   }
   assert {
     condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
@@ -1578,15 +1616,15 @@ run "mail_failures_and_log_privacy" {
 
   assert {
     condition = (
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length=0") &&
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length_on_error=0")
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_parameter_max_length=0") &&
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_parameter_max_length_on_error=0")
     )
     error_message = "Slow-statement and error logging must never record bind values (addresses, farm names, series): log_parameter_max_length(_on_error) = 0."
   }
   assert {
     condition = (
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1") &&
-      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_statement=none")
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1") &&
+      contains([for p in aws_db_parameter_group.main.parameter : "${p.name}=${p.value}"], "log_statement=none")
     )
     error_message = "The parameter group must keep TLS forced and log_statement = none."
   }
