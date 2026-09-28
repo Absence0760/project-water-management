@@ -78,7 +78,8 @@ describe('plainMarkdown', () => {
 
 describe('plainMarkdown on a run of brackets', () => {
 	// Link text could contain "[", so each "[" of a long run rescanned the rest (CodeQL js/polynomial-redos).
-	it('returns it unchanged, and still unwraps a link after it', () => {
+	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.
+	it('returns it unchanged, and still unwraps a link after it', { timeout: 5_000 }, () => {
 		const run = '['.repeat(200_000);
 		expect(plainMarkdown(run)).toBe(run);
 		expect(plainMarkdown(`[[[ [text](./x.md)`)).toBe('[[[ text');

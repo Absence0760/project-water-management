@@ -49,7 +49,8 @@ describe('unitOptions', () => {
 describe('unit spellings with long whitespace runs', () => {
 	// `\s+per\s+` over a long run of spaces backtracked quadratically (CodeQL js/polynomial-redos):
 	// a pasted unit cell full of padding hung the import. Collapsed first now, so this returns at once.
-	it('reads a unit padded with a long run of spaces, and "per" spelled with runs around it', () => {
+	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.
+	it('reads a unit padded with a long run of spaces, and "per" spelled with runs around it', { timeout: 5_000 }, () => {
 		expect(seriesUnit('flow_observed_m3s', `m3${' '.repeat(200_000)}/s`)).toMatchObject({ ok: true, factor: 1 });
 		expect(seriesUnit('flow_observed_m3s', `m3${' '.repeat(200_000)}x`)).toMatchObject({ ok: false });
 		expect(seriesUnit('flow_observed_m3s', 'm3 \t PER  \n sec')).toMatchObject({ ok: true, factor: 1 });

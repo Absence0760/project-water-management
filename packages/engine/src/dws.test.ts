@@ -78,7 +78,8 @@ describe('stripHtmlComments', () => {
 	});
 	// The regex it replaced retried from every unclosed "<!--" (CodeQL js/polynomial-redos): a page of
 	// them hung the parser. The scan returns at once.
-	it('returns a page of unclosed comment openers unchanged', () => {
+	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.
+	it('returns a page of unclosed comment openers unchanged', { timeout: 5_000 }, () => {
 		const hostile = '<!--'.repeat(200_000);
 		expect(stripHtmlComments(hostile)).toBe(hostile);
 	});
