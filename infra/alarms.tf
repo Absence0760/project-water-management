@@ -23,11 +23,9 @@ resource "aws_sns_topic" "alerts" {
   name = "${local.project}-prod-alerts"
 }
 
-# Subscribe operator email if configured. Empty var.budget_alert_email
-# means no subscription is created (alarms still fire visibly in the
-# console, just nobody is paged).
+# Subscribe the operator's email. budget_alert_email is required and
+# validated (variables.tf), so an alarm or budget breach always pages someone.
 resource "aws_sns_topic_subscription" "alerts_email" {
-  count     = var.budget_alert_email != "" ? 1 : 0
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"
   endpoint  = var.budget_alert_email
@@ -460,7 +458,6 @@ resource "aws_sns_topic" "alerts_us_east_1" {
 
 resource "aws_sns_topic_subscription" "alerts_us_east_1_email" {
   provider  = aws.us_east_1
-  count     = var.budget_alert_email != "" ? 1 : 0
   topic_arn = aws_sns_topic.alerts_us_east_1.arn
   protocol  = "email"
   endpoint  = var.budget_alert_email

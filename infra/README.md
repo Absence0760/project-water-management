@@ -144,7 +144,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (31 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (38 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -370,7 +370,8 @@ Claude does not run any of these, and none of them print a secret. Replace
 
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
-   topic.
+   topic. `budget_alert_email` is required and must be a real mailbox; plan
+   refuses an empty, malformed or reserved (`example.com` etc.) address.
 8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
    records are created by the apply; the identity turns `SUCCESS` once DNS
    propagates (minutes to an hour):
@@ -503,7 +504,14 @@ deploy role's trust postcondition, with negative runs for a branch subject, a
 immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
-below two ticks does. Six more refuse an unreserved (`-1`) concurrency on each
+below two ticks does. Another six refuse an alert mailbox nobody reads:
+`budget_alert_email` is required, and an empty, malformed or reserved
+address fails the plan (example.com/.org/.net and their subdomains, and the
+`.example`, `.test`, `.invalid` and `.localhost` TLDs of RFC 2606 / RFC 6761,
+in any case); `dmarc_report_email` may be empty but is held to the same rule
+when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
+domain that only contains "example". The suite's own address is at the
+site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
 `maximum_concurrency`; `worker_sqs_triggers` pins that sum against the planned
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker

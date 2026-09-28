@@ -400,6 +400,10 @@ variables {
   route53_zone_id = "Z0000000000000000000"
   github_repo     = "Absence0760/project-water-management"
   secrets_file    = "/dev/null"
+  # Required and validated. Not an example.* (or other RFC 2606) address,
+  # which the variable refuses: the site's own domain, and a plan-only test
+  # never subscribes it.
+  budget_alert_email = "ops@water-management.jaredhoward.com"
 }
 
 run "production_guardrails" {
@@ -795,12 +799,75 @@ run "rejects_invalid_dmarc_policy" {
 # Alarms + budget
 # ---------------------------------------------------------------------------
 
+# --- Alert / report mailbox validation --------------------------------------
+# budget_alert_email is required; an empty, malformed or reserved (RFC 2606 /
+# RFC 6761) address is refused, case-insensitively. dmarc_report_email may be
+# empty (no rua) but is held to the same rule when set.
+
+run "rejects_empty_budget_alert_email" {
+  command = plan
+  variables {
+    budget_alert_email = ""
+  }
+  expect_failures = [var.budget_alert_email]
+}
+
+run "rejects_malformed_budget_alert_email" {
+  command = plan
+  variables {
+    budget_alert_email = "ops at water-management.jaredhoward.com"
+  }
+  expect_failures = [var.budget_alert_email]
+}
+
+run "rejects_example_com_budget_alert_email" {
+  command = plan
+  variables {
+    budget_alert_email = "You+AWS-Alerts@Example.COM"
+  }
+  expect_failures = [var.budget_alert_email]
+}
+
+run "rejects_example_subdomain_budget_alert_email" {
+  command = plan
+  variables {
+    budget_alert_email = "ops@mail.example.org"
+  }
+  expect_failures = [var.budget_alert_email]
+}
+
+run "rejects_reserved_tld_budget_alert_email" {
+  command = plan
+  variables {
+    budget_alert_email = "ops@water-management.INVALID"
+  }
+  expect_failures = [var.budget_alert_email]
+}
+
+run "rejects_example_net_dmarc_report_email" {
+  command = plan
+  variables {
+    dmarc_report_email = "dmarc@EXAMPLE.net"
+  }
+  expect_failures = [var.dmarc_report_email]
+}
+
+# Positive control: a real-looking address at a domain that merely contains
+# "example" is accepted, and an empty dmarc_report_email still omits rua.
+run "accepts_real_alert_mailboxes" {
+  command = plan
+  variables {
+    budget_alert_email = "Ops+AWS@counterexample.com"
+    dmarc_report_email = "dmarc@water-management.jaredhoward.com"
+  }
+  assert {
+    condition     = aws_sns_topic_subscription.alerts_email.endpoint == "Ops+AWS@counterexample.com"
+    error_message = "A non-reserved address is accepted and subscribed."
+  }
+}
+
 run "alarms" {
   command = plan
-
-  variables {
-    budget_alert_email = "ops@example.com"
-  }
 
   assert {
     condition = alltrue([for a in [
@@ -846,7 +913,7 @@ run "alarms" {
     error_message = "A $60 monthly budget exists by default."
   }
   assert {
-    condition     = aws_sns_topic_subscription.alerts_email[0].endpoint == "ops@example.com" && aws_sns_topic_subscription.alerts_us_east_1_email[0].endpoint == "ops@example.com"
+    condition     = aws_sns_topic_subscription.alerts_email.endpoint == "ops@water-management.jaredhoward.com" && aws_sns_topic_subscription.alerts_us_east_1_email.endpoint == "ops@water-management.jaredhoward.com"
     error_message = "Both SNS topics (regional + us-east-1) must email budget_alert_email."
   }
 

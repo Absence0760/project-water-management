@@ -363,7 +363,11 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   report email that failed to send, § Email), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
   Lambda `Errors` metric can't see, § Runbooks), and the job queue's five (DLQ depth, worker errors and
-  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
+  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`. That variable is
+  required: plan refuses an empty, malformed or reserved address
+  (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
+  case), so a copied example tfvars can't leave the alarms paging nobody
+  (`dmarc_report_email`, when set, gets the same check).
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
