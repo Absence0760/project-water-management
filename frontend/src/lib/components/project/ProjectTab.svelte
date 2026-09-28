@@ -284,6 +284,14 @@
 		min-height: 6.5rem;
 		max-height: 24rem;
 	}
+	/* A phone has no cap: its narrow field wraps every line, so 12 short lines
+	   took 24 in a wide font (DejaVu Sans) and ran past 24rem into the inner
+	   scrollbar this avoids. The page scrolls instead (project-page.spec.ts). */
+	@container project-page (max-width: 520px) {
+		textarea {
+			max-height: none;
+		}
+	}
 	.stat {
 		position: relative;
 	}

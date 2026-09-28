@@ -900,7 +900,7 @@ it scrolls, and isn't fitted to the window.
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
-- The **description** box grows with its text (up to about 24rem) instead of
+- The **description** box grows with its text (up to about 24rem; on a phone, where every line wraps, with no cap) instead of
   hiding it behind an inner scrollbar (`field-sizing: content`; browsers
   without it keep four rows).
 
