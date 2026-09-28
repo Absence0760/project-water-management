@@ -41,8 +41,8 @@ export const HELP_AF: Record<string, HelpTranslation> = {
 	'farm-pump-less': {
 		term: 'Pomp minder (vir die rivier)',
 		short: 'Hoeveel minder jy sou gepomp het op die dae toe die rivier water nodig gehad het, sodat dit sy reserwe behou het.',
-		long: 'Jou plaasbladsy gee dit per dag toe die rivier dit nodig gehad het, nie as ’n gemiddelde oor die hele seisoen nie: om elke dag ’n bietjie minder te pomp, help min op die dae wat saak maak.\n\nAs jou dam ook water teruggehou het wat die rivier nodig gehad het, sê die bladsy dit apart. Daardie deel word nie van jou pompwerk afgetrek nie; as jou dam ’n uitlaat of ’n omleiding het, help dit om daardie water deur te laat.\n\nDit is die model se skatting. Net ’n kennisgewing van jou WGV is ’n beperking.',
-		sourceHash: 'b7937f7ab02e4b369a129bdda40a92fbd415b586417a6fe4bbe777a7ca9d0fee'
+		long: 'Jou plaasbladsy gee dit per dag toe die rivier dit nodig gehad het, nie as ’n gemiddelde oor die hele seisoen nie: om elke dag ’n bietjie minder te pomp, help min op die dae wat saak maak.\n\nAs jou dam ook water teruggehou het wat die rivier nodig gehad het, sê die bladsy dit apart. Daardie deel word nie van jou pompwerk afgetrek nie; as jou dam ’n uitlaat of ’n omleiding het, help dit om daardie water deur te laat.\n\nDit is die model se skatting. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
+		sourceHash: '46c4251014aaf2a299eb575c4d058c4ded8b4a9a68ea803c47cf0e367000067a'
 	},
 	'farm-modelled': {
 		term: 'Gemodelleer (deur die model bereken)',
@@ -64,14 +64,20 @@ export const HELP_AF: Record<string, HelpTranslation> = {
 	},
 	'farm-model-band': {
 		term: 'Model: goed, hou dop of tekort',
-		short: 'Die model se eie beoordeling van jou seisoen tot dusver. Nie ’n beperking nie: net ’n kennisgewing van jou WGV is een.',
+		short: 'Die model se eie beoordeling van jou seisoen tot dusver. Nie ’n beperking nie: net ’n kennisgewing van jou WGV of van die DWS is een.',
 		long: 'Goed: jy sou minstens 90 % gehad het van die water wat jy nodig gehad het as jy minder vir die rivier gepomp het. Hou dop: 70 tot 90 %, of jou dam het water teruggehou wat die rivier nodig gehad het. Tekort: onder 70 %.\n\nHierdie drempels is ’n voorstel wat die WGV kan verander.',
-		sourceHash: 'aacaa9467417def76b6cdb571cc957bd0c65b683504244df0509cd5671f4a9b9'
+		sourceHash: '9811a93d9dcbd39c8d22f9190a05098ed8ea58ac05ca2a5c0091726f508ebc4d'
 	},
 	'farm-saved-copy': {
 		term: 'Die kopie op jou foon',
 		short: 'Jou plaas se jongste syfers, op hierdie foon gehou sodat hulle dadelik wys, ook as daar geen sein is nie.',
 		long: 'Dit hou net jou eie plaas se syfers, wat jy in elk geval mag sien. Dit word verwyder wanneer jy uitteken, wanneer iemand anders op hierdie foon inteken, wanneer jy nie meer toegang tot die plaas het nie, en wanneer dit 30 dae lank nie oopgemaak is nie.\n\nOp ’n foon wat jy deel, kies "Moenie ’n kopie op hierdie foon hou nie" in die Kieslys.',
 		sourceHash: '6cfcf9b3943e90fe604d0510c0f187b1d5376d22e433f0dd68186ca59ed9a4b4'
+	},
+	'farm-wua': {
+		term: 'WGV (Watergebruikersvereniging)',
+		short: 'Die liggaam van watergebruikers wat die watergebruik in jou gebied bestuur. Dit publiseer die syfers op hierdie bladsy, en sy eie kennisgewings.',
+		long: '’n Watergebruikersvereniging (WGV) is ’n liggaam van die watergebruikers in ’n gebied, ingevolge die Nasionale Waterwet gestig. Dit bestuur hoe water onder sy lede gedeel word, en dit reik die kennisgewings uit wat boere vra om minder water te gebruik. Sommige gebiede het nog ’n besproeiingsraad in plaas daarvan, wat dieselfde werk doen totdat dit ’n WGV word.\n\nDie syfers op jou plaasbladsy is dié wat jou WGV gepubliseer het. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Vra jou WGV as enigiets op die bladsy onduidelik is.',
+		sourceHash: 'cb9c961b61c1cabe83eece6cb0b47d77c4491eab427730b0f9088e1acb682b60'
 	},
 };

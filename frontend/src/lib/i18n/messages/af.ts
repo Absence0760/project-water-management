@@ -337,8 +337,8 @@ export const af: Catalogue = {
 	'aeedf2e8': 'WGV',
 	// (you)
 	'394c6255': '(jy)',
-	// These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction.
-	'ee93a305': 'Hierdie syfers kom van ’n rekenaarmodel van die opvanggebied. Hulle kan verkeerd wees. Net ’n kennisgewing van jou WGV is ’n beperking.',
+	// These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
+	'5e0adb36': 'Hierdie syfers is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.',
 	// very little water needed
 	'ac1332f5': 'baie min water nodig',
 	// {pct} of water needed
@@ -439,8 +439,8 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
-	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction.
-	'f64a019a': 'Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV is ’n beperking.',
+	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA or from DWS is a restriction.
+	'bcdaf277': 'Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
 	// Next {days}
 	'0f4c3e21': 'Volgende {days}',
 	// Lowest dam level expected: about {pct} around {date}
@@ -597,10 +597,10 @@ export const af: Catalogue = {
 	'e31fe149': 'Jy het nodig gehad',
 	// {leaves} is about **{pct}** of the {need} you needed.
 	'78fd83cd': '{leaves} is ongeveer **{pct}** van die {need} wat jy nodig gehad het.',
-	// Only a notice from your WUA is a restriction. Right now: **no restriction**.
-	'09d3c636': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
-	// Only a notice from your WUA is a restriction. Right now: **{level}**.
-	'a99180e3': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik: **{level}**.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **no restriction**.
+	'4967ee19': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **{level}**.
+	'4ddcc30a': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik: **{level}**.',
 	// Not your allocation or licence. It doesn’t know your registered water use.
 	'678ca7b2': 'Nie jou toekenning of lisensie nie. Dit ken nie jou geregistreerde watergebruik nie.',
 	// Not a forecast. It looks back over {span}.
