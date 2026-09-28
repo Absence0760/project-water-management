@@ -171,7 +171,7 @@
 				</select>
 			{:else if s.t === 'node'}
 				<select id="op-value" bind:value={d.value}>
-					<option value="" disabled>Pick a unit</option>
+					<option value="" disabled>Pick a hydrological unit</option>
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			{:else}
@@ -208,9 +208,9 @@
 			</div>
 		{:else if d.kind === 'cropArea.set' || d.kind === 'landCover.add'}
 			<div class="field">
-				<label for="op-node">Unit</label>
+				<label for="op-node">Hydrological unit</label>
 				<select id="op-node" bind:value={d.nodeId}>
-					<option value="" disabled>Pick a unit</option>
+					<option value="" disabled>Pick a hydrological unit</option>
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
@@ -231,9 +231,9 @@
 			</div>
 		{:else if d.kind === 'borehole.add'}
 			<div class="field">
-				<label for="op-node">Unit or user</label>
+				<label for="op-node">Hydrological unit or user</label>
 				<select id="op-node" bind:value={d.nodeId}>
-					<option value="" disabled>Pick a unit or user</option>
+					<option value="" disabled>Pick a hydrological unit or user</option>
 					{#each pumpers as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
@@ -287,7 +287,7 @@
 			<div class="field">
 				<label for="op-new-kind">Kind</label>
 				<select id="op-new-kind" bind:value={d.newKind}>
-					<option value="farm">Unit</option>
+					<option value="farm">Hydrological unit</option>
 					<option value="user">Other water user</option>
 				</select>
 			</div>
@@ -327,7 +327,7 @@
 			<div class="field">
 				<label for="op-area">Area (ha)</label>
 				<input id="op-area" type="text" inputmode="decimal" bind:value={d.areaHa} />
-				{#if currentArea !== null}<span class="hint" data-testid="op-current">Now: {currentArea / 10_000} ha; 0 removes the crop from the unit</span>{/if}
+				{#if currentArea !== null}<span class="hint" data-testid="op-current">Now: {currentArea / 10_000} ha; 0 removes the crop from the hydrological unit</span>{/if}
 			</div>
 		</div>
 	{:else if d.kind === 'crop.add'}
@@ -350,20 +350,20 @@
 				<input id="op-crop-factors" type="text" bind:value={d.cropFactors} placeholder="12 values, or one for every month" />
 			</div>
 		</div>
-		<p class="hint">Plant it on a unit with “Set a unit's crop area” once it is added.</p>
+		<p class="hint">Plant it on a hydrological unit with “Set a hydrological unit's crop area” once it is added.</p>
 	{:else if d.kind === 'transfer.add'}
 		<div class="form-row">
 			<div class="field">
 				<label for="op-from">Source</label>
 				<select id="op-from" bind:value={d.fromNodeId}>
-					<option value="" disabled>Pick a unit</option>
+					<option value="" disabled>Pick a hydrological unit</option>
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
 			<div class="field">
 				<label for="op-to">Destination</label>
 				<select id="op-to" bind:value={d.toNodeId}>
-					<option value="" disabled>Pick a unit</option>
+					<option value="" disabled>Pick a hydrological unit</option>
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
 			</div>
@@ -437,7 +437,7 @@
 				<label for="op-bh-target">Pumps into</label>
 				<select id="op-bh-target" bind:value={d.bhTarget}>
 					<option value="direct">The crop or user</option>
-					<option value="dam">The unit’s dam</option>
+					<option value="dam">The hydrological unit’s dam</option>
 				</select>
 			</div>
 			<div class="field">
@@ -504,7 +504,7 @@
 						d.demandNodeIds = [];
 					}}
 				>
-					<option value="farm">Units (irrigation)</option>
+					<option value="farm">Hydrological units (irrigation)</option>
 					<option value="user">Other water users</option>
 				</select>
 			</div>
@@ -514,11 +514,11 @@
 			</div>
 		</div>
 		<fieldset class="months" data-testid="op-demand-nodes">
-			<legend>{d.demandCategory === 'farm' ? 'Units' : 'Other water users'} (none ticked: all of them)</legend>
+			<legend>{d.demandCategory === 'farm' ? 'Hydrological units' : 'Other water users'} (none ticked: all of them)</legend>
 			{#each demandNodes as n (n.id)}
 				<label><input type="checkbox" checked={d.demandNodeIds.includes(n.id)} onchange={(e) => toggleDemandNode(n.id, e.currentTarget.checked)} /> {n.name}</label>
 			{:else}
-				<span class="hint">The model has no {d.demandCategory === 'farm' ? 'unit' : 'other water user'}.</span>
+				<span class="hint">The model has no {d.demandCategory === 'farm' ? 'hydrological unit' : 'other water user'}.</span>
 			{/each}
 		</fieldset>
 		<fieldset class="months">

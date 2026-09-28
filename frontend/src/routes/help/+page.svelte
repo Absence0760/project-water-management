@@ -27,7 +27,7 @@
 	<p class="eyebrow">Help</p>
 	<h1>How the catchment model works</h1>
 	<p class="lede">
-		Water Management follows a catchment’s water day by day: how much the rain produces, what each unit can
+		Water Management follows a catchment’s water day by day: how much the rain produces, what each hydrological unit can
 		irrigate, and whether the river keeps its ecological Reserve. Follow the numbered stops, open one to see that
 		part up close, or go on to its guide.
 	</p>

@@ -302,6 +302,10 @@ textarea {
 	border-radius: var(--radius-sm);
 	padding: 0.35rem 0.5rem;
 	min-width: 0;
+	/* Never wider than its box: a select sizes itself to its longest option
+	   ("Hydrological units short this week (most first)"), which pushed a phone
+	   page sideways. */
+	max-width: 100%;
 }
 input:hover:not(:disabled):not(:read-only),
 select:hover:not(:disabled),

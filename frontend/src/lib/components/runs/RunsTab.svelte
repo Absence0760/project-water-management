@@ -626,8 +626,8 @@
 							>
 							<a
 								href={supplyHref(shownRunId)}
-								aria-label="Units & supply for this run"
-								title="Each unit's supply against its demand, the unit results table, the curtailment targets and assurance of supply">Units &amp; supply <span aria-hidden="true">→</span></a
+								aria-label="Hydrological units for this run"
+								title="Each hydrological unit's supply against its demand, the hydrological unit results table, the curtailment targets and assurance of supply">Hydrological units <span aria-hidden="true">→</span></a
 							>
 						</nav>
 					</div>
@@ -763,7 +763,7 @@
 		{:else}
 			<div class="panel placeholder muted">
 				Results appear here after a run: flows at the outflow gauge, calibration against observed flow, EWR compliance and each
-				unit's supply and dam storage.
+				hydrological unit's supply and dam storage.
 			</div>
 		{/if}
 	</div>

@@ -52,8 +52,8 @@
 	{/if}
 	{#if farms.length}
 		<span aria-hidden="true">·</span>
-		<span>
-			Your farm{farms.length === 1 ? '' : 's'}:
+		<span class="yours">
+			Your hydrological unit{farms.length === 1 ? '' : 's'}:
 			{#each farms as f, i (f.nodeId)}{i ? ', ' : ''}<a href="{base}/farm/{encodeURIComponent(project.id)}?node={encodeURIComponent(f.nodeId)}">{f.name}</a>{/each}
 		</span>
 	{/if}
@@ -66,7 +66,7 @@
 	<!-- Nothing published: the list says so ("Nothing is published yet…"). -->
 	{#if publication}
 		<p class="note" role="note">
-			Your applications start on the published baseline. You see your own units in full and every other unit only by an anonymous name.
+			Your applications start on the published baseline. You see your own hydrological units in full and every other hydrological unit only by an anonymous name.
 		</p>
 	{/if}
 {/snippet}
@@ -78,6 +78,10 @@
 </LoadState>
 
 <style>
+	/* Links inside a line of text are underlined, not told apart by colour alone (WCAG 1.4.1, as app.css does for p a). */
+	.yours a {
+		text-decoration: underline;
+	}
 	/* The header's one slim notice line, as the workspace's (routes/projects/[id] .note). */
 	.note {
 		margin: 0;

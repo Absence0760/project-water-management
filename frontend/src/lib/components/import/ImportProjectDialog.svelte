@@ -286,7 +286,7 @@
 			{#if isWorkbook}
 				<p class="muted small">
 					A Water Balance Tool <strong>b023</strong> workbook (<span class="mono">.xlsm</span>, or
-					<span class="mono">.xlsx</span>) becomes a new project: its network, units, crops, transfers, settings and
+					<span class="mono">.xlsx</span>) becomes a new project: its network, hydrological units, crops, transfers, settings and
 					[Flow data] series. It's read here in your browser; only the project is sent. Formulas and macros are never run,
 					and the per-farm result sheets aren't imported. Up to {WORKBOOK_MAX_MB} MB.
 				</p>

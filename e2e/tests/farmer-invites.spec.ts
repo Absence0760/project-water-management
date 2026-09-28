@@ -23,7 +23,7 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 
 	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: /^Farmers/ });
-	await expect(panel.getByText('No farmers yet: invite them to see their own farm.')).toBeVisible();
+	await expect(panel.getByText('No farmers yet: invite them to see their own hydrological unit.')).toBeVisible();
 	await panel.getByRole('button', { name: 'Invite farmers' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Invite farmers' });
 	await expect(dialog.getByLabel('One farmer')).toBeChecked();

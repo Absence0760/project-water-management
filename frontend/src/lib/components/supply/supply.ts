@@ -84,7 +84,7 @@ export function unitCards(summary: CardInput, modelFarmIds: ReadonlySet<string>,
 		const inModel = modelFarmIds.has(f.nodeId);
 		return {
 			nodeId: f.nodeId,
-			name: (inModel ? names.get(f.nodeId) : undefined) || f.name || 'Unnamed unit',
+			name: (inModel ? names.get(f.nodeId) : undefined) || f.name || 'Unnamed hydrological unit',
 			band: s.band,
 			fraction: s.fraction,
 			demandM3Day: f.avgDemandM3Day,
@@ -139,9 +139,9 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function supplySummary(t: Pick<SupplyTotals, 'units' | 'weekShort'> | null, modelUnits: number, runText: string | null): string {
 	const parts: string[] = [];
 	if (t) {
-		parts.push(plural(t.units, 'unit'));
+		parts.push(plural(t.units, 'hydrological unit'));
 		if (t.weekShort !== null && t.units) parts.push(`${t.weekShort} short this week`);
-	} else parts.push(plural(modelUnits, 'unit'));
+	} else parts.push(plural(modelUnits, 'hydrological unit'));
 	if (runText) parts.push(runText);
 	return parts.join(' · ');
 }
@@ -198,11 +198,11 @@ export function cardFacts(c: UnitCard, weekDays: number): string[] {
  * (links.ts SUPPLY_ANCHORS), in page order.
  */
 export const SUPPLY_NAV: NavGroup[] = [
-	{ label: 'Each unit', sections: [{ id: 'res-farm', label: 'Unit detail' }] },
+	{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
 	{
 		label: 'Tables for this run',
 		sections: [
-			{ id: 'res-farms', label: 'Unit results' },
+			{ id: 'res-farms', label: 'Hydrological unit results' },
 			{ id: 'res-curtailment', label: 'Curtailment' },
 			{ id: 'res-assurance', label: 'Assurance of supply' }
 		]

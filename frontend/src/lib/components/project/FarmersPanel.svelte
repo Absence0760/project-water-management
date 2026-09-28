@@ -93,7 +93,7 @@
 	}
 
 	async function remove(f: Farmer) {
-		if (!confirm(`Remove ${f.displayName} (${f.email}) as a farmer? They lose access to ${farmNames(f, farms).join(', ') || 'their farms'}.`)) return;
+		if (!confirm(`Remove ${f.displayName} (${f.email}) as a farmer? They lose access to ${farmNames(f, farms).join(', ') || 'their hydrological units'}.`)) return;
 		busy = f.userId;
 		error = null;
 		try {
@@ -152,7 +152,7 @@
 		{/if}
 	</div>
 	<p class="muted small intro">
-		A farmer sees only the farms linked to them, never another farm’s name or figures, and none of the model.
+		A farmer sees only the hydrological units linked to them, never another hydrological unit’s name or figures, and none of the model.
 	</p>
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 	<LoadState
@@ -160,7 +160,7 @@
 		error={loadError}
 		retry={load}
 		empty={entries.length === 0}
-		emptyText={isOwner ? 'No farmers yet: invite them to see their own farm.' : 'No farmers yet.'}
+		emptyText={isOwner ? 'No farmers yet: invite them to see their own hydrological unit.' : 'No farmers yet.'}
 	>
 		{#if farmers.length}
 			<div class="table-wrap">
@@ -184,7 +184,7 @@
 								<td>
 									{#if editing === f.userId}
 										<fieldset class="farms">
-											<legend class="visually-hidden">Farms for {f.displayName}</legend>
+											<legend class="visually-hidden">Hydrological units for {f.displayName}</legend>
 											{#each farms as farm (farm.id)}
 												<label class="check">
 													<input
@@ -206,7 +206,7 @@
 											<button type="button" class="btn btn-sm btn-primary" disabled={busy === f.userId || draft.length === 0} onclick={() => save(f)}>Save</button>
 											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => (editing = null)}>Cancel</button>
 										{:else}
-											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => edit(f)}>Change farms</button>
+											<button type="button" class="btn btn-sm" disabled={busy === f.userId} onclick={() => edit(f)}>Change hydrological units</button>
 											{#if f.role !== 'contributor'}
 												<button type="button" class="btn btn-sm btn-danger" disabled={busy === f.userId} onclick={() => remove(f)}>Remove</button>
 											{/if}
@@ -229,7 +229,7 @@
 							<div class="who">
 								<span class="email"><EmailText email={inv.email} /></span>
 								<span class="meta">
-									{farmNames(inv, farms).join(', ') || 'no farms left'} · invited by {inv.invitedBy} ·
+									{farmNames(inv, farms).join(', ') || 'no hydrological units left'} · invited by {inv.invitedBy} ·
 									{#if inv.status === 'expired'}
 										<span class="badge badge-warn">Expired</span>
 									{:else}
@@ -264,7 +264,7 @@
 
 	<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	{#if isOwner && farms.length === 0}
-		<p class="muted small add-hint">Add a unit on the Network tab before inviting a farmer to it.</p>
+		<p class="muted small add-hint">Add a hydrological unit on the Network tab before inviting a farmer to it.</p>
 	{/if}
 </section>
 

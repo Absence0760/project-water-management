@@ -205,9 +205,9 @@
 		{#if canEdit}
 			<form class="start" onsubmit={start} novalidate>
 				<div class="field">
-					<label for="outcome-levels">Demand levels <span class="u">(% of today’s unit demand)</span></label>
+					<label for="outcome-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
 					<input id="outcome-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outcome-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every unit’s irrigation demand.</span>
+					<span class="hint" id="outcome-levels-h">Up to {SWEEP_MEMBERS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand.</span>
 				</div>
 				<button type="submit" class="btn btn-primary" disabled={busy || !!parsed.error}>{sweep ? 'Run a new demand sweep' : 'Run demand sweep'}</button>
 			</form>

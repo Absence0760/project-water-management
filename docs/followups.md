@@ -1550,7 +1550,7 @@ yet; each lands with the work package named.
       the language the reader chose, marked with its `lang`, or the other
       with "The WUA wrote this notice in English only" (design §7). The
       saved copy moved to `wm.farm.saved.v2` (a v1 copy is dropped).
-- [x] **"Who can see my farm" by name** (design §10.2): done (91b8b833):
+- [x] **"Who can see my hydrological unit" by name** (design §10.2): done (91b8b833):
       `GET …/farm/:nodeId/access` lists people by name and role, never an
       email, and the card falls back to roles if it fails
       (`farm-view.spec.ts` checks it).
@@ -1622,7 +1622,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
 - [x] **Not yet in the catalogue**: the `/share` page (`share/share.ts`,
       `share.*` keys, with the switch in its header; it still imports none
       of the workspace's code, `boundary.test.ts`), the notes list inside
-      "Notes about your farm" (`NotesList` takes a `words` prop: English
+      "Notes about your hydrological unit" (`NotesList` takes a `words` prop: English
       `notes/words.ts` for the workspace, `farm/notesWords.ts` from the
       catalogue), and the server errors a farmer can see: the API sends a
       stable `code` (`ERROR_CODES`, [api.md § Errors](./api.md#errors)) and
@@ -2858,7 +2858,7 @@ from the WP:
       "“farms short this week” opens the Runs tab at the curtailment table"
       (the link, then a reload); it failed before the fix (landed at the
       top) and passed 30/30 at `--repeat-each=30`, 12 workers.
-      Since issue #17 the panel is on Units & supply: the link is
+      Since issue #17 the panel is on Hydrological units: the link is
       `?tab=supply&run=…&window=last7#res-curtailment`, that page holds the
       fragment the same way, and the old Runs link is sent there.
 - [x] **No perf guard on the portfolio query** (done 2026-09-26). The

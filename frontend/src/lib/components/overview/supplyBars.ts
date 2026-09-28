@@ -19,7 +19,7 @@ export interface SupplyBar {
 export function supplyBars(farms: readonly FarmSummary[], modelFarmIds: ReadonlySet<string>): SupplyBar[] {
 	const rows = farms.map((f): SupplyBar => {
 		const s = farmSupply(f);
-		return { nodeId: f.nodeId, name: f.name || 'Unnamed farm', band: s.band, fraction: s.fraction, inModel: modelFarmIds.has(f.nodeId) };
+		return { nodeId: f.nodeId, name: f.name || 'Unnamed hydrological unit', band: s.band, fraction: s.fraction, inModel: modelFarmIds.has(f.nodeId) };
 	});
 	return rows.sort((a, b) => {
 		if (a.fraction === null || b.fraction === null) return a.fraction === null ? (b.fraction === null ? a.name.localeCompare(b.name) : 1) : -1;

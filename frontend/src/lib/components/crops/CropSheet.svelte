@@ -46,7 +46,7 @@
 	function remove() {
 		if (!crop) return;
 		const used = editor.model.cropAreas.some((a) => a.cropId === crop.id);
-		if (used && !confirm(`Remove crop "${label}" and its planted areas on every farm?`)) return;
+		if (used && !confirm(`Remove crop "${label}" and its planted areas on every hydrological unit?`)) return;
 		editor.removeCrop(crop.id);
 		open = false;
 	}
@@ -83,7 +83,7 @@
 				irrigated.
 			</p>
 			<p class="small" data-testid="crop-planted-on">
-				{plantedOn.length ? `Planted on ${joinNames(plantedOn)}.` : 'Not planted on any farm yet.'}
+				{plantedOn.length ? `Planted on ${joinNames(plantedOn)}.` : 'Not planted on any hydrological unit yet.'}
 			</p>
 			{#if !readonly}
 				<p><button type="button" class="btn btn-sm btn-danger" aria-label="Remove {label}" onclick={remove}>Remove crop</button></p>

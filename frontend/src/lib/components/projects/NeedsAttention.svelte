@@ -44,7 +44,7 @@
 		<p class="line muted">The catchments’ figures couldn’t be loaded, so nothing is flagged. Reload the page to try again.</p>
 	{:else if !flagged.length}
 		<p class="line ok">
-			Nothing needs attention: no EWR red or amber, no units short this week, no alerts firing, no failing feeds and no stale
+			Nothing needs attention: no EWR red or amber, no hydrological units short this week, no alerts firing, no failing feeds and no stale
 			figures.
 		</p>
 	{:else}

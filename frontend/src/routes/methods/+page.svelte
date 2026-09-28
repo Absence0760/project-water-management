@@ -34,8 +34,8 @@
 	{sections}
 >
 	<p>
-		Water Management turns a catchment’s rainfall, dams, farms and river into a daily water balance, and people make decisions with
-		it: how much a farm can irrigate, whether the river keeps its Ecological Reserve, whether a licence application holds up. This
+		Water Management turns a catchment’s rainfall, dams, hydrological units and river into a daily water balance, and people make decisions with
+		it: how much a hydrological unit can irrigate, whether the river keeps its Ecological Reserve, whether a licence application holds up. This
 		page says how the model behind those figures is checked, where it deliberately differs from the spreadsheet model it replaced,
 		and what is still open.
 	</p>
@@ -44,10 +44,10 @@
 	<p>For every day of the record, the model:</p>
 	<ul>
 		<li>turns rainfall into natural river flow with <strong>GR4J</strong>, a published daily rainfall–runoff model, calibrated against measured flow;</li>
-		<li>works out each farm’s irrigation demand from its crops, evaporation and the rain that fell;</li>
-		<li>routes the water down the network, farm by farm and dam by dam, with transfers between dams, and the dams’ own rain, evaporation and seepage;</li>
-		<li>compares the flow at the outlet and at each gauge with the Ecological Reserve, and shares any shortfall among the farms upstream;</li>
-		<li>reports each farm’s supply, each dam’s storage and the river’s flow, day by day and in summary.</li>
+		<li>works out each hydrological unit’s irrigation demand from its crops, evaporation and the rain that fell;</li>
+		<li>routes the water down the network, hydrological unit by hydrological unit and dam by dam, with transfers between dams, and the dams’ own rain, evaporation and seepage;</li>
+		<li>compares the flow at the outlet and at each gauge with the Ecological Reserve, and shares any shortfall among the hydrological units upstream;</li>
+		<li>reports each hydrological unit’s supply, each dam’s storage and the river’s flow, day by day and in summary.</li>
 	</ul>
 
 	<h2 id="standard">2. The standard it is held to</h2>
@@ -65,14 +65,14 @@
 	<h2 id="every-run">3. Checks on every run</h2>
 	<p>Every saved run checks its own results before anyone sees them. Among them:</p>
 	<ul>
-		<li>the water balance closes at every farm on every day: what came in and what was stored equals what left, was used and is stored now;</li>
+		<li>the water balance closes at every hydrological unit on every day: what came in and what was stored equals what left, was used and is stored now;</li>
 		<li>supply stays between nothing and the demand, storage between empty and the dam’s capacity, and a dam spills only when full;</li>
 		<li>transfers net to zero and respect each dam’s minimum level and the receiving dam’s room;</li>
-		<li>each Reserve shortfall is shared out exactly: the farms’ shares and the part nobody caused add up to the whole;</li>
+		<li>each Reserve shortfall is shared out exactly: the hydrological units’ shares and the part nobody caused add up to the whole;</li>
 		<li>the report’s totals agree with the daily figures they summarise.</li>
 	</ul>
 	<p>
-		The run also warns about inputs that are impossible or doubtful: more runoff than rain, days with no rainfall value, farm areas
+		The run also warns about inputs that are impossible or doubtful: more runoff than rain, days with no rainfall value, hydrological unit areas
 		that don’t add up, gaps filled from satellite rain, and dams whose surface area had to be estimated.
 	</p>
 
@@ -80,7 +80,7 @@
 	<ul>
 		<li>
 			<strong>Invariant tests</strong> run the model on thousands of randomly generated catchments and check the rules above on every
-			day of every one, plus rules about behaviour: more demand never means a higher share of demand met, and the order farms or
+			day of every one, plus rules about behaviour: more demand never means a higher share of demand met, and the order hydrological units or
 			transfers are listed in never changes a result.
 		</li>
 		<li><strong>An event-scale test</strong> checks that no runoff model returns more water from a storm than fell in it.</li>

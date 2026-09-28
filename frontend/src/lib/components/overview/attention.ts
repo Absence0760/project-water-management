@@ -64,20 +64,20 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (short.length) {
 			const worst = short.reduce((a, f) => (f.fractionSupplied < a.fractionSupplied ? f : a));
 			const target = fmtPct(SUPPLY_TARGET, 0);
-			const worstText = `${worst.name || 'An unnamed unit'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
+			const worstText = `${worst.name || 'An unnamed hydrological unit'} got ${fmtPct(worst.fractionSupplied, 0)} of its demand in the latest run`;
 			// Its planted areas, when it is still a farm in the model (the run may be older than an edit).
 			const inModel = model.nodes.some((n) => n.id === worst.nodeId && n.kind === 'farm');
 			out.push({
 				id: 'short-farms',
-				title: `${fmtNum(short.length)} of ${plural(farms.length, 'unit')} below ${target}`,
+				title: `${fmtNum(short.length)} of ${plural(farms.length, 'hydrological unit')} below ${target}`,
 				// Red when the worst is in the lowest supply band (network/supplyColour.ts), amber otherwise.
 				tone: worst.fractionSupplied < LOW_SUPPLY ? 'danger' : 'warning',
 				text:
 					short.length === 1
 						? `${worstText}, below the ${target} target.`
-						: `${worstText}, the least of the ${fmtNum(short.length)} units below ${target} (of ${fmtNum(farms.length)}).`,
+						: `${worstText}, the least of the ${fmtNum(short.length)} hydrological units below ${target} (of ${fmtNum(farms.length)}).`,
 				// Units & supply for the run, opened on the worst unit (issue #17).
-				action: 'See the unit results',
+				action: 'See the hydrological unit results',
 				href: supplyHref(latest.id, { unit: worst.nodeId }),
 				...(inModel ? { also: { action: 'Its planted areas', href: farmDrawerHref(null, worst.nodeId) } } : {})
 			});
@@ -132,9 +132,9 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (bare.length)
 			out.push({
 				id: 'unplanted',
-				title: `${plural(bare.length, 'unit')} with no planted area`,
+				title: `${plural(bare.length, 'hydrological unit')} with no planted area`,
 				tone: 'info',
-				text: `${nameList(bare.map((n) => n.name || 'Unnamed unit'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
+				text: `${nameList(bare.map((n) => n.name || 'Unnamed hydrological unit'))} ${bare.length === 1 ? 'has no planted area, so it draws' : 'have no planted area, so they draw'} no irrigation water.`,
 				action: bare.length === 1 ? 'Set its planted areas' : 'Set crop areas',
 				href: bare.length === 1 ? farmDrawerHref(null, bare[0]!.id) : '?tab=crops'
 			});

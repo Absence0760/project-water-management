@@ -132,7 +132,7 @@ describe('buildOutlookView', () => {
 		expect(v.ewrHeading).toBe('Days below the EWR');
 		expect(v.nYears).toBe(12);
 		expect(v.tooFewYears).toBeNull();
-		expect(v.start).toBe('The units’ dams held 52\u202f000 m³ of 80\u202f000 m³ at the end of 30 Sep 2012: every year starts from there.');
+		expect(v.start).toBe('The hydrological units’ dams held 52\u202f000 m³ of 80\u202f000 m³ at the end of 30 Sep 2012: every year starts from there.');
 		const [l100, l85, l70, gone] = v.rows;
 		const s = r.levels[0]!.seasonEndStorageM3!;
 		expect(l100).toMatchObject({ label: '100 %', kind: 'ran', nYears: 12, yearsMet: 'EWR met on every day in 7 of 12 years' });

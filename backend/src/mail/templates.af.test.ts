@@ -29,7 +29,7 @@ describe('farmer emails in Afrikaans', () => {
 	it('an email with any word still in English is marked lang="en"', () => {
 		const mail = farmerInviteMail('f@example.com', url, 'Ann', { catchment: 'Kloof', farms: ['Hoek', 'Rand'] }, 'sign-up', 'af');
 		expect(mail.html).toMatch(/<html lang="en">/);
-		expect(mail.text).toContain("You will see your own farm's water");
+		expect(mail.text).toContain("You will see your own hydrological unit's water");
 		// The farms are joined with the catalogue's "and".
 		expect(mail.subject).toBe('[af] Ann has given you access to Hoek [af] and Rand in Kloof');
 	});

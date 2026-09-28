@@ -140,7 +140,7 @@
 
 		{#if mode === 'single'}
 			<p class="muted small">
-				Someone with an account is added straight away. Anyone else gets an email to create one; they see their farm once they
+				Someone with an account is added straight away. Anyone else gets an email to create one; they see their hydrological unit once they
 				accept.
 			</p>
 			<div class="field">
@@ -148,7 +148,7 @@
 				<input id="invite-farmer-email" type="email" required autocomplete="off" placeholder="farmer@example.com" bind:value={email} />
 			</div>
 			<fieldset class="farms">
-				<legend>Their farms</legend>
+				<legend>Their hydrological units</legend>
 				{#each farms as farm (farm.id)}
 					<label class="check">
 						<input type="checkbox" checked={picked.includes(farm.id)} onchange={() => (picked = toggleFarm(picked, farm.id, farms))} />
@@ -164,9 +164,9 @@
 			</div>
 		{:else}
 			<p class="muted small" id="invite-csv-help">
-				One farm per row: <code>email,farm,language</code>. The farm name must match a unit’s name on the Network tab (capitals don’t
+				One hydrological unit per row: <code>email,farm,language</code>. The <code>farm</code> column is the hydrological unit’s name on the Network tab (capitals don’t
 				matter); language is a code ({#each LANGUAGES as l, i (l.code)}{i ? ', ' : ''}<code>{l.code}</code>{/each}) or the language’s
-				name, English if left out. A farmer with two farms gets two rows and one
+				name, English if left out. A farmer with two hydrological units gets two rows and one
 				email. At most 200 rows.
 			</p>
 			<div class="field">
@@ -176,7 +176,7 @@
 					rows="6"
 					spellcheck="false"
 					aria-describedby="invite-csv-help"
-					placeholder={'email,farm,language\nfarmer@example.com,' + (farms[0]?.name ?? 'Farm name') + ',en'}
+					placeholder={'email,farm,language\nfarmer@example.com,' + (farms[0]?.name ?? 'Hydrological unit name') + ',en'}
 					bind:value={csv}
 					oninput={csvChanged}
 				></textarea>

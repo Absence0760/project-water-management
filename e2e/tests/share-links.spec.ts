@@ -144,7 +144,7 @@ test('a catchment with too few farms shows its status without the flow chart, an
 	await expect(shared.getByRole('region', { name: 'The river’s ecological reserve' })).toBeVisible();
 	await expect(shared.getByText(/^The flow chart isn’t shown for this catchment/)).toBeVisible();
 	await expect(shared.getByRole('region', { name: /^River flow each month/ })).toHaveCount(0);
-	await expect(shared.getByText(/^2\s+farms in the catchment\.$/)).toBeVisible();
+	await expect(shared.getByText(/^2\s+hydrological units in the catchment\.$/)).toBeVisible();
 
 	await shared.goto('/share');
 	await expect(shared.getByRole('alert')).toHaveText(/^This page needs the whole link\./);
