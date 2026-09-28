@@ -1117,13 +1117,21 @@
 //             (shared by the run worker and the pages), the water-account
 //             and balance lines, the help, report and scenario lines. No new
 //             dependency. Headroom ~3 KB.
-// 2026-09-28  total 1066 → 1073 KB (measured 1070). The methods page
+// 2026-09-28  ceilings unchanged. Vite 5 → 8 (Rolldown + Oxc; the Dependabot
+//             roll-up): 1064 KB measured on the Vite 5 build, 1070 KB on Vite 8
+//             with Terser (the IIFE spreadsheet workers came out unminified,
+//             import worker 26.4 → 29.3 KB, and the chunk split moved ~2 KB),
+//             1061 KB on Vite 8 with Oxc, Vite 8's own minifier, which
+//             replaces Terser (frontend/vite.config.ts, build.minify). Largest
+//             tab chunk 54 → 53 KB, workers 28 / 27 KB. Headroom ~5 KB.
+// 2026-09-28  total 1066 → 1073 KB (measured 1068 on Vite 8 + Oxc, after the
+//             Vite roll-up above; 1070 on Vite 5). The methods page
 //             (/methods, the engine audit's public summary, issue #57):
 //             prerendered with csr = false like the legal pages, so a visitor
 //             downloads no script, but SvelteKit still emits its page node
 //             (5.2 KB, its text, the departures and the generated known
 //             limitations), plus the trust strip's link and its Afrikaans
-//             word. No new dependency. Headroom ~3 KB.
+//             word. No new dependency. Headroom ~5 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

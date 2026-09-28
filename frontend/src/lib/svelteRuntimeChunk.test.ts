@@ -1,5 +1,5 @@
 // Guard: Svelte's runtime ships as one chunk (frontend/vite.config.ts,
-// svelteRuntimeChunk; issue #9). Without the rule Rollup cuts the runtime into
+// svelteRuntimeChunk; issue #9). Without the rule the bundler cuts the runtime into
 // ~15 chunks, several under 0.5 KB, and every page loads more (numbers in
 // scripts/guards/check_web_bundle_budget.mjs's change log).
 import { describe, expect, it } from 'vitest';
@@ -14,14 +14,15 @@ describe('the Svelte runtime chunk', () => {
 		}
 	});
 
-	it('leaves app code, the engine, other packages and the compiler to Rollup', () => {
+	it('leaves app code, the engine, other packages and the compiler to the bundler', () => {
 		for (const id of ['/repo/frontend/src/lib/api/client.ts', '/repo/packages/engine/src/run.ts', '/repo/node_modules/.pnpm/uplot@1.6.32/node_modules/uplot/dist/uPlot.esm.js', `${SVELTE}/compiler/index.js`]) {
 			expect(svelteRuntimeChunk(id), id).toBeUndefined();
 		}
 	});
 
-	it('is the page build’s manualChunks', () => {
-		const output = (config as { build: { rollupOptions: { output: { manualChunks: unknown } } } }).build.rollupOptions.output;
-		expect(output.manualChunks).toBe(svelteRuntimeChunk);
+	it('is the page build’s one code-splitting group (Rolldown’s manualChunks)', () => {
+		const output = (config as { build: { rolldownOptions: { output: { codeSplitting: { groups: { name: unknown }[] } } } } }).build.rolldownOptions.output;
+		expect(output.codeSplitting.groups).toHaveLength(1);
+		expect(output.codeSplitting.groups[0]!.name).toBe(svelteRuntimeChunk);
 	});
 });

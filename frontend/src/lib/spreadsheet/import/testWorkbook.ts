@@ -93,8 +93,8 @@ export class WorkbookBuilder {
 	}
 
 	/** The workbook as .xlsx bytes, for readWorkbook(). */
-	toFile(): Uint8Array {
-		return XLSX.write(this.book(), { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+	toFile(): Uint8Array<ArrayBuffer> {
+		return XLSX.write(this.book(), { type: 'array', bookType: 'xlsx' }) as Uint8Array<ArrayBuffer>;
 	}
 }
 

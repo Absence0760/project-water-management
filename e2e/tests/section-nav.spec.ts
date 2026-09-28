@@ -129,9 +129,15 @@ test('the open More menu passes axe; wider, More goes; on a phone the strip has 
 	void owner;
 	const menu = await narrowSettings(page, 'Menu more a11y');
 	const more = moreButton(menu);
+	// The page with More closed, then the open menu itself. Open, the panel lies over
+	// whatever the page has under it, and axe's target-size rule counts a control it
+	// half covers as a small target: in DejaVu Sans the Soil-water store help button
+	// sat 6 px under the last link. That is the page's layout under a transient
+	// overlay (as a control under the sticky header is, a11y.ts), not the menu's.
+	await expectNoViolations(page);
 	await more.click();
 	await expect(more).toHaveAttribute('aria-expanded', 'true');
-	await expectNoViolations(page);
+	await expectNoViolations(page, { include: 'nav[aria-label="Settings sections"]' });
 
 	// Wide again: everything back on the bar, no More.
 	await page.setViewportSize({ width: 1440, height: 900 });

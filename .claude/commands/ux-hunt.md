@@ -1,5 +1,5 @@
 ---
-description: Hunt for interaction/UX defects in the app — dead-ends, broken back/forward + URL-state, missing empty/loading/error states, stale selection, filter/sort inconsistency, keyboard traps. Fixes the objective bugs (with an e2e test), reports the judgment calls. Commits scoped; never pushes.
+description: Hunt for interaction/UX defects in the app — dead-ends, broken back/forward + URL-state, missing empty/loading/error states, stale selection, filter/sort inconsistency, keyboard traps. Fixes the objective bugs (with an e2e test), reports the judgment calls. Commits scoped; lands through a PR, never pushes `main`.
 argument-hint: "[optional scope — a route or feature, e.g. a list view, a compare/detail flow, a master/detail pane; omit to sweep the main app routes]"
 ---
 
@@ -31,7 +31,7 @@ These are the classes that ship broken most often:
 - **Fix the root cause — never mask** (no arbitrary waits/retries to paper over a race; fix the readiness signal). (Rails 5–6.)
 - **Reusable components.** Build UI from the project's shared component library and its idioms; don't copy-paste markup. (Rail 9.)
 - **Be honest about non-findings.** A sound flow + a new e2e test that locks the good behaviour is a success. (Rail 3.)
-- **Docs-as-code; commit scoped; never push.** (Rails 12; git workflow — fix and test as separate path-scoped commits.)
+- **Docs-as-code; commit scoped; PRs only, never push `main`.** (Rails 12; git workflow — fix and test as separate path-scoped commits.)
 
 ## Procedure
 
@@ -41,7 +41,7 @@ These are the classes that ship broken most often:
 4. **Fix the objective defects** at the root, in shared components where the markup repeats.
 5. **Lock with e2e** in the project's e2e suite (read-only assertions where possible so they're parallel-safe; wait on real signals, never sleeps). The test must fail on the old behaviour.
 6. **Verify:** the frontend type/lint gate + the new specs + the nearby existing specs for that route (report counts). For load-bearing flows (auth walls, tenant/access scoping, gate signals surfaced in UI) run the `code-reviewer` agent.
-7. **Commit** fix + tests scoped; **never push**. Write up the subjective/out-of-scope findings for the operator.
+7. **Commit** fix + tests scoped; push the branch and open a PR, **never push `main`**. Write up the subjective/out-of-scope findings for the operator.
 
 ## Report
 

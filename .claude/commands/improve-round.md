@@ -44,7 +44,7 @@ Each discrete piece is its own commit, tests in the **same** commit as the code:
 - Always path-scoped: `git commit -m "…" -- path1 path2 …`. Never `git add -A`/`-u`, never a bare `git commit`.
 - One piece = one commit. `git status` before each commit; confirm every path is yours.
 - No AI attribution / `Co-Authored-By` / robot footer in messages.
-- Commit only — never `git push` without an explicit ask.
+- Commit on your PR branch; push the branch and open a PR, never push `main` (CLAUDE.md).
 
 ### 3. Verify each piece before moving on
 

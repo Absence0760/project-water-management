@@ -368,10 +368,14 @@ guard finds the tabs from the page's `LOAD` map and the chunk map
 (`.svelte-kit/output/client/.vite/chunk-modules.json`, never shipped),
 since chunk file names are bare hashes.
 
-The client build minifies with Terser (`build.minify: 'terser'`), not Vite's
-default esbuild: its mangler reuses the same short names in every scope, so
-gzip compresses the output ~5% better (−50 KB in total on 2026-09-27, the
-guard's change log), at the cost of a slower build.
+The client build minifies with Oxc (`build.minify: 'oxc'`, Vite 8's
+default). Under Vite 5 it used Terser rather than esbuild, because Terser's
+mangler reuses the same short names in every scope and gzip compresses that
+~5% better (−50 KB on 2026-09-27, the guard's change log); on Vite 8 Oxc does
+the same and measured 5 KB smaller than Terser (2026-09-28), so Terser is
+gone. The page build and the spreadsheet workers are Rolldown builds
+(`build.rolldownOptions`, `worker.rolldownOptions`); the Svelte runtime chunk
+is a `codeSplitting` group, Rolldown's replacement for `manualChunks`.
 
 ## First load (frontend)
 

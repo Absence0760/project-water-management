@@ -79,7 +79,7 @@ export function liveHttp(fetchFn: Fetch = (...a) => fetch(...a)): FeedHttp {
 			await res.body?.cancel();
 			if (hop === MAX_REDIRECTS) throw new FeedUnavailableError('the source redirected too many times');
 			const location = res.headers.get('location');
-			const next = location ? URL.parse(location, target) : null;
+			const next = location ? URL.parse(location, target.href) : null;
 			if (!next || !allowed(next)) throw new FeedUnavailableError('the source redirected somewhere it may not');
 			target = next;
 		}

@@ -4,7 +4,7 @@
 // millisecond ceiling inside the default `pnpm test` run flakes under load —
 // three workspaces' suites running in parallel, or a busy laptop, can push
 // any single run over budget with no engine regression involved. This file
-// is its own vitest project (`perf`, see vitest.workspace.ts): excluded from
+// is its own vitest project (`perf`, see vitest.config.ts): excluded from
 // `pnpm test`, run serially via `pnpm test:perf` / the root
 // `pnpm test:backend:perf`.
 import { resolveEnsembleOptions, runEnsemble, runModel, verifyEnsemble } from '@water-management/engine';

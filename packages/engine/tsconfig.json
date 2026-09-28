@@ -9,7 +9,11 @@
 		"noEmit": true,
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
-		"types": []
+		// Node types for the tests (process.env, import.meta.url, performance) and
+		// structuredClone, which the engine uses (browsers and Node both have it).
+		// Until vitest 5 they arrived unasked, through vite 5's type declarations;
+		// the engine source itself still uses no Node API (docs/STACK.md).
+		"types": ["node"]
 	},
 	"include": ["src/**/*.ts"]
 }
