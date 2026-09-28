@@ -2994,7 +2994,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
   **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
-  **Uncertainty bands** (`#res-uncertainty`), the **Outcome matrix**
+  **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
+  under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)) and the
   **Water account** (`#res-water-account`). Each is described under
@@ -3612,7 +3613,8 @@ read it before.
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
-  stored. **Run notes** on every run (`runs/RunNotes.svelte`,
+  stored. Under the bands, in the same panel, the **Sensitivity runs**
+  ([§ Sensitivity runs](#sensitivity-runs)). **Run notes** on every run (`runs/RunNotes.svelte`,
   `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
   explanation of the run, the one thing about a run that can change after it
   is made. Editors get a textarea with a character count (4 000 at most) and
@@ -3801,6 +3803,47 @@ read it before.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 - **Report**, beside the Download menu in the run header, opens the shown
   run's printable report (§ Report below).
+
+### Sensitivity runs
+
+Calibration research CR-21 ([model.md §2.10g](./model.md#210g-sensitivity-runs-ewr-compliance-as-a-range-engine--1180-calibration-research-cr-21)):
+how far EWR compliance moves when one input the record can't settle is
+changed at a time. On [River & reserve](#river--reserve), under the
+uncertainty bands in the same panel (`#res-uncertainty`; the **Uncertainty**
+link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
+with its chart `uncertainty/TornadoChart.svelte` and helpers
+`uncertainty/sensitivity.ts`.
+
+- **Anyone who can see the run** can press **Run sensitivity**: the page
+  fetches the run's own inputs (`…/model-input`) and the calibration worker
+  runs the central case and each factor's low and high (at most 11 model
+  runs, under a second on the examples), with a count ("5 of 11 runs") and
+  Cancel. **Nothing is stored**: it is a live diagnostic, like
+  `pnpm pan-sensitivity`, and **Run again** repeats it (the same inputs give
+  the same numbers).
+- A line names each factor's settings (Rain × 0.9 / × 1.1 · Pan coefficient
+  × 0.85 / × 1.15 · Dam evaporation factor × 0.85 / × 1.15 · Abstraction
+  (demand) × 0.7 / × 1.3 · Initial dam storage empty / full), the reporting
+  window and the engine version. Factors that don't apply (no dam, no
+  demand, a monthly PE row) are listed under **Not run** with the reason.
+- **Thresholds**: the share of days the EWR must be met, and with a rule
+  table the share of months meeting it, both 80 % by default (a note says
+  they are defaults pending the hydrologist). Changing one re-judges at once,
+  without a re-run.
+- **The verdict**, one line per EWR site, with a coloured edge and its name
+  in words: *Meets the threshold*, *Below the threshold*, *Not determinable
+  with current data* (the range over every run crosses the threshold) or
+  *Nothing to judge*, then the engine's sentence with the range, the central
+  value and the threshold.
+- **The tornado** for one site (a select when there are several) and one
+  result: EWR days not met, the shortfall (Mm³), and with a rule table the
+  months meeting it (shown first then). One row per factor, largest swing
+  first: a blue bar from the central run to the low setting and an orange one
+  to the high, each setting named beside its bar; the central run is the
+  solid line, the threshold the dashed one (on days not met, the days the
+  threshold allows; none on the shortfall). The chart's accessible name
+  carries every number, and the table under it gives the same rows (low,
+  its result, high, its result, swing).
 
 ### Outcome matrix
 
