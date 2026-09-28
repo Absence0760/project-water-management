@@ -43,7 +43,7 @@ export async function assertKeyMayCreate(db: Db, projectId: string, kind: string
 	if (taken) {
 		throw new ApiError(
 			409,
-			`the project already has a ${kind} series: an API key can only add days to a series that exists. Ask an editor to add this one first (an upload of one day is enough)`
+			`the project already has a ${kind} series: an API key can only add days to a series that exists. Ask an editor to add this one first, with the record so far (the key's days are checked against at least 100 non-zero days of it)`
 		);
 	}
 }

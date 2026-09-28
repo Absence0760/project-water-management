@@ -19,7 +19,8 @@ ap.add_argument("--step", type=float, default=0.18, help="height between contour
 ap.add_argument("--width", type=int, default=1500)
 args = ap.parse_args()
 
-grid = json.load(open(args.heights))
+with open(args.heights) as f:
+    grid = json.load(f)
 nx, ny, Z = grid["nx"], grid["ny"], grid["z"]
 W = args.width
 H = round(W * (ny - 1) / (nx - 1))

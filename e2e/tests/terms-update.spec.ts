@@ -32,6 +32,9 @@ test('after the terms change, the app waits for Accept; the legal pages stay ope
 	await page.getByRole('button', { name: 'Accept the new terms' }).click();
 	await expect(title).toHaveCount(0);
 	await expect(page).toHaveURL(`/projects/${project.id}`);
+	// The button went with the notice: focus is at the start of the page asked for (its title, or
+	// #main while it loads), not dropped on <body> (WCAG 2.4.3, issue #51).
+	await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest('#main'))).toBe(true);
 	await expect(page.getByText('Terms-update catchment').first()).toBeVisible();
 	expect(await termsAccepted(owner.email)).toEqual({ version: LEGAL_VERSION, at: expect.any(Date) });
 

@@ -697,6 +697,8 @@ export const af: Catalogue = {
 	'bc8fde2e': 'Reserwe behou op {pct} % van die dae',
 	// Example catchment, {years} years
 	'828ebfcc': 'Voorbeeld-opvanggebied, {years} jaar',
+	// Pause the animation
+	'30f19c54': 'Pouseer die animasie',
 	// How it works
 	'd03ba450': 'Hoe dit werk',
 	// Build the network

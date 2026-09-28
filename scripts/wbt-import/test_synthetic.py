@@ -15,8 +15,8 @@ import json
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -133,7 +133,7 @@ class Variants(unittest.TestCase):
 
     def test_element_sheets_that_start_after_flow_data_set_the_expected_window(self):
         # A workbook whose gauge record starts decades before the model window (issue #54).
-        with mock.patch.object(gen, "ELEMENT_START_OFFSET", 30):
+        with unittest.mock.patch.object(gen, "ELEMENT_START_OFFSET", 30):
             project, expected, _ = self.extract_all()
         _, base, _ = self.extract_all()
         self.assertEqual(expected["startDate"], (gen.START + gen.dt.timedelta(days=30)).isoformat())
@@ -145,29 +145,29 @@ class Variants(unittest.TestCase):
         self.assertEqual({s["startDate"] for s in project["series"]}, {gen.START.isoformat()})  # the project keeps every day
 
     def test_element_sheets_that_start_before_flow_data_are_refused(self):
-        with mock.patch.object(gen, "ELEMENT_START_OFFSET", -5), self.assertRaisesRegex(ValueError, r"outside \[Flow data\]"):
+        with unittest.mock.patch.object(gen, "ELEMENT_START_OFFSET", -5), self.assertRaisesRegex(ValueError, r"outside \[Flow data\]"):
             self.extract_all()
 
     def test_unknown_fragmentation_method_falls_back_to_area(self):
-        with mock.patch.object(gen, "FRAGMENTATION_METHOD", "Equal shares"):
+        with unittest.mock.patch.object(gen, "FRAGMENTATION_METHOD", "Equal shares"):
             project, notes = self.extract()
         self.assertEqual(project["settings"]["flowShareMethod"], "area")
         self.assertIn("unknown fragmentation method 'Equal shares'; using area", notes)
 
     def test_a_second_root_is_noted(self):
         network = [(n, t, [u for u in ups if u != "Golf Farm"]) for n, t, ups in gen.NETWORK]
-        with mock.patch.object(gen, "NETWORK", network):
+        with unittest.mock.patch.object(gen, "NETWORK", network):
             _, notes = self.extract()
         self.assertIn("elements ['Golf Farm', 'Outlet Gauge'] have no downstream element; only Outlet Gauge is the outflow gauge", notes)
 
     def test_rUseFlow_on_pitman_is_unset_with_a_warning(self):
-        with mock.patch.object(gen, "USE_FLOW", 1):
+        with unittest.mock.patch.object(gen, "USE_FLOW", 1):
             project, notes = self.extract()
         self.assertIsNone(project["settings"]["calibrationFlowKind"])
         self.assertTrue(any(n.startswith("WARNING: [Flow data] rUseFlow calibrates against Pitman flow") for n in notes))
 
     def test_rUseFlow_on_an_empty_series_is_unset(self):
-        with mock.patch.object(gen, "USE_FLOW", 3), mock.patch.object(gen, "LOGGER_FROM", gen.END + gen.dt.timedelta(days=30)):
+        with unittest.mock.patch.object(gen, "USE_FLOW", 3), unittest.mock.patch.object(gen, "LOGGER_FROM", gen.END + gen.dt.timedelta(days=30)):
             project, notes = self.extract()
         self.assertIsNone(project["settings"]["calibrationFlowKind"])
         self.assertNotIn("flow_logger_m3s", [s["kind"] for s in project["series"]])
@@ -175,7 +175,7 @@ class Variants(unittest.TestCase):
 
     def test_a_calibration_window_that_ends_before_it_starts_is_dropped(self):
         swapped = {"D11": gen.CALIBRATION["D12"], "D12": gen.CALIBRATION["D11"]}
-        with mock.patch.dict(gen.CALIBRATION, swapped):
+        with unittest.mock.patch.dict(gen.CALIBRATION, swapped):
             project, _ = self.extract()
         self.assertEqual((project["settings"]["calibrationStart"], project["settings"]["calibrationEnd"]), (None, None))
 

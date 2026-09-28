@@ -10,8 +10,11 @@
 //     both unit-hydrograph queues (no warm-up on resume: the state is it);
 //   - per node: the dam storage the day before (before any storage reset on
 //     the day), the soil-water store (m³ over the cropped area), the
-//     stream-depletion lag store, whether the river pump was on and each
-//     pumping unit's volume so far this water year;
+//     stream-depletion lag store, whether the river pump was on, each
+//     pumping unit's volume so far this water year and, under an allocation
+//     cap, the unit's surface and groundwater use so far this water year,
+//     and under a full allocation, the demand factor of the water year in
+//     progress;
 //   - per Reserve rule table, the month in progress (its natural and
 //     impacted flow so far) and, when low flows are judged on base flow,
 //     the impacted flow its base-flow windows reach back into (engine ≥
@@ -49,6 +52,10 @@ export interface ModelNodeState {
 	onRiver: boolean;
 	/** Each pumping unit's volume so far this water year (m³), in the plan's unit order; null without boreholes. */
 	boreholeUsedM3: number[] | null;
+	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */
+	allocationUsedM3?: [number, number];
+	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.18.0); absent without one. */
+	allocationFactor?: number;
 	/**
 	 * The storage the day before left, when withDamStorage set another: only
 	 * sizes the float noise the EWR attribution ignores on the first day, as

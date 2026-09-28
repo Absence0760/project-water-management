@@ -107,6 +107,10 @@ describe('the workspace’s Active alerts', () => {
 		expect(eventText(event({ kind: 'data_stale', detail: { feeds: [{ label: 'DWS gauge flow', overdue: 10 }] } }))).toBe('Late: DWS gauge flow (10 days)');
 		expect(eventText(event({ kind: 'job_dead', detail: { count: 1 } }))).toBe('1 background job failed in the last 24 hours');
 		expect(eventText(event({ kind: 'feed_failing', detail: {} }))).toBe('A data feed is failing');
+		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 2', pct: 20.4 } }))).toBe(
+			'Restriction in place: Level 2, a 20 % cut in registered water use'
+		);
+		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 1' } }))).toBe('Restriction in place: Level 1');
 	});
 });
 

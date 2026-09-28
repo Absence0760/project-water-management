@@ -2,8 +2,19 @@
 	// Decorative catchment illustration for the sign-in panel: the Outlet mark
 	// grown into a scene. Ridge contours, farms (some with dams) draining
 	// through a gauge to the outflow gauge, water moving down the rivers and
-	// ripples at the outlet. CSS-only motion, off under prefers-reduced-motion.
-	// Coordinates are in a 600 × 800 box; nothing here is data.
+	// ripples at the outlet. CSS motion, off under prefers-reduced-motion, and
+	// stopped where it is after 5 s (WCAG 2.2.2 Pause, Stop, Hide: motion beside
+	// the form that runs longer needs a pause control; this is decoration, so it
+	// just stops). Coordinates are in a 600 × 800 box; nothing here is data.
+	import { onMount } from 'svelte';
+
+	/** How long the scene moves before it holds still (2.2.2 exempts motion of 5 s or less). */
+	const MOTION_MS = 4_800;
+	let still = $state(false);
+	onMount(() => {
+		const stop = setTimeout(() => (still = true), MOTION_MS);
+		return () => clearTimeout(stop);
+	});
 
 	type Pt = readonly [number, number];
 	// The top-left stays clear of nodes: the panel copy sits there.
@@ -75,7 +86,7 @@
 	const dams: Id[] = ['b', 'd', 'f'];
 </script>
 
-<svg class="scene" viewBox="0 0 600 800" preserveAspectRatio="xMaxYMax slice" aria-hidden="true" focusable="false">
+<svg class="scene" class:still data-still={still ? 'yes' : 'no'} viewBox="0 0 600 800" preserveAspectRatio="xMaxYMax slice" aria-hidden="true" focusable="false">
 	<g class="contours">
 		{#each contours as c, i (i)}
 			<path d={c.d} class="contour" class:drift-b={c.hi % 2 === 1} />
@@ -187,6 +198,10 @@
 	}
 	.r2 {
 		animation-delay: 2.4s;
+	}
+	.still,
+	.still * {
+		animation-play-state: paused !important;
 	}
 	@keyframes flow {
 		to {

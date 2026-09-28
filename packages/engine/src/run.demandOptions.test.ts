@@ -120,7 +120,7 @@ describe('irrigation efficiency per crop (engine 0.43.0)', () => {
 	it('lowering a crop’s or a farm’s efficiency never lowers the farm’s demand on any day (invariant)', () => {
 		let tested = 0;
 		for (let seed = 1; seed <= 60; seed++) {
-			const x = randomInput(seed, { maxDays: 120 });
+			const x = randomInput(seed, { maxDays: 120, allocationModes: false });
 			if (!x.model.crops.some((c) => c.irrigationEfficiency != null)) continue;
 			tested++;
 			// Worse systems: every crop's own efficiency and, every other seed, every farm's too.
@@ -198,7 +198,7 @@ describe('monthly effective-rain fraction (engine 0.43.0)', () => {
 
 	it('keeps effective rain between 0 and the day’s rain on the cropped area, and a higher fraction never raises demand (invariant)', () => {
 		for (let seed = 1; seed <= 40; seed++) {
-			const x = randomInput(seed, { maxDays: 150 });
+			const x = randomInput(seed, { maxDays: 150, allocationModes: false });
 			const lo = structuredClone(x);
 			const hi = structuredClone(x);
 			const f = Array.from({ length: 12 }, (_, m) => ((seed * 7 + m * 3) % 10) / 10);
@@ -234,7 +234,7 @@ describe('the invariants hold with both options on', () => {
 	it('balance, workings, soil water, EWR attribution, order invariance and the crop-area property (random networks)', () => {
 		let tested = 0;
 		for (let seed = 1; seed < 400 && tested < 12; seed++) {
-			const x = randomInput(seed, { maxDays: 200 });
+			const x = randomInput(seed, { maxDays: 200, allocationModes: false });
 			if (!x.model.cropAreas.some((a) => a.areaM2 > 0)) continue;
 			// Every crop on its own system, and a monthly fraction with a dry-season 0 and a wet-season 1.
 			x.model.crops.forEach((c, i) => (c.irrigationEfficiency = [0.55, 0.7, 0.85, 0.95, 1][i % 5]));
