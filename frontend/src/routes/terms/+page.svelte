@@ -76,7 +76,8 @@
 	</ul>
 	<p>
 		Reports the service produces carry their own disclaimer, which says the same thing for anyone a report is shared with,
-		including that results are not an authorisation or licence under the National Water Act, 1998 (sections 27 and 41).
+		including that a report is not an authorisation to use water: only the responsible authority decides that, under the
+		National Water Act, 1998 (sections 22, 27 and 41).
 	</p>
 
 	<h2 id="accounts">4. Accounts</h2>
