@@ -34,7 +34,7 @@ client goes live. Not customer-facing.
   Privacy §7: an account that created project evidence is kept until the
   person and the responsible organisation agree what happens to that record
   (`docs/security.md`, the restrict foreign keys). Self-service deletion
-  stays open (issue #48).
+  stays open (issue #90).
 - **Assent:** directly above the sign-up button, a box with the four main
   points of the Terms in the reader's language ("The main things you agree
   to", `lib/components/legal/termsSummary.ts`; the same points open the
