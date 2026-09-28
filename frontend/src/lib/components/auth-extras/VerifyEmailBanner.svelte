@@ -4,6 +4,7 @@
 	// verified yet (GET /auth/me → emailVerified: false). Pending project/team
 	// invitations for the address only take effect once it is confirmed.
 	// Mount once, just under the app header, in routes/+layout.svelte.
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { api, ApiError } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { session } from '$lib/auth/session.svelte';
@@ -19,6 +20,12 @@
 
 	const show = $derived(!!session.user && session.user.emailVerified === false && !dismissed);
 
+	/** The banner goes, and the Dismiss button with it: focus moves on to the page below (WCAG 2.4.3). */
+	function dismiss() {
+		dismissed = true;
+		void focusPageStart();
+	}
+
 	async function resend() {
 		busy = true;
 		message = null;
@@ -29,6 +36,8 @@
 			if (err instanceof ApiError && err.status === 409 && session.user) {
 				// Verified in another tab meanwhile.
 				session.user = { ...session.user, emailVerified: true };
+				// The banner (and the button just pressed) is gone.
+				void focusPageStart();
 				return;
 			}
 			message = errorText(err);
@@ -47,7 +56,7 @@
 			<button type="button" class="btn btn-sm" onclick={resend} disabled={busy}>
 				{busy ? t('Sending…') : t('Resend email')}
 			</button>
-			<button type="button" class="btn btn-sm btn-ghost" onclick={() => (dismissed = true)}>{t('Dismiss')}</button>
+			<button type="button" class="btn btn-sm btn-ghost" onclick={dismiss}>{t('Dismiss')}</button>
 		</div>
 		<p class="status" role="status" aria-live="polite">{message ?? ''}</p>
 	</section>

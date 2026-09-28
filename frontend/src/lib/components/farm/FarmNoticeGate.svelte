@@ -11,6 +11,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
 	import { base } from '$app/paths';
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { errorText } from '$lib/i18n/apiError';
@@ -44,6 +45,8 @@
 		} finally {
 			busy = false;
 		}
+		// The button is gone with the notice: focus the page's title, not <body> (WCAG 2.4.3).
+		if (!needed) await focusPageStart();
 	}
 
 	let flushing = false;
