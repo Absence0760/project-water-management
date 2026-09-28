@@ -22,10 +22,11 @@ Blocked:
   git checkout/restore . (or :/, *) — no pathspec  (discards across the tree)
   git rm . (or :/, *)                              (removes the whole tree)
   git clean -f                                     (deletes untracked files)
+  git push to main, bare `git push`, HEAD, --all   (main only changes through a PR)
 
 Allowed: git add <path>, git commit -m "…" -- <path>, git commit --allow-empty,
 git commit --amend (pure reword, nothing staged), git restore -- <path>,
-git stash push -- <path>, and all read-only git.
+git stash push -- <path>, git push -u origin <branch>, and all read-only git.
 """
 
 import json
@@ -285,7 +286,46 @@ def _check_clean(args):
     return None
 
 
+PROTECTED = {"main", "refs/heads/main", "master", "refs/heads/master"}
+# Options whose value is the next argument (--signed and --force-with-lease
+# only take one in their `=` form).
+PUSH_TAKES_VALUE = {"--repo", "--receive-pack", "--exec", "--push-option", "-o"}
+
+
+def _check_push(args):
+    """Changes reach main through a PR: push a branch, never main itself."""
+    how = ("Push your branch and open a PR instead: "
+           "`git push -u origin <branch>` then `gh pr create` (CLAUDE.md, "
+           "\"Working alongside other Claude sessions\").")
+    positional, i = [], 0
+    while i < len(args):
+        a = args[i]
+        if a in ("--all", "--mirror") or a.startswith("--mirror"):
+            return "`git push %s` can push main. %s" % (a, how)
+        if a in PUSH_TAKES_VALUE and "=" not in a:
+            i += 2
+            continue
+        if not a.startswith("-"):
+            positional.append(a)
+        i += 1
+    refspecs = positional[1:]
+    if not refspecs:
+        return ("A bare `git push` pushes whatever branch is checked out, which may "
+                "be main. Name the branch: `git push -u origin <branch>`. " + how)
+    for spec in refspecs:
+        src, _, dst = spec.lstrip("+").partition(":")
+        target = dst or src
+        if target in ("HEAD", "@"):
+            return ("`git push … %s` pushes the checked-out branch, which may be "
+                    "main. Name the branch explicitly. %s" % (spec, how))
+        if target in PROTECTED:
+            return ("Never push to main: every change reaches it through a pull "
+                    "request (main is also protected on GitHub). " + how)
+    return None
+
+
 CHECKS = {
+    "push": _check_push,
     "add": _check_add,
     "commit": _check_commit,
     "stash": _check_stash,
