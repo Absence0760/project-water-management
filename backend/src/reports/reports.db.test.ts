@@ -70,7 +70,7 @@ describe('render tokens', () => {
 		const { cookie } = await exchange(await withUser(owner.id, (db) => issueRenderToken(db, projectId, runId)));
 		const res = await app.request('/auth/me', { headers: { cookie: cookie!, origin: ORIGIN } });
 		expect(res.status).toBe(200);
-		expect((await res.json()).user).toMatchObject({ id: owner.id, termsCurrent: false, renderSession: true });
+		expect(((await res.json()) as { user: unknown }).user).toMatchObject({ id: owner.id, termsCurrent: false, renderSession: true });
 	});
 
 	it('a viewer issues one; it buys a session that reads that project and run (positive control) and nothing else', async () => {
