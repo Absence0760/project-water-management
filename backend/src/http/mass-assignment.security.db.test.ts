@@ -187,7 +187,9 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 			params: { runId: run.run.id },
 			body: {
 				fullName: 'Mass Signer',
-				registrationBody: 'SACNASP',
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationField: 'water_resources',
 				registrationNo: '1',
 				scope: 'mass',
 				confirmed: statement.confirmations.map((k: { id: string }) => k.id),

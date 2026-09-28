@@ -36,7 +36,9 @@ async function signOff(u: User, runId: string) {
 	expect(shown.status).toBe(200);
 	return u.call('POST', `${P()}/runs/${runId}/signoffs`, {
 		fullName: 'Dr A. Assessor',
-		registrationBody: 'SACNASP',
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationField: 'water_resources',
 		registrationNo: '400123/21',
 		scope: 'Hydrology of a synthetic application',
 		confirmed: shown.body.statement.confirmations.map((k: { id: string }) => k.id),

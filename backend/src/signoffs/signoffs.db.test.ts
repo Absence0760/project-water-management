@@ -23,7 +23,9 @@ const SIGNOFF_1 = ['calibration', 'ewr', 'works', 'assurance', 'limitations'];
 const path = (rid = runId, pid = projectId) => `/projects/${pid}/runs/${rid}/signoffs`;
 const body = (hash: string, over: Record<string, unknown> = {}) => ({
 	fullName: 'Dr A. Hydrologist',
-	registrationBody: 'SACNASP',
+	registrationBody: 'sacnasp',
+	registrationCategory: 'pr_sci_nat',
+	registrationField: 'water_resources',
 	registrationNo: '400999/20',
 	scope: 'Hydrology section of a synthetic WULA technical report',
 	confirmed: ALL,
@@ -115,9 +117,11 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 		expect(res.body.signoff).toMatchObject({
 			runId,
 			fullName: 'Dr A. Hydrologist',
-			registrationBody: 'SACNASP',
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationField: 'water_resources',
 			registrationNo: '400999/20',
-			statementVersion: 'signoff-2',
+			statementVersion: 'signoff-3',
 			statementSha256: hash,
 			mine: true
 		});
@@ -128,7 +132,10 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 
 		const { rows } = await withUser(viewer.id, (db) => db.query(`SELECT actor_user_id, kind, subject FROM audit_event WHERE project_id = $1 AND kind = 'signoff.created'`, [projectId]));
 		expect(rows).toHaveLength(1);
-		expect(rows[0]).toMatchObject({ actor_user_id: editor.id, subject: { signoffId: res.body.signoff.id, runId, statementSha256: hash } });
+		expect(rows[0]).toMatchObject({
+			actor_user_id: editor.id,
+			subject: { signoffId: res.body.signoff.id, runId, statementSha256: hash, registrationBody: 'sacnasp', registrationCategory: 'pr_sci_nat', registrationField: 'water_resources' }
+		});
 
 		// The run is cited, so kept: the DELETE route refuses and says by what.
 		const del = await owner.call('DELETE', `/projects/${projectId}/runs/${runId}`);
@@ -145,7 +152,7 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 
 	it('keeps a sign-off made under signoff-1 as it was recorded, beside new ones under the current statement', async () => {
 		const oldHash = 'b'.repeat(64);
-		// A sign-off stored before the statement moved to signoff-2 (the route can only make current ones).
+		// A sign-off stored under signoff-1 (the route can only make current ones).
 		await withUser(editor.id, (db) =>
 			db.query(
 				`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version, signed_at)
@@ -154,13 +161,81 @@ describe('POST /projects/:id/runs/:runId/signoffs', () => {
 			)
 		);
 		const res = await viewer.call('GET', path());
-		expect(res.body.statement.version).toBe('signoff-2');
+		expect(res.body.statement.version).toBe('signoff-3');
 		expect(res.body.statementSha256).toBe(hash);
 		expect(res.body.signoffs.map((s: { fullName: string; statementVersion: string; statementSha256: string }) => [s.fullName, s.statementVersion, s.statementSha256])).toEqual([
 			['Dr C. Earlier', 'signoff-1', oldHash],
-			['Dr A. Hydrologist', 'signoff-2', hash],
-			['Ms B. Reviewer', 'signoff-2', hash]
+			['Dr A. Hydrologist', 'signoff-3', hash],
+			['Ms B. Reviewer', 'signoff-3', hash]
 		]);
+		// Category and field not recorded on the earlier row; its free-text body as typed.
+		expect(res.body.signoffs[0]).toMatchObject({ registrationBody: 'SACNASP', registrationCategory: null, registrationField: null });
+	});
+});
+
+describe('the signer’s registration (092_signoff_registration, issue #47)', () => {
+	let rid: string;
+	let hash: string;
+	beforeAll(async () => {
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'registration' });
+		expect(run.status).toBe(201);
+		rid = run.body.run.id;
+		hash = (await editor.call('GET', path(rid))).body.statementSha256;
+	});
+
+	it('refuses a candidate, certificated or specified category (400, with why) and records nothing', async () => {
+		const cand = await editor.call('POST', path(rid), body(hash, { registrationCategory: 'cand_sci_nat' }));
+		expect(cand.status).toBe(400);
+		expect(cand.body.error).toBe(
+			'A Cand.Sci.Nat. (Candidate Natural Scientist) works under the supervision and control of a professional (Natural Scientific Professions Act, s 22(2)), so a sign-off must be made by the supervising professional. Ask them to sign; confirmation 2 covers work they supervised.'
+		);
+		for (const [b, c, f] of [
+			['sacnasp', 'cert_sci_nat', 'water_resources'],
+			['ecsa', 'cand_eng', 'civil'],
+			['ecsa', 'cand_techni_eng', 'civil'],
+			['ecsa', 'specified', 'civil']
+		]) {
+			const res = await editor.call('POST', path(rid), body(hash, { registrationBody: b, registrationCategory: c, registrationField: f, registrationNo: '20051234' }));
+			expect(res.status, c).toBe(400);
+		}
+		expect((await viewer.call('GET', path(rid))).body.signoffs).toEqual([]);
+	});
+
+	it('refuses a free-text body, an unknown code, and a category or field of the other body (400)', async () => {
+		for (const over of [
+			{ registrationBody: 'SACNASP' },
+			{ registrationBody: 'saice' },
+			{ registrationCategory: 'pr_eng' },
+			{ registrationField: 'civil' },
+			{ registrationCategory: undefined },
+			{ registrationField: 'Water Resources' }
+		]) {
+			expect((await editor.call('POST', path(rid), body(hash, over))).status, JSON.stringify(over)).toBe(400);
+		}
+		expect((await viewer.call('GET', path(rid))).body.signoffs).toEqual([]);
+	});
+
+	it('records a warn-level registration (Pr Cert Eng, Mining) as chosen: a warning is not an error', async () => {
+		const res = await editor.call('POST', path(rid), body(hash, { registrationBody: 'ecsa', registrationCategory: 'pr_cert_eng', registrationField: 'mining', registrationNo: '20051234' }));
+		expect(res.status).toBe(201);
+		expect(res.body.signoff).toMatchObject({ registrationBody: 'ecsa', registrationCategory: 'pr_cert_eng', registrationField: 'mining', statementVersion: 'signoff-3' });
+	});
+
+	it('binds a new row to its choices in the database; an older version’s row may leave them empty', async () => {
+		const insert = (version: string, bodyText: string, category: string | null) =>
+			withUser(editor.id, (db) =>
+				db.query(
+					`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope, statement_version, statement_sha256, disclaimer_version)
+					 VALUES ($1, $2, $3, 'X', $4, $5, $6, '1', 'scope', $7, $8, 'd')`,
+					[projectId, rid, editor.id, bodyText, category, category && 'water_resources', version, 'c'.repeat(64)]
+				)
+			);
+		await expect(insert('signoff-3', 'sacnasp', null)).rejects.toThrow(/signoff_registration_recorded/);
+		await expect(insert('signoff-3', 'SACNASP', 'pr_sci_nat')).rejects.toThrow(/signoff_registration_recorded/);
+		await expect(insert('signoff-3', 'sacnasp', 'Pr Sci Nat')).rejects.toThrow(/check constraint/);
+		// Controls: a complete signoff-3 row, and a signoff-2 row as it was recorded.
+		await expect(insert('signoff-3', 'sacnasp', 'pr_sci_nat')).resolves.toBeDefined();
+		await expect(insert('signoff-2', 'SACNASP', null)).resolves.toBeDefined();
 	});
 });
 

@@ -282,7 +282,9 @@ const WRITE_ROUTES: Entry[] = [
 			const { statement, statementSha256 } = (await c.owner.call('GET', path)).body;
 			return c.owner.call('POST', path, {
 				fullName: 'Guard Signer',
-				registrationBody: 'SACNASP',
+				registrationBody: 'sacnasp',
+				registrationCategory: 'pr_sci_nat',
+				registrationField: 'water_resources',
 				registrationNo: '1',
 				scope: 'guard',
 				confirmed: statement.confirmations.map((k: { id: string }) => k.id),

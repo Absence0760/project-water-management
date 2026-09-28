@@ -431,7 +431,7 @@ const CASES: Record<string, Case> = {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [
 			`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version)
-			 VALUES ($1, $2, $3, 'A Person', 'SACNASP', '1', 'x', 'v1', repeat('a', 64), 'v1')`,
+			 VALUES ($1, $2, $3, 'A Person', 'SACNASP', '1', 'x', 'signoff-1', repeat('a', 64), 'v1')`,
 			[h.projectId, ref, u()]
 		]
 	},
