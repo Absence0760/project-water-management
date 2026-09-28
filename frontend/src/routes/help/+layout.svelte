@@ -128,6 +128,17 @@
 			gap: 2.5rem;
 			align-items: start;
 		}
+		/* Placed, not auto-flowed: this grid starts at the media query, but the
+		   contents column comes with `wide` (a MediaQuery, whose change event
+		   lands a moment after a resize). Auto-flowed, the text column fell into
+		   the 13rem track until then: widened past 900 px, a guide was ~180 px
+		   wide for a moment (diagram-labels.spec.ts measures right after). */
+		.side {
+			grid-column: 1;
+		}
+		.help-col {
+			grid-column: 2;
+		}
 		/* In view while reading; it scrolls on its own only when it is taller
 		   than the window (a short window, or the glossary's term list). It
 		   starts and sticks at the page's top gutter and ends as far from the
