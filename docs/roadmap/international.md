@@ -1129,7 +1129,7 @@ Run the existing ones first:
 - **`persona-licensing-authority`** with a WRA lens: reproducibility and the
   provenance block.
 
-Personas to add (`.claude/agents/persona-*.md`, following
+Personas to add (`.claude/agents/personas/persona-*.md`, following
 `.claude/personas/README.md`) once a market is committed:
 
 - **`persona-kenya-wrua`**: a WRUA officer, Swahili/English, phone-first,
