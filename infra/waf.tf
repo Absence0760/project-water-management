@@ -47,8 +47,19 @@ resource "aws_wafv2_web_acl" "frontend" {
             field_to_match {
               uri_path {}
             }
+            # Match the path the API routes on, not its raw spelling: decode
+            # first (`/api/%61uth/login` is `/api/auth/login` to Hono), then
+            # collapse `//`, `/./` and `/../`, then fold case.
             text_transformation {
               priority = 0
+              type     = "URL_DECODE"
+            }
+            text_transformation {
+              priority = 1
+              type     = "NORMALIZE_PATH"
+            }
+            text_transformation {
+              priority = 2
               type     = "LOWERCASE"
             }
           }
