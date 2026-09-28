@@ -84,7 +84,7 @@ export function streamDailySheet(X: XLSX, stubXml: string, t: DailyTable): strin
 }
 
 /** The workbook as the export built it with SheetJS. */
-export async function sheetjsWorkbook(X: XLSX, input: WorkbookInput): Promise<Uint8Array> {
+export async function sheetjsWorkbook(X: XLSX, input: WorkbookInput): Promise<Uint8Array<ArrayBuffer>> {
 	const wb = X.utils.book_new();
 	const daily: { index: number; table: DailyTable }[] = [];
 	for (const sheet of workbookPlan(input)) {
@@ -103,7 +103,7 @@ export async function sheetjsWorkbook(X: XLSX, input: WorkbookInput): Promise<Ui
 	const dec = new TextDecoder();
 	for (const { index, table } of daily) {
 		if (tableDays(table) === 0) continue;
-		const file = X.CFB.find(cfb, `/xl/worksheets/sheet${index + 1}.xml`) as { content: Uint8Array; size: number } | null;
+		const file = X.CFB.find(cfb, `/xl/worksheets/sheet${index + 1}.xml`) as { content: Uint8Array<ArrayBuffer>; size: number } | null;
 		if (!file) throw new Error('unexpected workbook layout from the spreadsheet library');
 		file.content = new TextEncoder().encode(streamDailySheet(X, dec.decode(file.content), table));
 		file.size = file.content.length;
@@ -111,7 +111,7 @@ export async function sheetjsWorkbook(X: XLSX, input: WorkbookInput): Promise<Ui
 	const root = cfb.FullPaths[0]!;
 	const parts: ZipEntry[] = [];
 	for (let i = 1; i < cfb.FullPaths.length; i++) {
-		const f = cfb.FileIndex[i] as { type: number; content?: Uint8Array | number[]; size?: number };
+		const f = cfb.FileIndex[i] as { type: number; content?: Uint8Array<ArrayBuffer> | number[]; size?: number };
 		const name = cfb.FullPaths[i]!.slice(root.length);
 		if (f.type !== 2 || !f.size || !f.content || !f.content.length || name === '\u0001Sh33tJ5') continue;
 		parts.push({ name, data: f.content instanceof Uint8Array ? f.content : Uint8Array.from(f.content) });

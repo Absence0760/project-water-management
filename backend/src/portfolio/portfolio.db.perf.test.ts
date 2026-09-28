@@ -4,7 +4,7 @@
 // so this guard trips on a regression of the query's shape (a new join or a
 // per-row subquery over a run's series), not on a slow laptop.
 //
-// Its own vitest project (`perf-db`, vitest.workspace.ts): a timing budget,
+// Its own vitest project (`perf-db`, vitest.config.ts): a timing budget,
 // so out of `pnpm test` and CI, and against Postgres, so with the db
 // project's global setup. Run it alone: `pnpm test:backend:perf:db`.
 import { beforeAll, describe, expect, it } from 'vitest';

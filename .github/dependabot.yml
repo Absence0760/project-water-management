@@ -21,6 +21,20 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # @types/node tracks Node's major, and the runtime is Node 24
+      # (.tool-versions, Lambda nodejs24.x): 25+ types describe APIs Node 24
+      # lacks. Lift this with the runtime.
+      - dependency-name: "@types/node"
+        versions: [">=25"]
+      # The frontend stays on TypeScript 6: svelte-check and @sveltejs/kit
+      # accept typescript ^5 || ^6 only, and TypeScript 7 (the native port)
+      # ships no JS compiler API, which svelte-check and two frontend guard
+      # tests (engineSideEffects, engineSplit) import. backend, engine and e2e
+      # run 7 (tsc only). Majors are ignored for every workspace (one npm
+      # entry covers them all), so bump TypeScript majors by hand.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # The repo's Python lives in subfolders, each with its own pinned
   # requirements.txt; "/" has none, so list the folders (a new Python tool

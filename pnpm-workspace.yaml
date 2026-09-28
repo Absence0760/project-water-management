@@ -3,3 +3,11 @@ packages:
   - backend
   - packages/*
   - e2e
+
+overrides:
+  # @sveltejs/kit (2.70.3, the latest) still asks for cookie ^0.6.0, which has
+  # GHSA-pxg6-pf52-xh8x (out-of-bounds characters accepted in a cookie's name,
+  # path and domain; fixed in 0.7.0). 0.7.x keeps the parse/serialize API kit
+  # calls (its server runtime only: the prerendered /welcome page). Drop this
+  # once kit depends on cookie >= 0.7.
+  cookie@<0.7.0: 0.7.2

@@ -1,6 +1,6 @@
 // Wall-clock budgets for the seasonal outlook and the review triggers on the
 // invented catchment (13 water years, ./testCatchment.ts), in the `perf`
-// project (vitest.workspace.ts: serial, not in `pnpm test` or CI; run alone
+// project (vitest.config.ts: serial, not in `pnpm test` or CI; run alone
 // with `pnpm test:engine:perf`). Since engine 1.1.0 each member runs only
 // the season from one snapshot of the history (docs/model.md §2.16); the
 // budgets are set to that path and the speed-up over the re-run path
