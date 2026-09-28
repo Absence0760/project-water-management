@@ -1,0 +1,103 @@
+name: Terraform
+
+# Guards infra/ (estate standard: threkir's and feohledger's terraform.yml):
+#   1. `terraform fmt -check -recursive`, so the diff is the real change.
+#   2. `terraform validate` (init -backend=false, a local-backend override),
+#      credential-free.
+#   3. `terraform test`: plan-only runs against mocked providers
+#      (infra/tests/guardrails.tftest.hcl), also credential-free. This is the
+#      plan CI can run: it pins IAM, the OIDC trust postcondition, RDS privacy,
+#      the CloudFront wiring, WAF, SES, alarms and the budget.
+#   4. Trivy IaC scan for known-bad patterns (public buckets, `Action: *`,
+#      open ingress). Advisory (exit-code 0), results to the Security tab.
+#
+# 1-3 are `bin/check-infra.sh`, the same script as `pnpm check:infra`.
+#
+# There is deliberately NO credentialed `terraform plan` against the real
+# account here. The only role CI can assume is the deploy role, whose trust
+# policy accepts `environment:production` alone and whose policy grants
+# deploy actions only (infra/oidc.tf), so a plan would need a reviewer
+# approval on every infra push, the sops key and a checkout of the private
+# infra-secrets repo, and would still fail on read permissions. The real plan
+# stays an operator step (infra/README.md § Operator steps, step 8).
+#
+# CALLED by ci.yml's `terraform` job (so it gates the `CI gate`), and by
+# nothing else.
+
+on:
+  workflow_call:
+
+# The caller's grant is the ceiling; only trivy-iac spends security-events.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: fmt, validate, test (mocked providers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read pinned Terraform version
+        id: tfver
+        run: echo "version=$(tr -d '[:space:]' < infra/.terraform-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ steps.tfver.outputs.version }}
+          terraform_wrapper: false
+
+      - name: fmt, validate, test
+        run: bin/check-infra.sh
+
+  trivy-iac:
+    name: Trivy IaC scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Trivy config scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: config
+          scan-ref: infra
+          format: sarif
+          output: trivy-iac.sarif
+          severity: CRITICAL,HIGH
+          exit-code: '0'
+
+      # Code scanning (the Security tab) needs a public repo, or GitHub
+      # Advanced Security on a private one. While the repo is private the
+      # upload would fail the job, so the findings go to the job summary
+      # instead, where they are still read.
+      - name: Upload Trivy IaC SARIF
+        if: ${{ !github.event.repository.private }}
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
+        with:
+          sarif_file: trivy-iac.sarif
+          category: trivy-iac
+
+      - name: Summarise findings (private repo, no code scanning)
+        if: ${{ github.event.repository.private }}
+        run: |
+          set -euo pipefail
+          count=$(jq '[.runs[].results[]] | length' trivy-iac.sarif)
+          {
+            echo "## Trivy IaC (HIGH/CRITICAL)"
+            echo ""
+            echo "The repo is private, so these are not in the Security tab. ${count} finding(s)."
+            echo ""
+            jq -r '.runs[].results[] | "- `\(.ruleId)` \(.locations[0].physicalLocation.artifactLocation.uri):\(.locations[0].physicalLocation.region.startLine // "?") \(.message.text | split("\n")[0])"' trivy-iac.sarif
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$count" -gt 0 ]; then
+            echo "::warning::Trivy found ${count} HIGH/CRITICAL IaC finding(s); see the job summary."
+          fi

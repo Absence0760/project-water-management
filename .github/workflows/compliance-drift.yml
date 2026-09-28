@@ -1,0 +1,71 @@
+name: Compliance drift
+
+# Advisory guard against a change quietly invalidating the privacy (POPIA)
+# posture (estate standard: threkir's and feohledger's compliance-drift.yml).
+# A migration that adds a personal-data column, source that starts talking to
+# a new outside host, or a new analytics/telemetry SDK should move
+# docs/data-model.md / docs/security.md with it. Rules and their tests:
+# scripts/guards/check_compliance_drift.mjs.
+#
+# `warn` mode: it annotates and writes a job summary but never fails. Flip
+# COMPLIANCE_DRIFT_MODE to `fail` once the signal has proven low-noise.
+# (Measured at introduction: 0 findings over the whole history, and it fires
+# on 001_init.sql / 004_email.sql when their doc changes are left out.)
+#
+# Runs on push to main as well as PRs, because the operator pushes to main
+# directly during early development; there is no PR to hang it on.
+
+on:
+  pull_request:
+    paths:
+      - 'backend/migrations/**'
+      - 'backend/src/**'
+      - 'frontend/src/**'
+      - '**/package.json'
+      - 'docs/data-model.md'
+      - 'docs/security.md'
+      - 'scripts/guards/check_compliance_drift*.mjs'
+      - '.github/workflows/compliance-drift.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/migrations/**'
+      - 'backend/src/**'
+      - 'frontend/src/**'
+      - '**/package.json'
+      - 'docs/data-model.md'
+      - 'docs/security.md'
+      - 'scripts/guards/check_compliance_drift*.mjs'
+      - '.github/workflows/compliance-drift.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  compliance-drift:
+    name: Compliance drift advisory
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The detector diffs against the PR base / the push's `before`.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Detector unit tests
+        run: |
+          if ! node --test scripts/guards/check_compliance_drift.test.mjs; then
+            echo "::error::The compliance-drift detector's own tests failed, so whatever it says about this diff cannot be trusted. This is not a compliance finding."
+            exit 1
+          fi
+
+      - name: Run compliance-drift detector
+        env:
+          COMPLIANCE_DRIFT_MODE: warn
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/guards/check_compliance_drift.mjs

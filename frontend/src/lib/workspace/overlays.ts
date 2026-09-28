@@ -1,0 +1,63 @@
+// Overlays opened over any workspace tab from a URL parameter, so they can
+// be linked and Back closes them (issue #17): the farm drawer (`farm=<nodeId>`,
+// crops/farmDrawer.ts) and the grid modal (`grid=<id>`): an existing grid,
+// unchanged, full screen.
+
+/** The grids the grid modal can show, with their titles. */
+export const GRIDS = {
+	nodes: 'Node table',
+	'crop-factors': 'Crop factors',
+	'planted-areas': 'Planted areas',
+	demand: 'Irrigation demand preview',
+	transfers: 'Transfers'
+} as const;
+
+export type GridId = keyof typeof GRIDS;
+
+export function isGridId(v: string | null): v is GridId {
+	return v !== null && Object.hasOwn(GRIDS, v);
+}
+
+/**
+ * The workspace tab a grid is also shown on, where the modal isn't opened
+ * (the grid is already on the page); null: only ever in the modal (the node
+ * table, since the Network became a map, and the crop grids, since Crops &
+ * demand became cards and bars, issue #17).
+ */
+export const GRID_TAB: Record<GridId, string | null> = {
+	nodes: null,
+	'crop-factors': null,
+	'planted-areas': null,
+	demand: null,
+	transfers: 'transfers'
+};
+
+/** `?tab=<tab>&<name>=<value>`, or no `tab` over the Summary (the default tab). */
+export function overlayHref(tab: string | null, name: string, value: string): string {
+	const q = new URLSearchParams();
+	if (tab && tab !== 'overview') q.set('tab', tab);
+	q.set(name, value);
+	return `?${q}`;
+}
+
+/** The link that opens a grid in the modal over `tab`. */
+export const gridHref = (tab: string | null, grid: GridId) => overlayHref(tab, 'grid', grid);
+
+/**
+ * The current page with one overlay opened: `name=value` added, every other
+ * parameter kept (the tab's own state, e.g. the Network's `view`), so closing
+ * it comes back to exactly where it was opened.
+ */
+export function withParam(url: URL, name: string, value: string): string {
+	const q = new URLSearchParams(url.search);
+	q.set(name, value);
+	return `?${q}`;
+}
+
+/** The URL with one overlay closed: `name` dropped, everything else kept. */
+export function withoutParam(url: URL, name: string): string {
+	const q = new URLSearchParams(url.search);
+	q.delete(name);
+	const s = q.toString();
+	return `${url.pathname}${s ? `?${s}` : ''}${url.hash}`;
+}

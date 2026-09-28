@@ -1,0 +1,6 @@
+email,farm,language
+farmer.one@example.com,Upper farm,en
+farmer.two@example.com,lower farm,af
+farmer.two@example.com,Upper farm,
+farmer.three@example.com,Middle farm,en
+not-an-email,Upper farm,en

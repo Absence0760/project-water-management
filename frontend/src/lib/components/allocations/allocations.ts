@@ -1,0 +1,194 @@
+// Words and table shapes for the Allocations tab (WP-3.10, docs/ui.md
+// § Allocations). Pure, unit-tested in allocations.test.ts.
+//
+// The wording never says "lawful", "unlawful", "compliant" or "illegal": the
+// app compares modelled use with a registered volume and leaves the finding to
+// the authority (docs/allocations.md § What the comparison is not).
+import { allocationStatus, type AllocationComparison, type AllocationStatus, type AllocationYear } from '@water-management/engine';
+import type { AllocationAuthorisation, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
+import { fmtNum } from '$lib/format/number';
+
+export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
+	registration: 'Registration (WARMS)',
+	licence: 'Licence',
+	general_authorisation: 'General authorisation',
+	existing_lawful_use: 'Existing lawful use (verified)'
+};
+
+export const PURPOSE_LABEL: Record<AllocationPurpose, string> = {
+	irrigation: 'Irrigation',
+	domestic: 'Domestic',
+	livestock: 'Livestock',
+	industry: 'Industry',
+	mining: 'Mining',
+	municipal: 'Municipal',
+	other: 'Other'
+};
+
+export const SOURCE_LABEL: Record<AllocationWaterSourceKind, string> = {
+	surface: 'Surface water',
+	groundwater: 'Groundwater'
+};
+
+/** Short badge text per status: what the numbers say, not a finding. */
+export const STATUS_LABEL: Record<AllocationStatus, string> = {
+	over: 'Above registered',
+	within: 'Within band',
+	under: 'Below registered',
+	unregistered: 'No registered volume',
+	none: 'No use, none registered'
+};
+
+/** "2021/22". */
+export const waterYearLabel = (wy: number) => `${wy}/${String((wy + 1) % 100).padStart(2, '0')}`;
+
+/** One sentence for a year's comparison, with the tolerance, never a legal word. */
+export function statusSentence(y: Pick<AllocationYear, 'status' | 'ratio' | 'modelledM3' | 'registeredM3'>, tolerance: number): string {
+	const band = `±${fmtNum(tolerance * 100, 0)} %`;
+	switch (y.status) {
+		case 'over':
+			return `Modelled use is ${fmtNum(((y.ratio ?? 0) - 1) * 100, 0)} % above the registered volume (outside the ${band} band).`;
+		case 'under':
+			return `Modelled use is ${fmtNum((1 - (y.ratio ?? 0)) * 100, 0)} % below the registered volume (outside the ${band} band).`;
+		case 'within':
+			return `Modelled use is within ${band} of the registered volume.`;
+		case 'unregistered':
+			return `The model abstracts ${fmtNum(y.modelledM3)} m³ here, with no registered volume in force.`;
+		case 'none':
+			return 'No modelled use and no registered volume.';
+	}
+}
+
+/** A table row of the comparison: one farm, one water source, one water year. */
+export interface ComparisonRow {
+	key: string;
+	nodeId: string;
+	name: string;
+	source: AllocationWaterSourceKind;
+	year: AllocationYear;
+}
+
+/**
+ * The comparison as table rows, farm by farm, surface before groundwater. A
+ * source with neither use nor a registered volume in any year is left out
+ * (most farms have no boreholes).
+ */
+export function comparisonRows(c: AllocationComparison): ComparisonRow[] {
+	const out: ComparisonRow[] = [];
+	for (const n of c.nodes)
+		for (const side of [n.surface, n.groundwater]) {
+			if (side.years.every((y) => y.status === 'none')) continue;
+			for (const y of side.years) out.push({ key: `${n.nodeId}:${side.waterSource}:${y.waterYear}`, nodeId: n.nodeId, name: n.name, source: side.waterSource, year: y });
+		}
+	return out;
+}
+
+/** One unit and water source on the page's list: its whole water years at a glance. */
+export interface UnitRow {
+	key: string;
+	nodeId: string;
+	name: string;
+	source: AllocationWaterSourceKind;
+	/** Above registered when any whole year was; else the status of the mean year (or of the part year, without a whole one). */
+	status: AllocationStatus;
+	yearsOver: number;
+	wholeYears: number;
+	/** Mean registered volume and modelled use per whole water year, m³ (the part year's own when there is no whole year). */
+	registeredM3: number;
+	modelledM3: number;
+	ratio: number | null;
+	/** The run covers no whole water year of it: the figures are the part year's. */
+	partOnly: boolean;
+}
+
+const STATUS_RANK: Record<AllocationStatus, number> = { over: 0, unregistered: 1, under: 2, within: 3, none: 4 };
+
+/**
+ * The comparison as one row per unit and source, the ones to look into
+ * first: above registered (most years over, then the largest ratio), use
+ * with no registered volume (the most use), below registered (the smallest
+ * ratio), within the band, then neither; the run's order otherwise. Sources
+ * with neither use nor a volume in any year are left out, as in
+ * comparisonRows.
+ */
+export function unitRows(c: AllocationComparison): UnitRow[] {
+	const out: (UnitRow & { i: number })[] = [];
+	for (const n of c.nodes)
+		for (const side of [n.surface, n.groundwater]) {
+			if (side.years.every((y) => y.status === 'none')) continue;
+			const partOnly = side.wholeYears === 0;
+			const registeredM3 = partOnly ? side.years.reduce((a, y) => a + y.registeredM3, 0) : (side.meanRegisteredM3PerYear ?? 0);
+			const modelledM3 = partOnly ? side.years.reduce((a, y) => a + y.modelledM3, 0) : (side.meanModelledM3PerYear ?? 0);
+			out.push({
+				key: `${n.nodeId}:${side.waterSource}`,
+				nodeId: n.nodeId,
+				name: n.name,
+				source: side.waterSource,
+				status: side.yearsOver > 0 ? 'over' : allocationStatus(modelledM3, registeredM3, c.tolerance),
+				yearsOver: side.yearsOver,
+				wholeYears: side.wholeYears,
+				registeredM3,
+				modelledM3,
+				ratio: registeredM3 > 0 ? modelledM3 / registeredM3 : null,
+				partOnly,
+				i: out.length
+			});
+		}
+	const within = (a: UnitRow, b: UnitRow) => {
+		switch (a.status) {
+			case 'over':
+				return b.yearsOver - a.yearsOver || (b.ratio ?? 0) - (a.ratio ?? 0);
+			case 'unregistered':
+				return b.modelledM3 - a.modelledM3;
+			case 'under':
+				return (a.ratio ?? 0) - (b.ratio ?? 0);
+			default:
+				return 0;
+		}
+	};
+	return out.sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || within(a, b) || a.i - b.i).map(({ i: _, ...r }) => r);
+}
+
+/** The picked unit: `unit=` when it is on the list, else the first (the one to look into first); null with no rows. */
+export function pickUnit(rows: readonly UnitRow[], param: string | null): string | null {
+	return (param && rows.some((r) => r.nodeId === param) ? param : rows[0]?.nodeId) ?? null;
+}
+
+/** A row's status in words, with the years for "above registered": "Above registered in 2 of 3 whole years". */
+export function unitStatusText(r: UnitRow): string {
+	if (r.status === 'over' && r.wholeYears > 0) return `${STATUS_LABEL.over} in ${r.yearsOver} of ${r.wholeYears} whole year${r.wholeYears === 1 ? '' : 's'}`;
+	return STATUS_LABEL[r.status];
+}
+
+/** The section header's line: "40 registered volumes · 4 not matched · 13 units above registered". */
+export function allocationsContext(volumes: number, unmatched: number, rows: readonly UnitRow[] | null): string {
+	const parts = [volumes ? `${fmtNum(volumes)} registered volume${volumes === 1 ? '' : 's'}` : 'No registered volumes yet'];
+	if (unmatched) parts.push(`${fmtNum(unmatched)} not matched`);
+	if (rows?.length) {
+		const over = new Set(rows.filter((r) => r.status === 'over').map((r) => r.nodeId)).size;
+		parts.push(over ? `${fmtNum(over)} unit${over === 1 ? '' : 's'} above registered` : 'no unit above registered');
+	}
+	return parts.join(' · ');
+}
+
+/** Preview rows in the order a person fixes them: rows with problems, then unmatched, then matched; file order within each. */
+export function previewOrder(rows: readonly AllocationPreviewRow[]): AllocationPreviewRow[] {
+	const rank = (r: AllocationPreviewRow) => (r.errors.length ? 0 : r.nodeId === null ? 1 : 2);
+	return [...rows].sort((a, b) => rank(a) - rank(b) || a.line - b.line);
+}
+
+/** How a preview row was matched, in words. */
+export const MATCHED_BY_LABEL: Record<NonNullable<AllocationPreviewRow['matchedBy']>, string> = {
+	registration: 'same registration number as an earlier import',
+	property: 'same property as an earlier import',
+	name: 'farm name',
+	manual: 'chosen by you'
+};
+
+/** The CSV template's header line (backend TEMPLATE_HEADERS) and one invented example row. */
+export const TEMPLATE_CSV =
+	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference\r\n' +
+	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace\r\n';
+
+/** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
+export const shortHash = (sha: string) => sha.slice(0, 12);

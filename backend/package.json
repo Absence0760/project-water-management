@@ -1,0 +1,51 @@
+{
+	"$schema": "https://json.schemastore.org/package.json",
+	"name": "@water-management/backend",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "tsx watch --include './migrations/*.sql' scripts/dev-server.ts",
+		"worker": "tsx src/jobs/worker.ts",
+		"jobs:tick": "tsx src/jobs/worker.ts --once",
+		"feeds:run": "tsx src/jobs/worker.ts --once --all-feeds",
+		"mail:bounce": "tsx scripts/mail-bounce.ts",
+		"build": "esbuild src/lambda.ts --external:playwright-core --bundle --platform=node --target=node24 --format=esm --minify --keep-names --sourcemap --outfile=dist/lambda.mjs --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run --project unit",
+		"test:watch": "vitest",
+		"test:db": "vitest run --project db",
+		"test:perf": "vitest run --project perf",
+		"test:perf:db": "vitest run --project perf-db",
+		"db:migrate": "tsx scripts/migrate.ts",
+		"import:project": "tsx scripts/import-project.ts",
+		"seed:examples": "tsx scripts/seed-examples.ts",
+		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "3.1139.0",
+		"@aws-sdk/client-sesv2": "3.1139.0",
+		"@aws-sdk/client-sqs": "3.1139.0",
+		"@aws-sdk/s3-request-presigner": "3.1139.0",
+		"@water-management/engine": "workspace:*",
+		"bcryptjs": "3.0.3",
+		"dotenv": "^17.4.1",
+		"hono": "4.13.9",
+		"jose": "6.2.12",
+		"nodemailer": "10.0.10",
+		"pg": "8.23.0",
+		"playwright-core": "1.63.0",
+		"zod": "4.6.5"
+	},
+	"devDependencies": {
+		"@hono/node-server": "1.19.13",
+		"@types/aws-lambda": "8.10.163",
+		"@types/node": "25.6.0",
+		"@types/nodemailer": "8.0.2",
+		"@types/pg": "8.23.1",
+		"esbuild": "0.28.2",
+		"tsx": "4.23.15",
+		"typescript": "6.0.2",
+		"vitest": "^2.1.9"
+	}
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="434" height="888" viewBox="0 0 434 888">
+  <title>A thin phone outline. The screen is a hole, 390 × 844 at (22, 22), corners of radius 40: the screenshot is composited under the frame. The camera sits in the bezel above the hole, never over the screen, where it covered the farm view's header.</title>
+  <path id="body" fill-rule="evenodd" fill="#0e1a26" stroke="#102a43" stroke-width="4"
+    d="M60 2 H374 A58 58 0 0 1 432 60 V828 A58 58 0 0 1 374 886 H60 A58 58 0 0 1 2 828 V60 A58 58 0 0 1 60 2 Z
+       M62 22 A40 40 0 0 0 22 62 V826 A40 40 0 0 0 62 866 H372 A40 40 0 0 0 412 826 V62 A40 40 0 0 0 372 22 Z"/>
+  <circle id="camera" cx="217" cy="12" r="4.5" fill="#22384d"/>
+</svg>

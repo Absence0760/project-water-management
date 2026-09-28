@@ -1,0 +1,11 @@
+Registration Number,Property Description,Farm Name,Registered User,Water Use Sector,Authorisation,Resource Type,Registered Volume (m3/a),Registered Storage (m3),Valid From,Valid To,Comment
+SYN-0001,Portion 1 of Synthetic 101,Farm A,Invented Holdings A,Irrigation,Registration,Surface,"120,000",150000,2000-01-01,,synthetic fixture row
+SYN-0002,Portion 2 of Synthetic 101,Farm A,Invented Holdings A,Irrigation,Registration,Groundwater,"15,000",,2000-01-01,,synthetic fixture row
+SYN-0003,Remainder of Synthetic 102,Farm B,Made-up Trust B,Irrigation,Licence,Surface,"80,000",90000,2005-06-01,2045-05-31,synthetic fixture row
+SYN-0004,Portion 4 of Synthetic 103,Farm C,Fictional Estates C,Livestock,Existing lawful use,Surface,"4,000",,,,synthetic fixture row
+SYN-0005,Portion 5 of Synthetic 103,Farm C,Fictional Estates C,Irrigation,Registration,Surface,"60,000",75000,,,synthetic fixture row
+SYN-0006,Portion 6 of Synthetic 104,Farm D,Placeholder Farming D,Irrigation,General authorisation,Groundwater,"40,000",,,,synthetic fixture row
+SYN-0007,Portion 7 of Synthetic 104,Farm D,Placeholder Farming D,Irrigation,Registration,Surface,"95,000",100000,,,synthetic fixture row
+SYN-0008,Portion 8 of Synthetic 105,Farm E,Sample Agri E,Irrigation,Registration,Surface,"70,000",,,,synthetic fixture row
+SYN-0009,Portion 9 of Synthetic 105,Farm E,Sample Agri E,Domestic,Registration,Groundwater,"2,000",,,,synthetic fixture row
+SYN-0010,Portion 10 of Synthetic 106,Unknown Farm Z,Nobody Z,Irrigation,Registration,Surface,"10,000",,,,synthetic fixture row

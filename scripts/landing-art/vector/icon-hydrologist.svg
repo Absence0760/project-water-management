@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#102a43" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Hydrologist: a hydrograph against a dashed reserve line</title>
+  <path id="axes" d="M8 7 V40 H42"/>
+  <path id="reserve" d="M8 29 H42" stroke-dasharray="3 3"/>
+  <path id="hydrograph" class="accent" stroke="#1e9bb8" d="M8 36 C13 36 15 13 19.5 13 C24 13 25 30 31 32.5 C35 34 38 34 42 34.5"/>
+</svg>

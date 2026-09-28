@@ -1,0 +1,242 @@
+import { describe, expect, it } from 'vitest';
+import type { Role } from '$lib/api/types';
+import {
+	ALL_TABS,
+	canOpenTab,
+	NAV_SECTIONS,
+	navSections,
+	hasModelInputsToggle,
+	hiddenTabs,
+	stripTabs,
+	TAB_GROUP,
+	VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT,
+	visibleTabs,
+	withTabHidden,
+	type TabId
+} from './tabs';
+
+const EVERY_ROLE: (Role | null | undefined)[] = ['owner', 'editor', 'viewer', 'contributor', 'farmer', null, undefined];
+// What the page renders (Applications is added where it's tested).
+const PAGE: TabId[] = ['overview', 'network', 'crops', 'transfers', 'series', 'settings', 'runs', 'scenarios', 'allocations', 'history'];
+
+describe('visibleTabs', () => {
+	it('shows owners and editors every tab, in order', () => {
+		for (const role of ['owner', 'editor'] as const) {
+			expect(visibleTabs(role)).toEqual(ALL_TABS);
+			expect(visibleTabs(role, {}, PAGE)).toEqual(PAGE);
+			// The viewer toggle doesn't take anything away from them.
+			expect(visibleTabs(role, { showModelInputs: false }, PAGE)).toEqual(PAGE);
+		}
+	});
+
+	it('shows a viewer Overview, Data and Runs & results (and Dams, Compare runs, Scenarios, Allocations) by default', () => {
+		expect(VIEWER_SEES_MODEL_INPUTS_BY_DEFAULT).toBe(false);
+		const core = ['overview', 'series', 'runs', 'scenarios', 'allocations'];
+		expect(visibleTabs('viewer')).toEqual(['overview', 'series', 'runs', 'river', 'supply', 'dams', 'compare', 'scenarios', 'allocations', 'project']);
+		expect(visibleTabs('viewer', {}, PAGE)).toEqual(core);
+		expect(visibleTabs('viewer', { showModelInputs: false }, PAGE)).toEqual(core);
+	});
+
+	it('gives a viewer every tab once "Show model inputs" is on', () => {
+		expect(visibleTabs('viewer', { showModelInputs: true })).toEqual(ALL_TABS.filter((id) => id !== 'applications'));
+		expect(visibleTabs('viewer', { showModelInputs: true }, PAGE)).toEqual(PAGE);
+	});
+
+	it('shows a farmer, an applicant or an unknown role Overview only (the workspace shows them their own views)', () => {
+		for (const role of ['farmer', 'contributor', null, undefined] as const) {
+			expect(visibleTabs(role)).toEqual(['overview']);
+			expect(visibleTabs(role, { showModelInputs: true }, PAGE)).toEqual(['overview']);
+		}
+	});
+
+	it('never hides Overview, whatever the role and prefs', () => {
+		for (const role of EVERY_ROLE)
+			for (const showModelInputs of [undefined, true, false])
+				expect(visibleTabs(role, { showModelInputs }, PAGE)[0]).toBe('overview');
+	});
+
+	it('only returns tabs the page renders, in the page’s order', () => {
+		const reordered: TabId[] = ['runs', 'overview', 'series'];
+		expect(visibleTabs('owner', {}, reordered)).toEqual(reordered);
+		expect(visibleTabs('viewer', {}, ['overview', 'network'])).toEqual(['overview']);
+	});
+
+	it('lists Scenarios for owners, editors and viewers once the page renders it', () => {
+		const withScenarios = PAGE;
+		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, withScenarios)).toContain('scenarios');
+		expect(visibleTabs('farmer', {}, withScenarios)).not.toContain('scenarios');
+	});
+
+	// Viewers read registered volumes (not names: that is RLS, not the tab strip).
+	it('lists Allocations for owners, editors and viewers, never farmers', () => {
+		for (const role of ['owner', 'editor', 'viewer'] as const) expect(visibleTabs(role, {}, PAGE)).toContain('allocations');
+		for (const role of ['contributor', 'farmer'] as const) expect(visibleTabs(role, { showModelInputs: true }, PAGE)).not.toContain('allocations');
+	});
+
+	it('lists Applications for owners and editors only (WP-3.3)', () => {
+		const withApplications: TabId[] = [...PAGE, 'applications'];
+		for (const role of ['owner', 'editor'] as const) expect(visibleTabs(role, {}, withApplications)).toContain('applications');
+		for (const role of ['viewer', 'contributor', 'farmer'] as const) {
+			expect(visibleTabs(role, { showModelInputs: true }, withApplications)).not.toContain('applications');
+		}
+	});
+
+	it('treats a tab it doesn’t know as a model input', () => {
+		const rendered = ['overview', 'runs', 'brand-new'];
+		expect(visibleTabs('editor', {}, rendered)).toEqual(rendered);
+		expect(visibleTabs('viewer', {}, rendered)).toEqual(['overview', 'runs']);
+		expect(visibleTabs('viewer', { showModelInputs: true }, rendered)).toEqual(rendered);
+	});
+
+	it('groups every tab', () => {
+		expect(ALL_TABS).toEqual(Object.keys(TAB_GROUP));
+		for (const id of PAGE) expect(Object.hasOwn(TAB_GROUP, id)).toBe(true);
+	});
+});
+
+// Members choose their own sections (followups.md): each person hides what
+// they don't use, within what their role sees; the Summary stays.
+describe('visibleTabs with the person’s own hidden sections', () => {
+	const hidden = ['crops', 'history', 'dams', 'applications'];
+
+	it('drops the hidden sections for every role that sees them, and nothing else', () => {
+		expect(visibleTabs('owner', { hidden }, PAGE)).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+		expect(visibleTabs('editor', { hidden }, [...PAGE, 'applications'])).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+		// A viewer: the core set, less what they hid; the inputs they hid stay hidden once shown.
+		expect(visibleTabs('viewer', { hidden: ['allocations'] }, PAGE)).toEqual(['overview', 'series', 'runs', 'scenarios']);
+		expect(visibleTabs('viewer', { hidden, showModelInputs: true }, PAGE)).toEqual(PAGE.filter((id) => !hidden.includes(id)));
+	});
+
+	it('never shows a section the role doesn’t see, hidden or not (hiding only takes away)', () => {
+		expect(visibleTabs('viewer', { hidden: [] }, [...PAGE, 'applications'])).not.toContain('applications');
+		expect(visibleTabs('viewer', { hidden: ['series'] }, PAGE)).not.toContain('network');
+		for (const role of ['farmer', 'contributor', null] as const) expect(visibleTabs(role, { hidden }, PAGE)).toEqual(['overview']);
+	});
+
+	it('never hides the Summary, even when an owner (or anyone) asks to hide every section', () => {
+		for (const role of EVERY_ROLE)
+			for (const showModelInputs of [undefined, true, false]) {
+				const shown = visibleTabs(role, { showModelInputs, hidden: [...ALL_TABS] }, PAGE);
+				expect(shown).toEqual(['overview']);
+			}
+	});
+
+	it('ignores ids no section has', () => {
+		expect(visibleTabs('owner', { hidden: ['nope', 'brand-new-ish'] }, PAGE)).toEqual(PAGE);
+	});
+});
+
+describe('hiddenTabs (the "Hidden (n)" count)', () => {
+	it('counts only the hidden sections the role would show here, in the sidebar’s order, never the Summary', () => {
+		const ownerTabs = visibleTabs('owner', {}, PAGE);
+		expect(hiddenTabs(ownerTabs, ['history', 'overview', 'crops', 'nope'])).toEqual(['crops', 'history']);
+		// A viewer doesn't see Crops & demand without the inputs, so it isn't counted here, but stays stored.
+		const viewerTabs = visibleTabs('viewer', {}, PAGE);
+		expect(hiddenTabs(viewerTabs, ['history', 'crops', 'runs'])).toEqual(['runs']);
+		expect(hiddenTabs(viewerTabs, undefined)).toEqual([]);
+	});
+});
+
+describe('withTabHidden', () => {
+	it('hides a section once, shows it again, and never stores the Summary', () => {
+		expect(withTabHidden(undefined, 'crops', true)).toEqual(['crops']);
+		expect(withTabHidden(['crops'], 'crops', true)).toEqual(['crops']);
+		expect(withTabHidden(['crops', 'dams'], 'crops', false)).toEqual(['dams']);
+		expect(withTabHidden([], 'overview', true)).toEqual([]);
+		expect(withTabHidden(['overview', 'dams'], 'history', true)).toEqual(['dams', 'history']);
+	});
+});
+
+describe('hasModelInputsToggle', () => {
+	it('is offered to viewers only', () => {
+		expect(EVERY_ROLE.filter(hasModelInputsToggle)).toEqual(['viewer']);
+	});
+});
+
+describe('stripTabs', () => {
+	const short: TabId[] = ['overview', 'series', 'runs'];
+
+	it('is the visible tabs when the open tab is one of them', () => {
+		expect(stripTabs(short, 'runs', PAGE)).toEqual(short);
+	});
+
+	it('adds a hidden tab a deep link opened, in its place', () => {
+		expect(stripTabs(short, 'settings', PAGE)).toEqual(['overview', 'series', 'settings', 'runs']);
+		expect(stripTabs(short, 'network', PAGE)).toEqual(['overview', 'network', 'series', 'runs']);
+	});
+
+	it('ignores an open tab the page doesn’t render', () => {
+		expect(stripTabs(short, 'scenarios', PAGE.filter((id) => id !== 'scenarios'))).toEqual(short);
+	});
+});
+
+describe('navSections', () => {
+	it('lists every tab in exactly one section', () => {
+		const listed = NAV_SECTIONS.flatMap((s) => [...s.tabs]);
+		expect([...listed].sort()).toEqual([...ALL_TABS].sort());
+		expect(new Set(listed).size).toBe(listed.length);
+	});
+
+	it('puts the model first, then review, then the outcomes at the bottom', () => {
+		expect(navSections(ALL_TABS)).toEqual([
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
+			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
+		]);
+	});
+
+	it('puts the Project page first under Review, for owners, editors and viewers (no model inputs needed)', () => {
+		const rendered: TabId[] = ['overview', 'project', 'applications', 'history'];
+		for (const role of ['owner', 'editor'] as const) {
+			expect(navSections(visibleTabs(role, {}, rendered))).toContainEqual({ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] });
+		}
+		expect(navSections(visibleTabs('viewer', {}, rendered))).toContainEqual({ id: 'review', label: 'Review', tabs: ['project'] });
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
+	});
+
+	it('puts River & reserve under Outcomes, after the Summary, for owners, editors and viewers only', () => {
+		const rendered: TabId[] = ['overview', 'runs', 'river'];
+		for (const role of ['owner', 'editor', 'viewer'] as const) {
+			expect(navSections(visibleTabs(role, {}, rendered))).toEqual([{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'runs'] }]);
+		}
+		// An applicant (contributor) and a farmer get their own views; the workspace shows them the Summary only.
+		for (const role of ['contributor', 'farmer', null] as const) expect(visibleTabs(role, {}, rendered)).toEqual(['overview']);
+	});
+
+	it('orders by section whatever order the tabs arrive in, and drops empty sections', () => {
+		// A viewer before "Show model inputs".
+		expect(navSections(visibleTabs('viewer', {}, PAGE))).toEqual([
+			{ id: 'model', label: 'Build the model', tabs: ['series'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] }
+		]);
+		expect(navSections<TabId>(['history', 'overview'])).toEqual([
+			{ id: 'review', label: 'Review', tabs: ['history'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] }
+		]);
+		expect(navSections<TabId>([])).toEqual([]);
+	});
+
+	it('puts a tab no section lists at the end of "Build the model"', () => {
+		expect(navSections(['overview', 'newthing', 'network'])).toEqual([
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] }
+		]);
+	});
+});
+
+describe('canOpenTab', () => {
+	it('lets owners and editors open the assessors’ Applications tab', () => {
+		expect(canOpenTab('owner', 'applications')).toBe(true);
+		expect(canOpenTab('editor', 'applications')).toBe(true);
+	});
+	it('refuses it to everyone else, so an old link lands on the Summary', () => {
+		for (const role of ['viewer', 'farmer', 'contributor', null, undefined] as (Role | null | undefined)[]) {
+			expect(canOpenTab(role, 'applications')).toBe(false);
+		}
+	});
+	it('still opens a viewer’s hidden model-input tabs from a link (hiding is presentation)', () => {
+		expect(visibleTabs('viewer')).not.toContain('network');
+		expect(canOpenTab('viewer', 'network')).toBe(true);
+		expect(canOpenTab('viewer', 'overview')).toBe(true);
+	});
+});

@@ -1,0 +1,383 @@
+<!--
+	Settings → WR2012 check (issue #4 phase 8): the quaternary's naturalised
+	flow, entered by the user from the public WR2012 study (never bundled), and
+	how runs compare with it. Bind `value` (settings.wr2012); `error` is set
+	while anything would be rejected, so the parent form can block saving.
+-->
+<script lang="ts">
+	import { WR2012_MONTHLY_SUM_TOLERANCE, type Wr2012Settings } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import MonthPicker from '$lib/components/transfers/MonthPicker.svelte';
+	import { fmtNum } from '$lib/format/number';
+	import { describeMonths, WATER_YEAR_MONTHS } from '$lib/format/months';
+	import { blankReference, mm3MonthToM3s, monthlySum, waterYearLabel, wr2012Errors, type Wr2012Draft } from './wr2012';
+
+	let {
+		value = $bindable(),
+		error = $bindable(null),
+		readonly = false,
+		modelAreaKm2
+	}: {
+		value: Wr2012Settings;
+		error?: string | null;
+		readonly?: boolean;
+		/** The modelled catchment's area (km²), for the scaling preview. */
+		modelAreaKm2: number;
+	} = $props();
+
+	const uid = $props.id();
+	// The form edits a draft whose numbers may still be blank.
+	const ref = $derived(value.reference as Wr2012Draft | null);
+	const errors = $derived(wr2012Errors(value));
+	const sum = $derived(ref ? monthlySum(ref.monthlyMm3) : null);
+	const areaFactor = $derived(ref?.areaKm2 ? modelAreaKm2 / ref.areaKm2 : null);
+	let ownMonths = $state(value.lowFlowMonths !== null);
+	let ownBand = $state(value.calibrationPenalty.marLowMm3 !== null || value.calibrationPenalty.marHighMm3 !== null);
+	// Both blank counts as "no band" (a single target) at the engine level, so it never blocks Save;
+	// this is just a nudge while the checkbox is ticked and nothing has been entered yet.
+	const bandBlank = $derived(ownBand && value.calibrationPenalty.marLowMm3 === null && value.calibrationPenalty.marHighMm3 === null);
+
+	$effect(() => {
+		const n = Object.keys(errors).length;
+		error = n ? `The WR2012 check has ${n} problem${n === 1 ? '' : 's'} to fix.` : null;
+	});
+
+	function setEnabled(on: boolean) {
+		value.reference = on ? (blankReference() as unknown as Wr2012Settings['reference']) : null;
+		if (!on) value.calibrationPenalty.enabled = false;
+	}
+
+	function setOwnMonths(on: boolean) {
+		ownMonths = on;
+		value.lowFlowMonths = on ? (value.lowFlowMonths ?? [12, 1, 2]) : null;
+	}
+
+	function setOwnBand(on: boolean) {
+		ownBand = on;
+		if (!on) {
+			value.calibrationPenalty.marLowMm3 = null;
+			value.calibrationPenalty.marHighMm3 = null;
+		}
+	}
+
+	const err = (k: string) => errors[k];
+</script>
+
+<section class="panel" aria-labelledby="{uid}-h">
+	<div class="panel-head">
+		<h2 id="{uid}-h">WR2012 check <HelpTip key="settings.wr2012" /></h2>
+		<span class="muted small">Optional: compare simulated natural flow with the quaternary’s naturalised flow</span>
+	</div>
+	<p class="hint muted">
+		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
+		<strong>simulated natural flow</strong> (before units and dams take any water) with it, scaled to the modelled catchment. The numbers are
+		yours to enter; the app doesn’t ship WR2012 data.
+	</p>
+	<label class="check">
+		<input type="checkbox" disabled={readonly} checked={ref !== null} onchange={(e) => setEnabled(e.currentTarget.checked)} />
+		Compare runs with WR2012 naturalised flow
+	</label>
+
+	{#if ref}
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-q">Quaternary catchment</label>
+				<input id="{uid}-q" readonly={readonly} maxlength="16" placeholder="e.g. A21B" bind:value={ref.quaternary} aria-invalid={err('quaternary') ? 'true' : undefined} aria-describedby="{uid}-q-e" />
+				{#if err('quaternary')}<span class="err" id="{uid}-q-e">{err('quaternary')}</span>{/if}
+			</div>
+			<div class="field">
+				<label for="{uid}-area">Quaternary area <span class="u">(km²)</span></label>
+				<NumberInput id="{uid}-area" min={0} nullable disabled={readonly} bind:value={ref.areaKm2} aria-invalid={err('areaKm2') ? 'true' : undefined} aria-describedby="{uid}-area-e" />
+				{#if err('areaKm2')}<span class="err" id="{uid}-area-e">{err('areaKm2')}</span>{/if}
+			</div>
+			<div class="field">
+				<label for="{uid}-map">Quaternary MAP <span class="u">(mm, optional)</span></label>
+				<NumberInput id="{uid}-map" min={0} nullable disabled={readonly} bind:value={ref.mapMm} aria-invalid={err('mapMm') ? 'true' : undefined} aria-describedby="{uid}-map-h" />
+				<span class="hint" id="{uid}-map-h">{#if err('mapMm')}<span class="err">{err('mapMm')}</span>{:else}Mean annual precipitation. Enables the rainfall scaling and the check that the MAR is less than the rain.{/if}</span>
+			</div>
+			<div class="field">
+				<label for="{uid}-mar">Naturalised MAR <span class="u">(Mm³/a)</span></label>
+				<NumberInput id="{uid}-mar" min={0} nullable disabled={readonly} bind:value={ref.marMm3} aria-invalid={err('marMm3') ? 'true' : undefined} aria-describedby="{uid}-mar-e" />
+				{#if err('marMm3')}<span class="err" id="{uid}-mar-e">{err('marMm3')}</span>{/if}
+			</div>
+			<fieldset class="plain period">
+				<legend>Period the reference covers <span class="u">(water years)</span></legend>
+				<div class="form-row">
+					<div class="field">
+						<label for="{uid}-from">From</label>
+						<NumberInput id="{uid}-from" min={1800} max={2200} step={1} nullable disabled={readonly} bind:value={ref.periodStart} aria-describedby="{uid}-per-h" />
+					</div>
+					<div class="field">
+						<label for="{uid}-to">To</label>
+						<NumberInput id="{uid}-to" min={1800} max={2200} step={1} nullable disabled={readonly} bind:value={ref.periodEnd} aria-invalid={err('periodEnd') ? 'true' : undefined} aria-describedby="{uid}-per-h" />
+					</div>
+				</div>
+				<span class="hint" id="{uid}-per-h">
+					{#if err('periodEnd')}<span class="err">{err('periodEnd')}</span>{:else if ref.periodStart != null && ref.periodEnd != null}{waterYearLabel(ref.periodStart)} to {waterYearLabel(ref.periodEnd)}: each year starts in October.{:else}Each water year is labelled by the year it starts in (1920 = Oct 1920 – Sep 1921).{/if}
+				</span>
+			</fieldset>
+			<div class="field wide">
+				<label for="{uid}-src">Source</label>
+				<input id="{uid}-src" readonly={readonly} maxlength="500" placeholder="Study, volume, table" bind:value={ref.source} aria-invalid={err('source') ? 'true' : undefined} aria-describedby="{uid}-src-e" />
+				{#if err('source')}<span class="err" id="{uid}-src-e">{err('source')}</span>{/if}
+			</div>
+		</div>
+
+		<div class="table-wrap">
+			<table class="data compact monthly">
+				<caption class="visually-hidden">Mean naturalised flow per month</caption>
+				<thead>
+					<tr>
+						<th scope="col" class="sticky">Month</th>
+						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
+						<th scope="col" class="num">Sum</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<th scope="row" class="sticky">Mean naturalised flow <span class="u">Mm³</span></th>
+						{#each WATER_YEAR_MONTHS as m, i (m)}
+							<td><NumberInput label="WR2012 monthly mean, {m}, Mm³" min={0} nullable disabled={readonly} bind:value={ref.monthlyMm3[i]} /></td>
+						{/each}
+						<td class="num">{sum === null ? '–' : fmtNum(sum, 3)}</td>
+					</tr>
+					<tr class="derived">
+						<th scope="row" class="sticky">Equivalent <span class="u">m³/s</span></th>
+						{#each ref.monthlyMm3 as v, i (i)}<td class="num">{v == null ? '–' : fmtNum(mm3MonthToM3s(v, i), 3)}</td>{/each}
+						<td></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<p class="hint muted" id="{uid}-monthly-h">
+			Monthly volumes in <strong>million m³ per month</strong>, October → September, as the WR2012 tables give them (not m³/s). They should add
+			up to the MAR within {WR2012_MONTHLY_SUM_TOLERANCE * 100} %.
+		</p>
+		{#if err('monthlyMm3')}<p class="err" role="alert">{err('monthlyMm3')}</p>{/if}
+
+		<div class="fields">
+			<div class="field">
+				<label for="{uid}-scale">Scale the reference by</label>
+				<select id="{uid}-scale" disabled={readonly} bind:value={value.scaling} aria-describedby="{uid}-scale-h">
+					<option value="area">Area ratio</option>
+					<option value="areaRain">Area and rainfall ratio</option>
+				</select>
+				<span class="hint" id="{uid}-scale-h">
+					{#if areaFactor !== null}Area ratio now: {fmtNum(modelAreaKm2, 2)} ÷ {fmtNum(ref.areaKm2, 2)} km² = {fmtNum(areaFactor, 3)}.{/if}
+					{value.scaling === 'areaRain'
+						? ' Also × the run’s mean annual rain ÷ the quaternary MAP; falls back to area alone (with a warning) without them.'
+						: ''}
+				</span>
+			</div>
+		</div>
+		<fieldset class="plain months">
+			<legend>Dry-season months <span class="muted">({ownMonths ? describeMonths(value.lowFlowMonths ?? []) : 'from each run'})</span></legend>
+			<label class="check">
+				<input type="checkbox" disabled={readonly} checked={ownMonths} onchange={(e) => setOwnMonths(e.currentTarget.checked)} />
+				Choose the dry-season months
+			</label>
+			{#if ownMonths && value.lowFlowMonths}
+				<MonthPicker label="Dry-season months" disabled={readonly} bind:months={value.lowFlowMonths} />
+			{/if}
+			{#if err('lowFlowMonths')}<p class="err" role="alert">{err('lowFlowMonths')}</p>{/if}
+			<span class="hint">
+				Unticked, each run uses the project’s own low-flow months: those whose simulated natural flow is below half the average month.
+			</span>
+		</fieldset>
+
+		<fieldset class="plain flags">
+			<legend>When the simulated MAR differs from WR2012 by…</legend>
+			<div class="fields">
+				<div class="field">
+					<label for="{uid}-note">Note it <span class="u">(%)</span></label>
+					<NumberInput id="{uid}-note" min={0} max={1000} disabled={readonly} bind:value={value.flags.notePct} />
+				</div>
+				<div class="field">
+					<label for="{uid}-query">Query it <span class="u">(%)</span></label>
+					<NumberInput id="{uid}-query" min={0} max={1000} disabled={readonly} bind:value={value.flags.queryPct} aria-invalid={err('queryPct') ? 'true' : undefined} />
+				</div>
+				<div class="field">
+					<label for="{uid}-wet">…or query it when wetter by <span class="u">(%)</span></label>
+					<NumberInput id="{uid}-wet" min={0} max={1000} disabled={readonly} bind:value={value.flags.queryWetterPct} aria-invalid={err('queryWetterPct') ? 'true' : undefined} />
+				</div>
+				<div class="field">
+					<label for="{uid}-unusable">Not usable for EWR findings <span class="u">(%)</span></label>
+					<NumberInput id="{uid}-unusable" min={0} max={1000} disabled={readonly} bind:value={value.flags.unusablePct} />
+				</div>
+			</div>
+			<span class="hint">Shown as run warnings. Defaults 10, 25 (or 15 wetter) and 50 %.</span>
+			{#each ['notePct', 'queryPct', 'queryWetterPct', 'unusablePct'] as k (k)}
+				{#if err(k)}<p class="err" role="alert">{err(k)}</p>{/if}
+			{/each}
+		</fieldset>
+
+		<fieldset class="plain penalty">
+			<legend>Automatic calibration <HelpTip key="wr2012-penalty" /></legend>
+			<label class="check">
+				<input type="checkbox" disabled={readonly} bind:checked={value.calibrationPenalty.enabled} />
+				Add a soft penalty on the MAR when fitting automatically
+			</label>
+			{#if value.calibrationPenalty.enabled}
+				<div class="field weight">
+					<label for="{uid}-w">Penalty weight</label>
+					<NumberInput id="{uid}-w" min={0} max={10} step={0.1} disabled={readonly} bind:value={value.calibrationPenalty.weight} aria-describedby="{uid}-w-h" />
+					<span class="hint" id="{uid}-w-h">{#if err('weight')}<span class="err">{err('weight')}</span>{:else}Loss + weight × |ln(simulated MAR ÷ target)|. Default 0.5.{/if}</span>
+				</div>
+				<label class="check">
+					<input type="checkbox" disabled={readonly} checked={ownBand} onchange={(e) => setOwnBand(e.currentTarget.checked)} />
+					Use a MAR band instead of one target
+				</label>
+				{#if ownBand}
+					<div class="fields">
+						<div class="field">
+							<label for="{uid}-lo">Band low <span class="u">(Mm³/a)</span></label>
+							<NumberInput
+								id="{uid}-lo"
+								min={0}
+								nullable
+								disabled={readonly}
+								bind:value={value.calibrationPenalty.marLowMm3}
+								aria-invalid={err('marLowMm3') ? 'true' : undefined}
+								aria-describedby="{uid}-band-h"
+							/>
+						</div>
+						<div class="field">
+							<label for="{uid}-hi">Band high <span class="u">(Mm³/a)</span></label>
+							<NumberInput
+								id="{uid}-hi"
+								min={0}
+								nullable
+								disabled={readonly}
+								bind:value={value.calibrationPenalty.marHighMm3}
+								aria-invalid={err('marHighMm3') ? 'true' : undefined}
+								aria-describedby="{uid}-band-h"
+							/>
+						</div>
+					</div>
+					<span class="hint" id="{uid}-band-h">
+						{#if err('marLowMm3')}<span class="err">{err('marLowMm3')}</span>{:else if err('marHighMm3')}<span class="err">{err('marHighMm3')}</span
+							>{:else if bandBlank}<span class="err">Enter both bounds, or untick “Use a MAR band instead of one target”.</span
+							>{:else}Already scaled to the modelled catchment (not the quaternary's own figure): use this when two published natural-MAR estimates for this
+						catchment disagree. The penalty is zero inside the band, weight × |ln(simulated ÷ the nearer bound)| outside it.{/if}
+					</span>
+				{/if}
+			{/if}
+			<span class="hint">Off by default. The fit then also runs without it, so you can see what it changed.</span>
+		</fieldset>
+	{/if}
+</section>
+
+<style>
+	.u {
+		font-weight: 400;
+		color: var(--text-muted);
+		font-size: 0.8rem;
+	}
+	.hint {
+		font-size: 0.8rem;
+		max-width: 75ch;
+	}
+	.panel > .hint {
+		margin: 0.5rem 0 0.75rem;
+	}
+	.fields {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+		gap: 0 1.25rem;
+		margin-top: 0.5rem;
+	}
+	.field :global(input),
+	.field select {
+		width: 100%;
+	}
+	.field.wide {
+		grid-column: 1 / -1;
+		max-width: 60ch;
+	}
+	.plain {
+		border: 0;
+		padding: 0;
+		margin: 0.25rem 0 0.75rem;
+		min-width: 0;
+	}
+	.plain legend {
+		font-weight: 500;
+		font-size: 0.85rem;
+		color: var(--text-2);
+		margin-bottom: 0.35rem;
+		padding: 0;
+	}
+	.period .field {
+		width: 120px;
+	}
+	.months,
+	.penalty {
+		display: grid;
+		gap: 0.35rem;
+	}
+	.weight {
+		max-width: 240px;
+	}
+	th.sticky {
+		position: sticky;
+		left: 0;
+		z-index: 2;
+		background: var(--surface);
+		white-space: nowrap;
+	}
+	thead th.sticky {
+		background: var(--surface-2);
+		z-index: 3;
+	}
+	/* Twelve months plus the row label fit a 1280px screen beside the
+	   workspace sidebar (shown from 1100px): a month cell is as narrow as a
+	   six-digit value (170800) allows, measured in the input's own digits,
+	   and gets any width to spare. No spin buttons, as in the Network table:
+	   Chrome keeps room for them, which pushed the row past the panel (arrow
+	   keys still step). When the row is still short of room the label wraps
+	   before the page scrolls sideways. */
+	.monthly td {
+		/* A preferred width, so spare room keeps the label on one line first. */
+		width: calc(6.5ch + 0.7rem + 2px + 0.4rem);
+		padding-left: 0.2rem;
+		padding-right: 0.2rem;
+	}
+	table.data.monthly td :global(input) {
+		min-width: calc(6.5ch + 0.7rem + 2px);
+	}
+	.monthly td :global(input[type='number']) {
+		appearance: textfield;
+		-moz-appearance: textfield;
+	}
+	.monthly td :global(input[type='number']::-webkit-inner-spin-button),
+	.monthly td :global(input[type='number']::-webkit-outer-spin-button) {
+		-webkit-appearance: none;
+		margin: 0;
+	}
+	.monthly th.sticky {
+		/* Preferred widths on every column share spare room out in proportion;
+		   13rem holds the longest row label on one line. */
+		width: 13rem;
+		white-space: normal;
+	}
+	.derived td,
+	.derived th {
+		color: var(--text-muted);
+		font-size: 0.8rem;
+	}
+	.check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 36px;
+	}
+	.err {
+		color: var(--danger);
+		font-size: 0.8rem;
+	}
+	h2 :global(.helptip),
+	legend :global(.helptip) {
+		margin-left: 0.15rem;
+	}
+</style>

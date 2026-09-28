@@ -1,0 +1,250 @@
+// GET /projects/:id/runs/:runId/day: one node's columns on one day, for the
+// day trace in the results (docs/ui.md § Self-checks).
+import { beforeAll, describe, expect, it } from 'vitest';
+import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
+
+type User = Awaited<ReturnType<typeof signUp>>;
+
+let owner: User;
+let viewer: User;
+let stranger: User;
+let projectId: string;
+let runId: string;
+const outlet = node('Outlet', null);
+const farm = node('Upper', outlet.id, {
+	damCapacityM3: 5_000,
+	damInitialPct: 0.4,
+	pctRunoffToDam: 0.5,
+	pctUpstreamToDam: 0,
+	irrigationEfficiency: 0.8,
+	lossReturnFraction: 0.5,
+	divertCapacityM3Day: 50
+});
+const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.8) };
+
+beforeAll(async () => {
+	owner = await signUp('Owner');
+	viewer = await signUp('Viewer');
+	stranger = await signUp('Stranger');
+	projectId = (await owner.call('POST', '/projects', { name: 'Trace' })).body.project.id;
+	await owner.call('PATCH', `/projects/${projectId}`, { settings: { apanMm: monthly(150) } });
+	const model = { nodes: [outlet, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+	expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+	const rain = Array.from({ length: 30 }, (_, i) => (i % 5 === 0 ? 10 : 0));
+	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Trace' });
+	expect(run.status).toBe(201);
+	runId = run.body.run.id;
+	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+});
+
+const day = (u: User, date: string, nodeId = farm.id) => u.call('GET', `/projects/${projectId}/runs/${runId}/day?${new URLSearchParams({ date, nodeId })}`);
+const valueOf = (body: { columns: { key: string; value: number | null }[] }, key: string) => body.columns.find((c) => c.key === key)!.value!;
+
+describe('GET /projects/:id/runs/:runId/day', () => {
+	it("returns the farm's columns that day, matching the stored series", async () => {
+		const res = await day(viewer, '2020-01-06');
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({ date: '2020-01-06', nodeId: farm.id, name: 'Upper', kind: 'farm' });
+		expect(res.body.params).toEqual({
+			pctUpstreamToDam: 0,
+			pctRunoffToDam: 0.5,
+			divertCapacityM3Day: 50,
+			damCapacityM3: 5_000,
+			damInitialPct: 0.4,
+			damMinPct: 0.1,
+			irrigationEfficiency: 0.8,
+			lossReturnFraction: 0.5,
+			damAreaFullM2: null,
+			damAreaExponent: 0.7,
+			damSeepagePerDay: 0
+		});
+		const keys = res.body.columns.map((c: { key: string }) => c.key);
+		for (const k of ['gross_demand', 'effective_rain', 'soil_water', 'crop_requirement', 'demand', 'supplied', 'upstream_to_dam', 'dam_evaporation', 'rain_on_dam', 'dam_seepage', 'interim_storage', 'return_flow', 'balance_residual']) expect(keys).toContain(k);
+		// Day index 5 of the stored series, and the day before's storage.
+		for (const key of ['supplied', 'dam_storage']) {
+			const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=${key}&nodeId=${farm.id}`);
+			expect(valueOf(res.body, key)).toBe(s.body.values[5]);
+			if (key === 'dam_storage') expect(res.body.previousStorageM3).toBe(s.body.values[4]);
+		}
+		// 10 mm of rain on the 6th: effective rain is taken off the demand.
+		expect(valueOf(res.body, 'effective_rain')).toBeGreaterThan(0);
+		// The day closes from the returned numbers alone.
+		const v = (k: string) => valueOf(res.body, k);
+		// Rain on the dam in, evaporation out (N2); seepage is part of the outflow.
+		const closes =
+			v('inflow_upstream') + v('runoff') + v('transfer') + v('rain_on_dam') - (v('supplied') - v('return_flow')) - v('dam_evaporation') - (v('dam_storage') - res.body.previousStorageM3) - v('outflow');
+		expect(Math.abs(closes)).toBeLessThan(1e-6);
+	});
+
+	it("uses the run's initial storage on its first day", async () => {
+		const res = await day(owner, '2020-01-01');
+		expect(res.status).toBe(200);
+		expect(res.body.previousStorageM3).toBe(2_000); // 0.4 × 5 000 m³
+		expect(res.body.previousSoilWaterMm).toBe(0); // the soil-water store starts empty
+	});
+
+	it('returns the soil-water store the day started from, so the carried-over rain can be redone (N3)', async () => {
+		// 10 mm on the 6th: 10 000 m² × 0.65 × 10 / 1000 = 65 m³, more than the day's gross demand; the rest is kept.
+		const res = await day(viewer, '2020-01-07');
+		const s = await viewer.call('GET', `/projects/${projectId}/runs/${runId}/series?key=soil_water&nodeId=${farm.id}`);
+		expect(res.body.previousSoilWaterMm).toBe(s.body.values[5]);
+		expect(res.body.previousSoilWaterMm).toBeGreaterThan(0);
+		// A dry day: the rain used is what the store held (in m³ over 10 000 m²), up to the gross demand.
+		const v = (k: string) => valueOf(res.body, k);
+		expect(v('effective_rain')).toBeCloseTo(Math.min((res.body.previousSoilWaterMm * 10_000) / 1000, v('gross_demand')), 9);
+		expect(v('crop_requirement')).toBeCloseTo(v('gross_demand') - v('effective_rain'), 9);
+		// The farm abstracts the crop requirement ÷ its 80 % efficiency (N1, engine 0.16.0).
+		expect(v('demand')).toBeCloseTo(v('crop_requirement') / 0.8, 9);
+	});
+
+	it('takes the parameters from the run, not from the project as it is now', async () => {
+		const edited = { ...farm, name: 'Renamed', irrigationEfficiency: 0.5 };
+		const model = { nodes: [outlet, edited], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const res = await day(owner, '2020-01-02');
+		expect(res.body.name).toBe('Upper');
+		expect(res.body.params.irrigationEfficiency).toBe(0.8);
+	});
+
+	it('gives the efficiency the run used when a crop carries its own (engine 0.43.0), so D = F ÷ e redoes the day', async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Trace crop efficiency' })).body.project.id;
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		const out2 = node('Outlet', null);
+		const farm2 = node('Upper', out2.id, { damCapacityM3: 50_000, damInitialPct: 1, irrigationEfficiency: 0.8, lossReturnFraction: 0.5 });
+		const drip = { ...crop, id: crypto.randomUUID(), irrigationEfficiency: 0.9 };
+		const model = { nodes: [out2, farm2], crops: [drip], cropAreas: [{ nodeId: farm2.id, cropId: drip.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: new Array(10).fill(0) });
+		const run = await owner.call('POST', `/projects/${pid}/runs`, { label: 'Drip' });
+		expect(run.status).toBe(201);
+		const res = await owner.call('GET', `/projects/${pid}/runs/${run.body.run.id}/day?${new URLSearchParams({ date: '2020-01-03', nodeId: farm2.id })}`);
+		expect(res.status).toBe(200);
+		// The farm's own 0.8 is overridden by its only crop's 0.9.
+		expect(res.body.params.irrigationEfficiency).toBeCloseTo(0.9, 12);
+		expect(valueOf(res.body, 'demand')).toBeCloseTo(valueOf(res.body, 'crop_requirement') / 0.9, 9);
+	});
+
+	it('reads a run saved before engine 0.16.0 with its return flow % as migration 006 maps it', async () => {
+		// Rewrite the stored snapshot as an engine 0.14 run held it (as the owner role: runs are immutable to the app).
+		const pg = (await import('pg')).default;
+		const db = new pg.Client({ connectionString: process.env.TEST_MIGRATION_DATABASE_URL });
+		await db.connect();
+		try {
+			await db.query(
+				`UPDATE model_run SET inputs = jsonb_set(inputs, '{model,nodes}', (
+					SELECT jsonb_agg((n - 'irrigationEfficiency' - 'lossReturnFraction') || '{"returnFlowPct": 0.2}'::jsonb)
+					FROM jsonb_array_elements(inputs->'model'->'nodes') n)) WHERE id = $1`,
+				[runId]
+			);
+		} finally {
+			await db.end();
+		}
+		const res = await day(owner, '2020-01-02');
+		expect(res.body.params).toMatchObject({ irrigationEfficiency: 0.8, lossReturnFraction: 1 });
+		expect(res.body.params).not.toHaveProperty('returnFlowPct');
+	});
+
+	it('returns a gauge with its own columns and no storage', async () => {
+		const res = await day(owner, '2020-01-02', outlet.id);
+		expect(res.status).toBe(200);
+		expect(res.body.kind).toBe('gauge');
+		expect(res.body.previousStorageM3).toBeNull();
+		expect(res.body.previousSoilWaterMm).toBeNull();
+		expect(res.body.columns.map((c: { key: string }) => c.key).sort()).toEqual(['ewr_cumulative', 'ewr_shortfall', 'inflow_upstream', 'outflow']);
+	});
+
+	it('rejects dates that are not dates or outside the run, and unknown nodes', async () => {
+		expect((await day(owner, '2020-02-31')).status).toBe(400);
+		expect((await day(owner, '2020-1-5')).status).toBe(400);
+		expect((await day(owner, '2019-12-31')).status).toBe(400);
+		expect((await day(owner, '2020-01-31')).status).toBe(400);
+		expect((await day(owner, '2020-01-02', crypto.randomUUID())).status).toBe(404);
+		expect((await owner.call('GET', `/projects/${projectId}/runs/${runId}/day?date=2020-01-02&nodeId=nope`)).status).toBe(400);
+	});
+
+	it('is hidden (404) from anyone without access to the project', async () => {
+		expect((await day(stranger, '2020-01-02')).status).toBe(404);
+	});
+});
+
+// Without a nodeId: the catchment's day, how rain became natural flow (the runoff model's trace).
+describe('GET /projects/:id/runs/:runId/day without a nodeId (catchment)', () => {
+	let catchmentProject: string;
+	let gr4jRun: string;
+	let legacyRun: string;
+	const catchmentDay = (u: User, run: string, date: string, project = catchmentProject) =>
+		u.call('GET', `/projects/${project}/runs/${run}/day?${new URLSearchParams({ date })}`);
+	const col = (body: { columns: { key: string; value: number | null }[] }, key: string) => body.columns.find((c) => c.key === key)?.value;
+	const STORES = ['production_store', 'routing_store', 'uh_store'];
+
+	beforeAll(async () => {
+		catchmentProject = (await owner.call('POST', '/projects', { name: 'Catchment trace' })).body.project.id;
+		// X2 ≠ 0 so the groundwater exchange is stored and enters the balance.
+		const settings = { apanMm: monthly(150), runoffModel: 'gr4j', gr4j: { x1: 200, x2: -0.5, x3: 60, x4: 1.8, warmupDays: 30 } };
+		expect((await owner.call('PATCH', `/projects/${catchmentProject}`, { settings })).status).toBe(200);
+		// Node ids are unique across projects: a network of its own.
+		const gauge = node('Outlet', null);
+		const upper = node('Upper', gauge.id);
+		const model = { nodes: [gauge, upper], crops: [], cropAreas: [], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${catchmentProject}/model`, model)).status).toBe(200);
+		const rain = Array.from({ length: 30 }, (_, i) => (i % 7 === 0 ? 30 : i % 3 === 0 ? 2 : 0));
+		expect((await owner.call('PUT', `/projects/${catchmentProject}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2020-01-01', values: rain })).status).toBe(200);
+		const a = await owner.call('POST', `/projects/${catchmentProject}/runs`, { label: 'GR4J' });
+		expect(a.status).toBe(201);
+		gr4jRun = a.body.run.id;
+		// Saved on the legacy model before engine 1.0.0 removed it (the API can't make one now).
+		const b = await owner.call('POST', `/projects/${catchmentProject}/runs`, { label: 'Legacy' });
+		expect(b.status).toBe(201);
+		legacyRun = b.body.run.id;
+		await makeStoredLegacyRun(legacyRun);
+		expect((await owner.call('POST', `/projects/${catchmentProject}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+	});
+
+	it("returns the runoff model's day with the stores the day started from, and the store balance closes", async () => {
+		const res = await catchmentDay(viewer, gr4jRun, '2020-01-08');
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({ date: '2020-01-08', nodeId: null, name: 'Catchment', kind: 'catchment', runoffModel: 'gr4j', areaKm2: 10 });
+		expect(res.body.params).toEqual({ x1: 200, x2: -0.5, x3: 60, x4: 1.8, warmupDays: 30 });
+		for (const k of ['rain_used', 'pet', 'aet', 'exchange', 'natural_flow', ...STORES]) expect(typeof col(res.body, k), k).toBe('number');
+		// The stores the day before are the stored series' previous day.
+		for (const k of STORES) {
+			const s = await viewer.call('GET', `/projects/${catchmentProject}/runs/${gr4jRun}/series?key=${k}`);
+			expect(res.body.previousStores[k]).toBe(s.body.values[6]);
+			expect(col(res.body, k)).toBe(s.body.values[7]);
+		}
+		expect(res.body.previousStorageMm).toBeCloseTo(STORES.reduce((s, k) => s + res.body.previousStores[k], 0), 12);
+		// before + P + F − AET − Q (mm over the catchment) = after.
+		const v = (k: string) => col(res.body, k)!;
+		const after = STORES.reduce((s, k) => s + v(k), 0);
+		const q = v('natural_flow') / (res.body.areaKm2 * 1000);
+		expect(Math.abs(res.body.previousStorageMm + v('rain_used') + v('exchange') - v('aet') - q - after)).toBeLessThan(1e-9);
+		expect(v('rain_used')).toBe(30); // 30 mm on the 8th
+	});
+
+	it("starts the run's first day from the storage after the warm-up (each store unknown, only the total)", async () => {
+		const res = await catchmentDay(owner, gr4jRun, '2020-01-01');
+		expect(res.status).toBe(200);
+		const run = await owner.call('GET', `/projects/${catchmentProject}/runs/${gr4jRun}`);
+		expect(res.body.previousStorageMm).toBe(run.body.run.summary.runoff.storageStartMm);
+		expect(res.body.previousStores).toEqual({ production_store: null, routing_store: null, uh_store: null });
+	});
+
+	it('traces a legacy run without stores: the [Flow data] columns only', async () => {
+		const res = await catchmentDay(viewer, legacyRun, '2020-01-08');
+		expect(res.status).toBe(200);
+		expect(res.body).toMatchObject({ kind: 'catchment', runoffModel: 'legacy', areaKm2: null, params: null, previousStorageMm: null, previousStores: null });
+		for (const k of ['rain_used', 'base_flow', 'response_flow', 'natural_flow']) expect(typeof col(res.body, k), k).toBe('number');
+		expect(col(res.body, 'production_store')).toBeUndefined();
+	});
+
+	it('rejects dates outside the run, and is hidden (404) from anyone without access', async () => {
+		expect((await catchmentDay(owner, gr4jRun, '2019-12-31')).status).toBe(400);
+		expect((await catchmentDay(owner, gr4jRun, '2020-02-30')).status).toBe(400);
+		expect((await catchmentDay(owner, crypto.randomUUID(), '2020-01-02')).status).toBe(404);
+		// Another project's run through this project's URL: not found.
+		expect((await catchmentDay(owner, runId, '2020-01-02')).status).toBe(404);
+		expect((await catchmentDay(stranger, gr4jRun, '2020-01-02')).status).toBe(404);
+		expect((await stranger.call('GET', `/projects/${projectId}/runs/${runId}/day?date=2020-01-02`)).status).toBe(404);
+	});
+});

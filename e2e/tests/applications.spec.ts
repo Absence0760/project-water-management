@@ -1,0 +1,194 @@
+// Applications (WP-3.3, docs/ui.md § Applications, docs/scenarios.md
+// § Applications): an applicant (the contributor role), linked to the Upper
+// farm, opens the project and gets the Applicant view; starts an application
+// on the published baseline, sees their own farm in full and the other farm
+// only as "Farm 1", raises their dam, runs and submits it. The assessor (the
+// project's owner) finds it in the Applications tab and decides it; an
+// application whose run was changed behind the API (its server stamp no
+// longer matches, docs/security.md § Run stamps) shows the assessor a
+// warning and can't be decided. Axe on
+// both views, light and dark. Synthetic data only.
+import { expectNoViolations } from '../support/a11y.ts';
+import { addMember } from '../support/api.ts';
+import { seedApplicantProject } from '../support/applications.ts';
+import { tamperRunSummary } from '../support/db.ts';
+import { API_URL } from '../support/env.ts';
+import { expect, test } from '../support/fixtures.ts';
+
+const NAME = 'Raise the Upper farm dam';
+
+test('an applicant submits an application on the published baseline, and the assessor decides it', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Applicant');
+	const { project } = await seedApplicantProject(page, 'Applications golden path', applicant.user);
+	const a = applicant.page;
+	a.on('dialog', (d) => d.accept());
+
+	// The workspace shows an applicant their own view, not the tabs.
+	await a.goto(`/projects/${project.id}`);
+	await expect(a.getByTestId('applicant-view')).toHaveText('Applicant view');
+	await expect(a.getByRole('navigation', { name: 'Project sections' })).toHaveCount(0);
+	// One section header, like every workspace section: the title, and the catchment, the baseline and their farm on its context line.
+	const header = a.getByTestId('section-header');
+	await expect(a.getByRole('heading', { level: 1 })).toHaveText(['Applications']);
+	await expect(header.getByTestId('applicant-project')).toHaveText('Applications golden path');
+	await expect(header.getByTestId('applicant-baseline')).toContainText('Baseline published');
+	await expect(header.getByRole('link', { name: 'Upper farm' })).toBeVisible();
+	await expect(a.getByTestId('scenarios-empty')).toContainText('No applications yet.');
+
+	// A new application starts on the published baseline: New application, the header's action, opens the dialog.
+	await header.getByRole('link', { name: 'New application', exact: true }).click();
+	const create = a.getByRole('dialog', { name: 'New application' });
+	await expect(create.getByLabel('Base run')).toHaveCount(0);
+	await create.getByLabel('Name', { exact: true }).fill(NAME);
+	await create.getByRole('button', { name: 'Create application' }).click();
+	await expect(a.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+	await expect(a.getByTestId('scenario-base')).toContainText('Based on run Baseline');
+
+	// Their own farm with its values; the other farm only as "Farm 1", with none.
+	const form = a.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Dam capacity' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: 150\u202f000 m³');
+	await expect(form.getByLabel('Node').getByRole('option', { name: 'Farm 1' })).toHaveCount(1);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+	await form.getByLabel('Dam capacity (m³)').fill('200000');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	const changes = a.getByRole('list', { name: `Changes in ${NAME}` });
+	await expect(changes.getByRole('listitem')).toContainText('Proposal');
+
+	// Run it (the result is the assessors' to compare), then submit it.
+	await a.getByRole('button', { name: 'Run scenario' }).click();
+	await expect(a.getByTestId('applicant-results-note')).toBeVisible();
+	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
+	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
+	await expect(a.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
+	await expect(a.getByText('Lower farm')).toHaveCount(0);
+
+	// The assessor's Applications tab lists it; they open and decide it.
+	page.on('dialog', (d) => d.accept());
+	await page.goto(`/projects/${project.id}?tab=applications`);
+	const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: NAME }) });
+	await expect(row).toContainText('Applicant');
+	await expect(row).toContainText('Awaiting a decision');
+	await row.getByRole('link', { name: NAME }).click();
+	await expect(page).toHaveURL(/tab=scenarios&scenario=/);
+	const decide = page.getByRole('form', { name: 'Decide' });
+	// Its run is the one the model run stored: no stamp warning (the control for the test below).
+	await expect(decide).toBeVisible();
+	await expect(page.getByTestId('application-unverified')).toHaveCount(0);
+	await decide.getByLabel('Approved with conditions').check();
+	await decide.getByLabel('Reasons and conditions').fill('Release 5 % of inflow in dry months.');
+	await decide.getByRole('button', { name: 'Record the decision' }).click();
+	await expect(page.getByTestId('application-decision')).toContainText('Approved with conditions');
+	await expect(page.getByTestId('application-decision')).toContainText('Release 5 % of inflow in dry months.');
+
+	// The applicant sees the decision.
+	await a.reload();
+	await a.getByRole('button', { name: new RegExp(`^${NAME}`) }).click();
+	await expect(a.getByTestId('application-decision')).toContainText('Approved with conditions');
+});
+
+test('an application whose run was changed behind the API shows the assessor a warning and waits for its decision', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Stamped applicant');
+	const { project, runId, upper } = await seedApplicantProject(page, 'Applications unverified', applicant.user);
+	const P = `${API_URL}/projects/${project.id}`;
+	const req = applicant.context.request;
+	const made = await req.post(`${P}/scenarios`, {
+		data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
+	});
+	expect(made.status()).toBe(201);
+	const sid = (await made.json()).scenario.id as string;
+	const ran = await req.post(`${P}/scenarios/${sid}/runs`, { data: {} });
+	expect(ran.status()).toBe(201);
+	expect((await req.post(`${P}/scenarios/${sid}/submit`, { data: {} })).status()).toBe(200);
+	await tamperRunSummary((await ran.json()).run.id);
+
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+	await expect(page.getByTestId('application-unverified')).toHaveText(
+		'1 run of this application wasn’t stored by the model run itself: the server’s stamp is missing or no longer matches the results, so it can’t be signed off, and the application can’t be decided until it is deleted (Runs tab).'
+	);
+	const decide = page.getByRole('form', { name: 'Decide' });
+	await decide.getByLabel('Approved', { exact: true }).check();
+	await expect(decide.getByRole('button', { name: 'Record the decision' })).toBeDisabled();
+});
+
+test('the Applications tab says so when nothing is submitted, and a draft stays with its applicant', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Drafting applicant');
+	const { project, runId } = await seedApplicantProject(page, 'Applications empty', applicant.user);
+	const res = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: 'A draft', baseRunId: runId } });
+	expect(res.status()).toBe(201);
+	await page.goto(`/projects/${project.id}?tab=applications`);
+	await expect(page.getByTestId('applications-empty')).toHaveText('No applications submitted.');
+	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	await expect(page.getByRole('button', { name: /^A draft/ })).toHaveCount(0);
+});
+
+test('the owner puts an applicant and their consultant in one party, and the applicant shares from that list', async ({ page, owner, signIn }) => {
+	void owner;
+	const applicant = await signIn('Party applicant');
+	const consultant = await signIn('Party consultant');
+	const rival = await signIn('Rival applicant');
+	const { project, runId } = await seedApplicantProject(page, 'Applications sharing', applicant.user);
+	for (const u of [consultant.user, rival.user]) await addMember(page.request, project.id, u.email, 'contributor');
+	const created = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, { data: { name: NAME, baseRunId: runId } });
+	const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+	const a = applicant.page;
+
+	// Before any party: nobody to share with, and no address box to probe.
+	await a.goto(`/projects/${project.id}?scenario=${sid}`);
+	await expect(a.getByTestId('share-none')).toContainText('Nobody to share it with yet');
+	await expect(a.getByRole('textbox', { name: /email/i })).toHaveCount(0);
+
+	// The owner groups the applicant and the consultant in the Members panel.
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const members = page.getByRole('region', { name: 'Members' });
+	for (const u of [applicant.user, consultant.user]) {
+		const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().endsWith(`/members/${u.id}`));
+		const party = members.getByLabel(`Applying party for ${u.displayName}`);
+		await party.fill('Upper farm trust');
+		await party.press('Enter');
+		expect((await saved).status()).toBe(200);
+	}
+
+	// The applicant picks the consultant; the rival is never offered.
+	await a.reload();
+	const who = a.getByLabel('Share with');
+	await expect(who.getByRole('option')).toHaveText(['Choose someone…', 'Party consultant']);
+	await who.selectOption({ label: 'Party consultant' });
+	await a.getByRole('button', { name: 'Share', exact: true }).click();
+	await expect(a.getByTestId('application-panel').getByRole('listitem')).toContainText('Party consultant');
+	await expect(a.getByTestId('share-none')).toHaveText('Everyone you can share it with already reads it.');
+
+	// The consultant now reads the draft.
+	await consultant.page.goto(`/projects/${project.id}?scenario=${sid}`);
+	await expect(consultant.page.getByRole('heading', { level: 2, name: NAME })).toBeVisible();
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+	test(`the Applicant view and the Applications tab have no violations (${colorScheme})`, async ({ page, owner, signIn }) => {
+		void owner;
+		const applicant = await signIn(`Applicant a11y ${colorScheme}`);
+		await applicant.page.emulateMedia({ colorScheme });
+		await page.emulateMedia({ colorScheme });
+		const { project, runId, upper } = await seedApplicantProject(page, `Applications a11y ${colorScheme}`, applicant.user);
+		const created = await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios`, {
+			data: { name: NAME, baseRunId: runId, ops: [{ op: 'node.set', nodeId: upper, field: 'damCapacityM3', value: 200_000 }] }
+		});
+		const sid = ((await created.json()) as { scenario: { id: string } }).scenario.id;
+		expect((await applicant.context.request.post(`${API_URL}/projects/${project.id}/scenarios/${sid}/submit`, { data: {} })).status()).toBe(200);
+
+		await applicant.page.goto(`/projects/${project.id}?scenario=${sid}`);
+		await expect(applicant.page.getByTestId('application-panel')).toBeVisible();
+		await expectNoViolations(applicant.page);
+
+		await page.goto(`/projects/${project.id}?tab=applications`);
+		await expect(page.getByRole('rowheader', { name: NAME })).toBeVisible();
+		await expectNoViolations(page);
+		await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${sid}`);
+		await expect(page.getByRole('form', { name: 'Decide' })).toBeVisible();
+		await expectNoViolations(page);
+	});
+}

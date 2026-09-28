@@ -1,0 +1,76 @@
+# Local dev services. Start with `pnpm dev:db:up` (Postgres) and
+# `pnpm dev:mail:up` (Mailpit).
+#
+# Postgres is published on 5434 — this workstation already runs Supabase's
+# container Postgres on 5432 and native Postgres on 5433.
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: water-management-db
+    ports:
+      - "5434:5432"
+    environment:
+      # DEV-ONLY throwaway credentials — grant access to nothing outside this
+      # local container. Never reuse them anywhere real.
+      POSTGRES_USER: water
+      POSTGRES_PASSWORD: water
+      POSTGRES_DB: water
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Runs once on first boot of an empty volume: creates the RLS-bound
+      # application role. Schema itself comes from backend/migrations via
+      # `pnpm dev:db:migrate`, not from here.
+      - ./dev/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U water -d water"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Catches every email the backend sends in local dev (MAIL_TRANSPORT=smtp
+  # in backend/.env.development). Nothing leaves the laptop. Web UI:
+  # http://localhost:8026 (`pnpm dev:mail:open`). Published on 1026/8026 so it
+  # doesn't collide with other projects' Mailpit on the default 1025/8025.
+  mailpit:
+    image: axllent/mailpit:v1.31.2
+    container_name: water-management-mail
+    ports:
+      - "127.0.0.1:1026:1025"
+      - "127.0.0.1:8026:8025"
+    environment:
+      MP_MAX_MESSAGES: 500
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # S3-compatible object storage for server-side PDF reports (STORAGE=local in
+  # backend/.env.development; `pnpm dev:s3:up`). The backend creates its
+  # bucket (water-reports) on first use. API on 9002, console on
+  # http://localhost:9003. Upstream MinIO stopped publishing images (the
+  # minio/minio Docker Hub repository is gone), so this is the community
+  # fork's build of the same server (github.com/pgsty/minio), pinned.
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: water-management-s3
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "127.0.0.1:9002:9000"
+      - "127.0.0.1:9003:9001"
+    environment:
+      # DEV-ONLY throwaway credentials (MinIO's documented defaults) — grant
+      # access to nothing outside this local container.
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - s3data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
+  s3data:

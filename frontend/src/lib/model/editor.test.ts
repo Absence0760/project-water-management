@@ -1,0 +1,160 @@
+import { describe, expect, it } from 'vitest';
+import { validateModel } from './validate';
+import { ModelEditor } from './editor.svelte';
+
+describe('ModelEditor', () => {
+	it('is not dirty before anything is loaded', () => {
+		// A project page that 404s never calls load(); leaving it must not
+		// trigger the "unsaved changes" prompt.
+		expect(new ModelEditor().dirty).toBe(false);
+	});
+
+	it('tracks dirty state against the loaded snapshot and reverts', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.dirty).toBe(false);
+		ed.addNode();
+		expect(ed.dirty).toBe(true);
+		expect(ed.model.nodes[0]!.downstreamNodeId).toBeNull();
+		ed.revert();
+		expect(ed.dirty).toBe(false);
+		expect(ed.model.nodes).toHaveLength(0);
+	});
+
+	it('knows which nodes the server has: the loaded ones, not one added since (notes go only on those)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const outlet = ed.addNode();
+		expect(ed.savedNodeIds.has(outlet.id)).toBe(false);
+		ed.load(ed.snapshot());
+		expect(ed.savedNodeIds.has(outlet.id)).toBe(true);
+	});
+
+	it('starts a new farm with all upstream inflow entering its dam (Q1: 1 = on-river dam)', () => {
+		// Since engine 0.9.0 the share means water INTO the dam; 0 would make a
+		// new farm's dam an off-channel one that only the diversion fills.
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const farm = ed.addNode();
+		expect(farm.kind).toBe('farm');
+		expect(farm.pctUpstreamToDam).toBe(1);
+	});
+
+	it('re-routes children and drops references when a node is removed', () => {
+		const ed = new ModelEditor();
+		const g = ed.addNode();
+		const a = ed.addNode();
+		const b = ed.addNode();
+		b.downstreamNodeId = a.id;
+		const crop = ed.addCrop();
+		ed.setCropArea(a.id, crop.id, 500);
+		const t = ed.addTransfer();
+		t.toNodeId = a.id;
+		ed.removeNode(a.id);
+		expect(ed.model.nodes.find((n) => n.id === b.id)!.downstreamNodeId).toBe(g.id);
+		expect(ed.model.cropAreas).toEqual([]);
+		expect(ed.model.transfers).toEqual([]);
+		expect(ed.issues).toEqual([]);
+	});
+
+	it('keeps crop areas sparse', () => {
+		const ed = new ModelEditor();
+		const g = ed.addNode();
+		const c = ed.addCrop();
+		ed.setCropArea(g.id, c.id, 100);
+		ed.setCropArea(g.id, c.id, 250);
+		expect(ed.cropArea(g.id, c.id)).toBe(250);
+		expect(ed.model.cropAreas).toHaveLength(1);
+		ed.setCropArea(g.id, c.id, 0);
+		expect(ed.model.cropAreas).toHaveLength(0);
+	});
+
+	it('loads nodes and crops in their saved display order', () => {
+		const ed = new ModelEditor();
+		const node = (id: string, sortOrder: number) => ({ ...ed.addNode(), id, name: id, sortOrder });
+		const nodes = [node('b', 2), node('a', 0), node('c', 1)];
+		ed.load({
+			nodes,
+			crops: [
+				{ id: 'y', name: 'y', cropFactor: [], sortOrder: 1 },
+				{ id: 'x', name: 'x', cropFactor: [], sortOrder: 0 }
+			],
+			cropAreas: [],
+			transfers: []
+		});
+		expect(ed.model.nodes.map((n) => n.id)).toEqual(['a', 'c', 'b']);
+		expect(ed.model.crops.map((c) => c.id)).toEqual(['x', 'y']);
+		expect(ed.dirty).toBe(false);
+	});
+
+	it('gives a new crop the next display position', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [{ id: 'x', name: 'x', cropFactor: [], sortOrder: 4 }], cropAreas: [], transfers: [] });
+		expect(ed.addCrop().sortOrder).toBe(5);
+	});
+
+	it('adds an other water user draining into the outlet, with no demand yet (WP-1.33)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		const outlet = ed.addNode();
+		const u = ed.addUser();
+		expect(u).toMatchObject({ kind: 'user', downstreamNodeId: outlet.id, name: 'Other user 1', userReturnPct: 0, userPriority: 'senior' });
+		expect(u.userDemandM3Day).toEqual(new Array(12).fill(0));
+		// A new farm carries the inert user defaults.
+		expect(ed.addNode()).toMatchObject({ kind: 'farm', userDemandM3Day: null, userReturnPct: 0, userPriority: 'senior' });
+	});
+
+	it('adds and removes land cover on a farm, and removing the farm removes its patches (WP-1.35)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.model.landCover).toEqual([]);
+		ed.addNode();
+		const farm = ed.addNode();
+		const p = ed.addLandCover(farm.id);
+		expect(p).toMatchObject({ nodeId: farm.id, coverClass: 'invasive', densityPct: 1, factors: null });
+		ed.addLandCover(farm.id);
+		ed.removeLandCover(p.id);
+		expect(ed.model.landCover).toHaveLength(1);
+		ed.removeNode(farm.id);
+		expect(ed.model.landCover).toEqual([]);
+	});
+
+	it('adds demand objects with their category’s defaults, and removing the unit removes them (engine 1.7.0)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		expect(ed.model.demandObjects).toBeUndefined();
+		ed.addNode();
+		const unit = ed.addNode();
+		const town = ed.addDemandObject(unit.id, 'municipal');
+		expect(ed.model.demandObjects).toHaveLength(1);
+		expect(ed.model.demandObjects![0]).toMatchObject({ nodeId: unit.id, name: 'Demand 1', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(0), returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true });
+		const homes = ed.addDemandObject(unit.id, 'domestic');
+		expect(homes).toMatchObject({ name: 'Demand 2', sizing: 'perUnit', count: 0, litresPerUnitDay: 230, monthlyM3Day: null });
+		expect(ed.addDemandObject(unit.id, 'external')).toMatchObject({ destination: 'external', returnPct: 0 });
+		// A new object's model is one the API accepts.
+		expect(validateModel(ed.snapshot()).filter((i) => /demand object/i.test(i.message))).toEqual([]);
+		ed.removeDemandObject(town.id);
+		expect(ed.model.demandObjects).toHaveLength(2);
+		ed.removeNode(unit.id);
+		expect(ed.model.demandObjects).toEqual([]);
+	});
+
+	it('adds and removes individual boreholes, the first one included, and removing the node removes them (WP-3.9)', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		// An older document, or one without boreholes, has none and doesn't grow the key on load.
+		expect(ed.model.boreholes).toBeUndefined();
+		ed.addNode();
+		const farm = ed.addNode();
+		const b = ed.addBorehole(farm.id);
+		// The very first borehole lands in the state (a `??=` on the state would drop it).
+		expect(ed.model.boreholes).toHaveLength(1);
+		expect(ed.model.boreholes![0]).toMatchObject({ nodeId: farm.id, name: 'Borehole 1', mode: 'supplemental', target: 'direct', annualCapM3: null });
+		expect(ed.addBorehole(farm.id).name).toBe('Borehole 2');
+		ed.removeBorehole(b.id);
+		expect(ed.model.boreholes).toHaveLength(1);
+		ed.removeNode(farm.id);
+		expect(ed.model.boreholes).toEqual([]);
+	});
+});

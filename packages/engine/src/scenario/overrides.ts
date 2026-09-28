@@ -1,0 +1,785 @@
+// Scenarios (roadmap WP-3.2, docs/scenarios.md): apply an ordered list of
+// overrides to a base run's input, and classify each override as the
+// applicant's proposal or a change to the baseline assumptions. Pure: the
+// backend loads the base input, this transforms plain data, and runModel is
+// unchanged. Climate and stochastic transforms (WP-4.11) will sit beside it.
+import { toEpochDay } from '../calendar';
+import { withMonthlyRates } from '../network/transferRates';
+import { DAM_AREA_EXPONENT, ESTIMATED_DAM_DEPTH_M, upgradeLegacyModel, type Borehole, type DailySeries, type LandCoverPatch, type ModelInput, type NetworkNode, type Transfer } from '../project';
+import {
+	BASELINE_NODE_FIELDS,
+	NODE_SET_FIELDS,
+	SCALABLE_SERIES_KINDS,
+	SERIES_SCALE_MAX,
+	demandScaleError,
+	ewrRuleTableOpIssues,
+	isIsoDate,
+	nodeAddFieldError,
+	nodeFieldError,
+	settingsValueError,
+	transferFieldError,
+	type ScenarioOp
+} from './ops';
+import { structureIssues } from './structure';
+import { resolveDamCurve } from '../network/dam';
+import { resizeDamCurve, resizedFullArea } from '../network/damResize';
+import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
+
+/** An op that was applied, with what it did besides its own edit (re-links, dropped references, days scaled). */
+export interface AppliedOp {
+	/** Position in the op list (0-based). */
+	index: number;
+	op: ScenarioOp;
+	notes: string[];
+}
+
+export interface ScenarioResult {
+	/** The base input with every applicable op applied. Unscaled series are shared with the base: treat as read-only. */
+	input: ModelInput;
+	applied: AppliedOp[];
+	/**
+	 * One line per op that was skipped, naming it (`op 3 (node.remove): …`):
+	 * a missing target, a value out of range, or an edit that would break the
+	 * network (a second outflow, a loop, a duplicate name…). A group of
+	 * `node.set` ops on one node that breaks a network rule is one line naming
+	 * each of its ops that applied (`ops 3–5 (node.set, "Upper farm"): …`,
+	 * or `ops 3, 5` when op 4 failed its own check). A skipped op changes
+	 * nothing; later ops still apply.
+	 */
+	problems: string[];
+	/**
+	 * With `mask`: the hidden nodes and crops that got their real name back
+	 * with a suffix, because an op gave a visible one that name
+	 * (`Kalkoenkrans` → `Kalkoenkrans (2)`). For the assessor only; the applicant
+	 * never sees a hidden name.
+	 */
+	renamed: MaskedRename[];
+	/**
+	 * With `mask`: the items an op added under the id of a hidden one, given a
+	 * fresh id so the hidden one keeps its own (and still lines up with the
+	 * base by id). For the assessor only: it says a hidden item has that id.
+	 */
+	reIds: MaskedReId[];
+}
+
+/**
+ * What an application's ops must not see (roadmap WP-3.3, docs/scenarios.md
+ * § Applications): the nodes, crops, transfers, land-cover patches and
+ * boreholes its applicant can't see. The ops apply to the base with:
+ *
+ *  - each hidden node under the anonymous name the applicant sees it by
+ *    (`nodes`: id → "Farm 3"); node ids stay, the applicant sees them;
+ *  - each hidden crop, transfer, land-cover patch and borehole under an
+ *    opaque id (and a hidden crop or borehole under an opaque name), chosen
+ *    so no op mentions it: an op that targets or reuses a hidden item's id
+ *    or name meets exactly what it meets for a free one;
+ *  - counts of hidden items left out of the notes (`dropped 2 crop area(s)`),
+ *    and a rule an op breaks because of hidden data (a hidden item, a hidden
+ *    node's hidden values, the catchment's flow shares or area while any
+ *    node is hidden) reported only as `doesn't apply to the catchment as
+ *    modelled` (MASKED_RULE; the wording is pending the client, issue #50).
+ *
+ * Afterwards each hidden item gets its real id and name back: a name an op
+ * gave a visible item suffixes the hidden one (`renamed`), and an id an op
+ * gave a new item moves the new item to a fresh id (`reIds`). A hidden node
+ * an op renamed keeps the op's name.
+ */
+export interface ScenarioMask {
+	nodes?: Readonly<Record<string, string>>;
+	crops?: readonly string[];
+	transfers?: readonly string[];
+	landCover?: readonly string[];
+	boreholes?: readonly string[];
+}
+
+/** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #50). */
+export const MASKED_RULE = "doesn't apply to the catchment as modelled";
+
+export interface MaskedRename {
+	kind: 'node' | 'crop';
+	id: string;
+	/** Its real name in the base. */
+	name: string;
+	/** The name it has in the scenario's input. */
+	as: string;
+}
+
+export interface MaskedReId {
+	kind: IdKind;
+	/** The id the op gave it: a hidden item's. */
+	id: string;
+	/** The id it has in the scenario's input. */
+	as: string;
+}
+
+export interface ApplyOptions {
+	mask?: ScenarioMask;
+}
+
+type IdKind = 'crop' | 'transfer' | 'landCover' | 'borehole';
+type Named = { id: string; name: string };
+type Identified = { id: string; name?: string };
+interface Masked {
+	model: ModelInput['model'];
+	/** node id → [real name, mask name]; crop id → the same (by real id, read after the ids are restored). */
+	nodes: Map<string, [real: string, mask: string]>;
+	crops: Map<string, [real: string, mask: string]>;
+	/** opaque id → the hidden item's real id and name, per kind. */
+	ids: Record<IdKind, Map<string, { id: string; name?: string }>>;
+	/** Every opaque id, for spotting a rule issue about a hidden item. */
+	tokens: Set<string>;
+}
+
+const nameKey = (s: string) => s.trim().toLowerCase();
+
+/** Every string anywhere in `v` (an op list): what an opaque id must not be. */
+function strings(v: unknown, out: Set<string>): Set<string> {
+	if (typeof v === 'string') out.add(v).add(nameKey(v));
+	else if (Array.isArray(v)) for (const x of v) strings(x, out);
+	else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) strings(x, out.add(k));
+	return out;
+}
+
+const ID_LISTS = {
+	crop: (m: ModelInput['model']) => m.crops as Identified[],
+	transfer: (m: ModelInput['model']) => m.transfers as Identified[],
+	landCover: (m: ModelInput['model']) => (m.landCover ?? []) as Identified[],
+	borehole: (m: ModelInput['model']) => (m.boreholes ?? []) as Identified[]
+} as const;
+const MASK_KEY = { crop: 'crops', transfer: 'transfers', landCover: 'landCover', borehole: 'boreholes' } as const;
+
+/**
+ * A copy of `model` with the masked nodes under their mask names and the
+ * hidden items under opaque ids (and names), none of which any of `ops`
+ * mentions, and what each really was.
+ */
+function maskModel(model: ModelInput['model'], mask: ScenarioMask, ops: readonly unknown[]): Masked {
+	const m = cloneData(model);
+	const nodes = new Map<string, [string, string]>();
+	for (const n of m.nodes) {
+		if (!mask.nodes || !Object.hasOwn(mask.nodes, n.id)) continue;
+		nodes.set(n.id, [n.name, mask.nodes[n.id]!]);
+		n.name = mask.nodes[n.id]!;
+	}
+	// Never a string an op holds, nor an id or name the model already has.
+	const used = strings(ops, new Set());
+	for (const k of Object.keys(ID_LISTS) as IdKind[]) for (const x of ID_LISTS[k](m)) strings([x.id, x.name ?? ''], used);
+	const tokens = new Set<string>();
+	let i = 0;
+	const opaque = (kind: IdKind) => {
+		let t: string;
+		do t = `#${kind}${++i}#`;
+		while (used.has(t));
+		tokens.add(t);
+		return t;
+	};
+	const crops = new Map<string, [string, string]>();
+	const ids = { crop: new Map(), transfer: new Map(), landCover: new Map(), borehole: new Map() } as Masked['ids'];
+	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
+		const hidden = new Set(mask[MASK_KEY[kind]] ?? []);
+		if (!hidden.size) continue;
+		const swapped = new Map<string, string>();
+		for (const x of ID_LISTS[kind](m)) {
+			if (!hidden.has(x.id)) continue;
+			const t = opaque(kind);
+			ids[kind].set(t, { id: x.id, name: x.name });
+			swapped.set(x.id, t);
+			if (kind === 'crop') crops.set(x.id, [x.name!, t]);
+			x.id = t;
+			if (x.name !== undefined) x.name = t;
+		}
+		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = swapped.get(a.cropId) ?? a.cropId;
+	}
+	return { model: m, nodes, crops, ids, tokens };
+}
+
+/**
+ * Hidden items back under their real ids (and a hidden borehole under its
+ * real name): an item an op added under a hidden one's id first moves to a
+ * fresh id (`${id}-2`, …), so the hidden one keeps the id the base knows it by.
+ */
+function restoreIds(m: ModelInput['model'], masked: Masked, out: MaskedReId[]) {
+	for (const kind of Object.keys(ID_LISTS) as IdKind[]) {
+		const hidden = masked.ids[kind];
+		if (!hidden.size) continue;
+		const list = ID_LISTS[kind](m);
+		const realIds = new Set([...hidden.values()].map((h) => h.id));
+		const taken = new Set([...list.map((x) => x.id), ...realIds]);
+		for (const x of list) {
+			if (hidden.has(x.id) || !realIds.has(x.id)) continue;
+			let k = 2;
+			while (taken.has(`${x.id}-${k}`)) k++;
+			const as = `${x.id}-${k}`;
+			taken.add(as);
+			if (kind === 'crop') for (const a of m.cropAreas) if (a.cropId === x.id) a.cropId = as;
+			out.push({ kind, id: x.id, as });
+			x.id = as;
+		}
+		for (const x of list) {
+			const h = hidden.get(x.id);
+			if (!h) continue;
+			x.id = h.id;
+			// A crop's name comes back through unmask (suffixed if an op took it); a borehole's name is not unique.
+			if (kind === 'borehole') x.name = h.name!;
+		}
+		if (kind === 'crop') for (const a of m.cropAreas) a.cropId = hidden.get(a.cropId)?.id ?? a.cropId;
+	}
+}
+
+/** Give masked items still under their mask name their real name back, suffixed where a visible one now has it. */
+function unmask(xs: Named[], real: Map<string, [string, string]>, kind: MaskedRename['kind'], out: MaskedRename[]) {
+	const hidden = (x: Named) => real.has(x.id) && x.name === real.get(x.id)![1];
+	const visible = new Set(xs.filter((x) => !hidden(x)).map((x) => nameKey(x.name)));
+	const taken = new Set([...visible, ...xs.filter(hidden).map((x) => nameKey(real.get(x.id)![0]))]);
+	for (const x of xs) {
+		if (!hidden(x)) continue;
+		const name = real.get(x.id)![0];
+		if (!visible.has(nameKey(name))) {
+			x.name = name;
+			continue;
+		}
+		let k = 2;
+		while (taken.has(nameKey(`${name} (${k})`))) k++;
+		x.name = `${name} (${k})`;
+		taken.add(nameKey(x.name));
+		out.push({ kind, id: x.id, name, as: x.name });
+	}
+}
+
+/**
+ * Does a rule issue (structureIssues' key) turn on data the applicant can't
+ * see? A hidden item (its opaque id is in the key), a hidden node's hidden
+ * borehole rule or supply rule (both read its hidden dam), or the catchment-wide value rules while any node is hidden
+ * (flow shares over 100 %, no area left: the op's own values are
+ * range-checked, so these trip only with other nodes' values in play). The
+ * network's shape (outflows, loops, what drains where) and names are the
+ * applicant's to see, so those rules keep their words.
+ */
+function hiddenRule(key: string, masked: Masked): boolean {
+	if (key === 'area' || key === 'shares') return masked.nodes.size > 0;
+	// A hidden node's dam, and its supply rule's levels, are hidden values: the rules that read them say nothing of them.
+	for (const p of ['bhDrought:', 'supplyTrigger:', 'supplyRor:', 'supplyStop:']) if (key.startsWith(p)) return masked.nodes.has(key.slice(p.length));
+	for (const t of masked.tokens) if (key.includes(t)) return true;
+	return false;
+}
+
+/** What node.remove may count of what it drops: in masked mode, only what the applicant sees. */
+interface Visibility {
+	node: (id: string) => boolean;
+	item: (id: string) => boolean;
+}
+const SEE_ALL: Visibility = { node: () => true, item: () => true };
+
+class OpError extends Error {}
+const fail = (msg: string): never => {
+	throw new OpError(msg);
+};
+
+/** Deep copy of plain data (settings and the model document are JSON). */
+function cloneData<T>(v: T): T {
+	if (Array.isArray(v)) return v.map(cloneData) as T;
+	if (v && typeof v === 'object') {
+		const o: Record<string, unknown> = {};
+		for (const [k, x] of Object.entries(v)) o[k] = cloneData(x);
+		return o as T;
+	}
+	return v;
+}
+
+/** A calendar-month list as a sorted set (the engine and compare read months as a set). */
+const monthSet = (ms: readonly number[]) => [...new Set(ms)].sort((a, b) => a - b);
+
+type Draft = ModelInput;
+
+function findNode(d: Draft, nodeId: string): NetworkNode {
+	return d.model.nodes.find((n) => n.id === nodeId) ?? fail(`node ${nodeId} not found`);
+}
+function findTransfer(d: Draft, transferId: string): Transfer {
+	return d.model.transfers.find((t) => t.id === transferId) ?? fail(`transfer ${transferId} not found`);
+}
+
+/**
+ * A farm dam whose capacity an op changed keeps its geometry along its own
+ * area–volume relation (engine ≥ 1.10.0, docs/model.md §2.13, ../network/damResize.ts):
+ * a survey curve is cut at, or extrapolated to, its top × the capacity ratio;
+ * a power-law dam's area when full (as entered, or the capacity ÷ 3 m
+ * estimate) becomes A_full × ratio^b. A later `damAreaFullM2` op on the node
+ * sets the new dam's own area; one before this op described the old dam and
+ * is resized with it. Nothing happens for a new dam (from capacity 0), a dam
+ * removed (to 0) or an unchanged capacity. Returns the op's note.
+ */
+function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
+	const cap = n.damCapacityM3;
+	if (!(oldCap > 0) || !(cap > 0) || cap === oldCap) return null;
+	const ratio = cap / oldCap;
+	const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
+	const survey = resolveDamCurve(n);
+	if (survey && n.damCurve) {
+		const top = survey.volume[survey.volume.length - 1]! * ratio;
+		const r = resizeDamCurve(n.damCurve, top, b);
+		if (r.rows.length >= 2) {
+			n.damCurve = r.rows;
+			return r.extrapolated
+				? `dam survey curve extrapolated beyond the survey to ${Math.round(top)} m³ (area ∝ volume^${r.exponent!.toFixed(2)} from its top rows): enter a surveyed curve for the enlarged dam if there is one`
+				: `dam survey curve cut at ${Math.round(top)} m³`;
+		}
+		// Cut below its lowest surveyed row: too little curve left, so the power law takes the area there.
+		n.damCurve = null;
+		n.damAreaFullM2 = r.rows.at(-1)!.areaM2;
+		return `dam survey curve cut below its lowest row; area when full ${Math.round(n.damAreaFullM2)} m² from it, on the power law`;
+	}
+	const estimated = n.damAreaFullM2 === null || n.damAreaFullM2 === undefined || !(n.damAreaFullM2 >= 0);
+	const from = estimated ? oldCap / ESTIMATED_DAM_DEPTH_M : n.damAreaFullM2!;
+	n.damAreaFullM2 = resizedFullArea(from, oldCap, cap, b);
+	return `dam area when full ${Math.round(from)} → ${Math.round(n.damAreaFullM2)} m² along the dam's own area–volume relation (× ${ratio.toFixed(3)}^${b})${estimated ? `, from the capacity ÷ ${ESTIMATED_DAM_DEPTH_M} m estimate` : ''}`;
+}
+
+function applyOne(d: Draft, op: ScenarioOp, see: Visibility = SEE_ALL): string[] {
+	const notes: string[] = [];
+	const m = d.model;
+	switch (op.op) {
+		case 'node.set': {
+			const n = findNode(d, op.nodeId);
+			if (!(NODE_SET_FIELDS[n.kind] as readonly string[]).includes(op.field)) fail(`"${op.field}" can't be set on a ${n.kind}`);
+			const e = nodeFieldError(op.field, op.value);
+			if (e) fail(`${op.field} ${e}`);
+			const oldCap = n.damCapacityM3;
+			(n as unknown as Record<string, unknown>)[op.field] = op.field === 'name' ? (op.value as string).trim() : cloneData(op.value);
+			if (op.field === 'damCapacityM3' && n.kind === 'farm') {
+				const note = resizeDamGeometry(n, oldCap);
+				if (note && see.node(n.id)) notes.push(note);
+			}
+			break;
+		}
+		case 'node.add': {
+			const raw = op.node as unknown as Record<string, unknown>;
+			for (const k of ['id', 'name', 'kind', 'downstreamNodeId'] as const) if (typeof raw?.[k] !== 'string') fail(`the new node needs a ${k}`);
+			if (m.nodes.some((n) => n.id === op.node.id)) fail(`node id ${op.node.id} is already in use`);
+			if (!m.nodes.some((n) => n.id === op.node.downstreamNodeId)) fail(`the new node drains into unknown node ${op.node.downstreamNodeId}`);
+			for (const [k, v] of Object.entries(raw)) {
+				if (['id', 'name', 'kind', 'downstreamNodeId'].includes(k)) continue;
+				if (k === 'sortOrder') {
+					if (!Number.isInteger(v)) fail('the new node\'s sortOrder must be a whole number');
+					continue;
+				}
+				const e = nodeAddFieldError(k, v);
+				if (e) fail(`the new node's ${k} ${e}`);
+			}
+			const [node] = upgradeLegacyModel({ nodes: [cloneData(op.node)] }).nodes as NetworkNode[];
+			node!.name = node!.name.trim();
+			node!.sortOrder ??= m.nodes.length;
+			m.nodes.push(node!);
+			break;
+		}
+		case 'node.remove': {
+			const n = findNode(d, op.nodeId);
+			if (n.downstreamNodeId === null) fail(`"${n.name}" is the outflow node and can't be removed`);
+			for (const u of m.nodes) {
+				if (u.downstreamNodeId !== n.id) continue;
+				u.downstreamNodeId = n.downstreamNodeId;
+				notes.push(`"${u.name}" now drains into ${n.downstreamNodeId}`);
+			}
+			m.nodes = m.nodes.filter((x) => x.id !== n.id);
+			// Counts only what the caller sees: in masked mode a hidden node's crops, transfers… are not theirs to count.
+			const drop = <T>(xs: T[], gone: (x: T) => boolean, what: string, seen: (x: T) => boolean): T[] => {
+				const kept = xs.filter((x) => !gone(x));
+				const counted = xs.filter((x) => gone(x) && seen(x)).length;
+				if (counted) notes.push(`dropped ${counted} ${what}`);
+				return kept;
+			};
+			m.cropAreas = drop(m.cropAreas, (a) => a.nodeId === n.id, 'crop area(s)', (a) => see.node(a.nodeId) && see.item(a.cropId));
+			m.transfers = drop(m.transfers, (t) => t.fromNodeId === n.id || t.toNodeId === n.id, 'transfer(s)', (t) => see.item(t.id));
+			if (m.landCover) m.landCover = drop(m.landCover, (p) => p.nodeId === n.id, 'land-cover patch(es)', (p) => see.item(p.id));
+			if (m.boreholes) m.boreholes = drop(m.boreholes, (b) => b.nodeId === n.id, 'borehole(s)', (b) => see.item(b.id));
+			// Demand objects (engine ≥ 1.7.0) go with their unit; counted only on a unit the caller sees.
+			if (m.demandObjects) m.demandObjects = drop(m.demandObjects, (o) => o.nodeId === n.id, 'demand object(s)', (o) => see.node(o.nodeId));
+			if (Array.isArray(d.settings.ewrRules)) {
+				// Settings are catchment-wide and the applicant sees them in full.
+				d.settings.ewrRules = drop(d.settings.ewrRules, (t) => t?.siteNodeId === n.id, 'EWR rule table(s) sited there', () => true);
+			}
+			break;
+		}
+		case 'cropArea.set': {
+			const n = findNode(d, op.nodeId);
+			if (n.kind !== 'farm') fail(`crops grow on farms; "${n.name}" is a ${n.kind}`);
+			if (!m.crops.some((c) => c.id === op.cropId)) fail(`crop ${op.cropId} not found`);
+			if (!(Number.isFinite(op.areaM2) && op.areaM2 >= 0)) fail('areaM2 must be a finite number ≥ 0');
+			const at = m.cropAreas.findIndex((a) => a.nodeId === op.nodeId && a.cropId === op.cropId);
+			const rest = m.cropAreas.filter((a) => !(a.nodeId === op.nodeId && a.cropId === op.cropId));
+			if (op.areaM2 > 0) rest.splice(at < 0 ? rest.length : at, 0, { nodeId: op.nodeId, cropId: op.cropId, areaM2: op.areaM2 });
+			m.cropAreas = rest;
+			break;
+		}
+		case 'crop.add': {
+			const c = op.crop;
+			if (typeof c?.id !== 'string' || typeof c.name !== 'string') fail('the new crop needs an id and a name');
+			if (m.crops.some((x) => x.id === c.id)) fail(`crop id ${c.id} is already in use`);
+			if (!(Array.isArray(c.cropFactor) && c.cropFactor.length === 12 && c.cropFactor.every((v) => Number.isFinite(v) && v >= 0)))
+				fail('a crop needs 12 crop factors ≥ 0');
+			m.crops.push({ ...cloneData(c), name: c.name.trim() });
+			break;
+		}
+		case 'transfer.add': {
+			const t = op.transfer;
+			if (typeof t?.id !== 'string') fail('the new transfer needs an id');
+			if (m.transfers.some((x) => x.id === t.id)) fail(`transfer id ${t.id} is already in use`);
+			for (const k of ['fromNodeId', 'toNodeId'] as const) if (!m.nodes.some((n) => n.id === t[k])) fail(`${k} ${t[k]} not found`);
+			for (const k of ['months', 'maxRateM3s', 'dailyCapM3', 'minStoragePct', 'enabled', 'priority'] as const) {
+				const e = transferFieldError(k, t[k]);
+				if (e) fail(`${k} ${e}`);
+			}
+			// Engine ≥ 1.14.0 fields, when given: monthly rates and a river off-take's.
+			for (const k of ['monthlyRateM3s', 'source', 'handsOffM3Day', 'handsOffEwr', 'lossPct', 'sizing', 'topUpDam'] as const) {
+				if (t[k] === undefined) continue;
+				const e = transferFieldError(k, t[k]);
+				if (e) fail(`${k} ${e}`);
+			}
+			// Monthly rates (engine ≥ 1.14.0) set the months and max rate kept beside them.
+			const added: Transfer = { ...cloneData(t), months: monthSet(t.months), monthlyRateM3s: t.monthlyRateM3s ?? null };
+			if (t.monthlyRateM3s) Object.assign(added, withMonthlyRates(t.monthlyRateM3s));
+			m.transfers.push(added);
+			break;
+		}
+		case 'transfer.set': {
+			const t = findTransfer(d, op.transferId);
+			const e = transferFieldError(op.field, op.value);
+			if (e) fail(`${op.field} ${e}`);
+			if ((op.field === 'fromNodeId' || op.field === 'toNodeId') && !m.nodes.some((n) => n.id === op.value)) fail(`node ${String(op.value)} not found`);
+			// Monthly rates (engine ≥ 1.14.0) also set the months and max rate kept beside them; months or a max rate
+			// on a rule with monthly rates would disagree with them, which the save rules (modelRuleIssues) refuse.
+			if (op.field === 'monthlyRateM3s' && Array.isArray(op.value)) Object.assign(t, withMonthlyRates(op.value));
+			else (t as unknown as Record<string, unknown>)[op.field] = op.field === 'months' ? monthSet(op.value as number[]) : cloneData(op.value);
+			break;
+		}
+		case 'transfer.remove': {
+			findTransfer(d, op.transferId);
+			m.transfers = m.transfers.filter((t) => t.id !== op.transferId);
+			break;
+		}
+		case 'landCover.add': {
+			const p = op.patch;
+			if (typeof p?.id !== 'string') fail('the new patch needs an id');
+			if ((m.landCover ?? []).some((x) => x.id === p.id)) fail(`land-cover id ${p.id} is already in use`);
+			const n = findNode(d, p.nodeId);
+			if (n.kind !== 'farm') fail(`land cover lies on a farm; "${n.name}" is a ${n.kind}`);
+			m.landCover = [...(m.landCover ?? []), cloneData(p) as LandCoverPatch];
+			break;
+		}
+		case 'landCover.remove': {
+			if (!(m.landCover ?? []).some((p) => p.id === op.patchId)) fail(`land-cover patch ${op.patchId} not found`);
+			m.landCover = m.landCover!.filter((p) => p.id !== op.patchId);
+			break;
+		}
+		case 'borehole.add': {
+			const b = op.borehole;
+			if (typeof b?.id !== 'string') fail('the new borehole needs an id');
+			if ((m.boreholes ?? []).some((x) => x.id === b.id)) fail(`borehole id ${b.id} is already in use`);
+			const n = findNode(d, b.nodeId);
+			if (n.kind === 'gauge') fail(`a borehole supplies a farm or other user; "${n.name}" is a gauge`);
+			m.boreholes = [...(m.boreholes ?? []), cloneData(b) as Borehole];
+			break;
+		}
+		case 'borehole.remove': {
+			if (!(m.boreholes ?? []).some((b) => b.id === op.boreholeId)) fail(`borehole ${op.boreholeId} not found`);
+			m.boreholes = m.boreholes!.filter((b) => b.id !== op.boreholeId);
+			break;
+		}
+		case 'settings.set': {
+			const e = settingsValueError(op.path, op.value);
+			if (e) fail(`${op.path} ${e}`);
+			const value = cloneData(op.value);
+			const [head, leaf] = op.path.split('.') as [string, string | undefined];
+			const s = d.settings as Record<string, unknown>;
+			if (leaf === undefined) s[head] = value;
+			else {
+				const cur = s[head];
+				s[head] = { ...(cur && typeof cur === 'object' && !Array.isArray(cur) ? cur : {}), [leaf]: value };
+			}
+			break;
+		}
+		case 'series.scale': {
+			if (!(SCALABLE_SERIES_KINDS as readonly string[]).includes(op.kind)) fail(`${op.kind} can't be scaled`);
+			if (!(Number.isFinite(op.factor) && op.factor >= 0 && op.factor <= SERIES_SCALE_MAX)) fail(`factor must be 0–${SERIES_SCALE_MAX}`);
+			for (const k of ['from', 'to'] as const) if (op[k] !== undefined && !isIsoDate(op[k])) fail(`${k} must be an ISO date`);
+			const s = d.series[op.kind] ?? fail(`the base has no ${op.kind} series`);
+			const start = toEpochDay(s.startDate);
+			const a = op.from === undefined ? 0 : Math.max(0, toEpochDay(op.from) - start);
+			const b = op.to === undefined ? s.values.length - 1 : Math.min(s.values.length - 1, toEpochDay(op.to) - start);
+			if (a > b) fail(`no day of ${op.kind} falls in ${op.from ?? 'its start'} – ${op.to ?? 'its end'}`);
+			const values = s.values.slice();
+			let n = 0;
+			for (let t = a; t <= b; t++) {
+				const v = values[t];
+				if (v === null || v === undefined) continue;
+				values[t] = v * op.factor;
+				n++;
+			}
+			d.series = { ...d.series, [op.kind]: { startDate: s.startDate, values } satisfies DailySeries };
+			notes.push(`${n} day(s) scaled`);
+			break;
+		}
+		case 'demand.scale': {
+			const e = demandScaleError(op);
+			if (e) fail(e);
+			const category = op.category ?? 'farm';
+			const word = category === 'farm' ? 'farm' : 'other water user';
+			const aKind = (k: string) => (k === 'user' ? 'an other water user' : `a ${k}`);
+			let targets: NetworkNode[];
+			if (op.nodeIds) {
+				targets = op.nodeIds.map((id) => findNode(d, id));
+				const wrong = targets.find((n) => n.kind !== category);
+				if (wrong) fail(`"${wrong.name}" is ${aKind(wrong.kind)}, not ${aKind(category)}`);
+			} else {
+				targets = m.nodes.filter((n) => n.kind === category);
+				if (!targets.length) fail(`the model has no ${word} to scale`);
+			}
+			// Water-year index (Oct = 0) of each calendar month the op scales.
+			const wy = new Set((op.months ?? [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]).map((c) => (c + 2) % 12));
+			for (const n of targets) {
+				const cur = Array.isArray(n.demandFactor) && n.demandFactor.length === 12 ? n.demandFactor : new Array<number>(12).fill(1);
+				n.demandFactor = cur.map((v, i) => (wy.has(i) ? v * op.factor : v));
+			}
+			if (!op.nodeIds) notes.push(`${targets.length} ${word}(s) scaled`);
+			break;
+		}
+		case 'ewrRule.set': {
+			const { table, issues } = ewrRuleTableOpIssues(op.table);
+			if (!table) fail(`the rule table isn't usable: ${issues.map(([k, msg]) => (k ? `${k} ${msg}` : msg)).join('; ')}`);
+			// As the run reads it (resolveEwrRules): the source trimmed, no natural grid unless it is the source, a kind and a natural MAR only when stated.
+			const { sourceKind, naturalMarMcm, ...rest } = table!;
+			const t: EwrRuleTable = { ...rest, ...(sourceKind != null ? { sourceKind } : {}), ...(naturalMarMcm != null ? { naturalMarMcm } : {}), source: rest.source.trim(), natural: rest.naturalSource === 'table' ? rest.natural : null };
+			// The outlet is its own site whether a table names it null (as Settings does) or by its node's id (as the run reads both).
+			const outflowId = m.nodes.find((n) => n.downstreamNodeId === null)?.id;
+			const site = (id: string | null | undefined) => (id === undefined || id === null || id === outflowId ? null : id);
+			if (site(t.siteNodeId) !== null) {
+				const n = findNode(d, t.siteNodeId!);
+				if (n.kind !== 'gauge') fail(`an EWR site is the outlet or a gauge; "${n.name}" is ${n.kind === 'user' ? 'an other water user' : `a ${n.kind}`}`);
+				if (n.ewrSite === false) fail(`"${n.name}" is not marked as an EWR site: set its EWR site flag first`);
+			}
+			const list: EwrRuleTable[] = Array.isArray(d.settings.ewrRules) ? d.settings.ewrRules : [];
+			const at = list.findIndex((x) => x && typeof x === 'object' && site(x.siteNodeId) === site(t.siteNodeId));
+			// A replaced table keeps the key its site had, so run comparison sees the same site's table changed.
+			const next = at < 0 ? [...list, t] : list.map((x, i) => (i === at ? { ...t, siteNodeId: x.siteNodeId ?? null } : x));
+			const e = ewrRuleListIssues(next);
+			if (e) fail(e);
+			// No note: what it replaced is the op's "was", which the editor describes (like node.set's).
+			d.settings.ewrRules = next;
+			break;
+		}
+		default:
+			fail(`unknown op ${(op as { op?: unknown }).op as string}`);
+	}
+	return notes;
+}
+
+/**
+ * Do ops `a` and `b` (in that order) belong to one edit? Consecutive
+ * `node.set` ops on the same node do: the network rules are checked once,
+ * after the last of them (docs/scenarios.md § Edit groups).
+ */
+const sameGroup = (a: ScenarioOp | undefined, b: ScenarioOp | undefined): boolean =>
+	a?.op === 'node.set' && b?.op === 'node.set' && typeof a.nodeId === 'string' && a.nodeId === b.nodeId;
+
+/** 1-based op numbers in words: `3`, `3–5` for a run, `3, 5` otherwise. */
+function opNumbers(indices: readonly number[]): string {
+	const n = indices.map((i) => i + 1);
+	const run = n.every((x, k) => k === 0 || x === n[k - 1]! + 1);
+	return run && n.length > 1 ? `${n[0]}–${n[n.length - 1]}` : n.join(', ');
+}
+
+interface Stepped extends Omit<ScenarioResult, 'renamed' | 'reIds'> {
+	/** The input each op meets: the committed input plus the earlier ops of its own group (not yet rule-checked). */
+	before: ModelInput[];
+	/** The input with every op applied, a last group included even if it breaks a rule (what a next op would meet). */
+	pending: ModelInput;
+}
+
+/**
+ * applyScenario's loop. The ops apply in order, each to a fresh copy. A
+ * group (consecutive `node.set` ops on one node; any other op is a group of
+ * its own) is checked against the network rules once, after its last op: a
+ * group that adds a rule issue is skipped whole and reported once, against
+ * the ops of it that applied, so the scenario never keeps half an edit. An
+ * op that fails its own check (a missing target, a value out of range) is
+ * refused on its own, and the rest of its group still counts.
+ */
+function step(base: ModelInput, ops: readonly ScenarioOp[], masked: Masked | null): Stepped {
+	const see: Visibility = masked ? { node: (id) => !masked.nodes.has(id), item: (id) => !masked.tokens.has(id) } : SEE_ALL;
+	let cur: ModelInput = { settings: cloneData(base.settings), model: masked?.model ?? cloneData(base.model), series: { ...base.series } };
+	let issues = structureIssues(cur);
+	const applied: AppliedOp[] = [];
+	const problems: string[] = [];
+	const before: ModelInput[] = [];
+	// The open group: the input with its ops so far applied, and those ops.
+	let draft = cur;
+	let group: AppliedOp[] = [];
+	// A last node.set group that breaks a rule stays open for a next op on the node to complete.
+	let pending: ModelInput | null = null;
+	ops.forEach((op, index) => {
+		const kind = typeof op?.op === 'string' ? op.op : 'unknown';
+		before.push(draft);
+		const next: ModelInput = { settings: cloneData(draft.settings), model: cloneData(draft.model), series: draft.series };
+		try {
+			group.push({ index, op, notes: applyOne(next, op, see) });
+			draft = next;
+		} catch (e) {
+			if (!(e instanceof OpError)) throw e;
+			problems.push(`op ${index + 1} (${kind}): ${e.message}`);
+		}
+		if (sameGroup(op, ops[index + 1]) || !group.length) return;
+		const after = structureIssues(draft);
+		const introduced = [...new Set([...after].filter(([k]) => !issues.has(k)).map(([k, text]) => (masked && hiddenRule(k, masked) ? MASKED_RULE : text)))];
+		if (introduced.length) {
+			// One op: `op 3 (node.set)`, as always. Several: `ops 3–5 (node.set, "Upper farm")`, the node named as it stood before them.
+			const nodeName = () => cur.model.nodes.find((n) => n.id === (op as { nodeId?: unknown }).nodeId)?.name ?? '';
+			const label = group.length === 1 ? `op ${group[0]!.index + 1} (${kind})` : `ops ${opNumbers(group.map((g) => g.index))} (${kind}, "${nodeName()}")`;
+			problems.push(`${label}: ${introduced.join('; ')}`);
+			if (index === ops.length - 1 && op.op === 'node.set') pending = draft;
+			draft = cur;
+		} else {
+			cur = draft;
+			issues = after;
+			applied.push(...group);
+		}
+		group = [];
+	});
+	return { input: cur, applied, problems, before, pending: pending ?? draft };
+}
+
+/**
+ * Apply `ops` to `base` in order. Never mutates `base` (settings and the
+ * model are deep-copied; a series is copied only when an op scales it). An
+ * op whose target is missing or whose value is out of range is skipped and
+ * reported in `problems`, never thrown; the ops after it still apply. The
+ * network rules (a second outflow, a loop, a duplicate name, the model's
+ * save rules…) are checked after each group of ops: consecutive `node.set`
+ * ops on one node form a group, checked once after its last op and skipped
+ * whole if it breaks one, so a farm can go from `trigger` to `runOfRiver`
+ * (rule and dam together) in either order. docs/scenarios.md has the rules.
+ */
+export function applyScenario(base: ModelInput, ops: readonly ScenarioOp[], options: ApplyOptions = {}): ScenarioResult {
+	const masked = options.mask ? maskModel(base.model, options.mask, ops) : null;
+	const { input, applied, problems } = step(base, ops, masked);
+	const renamed: MaskedRename[] = [];
+	const reIds: MaskedReId[] = [];
+	if (masked) {
+		// input.model is this call's own copy (every op works on a fresh draft), so restoring in place touches nothing shared.
+		restoreIds(input.model, masked, reIds);
+		unmask(input.model.nodes, masked.nodes, 'node', renamed);
+		unmask(input.model.crops, masked.crops, 'crop', renamed);
+	}
+	return { input, applied, problems, renamed, reIds };
+}
+
+/**
+ * The input each op of `ops` meets under applyScenario's rules (`before[i]`:
+ * the base with the ops before it applied, the earlier ops of its own group
+ * included though not yet checked against the rules), and `after`, what a
+ * next op would meet: every op applied, a last group included even while it
+ * still breaks a rule, so a form adding one op at a time builds on the
+ * group's edit so far. For describing ops and building the next one;
+ * applyScenario says which apply. The inputs share structure: read-only.
+ */
+export function scenarioSteps(base: ModelInput, ops: readonly ScenarioOp[]): { before: ModelInput[]; after: ModelInput } {
+	const { before, pending } = step(base, ops, null);
+	return { before, after: pending };
+}
+
+// ---------------------------------------------------------------------------
+// Classification
+// ---------------------------------------------------------------------------
+
+export type OpClass = 'proposal' | 'baseline';
+
+/** A gauge (an EWR site), or a node with land or a manual flow share: part of how the catchment's runoff is split. */
+const sharesRunoff = (n: NetworkNode) => n.kind === 'gauge' || n.areaKm2 > 0 || n.areaHiKm2 > 0 || n.areaLoKm2 > 0 || n.flowShareManual != null;
+
+/**
+ * Is this op the applicant's proposal, or a change to the baseline
+ * assumptions an assessor must see called out? docs/scenarios.md
+ * § Classification has the rules. Conservative: anything it can't place is
+ * 'baseline'.
+ *
+ * `ownedNodeIds` are the applicant's own nodes, plus any the scenario added
+ * (classifyScenario adds those for you). `input` is the input the op applies
+ * to; ops that target a transfer or land-cover patch by id, or remove a node,
+ * need it to see which nodes they touch, and are 'baseline' without it.
+ */
+export function classifyOp(op: ScenarioOp, ownedNodeIds: Iterable<string>, input?: ModelInput): OpClass {
+	const owned = ownedNodeIds instanceof Set ? (ownedNodeIds as Set<string>) : new Set(ownedNodeIds);
+	const mine = (id: string | undefined | null) => typeof id === 'string' && owned.has(id);
+	const ok = (x: boolean): OpClass => (x ? 'proposal' : 'baseline');
+	switch (op.op) {
+		case 'settings.set':
+		case 'series.scale':
+		// The Reserve's rule table: never the applicant's to propose, whoever's node the site is.
+		case 'ewrRule.set':
+			return 'baseline';
+		case 'node.set':
+			// Any other field of the applicant's own node is theirs to propose: its dam, irrigation,
+			// boreholes, and how it takes water (the supply rule and river pump, WP-3.8), which is
+			// what a licence to abstract from the river asks for, like a new pump. Land and flow
+			// share split the catchment's natural runoff, so they stay baseline.
+			return ok(mine(op.nodeId) && !BASELINE_NODE_FIELDS.includes(op.field));
+		case 'node.add':
+			// A new gauge moves an EWR site; a new node with land or a manual flow share re-partitions the catchment's runoff.
+			return ok(!sharesRunoff(op.node));
+		case 'node.remove': {
+			const n = input?.model.nodes.find((x) => x.id === op.nodeId);
+			// Removing a node also drops any EWR rule table sited at it.
+			const ewrSite = Array.isArray(input?.settings.ewrRules) && input.settings.ewrRules.some((t) => t?.siteNodeId === op.nodeId);
+			return ok(mine(op.nodeId) && !!n && !sharesRunoff(n) && !ewrSite);
+		}
+		case 'cropArea.set':
+			return ok(mine(op.nodeId));
+		case 'crop.add':
+			return 'proposal';
+		case 'transfer.add':
+			return ok(mine(op.transfer.fromNodeId) && mine(op.transfer.toNodeId));
+		case 'transfer.set': {
+			const t = input?.model.transfers.find((x) => x.id === op.transferId);
+			const newEnd = op.field === 'fromNodeId' || op.field === 'toNodeId' ? mine(op.value as string) : true;
+			return ok(!!t && mine(t.fromNodeId) && mine(t.toNodeId) && newEnd);
+		}
+		case 'transfer.remove': {
+			const t = input?.model.transfers.find((x) => x.id === op.transferId);
+			return ok(!!t && mine(t.fromNodeId) && mine(t.toNodeId));
+		}
+		case 'landCover.add':
+			return ok(mine(op.patch.nodeId));
+		case 'landCover.remove': {
+			const p = input?.model.landCover?.find((x) => x.id === op.patchId);
+			return ok(!!p && mine(p.nodeId));
+		}
+		case 'borehole.add':
+			return ok(mine(op.borehole.nodeId));
+		case 'borehole.remove': {
+			const b = input?.model.boreholes?.find((x) => x.id === op.boreholeId);
+			return ok(!!b && mine(b.nodeId));
+		}
+		case 'demand.scale':
+			// Only the author's own nodes, named: without nodeIds it scales every farm (or user) of the catchment.
+			return ok(!!op.nodeIds?.length && op.nodeIds.every(mine));
+		default:
+			return 'baseline';
+	}
+}
+
+/**
+ * Classify every op of a scenario against the input each one meets: the base
+ * with the earlier ops applied, and nodes the scenario added counted as
+ * owned. A skipped op (see applyScenario) is classified against the input it
+ * would have met (scenarioSteps' `before`: its group's earlier ops applied).
+ */
+export function classifyScenario(base: ModelInput, ops: readonly ScenarioOp[], ownedNodeIds: Iterable<string>, options: ApplyOptions = {}): OpClass[] {
+	const owned = new Set(ownedNodeIds);
+	// Masked once up front: each op below meets the names and ids applyScenario's would.
+	const cur = options.mask ? { ...base, model: maskModel(base.model, options.mask, ops).model } : base;
+	const { before, applied } = step(cur, ops, null);
+	const added = new Set(applied.map((a) => a.index));
+	return ops.map((op, i) => {
+		const c = classifyOp(op, owned, before[i]);
+		if (added.has(i) && op.op === 'node.add') owned.add(op.node.id);
+		return c;
+	});
+}

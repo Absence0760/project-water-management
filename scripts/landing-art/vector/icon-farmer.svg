@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#102a43" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Farmers: their dam's level on a phone</title>
+  <rect x="13" y="4" width="22" height="40" rx="3.5"/>
+  <path id="speaker" d="M21.5 8 H26.5"/>
+  <path id="dial" d="M17 26 A7 7 0 0 1 31 26"/>
+  <path id="needle" class="accent" stroke="#1e9bb8" d="M24 26 L28.5 20.5"/>
+  <path id="water" class="accent" stroke="#1e9bb8" d="M17 33 C19 31.8 21 34.2 24 33 S29 31.8 31 33 M17 37.5 C19 36.3 21 38.7 24 37.5 S29 36.3 31 37.5"/>
+</svg>

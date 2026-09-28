@@ -1,0 +1,60 @@
+// The edge controls in app.ts (docs/security.md § Infrastructure): the
+// CloudFront shared secret, the CORS allowlist and the cross-origin write check.
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApp } from './app.js';
+
+const ORIGIN = 'http://localhost:7777';
+
+afterEach(() => vi.unstubAllEnvs());
+
+describe('CloudFront shared secret', () => {
+	it('refuses a request without the header, or with a wrong one, and passes the right one (positive control)', async () => {
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', 'a-long-test-secret-value');
+		const app = createApp();
+		expect((await app.request('/health')).status).toBe(403);
+		expect((await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'a-long-test-secret-valuX' } })).status).toBe(403);
+		expect((await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'short' } })).status).toBe(403);
+		expect((await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'a-long-test-secret-value' } })).status).toBe(200);
+	});
+});
+
+describe('CORS', () => {
+	it('allows only the configured origins', async () => {
+		vi.stubEnv('ALLOWED_ORIGINS', ORIGIN);
+		const app = createApp();
+		const ok = await app.request('/health', { headers: { origin: ORIGIN } });
+		expect(ok.headers.get('access-control-allow-origin')).toBe(ORIGIN);
+		expect(ok.headers.get('access-control-allow-credentials')).toBe('true');
+		const evil = await app.request('/health', { headers: { origin: 'https://evil.example' } });
+		expect(evil.headers.get('access-control-allow-origin')).toBeNull();
+	});
+});
+
+describe('cross-origin writes', () => {
+	it('refuses a cross-site form post, and lets the same post through from the app origin (positive control)', async () => {
+		vi.stubEnv('ALLOWED_ORIGINS', ORIGIN);
+		const app = createApp();
+		const post = (origin: string) =>
+			app.request('/auth/logout', { method: 'POST', headers: { origin, 'content-type': 'application/x-www-form-urlencoded' }, body: 'a=1' });
+		expect((await post('https://evil.example')).status).toBe(403);
+		expect((await post(ORIGIN)).status).not.toBe(403);
+	});
+});
+
+describe('the Lambda entry point fails closed without the secret', () => {
+	it('refuses a missing or short secret and accepts a Terraform-length one (positive control)', async () => {
+		const { assertEdgeSecret } = await import('./app.js');
+		expect(() => assertEdgeSecret({})).toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		expect(() => assertEdgeSecret({ CLOUDFRONT_SHARED_SECRET: 'short' })).toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		expect(() => assertEdgeSecret({ CLOUDFRONT_SHARED_SECRET: 'x'.repeat(48) })).not.toThrow();
+	});
+
+	it('lambda.ts will not load without it, and loads with it', async () => {
+		vi.resetModules();
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', '');
+		await expect(import('./lambda.js')).rejects.toThrow(/CLOUDFRONT_SHARED_SECRET/);
+		vi.resetModules();
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', 'x'.repeat(48));
+		await expect(import('./lambda.js')).resolves.toHaveProperty('handler');
+	});
+});

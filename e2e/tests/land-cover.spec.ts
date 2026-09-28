@@ -1,0 +1,54 @@
+// Land-cover streamflow reductions (roadmap WP-1.35, docs/model.md §2.5a):
+// put invasive trees on a farm, save, run, read the reduction, then clear
+// them on a copy and compare the two runs ("what does the river get back?").
+import type { Page } from '@playwright/test';
+import { copyProject, createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
+import { expect, test } from '../support/fixtures.ts';
+import { openNodeForm, saveModelChanges } from '../support/network.ts';
+import { whatChanged } from '../support/compare.ts';
+
+const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
+
+test('add invasive trees to a farm, run, and compare with a copy that clears them', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Invaded');
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await openNodeForm(page);
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+
+	const cover = page.getByRole('group', { name: 'Land cover' });
+	await expect(cover.getByText('No land cover on Upper farm.')).toBeVisible();
+	await cover.getByRole('button', { name: '+ Add land cover' }).click();
+	await expect(cover.getByLabel('Cover class')).toHaveValue('invasive');
+	await cover.getByLabel('Area (km²)').fill('3');
+	await cover.getByLabel('Condensed cover (%)').fill('50');
+	await expect(cover.getByText('Class reductions at full cover: 50 % of flows, 60 % of low flows.')).toBeVisible();
+	// Upper farm is 12 km²: 3 × 50 % = 1.5 km², 13 %.
+	await expect(cover.getByText(/Condensed cover 13 % of the unit's 12 km²/)).toBeVisible();
+	await saveModelChanges(page);
+	await expect(saveBar(page)).toHaveCount(0);
+
+	await page.reload();
+	await openNodeForm(page);
+	await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+	await expect(page.getByRole('group', { name: 'Land cover' }).getByLabel('Area (km²)')).toHaveValue('3');
+
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await page.getByLabel(/^Run label/).fill('Invaded');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(page.getByRole('heading', { level: 2, name: 'Invaded' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 3, name: 'Land cover' })).toBeVisible();
+	const row = page.locator('table.land-cover').getByRole('row', { name: /^Invasive alien trees, dryland/ });
+	await expect(row.getByRole('cell').first()).toHaveText('1.50');
+
+	// The clearing scenario: a copy without the patch, compared with the invaded run.
+	const invadedRun = (await (await page.request.get(`${API_URL}/projects/${project.id}/runs`)).json()).runs[0].id as string;
+	const copy = await copyProject(page.request, project.id, 'Cleared');
+	const model = (await (await page.request.get(`${API_URL}/projects/${copy}/model`)).json()) as Model & { landCover: unknown[] };
+	await putModel(page.request, copy, { ...model, landCover: [] } as Model);
+	const clearedRun = await createRun(page.request, copy, 'Cleared');
+	await page.goto(`/compare?a=${project.id}:${invadedRun}&b=${copy}:${clearedRun}`);
+	await expect(page.getByRole('heading', { name: 'Headline results' })).toBeVisible();
+	await expect(whatChanged(page).getByText('Land cover "invasive" removed from Upper farm (was 1.5 km² condensed)')).toBeVisible();
+});

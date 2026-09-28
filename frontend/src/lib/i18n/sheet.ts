@@ -1,0 +1,122 @@
+// The translation sheet's words for the translator (WP-2.5; docs/ui.md
+// § Language): what each section of docs/i18n/af-translation-sheet.md is, and
+// notes on single messages where the section doesn't say enough. Never
+// shipped: only scripts/guards/i18n_sheet.mjs and the tests read it, so it
+// has no imports and keeps to erasable TypeScript.
+//
+// A message's section is set in its source file by a marker comment
+// (`// i18n-section: farm.dam`, or `<!-- i18n-section: account -->` in a
+// component's markup), which holds until the next marker; a message used in
+// more than one section goes to `common`. The sheet lists the sections in
+// this order.
+
+export const SECTIONS: Record<string, string> = {
+	common: 'Words used on several pages (buttons, field labels, the page title in the browser tab).',
+	password: 'Password fields: the Show / Hide button inside each one (it shows the typed password as text), and the rules shown under the field when the password is not accepted.',
+	auth: 'The sign-in pages: the brand panel beside every sign-in form.',
+	login: 'The sign-in page.',
+	register: 'The create-an-account page, including an emailed invitation (from the WUA or a colleague).',
+	forgot: 'The forgot-password page.',
+	reset: 'The choose-a-new-password page (opened from the reset email).',
+	verify: 'The confirm-your-email page (opened from the confirmation email).',
+	banner: 'The strip at the top of every page until the email address is confirmed.',
+	account: 'The account page: name, language and units, password.',
+	farm: 'The farm view (a farmer’s own farm, on a phone). Plain words for farmers; see docs/design/farmer-view.md §5.1 for the words to use and to avoid.',
+	'farm.state': 'Farm view: loading, error and empty states.',
+	'farm.saved': 'Farm view: the strip over the copy of the figures kept on the phone.',
+	'farm.n': 'Farm view: a counted noun after a number (“3 days”). .one is the singular, .other the plural.',
+	'farm.ordinal': 'Farm view: a day of the month as an ordinal (“the 10th”). If Afrikaans has one form for all, give it in every row.',
+	'farm.dates': 'Farm view: the dates line under the farm name on every page.',
+	'farm.level': 'Farm view: the WUA’s restriction level, as published by the WUA.',
+	'farm.notice': 'Farm view (and the shared view): the WUA’s notice card, first on the page.',
+	'farm.page': 'Farm view: the main page.',
+	'farm.supply': 'Farm view: the “Water you received this season” card.',
+	'farm.system': 'Farm view: the irrigation system the model assumes, inside the efficiency sentence.',
+	'farm.short': 'Farm view: the days the farm was short of water. {head} is “Short on 16 days (in Nov and Dec)”.',
+	'farm.dam': 'Farm view: the “Your dam” card.',
+	'farm.band': 'Farm view: the model’s own rating chip on the look-back card (not a restriction).',
+	'farm.back': 'Farm view: the “Looking back” card (the model’s estimate, not a restriction).',
+	'farm.forecast': 'Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.',
+	'farm.compare': 'Farm view: the “Compared with last season” card.',
+	'farm.river': 'Farm view: the “Your farm on the river” card. Counts only, never a neighbour’s name.',
+	'farm.who': 'Farm view: “Who can see my farm” on the river card.',
+	'farm.notes': 'Farm view: the notes card.',
+	'farm.chart': 'Farm view: the two small charts and their “Show the numbers” tables. The summaries are read by screen readers.',
+	'farm.damPage': 'Farm view: the dam details page.',
+	'farm.why': 'Farm view: the “Why?” page, the model’s look back in three steps.',
+	'farm.list': 'Farm view: “Your farms”, for a farmer with several farms.',
+	'farm.alerts': 'Farm view: the alert card, shown while the farm’s dam is below the WUA’s alert level. What the model estimates, never a promise.',
+	alerts: 'The alert emails page (from the account page): which alerts a person gets by email, per catchment, and how often.',
+	'alerts.mode': 'Alert emails page: how often, one choice per alert.',
+	'alerts.kind': 'Alert emails page: the name of each kind of alert.',
+	unsubscribe: 'The page an alert email’s “Stop these emails” link opens. Works without signing in.',
+	'unsubscribe.kind': 'Unsubscribe page: the kind of alert inside “You won’t get {kind} emails for {project} any more”.',
+	share: 'The shared catchment view: a page anyone with a share link can open without signing in (a catchment forum, a municipality). The catchment’s result only, never a farm’s. It also uses the farm view’s notice card and level words.',
+	'share.last30': 'Shared view: each river site over the last 30 days. {days} is “30 days”.',
+	'share.chart': 'Shared view: the monthly river flow chart and its “Show the numbers” table. The summary is read by screen readers.',
+	landing: 'The public landing page (/welcome, and / for someone not signed in): what the app is and who it is for, for a first-time visitor who may be a hydrologist, a water user association, a licence applicant or a farmer. Plain, specific, no sales talk. Every figure on it comes from an invented example catchment.',
+	'landing.hero': 'Landing page: the top of the page, its headline and the two buttons, and the tag beside the drawing’s river gauge.',
+	'landing.scene': 'Landing page: the text description of the drawing of a catchment (read by screen readers).',
+	'landing.story': 'Landing page: “From rainfall to river”, five steps of what the model does, each with a small chart (its unit, what its lines are, and a short summary under it that screen readers read).',
+	'landing.whatif': 'Landing page: “Try a what-if”, two sliders (more apple orchard, a bigger dam) and what the change does for the farm and for the river.',
+	'landing.screens': 'Landing page: “What you get”, pictures of the app’s own screens and their descriptions.',
+	'landing.audiences': 'Landing page: “Who it’s for”, four kinds of user.',
+	'landing.how': 'Landing page: “How it works”, three steps.',
+	'landing.trust': 'Landing page: “Why trust it”, and three figures from the example catchment.',
+	error: 'A message from the server when something couldn’t be done, shown in a red box on the sign-in, account, alert and farm pages. Plain and short; say what to do next where it helps.',
+	'error.minutes': 'Error messages: a number of minutes inside “Try again in {wait}”.',
+	'error.status': 'Error messages for a problem the server gave no reason for.'
+};
+
+/**
+ * Notes on single messages, by their English (a counted word by its "other"
+ * form). A note for English no message has fails the catalogue tests, so an
+ * edited message can't leave its note behind.
+ */
+export const NOTES: Record<string, string> = {
+	'Reserve met on {pct} % of days': '{pct} is a number like “41.6”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”).',
+	'It costs the river {days} more days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'It gives the river {days} fewer days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'The river is below the reserve about as often as today': 'First half of one sentence; the second half is one of the three “and the farm gets …” rows, joined with a comma.',
+	'{dam} dam': '{dam} is a farm dam’s name, like “Rooikloof”.',
+	'mm a week': 'The unit on a chart’s axis: millimetres of rain in a week.',
+	'Couldn’t load the notes. {reason}': '{reason} is one of the “Error messages” below.',
+	'note from {date}': 'Read only by screen readers, after “Edit” or “Delete”: which note the button is for. {date} is like “2026-09-26 14:05”.',
+	'Too long: {length} of {max} characters.': '{length} and {max} are numbers of characters.',
+	'Published by {name} on {date}. Data up to {until}.': '{name} is a person’s name, or “a former member” (the “A former member” row); {date} and {until} are dates like “12 Jan 2024”.',
+	'At {place}': '{place} is the name of a river gauge (a weir), as the WUA named it.',
+	'{n} of {days} below it this season (since {date}).': '{n} is a number of days; {days} is like “102 days”; {date} is a date like “1 Oct 2023”.',
+	'{farms} in the catchment.': '{farms} is like “6 farms”.',
+	'River flow at the catchment outlet each month against its ecological reserve, {from} to {to}. {verdict} The numbers are in the table below.': '{from} and {to} are months like “November 2023”; {verdict} is one of the three sentences above it.',
+	'{from} to {to}. Monthly means of the modelled daily flow.': '{from} and {to} are months like “Nov 2023”.',
+	'Too many sign-in attempts for this address. Try again in {wait}, or reset your password.': '{wait} is “1 minute” or “3 minutes” (the “{n} minute” / “{n} minutes” rows).',
+	'You downloaded your data a moment ago. Try again in {wait}.': 'On the account page’s “Download my data”. {wait} is “1 minute” (the “{n} minute” / “{n} minutes” rows).',
+	'You turned alert emails back on less than a day ago, and your email address was refused again. Check the address, then try again tomorrow.': 'On the alert-email banner’s “Turn alert emails back on”, when the mail server refused the address again within a day.',
+	'and': 'Joins the last two items of a list: “Nov and Dec”.',
+	'{page} · Water Management': 'The browser tab title; {page} is the page’s own name.',
+	'Check the environmental flow requirement (EWR) against every farm’s use.': 'EWR is the modeller’s word; this panel is shown to everyone who signs in.',
+	'Please confirm your email address. We sent a link to': 'Followed by the email address in bold.',
+	'To accept it, sign out and create an account for {email}. To use this account instead, ask {inviter} to invite {me}.': '{me} is the address of the account that is signed in.',
+	'{page} · My farm': 'The browser tab title; {page} is the farm’s name or the page’s own name.',
+	'{time} on {date}': '“07:42 on 19 Jan 2024”.',
+	'{amount} a day': '{amount} is a volume with its unit: “121 m³”.',
+	'{from} to {to}': 'Two dates: “1 Oct to 10 Jan”.',
+	'Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.': '{age} is a count of days: “3 days”.',
+	'Next update expected around {date}.': 'Added after the dates line.',
+	'Set by the WUA: {pct} of registered use.': 'A percentage of the farm’s registered water use.',
+	'The WUA wrote this notice in {language} only.': 'Under the WUA’s notice when it isn’t in the reader’s language. {language} is the name of the language it is in, in the reader’s language: “English” (Afrikaans: “Engels”).',
+	'{got} of {need} since {from}': '“324.2 ML of 376.5 ML since 1 Oct”.',
+	'Show in': 'Before two buttons, “ML” and “m³”.',
+	'about {span}': '{span} is “3 days” or “2 weeks”.',
+	'At your use over the last 14 days (about {use} a day), the water above the stop level lasts **{lasts}** if nothing flows in. A rough guide.': '{use} is a volume (“45 m³”); {lasts} is “about 3 weeks”.',
+	'At your use over the last 14 days (about {use} a day), that lasts **{lasts}** if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.': '{use} is a volume (“45 m³”); {lasts} is “about 3 weeks”.',
+	'{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm.': '{up} is one of the three “farm is / farms are” rows in this section, {down} one of the three “is / are” rows, {count} is “8 farms”.',
+	'1–{day} {month}': 'A month cut short by the data: “1–10 Jan 2024”.',
+	'* {month} to the {day}.': '{day} is an ordinal (“10th”).',
+	'at {name} on **{days}**': 'One gauge in the list after “below its reserve”; several are joined with “, ” and “ and ”.',
+	'{days} at {name}': 'One item of {list} in the mixed-reason sentence.',
+	'**Pump about {amount} a day less**{ls}. Averaged over all {days} that is {average}.': '{amount} is a number of m³; {ls} is empty or “ (2.3 l/s)”; {days} is “102 days”; {average} is “12 m³ a day”.',
+	'{leaves} is about **{pct}** of the {need} you needed.': '{leaves} and {need} are numbers of m³ a day.',
+	'Next {days}': '{days} is “14 days”.',
+	'This forecast is {age} old. Your WUA may publish a newer one.': '{age} is “5 days”.'
+};

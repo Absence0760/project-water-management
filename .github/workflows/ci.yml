@@ -1,0 +1,504 @@
+name: CI
+
+# Always runs on pull_request — no paths-ignore. Docs-only PRs skip the heavy
+# jobs via the `changes` job instead, so `CI gate` still reports (templates
+# docs/USING.md "The CI gate"; this repo has no ci-gate-docs.yml by design).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# PRs: only the tip is worth building, so a new push cancels the old run.
+# main: every commit keeps its own run (per-SHA group, never cancelled). The
+# operator pushes straight to main, and a release is refused unless `CI gate`
+# passed on the tagged commit (scripts/release/preflight.mjs), so a push
+# must not cancel the previous commit's run (estate standard: threkir ci.yml).
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name == 'push' && github.sha || github.event_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # Classifies the diff; heavy jobs gate on `code == 'true'`.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: diff
+        name: Anything besides docs changed?
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --name-only "$BASE" HEAD | grep -qvE '^(docs/|\.claude/)|\.md$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Typecheck and unit tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Root scripts guard
+        run: pnpm test:scripts
+
+      - name: Typecheck all workspaces
+        run: pnpm check
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+      - name: CSP meta policy present
+        run: node infra/scripts/check-csp.mjs frontend/build
+
+      # Ceilings and their change log: scripts/guards/check_web_bundle_budget.mjs.
+      - name: Web bundle budget
+        run: pnpm check:bundle
+
+      # Every farmer-facing string without reviewed Afrikaans is on the
+      # translator's sheet, and the sheet is current (WP-2.5, docs/ui.md § Language).
+      - name: Afrikaans translation sheet current
+        run: pnpm check:i18n
+
+      # The exact packaging deploy-backend.yml runs, so a broken package script
+      # fails here rather than at release time.
+      - name: Package Lambdas (release path)
+        run: infra/scripts/package-lambdas.sh
+
+  db-test:
+    name: Backend DB tests (Postgres + RLS)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          # Throwaway CI-only credentials, same as docker-compose.yml.
+          POSTGRES_USER: water
+          POSTGRES_PASSWORD: water
+          POSTGRES_DB: water
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U water -d water"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create app role and test database
+        env:
+          PGPASSWORD: water
+        run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
+
+      # The vitest files that drive real Chromium run in this job, the one
+      # vitest job with a browser: reports/render.db.test.ts (Chromium +
+      # MinIO) and reports/render.origin.db.test.ts (Chromium only). Under CI
+      # they FAIL, never skip, when the browser or MinIO is missing
+      # (docs/testing.md § Tests that need a service or a browser). Same
+      # cached install as the e2e shards; backend's playwright-core pins the
+      # same version as e2e's @playwright/test, so this is its browser.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Chromium
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -C e2e exec playwright install-deps chromium
+          else
+            pnpm -C e2e exec playwright install --with-deps chromium
+          fi
+
+      # The report PDF store for render.db.test.ts, from docker-compose.yml
+      # on the local-dev port (:9002). Mail is in-memory under vitest.
+      - name: Start MinIO
+        run: docker compose up -d --wait minio
+
+      - name: DB tests
+        run: pnpm test:backend:db
+
+  # E2E runs as 14 shards (e2e/README.md § CI). The site under test is built
+  # once here (with the slot-0 API URL, :3101, that every CI runner uses) and
+  # handed to each shard, so no shard spends its minutes on `vite build`.
+  e2e-build:
+    name: E2E site build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the e2e site
+        run: pnpm -C e2e build:site
+
+      - name: Upload the site
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: e2e-site
+          path: frontend/build-e2e/
+          if-no-files-found: error
+          retention-days: 1
+
+  e2e:
+    name: E2E (Playwright) ${{ matrix.shard }}/14
+    needs: [changes, e2e-build]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # Every shard reports, so one red shard doesn't hide the others.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          # Throwaway CI-only credentials, same as docker-compose.yml.
+          POSTGRES_USER: water
+          POSTGRES_PASSWORD: water
+          POSTGRES_DB: water
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U water -d water"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/package.json').devDependencies['@playwright/test']")" >> "$GITHUB_OUTPUT"
+
+      # The browser download is keyed on the Playwright version; the system
+      # libraries it needs still come from apt on every run (install-deps).
+      - name: Cache Chromium
+        id: pw-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      - name: Install Chromium
+        run: |
+          if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
+            pnpm -C e2e exec playwright install-deps chromium
+          else
+            pnpm -C e2e exec playwright install --with-deps chromium
+          fi
+
+      # report-schematic-print.spec.ts measures type sizes in the printed PDF
+      # with pdftotext (the apt index is fresh from install-deps above).
+      - name: Install poppler-utils
+        run: sudo apt-get install -y --no-install-recommends poppler-utils
+
+      - name: Download the site
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: e2e-site
+          path: frontend/build-e2e/
+
+      - name: Create app role
+        env:
+          PGPASSWORD: water
+        run: psql -h 127.0.0.1 -p 5434 -U water -d water -v ON_ERROR_STOP=1 -f dev/postgres/00-roles.sql
+
+      # Server-side PDF reports (server-report.spec.ts): the worker stores the
+      # PDF in MinIO and mails through Mailpit, both from docker-compose.yml
+      # on the same ports as local dev. That spec never skips in CI.
+      - name: Start MinIO and Mailpit
+        run: docker compose up -d --wait minio mailpit
+
+      # Global setup creates + migrates water_e2e; Playwright starts the
+      # backend (:3101) and serves the prebuilt site (:7801). The config refuses
+      # a site built for another API URL.
+      - name: E2E tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+        env:
+          E2E_PREBUILT: '1'
+          E2E_BLOB: '1'
+        run: pnpm -C e2e exec playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: e2e/blob-report/
+          retention-days: 1
+
+      - name: Upload failure traces
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-results-${{ matrix.shard }}
+          path: e2e/test-results/
+          retention-days: 7
+
+  # One HTML report for the whole suite, merged from the shards' blobs. Runs
+  # whether or not a shard failed; the shards themselves decide the gate.
+  e2e-report:
+    name: E2E report (all shards)
+    needs: [changes, e2e]
+    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.e2e.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download blob reports
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: blob-report-*
+          path: e2e/all-blob-reports/
+          merge-multiple: true
+
+      - name: Merge into one report
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: pnpm -C e2e exec playwright merge-reports --reporter=list,html ./all-blob-reports
+
+      - name: Upload report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: e2e/playwright-report/
+          retention-days: 7
+
+  # Workflow syntax as GitHub parses it (actionlint), plus this repo's CI
+  # rules as a guard (SHA pins, OIDC-only, environment gating, CI-gate fan-in)
+  # and the unit tests of every scripts/ guard (estate standard: threkir's
+  # workflow-lint job). A workflow GitHub rejects never fails a PR job; it
+  # just silently never runs, which is how a release pipeline dies unnoticed.
+  workflow-lint:
+    name: Workflow lint + guards
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        run: |
+          # The Go module proxy is the flaky part, so the fetch retries; only a
+          # persistent failure is a verdict (and it is not about the workflows).
+          for attempt in 1 2 3; do
+            if go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; then exit 0; fi
+            echo "::warning::actionlint install attempt $attempt failed; retrying"
+            sleep $((attempt * 5))
+          done
+          echo "::error::actionlint install failed after 3 attempts (Go module fetch, before any lint ran)."
+          exit 1
+
+      # -shellcheck= / -pyflakes= off, matching the estate: the gate is what
+      # GitHub itself enforces (syntax + expressions), not shell style.
+      - name: actionlint
+        run: |
+          if ! "$(go env GOPATH)/bin/actionlint" -color -shellcheck= -pyflakes=; then
+            echo "::error::A workflow does not parse the way GitHub parses it. The line above names the file and rule. Reproduce: actionlint -shellcheck= -pyflakes="
+            exit 1
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Workflow guard (pins, OIDC, environment, CI gate)
+        run: node scripts/guards/check_workflows.mjs
+
+      - name: Guard unit tests (scripts/guards, scripts/release)
+        run: |
+          if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs; then
+            echo "::error::A guard's own tests failed; its verdicts elsewhere in CI cannot be trusted until they pass. Reproduce: pnpm test:guards"
+            exit 1
+          fi
+
+  # Committed env files stay local-only; values are never printed
+  # (estate standard: feohledger env-isolation.yml, threkir env-isolation).
+  env-isolation:
+    name: Env isolation (committed env files)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Committed env files point at the local stack only
+        run: node scripts/guards/check_env_isolation.mjs
+
+  # The Python workbook importer's tests, including the synthetic b023 fixture's
+  # drift test (generator + extractor output == the committed fixture). The
+  # TypeScript importer's parity test reads that fixture, so without this job
+  # a Python-side change could silently change what "parity" means.
+  wbt-import:
+    name: Workbook importer (Python)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
+      - name: Install openpyxl
+        run: python -m pip install -r scripts/wbt-import/requirements.txt
+
+      - name: unittest
+        run: python -m unittest discover -s scripts/wbt-import
+
+  # Credential-free Terraform checks (fmt, validate, plan-only `terraform
+  # test` with mocked providers) + Trivy IaC. Called, so every job in it
+  # fans into the gate. Same checks as `pnpm check:infra` locally.
+  terraform:
+    name: Terraform
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+      security-events: write # Trivy SARIF upload (public repo only)
+    uses: ./.github/workflows/terraform.yml
+
+  # Secret scan, called so a detection fails the gate. UNGATED on purpose: a
+  # pasted credential arrives in a markdown file as easily as in code, and a
+  # docs-only diff skips every code-gated job.
+  gitleaks:
+    name: Secret scan (gitleaks)
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/gitleaks.yml
+
+  # Single required status check for branch protection (docs/USING.md
+  # "The CI gate"). It fans in on every job above via `needs` + always(),
+  # failing the merge if any upstream job did not succeed (a skipped job
+  # counts as passing, matching GitHub's required-check semantics).
+  #
+  # Add each new job's id to `needs` below — that is the only edit needed
+  # to gate merges on it; the branch-protection config never changes.
+  ci-gate:
+    name: CI gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, env-isolation, wbt-import, terraform, gitleaks]
+    steps:
+      - name: Require every upstream job to have passed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS_JSON"
+          bad=$(echo "$NEEDS_JSON" | jq -r \
+            'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"')
+          if [ -n "$bad" ]; then
+            echo "::error::CI gate failing — upstream jobs did not pass:"
+            echo "$bad"
+            exit 1
+          fi
+          echo "All upstream jobs passed."

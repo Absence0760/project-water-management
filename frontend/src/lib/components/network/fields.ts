@@ -1,0 +1,332 @@
+// The numeric node fields, in the order the editor shows them, with units and
+// plain-language help. Percent fields are stored 0–1 and shown as %.
+import { IRRIGATION_SYSTEMS, type NetworkNode } from '@water-management/engine';
+import { fmtNum } from '$lib/format/number';
+
+export type NodeNumberKey =
+	| 'areaKm2'
+	| 'areaHiKm2'
+	| 'areaLoKm2'
+	| 'damCapacityM3'
+	| 'damInitialPct'
+	| 'damMinPct'
+	| 'damAreaFullM2'
+	| 'damAreaExponent'
+	| 'damSeepagePerDay'
+	| 'damSeepageReturnPct'
+	| 'damOutletCapacityM3Day'
+	| 'pctUpstreamToDam'
+	| 'pctRunoffToDam'
+	| 'divertCapacityM3Day'
+	| 'irrigationEfficiency'
+	| 'lossReturnFraction'
+	| 'flowShareManual'
+	| 'boreholeCapacityM3Day'
+	| 'boreholeTriggerPct'
+	| 'streamDepletionFrac'
+	| 'streamDepletionLagDays'
+	| 'gaPropertyAreaHa';
+
+export interface NodeField {
+	key: NodeNumberKey;
+	/** Short column / field label. */
+	label: string;
+	unit: 'km²' | 'm³' | 'm²' | '%' | '%/day' | 'm³/day' | '×' | 'days' | 'ha';
+	group: 'area' | 'dam' | 'routing' | 'irrigation' | 'share' | 'groundwater';
+	/** Accessible name in the table, where each row repeats the field: "Area of Hilltop farm, km²". */
+	aria: (name: string) => string;
+	help: string;
+	/** Farm-only: gauges only pass upstream flow through. */
+	farmOnly?: boolean;
+	/** Farms and other water users, not gauges (boreholes, WP-1.34). */
+	notGauge?: boolean;
+	nullable?: boolean;
+	/** Only in the one-node form: rarely edited, and the table must fit a 1440px screen. */
+	detailOnly?: boolean;
+}
+
+export const GROUPS: Record<NodeField['group'], string> = {
+	area: 'Catchment area',
+	dam: 'Dam',
+	routing: 'Routing',
+	irrigation: 'Irrigation',
+	share: 'Flow share',
+	groundwater: 'Groundwater (boreholes)'
+};
+
+export const NODE_FIELDS: NodeField[] = [
+	{
+		key: 'areaKm2',
+		label: 'Area',
+		unit: 'km²',
+		group: 'area',
+		aria: (n) => `Area of ${n}, km²`,
+		help: "The node's own runoff area, excluding nodes upstream of it. Unit areas set the area-based flow shares and add up to the catchment area."
+	},
+	{
+		key: 'areaHiKm2',
+		label: 'High-MAP',
+		unit: 'km²',
+		group: 'area',
+		aria: (n) => `High-MAP area of ${n}, km²`,
+		help: 'Part of the area in the high-rainfall (high mean annual precipitation) zone. Only used by the high/low MAP flow-share method.'
+	},
+	{
+		key: 'areaLoKm2',
+		label: 'Low-MAP',
+		unit: 'km²',
+		group: 'area',
+		aria: (n) => `Low-MAP area of ${n}, km²`,
+		help: 'Part of the area in the low-rainfall zone. Only used by the high/low MAP flow-share method.'
+	},
+	{
+		key: 'damCapacityM3',
+		label: 'Capacity',
+		unit: 'm³',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam capacity of ${n}, m³`,
+		help: 'Full supply capacity of the unit’s dam. 0 means no dam: demand is met from the river only.'
+	},
+	{
+		key: 'damInitialPct',
+		label: 'Initial',
+		unit: '%',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam initial storage of ${n}, %`,
+		help: 'Storage on the first simulated day, as a percentage of capacity.'
+	},
+	{
+		key: 'damMinPct',
+		label: 'Minimum level',
+		unit: '%',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam minimum operating level of ${n}, %`,
+		help: 'Dead storage: irrigation draws only the water above this level, and transfers out of the dam leave at least this much. 0 % means irrigation may empty the dam.'
+	},
+	{
+		key: 'damAreaFullM2',
+		detailOnly: true,
+		label: 'Area when full',
+		unit: 'm²',
+		group: 'dam',
+		farmOnly: true,
+		nullable: true,
+		aria: (n) => `Dam surface area when full at ${n}, m²`,
+		help: 'Water surface of the full dam, for evaporation and the rain it catches. Empty: estimated as capacity ÷ 3 m (a typical farm dam’s mean depth), and the run says so.'
+	},
+	{
+		key: 'damAreaExponent',
+		detailOnly: true,
+		label: 'Area exponent',
+		unit: '×',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam area exponent of ${n}`,
+		help: 'How the surface shrinks as the dam empties: area = area when full × (storage ÷ capacity)^exponent. 0.7 suits small dams (Liebe et al. 2005); 1 is a flat-sided pan; allowed 0–3.'
+	},
+	{
+		key: 'damSeepagePerDay',
+		detailOnly: true,
+		label: 'Seepage',
+		unit: '%/day',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Dam seepage of ${n}, % of storage per day`,
+		help: 'Share of the stored water that seeps out each day. 0 % for a sealed dam. Where it goes is the next field.'
+	},
+	{
+		key: 'damSeepageReturnPct',
+		detailOnly: true,
+		label: 'Seepage returning',
+		unit: '%',
+		group: 'dam',
+		farmOnly: true,
+		aria: (n) => `Share of the dam seepage of ${n} returning to the river, %`,
+		help: 'Share of the seepage that reaches the river below the dam the same day. The rest is lost from the catchment (to deep groundwater). 100 % by default.'
+	},
+	{
+		key: 'damOutletCapacityM3Day',
+		detailOnly: true,
+		label: 'Outlet capacity',
+		unit: 'm³/day',
+		group: 'dam',
+		farmOnly: true,
+		nullable: true,
+		aria: (n) => `Dam outlet capacity of ${n}, m³/day`,
+		help: 'Most the dam’s outlet (a pipe or valve through the wall) can release in a day, for the release rule below. Empty: no limit.'
+	},
+	{
+		key: 'pctUpstreamToDam',
+		label: 'Upstream inflow to dam',
+		unit: '%',
+		group: 'routing',
+		farmOnly: true,
+		aria: (n) => `Upstream inflow entering the dam at ${n}, %`,
+		help: 'Share of the water arriving from upstream nodes that enters the dam. The rest passes below it, where the divert capacity can take some back. 100 % suits a dam on the river; 0 % an off-channel dam filled only by the diversion. (The b023 workbook\'s formula applied it the other way round; see docs/model.md §3 Q1.)'
+	},
+	{
+		key: 'pctRunoffToDam',
+		label: 'Runoff to dam',
+		unit: '%',
+		group: 'routing',
+		farmOnly: true,
+		aria: (n) => `Own runoff entering the dam at ${n}, %`,
+		help: "Share of the unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
+	},
+	{
+		key: 'divertCapacityM3Day',
+		label: 'Divert capacity',
+		unit: 'm³/day',
+		group: 'routing',
+		farmOnly: true,
+		aria: (n) => `Divert capacity of ${n}, m³/day`,
+		help: 'Most water per day that can be diverted from the river below the dam back into the dam (a weir, furrow or pump). 0 means none.'
+	},
+	{
+		key: 'irrigationEfficiency',
+		label: 'Efficiency',
+		unit: '%',
+		group: 'irrigation',
+		farmOnly: true,
+		aria: (n) => `Irrigation efficiency of ${n}, %`,
+		help: 'Share of the water abstracted that reaches the crop. The unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+	},
+	{
+		key: 'lossReturnFraction',
+		label: 'Losses returning',
+		unit: '%',
+		group: 'irrigation',
+		farmOnly: true,
+		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
+		help: 'Share of the application losses that drains back to the river below the unit the same day (return flow). The rest leaves the catchment.'
+	},
+	{
+		key: 'flowShareManual',
+		label: 'Manual',
+		unit: '%',
+		group: 'share',
+		farmOnly: true,
+		nullable: true,
+		aria: (n) => `Manual flow share of ${n}, %`,
+		help: "This unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; unit shares should add up to 100 %."
+	},
+	{
+		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
+		detailOnly: true,
+		notGauge: true,
+		label: 'Borehole capacity',
+		unit: 'm³/day',
+		group: 'groundwater',
+		nullable: true,
+		aria: (n) => `Borehole capacity of ${n}, m³/day`,
+		help: 'Most that the boreholes can pump in a day. Empty (or 0) means no boreholes. Groundwater counts as supply; the rule below says when it is used.'
+	},
+	{
+		key: 'boreholeTriggerPct',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Drought trigger',
+		unit: '%',
+		group: 'groundwater',
+		aria: (n) => `Borehole drought trigger of ${n}, % of dam capacity`,
+		help: 'Drought rule only: the boreholes run while the dam holds less than this share of its capacity at the start of the day.'
+	},
+	{
+		key: 'streamDepletionFrac',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Stream depletion',
+		unit: '%',
+		group: 'groundwater',
+		aria: (n) => `Share of pumping taken from the river at ${n}, %`,
+		help: 'Share of the pumped volume that the river below eventually loses (base flow the pumping captures). Near 100 % for a borehole close to the river in a connected aquifer; lower where the pumping draws on storage or other outflows.'
+	},
+	{
+		key: 'streamDepletionLagDays',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Depletion lag',
+		unit: 'days',
+		group: 'groundwater',
+		aria: (n) => `Stream depletion lag of ${n}, days`,
+		help: 'How slowly the river feels the pumping: the time constant of the delay (0 = the same day). The depletion carries on after pumping stops. A stream depletion factor (distance² × storativity ÷ transmissivity) is a first estimate.'
+	},
+	{
+		key: 'gaPropertyAreaHa',
+		detailOnly: true,
+		notGauge: true,
+		label: 'Property area (GN 538)',
+		unit: 'ha',
+		group: 'groundwater',
+		nullable: true,
+		aria: (n) => `GN 538 property area of ${n}, ha`,
+		help: 'Size of the property the groundwater is taken on (land registered separately in a Deeds Office). With the Table 2 rate below it gives the general authorisation’s volume for the property, for context only.'
+	}
+];
+
+/** The fields the node table shows as columns; the one-node form shows every field. */
+export const TABLE_FIELDS: NodeField[] = NODE_FIELDS.filter((f) => !f.detailOnly);
+
+/**
+ * Write a numeric field from its input. The fields the engine added later
+ * (boreholes, WP-1.34) are optional on NetworkNode, so the form writes
+ * through this rather than binding the union directly.
+ */
+export function setNodeField(node: NetworkNode, key: NodeNumberKey, v: number | null): void {
+	(node as unknown as Record<NodeNumberKey, number | null>)[key] = v;
+}
+
+/**
+ * A field's label on the node table's phone cards (≤ 640 px), where the group
+ * header row ("Dam", "Flow share") is gone: "Dam capacity", "High-MAP area".
+ */
+export function cardLabel(f: NodeField): string {
+	if (f.group === 'area') return f.key === 'areaKm2' ? f.label : `${f.label} area`;
+	if (f.group === 'dam') return f.key === 'damInitialPct' ? 'Dam initial storage' : `Dam ${f.label.toLowerCase()}`;
+	if (f.group === 'share') return `${f.label} flow share`;
+	return f.label;
+}
+
+export const isPct = (f: NodeField) => f.unit === '%' || f.unit === '%/day';
+/** Volume fields (m³, m³/day) hold six- or seven-digit values, so their table columns need room for them. */
+export const isVolume = (f: NodeField) => f.unit === 'm³' || f.unit === 'm³/day';
+
+/**
+ * Hints (not errors) about a node's dam settings, shown under its fields.
+ * A dam with no minimum operating level can be emptied by irrigation, which
+ * the workbook allowed but few farmers do (docs/engine-audit.md Q5).
+ */
+export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMinPct'> & Partial<Pick<NetworkNode, 'damAreaFullM2' | 'damCurve'>>): string[] {
+	if (!hasDam(n)) return [];
+	const hints: string[] = [];
+	if (!(n.damMinPct > 0)) hints.push('Irrigation may empty this dam: its minimum operating level is 0 %.');
+	// A survey curve (WP-3.5) gives the area; the estimate is only for the power law.
+	if ((n.damAreaFullM2 === null || n.damAreaFullM2 === undefined) && !(n.damCurve && n.damCurve.length))
+		hints.push(`No surface area: evaporation uses capacity ÷ 3 m, about ${fmtArea(n.damCapacityM3 / 3)}. Enter the dam's area when full for a better figure.`);
+	return hints;
+}
+
+/**
+ * The irrigation system whose indicative efficiency (IRRIGATION_SYSTEMS) this
+ * value is, for the node form's helper; null for any other value.
+ */
+export function systemOf(efficiency: number): (typeof IRRIGATION_SYSTEMS)[number]['id'] | null {
+	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
+}
+
+/** Treat a dam under 1 m³ as no dam (the workbook uses tiny placeholders under 1 m³ such as 0.5). */
+export const hasDam = (n: Pick<NetworkNode, 'kind' | 'damCapacityM3'>) => n.kind === 'farm' && n.damCapacityM3 >= 1;
+
+/** 30 000 → "3.0 ha"; 5 000 → "5 000 m²". */
+function fmtArea(m2: number): string {
+	return m2 >= 10_000 ? `${(m2 / 10_000).toFixed(1)} ha` : `${fmtNum(m2)} m²`;
+}
+
+/** 2 400 000 → "2.40 Mm³"; 60 000 → "60 000 m³". */
+export function fmtVolume(m3: number): string {
+	if (m3 >= 100_000) return `${(m3 / 1e6).toFixed(2)} Mm³`;
+	return `${fmtNum(m3)} m³`;
+}

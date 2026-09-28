@@ -1,0 +1,23 @@
+{
+	"$schema": "https://json.schemastore.org/package.json",
+	"name": "@water-management/e2e",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"e2e": "playwright test",
+		"e2e:ui": "playwright test --ui",
+		"e2e:list": "playwright test --list",
+		"build:site": "node support/build-site.ts",
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "node --test support/*.test.ts",
+		"install:browsers": "playwright install chromium"
+	},
+	"devDependencies": {
+		"@axe-core/playwright": "4.13.0",
+		"@playwright/test": "1.63.0",
+		"@types/node": "25.6.0",
+		"typescript": "6.0.2",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	}
+}

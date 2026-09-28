@@ -1,0 +1,29 @@
+{
+	"$schema": "https://json.schemastore.org/package.json",
+	"name": "@water-management/engine",
+	"version": "0.0.1",
+	"private": true,
+	"type": "module",
+	"description": "Pure TypeScript water-balance model. No I/O, no DB, no DOM — runs in the browser and in Lambda.",
+	"exports": {
+		".": "./src/index.ts",
+		"./calendar": "./src/calendar.ts",
+		"./dws": "./src/dws.ts",
+		"./format": "./src/format.ts",
+		"./languages": "./src/languages.ts",
+		"./legal": "./src/legal.ts",
+		"./provenance": "./src/seriesProvenance.ts",
+		"./testing": "./src/testing/index.ts"	},
+	"scripts": {
+		"check": "tsc -p tsconfig.json --noEmit",
+		"test": "vitest run --project unit",
+		"test:watch": "vitest",
+		"test:perf": "vitest run --project perf",
+		"gen:limitations": "tsx scripts/gen-limitations.ts"
+	},
+	"devDependencies": {
+		"tsx": "4.23.15",
+		"typescript": "6.0.2",
+		"vitest": "^2.1.9"
+	}
+}

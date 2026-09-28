@@ -1,0 +1,32 @@
+{
+	"$schema": "https://json.schemastore.org/package.json",
+	"name": "@water-management/frontend",
+	"version": "0.0.1",
+	"private": true,
+	"scripts": {
+		"dev": "vite dev --port 7777",
+		"build": "vite build",
+		"preview": "vite preview --port 8888",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"test": "vitest run",
+		"test:watch": "vitest"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-static": "3.0.10",
+		"@sveltejs/kit": "2.70.3",
+		"@sveltejs/vite-plugin-svelte": "4.0.4",
+		"svelte": "5.57.1",
+		"svelte-check": "4.7.6",
+		"terser": "5.51.2",
+		"typescript": "5.5.4",
+		"vite": "5.4.0",
+		"vitest": "^2.1.9",
+		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+	},
+	"type": "module",
+	"dependencies": {
+		"@water-management/engine": "workspace:*",
+		"uplot": "1.6.32"
+	}
+}

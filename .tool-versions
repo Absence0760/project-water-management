@@ -1,0 +1,15 @@
+# Toolchain versions for asdf / mise.
+#
+# Run `asdf install` (or `mise install`) in this directory to materialise
+# everything listed below. The format is `<plugin> <version>` per line.
+# Pinning here is a stronger guarantee than `engines` in package.json because
+# asdf shims the binary itself.
+
+# Frontend, backend and engine (pnpm via Corepack).
+nodejs 24
+
+# scripts/wbt-import — the Excel extractor (openpyxl).
+python 3.14
+
+# infra/ (on the operator's workstation tfenv manages this instead).
+# terraform 1.15.0

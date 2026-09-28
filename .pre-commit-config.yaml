@@ -1,0 +1,40 @@
+# Install once with: pre-commit install   (installs the pre-commit and commit-msg hooks)
+# Manual run: pre-commit run --all-files
+default_install_hook_types: [pre-commit, commit-msg]
+default_stages: [pre-commit]
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: gitleaks (scan staged changes for secrets)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ["--markdown-linebreak-ext=md"]
+      - id: check-yaml
+      - id: check-json
+
+  # Client-identifying names never enter this public repo. The term list lives
+  # outside it (../infra-secrets/water-management/client-terms.txt); without
+  # it these hooks are no-ops. docs/security.md § Public repo hygiene.
+  - repo: local
+    hooks:
+      - id: client-terms
+        name: client terms (staged changes)
+        entry: node scripts/guards/check_client_terms.mjs --staged
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]
+      - id: client-terms-message
+        name: client terms (commit message)
+        entry: node scripts/guards/check_client_terms.mjs --message
+        language: system
+        stages: [commit-msg]

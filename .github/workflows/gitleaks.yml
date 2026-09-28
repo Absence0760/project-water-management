@@ -1,0 +1,60 @@
+name: gitleaks
+
+# Secret scan. Catches accidentally-committed AWS keys, the JWT signing
+# secret, sops plaintext, admin tokens: anything an automated pattern can
+# recognise.
+#
+# CALLED, not triggered (estate standard: threkir's gitleaks.yml):
+#   - ci.yml's `gitleaks` job runs it on every push to main and every PR, so a
+#     detection fails the `CI gate`. Before this, it ran on its own triggers,
+#     where a red row could never block anything: the gate is the one check
+#     that matters, and a `needs:` entry cannot name another workflow's job.
+#   - gitleaks-sweep.yml runs it weekly over the whole history, and opens an
+#     issue when it fails (that reporting needs `issues: write`, which ci.yml's
+#     caller has no reason to hold, so the cron lives there).
+#
+# Complements existing controls:
+#   - CodeQL (security.yml) finds source-level injection bugs, not secrets.
+#   - pnpm audit (audit.yml) flags CVEs in dependencies.
+#   - scripts/guards/check_env_isolation.mjs (ci.yml `env-isolation`) checks
+#     the committed env files point only at the local stack.
+#   - sops + KMS in the private infra-secrets repo protects the secrets we
+#     mean to keep; it doesn't catch a stray paste.
+#
+# False positives go in `.gitleaks.toml` at the repo root (not yet created;
+# add it on the first false hit), scoped to the matched value rather than the
+# file, so a real key in the same file still fails.
+
+on:
+  workflow_call:
+
+# A called workflow cannot escalate past what the calling job grants, so these
+# are declared in both places and the caller's are the ceiling. The action
+# posts no SARIF (it writes a job summary and exits 1 on a detection), so it
+# needs no `security-events: write`.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: the weekly sweep reads all of it; push/PR runs scan
+          # the commits in the event.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # GITLEAKS_LICENSE is intentionally unset: the repo is owned by a
+          # user account, which the free tier covers.
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: 'false'
+          # PR comments need `pull-requests: write`, which no caller grants;
+          # the job summary and the exit status carry the finding.
+          GITLEAKS_ENABLE_COMMENTS: 'false'

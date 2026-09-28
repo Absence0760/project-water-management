@@ -1,0 +1,123 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Dam.dc.html": {
+      "h": 1480,
+      "is_interactive": true,
+      "title": "3 · Dam detail",
+      "w": 360,
+      "x": 880,
+      "y": 0
+    },
+    "Error.dc.html": {
+      "h": 760,
+      "is_interactive": true,
+      "title": "7 · Could not load",
+      "w": 360,
+      "x": 880,
+      "y": 2620
+    },
+    "Farms.dc.html": {
+      "h": 760,
+      "is_interactive": true,
+      "title": "9 · Several farms",
+      "w": 360,
+      "x": 1760,
+      "y": 2620
+    },
+    "Loading.dc.html": {
+      "h": 760,
+      "title": "5 · Loading (slow network)",
+      "w": 360,
+      "x": 0,
+      "y": 2620
+    },
+    "Main.dc.html": {
+      "h": 2160,
+      "is_interactive": true,
+      "title": "1 · My farm (light)",
+      "w": 360,
+      "x": 0,
+      "y": 0
+    },
+    "MainDark.dc.html": {
+      "h": 2160,
+      "is_interactive": true,
+      "title": "2 · My farm (dark)",
+      "w": 360,
+      "x": 440,
+      "y": 0
+    },
+    "NoPublication.dc.html": {
+      "h": 760,
+      "title": "6 · Nothing published yet",
+      "w": 360,
+      "x": 440,
+      "y": 2620
+    },
+    "Offline.dc.html": {
+      "h": 760,
+      "title": "8 · Offline / out of date",
+      "w": 360,
+      "x": 1320,
+      "y": 2620
+    },
+    "Why.dc.html": {
+      "h": 2200,
+      "is_interactive": true,
+      "title": "4 · Why about 83 %? (curtailment)",
+      "w": 360,
+      "x": 1320,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-09-25T09:00:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "notes": {
+    "s1": {
+      "fill": "orange",
+      "maxH": 640,
+      "size": 24,
+      "text": "Synthetic data only (the repo is public). The figures for 'Vaalbank' are from a real engine run (0.27.0) of the synthetic Sandspruit example catchment in backend/scripts/examples, 1 Oct 2023 to 10 Jan 2024. Forecast values stay as [placeholders] until forecast mode exists (WP-2.12).\n\nTweaks on board 1: the WUA notice level (none / advisory / restricted) changes the top card and collapses the model card under a restriction. The ML / m³ switch works in Play.\n\nWording marked [D10] is a placeholder until the liability wording is agreed with the client. Spec: docs/design/farmer-view.md",
+      "w": 320,
+      "x": 1760,
+      "y": 0
+    },
+    "t1": {
+      "kind": "title1",
+      "maxW": 1680,
+      "text": "Farmer view (/farm/:id): the main flow",
+      "w": 240,
+      "x": 0,
+      "y": -300
+    },
+    "t2": {
+      "kind": "title1",
+      "maxW": 2120,
+      "text": "States: loading, empty, error, offline, several farms",
+      "w": 240,
+      "x": 0,
+      "y": 2320
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "MainDark.dc.html",
+    "Dam.dc.html",
+    "Why.dc.html",
+    "Loading.dc.html",
+    "NoPublication.dc.html",
+    "Error.dc.html",
+    "Offline.dc.html",
+    "Farms.dc.html"
+  ],
+  "pages": [],
+  "title": "Farmer view prototype"
+}

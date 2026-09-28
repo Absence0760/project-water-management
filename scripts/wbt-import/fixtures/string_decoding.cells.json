@@ -1,0 +1,23 @@
+{
+  "A1": "Plain header",
+  "B1": "Echo Farm",
+  "C1": "Inline &amp; _x000D_ x005F_",
+  "D1": 12.5,
+  "A2": "Flow_x000D__x000A_(m3/day)",
+  "B2": "Alpha &amp; Bravo",
+  "C2": "In_x0041_line &#66;",
+  "D2": 12,
+  "A3": "Literal _x000D_ text",
+  "B3": "Flow_x000D_",
+  "A4": "Alpha &amp; Bravo & Co",
+  "B4": "a &lt;b&gt; &#65;",
+  "A5": "CR LF ref\r\nnext",
+  "B5": "Golf x005F_ \r\nHotel",
+  "A6": "Literal CR LF\nnext\nlast",
+  "B6": "Beyond \ud83d\udca7",
+  "A7": "Beyond BMP \ud83d\udca7 \ud83d\udca7",
+  "A8": "Rich_x0041_ run &amp;",
+  "A9": "CDATA _x000D_ &amp; kept",
+  "A10": "Mid  word",
+  "A11": "Upper \u2014 dash _X000D_"
+}

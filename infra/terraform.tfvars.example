@@ -1,0 +1,61 @@
+# Copy to terraform.tfvars (gitignored) — or, per the estate pattern, keep the
+# canonical copy in the private repo as infra-secrets/water-management/prod.tfvars
+# and pass it with -var-file (infra/README.md § First apply). Nothing here is
+# secret; secrets come from infra-secrets/water-management/prod.sops.yaml via
+# the sops provider (secrets.tf), never from tfvars.
+
+# Primary region for VPC/RDS/Lambda/S3. af-south-1 (Cape Town) for POPIA +
+# latency — enable it on the account first (Account → AWS Regions) — or
+# us-east-1 for the lowest price. See infra/README.md § Region.
+aws_region = "af-south-1"
+
+# The bootstrap's delegated child zone.
+domain_name = "water-management.jaredhoward.com"
+
+# Child zone ID from the bootstrap summary, or:
+#   aws route53 list-hosted-zones-by-name --dns-name water-management.jaredhoward.com --profile water-management
+route53_zone_id = "Z0000000000000000000"
+
+github_repo = "Absence0760/project-water-management"
+
+# MUST match the slug new-project-account.sh was run with (role <slug>-deploy).
+bootstrap_slug = "water-management"
+
+# Default: ../../infra-secrets/water-management/prod.sops.yaml (sibling clone).
+# secrets_file = ""
+
+# Budget + alarm notifications. Budget needs IAM billing access enabled on the
+# member account (one-time root toggle) — set 0 until then.
+# 80 for af-south-1 (idle ≈ $58–63); 60 would forecast-alert every month.
+# Full tier: ~170 (docs/deployment-tiers.md).
+budget_monthly_usd = 80
+budget_alert_email = "you+aws-alerts@example.com"
+
+# Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
+# keeps 10 unreserved, so ANY reservation fails until the quota is raised
+# (Service Quotas → Lambda → Concurrent executions → 1000). Use -1 until then.
+lambda_reserved_concurrency  = 10
+migrate_reserved_concurrency = 1
+
+# Database sizing (defaults shown).
+# db_instance_class           = "db.t4g.micro"
+# db_allocated_storage_gb     = 20
+# db_max_allocated_storage_gb = 50
+# db_backup_retention_days    = 7
+# db_multi_az                 = false
+
+# Email (SES, ses.tf). Mail goes out as no-reply@<domain_name>.
+# DMARC starts at p=none; set a report mailbox, read a few weeks of reports,
+# then move to quarantine (docs/deployment.md § Email).
+dmarc_report_email = "you+dmarc@example.com"
+# dmarc_policy          = "none"
+# ses_tls_policy        = "REQUIRE"
+# ses_endpoint_az_count = 1
+
+# CloudFront price class. Only PriceClass_All has South African edges;
+# PriceClass_100/200 serve SA users from Europe or Asia.
+# cloudfront_price_class = "PriceClass_All"
+
+# WAF: requests per IP per 5-minute window across the site (auth endpoints
+# have a fixed, tighter 100). AWS min 100.
+waf_rate_limit_per_ip = 1000

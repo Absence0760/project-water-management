@@ -1,0 +1,68 @@
+// The self-checks panel (engine 0.12.0): the model's checks on its own run,
+// the water balance per water year, and the trace of one farm's day with its
+// working columns (docs/ui.md § Self-checks).
+import { createRun, seedRunnableProject } from '../support/api.ts';
+import { expect, test } from '../support/fixtures.ts';
+
+test('a run shows its self-checks, its water balance and a traced day that closes', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Self-checks');
+	await createRun(page.request, project.id, 'Checked');
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	await expect(page.getByRole('heading', { level: 2, name: 'Checked' })).toBeVisible();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
+
+	const checks = page.getByRole('region', { name: /^Self-checks/ });
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 9 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35)
+	await expect(checks.getByRole('listitem')).toHaveCount(9);
+	// The workspace's word: the engine's "farm" reads "unit" (#54), and the checks say which engine made them.
+	await expect(checks.getByRole('listitem').first()).toContainText('Every unit balances every day');
+	await expect(checks.getByRole('listitem').filter({ hasText: /\bfarms?\b/i })).toHaveCount(0);
+	await expect(checks.getByTestId('checks-engine')).toHaveText(/^Checked by engine \d+\.\d+\.\d+ when the run was made\.$/);
+
+	// 120 days from 2021-10-01: one water year, then the whole run.
+	const balance = page.getByRole('region', { name: 'Water balance by water year' });
+	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
+	// No groundwater, users, storage resets or lost seepage here: the equation names only the columns shown.
+	await expect(balance).toContainText('Start storage + unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');
+	await expect(balance.getByRole('columnheader')).toHaveText([
+		'Water year',
+		'Rain (mm)',
+		'Runoff coeff.',
+		'Start storage',
+		'Unit runoff',
+		'Transfers',
+		'Rain on dams',
+		'Consumptive use',
+		'Dam evaporation',
+		'Outflow',
+		'End storage',
+		'Residual (m³)',
+		'Runoff-model residual (mm)'
+	]);
+
+	const trace = page.getByRole('region', { name: /^Trace a day/ });
+	await trace.getByLabel('Unit, gauge or catchment').selectOption({ label: 'Upper farm' });
+	await trace.getByLabel('Day').fill('2021-11-15');
+	await trace.getByRole('button', { name: 'Trace' }).click();
+	const table = trace.getByRole('table', { name: 'Upper farm on 2021-11-15' });
+	await expect(table).toBeVisible();
+	for (const name of ['Dam storage at the end of the day before', 'Soil-water store at the end of the day before', 'Soil-water store at the end of the day', 'Upstream inflow into the dam', 'Irrigation return flow', 'Balance check (should be 0)']) {
+		await expect(table.getByRole('rowheader', { name, exact: true })).toBeVisible();
+	}
+	await expect(table.getByRole('row').filter({ hasText: 'Irrigation supplied' }).getByRole('cell').first()).toHaveText('G');
+	// The day closes from the numbers shown: in − used − stored − out is 0 or float noise.
+	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+
+	// The catchment's day: how the runoff model (GR4J, the default) turned rain into natural flow.
+	await trace.getByLabel('Unit, gauge or catchment').selectOption({ label: 'Catchment (rain to natural flow)' });
+	await trace.getByRole('button', { name: 'Trace' }).click();
+	const runoff = trace.getByRole('table', { name: 'Catchment (GR4J) on 2021-11-15' });
+	await expect(runoff).toBeVisible();
+	for (const name of ['All stores at the end of the day before', 'Production store (soil moisture), the day before', 'Production store (soil moisture)', 'Routing store', 'Actual evaporation', 'Natural flow']) {
+		await expect(runoff.getByRole('rowheader', { name, exact: true })).toBeVisible();
+	}
+	// The store balance closes from the numbers shown: before + P + F − AET − Q − after is 0 or float noise.
+	await expect(trace.locator('.closure strong')).toHaveText(/^(-?0|-?\d\.\d{2}e-\d+)$/);
+	await expect(trace.locator('.closure')).toContainText('mm');
+});

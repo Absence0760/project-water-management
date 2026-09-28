@@ -1,0 +1,88 @@
+<!-- SYNTHETIC fixture for backend/src/feeds/sources/dws.ts. Invented station X0H000 and invented values.
+     The layout follows an archived DWS HyData.aspx daily page (web.archive.org, 2024-05): a <pre> whose
+     format block declares fixed columns (date 1-8, flow in m3/s 10-18, quality code 20-24), the header
+     "DATE     D AVG F/R  QUAL", a row of Z's after the last day, and the ASP.NET document after the </pre>.
+     Includes a two-day gap with no rows (2021-01-18/19), a gap row with a blank flow and code 170
+     (2021-01-26) and a negative value coded 152 (2021-02-20), both kept as gaps. -->
+<p><pre>Data are continuously updated and reviewed.
+The format of this file is as follows:
+POS.  1-8   = Date of daily flow  CCYYMMDD
+POS. 10-18  = Daily avg flow rate in cubic metres/sec 99999.999
+POS. 20-24  = Quality code
+
+X0H000 (SYNTHETIC WEIR)
+Variable 100.00 Surface Water Level
+
+DATE     D AVG F/R  QUAL
+20210101     0.359     1
+20210102     0.377     1
+20210103     0.395     1
+20210104     0.414     1
+20210105     0.433     1
+20210106     0.453     1
+20210107     0.472     1
+20210108     0.352     1
+20210109     0.371     1
+20210110     0.391     1
+20210111     0.411     1
+20210112     0.431     1
+20210113     1.250     1
+20210114     1.093     1
+20210115     0.835     1
+20210116     0.748     1
+20210117     0.684     1
+20210120     0.589     1
+20210121     0.578     1
+20210122     0.434     1
+20210123     0.436     1
+20210124     0.441     1
+20210125     0.450     1
+20210126             170
+20210127     0.474     1
+20210128     0.489     1
+20210129     0.365     1
+20210130     0.381     1
+20210131     0.399     1
+20210201     0.417     1
+20210202     0.435     1
+20210203     0.454     1
+20210204     0.473     1
+20210205     0.353     1
+20210206     0.372     1
+20210207     0.392     1
+20210208     0.411     1
+20210209     0.431     1
+20210210     0.451     2
+20210211     0.471     2
+20210212     1.150     2
+20210213     0.993     1
+20210214     0.875     1
+20210215     0.788     1
+20210216     0.724     1
+20210217     0.679     1
+20210218     0.649     1
+20210219     0.489     1
+20210220    -1.000   152
+20210221     0.474     1
+20210222     0.476     1
+20210223     0.481     1
+20210224     0.490     1
+20210225     0.501     1
+20210226     0.374     1
+20210227     0.389     1
+20210228     0.405     1
+20210301     0.421     1
+ZZZZZZZZZZZZ
+</pre></p>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" >
+<head><title>
+	X0H000100.00
+</title></head>
+<body>
+    <form method="post" action="./HyData.aspx?Station=X0H000100.00&amp;DataType=Daily&amp;StartDT=2021-01-01&amp;EndDT=2021-03-01&amp;SiteType=RIV" id="form1">
+    </form>
+</body>
+</html>

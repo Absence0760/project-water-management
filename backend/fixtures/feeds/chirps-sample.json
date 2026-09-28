@@ -1,0 +1,11 @@
+{
+	"_about": "Synthetic CHIRPS fixture (FEED_SOURCE=fixtures, backend/src/feeds/fixtures.ts). An invented 8 x 6 grid of 0.05° cells; no real place, catchment or measurement. Each day's grid is pattern[day % pattern.length] mm, scaled per cell by (1 + colGradient * col + rowGradient * row). The cell at row 5, col 7 is 'sea' (-9999). The fixture server re-dates the pattern to any day and publishes final values up to finalLagDays before today and preliminary ones up to prelimLagDays before it, like the real product. The v3 `sat` product is served from 1998-01-01 only; the `rnl` product (final only) from 1981-01-01 up to rnlLagDays before today, as the same pattern a day later (its daily timing differs from sat's, as the real products' do).",
+	"grid": { "originLon": 25.0, "originLat": -20.0, "scale": 0.05, "width": 8, "height": 6, "sea": [[5, 7]] },
+	"colGradient": 0.05,
+	"rowGradient": -0.03,
+	"pattern": [0, 0, 4.2, 12.5, 0.6, 0, 0, 0, 23.1, 1.4, 0, 0, 0.3, 7.8],
+	"finalLagDays": 40,
+	"prelimLagDays": 3,
+	"rnlLagDays": 6,
+	"exampleCell": { "lat": -20.12, "lon": 25.17 }
+}

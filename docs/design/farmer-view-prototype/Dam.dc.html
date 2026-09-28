@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Your dam</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@600&amp;display=swap">
+<style>
+body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+a{color:#0b6e8a}a:hover{color:#095a71}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</helmet>
+<div style="width: 360px; height: 1480px; box-sizing: border-box; background: #f3f5f9; color: #161816; font-size: 16px; line-height: 1.45; display: flex; flex-direction: column">
+
+<header style="height: 56px; box-sizing: border-box; padding: 0 16px 0 4px; display: flex; align-items: center; background: #fdfdfe; border-bottom: 1px solid #d9dcd9">
+<a href="Main.dc.html" style="min-height: 44px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: #0b6e8a"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 5 L8 12 L15 19"></path></svg>My farm</a>
+</header>
+
+<main style="padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div>
+<h1 style="margin: 0; font-family: Outfit, system-ui, sans-serif; font-weight: 600; font-size: 26px; line-height: 1.2">Your dam</h1>
+<p style="margin: 4px 0 0; color: #4d514e; font-size: 15px">Vaalbank (example)</p>
+<p style="margin: 8px 0 0; color: #666a66; font-size: 14px">Published by the WUA on 12 Jan 2024. Data up to 10 Jan 2024.</p>
+</div>
+
+<section aria-labelledby="now-h" style="padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; display: flex; flex-direction: column; gap: 12px">
+<h2 id="now-h" class="vh">How full it is</h2>
+<p style="margin: 0; display: flex; align-items: baseline; gap: 8px"><span style="font-family: Outfit, system-ui, sans-serif; font-weight: 600; font-size: 48px; line-height: 1">24 %</span><span style="color: #4d514e">full on 10 Jan</span></p>
+<div aria-hidden="true" style="position: relative; height: 36px">
+<div style="position: absolute; left: 0; right: 0; top: 0; height: 18px; border-radius: 6px; background: #eaecea; overflow: hidden"><div style="width: 24%; height: 18px; background: #1e9bb8"></div></div>
+<div style="position: absolute; left: 15%; top: -2px; width: 2px; height: 22px; background: #161816"></div>
+<div style="position: absolute; left: 15%; top: 20px; font-size: 13px; color: #4d514e; white-space: nowrap; transform: translateX(-4px)">irrigation stops at 15 %</div>
+</div>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 12px">
+<dt style="color: #4d514e">Water in the dam</dt><dd style="margin: 0; text-align: right; font-weight: 600">83.6 ML</dd>
+<dt style="color: #4d514e">Full</dt><dd style="margin: 0; text-align: right; font-weight: 600">350 ML</dd>
+<dt style="color: #4d514e">You can still use</dt><dd style="margin: 0; text-align: right; font-weight: 600">32.4 ML</dd>
+<dt style="color: #4d514e">Last 30 days</dt><dd style="margin: 0; text-align: right; font-weight: 600">up 32.4 ML</dd>
+<dt style="color: #4d514e">Same day last season</dt><dd style="margin: 0; text-align: right; font-weight: 600">17 %</dd>
+<dt style="color: #4d514e">Last full and spilling</dt><dd style="margin: 0; text-align: right; font-weight: 600">27 Jul 2023</dd>
+</dl>
+<p style="margin: 0; font-size: 15px; color: #4d514e">“You can still use” is the water above the level where irrigation stops (your pump intake or reserve).</p>
+<p style="margin: 0; padding: 10px 12px; border-radius: 6px; background: #eaecea">At your use over the last 14 days (about 5.1 ML a day), that lasts <strong>about 6 days</strong> if nothing flows in. A rough guide: rain and river flow into the dam make it last longer.</p>
+</section>
+
+<section aria-labelledby="yr-h" style="padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; display: flex; flex-direction: column; gap: 8px">
+<h2 id="yr-h" style="margin: 0; font-size: 17px">Last 12 months</h2>
+<p class="vh">Dam level at the end of each month, February 2023 to 10 January 2024. Full from April to July 2023, down to the stop level in November, 24 % on 10 January.</p>
+<svg viewBox="0 0 296 152" width="296" height="152" aria-hidden="true">
+<line x1="34" y1="10" x2="296" y2="10" stroke="#e4e6e3"></line><line x1="34" y1="70" x2="296" y2="70" stroke="#e4e6e3"></line><line x1="34" y1="130" x2="296" y2="130" stroke="#6c706c"></line>
+<line x1="34" y1="112" x2="296" y2="112" stroke="#161816" stroke-dasharray="4 3"></line>
+<text x="0" y="15" font-size="13" fill="#666a66">100%</text><text x="0" y="75" font-size="13" fill="#666a66">50%</text><text x="0" y="135" font-size="13" fill="#666a66">0</text>
+<polyline points="34,110.8 57.3,31.6 80.5,10 103.8,10 127.1,10 150.4,10 173.6,31.6 196.9,76 220.2,106 243.5,109.6 266.7,100 290,101.2" fill="none" stroke="#1e9bb8" stroke-width="2.5" stroke-linejoin="round"></polyline>
+<circle cx="290" cy="101.2" r="4" fill="#1e9bb8"></circle>
+<text x="34" y="148" text-anchor="middle" font-size="13" fill="#666a66">F</text><text x="80.5" y="148" text-anchor="middle" font-size="13" fill="#666a66">A</text><text x="127.1" y="148" text-anchor="middle" font-size="13" fill="#666a66">J</text><text x="173.6" y="148" text-anchor="middle" font-size="13" fill="#666a66">A</text><text x="220.2" y="148" text-anchor="middle" font-size="13" fill="#666a66">O</text><text x="266.7" y="148" text-anchor="middle" font-size="13" fill="#666a66">D</text>
+</svg>
+<p style="margin: 0; font-size: 14px; color: #666a66">Feb 2023 to Jan 2024, end of each month. Dashed line: irrigation stops (15 %). You were short on 16 days in Nov and Dec, while the dam sat at that line.</p>
+</section>
+
+<section aria-labelledby="fc-h" style="padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; display: flex; flex-direction: column; gap: 8px">
+<h2 id="fc-h" style="margin: 0; font-size: 17px">Next 14 days</h2>
+<p style="margin: 0">Lowest level expected: <strong>[from forecast mode]</strong> around <strong>[date]</strong>, with forecast rain and your usual irrigation.</p>
+<p style="margin: 0; font-size: 14px; color: #666a66">Forecasts beyond a few days are often wrong. (Needs forecast mode, WP-2.12.)</p>
+</section>
+
+<section aria-labelledby="about-h" style="padding: 16px; border-radius: 8px; background: #fdfdfe; border: 1px solid #d9dcd9; display: flex; flex-direction: column; gap: 8px">
+<h2 id="about-h" style="margin: 0; font-size: 17px">Where these figures come from</h2>
+<p style="margin: 0">Nobody measures your dam for this. The model works the level out every day from rain, the river flowing in, and the water your crops need.</p>
+<p style="margin: 0">If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.</p>
+<a href="#" style="min-height: 44px; display: inline-flex; align-items: center; font-weight: 600; color: #0b6e8a">What is “modelled”?</a>
+</section>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":360,"height":1480}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

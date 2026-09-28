@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" fill="none" stroke="#102a43" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+  <title>Water user association: farms joined on one river network</title>
+  <path id="reaches" d="M13.5 13.5 L22 23 M34.5 13.5 L26 23 M10.5 30 L21.5 26 M24 28 V36"/>
+  <circle cx="11" cy="11" r="3.5"/>
+  <circle cx="37" cy="11" r="3.5"/>
+  <circle cx="7" cy="31" r="3.5"/>
+  <circle cx="24" cy="25.5" r="3"/>
+  <circle class="accent" stroke="#1e9bb8" cx="24" cy="40" r="4"/>
+</svg>

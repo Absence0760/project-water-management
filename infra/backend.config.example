@@ -1,0 +1,13 @@
+# Partial backend config for `terraform init -backend-config=backend.config`.
+# Copy to backend.config (gitignored) and fill in the bucket.
+#
+# The bucket was created by the estate account bootstrap
+# (~/github/templates/scripts/new-project-account.sh water-management) as
+# `water-management-tfstate-<account-id>`. Only the bucket lives here — key,
+# region, locking and encryption are committed in main.tf — so the AWS
+# account ID stays out of this public repo. Generate the file rather than
+# typing the ID:
+#
+#   printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config
+
+bucket = "water-management-tfstate-PLACEHOLDER_ACCOUNT_ID"
