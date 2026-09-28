@@ -4,7 +4,8 @@
 # (ci.yml, renderer-image) and deploy-backend.yml before it ships the image.
 #
 #   infra/scripts/package-lambdas.sh
-#   docker build -f backend/renderer.Dockerfile -t water-management-renderer backend
+#   docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load \
+#     -f backend/renderer.Dockerfile -t water-management-renderer backend
 #   infra/scripts/smoke-renderer-image.sh [image]      # default: water-management-renderer
 #
 # Every container runs as Lambda runs one: a uid with no passwd entry, a

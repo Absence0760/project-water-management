@@ -24,6 +24,10 @@
 //              actions/cache). A cache is written by other runs, including
 //              ones that execute untrusted code on main, and a release build
 //              ships what it builds with deploy credentials.
+//   image      every `docker build` / `docker buildx build` in a workflow
+//              says --provenance=false --sbom=false --platform linux/amd64
+//              (on the command's first line). Lambda accepts one image
+//              manifest, never the image index attestations produce.
 //   push-full  ci.yml's `changes` job (the docs-only skip) emits code=true for
 //              every event but pull_request, before anything else writes
 //              `code=`, and never diffs against github.event.before. The
@@ -156,6 +160,14 @@ export function checkWorkflow(file, text) {
 		}
 		if (STATIC_KEYS.test(l) && !/^\s*#/.test(l)) {
 			out.push({ file, line: i + 1, rule: 'no-keys', message: 'static AWS credential reference; CI auth to AWS is GitHub OIDC only' });
+		}
+	});
+
+	lines.forEach((l, i) => {
+		if (/^\s*#/.test(l) || !/\bdocker\s+(buildx\s+)?build\b/.test(l)) return;
+		const missing = ['--provenance=false', '--sbom=false', '--platform linux/amd64'].filter((f) => !l.includes(f));
+		if (missing.length) {
+			out.push({ file, line: i + 1, rule: 'image', message: `docker build without ${missing.join(' ')}: an attestation-carrying image index is what Lambda rejects` });
 		}
 	});
 

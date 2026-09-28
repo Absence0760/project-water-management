@@ -154,7 +154,14 @@ jobs:
           VERSION: ${{ needs.preflight.outputs.version }}
         run: |
           set -euo pipefail
-          docker build -f backend/renderer.Dockerfile -t "renderer:${VERSION}" backend
+          # One linux/amd64 image manifest with no attestations: Lambda
+          # refuses an OCI image index, which provenance/SBOM attestations
+          # make of the push under Docker's containerd image store (the
+          # default from Engine 29), and ECR's untagged-image expiry would
+          # then delete the index's children. Same command as CI's
+          # renderer-image job (bin/check-renderer-image.sh).
+          docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load \
+            -f backend/renderer.Dockerfile -t "renderer:${VERSION}" backend
           # As Lambda runs it: Chromium prints, the handler answers under the
           # runtime interface emulator, the init check is live (CI's
           # renderer-image job runs the same on every PR).
@@ -325,14 +332,22 @@ jobs:
             docker tag "renderer:${VERSION}" "$image"
             docker push "$image"
           fi
-          if aws lambda get-function --function-name "$RENDERER_FUNCTION_NAME" > /dev/null 2>&1; then
+          # Only ResourceNotFoundException means "not created yet". Any other
+          # error (AccessDenied after a policy drift, throttling) fails the
+          # deploy, rather than leaving the renderer on an old image behind
+          # a green run.
+          if get_err=$(aws lambda get-function --function-name "$RENDERER_FUNCTION_NAME" 2>&1 >/dev/null); then
             aws lambda update-function-code \
               --function-name "$RENDERER_FUNCTION_NAME" \
               --image-uri "$image" \
               --query 'CodeSha256' --output text
             aws lambda wait function-updated --function-name "$RENDERER_FUNCTION_NAME"
-          else
+          elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
             echo "::notice::The renderer Lambda doesn't exist yet. Its image ${VERSION} is in ECR: set renderer_image_tag = \"${VERSION}\" in terraform.tfvars and apply (docs/deployment.md § Reports)."
+          else
+            echo "$get_err" >&2
+            echo "::error::Could not read the renderer Lambda ${RENDERER_FUNCTION_NAME} (not a ResourceNotFoundException); its image was NOT updated."
+            exit 1
           fi
 
       # Through CloudFront, the same path a browser takes (/api/* is proxied
