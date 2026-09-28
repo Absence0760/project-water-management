@@ -44,8 +44,24 @@ describe('step 1: was water shared fairly?', () => {
 	});
 
 	it('never words the share as water to take', () => {
-		expect(sp(shareComparison(-118))).toBe('a little more than an even share (about 118 m³ a day)');
-		expect(shareComparison(0.4)).toBe('about an even share');
+		expect(sp(shareComparison(-118, -3))).toBe('a little more than an even share (about 118 m³ a day)');
+		expect(shareComparison(0.4, 0)).toBe('about an even share');
+	});
+
+	// Issue #51: Klipdrift got 57 % against an even share of 88 %, which is not "a little less".
+	it('grows the wording with the gap in percentage points, on both sides', () => {
+		expect(sp(shareComparison(118, 9.9))).toBe('a little less than an even share (about 118 m³ a day)');
+		expect(sp(shareComparison(500, 10))).toBe('less than an even share (about 500 m³ a day)');
+		expect(sp(shareComparison(-500, -24.9))).toBe('more than an even share (about 500 m³ a day)');
+		expect(sp(shareComparison(977, 31))).toBe('much less than an even share (about 977 m³ a day)');
+		expect(sp(shareComparison(-977, -25))).toBe('much more than an even share (about 977 m³ a day)');
+		// A gap in points but under the 1 m³/day floor is still an even share.
+		expect(shareComparison(0.4, 30)).toBe('about an even share');
+	});
+
+	it('measures the gap from the farm’s own supply against the even share', () => {
+		const s = step1(farm((f) => ((f.season.fraction = 0.57), (f.river.equitableFraction = 0.88), (f.river.aboveBelowShareM3Day = 977))));
+		expect(s.shown && txt(s.you)).toBe('You received 57 %: much less than an even share (about 977 m³ a day).');
 	});
 });
 

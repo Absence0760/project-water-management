@@ -177,7 +177,7 @@ breakdown; not in the first release.
 | Engine / modeller term | Farmer view says | Afrikaans (draft, for the named reviewer) | Never says |
 | --- | --- | --- | --- |
 | Equitable share, K_tot, target volume | "even share" ("everyone gets the same share of what they need") | "gelyke deel" | gain, entitlement, allocation, target |
-| Above (−) / below (+) equitable share, N | "a little more / less than an even share (about 118 m³ a day)" | "'n bietjie meer / minder as 'n gelyke deel" | reduce/gain, "you may take" |
+| Above (−) / below (+) equitable share, N | "a little more / less than an even share (about 118 m³ a day)" under 10 points between the farm's % and the even share, "more / less than …" from 10, "much more / less than …" from 25 (`SHARE_GAP_POINTS`, issue #51) | "'n bietjie meer / minder as 'n gelyke deel" | reduce/gain, "you may take" |
 | EWR, Ecological Reserve | "the river's reserve" ("water the law keeps in the river so it stays healthy for everyone downstream"), with a help link | "die rivier se reserwe" | EWR, shortfall, charge |
 | EWR charge, supply cut ΔG | "pump less" | "pomp minder" | charge, attribution, consumptive |
 | R_store | "your dam held back … the river needed" | "jou dam het … teruggehou wat die rivier nodig gehad het" | storage part, release condition |
@@ -228,7 +228,8 @@ headline**. Beside it, always:
 > your dam. It isn't part of the 83 %.
 
 That is `EQUITABLE_SHARE_FOOTNOTE` in plain words. A farm *above* the even
-share reads "a little more than an even share (about N m³ a day)", which
+share reads "a little more than an even share (about N m³ a day)" (or "more",
+"much more" as the gap grows), which
 isn't a cut instruction either: only the notice is.
 
 ### 5.4 Why the headline isn't `fractionOfDemandLeft`

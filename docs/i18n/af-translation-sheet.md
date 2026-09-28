@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-2 strings: 1 on the site, 1 in emails, 0 in the glossary.
+6 strings: 5 on the site, 1 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -29,6 +29,17 @@ Farm view (and the shared view): the WUA’s notice card, first on the page.
 | Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
 | `2b8f408b` | Set by the WUA: a {pct} cut in registered water use. | The WUA’s cut, like “20 %”: water users are asked to use that much less than their registered water use (not allowed only that much). The alert email says it the same way. Keep: {pct} |  |
+
+### farm.why
+
+Farm view: the “Why?” page, the model’s look back in three steps.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `2ba3b1c4` | much less than an even share (about {amount}) | Keep: {amount} |  |
+| `791611d4` | much more than an even share (about {amount}) | Keep: {amount} |  |
+| `1fb9de6d` | less than an even share (about {amount}) | Keep: {amount} |  |
+| `f8c02205` | more than an even share (about {amount}) | Keep: {amount} |  |
 
 ## Emails
 
