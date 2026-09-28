@@ -77,7 +77,7 @@ export const HELP_AF: Record<string, HelpTranslation> = {
 	'farm-wua': {
 		term: 'WGV (Watergebruikersvereniging)',
 		short: 'Die liggaam van watergebruikers wat die watergebruik in jou gebied bestuur. Dit publiseer die syfers op hierdie bladsy, en sy eie kennisgewings.',
-		long: '’n Watergebruikersvereniging (WGV) is ’n liggaam van die watergebruikers in ’n gebied, ingevolge die Nasionale Waterwet gestig. Dit bestuur hoe water onder sy lede gedeel word, en dit reik die kennisgewings uit wat boere vra om minder water te gebruik. Sommige gebiede het nog ’n besproeiingsraad in plaas daarvan, wat dieselfde werk doen totdat dit ’n WGV word.\n\nDie syfers op jou plaasbladsy is dié wat jou WGV gepubliseer het. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Vra jou WGV as enigiets op die bladsy onduidelik is.',
+		long: '’n Watergebruikersvereniging (WGV) is ’n liggaam van die watergebruikers in ’n gebied, wat ingevolge die Nasionale Waterwet gestig is. Dit bestuur hoe water onder sy lede gedeel word, en dit reik die kennisgewings uit wat vir boere sê hulle moet minder water gebruik. Sommige gebiede het nog ’n besproeiingsraad in plaas van ’n WGV; dit doen dieselfde werk totdat dit ’n WGV word.\n\nDie syfers op jou plaasbladsy is dié wat jou WGV gepubliseer het. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Vra jou WGV as enigiets op die bladsy onduidelik is.',
 		sourceHash: 'cb9c961b61c1cabe83eece6cb0b47d77c4491eab427730b0f9088e1acb682b60'
 	},
 };

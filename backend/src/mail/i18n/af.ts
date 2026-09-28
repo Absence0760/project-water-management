@@ -95,7 +95,7 @@ export const af: Partial<Record<MailKey, string>> = {
 	// This is the catchment model’s estimate, worked out from the figures the WUA published. It is not a measurement of the dam and not an instruction. Only a notice from the WUA or from DWS is a restriction.
 	'mail.alert.model.dam.staff': 'Dit is ’n skatting van die opvanggebied se model, bereken uit die syfers wat die WGV gepubliseer het. Dit is nie ’n meting van die dam nie, en nie ’n opdrag nie. Net ’n kennisgewing van die WGV of van die DWS is ’n beperking.',
 	// This comes from the newest forecast run of the catchment model, which may not be published yet. It is an estimate, not a measurement, and not a restriction.
-	'mail.alert.model.staff': 'Dit kom van die opvanggebied se model se nuutste voorspellingslopie, wat dalk nog nie gepubliseer is nie. Dit is ’n skatting, nie ’n meting nie, en nie ’n beperking nie.',
+	'mail.alert.model.staff': 'Dit kom uit die nuutste voorspellingslopie van die opvanggebied se model, wat dalk nog nie gepubliseer is nie. Dit is ’n skatting, nie ’n meting nie, en nie ’n beperking nie.',
 	// You get this email because you get {kind} alerts for {project}.
 	'mail.alert.why': 'Jy kry hierdie e-pos omdat jy waarskuwings oor {kind} vir {project} kry.',
 	// Stop these emails
