@@ -2952,11 +2952,10 @@ assume, the questions for counsel); these are the actions, with triggers.
       template for counsel). Confirm the mailbox provider first: Migadu per
       the estate's DNS, but the operator's own site names Gmail (list Google
       too if mail is forwarded). Trigger: the first client going live.
-- [ ] **Re-acceptance when the terms change.** Each account records the
-      version it accepted (087) and `/auth/me` says whether it is current;
-      there is no screen yet that asks again. Durable fix in
-      legal-status.md. Trigger: the first change to `LEGAL_VERSION` after
-      real users exist (any material edit to either page must bump it).
+- [x] **Re-acceptance when the terms change.** Built 2026-09-28 (#47): an
+      account on old terms sees the re-acceptance notice before any page and
+      accepts through `POST /auth/me/accept-terms`. The material-change email
+      to existing account holders (Terms §16) is still sent by hand.
 - [ ] **Self-service account deletion** and what happens to evidence an
       account made: #48; the privacy notice discloses the current exception.
 

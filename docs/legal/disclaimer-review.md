@@ -87,21 +87,30 @@ Otherwise (an uploaded or edited forecast):
 ## 2. The professional sign-off statement
 
 Source: `packages/engine/src/liability/signoff.ts`, `signoffStatement()`.
-Version `signoff-2`. English only.
+Version `signoff-3`. English only.
 
 A registered professional signs one model run. The dialog asks for the
-signer's name, professional body and registration number, then shows ten
+signer's name and registration number, and the professional body (SACNASP
+or ECSA), registration category and field as fixed choices
+(`liability/registration.ts`, migration 092). Candidate and certificated
+categories, and ECSA's specified categories, can't sign: the law has them
+work under a professional's supervision, and that professional signs. A
+field or category outside catchment hydrology may sign after an inline
+warning to sign only within their competence. The report prints each
+signer's category, field and number as self-declared, with the register's
+address written out. The dialog then shows ten
 confirmations, each ticked on its own, then the run's known limitations
 (generated from `docs/engine-audit.md`), then five notes that are printed but
 not confirmed. The backend stores a SHA-256 hash of the exact statement shown,
 so a signature is bound to these words and to the version numbers. The
 report's sign-off section lists each signature with the versions and hash it
-recorded. Sign-offs made under `signoff-1` keep that version and hash; the
-report says they confirmed an earlier wording.
+recorded. Sign-offs made under `signoff-1` or `signoff-2` keep that version
+and hash; the report says they confirmed an earlier wording, and prints
+"category and field not recorded" for them.
 
 Confirmations:
 
-> 1. I am the person named above, and I am currently registered with the professional body shown, under the registration number shown.
+> 1. I am the person named above, and I am currently registered with the body, in the category and field, and under the registration number shown.
 > 2. This work is within my competence and the category of my registration, and I did it or supervised it.
 > 3. I have disclosed in writing to my client any interest that could conflict with this work, and I have none that prevents me from doing it.
 > 4. I have checked the input data (rainfall, evaporation and the observed record) against their sources, and they are adequate in quality and length for this assessment.
@@ -115,7 +124,7 @@ Confirmations:
 
 Notes printed with the statement:
 
-> - The registration details are the signer’s own declaration. This app does not check them. You can check them on the public register: ECSA “Find a Registered Person”, or the SACNASP database of registered scientists.
+> - The registration details are the signer’s own declaration. This app does not check them. You can check them on the public register, whose address the report prints beside each signature: ECSA “Find a Registered Person”, or the SACNASP database of registered scientists.
 > - A dam that can hold more than 50 000 m³ and has a wall more than 5 m high, or one the Minister has declared, is a dam with a safety risk (National Water Act, Chapter 12). The Department of Water and Sanitation must classify it; for a licence application that is form DW793. It also needs its own dam safety approvals. This sign-off does not cover dam safety.
 > - This sign-off makes no finding on whether any water use or works are lawful.
 > - The signature covers professional judgement on this run’s inputs and results. It relies on the app’s calculations and does not verify its software.
@@ -265,6 +274,16 @@ shows the full disclaimer, it needs an Afrikaans version too.
   names DWS as the classifier and DW793 as the licence form. New notes say
   the sign-off makes no finding on lawfulness and doesn't verify the
   software, and point to the ECSA and SACNASP public registers.
+- **Sign-off `signoff-3` (after the professional-registration research).**
+  Body, category and field are fixed choices; candidates can't sign;
+  confirmation 1 names the category and field; the first note points to the
+  register's address printed on the report.
+- **Farmer notices (after the Consumer Protection Act research).** The farm
+  view's estimate line moved from the foot of the page to a callout before
+  the first figure on every farm screen; a farmer acknowledges a short
+  "Before you look at your farm" notice once per version
+  (`FARMER_NOTICE_VERSION`, migration 093) before the figures show; the
+  invitation email carries the estimate line.
 - **Farmer and staff lines.** Every farmer line that said only a WUA notice
   is a restriction now names DWS too. The farm view line adds "not
   measurements or instructions". The dam email tells the farmer to check the
@@ -304,20 +323,18 @@ What they settled, against the draft pack's questions:
 6. *Rain-forecast inputs?* A forecast run's report now says so on its cover
    (§ 1), and both forecast alerts say forecasts change.
 
-## 6. Still for a lawyer
+## 6. The legal research that followed (2026-09-28)
 
-The operator accepted the wording without one. These stay open for counsel
-(tracked in [legal-status.md](../legal-status.md)):
-
-- Whether the Consumer Protection Act reaches the service while it is free,
-  and whether a WUA offering the farm view to its members is a supplier
-  under it. If it applies, s49 asks for liability notices to be conspicuous:
-  the farm view line is the page's last small-print paragraph.
-- Whether paragraph 5 holds against a claim in delict by a farmer, applicant
-  or objector who relied on a report.
-- Whether the signer fields should become fixed choices (body, category,
-  field of registration) and the report print the signer's scope. The app
-  keeps them as free text today.
+Four more pre-counsel research reports (the `za-legal-researcher` agent,
+`.claude/agents/legal/`), on the questions this section used to leave for a
+lawyer. Their positions, and what was done, are in
+[legal-status.md](../legal-status.md) § Counsel review: the Consumer
+Protection Act's reach and s49 (the farm notices above, the sign-up
+summary), delict and paragraph 5 (the wording and placement above),
+choice of law and POPIA (the Terms, the operator agreement, the gates), and
+the signer's registration (`signoff-3`). They are research, not legal
+advice. What still needs a practising South African attorney, before the
+first fee, is gate D in legal-status.md.
 
 ## 7. Changing the wording
 
