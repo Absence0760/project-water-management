@@ -176,20 +176,26 @@
 	// A dashboard on a wide screen (issue #17): the list's card takes at most
 	// the height left in the window, measured (its top and what sits below it),
 	// and scrolls inside, so the page itself doesn't; a short list just ends.
+	// What sits below it is measured to the end of this page's <main>, not the
+	// document's scrollHeight: that counts the empty window under a short list,
+	// so after a search narrowed the list and was cleared the card stayed
+	// capped at that short height (its 320 px floor) with the window empty below.
 	let fillEl: HTMLDivElement | undefined = $state();
 	let fillTop = $state(0);
 	let fillBelow = $state(0);
 	$effect(() => {
 		if (!fillEl) return;
+		const main = fillEl.closest('main');
 		const measure = () => {
-			if (!fillEl) return;
+			if (!fillEl || !main) return;
 			const r = fillEl.getBoundingClientRect();
 			fillTop = r.top + window.scrollY;
-			fillBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+			fillBelow = Math.max(0, main.getBoundingClientRect().bottom - r.bottom);
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
 		ro.observe(document.body);
+		if (main) ro.observe(main);
 		return () => ro.disconnect();
 	});
 	const groups = $derived(owner === 'all' ? groupProjects(visible, teams) : []);
