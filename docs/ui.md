@@ -2991,7 +2991,8 @@ read it before.
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Units below 95 %* (N of M, every unit
   under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
-  deficit above float noise on any of the run's last 7 days, the reporting
+  deficit above float noise on any of the run's last 7 days, or on a
+  forecast run the 7 days before the forecast, issue #51; the reporting
   window's *Last 7 days* and the publication's own rule,
   `backend/src/publish/recent.ts`; with the number the curtailment table asks
   to cut; the tile links to the curtailment over those days); *Total
@@ -3094,7 +3095,9 @@ read it before.
   "about", in whole percent (`forecast/forecast.ts`, which a test holds to
   never saying "will"), under a "Modelled on forecast rain, not measured"
   tag, with a line saying every other figure of the run covers the days
-  before the forecast only. Every daily chart of a forecast run (EWR vs
+  before the forecast only, and every "X of N days" beside them counts N
+  over those days too (`overview/latestRun.ts` `historyDays`, issue #51: the
+  EWR card, River & reserve's tiles, the unit results table's record). Every daily chart of a forecast run (EWR vs
   outflow, the hydrograph, dam storage, supply vs demand, the explorer)
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
@@ -3306,7 +3309,10 @@ read it before.
   window's name and dates ("Last 7 days: daily averages over 2022-01-22 –
   2022-01-28 (7 days)", also in its caption), and the other water users and
   EWR sites tables repeat the dates. The status line adds how many of the days
-  fall in the forecast period (`RunSummary.forecastRain`). A run saved before
+  fall in the forecast period (`RunSummary.forecastRain`). On a forecast run
+  *Last 7 / 14 / 30 days* end on the day before the forecast, and the note says
+  so (issue #51): the latest days of the record, never forecast days read as
+  "this week"; *Whole record* and a custom range may still reach into it. A run saved before
   engine 0.17.0 (no EWR charge series), or missing any series the recompute
   reads, disables the picker and asks for a new run. The engine's
   `views/curtailmentOverWindow.test.ts` checks the table, binding sites
