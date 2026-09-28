@@ -678,6 +678,15 @@ Interaction details that bit:
   (`e2e/art/landing-screens.spec.ts`). A generated picture that runs off its
   frame fails its generator rather than a reviewer: `scripts/landing-art/modules.mjs`
   refuses a hero with anything on its edge.
+- **Size text for the widest common sans, not this laptop's.** `system-ui`
+  is Noto Sans on the Fedora workstation but DejaVu Sans on CI's Ubuntu
+  runner (and most Debian/Ubuntu desktops), about 12 % wider. The crop
+  list's phone sparkline column was 6rem, which held "Oct max 1.10 Sep" in
+  Noto with 0.1 px to spare and cut it to "max …" in DejaVu, so the spec
+  passed here and failed on CI. Give a fixed column that holds text the
+  DejaVu width, and check a layout spec under it locally by running
+  Playwright with `FONTCONFIG_FILE` pointing at a fontconfig file whose
+  `system-ui` and `sans-serif` aliases prefer DejaVu Sans.
 - Never pipe e2e output into `grep`/`head`; redirect to a file.
 
 ## 6. Bundle
