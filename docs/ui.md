@@ -1329,7 +1329,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
 
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
-    ("2 hydrological units · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²";
+    ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
     "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
     as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes

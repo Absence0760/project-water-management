@@ -33,7 +33,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 
 	// A page of its own: a title, one line on what the network is, and its actions.
 	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
-	await expect(page.getByTestId('network-summary')).toHaveText('2 hydrological units · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²');
+	await expect(page.getByTestId('network-summary')).toHaveText('2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²');
 	// With a run, farms are coloured by supply from the start, and a farm's label says its share (nothing else, so labels don't collide).
 	await expect(page.getByLabel('Colour hydrological units by').locator('option:checked')).toHaveText('Supply, latest run');
 	const upperNode = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });

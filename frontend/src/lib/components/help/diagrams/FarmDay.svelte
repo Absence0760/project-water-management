@@ -21,7 +21,7 @@
 	<text class="s" x="330" y="55" text-anchor="middle">in or out</text>
 
 	<rect class="box" x="470" y="20" width="170" height="44" rx="6" />
-	<text class="t" x="555" y="38" text-anchor="middle">Hydrological unit runoff</text>
+	<text class="t" x="555" y="38" text-anchor="middle">Own runoff</text>
 	<text class="s" x="555" y="55" text-anchor="middle">its share of natural flow</text>
 
 	<rect class="box key" x="245" y="110" width="170" height="70" rx="6" />

@@ -371,7 +371,7 @@
 			`${dams} dam${dams === 1 ? '' : 's'}`,
 			`${gauges.length} gauge${gauges.length === 1 ? '' : 's'}`,
 			...(users.length ? [`${users.length} other user${users.length === 1 ? '' : 's'}`] : []),
-			...(outletName ? [`draining to ${outletName}`] : []),
+			...(outletName ? [`into ${outletName}`] : []),
 			`${fmtNum(nodes.reduce((sum, n) => sum + (n.areaKm2 || 0), 0), 1)} km²`
 		].join(' · ')
 	);
