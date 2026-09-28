@@ -261,6 +261,9 @@
 	}
 	.col {
 		display: grid;
+		/* One track no wider than the column: an implicit (auto) track grows to its widest panel's min-content,
+		   and in a wide font (DejaVu Sans) that pushed every panel 6 px past a phone's edge. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 0;
 		min-width: 0;
 	}
@@ -280,6 +283,14 @@
 		field-sizing: content;
 		min-height: 6.5rem;
 		max-height: 24rem;
+	}
+	/* A phone has no cap: its narrow field wraps every line, so 12 short lines
+	   took 24 in a wide font (DejaVu Sans) and ran past 24rem into the inner
+	   scrollbar this avoids. The page scrolls instead (project-page.spec.ts). */
+	@container project-page (max-width: 520px) {
+		textarea {
+			max-height: none;
+		}
 	}
 	.stat {
 		position: relative;

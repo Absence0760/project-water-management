@@ -990,12 +990,17 @@
 		flex-direction: column;
 		gap: 0.15rem;
 	}
+	/* "Catchment", the role and the Choose sections icon on one line, with a
+	   wide system font too (DejaVu Sans, Linux's usual one, where "Viewer"
+	   and the icon need ~190 px): a wrapped icon costs the sidebar a row and
+	   the sections no longer fit 1440×960 (app-sidebar.spec.ts). So the gaps
+	   are tight, and on the right the icon's own 24 px box is the inset. */
 	.side-head {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0 0.75rem;
+		gap: 0.4rem;
+		padding: 0 0.25rem 0 0.75rem;
 	}
 	.side-kicker {
 		color: var(--text-muted);

@@ -15,7 +15,8 @@ generated from them stay out of git: put workbooks in `../project-water-manageme
 
 ## Setup
 
-The scripts need Python 3.10+ and `openpyxl` (pinned in `requirements.txt`):
+The scripts need Python 3.10+ and `openpyxl` (pinned, with its dependency and
+the sha256 of each, in `requirements.txt`; pip checks the hashes):
 
 ```sh
 python3 -m venv .venv && .venv/bin/pip install -r scripts/wbt-import/requirements.txt

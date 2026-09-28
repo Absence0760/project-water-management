@@ -131,6 +131,20 @@ test('a link to one section of a guide lands on it', async ({ page, owner }) => 
 	]);
 });
 
+test('widened from a phone past 900 px, the text takes its column at once, beside the contents', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/help/guides/a-day-on-a-farm');
+	await expect(page.getByRole('heading', { level: 1, name: 'A day on one unit' })).toBeVisible();
+	await page.setViewportSize({ width: 1440, height: 960 });
+	// Measured straight after the resize, before the contents column (and the app
+	// sidebar) arrive: the text column was the 13rem contents track, ~180 px, until then.
+	const width = () => page.locator('.help-col').evaluate((el) => el.getBoundingClientRect().width);
+	expect(await width()).toBeGreaterThan(900);
+	await expect(page.getByRole('complementary', { name: 'Help contents' })).toBeVisible();
+	expect(await width()).toBeGreaterThan(900);
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
 	for (const [size, viewport] of [
 		['desktop', { width: 1280, height: 800 }],

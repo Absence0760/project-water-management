@@ -72,6 +72,23 @@ CASES = [
     # Compound commands: a deny anywhere in the chain blocks.
     ('git add foo.ts && git commit -m "msg"', "deny"),
     ('git add foo.ts && git commit -m "msg" -- foo.ts', "allow"),
+    # main only changes through a PR: branches push, main never does.
+    ("git push -u origin feat/thing", "allow"),
+    ("git push origin fix/x:fix/x", "allow"),
+    ("git push --force-with-lease origin feat/thing", "allow"),
+    ("git push origin --delete feat/old", "allow"),
+    ("git push origin main", "deny"),
+    ("git push origin HEAD:main", "deny"),
+    ("git push origin +feat:main", "deny"),
+    ("git push origin refs/heads/main", "deny"),
+    ("git push -f origin main", "deny"),
+    ("git push", "deny"),
+    ("git push origin", "deny"),
+    ("git push origin HEAD", "deny"),
+    ("git push --all origin", "deny"),
+    ("git push --mirror", "deny"),
+    ("cd x && git push origin main", "deny"),
+    ("git stash push -- foo.ts", "allow"),
 ]
 
 failures = []

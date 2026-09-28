@@ -32,7 +32,7 @@ export function worksheet(sheetData: string, before = ''): string {
 }
 
 /** The package's bytes, as a stored zip. */
-export function workbookPackage(spec: PackageSpec): Uint8Array {
+export function workbookPackage(spec: PackageSpec): Uint8Array<ArrayBuffer> {
 	const enc = new TextEncoder();
 	const parts: [string, string][] = [];
 	const overrides = [

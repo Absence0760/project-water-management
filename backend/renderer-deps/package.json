@@ -1,0 +1,13 @@
+{
+	"name": "@water-management/renderer-deps",
+	"version": "0.0.0",
+	"private": true,
+	"description": "What the report renderer's container image installs beside its bundle (backend/renderer.Dockerfile, npm ci). playwright-core must equal backend/package.json's and the Playwright image tag.",
+	"dependencies": {
+		"aws-lambda-ric": "4.0.2",
+		"playwright-core": "1.63.0"
+	},
+	"allowScripts": {
+		"aws-lambda-ric@4.0.2": true
+	}
+}

@@ -15,6 +15,7 @@
 		bandCrossings,
 		distinctShortNames,
 		labelBox,
+		measuredWidths,
 		paperBands,
 		schematicLayout,
 		symbolBox,
@@ -64,9 +65,10 @@
 	} = $props();
 
 	/**
-	 * Columns on paper: a drawing this wide is at most ~790 px (a little more
-	 * for a long second line), which A4 prints at ≥ 85 % so names stay at
-	 * ≥ 8 pt (report-schematic-print.spec.ts measures them).
+	 * Columns on paper: a drawing this wide is ~790 px, more for a long second
+	 * line (~860 px for 30 units with dams), which A4 prints at ≥ ~80 %, so
+	 * names stay at ≥ 7 pt of type (~7.6 pt there; report-schematic-print.spec.ts
+	 * measures them in the PDF).
 	 */
 	const PAPER_COLS = 5;
 	// Ids for the drawing's markers and hatch: the report draws it twice (screen and paper).
@@ -87,6 +89,30 @@
 		return new Map(nodes.map((n, i) => [n.id, cut[i]!]));
 	});
 	const short = (n: NetworkNode) => shortNames.get(n.id) ?? name(n);
+
+	// The labels' widths in the font they are drawn in (the system's sans, which
+	// varies: DejaVu Sans draws ~15 % wider than the estimate), so the column
+	// spacing and the transfers' routing keep clear of the text actually drawn.
+	// Measured on a canvas in the drawing's font (.label / .meta below); the
+	// meta line's digits are tabular there, so they're measured as zeros.
+	const widths = (() => {
+		const ctx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+		if (!ctx) return undefined;
+		const family = getComputedStyle(document.documentElement).getPropertyValue('--font-sans').trim() || 'sans-serif';
+		const fonts = { label: `600 12.5px ${family}`, meta: `11px ${family}` };
+		const cache = new Map<string, number>();
+		return measuredWidths((text, font) => {
+			const s = font === 'meta' ? text.replace(/\d/g, '0') : text;
+			const key = `${font}\n${s}`;
+			let w = cache.get(key);
+			if (w === undefined) {
+				ctx.font = fonts[font];
+				w = ctx.measureText(s).width;
+				cache.set(key, w);
+			}
+			return w;
+		});
+	})();
 	const isOutlet = (n: NetworkNode) => n.downstreamNodeId === null;
 	const nameOf = (id: string) => nodes.find((n) => n.id === id)?.name || '(unnamed)';
 
@@ -161,11 +187,11 @@
 	// catchment that fits the card isn't pushed off its right edge. Columns are at least wide enough
 	// that no label runs into the next node on its row; they spread as far as every node's label still ends inside
 	// the box (at most FILL_MAX_SPREAD × the usual spacing); and the drawing ends at the right-most
-	// label. Elsewhere: the fixed spacing, as before.
-	const labelRight = (ln: SchematicNode) => labelBox({ x: 0, y: 0 }, short(ln.node), metaText(ln)).x1 + 8;
+	// label. Elsewhere (the report, on screen and paper): the fixed spacing, widened only where a
+	// label drawn in a wide font would run into the next node on its row.
+	const labelRight = (ln: SchematicNode) => labelBox({ x: 0, y: 0 }, short(ln.node), metaText(ln), widths).x1 + 8;
 	// A label only needs clearing where another node sits to its right on the same row.
 	const minColW = $derived.by(() => {
-		if (!fill) return COL_W;
 		let need = 60;
 		const rows = new Map<number, SchematicNode[]>();
 		for (const n of layout.nodes) rows.set(n.row, [...(rows.get(n.row) ?? []), n]);
@@ -173,7 +199,7 @@
 			row.sort((a, b) => a.col - b.col);
 			for (let i = 1; i < row.length; i++) need = Math.max(need, (labelRight(row[i - 1]!) + 4) / (row[i]!.col - row[i - 1]!.col));
 		}
-		return need;
+		return fill ? need : Math.max(COL_W, need);
 	});
 	const fitColW = $derived(
 		Math.min(Infinity, ...layout.nodes.filter((n) => n.col > 0).map((n) => (boxW - 2 - PAD_X * 2 - 12 - labelRight(n)) / n.col))
@@ -228,7 +254,7 @@
 	};
 
 	// What a transfer arc must not cross: every label, and every symbol but its own two ends.
-	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(ln.node), metaText(ln))));
+	const labels = $derived(layout.nodes.map((ln) => labelBox(pos.get(ln.node.id)!, short(ln.node), metaText(ln), widths)));
 	const symbols = $derived(layout.nodes.map((ln) => ({ id: ln.node.id, box: symbolBox(pos.get(ln.node.id)!) })));
 
 	/**
@@ -757,6 +783,18 @@
 		stroke: var(--sch-ground);
 		stroke-width: 4px;
 		stroke-linejoin: round;
+	}
+	/* No halo on paper. Chromium prints stroked text as a second copy of every
+	   word (a Type 3 font drawing the stroke), so the PDF's text held each name
+	   twice: found twice by a search, pasted twice, and read out twice by a
+	   PDF text reader (poppler before 25 lists both; report-schematic-print.spec.ts).
+	   Paper needs no halo: nothing is dragged there, and the routed transfers
+	   clear every label (diagram-labels.spec.ts checks the printed drawing). */
+	@media print {
+		.label,
+		.meta {
+			stroke: none;
+		}
 	}
 	.label {
 		font-size: 12.5px;
