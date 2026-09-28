@@ -251,6 +251,45 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
   depends_on = [aws_cloudwatch_log_metric_filter.mail_send_failed]
 }
 
+# --- Unhandled API errors ---------------------------------------------------
+# The API answers an unexpected exception with a generic 500 (handleError,
+# backend/src/http/errors.ts), so the Lambda invocation itself succeeds and
+# the function's Errors metric (lambda_errors above) never counts it. It logs
+# one structured line instead:
+#   {"event":"unhandled_error","method":"GET","route":"/projects/:id","error":"error","code":"42P01","at":["at …"]}
+# the route's pattern (never the concrete path, which can carry a token), the
+# error's name/code (safeError) and its stack frames, never its message. Only
+# the API runs the Hono app, so only its log group is filtered; the worker's
+# unexpected failures are job_failed / job_dead (jobs.tf).
+
+resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
+  name           = "${local.project}-unhandled-error"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.event = \"unhandled_error\" }"
+
+  metric_transformation {
+    name          = "UnhandledError"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
+  alarm_name          = "${local.project}-unhandled-error"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.unhandled_error.metric_transformation[0].namespace
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The API answered a request with an unhandled 500 (invisible to the Lambda Errors metric). Search the API log group for event = unhandled_error: route says which endpoint, error/code the exception's name and code (a Postgres SQLSTATE for a database error), at the stack frames. Runbook: docs/deployment.md § Runbooks."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- Migrate Lambda --------------------------------------------------------
 # A failed migration also fails the deploy workflow loudly; this catches a
 # manual invocation (e.g. after a password rotation) that nobody watched.

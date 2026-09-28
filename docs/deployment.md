@@ -360,7 +360,9 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   and the worker's log group (a saved run failing one of the engine's own
   invariant checks — docs/security.md § Infrastructure), one on
   `mail_send_failed` in the same two log groups (an account, invitation or
-  report email that failed to send, § Email), and the job queue's five (DLQ depth, worker errors and
+  report email that failed to send, § Email), one on `unhandled_error` in
+  the API's log group (a request answered with an unhandled 500, which the
+  Lambda `Errors` metric can't see, § Runbooks), and the job queue's five (DLQ depth, worker errors and
   throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
@@ -941,6 +943,21 @@ Every step is an ordinary app action by an owner unless it says "operator".
    If `auditEventsTruncated` is `true` (more than 50 000 events), the
    operator adds the older events by query as the schema owner. Record the
    request in the operator log.
+9. **An unhandled 500** (the `unhandled-error` alarm, operator). The API
+   answered a request with a generic `500` (`handleError`,
+   `backend/src/http/errors.ts`): an exception no route expected, which the
+   Lambda `Errors` alarm never counts because the invocation succeeded. Each
+   one logs `{"event":"unhandled_error","method":"GET","route":"/projects/:id","error":"error","code":"42P01","at":["at …"]}`:
+   the route's pattern (never the concrete path), the error's name and code
+   (a Postgres SQLSTATE for a database error) and its stack frames, never its
+   message. In CloudWatch Logs Insights on the API's log group,
+   `filter event = "unhandled_error" | stats count() by route, error, code`
+   says which endpoint and what kind of failure; `at` points at the throwing
+   line. One route with a SQLSTATE after a deploy is usually a migration the
+   code got ahead of (§ A failed migration); every route at once with
+   `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
+   locally, fix the cause and add a test; the message was deliberately not
+   logged (it can hold row values), so the stack and code are the lead.
 
 ## Rollback
 

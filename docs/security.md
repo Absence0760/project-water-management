@@ -184,10 +184,13 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   error's text (SES's `MessageRejected` names the recipient). A CloudWatch
   alarm counts it (`infra/alarms.tf`, `mail_send_failed`), so a broken send is
   paged rather than silent.
-- **No personal data in server logs.** Mail, alert and job failures log
-  through `safeError` (`backend/src/logging/safeError.ts`): the error's name,
-  machine code (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for
-  an unexpected job failure. Never an error's message or a pg `detail`, which
+- **No personal data in server logs.** Mail, alert and job failures and the
+  API's unhandled errors log through `safeError`
+  (`backend/src/logging/safeError.ts`): the error's name, machine code
+  (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for an
+  unexpected job failure or an unhandled API error (`unhandled_error`, which
+  also names the route's pattern, never the concrete path, since a path can
+  carry a token). Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
@@ -1325,8 +1328,11 @@ In short:
   registered route and fails if a non-public one answers an anonymous request
   with anything but `401`.
 - **Errors never echo the database.** `backend/src/http/errors.ts` maps
-  Postgres error codes to fixed messages; anything else is a logged, generic
-  `500`.
+  Postgres error codes to fixed messages; anything else is a generic `500`,
+  logged as one structured `{"event":"unhandled_error","method","route",…}`
+  line through `safeError` (no message, no path). The Lambda invocation
+  succeeds, so the `Errors` metric never sees these; a log metric filter +
+  alarm on that line (`infra/alarms.tf`, `unhandled_error`) pages them.
 
 ## Input handling
 
@@ -1883,7 +1889,8 @@ readable by anyone. The rules:
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
   policy lets the worker, and only the worker, reach those two queues.
 - **Blast radius:** Lambda reserved concurrency is capped. There is a budget
-  alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
+  alarm, plus alarms on Lambda errors, throttles, the API's unhandled 500s
+  (`unhandled_error`) and CloudFront 5xx.
 - **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a
   structured `{ event: "self_check_failed", projectId, runId, checks }` line
   — failed check ids only, never a farm name, date or value — when a saved
