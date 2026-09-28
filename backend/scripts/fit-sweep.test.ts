@@ -169,7 +169,7 @@ describe('runCell (synthetic catchment, tiny budget)', () => {
 });
 
 describe('toMarkdown / toJson', () => {
-	const scores = (v: number | null) => ({ days: 100, kgePrime: v, kgeYearly: v, kgeNp: v, nse: v, nseSqrt: v, nseLog: v, volumeErrorPct: 1, fdcHighPct: 1, fdcMidSlopePct: 1, fdcLowPct: 1 });
+	const scores = (v: number | null) => ({ days: 100, kgePrime: v, kgeYearly: v, kgeNp: v, nse: v, nseSqrt: v, nseLog: v, kgeLowHigh: v, volumeErrorPct: 1, fdcHighPct: 1, fdcMidSlopePct: 1, fdcLowPct: 1 });
 	const result = (over: Partial<CellResult> = {}): CellResult => ({
 		cell: { pan: { label: 'generic', values: new Array(12).fill(0.7) }, bounds: 'typical', objective: 'nseLog', exclusionSet: 'drop', exclusions: [{ start: '2018-01-01', end: '2018-02-01', reason: 'silted' }], wr2012Band: true },
 		params: { x1: 350.25, x2: 0, x3: 90.5, x4: 1.75 },

@@ -213,7 +213,7 @@ describe('calibrate', () => {
 		expect(r.before.benchmarks).toEqual(r.fit.benchmarks);
 		for (const p of [r.splitSample!.calibration, r.splitSample!.validation]) {
 			expect(p.benchmarks).not.toBeNull();
-			expect(p.intervals === null || p.intervals.years === p.waterYears.length).toBe(true);
+			expect(p.intervals == null || p.intervals.years === p.waterYears.length).toBe(true);
 		}
 		// Deterministic: the same fit gives the same intervals.
 		expect(calibrate(input, { budget: 50, seed: 2 }).fit.intervals).toEqual(r.fit.intervals);
