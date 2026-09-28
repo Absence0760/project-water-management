@@ -159,7 +159,12 @@ describe.skipIf(!minioUp)('report_render with local Chromium and MinIO', () => {
 		const status = await u.call('GET', `/projects/${projectId}/reports/${jobId}`);
 		expect(status.body.report).toMatchObject({ status: 'done', error: null, emailed: 1 });
 		expect(status.body.report.pages).toBeGreaterThanOrEqual(2);
-		const pdf = Buffer.from(await (await fetch(status.body.url)).arrayBuffer());
+		// The download route redirects to a one-minute pre-signed GET on MinIO.
+		const dl = await fetch(`${apiUrl}/projects/${projectId}/reports/${jobId}/pdf`, { headers: { cookie: u.cookie }, redirect: 'manual' });
+		expect(dl.status).toBe(302);
+		const got = await fetch(dl.headers.get('location')!);
+		expect(got.headers.get('content-disposition')).toMatch(/^attachment; filename="rendered-catchment-report-\d{4}-\d{2}-\d{2}\.pdf"$/);
+		const pdf = Buffer.from(await got.arrayBuffer());
 		expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 		expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length).toBe(status.body.report.pages);
 		// The render token was used up.

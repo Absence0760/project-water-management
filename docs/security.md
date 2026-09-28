@@ -375,8 +375,16 @@ buys a **render session** that can read one report and nothing else.
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
   or taken from a message), deleted after 7 days. A download is a pre-signed
-  GET that lasts an hour, handed out only by `GET /projects/:id/reports/:jobId`
-  to a viewer of the project. **Emails carry no PDF and no download link**:
+  GET that lasts **60 seconds**, minted per request by
+  `GET /projects/:id/reports/:jobId/pdf` for a viewer of the project and
+  handed over as a `302` (`no-store`, `no-referrer`); the status route
+  carries no link (issue #126). So the only lasting handle on a PDF is that
+  API route, behind the session, CloudFront, the WAF's rate rule and the
+  project's membership, and every download re-checks membership. The
+  alternative, streaming the PDF through the API, was not taken: the API's
+  Function URL is in buffered mode (a 6 MB response cap, less after base64,
+  that a long report could pass), and streaming would hold a VPC Lambda open
+  and billed for every transfer. **Emails carry no PDF and no download link**:
   they link to the app's `/projects/:id/reports/:jobId` page, which needs the
   reader signed in and still a member, so a forwarded email opens nothing.
   Recipients must be direct project members with viewer or above, checked
@@ -386,9 +394,14 @@ buys a **render session** that can read one report and nothing else.
   schedules. The hourly and schedule caps are counted under an advisory lock
   (per user and project, per project), so a burst of concurrent requests
   can't pass them together (`jobs/costCaps.security.db.test.ts`).
-- **Accepted residual risks.** A pre-signed link works for its hour for
-  whoever holds it (as any download link would); keep it short and don't log
-  it. A render request dead-lettered in production still holds its token
+- **Accepted residual risks.** A pre-signed link works for its minute for
+  whoever holds it, from any address, and the S3 GET itself is outside
+  CloudFront and the WAF: a member who scripts the route can still pull a
+  PDF as often as the WAF's rate rule lets the redirects through, and each
+  URL may be replayed within its 60 s. Egress per minted URL is therefore
+  bounded by the PDF's size times what can be fetched in a minute, and the
+  minting is rate-limited and needs a live membership; don't log the
+  `Location` header. A render request dead-lettered in production still holds its token
   until it expires (5 minutes): the DLQ is encrypted and readable only by the
   account. The worker's inline render (local and CI only) holds the job's
   database transaction open for the few seconds it takes.
@@ -1513,8 +1526,10 @@ In short:
   `.href =`, except the blob download link in `lib/export/download.ts`),
   read from the whole file, since an inline handler in markup is code too. It
   also requires `rel="noopener"` on every `target="_blank"` link. The
-  one link that comes from the API, the report PDF's pre-signed URL, is
-  dropped unless it is http(s) (`serverPdf.ts` `reportsApi.get`). `?next=`
+  report PDF's download link is built in the client from `PUBLIC_API_URL`
+  and the ids (`api.reports.pdfUrl`), never taken from a response
+  (`serverPdf.ts` `reportsApi.get`), so no URL the API returns reaches an
+  `href`. `?next=`
   after sign-in (`lib/auth/redirect.ts` `safeNext`) follows only a path
   that resolves to the app's own origin, so `/\t/host` (a browser strips the
   tab) is refused as well as `//host`.

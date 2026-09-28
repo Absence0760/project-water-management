@@ -839,9 +839,12 @@ plan-only until the first deploy):
   access blocked, bucket-owner objects), SSE-S3, TLS only, and a lifecycle
   that deletes `reports/` objects after **7 days** (the tick deletes the
   rows a day later). The API role may only `GetObject` there, to pre-sign
-  one-hour download links; signing is local, so the API needs no S3
-  endpoint. A pre-signed URL is only valid while the Lambda role's
-  temporary credentials are, which normally outlast the hour.
+  the 60-second download links `GET /projects/:id/reports/:jobId/pdf`
+  redirects to (one per click, so nothing long-lived leaves the API; the
+  browser fetches the object from S3 directly, not through CloudFront);
+  signing is local, so the API needs no S3 endpoint. A pre-signed URL is
+  only valid while the Lambda role's temporary credentials are, which
+  always outlast the minute.
 - **Retries and DLQs:** each render queue dead-letters after 5 receives. A
   failed render is an answer (the report shows it), not a retry: its token
   is spent. A render request in the DLQ can't be redriven usefully (the
