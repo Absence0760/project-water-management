@@ -461,6 +461,54 @@ resource "aws_cloudwatch_metric_alarm" "worker_throttles" {
   }
 }
 
+# Heartbeat. The backlog metric below only exists once a tick succeeds, and
+# its alarm treats missing data as OK, so a worker that has stopped running
+# (the schedule disabled or deleted, reserved concurrency set to 0) never trips
+# it. The 5-minute tick alone invokes the worker ~3 times per 15 minutes, and a
+# throttled invocation isn't counted, so zero means nothing is reaching it.
+# Missing data is breaching: no datapoints *is* the failure. A tick that fails
+# still counts as an invocation (worker-errors covers it), and so does the stub
+# before the first backend release, which throws on every tick: the heartbeat
+# stays OK on a first deploy while worker-errors fires until the release.
+resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
+  alarm_name          = "${local.project}-worker-heartbeat"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Invocations"
+  namespace           = "AWS/Lambda"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "The worker Lambda was not invoked for 15 minutes, though its tick runs every 5: background jobs, feeds, alert emails and reports have stopped. Check that the worker-tick EventBridge rule is enabled and targets the worker, that the worker's reserved concurrency is not 0, and the worker-tick-failed alarm."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "breaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.worker.function_name
+  }
+}
+
+# EventBridge could not deliver the tick (the worker's invoke permission
+# removed, the target's function gone, or the invoke refused past
+# EventBridge's retries).
+resource "aws_cloudwatch_metric_alarm" "worker_tick_failed" {
+  alarm_name          = "${local.project}-worker-tick-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "FailedInvocations"
+  namespace           = "AWS/Events"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "EventBridge failed to invoke the worker for its 5-minute tick. Check the worker-tick rule's target and the worker's lambda:InvokeFunction permission for events.amazonaws.com (terraform plan shows the drift), then the worker's reserved concurrency."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    RuleName = aws_cloudwatch_event_rule.worker_tick.name
+  }
+}
+
 # Emitted by every tick as an embedded metric (lambda-worker.ts metricLine).
 resource "aws_cloudwatch_metric_alarm" "jobs_backlog" {
   alarm_name          = "${local.project}-jobs-backlog"

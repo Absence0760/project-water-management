@@ -647,11 +647,19 @@ plan-only until the first deploy):
   worker's logs, then redrive or purge the DLQ.
 - **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
   worker throttles > 0 (it hit its reserved concurrency);
-  the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
+  `worker-heartbeat`, fewer than 1 worker invocation in 15 minutes (three
+  ticks), with missing data treated as breaching, so a worker that has
+  stopped altogether (the tick rule disabled, reserved concurrency set to 0)
+  alarms even though it emits no backlog metric; `worker-tick-failed`,
+  EventBridge `FailedInvocations` > 0 on the tick rule (the invoke
+  permission or target broken); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
   (a metric filter on the worker's `job_dead` log line). A project with the
   `job_dead` alert on also emails its owners ([§ Alert emails](#alert-emails)).
+  On a first deploy the worker is Terraform's stub, which throws on every
+  tick until the first backend release: `worker-errors` fires then, but
+  the heartbeat stays OK (a failed invocation still counts).
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 

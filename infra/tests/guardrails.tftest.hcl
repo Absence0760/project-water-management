@@ -805,6 +805,8 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.jobs_dlq_depth,
       aws_cloudwatch_metric_alarm.worker_errors,
       aws_cloudwatch_metric_alarm.worker_throttles,
+      aws_cloudwatch_metric_alarm.worker_heartbeat,
+      aws_cloudwatch_metric_alarm.worker_tick_failed,
       aws_cloudwatch_metric_alarm.jobs_backlog,
       aws_cloudwatch_metric_alarm.job_dead,
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth,
@@ -981,6 +983,29 @@ run "background_jobs" {
   assert {
     condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
     error_message = "The backlog alarm must read the metric lambda-worker.ts emits (METRIC_NAMESPACE, OldestDueJobAgeSeconds)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_heartbeat.namespace == "AWS/Lambda" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.metric_name == "Invocations" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.comparison_operator == "LessThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.threshold == 1 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.period * aws_cloudwatch_metric_alarm.worker_heartbeat.evaluation_periods == 900 &&
+      aws_cloudwatch_metric_alarm.worker_heartbeat.treat_missing_data == "breaching"
+    )
+    error_message = "The worker heartbeat must alarm on < 1 invocation in 15 minutes (three ticks), with missing data breaching: a stopped worker emits no data."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_tick_failed.namespace == "AWS/Events" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.metric_name == "FailedInvocations" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.dimensions["RuleName"] == aws_cloudwatch_event_rule.worker_tick.name &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.worker_tick_failed.threshold == 0
+    )
+    error_message = "EventBridge failing to deliver the worker tick must alarm (FailedInvocations > 0 on the worker-tick rule)."
   }
   assert {
     condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
