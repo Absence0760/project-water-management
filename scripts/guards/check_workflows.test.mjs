@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { checkWorkflow, isProductionGated, jobsOf, needsOf, pushFullProblem, topLevelPermissions } from './check_workflows.mjs';
+import {
+	autoMergeProblem,
+	checkWorkflow,
+	isProductionGated,
+	jobsOf,
+	needsOf,
+	pushFullProblem,
+	topLevelPermissions
+} from './check_workflows.mjs';
 
 const SHA = 'de0fac2e4500dabe0009e67214ff5f5447ce83dd';
 
@@ -134,4 +143,22 @@ test('a docker build must produce one linux/amd64 manifest without attestations'
 	assert.deepEqual(rules(good + '      - run: docker build -t x .\n'), ['image']);
 	assert.deepEqual(rules(good + ok.replace(' --sbom=false', '')), ['image']);
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);
+});
+
+test('auto-merge: the allowlist exists and leaves github_actions and docker to a human', () => {
+	const file = '.github/workflows/dependabot-auto-merge.yml';
+	const step = (list) =>
+		good +
+		`      - name: Approve + auto-merge minor / patch\n        if: >-\n          contains(fromJSON('${JSON.stringify(list)}'), steps.meta.outputs.package-ecosystem) &&\n          steps.meta.outputs.update-type == 'version-update:semver-patch'\n`;
+	assert.deepEqual(rules(step(['npm_and_yarn', 'pip', 'docker_compose', 'terraform']), file), []);
+	assert.deepEqual(rules(step(['npm_and_yarn', 'docker']), file), ['auto-merge']);
+	assert.deepEqual(rules(step(['github_actions']), file), ['auto-merge']);
+	assert.deepEqual(rules(good, file), ['auto-merge'], 'no allowlist at all fails closed');
+	assert.deepEqual(rules(step(['docker'])), [], 'other workflows are not read for it');
+	assert.match(checkWorkflow(file, step(['docker']))[0].message, /includes docker/);
+});
+
+test('auto-merge: the repo workflow passes', () => {
+	const file = new URL('../../.github/workflows/dependabot-auto-merge.yml', import.meta.url);
+	assert.equal(autoMergeProblem(readFileSync(file, 'utf8')), null);
 });

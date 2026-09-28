@@ -101,6 +101,22 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   under `reports/` in the reports bucket. It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
+  The image is pinned by content: its Playwright base by tag *and* digest
+  (`mcr.microsoft.com/playwright:v<version>-noble@sha256:…`, both `FROM`
+  lines), its npm packages (playwright-core, aws-lambda-ric) by
+  `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
+  its build stage's apt packages by exact version from one Ubuntu archive
+  snapshot (`APT_SNAPSHOT`; move the snapshot and the versions together,
+  read from the base with `apt-cache policy` as the Dockerfile shows).
+  Dependabot's `docker` entry for `/backend` opens the tag-and-digest PR;
+  it is never auto-merged (`pnpm check:workflows` keeps `docker` off the
+  auto-merge allowlist). Moving
+  Playwright moves every pin at once: the Dockerfile tag and digest
+  (`docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`),
+  playwright-core in `backend/renderer-deps/package.json` (then
+  `npm install --package-lock-only` there) and `backend/package.json`, and
+  e2e's `@playwright/test`. `pnpm check:pins` fails until they agree, and
+  `pnpm check:renderer-image` builds and smoke-tests the result.
   Its egress is open: its Chromium is confined to the site's origin by the
   app (Playwright routing plus Chromium's own resolver, proxy and WebRTC
   flags; [docs/security.md § Render tokens](../docs/security.md#render-tokens)),
