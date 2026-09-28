@@ -324,18 +324,17 @@
 	const dotBand = (id: string) => colouring?.byNode.get(id)?.band ?? null;
 	// The Grids menu closes on Escape (focus back on its button) and on a click outside it, like the other pop-ups.
 	// The Map layout fills the window below its own top edge (issue #17: A2 uses the whole screen),
-	// less whatever the page keeps below it (its bottom padding, which makes room for the save bar),
-	// so the page itself never scrolls. Both are measured, not assumed.
+	// less the page's gutter and the save bar while it shows (--dock-h), so the page itself never
+	// scrolls. The top is measured. (It once measured what sat below it as the page's scroll height
+	// less its bottom, which the window's own height props up: any height that left the page shorter
+	// than the window measured itself as right, so a map shrunk on a phone never grew back at 1440.)
 	let mapEl: HTMLDivElement | undefined = $state();
 	let mapTop = $state(0);
-	let mapBelow = $state(0);
 	$effect(() => {
 		if (!mapEl) return;
 		const measure = () => {
 			if (!mapEl) return;
-			const r = mapEl.getBoundingClientRect();
-			mapTop = r.top + window.scrollY;
-			mapBelow = Math.max(0, document.documentElement.scrollHeight - (r.bottom + window.scrollY));
+			mapTop = mapEl.getBoundingClientRect().top + window.scrollY;
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
@@ -672,7 +671,7 @@
 			</div>
 		</section>
 	{:else}
-	<div class="map-layout" bind:this={mapEl} style:--map-top="{mapTop}px" style:--map-below="{mapBelow}px">
+	<div class="map-layout" bind:this={mapEl} style:--map-top="{mapTop}px">
 		<section class="panel map-card" aria-labelledby="sch-h">
 			<div class="panel-head">
 				<h3 id="sch-h">Catchment map</h3>
@@ -1134,6 +1133,8 @@
 		margin: 0;
 		padding: 0;
 		display: grid;
+		/* One column the list's width: a row's one-line ending must not size the track past it. */
+		grid-template-columns: minmax(0, 1fr);
 		max-height: 24rem;
 		overflow-y: auto;
 	}
@@ -1160,12 +1161,22 @@
 		background: var(--accent-soft);
 		font-weight: 600;
 	}
+	/* The name takes what the row has left and wraps between words; what it
+	   drains into takes at most 45 % on one line, cut with an ellipsis (the
+	   button's name still reads it whole). It took its full width before, and
+	   a long one squeezed the name to a column that broke mid-word ("Blinkwat/er"). */
 	.node-row .nm {
-		flex: 1;
+		flex: 1 1 0%;
 		min-width: 0;
-		overflow-wrap: anywhere;
+		overflow-wrap: break-word;
 	}
 	.node-row .meta {
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 45%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 		font-size: 0.8rem;
 		font-weight: 400;
 	}
@@ -1223,11 +1234,11 @@
 		}
 	}
 	/* From 900 px the layout is exactly the height left in the window (less
-	   what the page keeps below it: its padding, room for the save bar); the drawing and the node list take what
+	   the page's gutter and the save bar while it shows); the drawing and the node list take what
 	   their cards leave, each scrolling inside itself. */
 	@media (min-width: 900px) {
 		.map-layout {
-			height: max(520px, calc(100vh - var(--map-top, 0px) - var(--map-below, 0px)));
+			height: max(520px, calc(100vh - var(--map-top, 0px) - var(--dock-h, 0px) - 1rem));
 			align-items: stretch;
 		}
 		.map-card {

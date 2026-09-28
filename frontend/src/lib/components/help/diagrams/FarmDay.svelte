@@ -38,35 +38,35 @@
 
 	<!-- upstream inflow -->
 	<path class="wire" d="M150 64 L243 127" marker-end="url(#fd-arrow)" />
-	<text class="s" x="196" y="104" text-anchor="end">× upstream share</text>
+	<text class="s lbl" x="184" y="104" text-anchor="end">× upstream share</text>
 	<path class="wire" d="M60 64 V298" marker-end="url(#fd-arrow)" />
-	<text class="s" x="68" y="186">rest</text>
+	<text class="s lbl" x="68" y="186">rest</text>
 
 	<!-- farm runoff -->
 	<path class="wire" d="M510 64 L417 127" marker-end="url(#fd-arrow)" />
-	<text class="s" x="464" y="104">× runoff share</text>
+	<text class="s lbl" x="476" y="104">× runoff share</text>
 	<path class="wire" d="M600 64 V298" marker-end="url(#fd-arrow)" />
-	<text class="s" x="608" y="186">rest</text>
+	<text class="s lbl" x="608" y="186">rest</text>
 
 	<!-- transfer, diversion, irrigation, spill, return flow -->
 	<path class="wire" d="M330 66 V108" marker-start="url(#fd-arrow)" marker-end="url(#fd-arrow)" />
 	<path class="wire" d="M520 298 V160 H417" marker-end="url(#fd-arrow)" />
-	<text class="s" x="528" y="240">diversion</text>
+	<text class="s lbl" x="528" y="240">diversion</text>
 	<path class="wire" d="M270 180 V213" marker-end="url(#fd-arrow)" />
-	<text class="s" x="264" y="203" text-anchor="end">irrigation</text>
+	<text class="s lbl" x="264" y="203" text-anchor="end">irrigation</text>
 	<path class="wire" d="M390 180 V298" marker-end="url(#fd-arrow)" />
-	<text class="s" x="398" y="245">spill</text>
+	<text class="s lbl" x="398" y="245">spill</text>
 	<path class="wire" d="M225 255 V298" marker-end="url(#fd-arrow)" />
-	<text class="s" x="233" y="282">return flow</text>
+	<text class="s lbl" x="233" y="282">return flow</text>
 
 	<!-- the dam's own surface: rain in, evaporation out; seepage below the wall -->
 	<path class="wire" d="M290 76 V108" marker-end="url(#fd-arrow)" />
-	<text class="s" x="284" y="96" text-anchor="end">rain on dam</text>
+	<text class="s lbl" x="284" y="96" text-anchor="end">rain on dam</text>
 	<path class="wire" d="M370 108 V76" marker-end="url(#fd-arrow)" />
-	<text class="s" x="376" y="96">evaporation</text>
+	<text class="s lbl" x="376" y="96">evaporation</text>
 	<path class="wire" d="M345 180 V298" marker-end="url(#fd-arrow)" />
-	<text class="s" x="339" y="238" text-anchor="end">seepage</text>
+	<text class="s lbl" x="339" y="238" text-anchor="end">seepage</text>
 
 	<path class="wire" d="M330 336 V372" marker-end="url(#fd-arrow)" />
-	<text class="s" x="342" y="368">outflow to the next element</text>
+	<text class="s lbl" x="342" y="368">outflow to the next element</text>
 </svg>

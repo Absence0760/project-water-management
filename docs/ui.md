@@ -1236,11 +1236,13 @@ note's link on the Summary, `notes.ts` `noteHref`).
     filling the card, and one legend line under it. Colouring by supply is
     **on by default** once the project has a run.
   - **Screen use:** from 900 px the layout is exactly the height left in the
-    window below its top edge, less what the page keeps below it (its bottom
-    padding and the save bar's room; at least 520 px), both measured on load
-    and whenever the page resizes, so **the page itself doesn't scroll**
-    (the workspace's bottom padding is its usual 1rem gutter, plus the save
-    bar while it shows). The drawing takes the card's height
+    window below its top edge, less the page's 1rem gutter and the save bar
+    while it shows (`--dock-h`; at least 520 px), the top measured on load and
+    whenever the page resizes, so **the page itself doesn't scroll**. (It
+    used to measure what sat below it from the page's scroll height, which
+    the window's own height props up, so a map shrunk in a narrow window never
+    grew back when the window widened; Crops & demand had the same rule and
+    the same fix.) The drawing takes the card's height
     after the legend, and the node list takes the side column's height after
     the node card, each scrolling inside itself. `NetworkSchematic`'s `fill`
     lays the tree out to the box rather than zooming it: columns are at least
@@ -1249,7 +1251,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
     150 px); rows spread to the box's height the same way (only from 900 px,
     where the box's height is set by the page, not by the drawing). Text stays
     at its usual size, and a network wider than the box at its tightest
-    spacing scrolls. The side column is `clamp(17rem, 24vw, 22rem)`.
+    spacing scrolls; the drawing is centred in its box only while it fits
+    (`align-items: safe center`), so a network taller than the box starts at
+    its top row rather than centring that row above the box's edge, where
+    nothing can scroll to it (Sandspruit's top row was cut off at 1440 × 960).
+    The side column is `clamp(17rem, 24vw, 22rem)`.
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
@@ -1273,7 +1279,9 @@ note's link on the Summary, `notes.ts` `noteHref`).
       the map or in the list to see it here."
     - **All nodes**: a button per node, in the model's order, with a dot for
       its kind (in its supply band's colour while colouring is on), its name
-      and "→ downstream" (or "outlet"). Pressing one picks it (and marks it
+      and "→ downstream" (or "outlet"). The name wraps between words; the
+      downstream name takes at most 45 % of the row on one line, cut with an
+      ellipsis (the button's accessible name has it whole). Pressing one picks it (and marks it
       on the schematic); picking on the schematic marks it here.
 
   - **Node sheet** (`edit=<id>`, the `Dialog` `side wide` variant, 640 px,
@@ -1296,7 +1304,18 @@ note's link on the Summary, `notes.ts` `noteHref`).
   upstream area, and transfers are dashed arrows. Each transfer arc takes
   the smallest bend that keeps it off every node label and symbol and inside
   the drawing (`transferArc`), left of the nodes first since labels sit to
-  their right. Editors can drag a node onto
+  their right. When no arc is clear (far-apart dams on a big network, the
+  packed columns on paper) the transfer is routed instead (`routeAround`): a
+  shortest path on a 4 px grid round every label and symbol, along the lanes
+  between rows and beside the nodes, crossing rivers but never running along
+  one, its corners rounded (`routePath`); `transferPathData` picks. Labels
+  (ui-playbook § 3, "Labels on diagrams"): each node's **name** (12.5 px,
+  semibold, `--text`) over its **figure** (11 px, `--text-muted`: area and
+  dam, or the colouring's "82% supplied"), both with a halo in the drawing's
+  ground colour. Names are cut to 17 characters so that no two read the same
+  (`distinctShortNames`): "Kliprivier Estat…", but "North Sandvlak… 2" and
+  "… 7" keep the ending that tells them apart; the full name is the node's
+  tooltip, the list and the drainage tree. Editors can drag a node onto
   another to change what it drains into. Drops that would make a loop, or
   that move the outlet, are refused and the reason is shown. The "Drains
   into" select is the keyboard route. A visually hidden list ("Drainage
@@ -4497,9 +4516,14 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
 - **Diagrams** are inline SVG components in `lib/components/help/diagrams/`,
   wrapped by `help/Diagram.svelte`, which holds the only styles they use (the
   app's colour tokens, so they follow the light and dark themes). Each SVG is
-  `role="img"` with a full text description, plus a visible caption. On a
-  phone the drawing keeps a readable size and scrolls sideways (a
-  `data-scroll-region`). A diagram carries no colours or `<style>` of its own,
+  `role="img"` with a full text description, plus a visible caption. A
+  drawing is never drawn so small that its smallest text is under 9.5 px
+  (`Diagram` sizes its `min-width` from the SVG's viewBox and smallest font
+  once it is on the page); narrower than that it scrolls sideways (a
+  `data-scroll-region`): on a phone, and at 1440 for the five diagrams wider
+  than 660 units (the model pipeline shrank its notes to 7 px there). A label
+  on the figure's ground beside a wire (not in a box) is `.lbl`: a halo in
+  `--surface`. A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
   `guides.test.ts`).
 - **Help tips** (ⓘ) for terms that map to a part of the scene (`TIP_PICTURES`

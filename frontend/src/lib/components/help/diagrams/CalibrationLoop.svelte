@@ -43,19 +43,19 @@
 	<path class="wire" d="M605 86 V138" marker-end="url(#cl-arrow)" />
 	<path class="wire" d="M510 168 H457" marker-end="url(#cl-arrow)" />
 	<path class="wire loop" d="M360 140 V88" marker-end="url(#cl-loop)" />
-	<text class="s" x="370" y="118">repeat: 1 500 runs by default</text>
+	<text class="s lbl" x="370" y="118">repeat: 1 500 runs by default</text>
 	<path class="wire" d="M265 168 H192" marker-end="url(#cl-arrow)" />
-	<text class="s" x="228" y="160" text-anchor="middle">done</text>
+	<text class="s lbl" x="228" y="160" text-anchor="middle">done</text>
 
 	<!-- which days count -->
-	<text class="m" x="20" y="236">Which days are scored</text>
-	<text class="s" x="20" y="259">observed record</text>
+	<text class="m lbl" x="20" y="236">Which days are scored</text>
+	<text class="s lbl" x="20" y="259">observed record</text>
 	<rect class="bar" x="130" y="250" width="570" height="10" rx="2" />
-	<text class="s" x="20" y="281">calibration window</text>
+	<text class="s lbl" x="20" y="281">calibration window</text>
 	<rect class="box key" x="200" y="271" width="420" height="12" rx="2" />
-	<text class="s" x="20" y="303">scored days</text>
+	<text class="s lbl" x="20" y="303">scored days</text>
 	<rect class="box fit" x="200" y="294" width="180" height="12" rx="2" />
 	<rect class="box fit" x="450" y="294" width="170" height="12" rx="2" />
 	<rect class="excl" x="380" y="244" width="70" height="68" rx="2" fill-opacity="0.6" />
-	<text class="s" x="415" y="326" text-anchor="middle">exclusion, with a reason</text>
+	<text class="s lbl" x="415" y="326" text-anchor="middle">exclusion, with a reason</text>
 </svg>

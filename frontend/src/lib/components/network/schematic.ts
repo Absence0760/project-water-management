@@ -139,6 +139,276 @@ export function transferArc(a: Point, b: Point, obstacles: readonly Box[], bound
 export const arcPath = (a: Arc) =>
 	`M${a.from.x},${a.from.y} C${a.c1.x},${a.c1.y} ${a.c2.x},${a.c2.y} ${a.to.x},${a.to.y}`;
 
+// --- routed transfers (when no arc is clear) --------------------------------
+// On a big network, or on paper where the columns are packed, every arc
+// between two far-apart dams crosses somebody's name: the Sandspruit example
+// drew one through "Vaalbank", and a 22-node catchment's report through six
+// names. A label with a line through it is the least readable thing on the
+// drawing, so when the arc search finds nothing clear the transfer is routed
+// instead: a shortest path on a grid of ROUTE_CELL px around every label and
+// symbol, along the open lanes between rows and beside the nodes, with its
+// corners rounded. Rivers may be crossed but not followed (a dashed line on a
+// river reads as neither).
+
+/** A straight piece of a river, in pixels. */
+export interface Segment {
+	a: Point;
+	b: Point;
+}
+
+export const ROUTE_CELL = 4;
+/** Extra cost of a grid step on a river line (crossing one costs a few steps; running along it, many). */
+const RIVER_COST = 6;
+/** Extra cost of a turn, so the route keeps to few, long straights. */
+const TURN_COST = 10;
+
+/** Is point p within `r` of segment s? */
+function nearSegment(p: Point, s: Segment, r: number): boolean {
+	const dx = s.b.x - s.a.x;
+	const dy = s.b.y - s.a.y;
+	const len2 = dx * dx + dy * dy || 1;
+	const t = Math.max(0, Math.min(1, ((p.x - s.a.x) * dx + (p.y - s.a.y) * dy) / len2));
+	return Math.hypot(p.x - (s.a.x + t * dx), p.y - (s.a.y + t * dy)) <= r;
+}
+
+/**
+ * The shortest grid path from `a` to `b` that keeps `clearance` px off every
+ * box in `obstacles` and inside `bounds`, as a polyline of its corners (the
+ * first point `a`, the last `b`). `soft` lines may be crossed at a cost.
+ * Null when `b` can't be reached. The two end points may sit inside an
+ * obstacle (their own symbols are not in the list, but a symbol's box may
+ * touch a neighbour's label); the path leaves and enters them by the
+ * nearest free cell.
+ */
+export function routeAround(a: Point, b: Point, obstacles: readonly Box[], bounds: Box, soft: readonly Segment[] = [], clearance = 3): Point[] | null {
+	const C = ROUTE_CELL;
+	const cols = Math.max(1, Math.floor((bounds.x1 - bounds.x0) / C));
+	const rows = Math.max(1, Math.floor((bounds.y1 - bounds.y0) / C));
+	const at = (i: number) => ({ x: bounds.x0 + ((i % cols) + 0.5) * C, y: bounds.y0 + (Math.floor(i / cols) + 0.5) * C });
+	const cellOf = (p: Point) => {
+		const c = Math.min(cols - 1, Math.max(0, Math.floor((p.x - bounds.x0) / C)));
+		const r = Math.min(rows - 1, Math.max(0, Math.floor((p.y - bounds.y0) / C)));
+		return r * cols + c;
+	};
+	const blocked = new Uint8Array(cols * rows);
+	for (const o of obstacles) {
+		const c0 = Math.max(0, Math.floor((o.x0 - clearance - bounds.x0) / C));
+		const c1 = Math.min(cols - 1, Math.floor((o.x1 + clearance - bounds.x0) / C));
+		const r0 = Math.max(0, Math.floor((o.y0 - clearance - bounds.y0) / C));
+		const r1 = Math.min(rows - 1, Math.floor((o.y1 + clearance - bounds.y0) / C));
+		for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) blocked[r * cols + c] = 1;
+	}
+	const extra = new Uint8Array(cols * rows);
+	for (const s of soft) {
+		const c0 = Math.max(0, Math.floor((Math.min(s.a.x, s.b.x) - C - bounds.x0) / C));
+		const c1 = Math.min(cols - 1, Math.floor((Math.max(s.a.x, s.b.x) + C - bounds.x0) / C));
+		const r0 = Math.max(0, Math.floor((Math.min(s.a.y, s.b.y) - C - bounds.y0) / C));
+		const r1 = Math.min(rows - 1, Math.floor((Math.max(s.a.y, s.b.y) + C - bounds.y0) / C));
+		for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) if (nearSegment(at(r * cols + c), s, C)) extra[r * cols + c] = RIVER_COST;
+	}
+	const start = cellOf(a);
+	const goal = cellOf(b);
+	// The ends' own cells (and a short way out of them) are always open.
+	const free = (i: number) => !blocked[i] || i === start || i === goal || Math.hypot(at(i).x - a.x, at(i).y - a.y) < 14 || Math.hypot(at(i).x - b.x, at(i).y - b.y) < 14;
+
+	// A* over (cell, heading) so a turn can cost extra. Headings: 0 right, 1 down, 2 left, 3 up.
+	const DX = [1, 0, -1, 0];
+	const DY = [0, 1, 0, -1];
+	const n = cols * rows * 4;
+	const g = new Float64Array(n).fill(Infinity);
+	const from = new Int32Array(n).fill(-1);
+	const gx = goal % cols;
+	const gy = Math.floor(goal / cols);
+	const h = (i: number) => Math.abs((i % cols) - gx) + Math.abs(Math.floor(i / cols) - gy);
+	// A binary heap of [f, state].
+	const heap: number[][] = [];
+	const push = (f: number, s: number) => {
+		heap.push([f, s]);
+		let k = heap.length - 1;
+		while (k > 0) {
+			const p = (k - 1) >> 1;
+			if (heap[p]![0]! <= heap[k]![0]!) break;
+			[heap[p], heap[k]] = [heap[k]!, heap[p]!];
+			k = p;
+		}
+	};
+	const pop = () => {
+		const top = heap[0]!;
+		const last = heap.pop()!;
+		if (heap.length) {
+			heap[0] = last;
+			let k = 0;
+			for (;;) {
+				const l = 2 * k + 1;
+				const r = l + 1;
+				let m = k;
+				if (l < heap.length && heap[l]![0]! < heap[m]![0]!) m = l;
+				if (r < heap.length && heap[r]![0]! < heap[m]![0]!) m = r;
+				if (m === k) break;
+				[heap[m], heap[k]] = [heap[k]!, heap[m]!];
+				k = m;
+			}
+		}
+		return top;
+	};
+	for (let d = 0; d < 4; d++) {
+		g[start * 4 + d] = 0;
+		push(h(start), start * 4 + d);
+	}
+	let end = -1;
+	while (heap.length) {
+		const [f, s] = pop() as [number, number];
+		const cell = s >> 2;
+		const dir = s & 3;
+		if (f - h(cell) > g[s]!) continue;
+		if (cell === goal) {
+			end = s;
+			break;
+		}
+		const cx = cell % cols;
+		const cy = Math.floor(cell / cols);
+		for (let d = 0; d < 4; d++) {
+			if (d === (dir + 2) % 4) continue;
+			const nx = cx + DX[d]!;
+			const ny = cy + DY[d]!;
+			if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+			const nc = ny * cols + nx;
+			if (!free(nc)) continue;
+			const ns = nc * 4 + d;
+			const cost = g[s]! + 1 + extra[nc]! + (d === dir || cell === start ? 0 : TURN_COST);
+			if (cost < g[ns]!) {
+				g[ns] = cost;
+				from[ns] = s;
+				push(cost + h(nc), ns);
+			}
+		}
+	}
+	if (end < 0) return null;
+	const cells: number[] = [];
+	for (let s = end; s >= 0; s = from[s]!) cells.push(s >> 2);
+	cells.reverse();
+	// Keep the corners only.
+	const pts: Point[] = [a];
+	for (let i = 1; i < cells.length - 1; i++) {
+		const p = cells[i - 1]!;
+		const c = cells[i]!;
+		const q = cells[i + 1]!;
+		if (c - p !== q - c) pts.push(at(c));
+	}
+	pts.push(b);
+	// The ends are the node centres, not cell centres: square the first and last legs to them.
+	return squareEnds(pts);
+}
+
+/** Moves the corners next to each end onto that end's row or column, so the first and last legs stay straight. */
+function squareEnds(pts: Point[]): Point[] {
+	if (pts.length < 3) return pts;
+	const out = pts.map((p) => ({ ...p }));
+	const fix = (end: Point, next: Point, after: Point) => {
+		// The leg end→next is horizontal if next→after is vertical, and vice versa.
+		if (Math.abs(after.x - next.x) < 0.5) next.y = end.y;
+		else next.x = end.x;
+	};
+	fix(out[0]!, out[1]!, out[2]!);
+	const k = out.length - 1;
+	fix(out[k]!, out[k - 1]!, out[k - 2]!);
+	return out;
+}
+
+/**
+ * SVG path data for a routed transfer: its polyline with the corners rounded
+ * (radius at most `radius`, less on a short leg), stopped `stopShort` px
+ * before the last point so the arrowhead shows.
+ */
+export function routePath(pts: readonly Point[], radius = 8, stopShort = STOP_SHORT): string {
+	if (pts.length < 2) return '';
+	const p = pts.map((q) => ({ ...q }));
+	const last = p[p.length - 1]!;
+	const prev = p[p.length - 2]!;
+	const d = Math.hypot(last.x - prev.x, last.y - prev.y) || 1;
+	const cut = Math.min(stopShort, d - 1);
+	p[p.length - 1] = { x: last.x - ((last.x - prev.x) / d) * cut, y: last.y - ((last.y - prev.y) / d) * cut };
+	let out = `M${p[0]!.x},${p[0]!.y}`;
+	for (let i = 1; i < p.length - 1; i++) {
+		const a = p[i - 1]!;
+		const c = p[i]!;
+		const b = p[i + 1]!;
+		const la = Math.hypot(c.x - a.x, c.y - a.y) || 1;
+		const lb = Math.hypot(b.x - c.x, b.y - c.y) || 1;
+		const r = Math.min(radius, la / 2, lb / 2);
+		const p1 = { x: c.x - ((c.x - a.x) / la) * r, y: c.y - ((c.y - a.y) / la) * r };
+		const p2 = { x: c.x + ((b.x - c.x) / lb) * r, y: c.y + ((b.y - c.y) / lb) * r };
+		out += ` L${p1.x},${p1.y} Q${c.x},${c.y} ${p2.x},${p2.y}`;
+	}
+	const z = p[p.length - 1]!;
+	return `${out} L${z.x},${z.y}`;
+}
+
+/** How many points, sampled every ~2 px along a polyline, fall inside a box (grown by the clearance) or outside `bounds`. */
+export function polylineHits(pts: readonly Point[], boxes: readonly Box[], bounds?: Box): number {
+	let hits = 0;
+	for (let i = 1; i < pts.length; i++) {
+		const a = pts[i - 1]!;
+		const b = pts[i]!;
+		const steps = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.y - a.y) / 2));
+		for (let s = i === 1 ? 0 : 1; s <= steps; s++) {
+			const p = { x: a.x + ((b.x - a.x) * s) / steps, y: a.y + ((b.y - a.y) * s) / steps };
+			if (bounds && (p.x < bounds.x0 || p.x > bounds.x1 || p.y < bounds.y0 || p.y > bounds.y1)) hits++;
+			else if (boxes.some((q) => p.x > q.x0 && p.x < q.x1 && p.y > q.y0 && p.y < q.y1)) hits++;
+		}
+	}
+	return hits;
+}
+
+/**
+ * A transfer's path data: the smallest clear arc (transferArc), else a route
+ * around every label and symbol (routeAround), else the least-crossing arc.
+ */
+export function transferPathData(a: Point, b: Point, obstacles: readonly Box[], bounds: Box, rivers: readonly Segment[] = []): { d: string; routed: boolean } {
+	const arc = transferArc(a, b, obstacles, bounds);
+	if (arcHits(arc, obstacles, bounds) === 0) return { d: arcPath(arc), routed: false };
+	const route = routeAround(a, b, obstacles, bounds, rivers);
+	return route ? { d: routePath(route), routed: true } : { d: arcPath(arc), routed: false };
+}
+
+// --- labels ------------------------------------------------------------------
+
+/**
+ * Each name cut to at most `max` characters, so that no two different names
+ * read the same. A long name loses its end ("Kliprivier Estat…"), unless that
+ * makes it read like another's ("North Sandvlakte 2" and "North Sandvlakte 7"
+ * both "North Sandvlakte…"): then those keep their endings instead and lose
+ * the middle ("North Sandv… 2", "North Sandv… 7"), as few characters of the
+ * ending as tell them apart.
+ */
+export function distinctShortNames(names: readonly string[], max = 17): string[] {
+	const end = (s: string) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+	const out = names.map(end);
+	const groups = new Map<string, number[]>();
+	out.forEach((s, i) => groups.set(s, [...(groups.get(s) ?? []), i]));
+	// Keep `ending` of a name: its head cut to fit, then "…", then the ending.
+	const keep = (s: string, ending: string) => (s.length <= max ? s : `${s.slice(0, max - 1 - ending.length).trimEnd()}…${ending}`);
+	const longest = max - 5; // leave at least four characters of the head
+	for (const [, idx] of groups) {
+		const full = new Set(idx.map((i) => names[i]!));
+		if (full.size < 2) continue; // the same name twice stays the same
+		// Whole words first ("… 12", "… Block B1"), the fewest that tell them apart; else characters.
+		const byWords = (k: number) => (s: string) => ` ${s.split(' ').slice(-k).join(' ')}`;
+		const byChars = (k: number) => (s: string) => s.slice(-k);
+		const tries = [...[1, 2, 3].map(byWords), ...Array.from({ length: longest }, (_, k) => byChars(k + 1))];
+		for (const pick of tries) {
+			const endings = idx.map((i) => pick(names[i]!));
+			if (endings.some((e) => e.length > longest)) continue;
+			const cut = idx.map((i, k) => keep(names[i]!, endings[k]!));
+			if (new Set(cut).size === full.size) {
+				idx.forEach((i, k) => (out[i] = cut[k]!));
+				break;
+			}
+		}
+	}
+	return out;
+}
+
 const order = (a: NetworkNode, b: NetworkNode) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
 
 /** What drains into each node (in drawing order), and the nodes that drain into nothing drawn. */

@@ -11,9 +11,9 @@
 		</marker>
 	</defs>
 
-	<text class="m" x="10" y="12">Inputs</text>
-	<text class="m" x="580" y="12">Network</text>
-	<text class="m" x="760" y="12">At the outlet</text>
+	<text class="m lbl" x="10" y="12">Inputs</text>
+	<text class="m lbl" x="580" y="12">Network</text>
+	<text class="m lbl" x="760" y="12">At the outlet</text>
 
 	<!-- inputs -->
 	<rect class="box" x="10" y="20" width="150" height="56" rx="6" />

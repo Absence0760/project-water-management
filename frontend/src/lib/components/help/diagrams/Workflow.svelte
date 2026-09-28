@@ -14,9 +14,9 @@
 		</marker>
 	</defs>
 
-	<text class="m" x="8" y="22">Set up, tab by tab</text>
+	<text class="m lbl" x="8" y="22">Set up, tab by tab</text>
 	<rect class="box opt" x="706" y="11" width="22" height="14" rx="3" />
-	<text class="m" x="736" y="22">optional step</text>
+	<text class="m lbl" x="736" y="22">optional step</text>
 
 	<rect class="box key" x="8" y="40" width="104" height="64" rx="6" />
 	<text class="t" x="60" y="67" text-anchor="middle">1 · Project</text>
@@ -54,8 +54,8 @@
 	<path class="wire" d="M722 72 H738" marker-end="url(#wf-arrow)" />
 
 	<path class="wire loop" d="M780 104 V140 H670 V106" marker-end="url(#wf-loop)" />
-	<text class="s" x="725" y="158" text-anchor="middle">calibrate, run again</text>
+	<text class="s lbl" x="725" y="158" text-anchor="middle">calibrate, run again</text>
 
 	<path class="wire loop" d="M820 104 V196 H60 V106" marker-end="url(#wf-loop)" />
-	<text class="s" x="440" y="214" text-anchor="middle">what-if: copy the project, change one thing, run, compare runs</text>
+	<text class="s lbl" x="440" y="214" text-anchor="middle">what-if: copy the project, change one thing, run, compare runs</text>
 </svg>

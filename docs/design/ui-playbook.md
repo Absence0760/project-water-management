@@ -86,6 +86,12 @@ section it belongs to, with the example that taught it.
   scroll *inside their card*. Size to the page's 1rem gutter
   (`calc(100vh - top - var(--dock-h, 0px) - 1rem)`). Help, guides and
   account pages scroll normally with a readable text column (~75ch).
+  **Measure the top, not what is below.** The Network map and Crops & demand
+  took "below" as `scrollHeight − bottom`, but the page's scroll height is
+  never less than the window, so any height that left the page short measured
+  itself as right: shrunk on a phone, the map kept that height at 1440
+  (`diagram-labels.spec.ts` resizes 390 → 1440 and checks it refills).
+  Subtract the gutter and `--dock-h`, which are known.
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
@@ -334,6 +340,40 @@ section it belongs to, with the example that taught it.
   (`--border-strong`) was 1.9:1 on the card. Each bar now has its label in
   front of it, Today is `--text-muted` (≥ 3:1, WCAG 1.4.11), and the plan's
   supply takes the supply bands, not a categorical `--series-*`.
+- **Labels on diagrams** (the Network schematic, the report's schematic, the
+  help diagrams; `diagram-labels.spec.ts` holds every one of them to these):
+  - **Nothing runs through a label.** No label overlaps another, no line or
+    symbol crosses it, no label straddles a box's edge. Where a line must go
+    somewhere, route it round: the schematic's transfers take the smallest
+    clear arc, and when none is clear (Sandspruit drew one through
+    "Vaalbank"; a 22-node report through six names on paper) a grid route
+    round every label and symbol (`network/schematic.ts` `routeAround`),
+    crossing rivers but never running along one. In a hand-drawn help
+    diagram, move the label ("× upstream share" sat on its wire; GR4J's
+    footnote ran into the Flow Q box).
+  - **A halo behind every free label**, in the ground's colour
+    (`paint-order: stroke fill`, a 4 px stroke of `--surface-sunken` on the
+    schematic, `--surface` on help diagrams' `.lbl`), so anything that must
+    pass (the drag preview) breaks behind the words. Chromium's PDF keeps one
+    copy of the text (`pdftotext` finds each name once). Not on text inside a
+    filled box: the halo would ring it in the wrong colour.
+  - **Three steps of hierarchy:** the name (12.5 px, 600, `--text`), its
+    figure (11 px, 400, `--text-muted`), and the line's own key (the legend,
+    not a label on every line). Both text colours are ≥ 4.5:1 on the ground
+    in both themes (light: 15.0 and 4.6 on `--surface-sunken`; dark: 15.4
+    and 6.6); compute it when a token or a ground changes.
+  - **Distinct names.** A name cut to fit must not read like another's:
+    "North Sandvlakte 2" and "… 7" both became "North Sandvlakte…". Cut the
+    end, but where that collides keep the fewest whole words of the ending
+    that tell them apart ("North Sandvlak… 2"; `distinctShortNames`). The full
+    name stays in the tooltip, the list and the text equivalent.
+  - **Never cut off, never too small.** A drawing centred in a scrolling box
+    uses `align-items: safe center`, or its top row sits above the box's edge
+    where nothing scrolls to it (Sandspruit's first row at 1440 × 960). A
+    drawing scaled to its column is never drawn with its smallest text under
+    9.5 px (help `Diagram` sets its `min-width` from the viewBox); past that
+    it scrolls sideways, as on a phone. The model pipeline, 920 units wide,
+    drew its notes at 7 px at 1440.
 - **Say what a colour means in words too** (a band label, "below 70%"), and
   name a segment on hover and focus: colour alone fails colour-blind users
   and axe.
@@ -559,6 +599,15 @@ Interaction details that bit:
   `golden-path`, `section-header`, `tabs-by-role`, `overview` and whatever
   links into the screen. `--repeat-each 5 --retries 0` on every new
   interaction catches races.
+- **Check diagram labels with `support/diagrams.ts`** (`checkDiagramLabels`):
+  on screen, after layout, it reports every label that overlaps another, is
+  crossed by a line (sampled every 2 px) or covers a symbol, straddles a box's
+  edge, and the smallest text as drawn (font size × the drawing's scale). Pass
+  the diagram's own selectors (the schematic's `g.node` groups a name with its
+  figure). Run it on the example catchments and a big invented network, at
+  1440, 1280 and 390, and on paper (`emulateMedia({ media: 'print' })`).
+  Two lines of one label are one `<text>` with a `<tspan>`, or the checker
+  (and a reader) sees two labels touching.
 - **A scroll box with nothing focusable inside fails axe**
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,

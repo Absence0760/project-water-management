@@ -1098,6 +1098,11 @@
 // 2026-09-27  total 1049 → 1055 KB (measured 1052 on main merging the areal
 //             rainfall correction (above) with the work that landed beside it,
 //             each measured without the other). Headroom ~3 KB.
+// 2026-09-27  total 1055 → 1057 KB (measured 1054). Distinct diagram labels
+//             add ~2 KB: the schematic's transfer router (a grid path round
+//             every name when no arc is clear) and its distinct short names
+//             (NetworkSchematic's chunk), and the help diagrams' minimum
+//             drawn text size (Diagram). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1108,7 +1113,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1055,
+	totalCodeKb: 1057,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
