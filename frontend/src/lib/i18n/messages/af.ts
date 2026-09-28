@@ -897,6 +897,8 @@ export const af: Catalogue = {
 	'cd1a360e': 'Onder sy reserwe op {n} van die afgelope {days}.',
 	// {n} of {days} below it this season (since {date}).
 	'a8344db9': '{n} van {days} hierdie seisoen daaronder (sedert {date}).',
+	// A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
+	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// {farms} in the catchment.
 	'aecf2c05': '{farms} in die opvanggebied.',
 	// Language
@@ -1283,8 +1285,6 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
-	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// The river’s ecological reserve
 	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
@@ -1295,8 +1295,8 @@ export const af: Catalogue = {
 	'254af6c5': 'Oor hierdie bladsy',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.
 	'60cadb22': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen plaas se syfers nie.',
-	// A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.
-	'e4b3fdc4': '’n Model van die opvanggebied, nie metings nie; dit kan verkeerd wees. Hierdie skakel werk totdat dit verval of teruggetrek word.',
+	// This link works until it expires or is withdrawn.
+	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
 	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// We’ve sent a new link to {email}.

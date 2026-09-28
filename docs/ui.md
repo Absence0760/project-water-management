@@ -5204,12 +5204,18 @@ signed in or out, for someone outside the project, on a phone first.
   width, a summary sentence and a table behind "Show the numbers"), only
   when the series come back, otherwise a line saying that with so few farms
   the flows could reveal a farm's use; and **About this page** with the
-  farm count and the model disclaimer.
+  farm count, how long the link works, and that the result is no
+  authorisation, licence, allocation or restriction under the National
+  Water Act (that it is a model estimate that can be wrong is the caveat
+  under the name, not repeated here).
 - **Layout (issue #17):** one column on a phone (560 px at most). Once the
   page is 860 px wide (a container query) the result is 1120 px wide in two
   columns under the name: the notice and the reserve on the left, the flow
-  chart and About on the right, so at 1440 × 960 and 1280 × 800 it all
-  fits without a page scroll. The message states (dead link, error) stay
+  chart and About on the right, so at 1440 × 960 it all fits without a
+  page scroll (the caveat runs the full 1120 px, two lines, rather than a
+  narrower reading measure that wraps it to three; the right column has
+  little room to spare, so a longer caveat or About text needs this
+  re-checked). The message states (dead link, error) stay
   one 560 px card. `share-links.spec.ts` pins both layouts and axe in both
   themes.
 - **States:** loading; a dead link ("This link has expired or was
