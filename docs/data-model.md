@@ -288,7 +288,9 @@ input series (`loadRunInput`, see **Stored run inputs** below) on the same
   ([Publications](#publications-022_publicationsql)), and a scenario its base
   ([Scenarios](#scenarios-024_scenariossql)). All of them go through
   one exemption, `RUN_KEPT_SQL` in `backend/src/runs/execute.ts`, which
-  `trimRuns` and the `DELETE` route share. So a project holds at most 20
+  `trimRuns` and the `DELETE` route share. It is the database's own
+  `app_run_kept(run)` (045), which the application trims use too, so the API
+  and the database can't disagree about a run (issue #77). So a project holds at most 20
   unpinned, unnominated, uncited runs, plus at most 10 pinned, plus the runs
   its (at most 50) nominations name, plus the cited ones (the runs its at most
   12 publications hold among them). A trimmed run's stored inputs go with it
@@ -1175,7 +1177,7 @@ application has a name.
   `app_trim_application_runs(project, scenario, keep)`, the owner's
   per-application cap (a `DELETE` needs its rows readable, so 045's
   `model_run_delete_contributor` policy is gone), which spares a kept run
-  (`app_run_kept`, `RUN_KEPT_SQL`'s rule past RLS) and deletes nothing for
+  (`app_run_kept`, the rule `RUN_KEPT_SQL` calls, read past RLS) and deletes nothing for
   anyone but the owner. A published run is **not** readable as a row either.
 - **`run_series`**: `run_series_select` (from 001) excludes
   `app_hidden_scenario_runs()` (applications the caller can't read).

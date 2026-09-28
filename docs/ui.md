@@ -3104,7 +3104,12 @@ read it before.
   the total and links to Network and Settings). While a run is going it shows progress. A note says when
   inputs changed since the latest run.
 - **The runs list** (newest first, the newest marked "latest") selects the
-  run shown; editors delete one with its ✕. Rows are compact so several fit
+  run shown; editors delete one with its ✕ (a run already gone, deleted
+  elsewhere or trimmed, just leaves the list; a run that can't be opened
+  because it's gone says so in words, `runs/runList.ts` `runErrorText`, never
+  the API's "not found"). A list read that a change (a run made, deleted,
+  pinned) overtakes is read again, so a deleted run never comes back
+  (issue #77). Rows are compact so several fit
   the narrow rail: the label (two lines at most; the full label is the row's
   tooltip and the results heading), when it ran and the years it covers
   ("2026-09-23 15:06 · 1979–2024", `runs/runList.ts`), then small tags
