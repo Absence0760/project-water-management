@@ -29,7 +29,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
-| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
+| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
@@ -52,8 +52,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   account exists ([security.md § Authentication](./security.md#authentication)).
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
-- **`forgot-password`** answers the same `202` whether or not the address has
-  an account, and sends at most one email per address per minute and ten
+- **`forgot-password`** answers the same `202`, after the same time (at
+  least 200 ms; the email is sent without being waited for, issue #51),
+  whether or not the address has an account, and sends at most one email per address per minute and ten
   reset or verification emails per address in 24 hours (a browser trusted for
   the address has its own ten; later requests get `202` and no email).
   Requesting again replaces the previous link.

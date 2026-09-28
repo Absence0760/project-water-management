@@ -113,8 +113,17 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   address's cooldown and daily cap, so sign-up can't be used to flood an
   inbox. The one exception is sign-up through an invite link, which names its
   address already: `409 account_exists` there tells the holder nothing new.
-  Accepted residual risk: response *timing* differs slightly (a known address
-  does DB writes and an SES call).
+  **Timing too** (issue #51): `forgot-password` and `resend-confirmation`
+  never wait for the send (it is started and left to finish), and answer
+  after one fixed floor of 200 ms from the start of the request, known
+  address or not, which also covers a known address's token write
+  (`auth/accountMail.ts` `answerAlike`; `auth/accountMail.test.ts` drives
+  it with promises, no clock). In Lambda a send still in flight when the
+  answer goes finishes at the environment's next invocation, or is lost if
+  the environment is retired; the floor gives it that long first, and a
+  lost link is asked for again. `register` sends a mail on both of its
+  paths (a link, or "you already have an account"), so only its database
+  work differs, slightly: accepted residual risk.
 - **Confirmation before sign-in** leaves one legacy state: an unconfirmed
   account signed in before this rule (its session stays valid until it
   expires) still sees the confirm-your-email banner and can resend the link
