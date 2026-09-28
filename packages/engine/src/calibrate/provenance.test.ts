@@ -4,6 +4,8 @@ import { defaultProjectSettings, type ProjectSettings, type RainSourcePeriod, ty
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import {
+	chirpsFactorsDrifted,
+	CHIRPS_FACTOR_TOLERANCE,
 	calibrationFitStatus,
 	editedParams,
 	excludedDayMask,
@@ -217,7 +219,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -231,7 +233,7 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(5);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
@@ -402,6 +404,41 @@ describe('fit record', () => {
 		expect(fitRecordStatus(s, before, { chirpsSource: v3 })).toMatchObject({ forcingChanged: false, chirpsSourceChanged: false });
 		// A fit on a series with no recorded version records null.
 		expect(fitRecordFromReport(report(), { ...ctx, chirpsSource: null }).forcing!.chirpsSource).toBeNull();
+	});
+
+	it('flags CHIRPS factors that drifted beyond 2 % since the fit, with the settings and product the same (issue #51)', () => {
+		const s = { runoffModel: 'gr4j' as const, panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const, chirpsFitPeriod: 'all' as const };
+		const f = [1.1, 1.2, 0.9, 1, 1, 1, 1, 1, 1, 1, 1, null];
+		const set = (factors: (number | null)[]) => [{ label: 'whole record', factors }];
+		const rec = fitRecordFromReport(report({ chirpsFactors: set(f) }), { ...ctx, settings: { ...ctx.settings, chirpsFitPeriod: 'all' } });
+		// Positive control: the same factors, and a drift within 2 % (1.1 → 1.12, +1.8 %), are no change.
+		expect(fitRecordStatus(s, rec, { chirpsFactors: set(f) })).toMatchObject({ forcingChanged: false, chirpsFactorsChanged: false });
+		expect(fitRecordStatus(s, rec, { chirpsFactors: set([1.12, ...f.slice(1)]) }).chirpsFactorsChanged).toBe(false);
+		// 1.2 → 1.23 (+2.5 %): changed, with its own caveat, said once.
+		const drifted = fitRecordStatus(s, rec, { chirpsFactors: set([1.1, 1.23, ...f.slice(2)]) });
+		expect(drifted).toMatchObject({ forcingChanged: true, chirpsFactorsChanged: true });
+		const caveats = fitRecordCaveats(drifted);
+		expect(caveats.filter((c) => /monthly CHIRPS factors this run applies differ by more than 2 %/.test(c))).toHaveLength(1);
+		expect(caveats.some((c) => /^The potential evaporation GR4J runs on/.test(c))).toBe(false);
+		// A month gaining or losing a factor, or another number of fit ranges, is a change.
+		expect(fitRecordStatus(s, rec, { chirpsFactors: set([...f.slice(0, 11), 1]) }).chirpsFactorsChanged).toBe(true);
+		expect(fitRecordStatus(s, rec, { chirpsFactors: [...set(f), ...set(f)] }).chirpsFactorsChanged).toBe(true);
+		// Unknown on either side: nothing to compare.
+		expect(fitRecordStatus(s, rec).chirpsFactorsChanged).toBe(false);
+		const { chirpsFactors: _f, ...noFactors } = rec.forcing!;
+		expect(fitRecordStatus(s, { ...rec, forcing: noFactors }, { chirpsFactors: set([2, ...f.slice(1)]) }).chirpsFactorsChanged).toBe(false);
+		// A change of mode or product is said by its own flag, not as drift.
+		expect(fitRecordStatus({ ...s, chirpsBiasCorrection: 'none' }, rec, { chirpsFactors: null })).toMatchObject({ forcingChanged: true, chirpsFactorsChanged: false });
+	});
+
+	it('chirpsFactorsDrifted compares month by month, relative to the fit’s factor', () => {
+		const one = (factors: (number | null)[]) => [{ label: 'whole record', factors }];
+		expect(chirpsFactorsDrifted(null, null)).toBe(false);
+		expect(chirpsFactorsDrifted(null, one([1]))).toBe(true);
+		expect(chirpsFactorsDrifted(one([0.5]), one([0.509]))).toBe(false);
+		expect(chirpsFactorsDrifted(one([0.5]), one([0.511]))).toBe(true);
+		expect(chirpsFactorsDrifted(one([null]), one([null]))).toBe(false);
+		expect(CHIRPS_FACTOR_TOLERANCE).toBe(0.02);
 	});
 
 	it('flags a GR4J fit whose daily A-pan series has changed since (issue #45), only when both sides know it', () => {

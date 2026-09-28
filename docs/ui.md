@@ -3498,7 +3498,9 @@ read it before.
   "Forcing changed since fit" badge when this run's pan coefficient, A-pan,
   PE input, CHIRPS bias correction or zero-rain runs differ from what the fit was made under, or its
   CHIRPS series held another product or version, or its daily A-pan series
-  differs from the fit's, from the run's `inputSeries`), or "No fit
+  differs from the fit's, from the run's `inputSeries`, or its monthly CHIRPS
+  factors drifted more than 2 % from the fit's, from its `summary.chirpsCorrection`,
+  issue #51), or "No fit
   record" when the parameters were set by hand or imported. It also lists the
   calibration exclusions the run's statistics left out, which the calibration
   panel shows as "Excluded" with the observed days removed (or explains that

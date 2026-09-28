@@ -3891,6 +3891,23 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   pan coefficient or A-pan evaporation it is taken from), the areal rainfall
   correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods
   or zero-rain run handling has changed since the fit. …".
+  **CHIRPS factor drift (issue #51).** The monthly factors are fitted on
+  every day the catchment rain and CHIRPS share (§2.4b), so with the
+  settings and product unchanged they still move when those days change: a
+  logger reporting beside a daily CHIRPS feed adds shared days on every
+  merge, and preliminary CHIRPS turning final revises them. With the run's
+  applied factor sets (`FitForcingNow.chirpsFactors`, the frontend's
+  `runChirpsFactors` of `summary.chirpsCorrection`; the Settings form has no
+  run, so it doesn't compare), `fitRecordStatus` sets `chirpsFactorsChanged`
+  (and `forcingChanged`) when the number of fit ranges differs, a month has a
+  factor on one side only, or a month's factor moved by more than
+  `CHIRPS_FACTOR_TOLERANCE` (2 %) of the fit's (`chirpsFactorsDrifted`). A
+  change of bias-correction mode, fit period or product is said by its own
+  flag instead. The caveat names the cause and the durable fix: refit, or fit
+  the factors on fixed water years (Settings → CHIRPS fit period ranges),
+  which a fed project should do so its factors stop moving with each merge.
+  Run comparison's "Forcing changed since fit" says *yes (the CHIRPS factors
+  drifted)*. Not a run output, so `ENGINE_VERSION` doesn't move.
   **The areal rainfall correction (engine ≥ 1.13.0, §2.4g).**
   `forcing.arealRain` is always recorded (null = none). A different factor
   in any month, or a correction added or removed, is a forcing change; its
