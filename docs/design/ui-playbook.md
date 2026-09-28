@@ -277,8 +277,11 @@ section it belongs to, with the example that taught it.
   beside it a long context line wrapped to 3–4 short lines (River & reserve
   for a viewer at 1440, Compare runs at 1024). Size a text column that
   shares a wrapping row with controls by its content (`flex: 1 1 auto`, its
-  max-content, with the old basis as `min-width`), so the controls wrap
-  under it once its text would wrap, and pin the line count in e2e.
+  max-content), so the controls wrap under it once its text would wrap, and
+  pin the line count in e2e. No `min-width` floor over the content: kept as
+  a 16rem floor, it made a short title claim room it never drew in, and in
+  DejaVu Sans Data's controls wrapped under "2 input series · 1 behind" at
+  1024 with ~40 px to spare.
 
 ## 3. Colour, wording, content
 

@@ -468,8 +468,9 @@ role, freshness, Add data) and each tab's own header:
   tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the pair is one box, so a wrap never splits it.
-  The title column asks for its context's full one-line width (never less
-  than 16rem), so the controls sit beside the title only while the context
+  The title column asks for its context's full one-line width (and no more:
+  a 16rem floor made a short one wrap its controls under it in a wide font,
+  Data at 1024 in DejaVu Sans), so the controls sit beside the title only while the context
   fits on one line there; a longer context puts them under the title instead
   of wrapping to 3–4 short lines in a narrow column (River & reserve for a
   viewer at 1440 and Compare runs at 1024 did). A context that fits keeps the
