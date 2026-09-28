@@ -201,7 +201,7 @@ export const exportRoutes = new Hono<AuthEnv>()
 					notesUpdatedAt: run.notesUpdatedAt ? new Date(run.notesUpdatedAt).toISOString() : null,
 					notesUpdatedBy: run.notesUpdatedBy,
 					evidence: runEvidence(await listNominations(db, id), runId),
-					flowDuration: await loadFlowDuration(db, runId),
+					flowDuration: await loadFlowDuration(db, runId, { startDate: run.startDate, forecastFrom: run.summary.forecast?.from ?? null }),
 					runoffModel: run.runoffModel,
 					damCapacityM3: await loadDamCapacities(db, runId)
 				},

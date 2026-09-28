@@ -3,7 +3,7 @@
 // ones the Runs tab's headline (runs/RunSummaryView.svelte) shows, so the two
 // never disagree; the change against the previous run is formatted the way
 // the compare page does it (compare/delta.ts).
-import { metricDelta, toEpochDay, type MetricDelta, type RunSummary } from '@water-management/engine';
+import { fromEpochDay, metricDelta, toEpochDay, type MetricDelta, type RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { headlineSite } from '$lib/components/runs/ewrAssurance';
@@ -56,8 +56,21 @@ export function ranAgo(createdAt: string, now: Date = new Date()): string {
 	return describeAge(Math.max(0, daysBetween(localIsoDate(t), localIsoDate(now))));
 }
 
-/** Days a run covers, both ends included. */
+/** Days a run covers, both ends included (a forecast run's forecast days too: the span its header shows). */
 export const runDays = (r: Pick<RunMeta, 'startDate' | 'endDate'>) => toEpochDay(r.endDate) - toEpochDay(r.startDate) + 1;
+
+/**
+ * Days of the record a run's summary covers: runDays, but on a forecast run
+ * only the days before its forecast (WP-2.12), since every summary figure
+ * is the history's. The denominator of any "X of N days" beside them (issue
+ * #51: "EWR not met on X of N days" counted X over the history and N to the
+ * forecast's end).
+ */
+export const historyDays = (r: Pick<RunMeta, 'startDate' | 'endDate' | 'forecastFrom'>) =>
+	r.forecastFrom ? Math.max(0, Math.min(toEpochDay(r.forecastFrom), toEpochDay(r.endDate) + 1) - toEpochDay(r.startDate)) : runDays(r);
+
+/** The last day of the record a run's summary covers: its end date, or on a forecast run the day before the forecast. */
+export const historyEnd = (r: Pick<RunMeta, 'startDate' | 'endDate' | 'forecastFrom'>) => fromEpochDay(toEpochDay(r.startDate) + historyDays(r) - 1);
 
 export type HeadlineId = 'reserve' | 'ewr' | 'supply' | 'nse' | 'outflow' | 'dams';
 

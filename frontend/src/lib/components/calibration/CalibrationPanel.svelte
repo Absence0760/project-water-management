@@ -15,6 +15,7 @@
 		isPartYear,
 		kgeComponents,
 		metricRows,
+		volumeBiasText,
 		waterYearLabel
 	} from './metrics';
 	import { calibrationSample } from './sample';
@@ -40,7 +41,6 @@
 		obs: years.reduce((a, y) => a + y.observedMm3, 0),
 		sim: years.reduce((a, y) => a + y.simulatedMm3, 0)
 	});
-	const pct = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? '–' : `${v > 0 ? '+' : ''}${fmtNum(v, 1)}%`);
 </script>
 
 <section class="calibration" aria-labelledby="{uid}-h">
@@ -130,7 +130,7 @@
 							<th scope="col" class="num">Days observed</th>
 							<th scope="col" class="num">Observed<br /><span class="u">Mm³</span></th>
 							<th scope="col" class="num">Simulated<br /><span class="u">Mm³</span></th>
-							<th scope="col" class="num">Difference</th>
+							<th scope="col" class="num">Simulated vs observed</th>
 						</tr>
 					</thead>
 					<tbody>
@@ -144,7 +144,7 @@
 								<td class="num">{fmtNum(y.days)}<span class="muted"> / {fmtNum(y.daysInWindow)}</span></td>
 								<td class="num">{fmtNum(y.observedMm3, 2)}</td>
 								<td class="num">{fmtNum(y.simulatedMm3, 2)}</td>
-								<td class="num">{pct(y.diffPct)}</td>
+								<td class="num">{volumeBiasText(y.diffPct)}</td>
 							</tr>
 						{/each}
 					</tbody>
@@ -154,7 +154,7 @@
 							<td class="num">{fmtNum(calibration.days)}</td>
 							<td class="num">{fmtNum(yearTotals.obs, 2)}</td>
 							<td class="num">{fmtNum(yearTotals.sim, 2)}</td>
-							<td class="num">{pct(calibration.volumeErrorPct)}</td>
+							<td class="num">{volumeBiasText(calibration.volumeErrorPct ?? (calibration.pbias == null ? null : -calibration.pbias))}</td>
 						</tr>
 					</tfoot>
 				</table>

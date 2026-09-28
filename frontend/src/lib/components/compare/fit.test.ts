@@ -101,6 +101,14 @@ describe('fitValidationRows', () => {
 			b: 'no'
 		});
 		expect(row(fitValidationRows(onV2, null, settings, null, { a: undefined }), 'Forcing changed since fit').a).toBe('no');
+		// Issue #51: CHIRPS factors drifted beyond 2 % since the fit say so; the same factors (positive control) don't.
+		const f = [1.1, 1.2, 0.9, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+		const set = (factors: number[]) => [{ label: 'whole record', factors }];
+		const onFactors = record({ ...withForcing, forcing: { ...withForcing.forcing!, chirpsFitPeriod: 'all', chirpsFactors: set(f) } });
+		expect(row(fitValidationRows(onFactors, onFactors, settings, settings, {}, {}, { a: set([1.3, ...f.slice(1)]), b: set(f) }), 'Forcing changed since fit')).toMatchObject({
+			a: 'yes (the CHIRPS factors drifted)',
+			b: 'no'
+		});
 		// Issue #45: a run on another daily A-pan series than its fit says so; the same series (positive control) doesn't.
 		const pan = { startDate: '2020-10-01', length: 30, valuesSha256: 'c'.repeat(64) };
 		const onPan = record({ ...withForcing, forcing: { ...withForcing.forcing!, apanDaily: pan } });
