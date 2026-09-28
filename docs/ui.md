@@ -2992,8 +2992,9 @@ read it before.
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Units below 95 %* (N of M, every unit
   under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
-  deficit above float noise on any of the run's last 7 days, the reporting
-  window's *Last 7 days* and the publication's own rule,
+  deficit above float noise on any of the 7 days to the run's last day of
+  recorded rain, the reporting window's *Last 7 days* and the publication's
+  own rule, so the portfolio's count and this page agree,
   `backend/src/publish/recent.ts`; with the number the curtailment table asks
   to cut; the tile links to the curtailment over those days); *Total
   shortfall* (Mm³/a and mean m³/day of demand not supplied). The week needs
@@ -3272,7 +3273,9 @@ read it before.
   (`#res-curtailment`) chooses the days the curtailment, other water users and
   EWR sites tables average over: **Project window** (the window the run
   reported over, from the project setting, with its dates in the option; the
-  default), **Last 7 / 14 / 30 days** (ending on the run's last day), **Whole
+  default), **Last 7 / 14 / 30 days** (ending on the run's last day of
+  recorded rain, `reportWindow.ts` `runDataUntil`, the publication's rule,
+  with a note when the run goes on past it as dry days), **Whole
   record**, or **Custom range** (From / To date fields, starting from the days
   shown, cut to the run with a note; a backwards range or one outside the run
   says so and shows the project window). Any window other than the run's own is

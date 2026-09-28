@@ -10,7 +10,7 @@ import type { RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import { farmSupply, LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
 import { m3DayToMm3a, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { resolveWindow } from '$lib/components/runs/reportWindow';
+import { resolveWindow, type WindowRun } from '$lib/components/runs/reportWindow';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 
 /** The run before `id` by createdAt (the one its changes are against); null for the oldest or an unknown id. */
@@ -28,8 +28,12 @@ export function previousRunOf(runs: readonly RunMeta[] | null, id: string | null
 /** A deficit below this (m³/day) is float noise, not a short day: the publication's own rule (backend publish/recent.ts). */
 export const NOISE_M3 = 1e-6;
 
-/** "This week": the run's last 7 days, the reporting window's "Last 7 days" (reportWindow.ts), which the portfolio links to. */
-export function weekWindow(run: { startDate: string; endDate: string }): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
+/**
+ * "This week": the reporting window's "Last 7 days" (reportWindow.ts), the 7
+ * days to the run's last day of recorded rain: the publication's count, which
+ * the portfolio shows and links here.
+ */
+export function weekWindow(run: WindowRun): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
 	const r = resolveWindow({ preset: 'last7' }, run, { reportStart: run.startDate, reportEnd: run.endDate });
 	if (!r.ok) throw new Error(r.error);
 	return r.window;

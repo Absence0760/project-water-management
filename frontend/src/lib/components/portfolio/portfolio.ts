@@ -198,7 +198,9 @@ export function statusCounts(rows: readonly PortfolioProject[]): Record<Portfoli
 /**
  * Where "N units short this week" links: the run's curtailment on Units &
  * supply over the last 7 days (the reporting-window picker, #44; the page
- * since issue #17). `base` is the app's base path.
+ * since issue #17). Both count the 7 days to the run's last day of recorded
+ * rain (reportWindow.ts runDataUntil, the publication's recent.ts), so the
+ * link opens the same week it counted. `base` is the app's base path.
  */
 export function curtailmentHref(p: Pick<PortfolioProject, 'id' | 'sourceRunId'>, base = ''): string {
 	return `${base}/projects/${p.id}?tab=supply&run=${p.sourceRunId}&window=last7#res-curtailment`;
