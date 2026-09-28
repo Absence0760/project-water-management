@@ -818,7 +818,13 @@ In short:
   `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
   again on every call, and a policy calls them once per row (writing a run's
   hundreds of series spent 0.8 ms a row on them). Keep new role helpers in PL/pgSQL
-  for the same reason.
+  for the same reason. And return before the query when there is no user
+  (`app_current_user_id()` NULL: an API key's session, the job queue's), as
+  `app_project_role` does since 094_role_check_no_user and `app_user_visible`
+  always has: with the user NULL every custom plan of the query folds to
+  "false" and looks cheaper than the generic plan, so PL/pgSQL's plan cache
+  plans it again on every call (~150 µs a row; the ingest key sweep over
+  every table timed out in CI). `role-check.db.perf.test.ts` guards it.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every
