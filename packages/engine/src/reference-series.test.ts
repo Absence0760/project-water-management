@@ -1,7 +1,8 @@
 // A reference gauge (flow_reference_m3s) is a gauge on a different river: a
 // regional wet/dry index only (docs/model.md §2.10). These tests pin that the
 // engine never uses it as an observed or calibration record, never compares it
-// with the logger, and never lets it touch the EWR results.
+// with the logger, and never lets it touch the EWR results. Its one use, ranking
+// the dry → wet test's water years, is pinned (never scored) in calibrate.test.ts.
 import { describe, expect, it } from 'vitest';
 import { calibrate } from './calibrate/calibrate';
 import { CALIBRATION_FLOW_KINDS, SERIES_KINDS, type ModelInput, type NetworkNode } from './project';

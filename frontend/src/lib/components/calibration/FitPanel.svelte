@@ -34,6 +34,7 @@
 		marPenaltyOn,
 		objectiveName,
 		progressFraction,
+		rankedByText,
 		SCORE_ROWS,
 		scoreColumns,
 		SEED_MAX,
@@ -342,6 +343,9 @@
 						</tbody>
 					</table>
 				</div>
+				{#if report.differential}
+					<p class="muted small" data-testid="fit-dsst-ranking">Dry → wet test: {rankedByText(report.differential)}.</p>
+				{/if}
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
 				{/if}

@@ -3716,7 +3716,7 @@ the gauge column to `flow_observed_m3s`, because for most workbooks it really is
 the catchment's own gauge. `extract_project.py --gauge-as-reference` imports it
 as **`flow_reference_m3s`** ("Reference gauge (other catchment)") instead, and
 `--gauge-scaling-from YYYY-MM-DD --gauge-scale-factor F` undoes a known
-scaling (values on or after the date are divided by F). The engine never reads
+scaling (values on or after the date are divided by F). A run never reads
 that kind: it is not in `CALIBRATION_FLOW_KINDS` (so it can't be the
 calibration or validation record, and the API refuses it as
 `calibrationFlowKind`), `pickObservedKind` never falls back to it, it is not
@@ -3725,7 +3725,9 @@ EWR results, including the EWR agreement with the observed record (§2.9b). A pr
 calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
 name. It can be charted on the Time series tab, where it serves as a regional
-wet/dry index (for example, to rank water years for the dry → wet test).
+wet/dry index. From engine 1.18.0 automatic calibration's dry → wet test
+ranks its water years by it (§2.10b) — its only use in the engine, and never
+as something scored.
 `reference-series.test.ts` pins all of this. If the workbook's `rUseFlow`
 pointed calibration at the gauge (2), the importer leaves `calibrationFlowKind`
 unset and prints a `WARNING`: a run then falls back to the logger, or has no
@@ -3878,12 +3880,40 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   - **Split-sample** (Klemeš 1986): fit on the first half of the scored
     days, score the second half.
   - **Differential split-sample**, when at least 4 water years have 180 or
-    more observed days: fit on the driest half of those years (by mean
-    observed flow), score the wettest half. The dry and wet years
+    more observed days: fit on the driest half of those years, score the
+    wettest half. The dry and wet years
     interleave, so the two sets' first and last days overlap even though no
     year is in both. Every `ScoredPeriod` therefore carries the `waterYears`
     it scored, and the report shows this test by those years
     ("WY 2001/02, 2003/04"), never as a date range.
+    **What ranks the years** (engine ≥ 1.18.0, issue #4 phase 6, "make the
+    logger fit identifiable" step 2; `CalibrateOptions.rankYearsBy`,
+    `DifferentialTest.rankedBy`). Ranked by its own flow, the test's "wet"
+    years are the years this (impacted, often short) record ran high, not
+    necessarily the years the region was wet. So when the project has a **reference gauge**
+    (`flow_reference_m3s`, a gauge on another river, §2.10) the years are
+    ranked by it: each candidate year's mean reference flow over the whole
+    water year (whatever the calibration window), from days with a
+    reference value (`referenceYearMeans`). It is a regional wet/dry index
+    only: it picks which years go in which half and is never compared with
+    anything, so every score, the split-sample test and the fitted
+    parameters are exactly what they are without it (`calibrate.test.ts`
+    pins this, and that a reference ranking the years as the record does
+    gives the same test). This is the default whenever a reference exists;
+    `rankYearsBy: 'observed'` keeps the record's own mean observed flow over
+    its scored days (the only ranking before 1.18.0, and the default without
+    a reference). A reference with fewer than 180 days in any candidate year
+    falls back to the observed ranking, with a note naming the years it
+    misses; asking for `'reference'` without one also falls back, with a
+    note. `wetDryRatio` stays the fitted record's own mean flow of the wet
+    half ÷ the dry half, however they were ranked, so a reference that
+    disagrees with this river shows as a ratio near or under 1 (and the
+    "no clearly wet years" note, reworded for the reference). `rankedBy` is
+    stored in the fit record (absent on older records: `'observed'`) and
+    shown beside the test in Fit automatically and the fit record. The
+    uncertainty ensemble (§2.10e, Phase 9) has no year ranking to share:
+    its held-out split is chronological (the second half of the scored
+    days), so there is nothing for the reference to rank there.
   - **Independent record** (optional, `validationRecord`): the parameters
     fitted to the calibration record, scored against a second observed
     record, for example a logger when the fit used a gauge. It is

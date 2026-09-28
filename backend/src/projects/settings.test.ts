@@ -665,6 +665,10 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok(record)).toBe(true);
 		expect(ok(null)).toBe(true);
 		expect(ok({ ...record, splitSample: null, differential: null, independentRecord: null, notes: [] })).toBe(true);
+		// The dry → wet test's ranking (engine ≥ 1.18.0); a record from before it has none.
+		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'reference' } })).toBe(true);
+		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'observed' } })).toBe(true);
+		expect(ok({ ...record, differential: { ...record.differential, rankedBy: 'gauge' } })).toBe(false);
 		const marPenalty = {
 			weight: 0.5,
 			targetMarMm3: 12,

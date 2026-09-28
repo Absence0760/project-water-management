@@ -2616,6 +2616,11 @@ which checks every catchment tab).
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
     variants, volume error and the FDC signatures.
+    With a dry → wet test, a line under the table says what ranked its
+    years: the reference gauge (other catchment), "a regional wet/dry index
+    that is never scored", or the fitted record's own mean flow (engine ≥
+    1.18.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
+    fit record's dry → wet line says the same.
     Under it, **How representative is the record** (engine ≥ 1.18.0, CR-34;
     `calibration/representativeness.ts`): the record's length and its mean
     rain as a share of the long-term mean in the heading, the engine's

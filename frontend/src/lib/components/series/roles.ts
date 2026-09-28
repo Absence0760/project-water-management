@@ -53,7 +53,7 @@ export const KIND_ROLES: Record<string, KindRole> = {
 	},
 	flow_reference_m3s: {
 		role: 'Reference only',
-		help: 'A gauge on a different river, e.g. a neighbouring sub-catchment (m³/s). Shown on this tab as a regional wet/dry index only: runs never read it, calibrate against it or compare it with the EWR.',
+		help: 'A gauge on a different river, e.g. a neighbouring sub-catchment (m³/s). A regional wet/dry index only: Fit automatically ranks water years dry → wet by it for its dry → wet test, but runs never read it, and nothing is calibrated against it or compared with the EWR.',
 		driver: false
 	}
 };
