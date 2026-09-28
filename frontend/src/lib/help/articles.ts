@@ -83,6 +83,18 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['report-window', 'stress-class', 'water-account'],
 		source: 'docs/model.md §2.11a; Hashimoto, Stedinger & Loucks 1982'
 	},
+	'allocation-mode': {
+		long: 'The Allocations tab stores the volumes registered or licensed per unit and water source. By default they only sit beside a run: the tab compares each water year’s modelled use with them. Two modes (engine 1.16.0) make them part of the run.\n\nCap: each unit’s surface-water use (from its dam, its river pump and off-take water) and groundwater use (pumped to the crop and into the dam) per water year (October–September) stays within its registered volumes. The budget is the whole year’s volume, so a unit may take it early and then goes without; its boreholes cover what a capped surface can’t, within the groundwater volume. A source with no registered volume isn’t capped.\n\nFull allocation: each unit’s demand (crops and other demands together) is scaled, year by year, so it asks for exactly its registered volume (both sources), keeping its own seasonal pattern. It shows the river if every registered user took their entitlement, the background for a cumulative assessment. A unit without a volume keeps its modelled demand.\n\nLicence conditions (months, a maximum rate) are recorded but not applied yet. How the cap counts water drawn from a dam that boreholes filled is pending the hydrologist.',
+		aliases: ['cap', 'full allocation', 'entitlement', 'registered volume', 'WARMS', 'allocationMode'],
+		related: ['allocation-band', 'assurance-of-supply'],
+		source: 'docs/model.md §2.12a; docs/allocations.md'
+	},
+	'allocation-band': {
+		long: 'A water year whose modelled use is more than the registered volume × (1 + band) reads “above registered”, less than × (1 − band) “below registered”, anything between “within band”. It changes only how the comparison reads, never the run’s water. The ±10 % default is a placeholder pending the hydrologist.',
+		aliases: ['tolerance', 'allocation tolerance', 'within band'],
+		related: ['allocation-mode'],
+		source: 'docs/allocations.md § The comparison'
+	},
 	'stress-class': {
 		long: 'The classes and thresholds come from an experimental node-based workbook, which reported them per farm and per month. The app grids them per unit, per other water user and for all of them together, water year by month, over the whole run. A month without demand has no class.',
 		aliases: ['stress', 'supply ratio', 'Low', 'Moderate', 'High', 'Severe', 'Critical'],

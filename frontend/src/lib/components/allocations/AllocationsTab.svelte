@@ -15,7 +15,7 @@
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { AllocationComparison } from '@water-management/engine';
+	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
 	import { api, type Allocation, type AllocationList, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -28,6 +28,8 @@
 		allocationsContext,
 		AUTHORISATION_LABEL,
 		comparisonRows,
+		conditionsSummary,
+		MODE_NOTE,
 		pickUnit,
 		PURPOSE_LABEL,
 		shortHash,
@@ -87,6 +89,8 @@
 
 	// --- the comparison for that run ---
 	let comparison = $state.raw<AllocationComparison | null>(null);
+	/** What the compared run's allocation mode did to its use (engine ≥ 1.16.0). */
+	let runMode = $state<AllocationMode>('none');
 	let cLoading = $state(false);
 	let cError = $state<string | null>(null);
 	let wanted = '';
@@ -96,7 +100,10 @@
 		cError = null;
 		try {
 			const r = await api.allocations.compare(projectId, id);
-			if (wanted === id) comparison = r.comparison;
+			if (wanted === id) {
+				comparison = r.comparison;
+				runMode = r.run.allocationMode ?? 'none';
+			}
 		} catch (e) {
 			if (wanted === id) {
 				comparison = null;
@@ -273,6 +280,7 @@
 			</p>
 			<LoadState loading={cLoading && !comparison} error={cError} retry={() => run && loadComparison(run.id)}>
 				{#if comparison}
+					{#if MODE_NOTE[runMode]}<p class="alert alert-info slim" data-testid="allocation-mode-note">{MODE_NOTE[runMode]}</p>{/if}
 					{#if comparison.unmatchedAllocationIds.length}
 						<p class="alert alert-info slim">
 							{comparison.unmatchedAllocationIds.length} registered volume{comparison.unmatchedAllocationIds.length === 1 ? ' is' : 's are'} not matched to a unit yet,
@@ -414,6 +422,7 @@
 										<td class="num" data-label="Storage (m³)">{fmtNum(a.storageM3)}</td>
 										<td data-label="Valid">
 											{validity(a)}
+											{#if conditionsSummary(a)}<span class="sub" data-testid="allocation-conditions" title={a.conditions.join('\n') || undefined}>{conditionsSummary(a)}</span>{/if}
 											<span class="sub">{#if src}<span title="SHA-256 {src.sha256}">{src.fileName} · {shortHash(src.sha256)}</span>{:else}Entered by hand{/if}</span>
 										</td>
 										{#if canEdit}

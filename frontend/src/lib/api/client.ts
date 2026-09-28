@@ -5,6 +5,7 @@ import type { Locale } from '@water-management/engine/languages';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import type {
 	AllocationComparison,
+	AllocationMode,
 	DailySeries,
 	DayBoundary,
 	InputChange,
@@ -662,7 +663,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			exportUrl: (id: string) => `${base}${p(id)}/allocations/export.csv`,
 			/** A run's modelled use against the registered volumes, per water year. */
 			compare: (id: string, runId: string, tolerance?: number) =>
-				request<{ run: { id: string; label: string; startDate: string; endDate: string }; comparison: AllocationComparison }>(
+				request<{ run: { id: string; label: string; startDate: string; endDate: string; allocationMode: AllocationMode }; comparison: AllocationComparison }>(
 					'GET',
 					`${p(id)}/runs/${enc(runId)}/allocations${tolerance !== undefined ? `?tolerance=${tolerance}` : ''}`
 				)

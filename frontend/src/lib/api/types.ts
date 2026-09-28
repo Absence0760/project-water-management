@@ -1299,6 +1299,10 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	/** Licence conditions (095, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -1338,6 +1342,9 @@ export interface AllocationInput {
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
+	months?: number[] | null;
+	maxRateM3s?: number | null;
+	conditions?: string[];
 }
 
 /** One row of an import preview. */
@@ -1355,6 +1362,9 @@ export interface AllocationPreviewRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

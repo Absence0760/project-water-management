@@ -5,9 +5,11 @@
 // modelled use sits next to the registered volume per water year (the page's
 // layout, the sheets and the big case: allocations-page.spec.ts). A viewer
 // sees the volumes but no names and can't import. Axe-scanned, and on a
-// phone. Synthetic data only.
+// phone. Licence conditions entered in the sheet show in the list, and a run
+// capped at the registered volumes (settings.allocationMode, engine 1.16.0)
+// says so above its comparison (issue #72). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
 
@@ -81,4 +83,44 @@ test('an editor imports registered volumes and compares them with modelled use',
 	await expect(compare.locator('thead')).toBeHidden();
 	await expect(upper.getByText('2021/22')).toBeVisible();
 	await expectNoViolations(page);
+});
+
+test('licence conditions entered by hand show with the volume, and a capped run says so', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Allocations conditions');
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}?tab=allocations`);
+	await expect(page.getByTestId('allocations-empty')).toBeVisible();
+	// Compare only: nothing said about a mode.
+	await expect(page.getByTestId('allocation-compare-table')).toBeVisible();
+	await expect(page.getByTestId('allocation-mode-note')).toHaveCount(0);
+
+	await page.getByTestId('section-header').getByRole('link', { name: '+ Add volume' }).click();
+	const sheet = page.getByRole('dialog', { name: 'Add a registered volume' });
+	await sheet.getByLabel('Unit or water user').selectOption({ label: 'Upper farm' });
+	await sheet.getByLabel('Volume (m³ per year)').fill('1000');
+	await sheet.getByLabel('Registration or licence number').fill('E2E-LIC');
+	const months = sheet.getByRole('group', { name: 'Months water may be taken' });
+	for (const m of ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']) await months.getByLabel(m, { exact: true }).check();
+	await sheet.getByLabel('Maximum rate (m³/s)').fill('0.05');
+	await sheet.getByLabel('Other conditions, one a line').fill('No abstraction below 0.2 m³/s at the weir\nMeter and report monthly');
+	await expectNoViolations(page);
+	await sheet.getByRole('button', { name: 'Save' }).click();
+	await expect(sheet).toBeHidden();
+	const row = page.getByTestId('allocation-list').getByRole('row', { name: /Upper farm/ });
+	await expect(row.getByTestId('allocation-conditions')).toHaveText('Oct–Mar only · at most 0.05 m³/s · 2 conditions');
+
+	// Reopened, the sheet shows what was saved.
+	await row.getByRole('button', { name: 'Change E2E-LIC' }).click();
+	const change = page.getByRole('dialog', { name: 'Change the registered volume' });
+	await expect(change.getByRole('group', { name: 'Months water may be taken' }).getByLabel('Oct', { exact: true })).toBeChecked();
+	await expect(change.getByRole('group', { name: 'Months water may be taken' }).getByLabel('Apr', { exact: true })).not.toBeChecked();
+	await expect(change.getByLabel('Other conditions, one a line')).toHaveValue('No abstraction below 0.2 m³/s at the weir\nMeter and report monthly');
+	await change.getByRole('button', { name: 'Cancel' }).click();
+
+	// A run capped at the registered volumes: the comparison says what the cap did.
+	await updateSettings(page.request, project.id, { allocationMode: 'cap' });
+	const capped = await createRun(page.request, project.id, 'Capped');
+	await page.goto(`/projects/${project.id}?tab=allocations&run=${capped}`);
+	await expect(page.getByTestId('allocation-mode-note')).toContainText('This run capped each unit’s use at its registered volume per water year');
 });
