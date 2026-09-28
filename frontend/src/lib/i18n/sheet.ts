@@ -118,5 +118,10 @@ export const NOTES: Record<string, string> = {
 	'**Pump about {amount} a day less**{ls}. Averaged over all {days} that is {average}.': '{amount} is a number of m³; {ls} is empty or “ (2.3 l/s)”; {days} is “102 days”; {average} is “12 m³ a day”.',
 	'{leaves} is about **{pct}** of the {need} you needed.': '{leaves} and {need} are numbers of m³ a day.',
 	'Next {days}': '{days} is “14 days”.',
-	'This forecast is {age} old. Your WUA may publish a newer one.': '{age} is “5 days”.'
+	'This forecast is {age} old. Your WUA may publish a newer one.': '{age} is “5 days”.',
+	'Questions? Contact {wua}.': '{wua} is the WUA’s name as the WUA wrote it (“Vaalbank WUA”); never translated. Without a name the page says “your WUA”.',
+	'You no longer have access to this farm. Contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
+	'Still no connection. If this keeps happening, contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
+	'Still not working. If this keeps happening, contact {wua}.': '{wua} is the WUA’s name (“Vaalbank WUA”); never translated.',
+	'Not available: the model’s data starts on {date}.': 'Instead of “compared with last season” when the model’s figures don’t go back a year. {date} is a date with its year: “1 Jun 2023”.'
 };

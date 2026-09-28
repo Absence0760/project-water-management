@@ -285,7 +285,13 @@ export type CompareVm =
 export function compareCard(farm: FarmProjection): CompareVm {
 	const last = farm.lastSeason;
 	// i18n-section: farm.compare
-	if (!last) return { available: false, text: t('Not available: the model’s data doesn’t reach back to the same dates last season.') };
+	if (!last) {
+		// A copy saved on the phone before `dataFrom` existed has no date to name.
+		const text = farm.dataFrom
+			? t('Not available: the model’s data starts on {date}.', { date: fmtDay(farm.dataFrom) })
+			: t('Not available: the model’s data doesn’t reach back to the same dates last season.');
+		return { available: false, text };
+	}
 	const pct = (f: number | null) => (f == null ? t('very little needed') : fmtPct(f));
 	const rows = [{ label: t('Water received'), now: pct(farm.season.fraction), then: pct(last.fraction) }];
 	if (farm.dam && farm.damCapacityM3 > 0) {
@@ -378,15 +384,30 @@ const STATE_KEYS = {
 	noPublicationText: msg('When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.'),
 	contact: msg('Questions? Contact your WUA.'),
 	removed: msg('You no longer have access to this farm. Contact your WUA.'),
+	contactNamed: msg('Questions? Contact {wua}.'),
+	removedNamed: msg('You no longer have access to this farm. Contact {wua}.'),
 	needsConnection: msg('Charts, “Why?” and downloads need a connection.'),
 	updating: msg('Updating…')
 };
 
 /** One of the farm pages' state lines, in the active language. */
-export const stateText = (which: keyof typeof STATE_KEYS) => t(STATE_KEYS[which]);
+export const stateText = (which: Exclude<keyof typeof STATE_KEYS, 'contactNamed' | 'removedNamed'>) => t(STATE_KEYS[which]);
+
+/**
+ * A "Contact your WUA" line, naming the WUA when the project has its name
+ * (project.wuaName, 095_wua_name; design §6.5 "Contact [WUA]").
+ */
+export function contactText(which: 'contact' | 'removed', wuaName: string | null | undefined): string {
+	if (!wuaName) return t(STATE_KEYS[which]);
+	const named = which === 'contact' ? STATE_KEYS.contactNamed : STATE_KEYS.removedNamed;
+	return t(named, { wua: wuaName });
+}
 
 /** The contact line after a second failure in a row. */
-export function stillFailing(offline: boolean): string {
+export function stillFailing(offline: boolean, wuaName: string | null = null): string {
+	if (wuaName) {
+		return t(offline ? 'Still no connection. If this keeps happening, contact {wua}.' : 'Still not working. If this keeps happening, contact {wua}.', { wua: wuaName });
+	}
 	return t(offline ? 'Still no connection. If this keeps happening, contact your WUA.' : 'Still not working. If this keeps happening, contact your WUA.');
 }
 

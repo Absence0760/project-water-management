@@ -104,6 +104,11 @@ export class FarmState {
 		return this.view?.project.name ?? this.index?.project.name ?? null;
 	}
 
+	/** The WUA the contact lines name (095_wua_name), or null for "your WUA". A saved copy from before it has none. */
+	get wuaName(): string | null {
+		return this.view?.project.wuaName ?? this.index?.project.wuaName ?? null;
+	}
+
 	/**
 	 * Load `projectId`'s farm `asked` (?node=), or the one shown last, or its
 	 * only one. `quiet` keeps what's on screen while it asks (a return to the page).

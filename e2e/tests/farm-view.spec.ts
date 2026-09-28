@@ -186,7 +186,14 @@ test('a farm whose catchment has nothing published says so', async ({ page, owne
 	await farmer.page.goto('/');
 	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${project.id}`));
 	await expect(farmer.page.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();
+	await expect(farmer.page.getByText('Questions? Contact your WUA.', { exact: true })).toBeVisible();
 	await expectNoSidewaysScroll(farmer.page);
+
+	// Once the WUA's name is set (095_wua_name), the contact line names it.
+	const named = await page.context().request.patch(`${API_URL}/projects/${project.id}`, { data: { wuaName: 'Early Valley WUA' } });
+	expect(named.status(), await named.text()).toBe(200);
+	await farmer.page.reload();
+	await expect(farmer.page.getByText('Questions? Contact Early Valley WUA.', { exact: true })).toBeVisible();
 });
 
 // The farm pages sit outside the app shell (FarmShell, ui.md § Farmer view).

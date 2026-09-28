@@ -58,11 +58,11 @@
 	{#if farm.phase.kind === 'loading'}
 		<FarmSkeleton />
 	{:else if farm.phase.kind === 'error'}
-		<FarmStatus kind="error" offline={farm.phase.offline} attempts={farm.phase.attempts} {retry} />
+		<FarmStatus kind="error" offline={farm.phase.offline} attempts={farm.phase.attempts} wuaName={farm.wuaName} {retry} />
 	{:else if farm.phase.kind === 'removed'}
-		<FarmStatus kind="removed" farmName={farm.farmName} />
+		<FarmStatus kind="removed" farmName={farm.farmName} wuaName={farm.wuaName} />
 	{:else if farm.phase.kind === 'no-publication'}
-		<FarmStatus kind="no-publication" farmName={farm.farmName} projectName={farm.projectName} />
+		<FarmStatus kind="no-publication" farmName={farm.farmName} projectName={farm.projectName} wuaName={farm.wuaName} />
 	{:else if view}
 		{@render children(view)}
 	{/if}

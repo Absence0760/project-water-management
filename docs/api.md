@@ -226,7 +226,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | GET | `/projects/outcomes` | – | `{ projects: PortfolioProject[] }`: the [portfolio](#portfolio)'s figures for every project you can see (below) | – |
 | POST | `/projects` | `{ name, description?, teamId? }` | `201 { project }` (`teamId` must be a team where you're a member or admin: `404 team not found` if you're not in it, `403` if you're a team viewer; omit/`null` = personal) | – |
 | GET | `/projects/:id` | – | `{ project }` | viewer |
-| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
+| PATCH | `/projects/:id` | `{ name?, description?, timeZone?, wuaName?, settings?, teamId? }` | `{ project }`; `400` for a `timeZone` that isn't an IANA zone the server knows | editor (owner when `teamId` is sent) |
 | DELETE | `/projects/:id` | – | `204`; `409 { error, details: { evidenceRun: { id, label } \| null, nominations } }` for a project that has nominated an evidence run, current or since replaced: the project is kept with its evidence run and nomination history for good (issue #43, [data-model.md](./data-model.md) § Evidence nomination). The error names the current evidence run and says a nomination can be replaced but not withdrawn; `evidenceRun` is `null` only when a nomination landed during the request (the database trigger refused it) | owner |
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
@@ -256,6 +256,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   (`project.changed` with `fields: ['time_zone']` and `timeZone: { from, to }`);
   a copy keeps it, and the project document (`export.json`, `POST
   /projects/import`) carries it as `timeZone` (absent = the default).
+  `wuaName` (095_wua_name): the WUA the farm pages' contact lines name
+  ("Questions? Contact Vaalbank WUA."), trimmed, ≤ 200 characters; `""` or
+  `null` clears it (then the pages say "your WUA"). A change is audited
+  (`project.changed` with `fields: ['wua_name']` and `wuaName: { from, to }`).
+  A copy and the project document don't carry it: neither has farmers to
+  contact anyone.
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
   `startDate + length − 1`), or `null` with none. A forecast or a flow series
@@ -1944,9 +1950,11 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
-| GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above | farmer |
+| GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
 | GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
+| GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my farm", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
 
 - `farm` is the stored `FarmProjection` (season and last-30 totals, the dam,
@@ -1974,8 +1982,15 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
-- The chart series route (`…/farm/:nodeId/series`) and the publication
-  history per farm (`…/history`) are not built yet (WP-2.6).
+- `project.wuaName` is the WUA's name for the contact lines (`null` =
+  "your WUA"); `farm.dataFrom` is the published run's first day, which
+  "compared with last season" names when `lastSeason` is `null` (a
+  projection stored before it existed gets it from the publication's
+  `catchment_view.runStart`).
+- `series` and `history` check the farm before the query, so any other
+  node answers `404` whatever the query. The farm page itself renders from
+  the projection (the 12 months, last season); these two are for a longer
+  or custom chart and for comparing publications (roadmap WP-2.6).
 
 ## Jobs
 

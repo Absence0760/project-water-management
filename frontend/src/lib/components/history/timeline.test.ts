@@ -122,6 +122,8 @@ describe('what an item says', () => {
 		expect(eventLine(ev('project.changed', { fields: ['time_zone'], timeZone: { from: 'Africa/Johannesburg', to: 'Africa/Windhoek' } }))).toBe(
 			'Set the time zone to Africa/Windhoek'
 		);
+		expect(eventLine(ev('project.changed', { fields: ['wua_name'], wuaName: { from: null, to: 'Vaalbank WUA' } }))).toBe('Named the WUA “Vaalbank WUA”');
+		expect(eventLine(ev('project.changed', { fields: ['wua_name'], wuaName: { from: 'Vaalbank WUA', to: null } }))).toBe('Cleared the WUA’s name');
 		expect(eventLine(ev('restore', { target: 'series', kind: 'flow_observed_m3s', name: 'weir' }))).toBe('Restored earlier values of the Flow — observed gauge “weir” series');
 		expect(eventLine(ev('something.new'))).toBe('something.new');
 	});

@@ -88,6 +88,9 @@ const UNLINK_CAUSES: Record<string, string> = {
 	restore: ' (by a restore)'
 };
 
+/** "named the WUA “Vaalbank WUA”", or "cleared the WUA's name" (095_wua_name). */
+const wuaNamePart = (to: unknown) => (str(to) ? `named the WUA “${str(to)}”` : 'cleared the WUA’s name');
+
 /** One sentence for an audit event, without its actor or time. */
 export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 	const s = e.subject ?? {};
@@ -99,6 +102,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				fields.includes('name') ? `renamed the project from “${str(s.from)}” to “${str(s.to)}”` : '',
 				fields.includes('description') ? 'changed the description' : '',
 				fields.includes('time_zone') ? `set the time zone to ${str((s.timeZone as { to?: unknown } | undefined)?.to)}` : '',
+				fields.includes('wua_name') ? wuaNamePart((s.wuaName as { to?: unknown } | undefined)?.to) : '',
 				fields.includes('team') ? (s.team ? `moved the project into the team “${str(s.team)}”` : 'made the project personal') : ''
 			].filter(Boolean);
 			const text = parts.join(', ') || 'changed the project';

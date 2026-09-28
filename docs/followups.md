@@ -1554,14 +1554,19 @@ yet; each lands with the work package named.
       `GET …/farm/:nodeId/access` lists people by name and role, never an
       email, and the card falls back to roles if it fails
       (`farm-view.spec.ts` checks it).
-- [ ] **The WUA's name** in "Contact [WUA]" lines: not in `FarmView` or
-      `FarmIndex`; the pages say "your WUA".
+- [x] **The WUA's name** in "Contact [WUA]" lines (issue #74):
+      `project.wua_name` (095_wua_name), set as **WUA name** on the Project
+      page's details and carried as `project.wuaName` in `FarmView` and
+      `FarmIndex`; the contact lines name it, and say "your WUA" without
+      one. Not the team's name, which may be a consultancy's.
 - [x] **"Email me when …"** links for the notice and a low dam: alert emails
       (WP-2.13); the farm view's alert card and every alert email link to
       `/account/alerts`. "Email me when it's ready" (a report) is still open.
-- [ ] **"Not available: the model's data starts on …"** needs the run's
-      first date; `lastSeason` is null without it, so the page says the data
-      doesn't reach back.
+- [x] **"Not available: the model's data starts on …"** (issue #74): the
+      projection carries the run's first day (`dataFrom`; a row stored
+      before it gets it from `catchment_view.runStart`), and "Compared with
+      last season" names it. A copy saved on the phone before it still says
+      the data doesn't reach back.
 - [x] **e2e on the full stack**: `e2e/tests/farm-view.spec.ts` runs in CI's
       e2e shards against the farm API and the seeded publication (1ab1896b,
       de671eb2).
@@ -2309,8 +2314,14 @@ role and not before it.
         recompute ([model.md §2.7b](./model.md)). About 195 kB before
         compression (1.6 % of the run's series) on Sandspruit, nothing on
         the single-site examples.
-  - [ ] **The chart series and per-farm history routes** of WP-2.6
-        (`…/farm/:nodeId/series`, `…/history`): with the farm page.
+  - [x] **The chart series and per-farm history routes** of WP-2.6
+        (issue #74): `GET …/farm/:nodeId/series?key=&from=&to=` (one farm
+        allowlist series from the published run, the year to `dataUntil` by
+        default, sliced in SQL) and `GET …/farm/:nodeId/history` (the farm's
+        own figures in the last 12 publications), `farms/view.ts`,
+        [api.md § Farm](./api.md#farm). The farm page keeps rendering from
+        the projection (design §12: "compared with last season" from
+        `lastSeason`, not `/history`); nothing on it calls them yet.
 
 ## Pipelines
 
