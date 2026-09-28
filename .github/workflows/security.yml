@@ -98,6 +98,8 @@ jobs:
           # silently falls back to that when security-and-quality isn't
           # available — no per-language branching required.
           queries: security-and-quality
+          # Project-owned: what this repo keeps out of the scan, and why.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform analysis
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
