@@ -155,8 +155,6 @@ export const af: Catalogue = {
 	'6ee0c03c': 'Jou en die WGV se notas oor {farm}. Enigiets wat jy hier byvoeg, word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
 	// No notes about this farm yet.
 	'd2af0a62': 'Nog geen notas oor hierdie plaas nie.',
-	// Terms of use
-	'953dc886': 'Gebruiksvoorwaardes',
 	// Your figures will be kept on this phone.
 	'c98e5cb5': 'Jou syfers sal op hierdie foon gehou word.',
 	// Nothing is kept on this phone now.
