@@ -48,8 +48,9 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const keyOf = (f: FarmerEntry) => (f.status === 'active' ? f.userId : f.inviteId);
 
-	async function load() {
-		loading = true;
+	/** `quiet`: refresh behind the list already shown (after a CSV), with no loading state in its place. */
+	async function load(quiet = false) {
+		loading = !quiet;
 		loadError = null;
 		try {
 			entries = await api.farmers.list(projectId);
@@ -71,7 +72,7 @@
 		message = text;
 		error = null;
 		if (entry) upsert(entry);
-		else void load(); // a CSV: many rows changed
+		else void load(true); // a CSV: many rows changed; the list stays up while it refreshes
 	}
 
 	function edit(f: Farmer) {
