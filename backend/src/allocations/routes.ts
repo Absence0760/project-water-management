@@ -9,7 +9,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { compareAllocations, fromEpochDay, toEpochDay, type AllocationUseNode } from '@water-management/engine';
+import { ALLOCATION_MODES, compareAllocations, DEFAULT_ALLOCATION_TOLERANCE, fromEpochDay, toEpochDay, type AllocationMode, type AllocationUseNode } from '@water-management/engine';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -20,8 +20,12 @@ import { recordAudit } from '../history/record.js';
 import { readJson } from '../http/body.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { rank, requireRole, UUID } from '../projects/access.js';
+import { mergeSettings } from '../projects/settings.js';
 import {
 	AUTHORISATIONS,
+	CONDITION_MAX_CHARS,
+	CONDITIONS_MAX,
+	CONDITIONS_SEPARATOR,
 	IMPORT_MAX_CHARS,
 	ImportRefused,
 	matchRow,
@@ -47,24 +51,58 @@ const isoDate = z
 	.refine((s) => !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && fromEpochDay(toEpochDay(s)) === s, 'not a date');
 const volume = z.number().finite().min(0).lt(1e12);
 
-const AllocationFields = z.object({
+/**
+ * An allocation's fields, without defaults: a PATCH changes only what it sends.
+ * (zod 4's .partial() keeps a field's .default(), so a PATCH built from the
+ * create schema reset every field it didn't send, the holder's name and the
+ * registration number included; issue #72.)
+ */
+const FIELDS = {
 	nodeId: z.string().uuid().nullable(),
-	registrationNo: text(100).default(''),
-	propertyRef: text(200).default(''),
+	registrationNo: text(100),
+	propertyRef: text(200),
 	/** The registered user's name; '' = none. Editors only (D3). */
-	holder: text(200).default(''),
+	holder: text(200),
 	authorisation: z.enum(AUTHORISATIONS as [string, ...string[]]),
-	purpose: z.enum(PURPOSES as [string, ...string[]]).default('irrigation'),
+	purpose: z.enum(PURPOSES as [string, ...string[]]),
 	waterSource: z.enum(WATER_SOURCES as [string, ...string[]]),
 	volumeM3PerYear: volume,
-	storageM3: volume.nullable().default(null),
-	validFrom: isoDate.nullable().default(null),
-	validTo: isoDate.nullable().default(null),
-	reference: text(500).default('')
-});
+	storageM3: volume.nullable(),
+	validFrom: isoDate.nullable(),
+	validTo: isoDate.nullable(),
+	reference: text(500),
+	// Licence conditions (095, issue #72): shown, not yet enforced by the engine.
+	months: z
+		.array(z.number().int().min(1).max(12))
+		.min(1)
+		.max(12)
+		.refine((m) => new Set(m).size === m.length, 'a month is listed twice')
+		.transform((m) => [...m].sort((a, b) => a - b))
+		.nullable(),
+	maxRateM3s: z.number().finite().min(0).lt(1e6).nullable(),
+	conditions: z.array(text(CONDITION_MAX_CHARS).pipe(z.string().min(1, 'a condition is empty'))).max(CONDITIONS_MAX, `at most ${CONDITIONS_MAX} conditions`)
+};
 const datesInOrder = (b: { validFrom?: string | null; validTo?: string | null }) => !b.validFrom || !b.validTo || b.validFrom <= b.validTo;
-const CreateBody = AllocationFields.strict().refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] });
-const PatchBody = AllocationFields.partial()
+const CreateBody = z
+	.object({
+		...FIELDS,
+		registrationNo: FIELDS.registrationNo.default(''),
+		propertyRef: FIELDS.propertyRef.default(''),
+		holder: FIELDS.holder.default(''),
+		purpose: FIELDS.purpose.default('irrigation'),
+		storageM3: FIELDS.storageM3.default(null),
+		validFrom: FIELDS.validFrom.default(null),
+		validTo: FIELDS.validTo.default(null),
+		reference: FIELDS.reference.default(''),
+		months: FIELDS.months.default(null),
+		maxRateM3s: FIELDS.maxRateM3s.default(null),
+		conditions: FIELDS.conditions.default([])
+	})
+	.strict()
+	.refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] });
+const PatchBody = z
+	.object(FIELDS)
+	.partial()
 	.strict()
 	.refine((b) => Object.keys(b).length > 0, 'send at least one field')
 	.refine(datesInOrder, { message: 'valid from is after valid to', path: ['validFrom'] });
@@ -82,12 +120,27 @@ const CommitBody = ImportBody.extend({
 	matches: z.record(z.string().regex(/^\d+$/), z.string().uuid().nullable()).default({})
 }).strict();
 
-const TOLERANCE = z.coerce.number().min(0).lt(1).default(0.1);
+/** A one-off band for the comparison (`?tolerance=`); absent = the project's settings.allocationTolerance. */
+const TOLERANCE = z.coerce.number().min(0).lt(1).optional();
+
+/** The fields of an allocation a run reads (the engine's AllocationEntry, runs/execute.ts allocationsForRun). */
+const RUN_INPUT_FIELDS = ['nodeId', 'waterSource', 'volumeM3PerYear', 'storageM3', 'validFrom', 'validTo'] as const;
+
+/**
+ * Allocations are part of every run's input since engine 1.16.0 (the model's
+ * `allocations`, runs/execute.ts): a change to what the run reads is a change
+ * to the project's inputs, so the Runs tab says the latest run is out of date
+ * (project.updated_at, as a model save does).
+ */
+async function touchRunInputs(db: Db, projectId: string) {
+	await db.query('UPDATE project SET updated_at = now() WHERE id = $1', [projectId]);
+}
 
 const ALLOCATION_SELECT = `SELECT a.id, a.node_id AS "nodeId", n.name AS "nodeName", a.source_id AS "sourceId",
 	a.registration_no AS "registrationNo", a.property_ref AS "propertyRef", h.user_display AS holder,
 	a.authorisation, a.purpose, a.water_source AS "waterSource", a.volume_m3_year AS "volumeM3PerYear",
 	a.storage_m3 AS "storageM3", a.valid_from AS "validFrom", a.valid_to AS "validTo", a.reference,
+	a.months::int[] AS months, a.max_rate_m3s AS "maxRateM3s", a.conditions,
 	a.created_at AS "createdAt", a.updated_at AS "updatedAt"
 	FROM allocation a
 	LEFT JOIN node n ON n.id = a.node_id
@@ -110,6 +163,10 @@ export interface AllocationRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	/** Licence conditions (095): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. */
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -258,10 +315,11 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				throw new ApiError(409, `this project has reached the limit of ${ALLOCATIONS_PER_PROJECT_MAX} allocations`);
 			const { rows } = await db.query<{ id: string }>(
 				`INSERT INTO allocation (project_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference)
-				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
-				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference]
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15::jsonb) RETURNING id`,
+				[id, body.nodeId, body.registrationNo, body.propertyRef, body.authorisation, body.purpose, body.waterSource, body.volumeM3PerYear, body.storageM3, body.validFrom, body.validTo, body.reference, body.months, body.maxRateM3s, JSON.stringify(body.conditions)]
 			);
+			await touchRunInputs(db, id);
 			const aid = rows[0]!.id;
 			await setHolder(db, id, aid, body.holder);
 			await recordAudit(db, id, 'allocation.created', { allocationId: aid, registrationNo: body.registrationNo, nodeId: body.nodeId, waterSource: body.waterSource, volumeM3PerYear: body.volumeM3PerYear });
@@ -289,17 +347,22 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				storageM3: 'storage_m3',
 				validFrom: 'valid_from',
 				validTo: 'valid_to',
-				reference: 'reference'
+				reference: 'reference',
+				months: 'months',
+				maxRateM3s: 'max_rate_m3s',
+				conditions: 'conditions'
 			};
 			const sets: string[] = [];
 			const values: unknown[] = [id, aid];
 			for (const [k, col] of Object.entries(cols)) {
 				const v = (body as Record<string, unknown>)[k];
 				if (v === undefined) continue;
-				values.push(v);
-				sets.push(`${col} = $${values.length}`);
+				values.push(k === 'conditions' ? JSON.stringify(v) : v);
+				sets.push(`${col} = $${values.length}${k === 'conditions' ? '::jsonb' : ''}`);
 			}
 			if (sets.length) mustChange(await db.query(`UPDATE allocation SET ${sets.join(', ')} WHERE project_id = $1 AND id = $2`, values));
+			// A change the run reads (the engine's AllocationEntry) makes the latest run out of date.
+			if (RUN_INPUT_FIELDS.some((k) => (body as Record<string, unknown>)[k] !== undefined)) await touchRunInputs(db, id);
 			if (body.holder !== undefined) await setHolder(db, id, aid, body.holder);
 			// Which fields changed, never the holder's name (the history is readable by viewers).
 			await recordAudit(db, id, 'allocation.changed', { allocationId: aid, registrationNo: before.registrationNo, fields: Object.keys(body) });
@@ -313,6 +376,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			const before = await loadAllocation(db, id, aid);
 			mustChange(await db.query('DELETE FROM allocation WHERE project_id = $1 AND id = $2', [id, aid]));
+			await touchRunInputs(db, id);
 			await recordAudit(db, id, 'allocation.deleted', { allocationId: aid, registrationNo: before.registrationNo, nodeId: before.nodeId });
 			return c.body(null, 204);
 		});
@@ -350,11 +414,13 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const ids = valid.map(() => crypto.randomUUID());
 			await db.query(
 				`INSERT INTO allocation (id, project_id, source_id, node_id, registration_no, property_ref, authorisation, purpose, water_source,
-					volume_m3_year, storage_m3, valid_from, valid_to, reference)
+					volume_m3_year, storage_m3, valid_from, valid_to, reference, months, max_rate_m3s, conditions)
 				 SELECT x.id, $1, $2, x.node_id, x.registration_no, x.property_ref, x.authorisation, x.purpose, x.water_source,
-					x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference
+					x.volume_m3_year, x.storage_m3, x.valid_from, x.valid_to, x.reference,
+					CASE WHEN jsonb_typeof(x.months) = 'array' THEN (SELECT array_agg(m::smallint ORDER BY m::int) FROM jsonb_array_elements_text(x.months) m) END, x.max_rate_m3s, x.conditions
 				 FROM jsonb_to_recordset($3::jsonb) AS x(id uuid, node_id uuid, registration_no text, property_ref text, authorisation text, purpose text,
-					water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text)`,
+					water_source text, volume_m3_year double precision, storage_m3 double precision, valid_from date, valid_to date, reference text,
+					months jsonb, max_rate_m3s double precision, conditions jsonb)`,
 				[
 					id,
 					sourceId,
@@ -371,11 +437,15 @@ export const allocationRoutes = new Hono<AuthEnv>()
 							storage_m3: r.storageM3,
 							valid_from: r.validFrom,
 							valid_to: r.validTo,
-							reference: r.reference
+							reference: r.reference,
+							months: r.months,
+							max_rate_m3s: r.maxRateM3s,
+							conditions: r.conditions
 						}))
 					)
 				]
 			);
+			await touchRunInputs(db, id);
 			const holders = ids.map((aid, i) => ({ allocation_id: aid, user_display: valid[i]!.holder })).filter((h) => h.user_display.trim() !== '');
 			if (holders.length)
 				await db.query(
@@ -408,6 +478,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			);
 			if (!rows[0]) throw new ApiError(404, 'not found');
 			mustChange(await db.query('DELETE FROM allocation_source WHERE project_id = $1 AND id = $2', [id, sourceId]));
+			await touchRunInputs(db, id);
 			await recordAudit(db, id, 'allocation.import_deleted', { sourceId, fileName: rows[0].fileName, rows: rows[0].rows });
 			return c.body(null, 204);
 		});
@@ -444,6 +515,9 @@ export const allocationRoutes = new Hono<AuthEnv>()
 						a.validFrom ?? '',
 						a.validTo ?? '',
 						a.reference,
+						a.months ? a.months.join(' ') : '',
+						a.maxRateM3s,
+						a.conditions.join(CONDITIONS_SEPARATOR),
 						s?.fileName ?? '',
 						s?.sha256 ?? ''
 					]);
@@ -462,12 +536,23 @@ export const allocationRoutes = new Hono<AuthEnv>()
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			const { rows: run } = await db.query<{ label: string; startDate: string; endDate: string; nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null }>(
-				`SELECT label, start_date AS "startDate", end_date AS "endDate", inputs->'model'->'nodes' AS nodes FROM model_run WHERE project_id = $1 AND id = $2`,
+			const { rows: run } = await db.query<{
+				label: string;
+				startDate: string;
+				endDate: string;
+				nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null;
+				mode: string | null;
+				settings: unknown;
+			}>(
+				`SELECT r.label, r.start_date AS "startDate", r.end_date AS "endDate", r.inputs->'model'->'nodes' AS nodes,
+					r.inputs->'settings'->>'allocationMode' AS mode, p.settings
+				 FROM model_run r JOIN project p ON p.id = r.project_id WHERE r.project_id = $1 AND r.id = $2`,
 				[id, runId]
 			);
 			const r = run[0];
 			if (!r) throw new ApiError(404, 'not found');
+			// The band: a one-off ?tolerance=, else the project's setting now (issue #72), so every run reads against the same one.
+			const tolerance = q.tolerance ?? mergeSettings(r.settings).allocationTolerance ?? DEFAULT_ALLOCATION_TOLERANCE;
 			const users = (r.nodes ?? []).filter((n) => n.kind === 'farm' || n.kind === 'user');
 			const { rows: series } = await db.query<{ nodeId: string; key: string; values: (number | null)[] }>(
 				`SELECT node_id AS "nodeId", key, "values" FROM run_series
@@ -491,7 +576,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 			const comparison = compareAllocations({
 				startDate: r.startDate,
 				nodes,
-				tolerance: q.tolerance,
+				tolerance,
 				allocations: allocations.map((a) => ({
 					id: a.id,
 					nodeId: a.nodeId,
@@ -502,6 +587,8 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					validTo: a.validTo
 				}))
 			});
-			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate }, comparison });
+			// What the run's allocation mode did to its use (engine ≥ 1.16.0; a run before it compared only).
+			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
+			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, allocationMode }, comparison });
 		});
 	});

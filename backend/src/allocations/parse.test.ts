@@ -6,6 +6,7 @@ import {
 	parseAllocationTable,
 	parseAuthorisation,
 	parseDate,
+	parseMonths,
 	parseNumber,
 	parsePurpose,
 	parseWaterSource,
@@ -125,6 +126,46 @@ describe('parseAllocationTable', () => {
 
 	it('lists columns it does not read', () => {
 		expect(parseAllocationTable(`${TEMPLATE},Catchment\n`, 'csv').ignoredColumns).toEqual(['Catchment']);
+	});
+});
+
+describe('licence conditions (095, issue #72)', () => {
+	it('reads months as numbers, names and ranges over the new year', () => {
+		expect(parseMonths('')).toBeNull();
+		expect(parseMonths('10 11 12 1 2 3')).toEqual([1, 2, 3, 10, 11, 12]);
+		expect(parseMonths('Oct-Mar')).toEqual([1, 2, 3, 10, 11, 12]);
+		expect(parseMonths('june; July / Sept')).toEqual([6, 7, 9]);
+		expect(parseMonths('3-3|3')).toEqual([3]);
+		expect(parseMonths('Jan–Dec')).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+		for (const bad of ['13', '0', 'Octo', 'summer', 'Oct-', '1-2-3']) expect(parseMonths(bad), bad).toBeUndefined();
+	});
+
+	it('imports months, the maximum rate and conditions separated by “|”, and lists what doesn’t read', () => {
+		const head = 'registration_no,farm,authorisation,water_source,volume_m3_year,months,max_rate_m3s,conditions';
+		const t = parseAllocationTable(
+			[head, 'L-1,Farm A,licence,surface,1000,Oct-Mar,0.05,No abstraction below 0.2 m3/s | Meter monthly', 'L-2,Farm A,licence,surface,1000,Smarch,-1,', 'L-3,Farm A,licence,surface,1000,,,'].join('\n'),
+			'csv'
+		);
+		expect(t.columns).toMatchObject({ months: 'months', maxRateM3s: 'max_rate_m3s', conditions: 'conditions' });
+		const [ok, bad, none] = t.rows;
+		expect(ok!.errors).toEqual([]);
+		expect(ok!.months).toEqual([1, 2, 3, 10, 11, 12]);
+		expect(ok!.maxRateM3s).toBe(0.05);
+		expect(ok!.conditions).toEqual(['No abstraction below 0.2 m3/s', 'Meter monthly']);
+		expect(bad!.errors).toEqual(['months “Smarch” are not months (e.g. “Oct-Mar” or “10 11 12 1 2 3”)', 'maximum rate “-1” is not a number of m³/s ≥ 0']);
+		expect([none!.months, none!.maxRateM3s, none!.conditions]).toEqual([null, null, []]);
+	});
+
+	it('refuses more than 20 conditions and a condition that looks like an ID number', () => {
+		const head = 'registration_no,authorisation,water_source,volume_m3_year,conditions';
+		const many = new Array(21).fill('c').join('|');
+		const t = parseAllocationTable([head, `L-1,licence,surface,1,${many}`, 'L-2,licence,surface,1,8001015009087'].join('\n'), 'csv');
+		expect(t.rows[0]!.errors).toContain('more than 20 conditions (separate them with “|”)');
+		expect(t.rows[1]!.errors).toContain("conditions looks like an ID number; the app doesn't keep those");
+	});
+
+	it('the template ends with the three condition columns', () => {
+		expect(TEMPLATE_HEADERS.slice(-3)).toEqual(['months', 'max_rate_m3s', 'conditions']);
 	});
 });
 

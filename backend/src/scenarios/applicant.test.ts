@@ -75,6 +75,11 @@ const base: ModelInput = {
 		demandObjects: [
 			{ id: 'd1', nodeId: MINE, name: 'Own cottages', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 12, litresPerUnitDay: 230, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'first', destination: 'internal', enabled: true, note: '' },
 			{ id: 'd2', nodeId: N1, name: 'Neighbour village', category: 'municipal', sizing: 'monthly', monthlyM3Day: new Array(12).fill(300), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' }
+		],
+		allocations: [
+			{ id: 'a1', nodeId: MINE, waterSource: 'surface', volumeM3PerYear: 40_000 },
+			{ id: 'a2', nodeId: N1, waterSource: 'surface', volumeM3PerYear: 777_777 },
+			{ id: 'a3', nodeId: null, waterSource: 'groundwater', volumeM3PerYear: 666_666 }
 		]
 	} as unknown as ModelInput['model'],
 	series: {}
@@ -114,6 +119,9 @@ describe('projectBaseForApplicant', () => {
 		expect((view.model.landCover ?? []).map((p) => p.id)).toEqual(['p1']);
 		expect(view.model.boreholes).toEqual([base.model.boreholes![0]]);
 		expect(view.model.demandObjects).toEqual([base.model.demandObjects![0]]);
+		// Registered volumes (engine 1.16.0): their own only, never a neighbour's or an unmatched one.
+		expect(view.model.allocations).toEqual([base.model.allocations![0]]);
+		expect(JSON.stringify(view)).not.toMatch(/777777|666666/);
 	});
 
 	it('names no other node anywhere in the view', () => {

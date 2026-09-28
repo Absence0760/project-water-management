@@ -854,6 +854,26 @@ describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', (
 	});
 });
 
+describe('SettingsPatch allocation settings (engine ≥ 1.16.0, issue #72)', () => {
+	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
+
+	it('takes one of the three allocation modes', () => {
+		for (const v of ['none', 'cap', 'fullAllocation']) expect(ok({ allocationMode: v }), v).toBe(true);
+		for (const v of ['full', '', null, 1]) expect(ok({ allocationMode: v }), String(v)).toBe(false);
+	});
+
+	it('takes a comparison band in [0, 1), not a percentage', () => {
+		for (const v of [0, 0.05, 0.1, 0.99]) expect(ok({ allocationTolerance: v }), String(v)).toBe(true);
+		for (const v of [-0.01, 1, 10, Infinity, '0.1', null]) expect(ok({ allocationTolerance: v }), String(v)).toBe(false);
+	});
+
+	it('defaults a project that never set them to compare only, at ±10 %', () => {
+		const s = mergeSettings({});
+		expect(s.allocationMode).toBe('none');
+		expect(s.allocationTolerance).toBe(0.1);
+	});
+});
+
 describe('SettingsPatch.lakeEvapFactorMonthly (WP-3.5)', () => {
 	const ok = (lakeEvapFactorMonthly: unknown) => SettingsPatch.safeParse({ lakeEvapFactorMonthly }).success;
 

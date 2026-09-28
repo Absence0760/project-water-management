@@ -42,7 +42,10 @@ export type Field =
 	| 'storageM3'
 	| 'validFrom'
 	| 'validTo'
-	| 'reference';
+	| 'reference'
+	| 'months'
+	| 'maxRateM3s'
+	| 'conditions';
 
 /** Header spellings per field, compared after lower-casing and dropping everything but letters and digits. */
 export const HEADER_ALIASES: Record<Field, readonly string[]> = {
@@ -57,7 +60,11 @@ export const HEADER_ALIASES: Record<Field, readonly string[]> = {
 	storageM3: ['storagem3', 'storage', 'registeredstorage', 'registeredstoragem3', 'damcapacity', 'damcapacitym3'],
 	validFrom: ['validfrom', 'startdate', 'from', 'issuedate', 'datefrom'],
 	validTo: ['validto', 'enddate', 'to', 'expirydate', 'expiry', 'dateto'],
-	reference: ['reference', 'ref', 'comment', 'comments', 'notes']
+	reference: ['reference', 'ref', 'comment', 'comments', 'notes'],
+	// Licence conditions (095, issue #72).
+	months: ['months', 'abstractionmonths', 'permittedmonths', 'monthsofuse', 'usemonths'],
+	maxRateM3s: ['maxratem3s', 'maxrate', 'maximumrate', 'maximumratem3s', 'maxabstractionrate', 'maxabstractionratem3s', 'ratem3s'],
+	conditions: ['conditions', 'licenceconditions', 'licenseconditions', 'otherconditions']
 };
 
 /** The template's header row, in order (docs/allocations.md). */
@@ -73,8 +80,17 @@ export const TEMPLATE_HEADERS = [
 	'storage_m3',
 	'valid_from',
 	'valid_to',
-	'reference'
+	'reference',
+	'months',
+	'max_rate_m3s',
+	'conditions'
 ] as const;
+
+/** Most conditions in words on one allocation, and the longest one (095). */
+export const CONDITIONS_MAX = 20;
+export const CONDITION_MAX_CHARS = 500;
+/** The conditions cell's separator, in the template and the export: `|` (a comma or semicolon would split the CSV cell). */
+export const CONDITIONS_SEPARATOR = ' | ';
 
 /** Headers that carry personal information the app must not hold (normalised). */
 const FORBIDDEN_HEADER = /^(id|idno|idnr|idnumber|identity.*|rsaid.*|saidnumber|passport.*|.*(phone|cellular|cellno|cellnumber|mobile|telephone|telno|telnumber|fax|email).*|cell|tel)$/;
@@ -101,6 +117,10 @@ export interface ParsedRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	/** Licence conditions (095): the calendar months of use, null = none stated; the most it may take at once (m³/s); conditions in words. */
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	/** Why this row can't be imported; empty = valid. */
 	errors: string[];
 }
@@ -193,6 +213,44 @@ export function parseDate(cell: string): string | null | undefined {
 	return Number.isNaN(t) || new Date(t).toISOString().slice(0, 10) !== iso ? undefined : iso;
 }
 
+const MONTH_NAMES = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+const MONTH_FULL_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+
+/** One month: 1–12, or an English name or its first three letters ("Sept" too). */
+function monthOf(v: string): number | undefined {
+	if (/^\d{1,2}$/.test(v)) {
+		const n = Number(v);
+		return n >= 1 && n <= 12 ? n : undefined;
+	}
+	if (v === 'sept') return 9;
+	const i = Math.max(MONTH_NAMES.indexOf(v), MONTH_FULL_NAMES.indexOf(v));
+	return i < 0 ? undefined : i + 1;
+}
+
+/**
+ * The months of use (a licence condition, 095): month numbers or names
+ * separated by spaces, commas, semicolons, slashes or `|`, and ranges that
+ * may run over the new year ("Oct-Mar" is October to March). Ascending and
+ * without repeats; null for an empty cell; undefined for anything else.
+ */
+export function parseMonths(cell: string): number[] | null | undefined {
+	const v = cell.trim().toLowerCase();
+	if (v === '') return null;
+	const out = new Set<number>();
+	for (const part of v.split(/[\s,;/|]+/).filter(Boolean)) {
+		const m = /^([a-z]+|\d{1,2})(?:[-–]([a-z]+|\d{1,2}))?$/.exec(part);
+		if (!m) return undefined;
+		const a = monthOf(m[1]!);
+		const b = m[2] === undefined ? a : monthOf(m[2]);
+		if (a === undefined || b === undefined) return undefined;
+		for (let k = a; ; k = (k % 12) + 1) {
+			out.add(k);
+			if (k === b) break;
+		}
+	}
+	return [...out].sort((x, y) => x - y);
+}
+
 const word = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export function parseAuthorisation(cell: string): Authorisation | null | undefined {
@@ -280,9 +338,12 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			validFrom: null,
 			validTo: null,
 			reference: text('reference', 500),
+			months: null,
+			maxRateM3s: null,
+			conditions: [],
 			errors
 		};
-		for (const f of ['holder', 'reference', 'propertyRef', 'farm'] as const)
+		for (const f of ['holder', 'reference', 'propertyRef', 'farm', 'conditions'] as const)
 			if (LOOKS_LIKE_ID_NUMBER.test(get(f).replace(/\s/g, ''))) errors.push(`${columns[f]} looks like an ID number; the app doesn't keep those`);
 
 		const auth = parseAuthorisation(get('authorisation'));
@@ -311,6 +372,22 @@ export function parseAllocationTable(text: string, kind: AllocationSourceKind): 
 			else row[f] = d;
 		}
 		if (row.validFrom && row.validTo && row.validFrom > row.validTo) errors.push('valid from is after valid to');
+
+		// Licence conditions (095).
+		const months = parseMonths(get('months'));
+		if (months === undefined) errors.push(`${columns.months} “${get('months')}” are not months (e.g. “Oct-Mar” or “10 11 12 1 2 3”)`);
+		else row.months = months;
+		const rate = parseNumber(get('maxRateM3s'), delimiter);
+		if (rate !== null && (!Number.isFinite(rate) || rate < 0 || rate >= 1e6)) errors.push(`maximum rate “${get('maxRateM3s')}” is not a number of m³/s ≥ 0`);
+		else row.maxRateM3s = rate;
+		const conditions = get('conditions')
+			.split('|')
+			.map((c) => c.trim())
+			.filter(Boolean);
+		if (conditions.length > CONDITIONS_MAX) errors.push(`more than ${CONDITIONS_MAX} conditions (separate them with “|”)`);
+		if (conditions.some((c) => c.length > CONDITION_MAX_CHARS)) errors.push(`a condition is longer than ${CONDITION_MAX_CHARS} characters`);
+		if (conditions.some((c) => c.includes('\u0000'))) errors.push('a condition contains a NUL character');
+		row.conditions = conditions.slice(0, CONDITIONS_MAX).map((c) => c.slice(0, CONDITION_MAX_CHARS));
 		if (!row.registrationNo && !row.propertyRef && !row.farm) errors.push('the row has no registration number, property or farm to match it by');
 		return row;
 	});
