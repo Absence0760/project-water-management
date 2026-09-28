@@ -4961,7 +4961,10 @@ digest). The modeller workspace stays English.
   sentence ending on "31 Des." must not read "31 Des.." (issue #51).
   They read runes, so a template that calls them re-renders on a switch.
   The backend's emails keep a keyed catalogue, `backend/src/mail/i18n/`
-  (`mailT(locale)` → `{ t, lang }`): the server ships no bundle, so its keys
+  (`mailT(locale)` → `{ t, tn, lang }`; `tn(base, n, vars)` picks a counted
+  message's form, keys `<base>.one` / `<base>.other` and whatever else the
+  language's `Intl.PluralRules` needs, so no mail says "1 days late", issue
+  #51): the server ships no bundle, so its keys
   cost nothing, and the sheet lists its rows by key beside the site's ids;
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in

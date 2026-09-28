@@ -138,17 +138,17 @@ export function alertLines(f: AlertFacts, tr: MailTranslator, project: string, l
 			return {
 				what: tr.t('mail.alert.stale.what'),
 				body: [
-					tr.t('mail.alert.stale.body', { threshold: f.threshold }),
-					...f.feeds.map((x) => tr.t('mail.alert.stale.line', { feed: x.label, newest: dateText(x.newest, lang), overdue: x.overdue }))
+					tr.tn('mail.alert.stale.body', f.threshold, { threshold: f.threshold }),
+					...f.feeds.map((x) => tr.tn('mail.alert.stale.line', x.overdue, { feed: x.label, newest: dateText(x.newest, lang), overdue: x.overdue }))
 				]
 			};
 		case 'feed_failing':
 			return {
 				what: tr.t('mail.alert.failing.what'),
-				body: [tr.t('mail.alert.failing.body', { threshold: f.threshold }), ...f.feeds.map((x) => tr.t('mail.alert.failing.line', { feed: x.label, failures: x.failures }))]
+				body: [tr.t('mail.alert.failing.body', { threshold: f.threshold }), ...f.feeds.map((x) => tr.tn('mail.alert.failing.line', x.failures, { feed: x.label, failures: x.failures }))]
 			};
 		case 'job_dead':
-			return { what: tr.t('mail.alert.jobs.what'), body: [tr.t('mail.alert.jobs.body', { count: f.count })] };
+			return { what: tr.t('mail.alert.jobs.what'), body: [tr.tn('mail.alert.jobs.body', f.count, { count: f.count })] };
 		case 'restriction_published': {
 			const date = dateText(f.publishedAt, lang, timeZone);
 			if (f.lifted) return { what: tr.t('mail.alert.restriction.liftedWhat'), body: [tr.t('mail.alert.restriction.lifted', { project, date })] };
@@ -256,7 +256,7 @@ export function digestMail(to: Recipient, project: MailProject, items: AlertFact
 		body.forEach((p, i) => line.push(...(i ? [' '] : []), ...(typeof p === 'string' ? [p] : p)));
 		paragraphs.push(line.every((x) => typeof x === 'string') ? paraText(line) : line);
 	}
-	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
+	if (more > 0) paragraphs.push(tr.tn('mail.alert.digest.more', more, { more }));
 	paragraphs.push(...liabilityLines(items.map((f) => f.kind), to.farmer, tr));
 	const mail = render(
 		to.email,

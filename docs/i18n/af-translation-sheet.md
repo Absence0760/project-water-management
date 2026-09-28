@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-10 strings: 9 on the site, 1 in emails, 0 in the glossary.
+15 strings: 9 on the site, 6 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -68,10 +68,22 @@ The alert emails page (from the account page): which alerts a person gets by ema
 
 ## Emails
 
+### mail.alert.digest
+
+Alert emails: the daily summary (06:00), listing several alerts in one email.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `mail.alert.digest.more.one` | …and {more} more alert. Open the catchment to see it. | Keep: {more} |  |
+
 ### mail.alert
 
 Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.
 
 | Id | English | Context | Afrikaans |
 | --- | --- | --- | --- |
+| `mail.alert.stale.body.one` | These data feeds are more than {threshold} day later than usual: | Keep: {threshold} |  |
+| `mail.alert.stale.line.one` | {feed}: newest day {newest}, {overdue} day late | One line per data feed; {overdue} is 1 (a day). Keep: {feed}, {newest}, {overdue} |  |
+| `mail.alert.failing.line.one` | {feed}: {failures} failure in a row | Keep: {failures}, {feed} |  |
+| `mail.alert.jobs.body.one` | {count} background job failed for good in the last 24 hours. See the jobs list in the catchment. | Keep: {count} |  |
 | `mail.alert.restriction.bodyPct` | The WUA published a notice for {project} on {date}: {level}, a {pct} cut in registered water use. | {level} is one of the level lines below; {pct} is the WUA’s cut, like “20 %”: use that much less than the registered water use. The farm page says it the same way. Keep: {date}, {level}, {pct}, {project} |  |

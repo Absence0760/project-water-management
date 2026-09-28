@@ -99,6 +99,13 @@ describe('alertMail', () => {
 			'DWS gauge flow: newest day 2 Jan 2026, 10 days late'
 		);
 		expect(alertMail(wua, project, { kind: 'feed_failing', threshold: 3, feeds: [{ label: 'CHIRPS', failures: 4 }] }, unsub).text).toContain('CHIRPS: 4 failures in a row');
+		// Counted (issue #51): never "1 days", "1 failures", "1 background jobs".
+		const one = alertMail(wua, project, { kind: 'data_stale', threshold: 1, feeds: [{ label: 'DWS gauge flow', newest: '2026-01-02', overdue: 1 }] }, unsub).text;
+		expect(one).toContain('more than 1 day later than usual');
+		expect(one).toContain('DWS gauge flow: newest day 2 Jan 2026, 1 day late');
+		expect(alertMail(wua, project, { kind: 'feed_failing', threshold: 1, feeds: [{ label: 'CHIRPS', failures: 1 }] }, unsub).text).toContain('CHIRPS: 1 failure in a row');
+		expect(alertMail(wua, project, { kind: 'job_dead', count: 1 }, unsub).text).toContain('1 background job failed for good');
+		expect(digestMail(farmer, project, [dam], unsub, 5, 1).text).toContain('…and 1 more alert. Open the catchment to see it.');
 		expect(alertMail(wua, project, { kind: 'job_dead', count: 2 }, unsub).subject).toBe('Background jobs failed — Rustenvrede WUA');
 	});
 });

@@ -111,7 +111,7 @@ export const af: Partial<Record<MailKey, string>> = {
 	// Since the last summary:
 	'mail.alert.digest.intro': 'Sedert die vorige opsomming:',
 	// …and {more} more alerts. Open the catchment to see them all.
-	'mail.alert.digest.more': '…en nog {more} waarskuwings. Maak die opvanggebied oop om hulle almal te sien.',
+	'mail.alert.digest.more.other': '…en nog {more} waarskuwings. Maak die opvanggebied oop om hulle almal te sien.',
 	// You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day.
 	'mail.alert.digest.why': 'Jy kry hierdie daaglikse opsomming omdat jy daaglikse waarskuwings vir {project} gekies het, of op een dag meer as {cap} waarskuwings-e-posse gekry het.',
 	// Stop all alert emails for this catchment
@@ -141,19 +141,19 @@ export const af: Partial<Record<MailKey, string>> = {
 	// Data feed behind
 	'mail.alert.stale.what': 'Datavoer loop agter',
 	// These data feeds are more than {threshold} days later than usual:
-	'mail.alert.stale.body': 'Hierdie datavoere is meer as {threshold} dae later as gewoonlik:',
+	'mail.alert.stale.body.other': 'Hierdie datavoere is meer as {threshold} dae later as gewoonlik:',
 	// {feed}: newest day {newest}, {overdue} days late
-	'mail.alert.stale.line': '{feed}: nuutste dag {newest}, {overdue} dae laat',
+	'mail.alert.stale.line.other': '{feed}: nuutste dag {newest}, {overdue} dae laat',
 	// Data feed failing
 	'mail.alert.failing.what': 'Datavoer misluk',
 	// These data feeds have failed {threshold} or more times in a row:
 	'mail.alert.failing.body': 'Hierdie datavoere het {threshold} of meer keer agtereenvolgens misluk:',
 	// {feed}: {failures} failures in a row
-	'mail.alert.failing.line': '{feed}: {failures} mislukkings agtereenvolgens',
+	'mail.alert.failing.line.other': '{feed}: {failures} mislukkings agtereenvolgens',
 	// Background jobs failed
 	'mail.alert.jobs.what': 'Agtergrondtake het misluk',
 	// {count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment.
-	'mail.alert.jobs.body': '{count} agtergrondtake het die afgelope 24 uur finaal misluk. Kyk na die takelys in die opvanggebied.',
+	'mail.alert.jobs.body.other': '{count} agtergrondtake het die afgelope 24 uur finaal misluk. Kyk na die takelys in die opvanggebied.',
 	// New restriction notice
 	'mail.alert.restriction.what': 'Nuwe beperkingskennisgewing',
 	// Restriction lifted
