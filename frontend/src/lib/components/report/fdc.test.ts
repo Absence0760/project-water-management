@@ -29,3 +29,12 @@ describe('the report’s FDC table', () => {
 		expect(fdcReportDays(t)).toBe('all 100 days of the run');
 	});
 });
+
+describe('the report’s FDC table on a forecast run (issue #51)', () => {
+	it('ranks the history only and says the forecast days are left out', () => {
+		const wet = [...natural, ...new Array(10).fill(9)];
+		const t = fdcPercentileTable({ natural: wet, simulated: wet.map((v) => v / 2) }, { startDate: '2020-01-01', forecastFrom: '2020-04-10' });
+		expect(fdcReportRows(t)).toEqual(fdcReportRows(fdcPercentileTable({ natural, simulated })));
+		expect(fdcReportDays(t)).toBe('all 100 days of the run before the forecast (its 10 forecast days left out)');
+	});
+});

@@ -1141,6 +1141,14 @@
 //             footer text, the share-page line, the workbook's disclaimer
 //             sheet, and their Afrikaans words. No new dependency. Headroom
 //             ~3 KB.
+// 2026-09-28  total 1083 → 1089 KB (measured 1086 with main merged in).
+//             Issue #51's forecast-leak fixes: a forecast run's history-only
+//             day counts, windows and flow-duration ranking (flowSeries,
+//             reportWindow, views/fdc), fitting on the record only and the
+//             CHIRPS-factor drift flag (calibrate/provenance), negative flows
+//             read as missing, the Reserve requirement line on the flow vs
+//             reserve chart, and the CHIRPS feed note. No new dependency.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1151,7 +1159,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1083,
+	totalCodeKb: 1089,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

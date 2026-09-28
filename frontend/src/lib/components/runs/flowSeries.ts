@@ -2,6 +2,7 @@
 // the printable report: which lines, in which colour, width and style.
 import { OBSERVED_SERIES_LABEL, type DailySeries } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
+import { fmtNum } from '$lib/format/number';
 
 /** The run's catchment series the flow charts draw (each absent when the run has none). */
 export interface CatchmentFlows {
@@ -12,7 +13,17 @@ export interface CatchmentFlows {
 	/** The other record, when the project has both (engine ≥ 0.39.0): shown, never scored. */
 	observedOther?: DailySeries;
 	ewr?: DailySeries;
+	/**
+	 * The outlet's Reserve rule requirement (`ewr_rule`, engine ≥ 0.21.0: the
+	 * month's requirement from its rule table, per day), when the outlet has a
+	 * table: the line the Reserve compliance headline judges (issue #51). Only
+	 * the EWR charts load it (EWR_RULE_KEY), not the Runs tab's flow charts.
+	 */
+	ewrRule?: DailySeries;
 }
+
+/** The run series key of the outlet's Reserve rule requirement (catchment-level, node null). */
+export const EWR_RULE_KEY: [keyof CatchmentFlows, string] = ['ewrRule', 'ewr_rule'];
 
 /** The run series key behind each slot. */
 export const CATCHMENT_FLOW_KEYS: [keyof CatchmentFlows, string][] = [
@@ -84,10 +95,35 @@ export function hydrographSeries(c: CatchmentFlows, conv: Convert, hideNatural =
 	return out;
 }
 
-/** Simulated outflow against the pragmatic EWR (a dashed step line). */
+/**
+ * Simulated outflow against the pragmatic EWR (a step line) and, when the
+ * outlet has a Reserve rule table, its requirement (a second step line): the
+ * Summary's "Reserve rules met" is judged against the rule, so the chart
+ * beside it must show that line too, not only the pragmatic one (issue #51).
+ */
 export function ewrChartSeries(c: CatchmentFlows, conv: Convert): ChartSeries[] {
 	const out: ChartSeries[] = [];
 	if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
 	if (c.ewr) out.push({ label: 'Pragmatic EWR', startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
+	if (c.ewrRule) out.push({ label: 'Reserve rule requirement', startDate: c.ewrRule.startDate, values: conv(c.ewrRule), style: 'step', color: '--series-3', width: 1.75 });
 	return out;
+}
+
+/** The EWR chart's note on the rule line, when it draws one: what it is and how it is judged. */
+export const EWR_RULE_CAPTION =
+	'The Reserve rule requirement line is each month’s requirement from the rule table, spread over its days: Reserve compliance judges it month by month, not day by day.';
+
+/**
+ * The flow-duration chart's caption: which days its curves rank. On a
+ * forecast run it says the forecast days are left out (issue #51), since
+ * the curves rank the history only. Undefined when there is nothing to say.
+ */
+export function fdcCaption(f: { onObserved: boolean; partial: boolean; obsDays: number; runDays: number; forecastDays: number }): string | undefined {
+	const days = f.onObserved
+		? `Every curve ranks the ${fmtNum(f.obsDays)} days with an observed reading, so they compare like with like.`
+		: f.partial
+			? `Natural and simulated flow rank all ${fmtNum(f.runDays)} days of the run${f.forecastDays ? ' before the forecast' : ''}; observed flow only its ${fmtNum(f.obsDays)} days with a reading.`
+			: '';
+	const forecast = f.forecastDays ? `The ${fmtNum(f.forecastDays)} forecast days are left out: the curves rank the history only.` : '';
+	return [days, forecast].filter(Boolean).join(' ') || undefined;
 }

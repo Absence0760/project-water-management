@@ -131,6 +131,12 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	const each = panel.getByRole('table', { name: /^Each complete month/ });
 	await expect(each.getByRole('row')).toHaveCount(37);
 	await expect(each.getByRole('row', { name: /^Jan 2020 .* not met$/ })).toBeVisible();
+	// The flow chart draws the rule requirement the headline is judged by, beside the pragmatic EWR (issue #51).
+	const flowFig = page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart');
+	const legend = (name: string) => flowFig.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: new RegExp(`^${name}`) }) });
+	await expect(legend('Reserve rule requirement')).toHaveCount(1);
+	await expect(legend('Pragmatic EWR')).toHaveCount(1);
+	await expect(flowFig).toContainText('The Reserve rule requirement line is each month’s requirement from the rule table');
 	await expectNoViolations(page);
 	// The run's warnings, back on Runs & results, say the same about the short record.
 	await page.goBack();

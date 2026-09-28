@@ -5,6 +5,7 @@ import {
 	CALIBRATION_PARAMS,
 	ENGINE_VERSION,
 	fitRecordFromReport,
+	withoutForecastTail,
 	OBJECTIVE_LABELS,
 	waterYearLabel,
 	type CalibrationBounds,
@@ -61,10 +62,15 @@ export type WorkerMessage =
 /**
  * The engine input for a fit: what the server would run, with the unsaved
  * Settings form and (when given) the unsaved network in place of the saved
- * ones, so a fit reflects what the user sees.
+ * ones, so a fit reflects what the user sees. Without the forecast tail
+ * (engine withoutForecastTail, issue #51): the live input carries the
+ * forecast series, and the fit, like every ordinary run (backend
+ * runs/execute.ts), must see the record only. The cut is made after the
+ * form's settings are in, as a run makes it after the project's, so a form
+ * ending the run before the forecast leaves nothing to cut.
  */
 export function fitInput(server: ModelInput, settings: ProjectSettings, model?: ProjectModel): ModelInput {
-	return { settings: settings as unknown as ModelInput['settings'], model: model ?? server.model, series: server.series };
+	return withoutForecastTail({ settings: settings as unknown as ModelInput['settings'], model: model ?? server.model, series: server.series });
 }
 
 /** GR4J parameters the form offers to fit, with which are ticked by default (X2 only when the form opened it). */

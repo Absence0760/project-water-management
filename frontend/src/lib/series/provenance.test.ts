@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from './provenance';
+import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -77,3 +77,17 @@ describe('the daily A-pan fingerprint (issue #45)', () => {
 		expect(apanDailyOfInput({ evap_apan_mm: { startDate: '2020-10-01', length: 4 } })).toBeUndefined();
 	});
 });
+
+describe('runChirpsFactors (issue #51)', () => {
+	it('gives the factor sets a run applied: null without a monthly correction, undefined on a run too old to say', () => {
+		expect(runChirpsFactors(null)).toBeUndefined();
+		expect(runChirpsFactors({})).toBeUndefined();
+		expect(runChirpsFactors({ chirpsCorrection: null })).toBeNull();
+		const months = Array.from({ length: 12 }, (_, i) => ({ factor: i === 0 ? 1.25 : null }));
+		const sets = runChirpsFactors({ chirpsCorrection: { mode: 'monthly', months } as never });
+		expect(sets).toHaveLength(1);
+		expect(sets![0]!.factors[0]).toBe(1.25);
+		expect(sets![0]!.label).toBe('whole record');
+	});
+});
+

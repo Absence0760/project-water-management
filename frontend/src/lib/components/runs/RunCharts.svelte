@@ -13,11 +13,11 @@
 	import { page } from '$app/state';
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
-	import { FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
+	import { beforeForecast, FDC_RECORDS, fdcPercentileTable, flowDurationCurves, onDaysOf } from '@water-management/engine';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { cachedSeries } from './cache';
-	import { CATCHMENT_FLOW_KEYS, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
+	import { CATCHMENT_FLOW_KEYS, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources, type CatchmentFlows } from './flowSeries';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
@@ -94,10 +94,15 @@
 		const labels = ['Natural', 'Simulated outflow', observedLabels(sources).observed];
 		const colors = ['--series-1', '--series-2', '--chart-obs'];
 		const present = list.map((d, i) => ({ d, i })).filter((x) => x.d);
-		const obs = catchment.observed ? conv(catchment.observed) : null;
-		const converted = present.map(({ d }) => conv(d));
-		// The Q10–Q95 table is the one the exports carry (engine views/fdc.ts, issue #45).
-		const table = fdcPercentileTable(Object.fromEntries(present.map(({ i }, k) => [FDC_RECORDS[i]!, converted[k]!])));
+		// A forecast run ranks its history only (issue #51): the days before forecastFrom.
+		const history = (d: DailySeries) => Array.from(beforeForecast(conv(d), d.startDate, forecastFrom));
+		const obs = catchment.observed ? history(catchment.observed) : null;
+		const converted = present.map(({ d }) => history(d!));
+		// The Q10–Q95 table is the one the exports carry (engine views/fdc.ts, issues #45 and #51).
+		const table = fdcPercentileTable(
+			Object.fromEntries(present.map(({ i, d }) => [FDC_RECORDS[i]!, conv(d)])),
+			present[0] ? { startDate: present[0].d!.startDate, forecastFrom } : undefined
+		);
 		const runDays = table.runDays;
 		const obsDays = table.observedDays;
 		// Only a choice when the gauge misses some of the run's days.
@@ -111,6 +116,7 @@
 			onObserved,
 			obsDays,
 			runDays,
+			forecastDays: table.forecastDays,
 			series: present.map(({ d, i }) => ({ label: labels[i]!, startDate: d!.startDate, values: [], color: colors[i], width: 1.5, style: i === 2 ? ('dashed' as const) : undefined })),
 			q: (onObserved ? table.onObservedDays! : table.wholeRun).map((r) => ({ ...r, label: labels[FDC_RECORDS.indexOf(r.record)]! }))
 		};
@@ -198,11 +204,7 @@
 				toolbar={unitToggle}
 				logToggle
 				bind:log={fdcLog}
-				caption={fdc.onObserved
-					? `Every curve ranks the ${fmtNum(fdc.obsDays)} days with an observed reading, so they compare like with like.`
-					: fdc.partial
-						? `Natural and simulated flow rank all ${fmtNum(fdc.runDays)} days of the run; observed flow only its ${fmtNum(fdc.obsDays)} days with a reading.`
-						: undefined}
+				caption={fdcCaption(fdc)}
 			/>
 			{#if fdc.partial}
 				<span class="seg days" role="group" aria-label="Days the curves rank">
