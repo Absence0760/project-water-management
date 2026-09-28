@@ -64,6 +64,7 @@
 		type="button"
 		class="trigger"
 		class:some={hidden.length > 0}
+		class:icon-only={!showLabel && hidden.length === 0}
 		aria-haspopup="dialog"
 		title="Choose the sections in your sidebar"
 		bind:this={button}
@@ -124,6 +125,14 @@
 		font: inherit;
 		font-size: 0.8rem;
 		cursor: pointer;
+	}
+	/* Icon only (the sidebar's head): a 24 px square, so "Catchment", the role
+	   and this button stay on one line with a wider system font too (DejaVu
+	   Sans, Linux's usual one), and the sidebar's rows still fit 1440×960
+	   (app-sidebar.spec.ts). */
+	.trigger.icon-only {
+		justify-content: center;
+		padding: 0;
 	}
 	.trigger:hover {
 		border-color: var(--border);

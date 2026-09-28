@@ -97,7 +97,7 @@ export function sheetsToRead(source: WorkbookSource): string[] {
  * Given the picked File (a Blob), it reads just those parts' bytes from it,
  * a slice at a time; bytes already in memory work too.
  */
-export async function readWorkbook(data: Blob | ArrayBuffer | Uint8Array, opts: ReadOptions = {}): Promise<WorkbookSource> {
+export async function readWorkbook(data: Blob | ArrayBuffer | Uint8Array<ArrayBuffer>, opts: ReadOptions = {}): Promise<WorkbookSource> {
 	const maxBytes = opts.maxBytes ?? MAX_WORKBOOK_BYTES;
 	const maxSheets = opts.maxSheets ?? MAX_WORKBOOK_SHEETS;
 	const size = data instanceof Blob ? data.size : data.byteLength;

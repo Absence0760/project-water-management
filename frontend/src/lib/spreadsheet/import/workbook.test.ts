@@ -95,7 +95,7 @@ describe('readWorkbook', () => {
 		book.Sheets['Netwerk'] = book.Sheets['Network']!;
 		delete book.Sheets['Network'];
 		for (const n of book.Workbook!.Names!) n.Ref = n.Ref.replace(/^Network!/, 'Netwerk!');
-		const file = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as Uint8Array;
+		const file = XLSX.write(book, { type: 'array', bookType: 'xlsx' }) as Uint8Array<ArrayBuffer>;
 		const wb = await readWorkbook(file);
 		expect(wb.sheet('Netwerk')).toBeDefined();
 		expect(wb.sheet('Network')).toBeUndefined();
@@ -148,7 +148,7 @@ describe('readWorkbook', () => {
 	});
 
 	it('refuses malformed or hostile XML in a part it reads, with a typed error', async () => {
-		const reason = async (file: Uint8Array) => {
+		const reason = async (file: Uint8Array<ArrayBuffer>) => {
 			const e = await readWorkbook(file).catch((err: unknown) => err);
 			return e instanceof UnreadableWorkbookError ? e.reason : e;
 		};

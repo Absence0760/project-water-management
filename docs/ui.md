@@ -492,8 +492,9 @@ role, freshness, Add data) and each tab's own header:
   tab's `main`) as `main`. Wide, the pill and the tab's controls add no boxes,
   so all of it is one row beside the title (under it when it doesn't fit, as
   on Allocations at 1440); the pair is one box, so a wrap never splits it.
-  The title column asks for its context's full one-line width (never less
-  than 16rem), so the controls sit beside the title only while the context
+  The title column asks for its context's full one-line width (and no more:
+  a 16rem floor made a short one wrap its controls under it in a wide font,
+  Data at 1024 in DejaVu Sans), so the controls sit beside the title only while the context
   fits on one line there; a longer context puts them under the title instead
   of wrapping to 3–4 short lines in a narrow column (River & reserve for a
   viewer at 1440 and Compare runs at 1024 did). A context that fits keeps the
@@ -924,7 +925,7 @@ it scrolls, and isn't fitted to the window.
 - On the **Network** tab, a farm with linked farmers says how many in its
   detail panel, and removing it asks first, naming the farmers who lose
   access when the model is saved.
-- The **description** box grows with its text (up to about 24rem) instead of
+- The **description** box grows with its text (up to about 24rem; on a phone, where every line wraps, with no cap) instead of
   hiding it behind an inner scrollbar (`field-sizing: content`; browsers
   without it keep four rows).
 
@@ -1363,7 +1364,10 @@ note's link on the Summary, `notes.ts` `noteHref`).
   (ui-playbook § 3, "Labels on diagrams"): each node's **name** (12.5 px,
   semibold, `--text`) over its **figure** (11 px, `--text-muted`: area and
   dam, or the colouring's "82% supplied"), both with a halo in the drawing's
-  ground colour. Names are cut to 17 characters so that no two read the same
+  ground colour on screen (not on paper, where it doubled every name in the
+  PDF's text). The room each label takes (column spacing, the transfers'
+  obstacles) is its width measured in the drawing's own font, never less than
+  the per-character estimate (`measuredWidths`). Names are cut to 17 characters so that no two read the same
   (`distinctShortNames`): "Kliprivier Estat…", but "North Sandvlak… 2" and
   "… 7" keep the ending that tells them apart; the full name is the node's
   tooltip, the list and the drainage tree. Editors can drag a node onto
@@ -1376,8 +1380,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   draining into one node don't fit side by side they wrap onto more rows
   stacked upwards, the shortest nearest the node, the higher rows' rivers
   running down a gutter on their left into the node's confluence line. Names
-  print at their full size (a 30-unit catchment on one page, names at
-  9.4 pt; unwrapped it printed at ~15 %, names ~1.4 pt). A drawing that is
+  print at a readable size (a 30-unit catchment on one page, names at
+  ~7.6 pt of type; unwrapped it printed at ~15 %, names ~1.4 pt). A drawing that is
   then taller than its page (a long main stem wraps down, not across) is split
   into page-high bands (`paperBands`): each band is its own SVG that prints
   whole (`break-inside: avoid`), cut just below a row's names and above the

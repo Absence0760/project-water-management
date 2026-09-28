@@ -170,7 +170,7 @@ export interface XlsxDailyColumn {
 export class XlsxWorkbook {
 	private readonly styles = new Styles();
 	private readonly names: string[] = [];
-	private readonly sheets: Uint8Array[] = [];
+	private readonly sheets: Uint8Array<ArrayBuffer>[] = [];
 
 	private addName(name: string): void {
 		if (!name || name.length > 31 || /[\\/?*[\]:]/.test(name) || this.names.includes(name)) throw new Error(`xlsx: bad or repeated sheet name ${JSON.stringify(name)}`);
@@ -224,7 +224,7 @@ export class XlsxWorkbook {
 			return s ? ` s="${s}"` : '';
 		});
 		const [head, tail] = sheetShell(rangeRef(days, columns.length), widths);
-		const chunks: Uint8Array[] = [enc.encode(head + '<sheetData>' + headerRow)];
+		const chunks: Uint8Array<ArrayBuffer>[] = [enc.encode(head + '<sheetData>' + headerRow)];
 		const letters = columns.map((_, i) => colName(i + 1));
 		let buf = '';
 		for (let d = 0; d < days; d++) {
@@ -245,7 +245,7 @@ export class XlsxWorkbook {
 	}
 
 	/** The workbook as .xlsx bytes. */
-	async bytes(): Promise<Uint8Array> {
+	async bytes(): Promise<Uint8Array<ArrayBuffer>> {
 		const n = this.names.length;
 		const override = (part: string, type: string) => `<Override PartName="/${part}" ContentType="${type}"/>`;
 		const rel = (id: number, type: string, target: string) => `<Relationship Id="rId${id}" Type="${type}" Target="${target}"/>`;
@@ -335,7 +335,7 @@ export function partOrder(l: string, r: string): number {
 	return L.length - R.length;
 }
 
-function concat(chunks: readonly Uint8Array[]): Uint8Array {
+function concat(chunks: readonly Uint8Array[]): Uint8Array<ArrayBuffer> {
 	const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
 	let o = 0;
 	for (const c of chunks) {

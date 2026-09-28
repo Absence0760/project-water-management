@@ -77,7 +77,7 @@ The checklist for these is issue #62; the history scrub is #63.
       changed, why, and § 6: what stays open for a lawyer, tracked in
       [legal-status.md](./legal-status.md) under Counsel review).
 
-- [ ] **Client data in git history (#63).** Decided 2026-09-28: the public
+- [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
       stays in the private `project-water-management-old`, because rewriting
       reworded prose across every past commit can't be shown complete. Done:
@@ -87,9 +87,10 @@ The checklist for these is issue #62; the history scrub is #63.
       medium findings), the value list joined the terms list in
       `infra-secrets/water-management/` (so `pnpm check:terms` guards it),
       and the issues that quote client data are re-filed clean at their own
-      numbers, the originals archived there. Left: publish (rename the old
-      repo, create the new one, move the issues, make it public), then tick
-      this.
+      numbers, the originals archived there. Published 2026-09-28: the old
+      repo is the private `-old`, the new one holds that single commit and
+      issues #1–77 on their old numbers, and `pnpm check:terms` passes on
+      its tree and history (checked from a fresh mirror clone).
 
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
@@ -2471,7 +2472,7 @@ role and not before it.
       (`wrappedSchematicLayout`, at most five columns, a wide row of
       branches wrapped onto more rows with a gutter for their rivers; the
       screen copy is unchanged and hidden in print). A 30-unit catchment
-      prints on one page with its names at 9.4 pt;
+      prints on one page with its names at ~7.6 pt of type;
       `report-schematic-print.spec.ts` prints one and checks every name's
       box in `pdftotext -bbox` (CI installs poppler-utils). Still open: the
       drawing isn't split at a page break on purpose, so a network more than
@@ -2493,7 +2494,7 @@ role and not before it.
       page" / "Continued from the previous page" note. A drawing that fits
       prints as one, as before. `report-schematic-print.spec.ts` prints a
       25-gauge main stem (four pages) and checks every name is whole on one
-      page, inside its margins, at ≥ 9.5 pt boxes.
+      page, inside its margins, at ≥ 7 pt of type (measured from the printed width, not the word box, whose height is each font's own metric; 2026-09-28).
 - [ ] **playwright-core is pinned in two places**: `backend/package.json`
       (the worker's renderer) and `e2e/package.json` (`@playwright/test`),
       plus the image tag in `backend/renderer.Dockerfile`. They must move
@@ -2998,8 +2999,9 @@ assume, the questions for counsel); these are the actions, with triggers.
       no run-time imports, tips and articles cover the same ids in order.
       Issue #9's last checkbox.
 
-- During early development, work is pushed straight to `main`, without PRs, at
-  the operator's request.
+- Since 2026-09-28 every change reaches `main` through a pull request: `main`
+  is protected on GitHub (PRs only, admins included) and the git guard hook
+  blocks pushes to it (CLAUDE.md, "Working alongside other Claude sessions").
 - Demo data: `pnpm dev:db:reset && pnpm seed:demo` rebuilds the dev database.
   It holds three invented catchments, a demo team, two demo users, and client
   catchment if the workbook is present.

@@ -69,7 +69,7 @@ Each fix is its own commit with its guard/test in the **same** commit:
 **Commit discipline (root `CLAUDE.md` guard rails):**
 - Always path-scoped: `git commit -m "…" -- path1 path2 …`. `git add <new-file>` for new files only; never `git add -A`/`-u`, never a bare `git commit`.
 - One fix = one commit. `git status` before each; confirm every path is yours.
-- No AI attribution / `Co-Authored-By` / robot footer. Commit only — **never `git push`** without an explicit ask.
+- No AI attribution / `Co-Authored-By` / robot footer. Commit on your PR branch; push the branch and open a PR, **never push `main`** (CLAUDE.md).
 
 ### 5. Report
 

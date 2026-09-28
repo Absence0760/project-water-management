@@ -23,13 +23,13 @@
 		"pan-sensitivity": "tsx scripts/pan-sensitivity.ts"
 	},
 	"dependencies": {
-		"@aws-sdk/client-s3": "3.1139.0",
-		"@aws-sdk/client-sesv2": "3.1139.0",
-		"@aws-sdk/client-sqs": "3.1139.0",
-		"@aws-sdk/s3-request-presigner": "3.1139.0",
+		"@aws-sdk/client-s3": "3.1141.0",
+		"@aws-sdk/client-sesv2": "3.1141.0",
+		"@aws-sdk/client-sqs": "3.1141.0",
+		"@aws-sdk/s3-request-presigner": "3.1141.0",
 		"@water-management/engine": "workspace:*",
 		"bcryptjs": "3.0.3",
-		"dotenv": "^17.4.1",
+		"dotenv": "^18.0.4",
 		"hono": "4.13.9",
 		"jose": "6.2.12",
 		"nodemailer": "10.0.10",
@@ -38,14 +38,14 @@
 		"zod": "4.6.5"
 	},
 	"devDependencies": {
-		"@hono/node-server": "1.19.13",
+		"@hono/node-server": "2.1.1",
 		"@types/aws-lambda": "8.10.163",
-		"@types/node": "25.6.0",
+		"@types/node": "24.19.0",
 		"@types/nodemailer": "8.0.2",
 		"@types/pg": "8.23.1",
 		"esbuild": "0.28.2",
 		"tsx": "4.23.15",
-		"typescript": "6.0.2",
-		"vitest": "^2.1.9"
+		"typescript": "7.0.2",
+		"vitest": "^5.0.2"
 	}
 }

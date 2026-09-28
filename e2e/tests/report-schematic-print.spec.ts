@@ -26,6 +26,7 @@ const hasPdftotext = (() => {
 interface Word {
 	text: string;
 	xMin: number;
+	xMax: number;
 	yMin: number;
 	yMax: number;
 }
@@ -42,16 +43,20 @@ function pdfPages(path: string): PdfPage[] {
 		.slice(1)
 		.map((page) => ({
 			height: Number(/height="([\d.]+)"/.exec(page)![1]),
-			words: [...page.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="[\d.]+" yMax="([\d.]+)">([^<]*)<\/word>/g)].map((m) => ({
-				text: m[4]!,
+			words: [...page.matchAll(/<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)<\/word>/g)].map((m) => ({
+				text: m[5]!,
 				xMin: Number(m[1]),
+				xMax: Number(m[3]),
 				yMin: Number(m[2]),
-				yMax: Number(m[3])
+				yMax: Number(m[4])
 			}))
 		}));
 }
 
 type NodeRow = ReturnType<typeof node>;
+
+/** The smallest printed name the report allows, in points of type. */
+const MIN_PT = 7;
 
 /** A project with this network and one run; returns the report's URL. */
 async function reportOf(page: Page, name: string, nodes: NodeRow[]): Promise<string> {
@@ -81,14 +86,36 @@ async function networkPages(page: Page, testInfo: TestInfo): Promise<PdfPage[]> 
 	return pages.slice(first, next);
 }
 
-/** Every "<word> NN" name drawn on these pages (`word` matching `prefix`), with its page, box and word height. */
-function names(pages: PdfPage[], prefix: string) {
+/** A name as the paper drawing lays it out: its width in the SVG's own units (CSS px, unscaled) and its type size (px). */
+type Drawn = Map<string, { length: number; sizePx: number }>;
+
+/** The paper drawing's names, measured in the page under print media. */
+async function paperNames(page: Page): Promise<Drawn> {
+	await page.emulateMedia({ media: 'print' });
+	const rows = await page.locator('#rep-network .sch-paper svg.schematic text.label').evaluateAll((ts) =>
+		ts.map((t) => ({ text: t.textContent ?? '', length: (t as SVGTextContentElement).getComputedTextLength(), sizePx: parseFloat(getComputedStyle(t).fontSize) }))
+	);
+	return new Map(rows.map((r) => [r.text, { length: r.length, sizePx: r.sizePx }]));
+}
+
+/**
+ * Every "<word> NN" name drawn on these pages (`word` matching `prefix`), with
+ * its page, box and printed type size in points. The size is the drawing's
+ * scale on paper (the name's printed width over its width in the SVG) times
+ * its type size, so it reads the same in every font; a word box's height is
+ * a font's own metric (~1.38 × the size in Noto Sans, ~1.16 in DejaVu Sans)
+ * and poppler's differs between versions.
+ */
+function names(pages: PdfPage[], prefix: string, drawn: Drawn) {
 	return pages.flatMap((p, page) =>
 		p.words.flatMap((w, i) => {
 			const nn = p.words[i + 1];
-			return w.text === prefix && nn && /^\d\d$/.test(nn.text)
-				? [{ name: `${prefix} ${nn.text}`, page, yMin: Math.min(w.yMin, nn.yMin), yMax: Math.max(w.yMax, nn.yMax), h: w.yMax - w.yMin }]
-				: [];
+			if (!(w.text === prefix && nn && /^\d\d$/.test(nn.text))) return [];
+			const name = `${prefix} ${nn.text}`;
+			const svg = drawn.get(name);
+			// px → pt at 96 dpi: 0.75; the scale is (printed pt) / (SVG px × 0.75), so the 0.75s cancel.
+			const pt = svg ? (svg.sizePx * (nn.xMax - w.xMin)) / svg.length : 0;
+			return [{ name, page, yMin: Math.min(w.yMin, nn.yMin), yMax: Math.max(w.yMax, nn.yMax), pt }];
 		})
 	);
 }
@@ -112,15 +139,16 @@ test('a 30-unit catchment prints its network schematic with every name readable'
 	// It fits a page, so paper draws it as one picture, not in bands.
 	await expect(page.locator('#rep-network .sch-paper svg.schematic')).toHaveCount(1);
 
+	const svgNames = await paperNames(page);
 	const pages = await networkPages(page, testInfo);
-	const labels = names(pages, 'Unit');
+	const labels = names(pages, 'Unit', svgNames);
 
-	// Every unit is named in the drawing, each name tall enough to read. A
-	// word's box is ~1.38 × its type size in this font, so 9.5 pt is ~7 pt
-	// type; wrapped, the names print at their full 9.4 pt (13 pt boxes), where
-	// the unwrapped strip scaled to the page printed them at ~1.4 pt.
-	expect(new Set(labels.map((l) => l.name)).size).toBe(30);
-	for (const l of labels) expect(l.h, l.name).toBeGreaterThanOrEqual(9.5);
+	// Every unit is named in the drawing once, each name big enough to read:
+	// wrapped, the names print at ~7.6 pt type (the five columns and the
+	// widest second line scaled to the A4 width), where the unwrapped strip
+	// scaled to the page printed them at ~1.4 pt.
+	expect(labels.map((l) => l.name).sort()).toEqual(units.map((u) => u.name).sort());
+	for (const l of labels) expect(l.pt, l.name).toBeGreaterThanOrEqual(MIN_PT);
 	// Wrapped onto one page, not sliced across several.
 	expect(pages).toHaveLength(1);
 });
@@ -149,8 +177,9 @@ test('a network taller than a page prints in page-high bands, no name cut by a p
 	expect(bandCount).toBeGreaterThan(1);
 	await expect(page.locator('#rep-network .sch-screen svg.schematic')).toHaveCount(1);
 
+	const svgNames = await paperNames(page);
 	const pages = await networkPages(page, testInfo);
-	const drawn = [...names(pages, 'Gauge'), ...names(pages, 'Unit')];
+	const drawn = [...names(pages, 'Gauge', svgNames), ...names(pages, 'Unit', svgNames)];
 
 	// Every name whole on exactly one page: a drawing sliced by a page break
 	// prints the names on the cut on both sides of it, clipped.
@@ -161,7 +190,7 @@ test('a network taller than a page prints in page-high bands, no name cut by a p
 	for (const d of drawn) {
 		expect(d.yMin, `${d.name} top`).toBeGreaterThanOrEqual(margin - 1);
 		expect(d.yMax, `${d.name} foot`).toBeLessThanOrEqual(pages[d.page]!.height - margin + 1);
-		expect(d.h, d.name).toBeGreaterThanOrEqual(9.5);
+		expect(d.pt, d.name).toBeGreaterThanOrEqual(MIN_PT);
 	}
 	// A band a page, each saying where its rivers go on.
 	expect(pages).toHaveLength(bandCount);

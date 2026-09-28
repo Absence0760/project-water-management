@@ -1,5 +1,5 @@
 ---
-description: Go wide hunting for real correctness bugs across the project — reproduce each with a probe, confirm it's real, fix at the root, lock it with a regression test, then sweep sibling paths. Multi-round; commits scoped; never pushes.
+description: Go wide hunting for real correctness bugs across the project — reproduce each with a probe, confirm it's real, fix at the root, lock it with a regression test, then sweep sibling paths. Multi-round; commits scoped; lands through a PR, never pushes `main`.
 argument-hint: "[optional scope — a layer, feature, or path, e.g. 'the normalizers', 'live ingestion', src/routes/runs.ts; omit to let it choose high-yield targets]"
 ---
 
@@ -16,7 +16,7 @@ Hunt for genuine correctness bugs and land the fixes. This is the **cross-cuttin
 - **Be honest when there's no bug.** If a target is sound, say so and make the deliverable the coverage gap you closed — never invent a "fix" to justify the command.
 - **Respect the project's documented invariants.** Never bypass tenancy/isolation, log PII/secrets, or leak credentials. Treat auth/tenancy/migrations/gate-signals/money/audit-trail/PII as load-bearing (mandatory review pass, step 7).
 - **Docs-as-code.** A behaviour/command/env/port/convention change updates its docs in the same commit.
-- **Commit each logical unit, path-scoped; never push.** Fix and tests are separate commits (`git commit -m "…" -- <paths>`; the scope-guard hook blocks bare/whole-tree commits). No `Co-Authored-By` / AI-attribution trailer. (Git workflow.)
+- **Commit each logical unit, path-scoped; PRs only, never push `main`.** Fix and tests are separate commits (`git commit -m "…" -- <paths>`; the scope-guard hook blocks bare/whole-tree commits). No `Co-Authored-By` / AI-attribution trailer. (Git workflow.)
 
 ## Where bugs tend to live
 
@@ -63,9 +63,9 @@ The bug you found is rarely unique. Grep for the same shape elsewhere (the other
 - Run the **nearby existing** suites on the same path to prove no regression — report pass/fail counts faithfully.
 - For load-bearing diffs (auth, tenancy, migrations, money, webhooks, audit trail), run the `code-reviewer` agent and apply/push back before committing.
 
-### 8. Commit (scoped) — never push
+### 8. Commit (scoped) — on a PR branch
 
-Fix and tests as separate path-scoped commits, conventional-commit style, no AI/co-author trailer. Docs ride with the commit that changed the behaviour. Then go back to step 3 for the next target until you've covered the scope (or the user's round budget). **Never `git push`.**
+Fix and tests as separate path-scoped commits, conventional-commit style, no AI/co-author trailer. Docs ride with the commit that changed the behaviour. Then go back to step 3 for the next target until you've covered the scope (or the user's round budget). **Never push `main`**: push your branch and open a PR (CLAUDE.md).
 
 ## Report
 

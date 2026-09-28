@@ -82,14 +82,14 @@ export class ZipArchive {
 	 * the file. Throws a WorkbookImportError on anything malformed. Bytes
 	 * already in memory (the tests) are wrapped in a Blob.
 	 */
-	static async open(file: Blob | Uint8Array, limits: ZipLimits = {}): Promise<ZipArchive> {
+	static async open(file: Blob | Uint8Array<ArrayBuffer>, limits: ZipLimits = {}): Promise<ZipArchive> {
 		const zip = new ZipArchive(file instanceof Blob ? file : new Blob([file]), limits);
 		await zip.readDirectory();
 		return zip;
 	}
 
 	/** The file's bytes [start, end), which the caller has checked lie inside it. */
-	private async slice(start: number, end: number): Promise<{ bytes: Uint8Array; view: DataView }> {
+	private async slice(start: number, end: number): Promise<{ bytes: Uint8Array<ArrayBuffer>; view: DataView }> {
 		const buf = await this.file.slice(start, end).arrayBuffer();
 		return { bytes: new Uint8Array(buf), view: new DataView(buf) };
 	}
@@ -256,7 +256,7 @@ const INFLATE_SLICE = 64 * 1024;
  * whatever `feed` throws cancels the inflater and propagates as it is.
  */
 async function inflateRawChunks(
-	read: (from: number, to: number) => Promise<Uint8Array>,
+	read: (from: number, to: number) => Promise<Uint8Array<ArrayBuffer>>,
 	length: number,
 	name: string,
 	feed: (chunk: Uint8Array) => void
@@ -267,7 +267,7 @@ async function inflateRawChunks(
 	// one chunk several times its size (issue #23). A slice at a time keeps every browser's
 	// output chunks small, and only one slice of the file is read at once.
 	let at = 0;
-	const source = new ReadableStream<Uint8Array>({
+	const source = new ReadableStream<Uint8Array<ArrayBuffer>>({
 		async pull(c) {
 			if (at >= length) return c.close();
 			const to = Math.min(length, at + INFLATE_SLICE);
@@ -297,7 +297,7 @@ async function inflateRawChunks(
  * Raw inflate into a buffer of exactly `size` bytes. Output beyond `size`
  * (a lying header, or a bomb) stops the stream at once and throws.
  */
-export async function inflateRaw(packed: Uint8Array, size: number, name = 'a part'): Promise<Uint8Array> {
+export async function inflateRaw(packed: Uint8Array<ArrayBuffer>, size: number, name = 'a part'): Promise<Uint8Array> {
 	const out = new Uint8Array(size);
 	let n = 0;
 	await inflateRawChunks(async (from, to) => packed.subarray(from, to), packed.length, name, (chunk) => {
@@ -321,7 +321,7 @@ export interface StoredEntry {
  * reference reader the parity tests compare against (./sheetjsReference.ts).
  * The import itself no longer hands SheetJS anything.
  */
-export function storedZip(entries: readonly StoredEntry[]): Uint8Array {
+export function storedZip(entries: readonly StoredEntry[]): Uint8Array<ArrayBuffer> {
 	const enc = new TextEncoder();
 	const names = entries.map((e) => enc.encode(e.name));
 	const localSize = entries.reduce((n, e, i) => n + 30 + names[i]!.length + e.data.length, 0);

@@ -6,7 +6,7 @@ export type ToWorker = { type: 'start'; request: WorkbookRequest };
 
 export type FromWorker =
 	| { type: 'progress'; progress: ExportProgress }
-	| { type: 'done'; bytes: Uint8Array; filename: string }
+	| { type: 'done'; bytes: Uint8Array<ArrayBuffer>; filename: string }
 	| { type: 'error'; message: string };
 
 export const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';

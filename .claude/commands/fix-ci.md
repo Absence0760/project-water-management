@@ -64,7 +64,7 @@ If a doc describes the behaviour you changed (a CI job's steps, a command, an en
 - One coherent piece → one **path-scoped** commit, fix + coverage + doc update together: `git commit -m "…" -- <paths>`. Never `git add -A`/`-u`, never a bare `git commit` — path-scope so a concurrent session's unrelated changes aren't swept in.
 - No `Co-Authored-By` / "Generated with" / AI-attribution trailer in the message — write it as a human would.
 - Validate before committing where cheap: `python3 -c "import yaml; yaml.safe_load(open('<workflow>'))"` for workflow YAML, the relevant linter/test for code.
-- **Never `git push`.** Publishing is the operator's call — STOP before pushing.
+- **Never push `main`.** Push the fix branch and open a PR (CLAUDE.md); merging is the operator's call.
 - Consider a `code-reviewer` pass on the diff before you hand back, especially if the fix touched auth, a money path, tenant isolation, or a webhook.
 
 ## Output
