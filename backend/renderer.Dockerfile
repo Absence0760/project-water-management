@@ -43,5 +43,8 @@ COPY dist/renderer/lambda-renderer.mjs ./lambda-renderer.mjs
 ENV HOME=/tmp \
 	NODE_ENV=production \
 	PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# Not root (Trivy DS-0002): the Playwright image's own user. Lambda runs the
+# image as its own unprivileged user anyway; this covers a local `docker run`.
+USER pwuser
 ENTRYPOINT ["node", "/var/task/node_modules/aws-lambda-ric/index.mjs"]
 CMD ["lambda-renderer.handler"]

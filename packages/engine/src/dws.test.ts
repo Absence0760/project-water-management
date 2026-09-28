@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow } from './dws';
+import { DWS_GAP_CODES, DWS_HEADER, DWS_ROW, dwsColumns, dwsTableText, parseDwsRow, stripHtmlComments } from './dws';
 
 // Synthetic (invented station and values), shared with the feed's and the manual import's tests.
 const fixture = readFileSync(new URL('../fixtures/dws-daily-export.txt', import.meta.url), 'utf8');
@@ -65,5 +65,22 @@ describe('the shared fixture', () => {
 		const rows = lines.filter((l) => DWS_ROW.test(l.trim())).map((l) => parseDwsRow(l, cols));
 		expect(rows.map((r) => r.value)).toEqual([0.412, 0.398, 1.897, null, null, null, 12.5, 0.371, 0.355, 0.349]);
 		expect(rows.map((r) => r.gap).filter(Boolean)).toEqual(['code', 'code', 'negative']);
+	});
+});
+
+describe('stripHtmlComments', () => {
+	it('removes each comment, keeps the text around it, and leaves an unclosed one in place', () => {
+		expect(stripHtmlComments('a<!-- x -->b<!--y-->c')).toBe('abc');
+		expect(stripHtmlComments('<!-- mentions <pre> -->DATE')).toBe('DATE');
+		expect(stripHtmlComments('a<!-->b-->c')).toBe('ac');
+		expect(stripHtmlComments('a<!-- open')).toBe('a<!-- open');
+		expect(stripHtmlComments('a<!-- x -->b<!-- open')).toBe('ab<!-- open');
+	});
+	// The regex it replaced retried from every unclosed "<!--" (CodeQL js/polynomial-redos): a page of
+	// them hung the parser. The scan returns at once.
+	// The timeout is a hang guard, not a budget: the engine's default is 120 s, which the old pattern fit inside.
+	it('returns a page of unclosed comment openers unchanged', { timeout: 5_000 }, () => {
+		const hostile = '<!--'.repeat(200_000);
+		expect(stripHtmlComments(hostile)).toBe(hostile);
 	});
 });

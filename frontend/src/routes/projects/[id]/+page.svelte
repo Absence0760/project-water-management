@@ -141,28 +141,6 @@
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);
-	/**
-	 * Bumped by every change to `runs` a tab or this page makes (a run made,
-	 * deleted, pinned…). A list read from the server before a change is stale:
-	 * applied after it, it would bring back a run just deleted (issue #77), so
-	 * fetchRuns reads again instead.
-	 */
-	let runsChanges = 0;
-	function setRuns(list: RunMeta[] | null) {
-		runsChanges++;
-		runs = list;
-	}
-	/** Re-read the run list; throws on failure (the list keeps its values). */
-	async function fetchRuns(): Promise<void> {
-		for (;;) {
-			const seen = runsChanges;
-			const list = await api.runs.list(projectId);
-			if (seen === runsChanges) {
-				runs = list;
-				return;
-			}
-		}
-	}
 	let saveBarHeight = $state(0);
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
@@ -335,8 +313,34 @@
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */
 	async function loadLists() {
-		const [sl] = await Promise.allSettled([api.series.list(projectId), fetchRuns()]);
-		if (sl.status === 'fulfilled') series = sl.value;
+		await Promise.all([
+			api.series.list(projectId).then(
+				(l) => (series = l),
+				() => {}
+			),
+			loadRuns()
+		]);
+	}
+	async function loadRuns() {
+		for (;;) {
+			const at = runsEdits;
+			const list = await api.runs.list(projectId).catch(() => null);
+			if (!list) return;
+			// A run made or removed meanwhile (here or in a tab): this list predates it, so ask again rather than drop the run.
+			if (runsEdits !== at) continue;
+			runs = list;
+			return;
+		}
+	}
+	/**
+	 * Bumped by every change to the runs list (setRuns: the first load, a run made here, and every change a tab
+	 * reports), so a list fetched before it is asked for again (loadRuns) rather than bring back a run just
+	 * deleted (issue #77) or drop one just made.
+	 */
+	let runsEdits = 0;
+	function setRuns(next: RunMeta[] | null) {
+		runs = next;
+		runsEdits++;
 	}
 
 	// Reload when the route param changes (e.g. navigating between projects).
@@ -756,7 +760,7 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={fetchRuns} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>

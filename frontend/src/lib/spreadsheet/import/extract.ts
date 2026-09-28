@@ -8,7 +8,7 @@
 // both). `unmapped` is TypeScript-only (plan.md 1b).
 import type { CalibrationParams, DemandObject, FlowShareMethod, NetworkNode, ProjectModel, ProjectSettings } from '@water-management/engine';
 import type { WorkbookSource } from './source';
-import { clean, num, pyStr } from './cells';
+import { clean, num } from './cells';
 import { extractCalibration, extractCalibrationWindow } from './calibration';
 import { grossDemandNote, nonCropDemand, nonCropDemandObject, readCropAreas, readCrops, readFarmGross } from './crops';
 import { InvalidImportOptionsError, InvalidWorkbookError, NotB023WorkbookError, UnsupportedVersionError } from './errors';

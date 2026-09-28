@@ -128,26 +128,24 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-	/**
-	 * Bumped by every change this tab makes to `runs` (a run made, deleted,
-	 * pinned…). A list read before a change is stale: applied after it, it
-	 * brought back a run just deleted (issue #77), so load reads again instead.
-	 */
-	let runsChanges = 0;
-	function setRuns(next: RunMeta[]) {
-		runsChanges++;
+	/** Bumped by every change made here to the list or the evidence history (commit), so a load in flight can tell its answer is older. */
+	let edits = 0;
+	/** A change made here: the list (and the page's copy) take it. */
+	function commit(next: RunMeta[]) {
 		runs = next;
+		edits++;
 		onRunsChange?.(runs);
 	}
-
 	async function load() {
 		if (!runs.length) loading = true;
 		loadError = null;
 		try {
 			for (;;) {
-				const seen = runsChanges;
+				const at = edits;
 				const [list, history] = await Promise.all([api.runs.list(projectId), api.runs.nominations(projectId)]);
-				if (seen !== runsChanges) continue;
+				// A run made, removed, pinned or nominated here meanwhile: this answer predates it, so ask again
+				// rather than put back the list from before it.
+				if (edits !== at) continue;
 				runs = list;
 				nominations = history;
 				onRunsChange?.(runs);
@@ -186,7 +184,7 @@
 	const heldByPublication = $derived(publishedRunIds(publication?.history));
 	function published(p: { current: Publication; history: PublicationMeta[] }) {
 		publication = p;
-		setRuns(runs.map((r) => ({ ...r, published: r.id === p.current.runId })));
+		commit(runs.map((r) => ({ ...r, published: r.id === p.current.runId })));
 	}
 	onDestroy(() => clearInterval(timer));
 
@@ -283,7 +281,7 @@
 			label = '';
 			const { summary: _summary, ...meta } = r;
 			// Drop the oldest runs the server trimmed to stay within its cap.
-			setRuns([meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
+			commit([meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			select(r.id);
 		} catch (err) {
 			actionError = msg(err);
@@ -299,7 +297,7 @@
 		if (detail?.run.id === updated.id) detail = { ...detail, run: { ...detail.run, ...fields } };
 		const cached = detailCache.get(updated.id);
 		if (cached) detailCache.set(updated.id, { ...cached, run: { ...cached.run, ...fields } });
-		setRuns(runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r)));
+		commit(runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r)));
 	}
 
 	// Each run's place in the evidence history, from the history itself so a
@@ -320,7 +318,7 @@
 	function nominated(history: Nomination[]) {
 		nominations = history;
 		const status = (id: string) => evidenceById.get(id) ?? null;
-		setRuns(runs.map((r) => ({ ...r, evidence: status(r.id) })));
+		commit(runs.map((r) => ({ ...r, evidence: status(r.id) })));
 	}
 
 	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
@@ -332,7 +330,7 @@
 		actionError = null;
 		try {
 			const { pinned } = await api.runs.setPinned(projectId, r.id, !r.pinned);
-			setRuns(runs.map((x) => (x.id === r.id ? { ...x, pinned } : x)));
+			commit(runs.map((x) => (x.id === r.id ? { ...x, pinned } : x)));
 		} catch (err) {
 			actionError = runErrorText(err);
 		}
@@ -351,7 +349,7 @@
 			}
 		}
 		forgetRun(r.id);
-		setRuns(runs.filter((x) => x.id !== r.id));
+		commit(runs.filter((x) => x.id !== r.id));
 		if (selectedId === r.id) {
 			detail = null;
 			detailFor = '';

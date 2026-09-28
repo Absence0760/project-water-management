@@ -125,6 +125,8 @@ locals {
   mail_events_visibility_seconds = 6 * local.worker_timeout_seconds
 }
 
+# docs/security.md § Accepted IaC findings.
+#trivy:ignore:AWS-0095
 resource "aws_sns_topic" "ses_events" {
   name = "${local.project}-ses-events"
 }

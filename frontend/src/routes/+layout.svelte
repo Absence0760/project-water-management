@@ -159,10 +159,10 @@
 		document.documentElement.lang = translated && i18nModule ? i18nModule.wordsLang() : 'en';
 	});
 	const ready = $derived(session.checked && !bootError && access === 'show' && (!translated || i18nReady) && frameKnown);
-	// The static pages (/welcome, /privacy, /terms) render at once (and
+	// The static pages (/welcome, /privacy, /terms, /methods) render at once (and
 	// prerender), so crawlers and a slow API still get them (even with the API
 	// down: they need none). /welcome is English until the language's words
-	// arrive, the one page that may switch; the legal pages are English only.
+	// arrive, the one page that may switch; the legal and methods pages are English only.
 	const shown = $derived(staticPage || ready);
 </script>
 

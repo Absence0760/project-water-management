@@ -45,7 +45,10 @@
 		/** The current publication's run: an applicant's base. */
 		publishedRunId?: string | null;
 		onRunsChange: (runs: RunMeta[]) => void;
-		/** Re-read the shared run list (the page's: it drops a list a later change has made stale, issue #77). */
+		/**
+		 * Re-read the shared run list (the page's loadRuns): a list read before a later change, such as a
+		 * scenario run made here (onRunsChange bumps the page's count), is asked for again, never applied (issue #77).
+		 */
 		reloadRuns: () => Promise<void>;
 	} = $props();
 
