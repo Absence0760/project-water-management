@@ -1031,21 +1031,51 @@ export const DAM_AREA_EXPONENT = 0.7;
  */
 export const ESTIMATED_DAM_DEPTH_M = 3;
 
-/** Irrigation settings of a new farm (engine ≥ 0.16.0, audit N1): a typical mixed system, half of its losses returning. */
-export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.8, lossReturnFraction: 0.5 } as const;
+/** An irrigation system with its SABI 2021 efficiency range and the value the app offers for it. */
+export interface IrrigationSystem {
+	id: string;
+	label: string;
+	/** SABI Table 4's minimum and maximum "proposed default system efficiency" (net to gross), as fractions. */
+	min: number;
+	max: number;
+	/**
+	 * The value offered for the system (issue #54 Q10's recommendation): inside
+	 * [min, max] but not always the midpoint (drip is its minimum).
+	 */
+	efficiency: number;
+}
 
 /**
- * Indicative application efficiencies by irrigation system (audit N1), for
- * the node form's helper. Typical values from the irrigation design
- * literature; a scheme's own measurement is better.
+ * Application efficiency by irrigation system (audit N1, issue #54 Q10): SABI
+ * Agricultural Design Norms 2021, Table 4 "System efficiency" (pp. 9–10,
+ * adapted from Reinders et al. 2010). Surface spans its three rows (piped
+ * 80–95, lined canal 70–90, earth canal 60–83). The one table the node form's
+ * system helper and the crop library's Load crop factors dialog both offer; a
+ * scheme's own measurement is better.
  */
 export const IRRIGATION_SYSTEMS = [
-	{ id: 'drip', label: 'Drip', efficiency: 0.9 },
-	{ id: 'micro', label: 'Micro-sprinkler', efficiency: 0.85 },
-	{ id: 'pivot', label: 'Centre pivot', efficiency: 0.85 },
-	{ id: 'sprinkler', label: 'Sprinkler (dragline, big gun)', efficiency: 0.75 },
-	{ id: 'flood', label: 'Flood / furrow', efficiency: 0.65 }
-] as const;
+	{ id: 'drip', label: 'Drip', min: 0.9, max: 0.95, efficiency: 0.9 },
+	{ id: 'micro', label: 'Micro-sprinkler', min: 0.8, max: 0.85, efficiency: 0.82 },
+	{ id: 'pivot', label: 'Centre pivot / linear move', min: 0.8, max: 0.9, efficiency: 0.85 },
+	{ id: 'sprinkler', label: 'Sprinkler (permanent)', min: 0.75, max: 0.9, efficiency: 0.8 },
+	{ id: 'movable', label: 'Sprinkler (movable)', min: 0.7, max: 0.83, efficiency: 0.75 },
+	{ id: 'surface', label: 'Surface', min: 0.6, max: 0.95, efficiency: 0.7 }
+] as const satisfies readonly IrrigationSystem[];
+
+/** An IRRIGATION_SYSTEMS id. */
+export type IrrigationSystemId = (typeof IRRIGATION_SYSTEMS)[number]['id'];
+
+/** The system a new farm starts on: drip, confirmed by the client (issue #90, #54 Q10). */
+export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
+
+/**
+ * Irrigation settings of a new farm (audit N1): drip's efficiency (0.90,
+ * NEW_FARM_IRRIGATION_SYSTEM; migration 095 sets the column default to match),
+ * half of its losses returning. Only a newly created farm takes it: a saved
+ * farm keeps its stored efficiency, and the run never reads this, so it is
+ * not a model change.
+ */
+export const NEW_FARM_IRRIGATION = { irrigationEfficiency: 0.9, lossReturnFraction: 0.5 } as const;
 
 /**
  * The efficiency and loss return that replace an engine < 0.16.0 node's

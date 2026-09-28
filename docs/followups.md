@@ -2633,14 +2633,18 @@ from the WP:
       modeller enters its values by hand. Trigger: the hydrologist wants
       such a set compared (Q9), with a synthetic fixture of that shape for the
       test (never a client file).
-- [ ] **Two tables of indicative irrigation efficiencies.** The node form's
-      system helper uses the engine's `IRRIGATION_SYSTEMS` (micro 0.85,
-      sprinkler 0.75, flood 0.65, "typical values"), the dialog the SABI
-      2021 ranges with Q10's values (`crops/library.ts` `LIBRARY_SYSTEMS`:
-      micro 0.82, permanent sprinkler 0.80, surface 0.70 …). Durable fix:
-      once Q10 is answered, keep one table (SABI 2021, with its source) in
-      the engine and use it in both places; that changes what a new pick in
-      the node form sets, not any saved value. Trigger: Q10.
+- [x] **One table of irrigation efficiencies; drip the new-farm default**
+      (2026-09-28, issue #90 answering #54 Q10). The engine's
+      `IRRIGATION_SYSTEMS` is now the SABI 2021 Table 4 set with Q10's values
+      (drip 0.90, micro 0.82, pivot 0.85, permanent sprinkler 0.80, movable
+      sprinkler 0.75, surface 0.70); the crop library's `LIBRARY_SYSTEMS`
+      re-exports it and the farmer view names the nearest of it. New farms
+      start on drip (`NEW_FARM_IRRIGATION` e = 0.90; migration 095 sets the
+      column default). Saved farms keep their values (a value off the table
+      shows "Other" in the helper); no engine version change, since the run
+      reads neither ([model.md § Irrigation efficiency](./model.md)). Still
+      the hydrologist's: which system each farm's crops are under (the item
+      above).
 
 ## Demand objects and run of river (issue #54 items 2b–2d)
 

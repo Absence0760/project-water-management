@@ -10,7 +10,7 @@
 // function here reads the active language: call them where they render and
 // they follow a language switch. Fixed sentences are functions, not
 // constants, for the same reason.
-import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, IRRIGATION_SYSTEMS, type FarmProjection, type IrrigationSystemId, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
 import { STALE_DAYS } from '$lib/components/series/freshness';
 import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
@@ -79,19 +79,31 @@ export const noRestriction = () => t('No restriction from the WUA');
 
 // ---- Water you received this season (§3 Q1) ---------------------------------
 
-const SYSTEMS: [number, Msg][] = [
-	// i18n-section: farm.system
-	[0.9, msg('drip')],
-	[0.85, msg('micro or centre pivot')],
-	[0.75, msg('sprinklers')],
-	[0.65, msg('flood')]
-];
+// i18n-section: farm.system
+const DRIP = msg('drip');
+const MICRO_OR_PIVOT = msg('micro or centre pivot');
+const SPRINKLERS = msg('sprinklers');
+const FLOOD = msg('flood');
 
-/** The irrigation system nearest an efficiency (§3 Q1: drip 0.90, micro/pivot 0.85, sprinkler 0.75, flood 0.65). */
+/** A farmer's word for each of the engine's SABI 2021 systems (IRRIGATION_SYSTEMS). */
+const SYSTEM_WORDS: Record<IrrigationSystemId, Msg> = {
+	drip: DRIP,
+	micro: MICRO_OR_PIVOT,
+	pivot: MICRO_OR_PIVOT,
+	sprinkler: SPRINKLERS,
+	movable: SPRINKLERS,
+	surface: FLOOD
+};
+
+/**
+ * The irrigation system whose SABI 2021 efficiency (the engine's
+ * IRRIGATION_SYSTEMS, the table the node form sets) is nearest this one, in a
+ * farmer's words (§3 Q1). A tie goes to the system listed first.
+ */
 export function systemName(efficiency: number): string {
-	let best = SYSTEMS[0]!;
-	for (const s of SYSTEMS) if (Math.abs(s[0] - efficiency) < Math.abs(best[0] - efficiency)) best = s;
-	return t(best[1]);
+	let best: (typeof IRRIGATION_SYSTEMS)[number] = IRRIGATION_SYSTEMS[0];
+	for (const s of IRRIGATION_SYSTEMS) if (Math.abs(s.efficiency - efficiency) < Math.abs(best.efficiency - efficiency)) best = s;
+	return t(SYSTEM_WORDS[best.id]);
 }
 
 // i18n-section: farm.supply

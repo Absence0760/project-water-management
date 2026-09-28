@@ -104,7 +104,7 @@ erDiagram
 | `dam_release_m3_day` | (none) | m³/day per water-year month (12 values ≥ 0, CHECK): the fixed release, or the pass-inflow target; NULL = none (fixed) / the EWR required at the node (pass inflow) |
 | `dam_outlet_capacity_m3_day` | (none) | Most the outlet releases per day (≥ 0); NULL = no limit |
 | `dam_seepage_return_pct` | (none) | Share (0–1, default 1) of the seepage returning below the dam; the rest leaves the catchment |
-| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, floored at 0.01, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.8 (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
+| `irrigation_efficiency` | (from "Irrigation return flow (%)" r: e = 1 − r, floored at 0.01, or 1 when r = 0) | Application efficiency e, 0 < e ≤ 1 (CHECK), default 0.9, drip (095_drip_default_efficiency, issue #90; 0.8 from 006 until then, and stored rows kept their values), the engine's `NEW_FARM_IRRIGATION` (engine ≥ 0.16.0, [audit N1](./engine-audit.md)): abstraction demand = crop requirement ÷ e |
 | `loss_return_fraction` | (1 when r > 0, else 0) | Share β (0–1) of the application losses `(1 − e) × supplied` that returns to the river the same day; default 0.5. Migration 006 backfilled both from `return_flow_pct` and dropped that column |
 
 | `user_demand_m3_day` | (none: b023 has no such element) | Kind `user` only (migration 011, engine ≥ 0.22.0, [model.md §2.7c](./model.md#27c-other-water-users-engine--0220-roadmap-wp-133)): demand from the river, m³/day per water-year month (12 values ≥ 0, CHECK); NULL = none |

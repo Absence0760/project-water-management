@@ -260,7 +260,9 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    keeps the totals close. A per-month e* would need the network step to take
    a daily efficiency (a larger change, for the hydrologist to ask for if the
    farms warrant it). The crop factors themselves are unchanged: which crop
-   set a catchment uses awaits the hydrologist (issue #54, Q9/Q10).
+   set a catchment uses, and which system each farm's crops are under,
+   awaits the hydrologist (issue #54, Q9/Q10; the client chose drip as the
+   new-farm default, issue #90).
 
    A farm none of whose cropped crops sets one returns `e[f]` untouched, so a
    model without crop efficiencies runs **bit for bit** as before (tested on
@@ -323,7 +325,11 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      80–90 %, permanent sprinkler 75–90 %, movable sprinkler 70–83 %,
      surface 60–95 % across its piped, lined and earth canal rows). The
      dialog offers issue #54 Q10's values (0.90, 0.82, 0.85, 0.80, 0.75,
-     0.70), each inside its range but not always the midpoint. Each library
+     0.70), each inside its range but not always the midpoint. The table
+     lives in the engine (`IRRIGATION_SYSTEMS` in `project.ts`, the library
+     re-exports it), so the node form's system helper, this dialog and the
+     farmer view's system word all read the same values; drip is the
+     new-farm default (issue #90). Each library
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
@@ -1952,8 +1958,17 @@ the catchment (evaporation, deep percolation); consumptive use is `G − T`;
 the supplied fraction is `G / D` (= crop use / F); the deficit is `D − G`;
 curtailment works in D and G. The balance keeps its form,
 `V = (H + I + J) − (G − T) − ΔQ − U`, with the new T. New farms default to
-e = 0.80 and β = 0.5; the one-node form offers indicative efficiencies by
-system (drip 0.90, micro 0.85, pivot 0.85, sprinkler 0.75, flood 0.65).
+e = 0.90 (drip, confirmed by the client, issue #90) and β = 0.5; the
+one-node form's system helper and the Load crop factors dialog offer one
+table, the engine's `IRRIGATION_SYSTEMS` (SABI 2021 Table 4: drip 0.90,
+micro-sprinkler 0.82, centre pivot 0.85, permanent sprinkler 0.80, movable
+sprinkler 0.75, surface 0.70; §2.3 item 8). The default only reaches a newly
+created farm (the editor's new node, migration 095's column default): a
+saved farm keeps its stored efficiency, and the run never reads the default
+or the table, so the same model runs the same and `ENGINE_VERSION` did not
+change. Before 2026-09-28 new farms started at e = 0.80 and the helper's
+table was an indicative one (micro 0.85, sprinkler 0.75, flood 0.65); a farm
+saved with one of those values keeps it and shows "Other" in the helper.
 Migration 006 converted the old `return_flow_pct` r so stored results stay
 explainable: r = 0 → e = 1, β = 0 (bit-identical); r > 0 → e = 1 − r, β = 1
 (the balance per unit supplied is unchanged, the crop is now fully supplied,

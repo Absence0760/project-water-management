@@ -2,7 +2,7 @@
 // (docs/design/farmer-view-prototype/Main.dc.html, Farms.dc.html) with the
 // Vaalbank fixture, plus the rules the design states for the other cases.
 import { afterEach, describe, expect, it } from 'vitest';
-import type { FarmProjection, FarmView } from '@water-management/engine';
+import { IRRIGATION_SYSTEMS, NEW_FARM_IRRIGATION, type FarmProjection, type FarmView } from '@water-management/engine';
 import {
 	compareCard,
 	damCard,
@@ -158,13 +158,21 @@ describe('Water you received this season', () => {
 		expect(txt(s.last30)).toBe('Last 30 days: very little water needed');
 	});
 
-	it('names the irrigation system nearest the efficiency', () => {
+	it('names the SABI 2021 irrigation system nearest the efficiency (the table the node form sets)', () => {
 		expect(systemName(0.9)).toBe('drip');
-		expect(systemName(0.85)).toBe('micro or centre pivot');
-		expect(systemName(0.75)).toBe('sprinklers');
+		expect(systemName(0.95)).toBe('drip');
+		expect(systemName(0.85)).toBe('micro or centre pivot'); // centre pivot
+		expect(systemName(0.82)).toBe('micro or centre pivot'); // micro-sprinkler
+		expect(systemName(0.8)).toBe('sprinklers'); // permanent
+		expect(systemName(0.75)).toBe('sprinklers'); // movable
+		expect(systemName(0.7)).toBe('flood'); // surface
 		expect(systemName(0.65)).toBe('flood');
 		expect(systemName(0.5)).toBe('flood');
-		expect(systemName(0.95)).toBe('drip');
+	});
+
+	it('names every engine system in a farmer’s word, and drip for a new farm', () => {
+		expect(IRRIGATION_SYSTEMS.map((s) => systemName(s.efficiency))).toEqual(['drip', 'micro or centre pivot', 'micro or centre pivot', 'sprinklers', 'sprinklers', 'flood']);
+		expect(systemName(NEW_FARM_IRRIGATION.irrigationEfficiency)).toBe('drip');
 	});
 
 	it('words the short days for each kind of farm', () => {

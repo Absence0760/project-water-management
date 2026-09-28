@@ -1496,10 +1496,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   reach above the scrolling form in the sheet's fixed sub-header.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
-  **Irrigation system** select that sets an indicative efficiency (drip 90 %,
-  micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
-  `IRRIGATION_SYSTEMS` in the engine), labelled indicative; "Other" keeps the
-  value as typed. New farms start at 80 % and 50 %.
+  **Irrigation system** select that sets the system's SABI 2021 efficiency
+  (drip 90 %, micro-sprinkler 82 %, centre pivot / linear move 85 %,
+  permanent sprinkler 80 %, movable sprinkler 75 %, surface 70 %,
+  `IRRIGATION_SYSTEMS` in the engine, the same table as [Load crop
+  factors](#load-crop-factors)), labelled indicative; "Other" keeps the value
+  as typed (and is what a farm saved with a value off the table, e.g. the old
+  flood 65 %, shows). New farms start on drip, 90 % and 50 % (the client's
+  default, issue #90).
 - **Dam** fields also hold the area when full (m², empty = unknown), the area
   exponent (default 0.7) and seepage (% of storage per day) for dam
   evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
