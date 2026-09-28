@@ -26,14 +26,14 @@
 
 	const uid = $props.id();
 	const W = 520;
-	const H = 240;
+	const H = 256;
 	// Open on the first month of the year where the simulated curve falls below the EWR at a point.
 	const firstShort = $derived(Math.max(0, site.byMonth.findIndex((m) => m.fdc.some((f) => f.met === false))));
 	let picked = $state<number | null>(null);
 	const w = $derived(picked ?? firstShort);
 	const has = $derived(site.byMonth.some((m) => m.fdc.some((f) => f.natural !== undefined)));
 	const lines = $derived(fdcLines(site, w, { presentLabel, other }));
-	const chart = $derived(fdcOverlayChart(lines, site.points, W, H));
+	const chart = $derived(fdcOverlayChart(lines, site.points, W, H, { l: 56, r: 12, t: 10, b: 42 }));
 	const u = $derived(UNIT_LABEL[site.unit] ?? site.unit);
 	const month = $derived(monthName(site.byMonth[w]?.month ?? 10));
 	const otherDropped = $derived(!!other && !lines.some((l) => l.key === 'scenario') && !!other.site.byMonth[w]?.fdc.some((f) => f.impacted !== null));
@@ -59,8 +59,10 @@
 				<text class="tick" x="50" y={t.y + 4} text-anchor="end">{t.label}</text>
 			{/each}
 			{#each chart.xTicks as t (t.x)}
-				<text class="tick" x={t.x} y={H - 8} text-anchor="middle">{t.label}</text>
+				<text class="tick" x={t.x} y={H - 24} text-anchor="middle">{t.label}</text>
 			{/each}
+			<text class="axis-title" x={(56 + W - 12) / 2} y={H - 4} text-anchor="middle">% of {month}s the flow is at least this</text>
+			<text class="axis-title" transform="translate(12 {(10 + H - 42) / 2}) rotate(-90)" text-anchor="middle">Flow ({u}, log scale)</text>
 			{#each chart.paths as p (p.key)}
 				<path class="ln {p.key}" d={p.d} />
 			{/each}
@@ -123,6 +125,10 @@
 	.tick {
 		font-size: 11px;
 		fill: var(--text-muted);
+	}
+	.axis-title {
+		font-size: 11px;
+		fill: var(--text);
 	}
 	.ln {
 		fill: none;

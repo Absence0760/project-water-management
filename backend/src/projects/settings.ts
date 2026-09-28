@@ -378,6 +378,30 @@ const ScoredPeriod = z
 			.object({ meanFlow: scoreSet, climatology: scoreSet, halfWindowDays: z.number().int().min(0).max(183) })
 			.strict()
 			.nullable()
+			.optional(),
+		// Engine ≥ 1.18.0 (CR-28): the WR2012 five-statistic table on these days. Optional: absent on a record made before it.
+		wr2012Fit: z
+			.object({
+				waterYears: z.array(z.number().int()).max(500),
+				logYears: z.number().int().min(0).max(500),
+				stats: z
+					.array(
+						z
+							.object({
+								key: z.enum(['mar', 'meanLog', 'sd', 'logSd', 'seasonalIndex']),
+								observed: z.number().finite().nullable(),
+								simulated: z.number().finite().nullable(),
+								diffPct: z.number().finite().nullable(),
+								bandPct: z.number().finite().min(0),
+								withinBand: z.boolean().nullable()
+							})
+							.strict()
+					)
+					.max(5),
+				bandsConfirmed: z.boolean()
+			})
+			.strict()
+			.nullable()
 			.optional()
 	})
 	.strict();

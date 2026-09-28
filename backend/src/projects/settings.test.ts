@@ -703,6 +703,15 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, fit: { ...withBoth, benchmarks: { ...benchmarks, halfWindowDays: 400 } } })).toBe(false);
 	});
 
+	it('accepts the optional WR2012 five-statistic table on a scored period (CR-28, engine ≥ 1.18.0), and a period from before it without', () => {
+		const stat = (key: string) => ({ key, observed: 1.2, simulated: 1.25, diffPct: 4.2, bandPct: 4, withinBand: false });
+		const wr2012Fit = { waterYears: [2015, 2016], logYears: 2, stats: ['mar', 'meanLog', 'sd', 'logSd', 'seasonalIndex'].map(stat), bandsConfirmed: false };
+		expect(ok({ ...record, fit: { ...period, wr2012Fit }, before: { ...period, wr2012Fit: null } })).toBe(true);
+		expect(ok(record)).toBe(true); // a record from before it
+		expect(ok({ ...record, fit: { ...period, wr2012Fit: { ...wr2012Fit, stats: [{ ...stat('mar'), key: 'kge' }] } } })).toBe(false);
+		expect(ok({ ...record, fit: { ...period, wr2012Fit: { ...wr2012Fit, extra: 1 } } })).toBe(false);
+	});
+
 	it('accepts an optional forcing block (the pan coefficient / A-pan the fit ran under), and a record from before it without', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
 		expect(ok(record)).toBe(true); // no forcing: a record from before it existed
