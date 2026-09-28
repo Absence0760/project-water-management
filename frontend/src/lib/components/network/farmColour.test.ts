@@ -21,7 +21,7 @@ describe('damColouring', () => {
 			new: { band: 'absent', text: 'not in this run' }
 		});
 		expect(c.legend.map((l) => l.label)).toEqual(['60% full or more', '30–60% full', 'Under 30%, or at its minimum', 'No dam', 'Not in this run']);
-		expect(c.caption).toBe('Units coloured by how full their dam was at the end of run “Baseline”, ran today.');
+		expect(c.caption).toBe('Hydrological units coloured by how full their dam was at the end of run “Baseline”, ran today.');
 	});
 
 	it('puts a boundary value in the higher band', () => {
@@ -69,6 +69,6 @@ describe('supplyColouring', () => {
 	it('keeps the supply bands, words and caption', () => {
 		const c = supplyColouring([node('a')], { farms: [{ nodeId: 'a', avgDemandM3Day: 10, fractionSupplied: 0.5 } as never] }, run, false);
 		expect(c.byNode.get('a')).toMatchObject({ band: 'low', text: '50% supplied' });
-		expect(c.caption).toBe('Units coloured by share of irrigation demand supplied in run “Baseline”, ran today.');
+		expect(c.caption).toBe('Hydrological units coloured by share of irrigation demand supplied in run “Baseline”, ran today.');
 	});
 });

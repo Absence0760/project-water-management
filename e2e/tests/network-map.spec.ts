@@ -33,9 +33,9 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 
 	// A page of its own: a title, one line on what the network is, and its actions.
 	await expect(page.getByRole('heading', { level: 1, name: 'Network' })).toBeVisible();
-	await expect(page.getByTestId('network-summary')).toHaveText('2 units · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²');
+	await expect(page.getByTestId('network-summary')).toHaveText('2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²');
 	// With a run, farms are coloured by supply from the start, and a farm's label says its share (nothing else, so labels don't collide).
-	await expect(page.getByLabel('Colour units by').locator('option:checked')).toHaveText('Supply, latest run');
+	await expect(page.getByLabel('Colour hydrological units by').locator('option:checked')).toHaveText('Supply, latest run');
 	const upperNode = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
 	await expect(upperNode).toHaveAttribute('data-supply', /^(met|short|low|none)$/);
 	await expect(upperNode.locator('text.meta')).toHaveText(/^(\d+% supplied|no demand)$/);
@@ -61,7 +61,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
 	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ })).toHaveAttribute('aria-pressed', 'true');
 	const c = card(page);
-	await expect(c).toContainText('Selected · unit');
+	await expect(c).toContainText('Selected · hydrological unit');
 	await expect(c.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await expect(c).toContainText(/Supplied, Baseline\s*\d+%/);
 	// The dam at the end of the run (its storage series, fetched for the picked farm).
@@ -113,7 +113,7 @@ test('colour farms by dam level (end of the latest run) or by irrigated area, ea
 	const project = await seedRunnableProject(page.request, 'Network colours');
 	await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	const colourBy = page.getByLabel('Colour units by');
+	const colourBy = page.getByLabel('Colour hydrological units by');
 	const upper = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' });
 	const lower = page.locator('svg.schematic g.node').filter({ hasText: 'Lower farm' });
 
@@ -121,7 +121,7 @@ test('colour farms by dam level (end of the latest run) or by irrigated area, ea
 	await colourBy.selectOption({ label: 'Dam level, end of latest run' });
 	await expect(upper.locator('text.meta')).toHaveText(/^\d+(% full|%, at its minimum)$/);
 	await expect(upper).toHaveAttribute('data-supply', /^(met|short|low)$/);
-	await expect(page.getByText(/^Units coloured by how full their dam was at the end of run “Baseline”, ran today\./)).toBeVisible();
+	await expect(page.getByText(/^Hydrological units coloured by how full their dam was at the end of run “Baseline”, ran today\./)).toBeVisible();
 	// The node list's dots follow the colours.
 	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ }).locator('.dot')).toHaveAttribute('data-band', /^(met|short|low)$/);
 	await expectNoViolations(page);
@@ -132,7 +132,7 @@ test('colour farms by dam level (end of the latest run) or by irrigated area, ea
 	await expect(upper).toHaveAttribute('data-supply', 'area3');
 	await expect(lower.locator('text.meta')).toHaveText('12.0 ha planted');
 	await expect(lower).toHaveAttribute('data-supply', 'area2');
-	await expect(page.getByText('Units coloured by their irrigated (planted) area, as edited.')).toBeVisible();
+	await expect(page.getByText('Hydrological units coloured by their irrigated (planted) area, as edited.')).toBeVisible();
 
 	// It follows an unsaved edit at once.
 	const grid = await (async () => {
@@ -150,7 +150,7 @@ test('without a run, only irrigated area is offered', async ({ page, owner }) =>
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours no run');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await expect(page.getByLabel('Colour units by').locator('option')).toHaveText(['Nothing', 'Irrigated area']);
+	await expect(page.getByLabel('Colour hydrological units by').locator('option')).toHaveText(['Nothing', 'Irrigated area']);
 });
 
 test('a note’s link opens the map with its node picked', async ({ page, owner }) => {

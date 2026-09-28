@@ -25,14 +25,14 @@
 {#if objects.length}
 	<h3>Demand objects</h3>
 	<p class="muted small">
-		Demands on the units that aren’t crops, supplied from each unit’s dam, river pump and boreholes with its crops (daily averages over the run).
-		Their demand is part of the unit’s.
+		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops (daily averages over the run).
+		Their demand is part of the hydrological unit’s.
 	</p>
 	<div class="table-wrap">
 		<table class="data demand-objects" data-testid="demand-objects-table">
 			<thead>
 				<tr>
-					<th scope="col">Unit</th>
+					<th scope="col">Hydrological unit</th>
 					<th scope="col">Demand object</th>
 					<th scope="col">Priority</th>
 					<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
@@ -65,7 +65,7 @@
 	<h3>Land cover</h3>
 	<p class="muted small">
 		Invasive plants and forestry took {fmtNum(lc.reductionM3Day)} m³/day of natural flow on average{lc.fractionOfNatural !== null ? ` (${fmtPct(lc.fractionOfNatural, 1)} of it)` : ''}
-		before it reached the units. Low flows are the flow exceeded 75 % of the days ({fmtNum(lc.lowFlowThresholdM3Day)} m³/day).
+		before it reached the hydrological units. Low flows are the flow exceeded 75 % of the days ({fmtNum(lc.lowFlowThresholdM3Day)} m³/day).
 	</p>
 	<div class="table-wrap">
 		<table class="data land-cover">
@@ -100,7 +100,7 @@
 		<table class="data groundwater">
 			<thead>
 				<tr>
-					<th scope="col">Unit or user</th>
+					<th scope="col">Hydrological unit or user</th>
 					<th scope="col" class="num">Pumped<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Share of supplied<br /><span class="u">%</span></th>
 					<th scope="col" class="num">Stream depletion<br /><span class="u">m³/day</span></th>
@@ -134,7 +134,7 @@
 			<table class="data groundwater-annual">
 				<thead>
 					<tr>
-						<th scope="col">Unit or user</th>
+						<th scope="col">Hydrological unit or user</th>
 						<th scope="col" class="num">Mean pumped<br /><span class="u">m³/a</span></th>
 						<th scope="col" class="num">Most in a year<br /><span class="u">m³</span></th>
 						<th scope="col" class="num">Annual caps<br /><span class="u">m³/a</span></th>

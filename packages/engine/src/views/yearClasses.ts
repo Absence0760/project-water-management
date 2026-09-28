@@ -23,8 +23,8 @@
 //   bound is inclusive): "dry = at or below the lower tercile". Equal totals
 //   always share a class, since classes are by value, not by rank.
 // - The method is a parameter: `auto` (terciles, quintiles from 25 years)
-//   is the default until the client answers O2 (plan.md § Decision-support
-//   outputs), so the answer changes a default, not code.
+//   is the default, confirmed by the client (O2, issue #90; plan.md
+//   § Decision-support outputs). A project may still choose one.
 import { waterYearLabel, waterYearOf, toEpochDay } from '../calendar';
 import type { ModelOutput } from '../project';
 import { completeMonths, completeWaterYears } from '../reserve/assurance';
@@ -32,7 +32,7 @@ import { completeMonths, completeWaterYears } from '../reserve/assurance';
 /** How to split the years. `auto`: quintiles when there are at least YEAR_CLASS_QUINTILE_MIN_YEARS complete years, else terciles. */
 export type YearClassMethod = 'auto' | 'terciles' | 'quintiles';
 
-/** Complete water years from which `auto` uses quintiles (judgement, pending the client's O2). */
+/** Complete water years from which `auto` uses quintiles (confirmed by the client, O2, issue #90). */
 export const YEAR_CLASS_QUINTILE_MIN_YEARS = 25;
 
 export type YearClassId = 'veryDry' | 'dry' | 'normal' | 'wet' | 'veryWet';

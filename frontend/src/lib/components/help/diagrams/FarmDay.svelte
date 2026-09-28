@@ -4,7 +4,7 @@
 <svg
 	viewBox="0 0 660 390"
 	role="img"
-	aria-label="Upstream inflow splits: its upstream share enters the dam and the rest passes below it. The unit's own runoff splits the same way by its runoff share. A transfer adds water to the dam or takes it out. Rain falls on the dam's surface and adds to it; open-water evaporation leaves it. Seepage leaks from the dam into the river below it. The diversion takes water from the river below the dam back into it. Irrigation draws from the dam; part of it returns to the river as return flow. Water above the dam's capacity spills into the river below the dam. The river below the dam leaves as the unit's outflow to the next element."
+	aria-label="Upstream inflow splits: its upstream share enters the dam and the rest passes below it. The hydrological unit's own runoff splits the same way by its runoff share. A transfer adds water to the dam or takes it out. Rain falls on the dam's surface and adds to it; open-water evaporation leaves it. Seepage leaks from the dam into the river below it. The diversion takes water from the river below the dam back into it. Irrigation draws from the dam; part of it returns to the river as return flow. Water above the dam's capacity spills into the river below the dam. The river below the dam leaves as the hydrological unit's outflow to the next element."
 >
 	<defs>
 		<marker id="fd-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -21,7 +21,7 @@
 	<text class="s" x="330" y="55" text-anchor="middle">in or out</text>
 
 	<rect class="box" x="470" y="20" width="170" height="44" rx="6" />
-	<text class="t" x="555" y="38" text-anchor="middle">Unit runoff</text>
+	<text class="t" x="555" y="38" text-anchor="middle">Own runoff</text>
 	<text class="s" x="555" y="55" text-anchor="middle">its share of natural flow</text>
 
 	<rect class="box key" x="245" y="110" width="170" height="70" rx="6" />

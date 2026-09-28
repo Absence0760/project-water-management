@@ -20,7 +20,7 @@ export { helpFieldKeys } from './tips';
 export const CATEGORY_TITLES: Record<HelpCategory, string> = {
 	basics: 'Basics',
 	network: 'Network',
-	farm: 'Units and dams',
+	farm: 'Hydrological units and dams',
 	crops: 'Crops and irrigation demand',
 	transfers: 'Transfers',
 	flow: 'Natural flow and calibration',
@@ -28,7 +28,7 @@ export const CATEGORY_TITLES: Record<HelpCategory, string> = {
 	data: 'Input data',
 	results: 'Run results',
 	fit: 'Goodness of fit',
-	farmer: 'Words on your farm page'
+	farmer: 'Words on your hydrological unit page'
 };
 
 const regions = new Intl.DisplayNames(['en'], { type: 'region' });

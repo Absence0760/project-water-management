@@ -66,7 +66,7 @@ export interface OutlookRow {
 	baseRun: { id: string; label: string; createdAt: string };
 	decisionDate: string;
 	seasonEnd: string;
-	/** The share asked for; null = the engine's DEFAULT_PLANNING_SHARE (pending the client's O6). */
+	/** The share asked for; null = the engine's DEFAULT_PLANNING_SHARE (O6). */
 	planningShare: number | null;
 	levels: StoredLevel[];
 	analogueYears: number[] | null;

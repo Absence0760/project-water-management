@@ -45,6 +45,7 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 		body: { request: { members: 30, thresholds: { minSkill: -10, maxLowFlowBiasPct: null, wr2012MaxLevel: 'unusable' } } }
 	}),
 	'POST /projects/:id/evidence': (c) => ({ body: { runId: c.runId, reason: 'the calibrated run' } }),
+	'POST /projects/:id/evidence/withdraw': () => ({ body: { reason: 'the application lapsed' } }),
 	'POST /projects/:id/scenarios': (c) => ({ body: { name: `Ladder ${crypto.randomUUID()}`, baseRunId: c.runId, ops: [] } }),
 	'PATCH /projects/:id/scenarios/:sid': () => ({ body: { description: 'ladder' } }),
 	'POST /projects/:id/scenarios/:sid/rebase': (c) => ({ body: { baseRunId: c.runId } }),

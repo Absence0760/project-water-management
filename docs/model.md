@@ -260,7 +260,9 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    keeps the totals close. A per-month e* would need the network step to take
    a daily efficiency (a larger change, for the hydrologist to ask for if the
    farms warrant it). The crop factors themselves are unchanged: which crop
-   set a catchment uses awaits the hydrologist (issue #54, Q9/Q10).
+   set a catchment uses, and which system each farm's crops are under,
+   awaits the hydrologist (issue #54, Q9/Q10; the client chose drip as the
+   new-farm default, issue #90).
 
    A farm none of whose cropped crops sets one returns `e[f]` untouched, so a
    model without crop efficiencies runs **bit for bit** as before (tested on
@@ -323,7 +325,11 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
      80–90 %, permanent sprinkler 75–90 %, movable sprinkler 70–83 %,
      surface 60–95 % across its piped, lined and earth canal rows). The
      dialog offers issue #54 Q10's values (0.90, 0.82, 0.85, 0.80, 0.75,
-     0.70), each inside its range but not always the midpoint. Each library
+     0.70), each inside its range but not always the midpoint. The table
+     lives in the engine (`IRRIGATION_SYSTEMS` in `project.ts`, the library
+     re-exports it), so the node form's system helper, this dialog and the
+     farmer view's system word all read the same values; drip is the
+     new-farm default (issue #90). Each library
      crop names a typical system as a hint only; a crop's efficiency changes
      only when the modeller picks a system.
    - **Pan coefficient**: the dialog multiplies the source factors by an
@@ -1955,8 +1961,17 @@ the catchment (evaporation, deep percolation); consumptive use is `G − T`;
 the supplied fraction is `G / D` (= crop use / F); the deficit is `D − G`;
 curtailment works in D and G. The balance keeps its form,
 `V = (H + I + J) − (G − T) − ΔQ − U`, with the new T. New farms default to
-e = 0.80 and β = 0.5; the one-node form offers indicative efficiencies by
-system (drip 0.90, micro 0.85, pivot 0.85, sprinkler 0.75, flood 0.65).
+e = 0.90 (drip, confirmed by the client, issue #90) and β = 0.5; the
+one-node form's system helper and the Load crop factors dialog offer one
+table, the engine's `IRRIGATION_SYSTEMS` (SABI 2021 Table 4: drip 0.90,
+micro-sprinkler 0.82, centre pivot 0.85, permanent sprinkler 0.80, movable
+sprinkler 0.75, surface 0.70; §2.3 item 8). The default only reaches a newly
+created farm (the editor's new node, migration 099's column default): a
+saved farm keeps its stored efficiency, and the run never reads the default
+or the table, so the same model runs the same and `ENGINE_VERSION` did not
+change. Before 2026-09-28 new farms started at e = 0.80 and the helper's
+table was an indicative one (micro 0.85, sprinkler 0.75, flood 0.65); a farm
+saved with one of those values keeps it and shows "Other" in the helper.
 Migration 006 converted the old `return_flow_pct` r so stored results stay
 explainable: r = 0 → e = 1, β = 0 (bit-identical); r > 0 → e = 1 − r, β = 1
 (the balance per unit supplied is unchanged, the crop is now fully supplied,
@@ -2845,7 +2860,7 @@ regression suite is unchanged.
 | Field | Meaning |
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
-| `name`, `note` | a label, and where the number comes from (meter records, a reconciliation strategy's AADD, a norm, the workbook), so reports can say how solid it is (Q11) |
+| `name`, `note` | a label, and where the number comes from, so reports can say how solid it is (Q11). The rule, decided with the client (issue #90): use meter records where they exist, else the reconciliation strategy's AADD, else population × litres per person per day, and record which one was used. Today that record is the free-text `note`; a structured source field is a follow-up ([followups.md](./followups.md) "Demand objects: a structured demand source") |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -2886,7 +2901,8 @@ conservative reading where it didn't settle them):
 - *Priority is within the unit.* `first` is the basic-needs order the NWA
   gives domestic supply; across units, the existing senior/junior user
   priority applies. Splitting one demand into senior and junior slices is two
-  objects (Q14).
+  objects (Q14). The client confirmed senior/junior is enough (issue #90):
+  no finer priority classes.
 - *The monthly demand is what is abstracted.* A meter record or a
   reconciliation strategy's AADD usually includes losses, so only a demand
   sized per unit is grossed up. Where distribution losses go (to the river or
@@ -2896,8 +2912,15 @@ conservative reading where it didn't settle them):
   ([followups.md](./followups.md) "Demand objects: the daily schedule"); a
   monthly profile covers the seasonal part.
 - *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
-  crops and its objects alike; a per-category restriction is #53 R3, and a
-  scenario op to add or scale one object is a follow-up.
+  crops and its objects alike; the client wants every category cut by the
+  same % (#53 O4, issue #90), so no per-category restriction is planned, and
+  a scenario op to add or scale one object is a follow-up.
+- *Restrictions and basic needs (decided, not built).* The client agreed
+  (issue #90) that a restriction never cuts domestic supply below a
+  basic-needs floor of 25 litres per person per day, that cuts follow DWS's
+  % restrictions, and that a municipality's own restriction levels are an
+  optional display only. Nothing in the engine applies a floor yet
+  ([followups.md](./followups.md) "Restrictions: the basic-needs floor").
 
 **Outputs** (only on a unit with an enabled object): per object the series
 `object_demand@<id>` and `object_supplied@<id>`, and
@@ -4977,9 +5000,10 @@ The design and its research are in
 [design/planning-outputs.md §3.4](./design/planning-outputs.md#34-r4-year-classes-and-the-outcome-matrix-m).
 The screen (Runs tab → Outcome matrix, [ui.md](./ui.md)) reads a demand
 sweep (R1/R2), and the project settings `settings.outcomes` choose the class
-method, the risk cut-offs and the Reserve site. The defaults below still wait
-on the client's O1 and O2
-([plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
+method, the risk cut-offs and the Reserve site. The client confirmed the
+year-class default (O2) and agreed to the risk cut-offs (O1), whose
+confirmation by the hydrologist is still open (issue #90,
+[plan.md § Decision-support outputs](./plan.md#decision-support-outputs-2026-09-26)).
 
 **Year classes** (`classifyWaterYears`, `classifyRunWaterYears`). The
 classes are the catchment's own: its water years ranked by the annual total
@@ -4993,8 +5017,8 @@ of the run's natural flow at the outlet (`natural_flow`, m³).
 - **Method.** `terciles` (dry / normal / wet) or `quintiles` (very dry …
   very wet); `auto` (the default) takes quintiles from
   `YEAR_CLASS_QUINTILE_MIN_YEARS` = 25 complete years, else terciles
-  **(judgement, pending O2)**. The method is a parameter, so O2's answer
-  changes a default, not code.
+  (confirmed by the client, O2, issue #90). The method is a parameter, so a
+  project may fix either.
 - **Bounds** (`boundsM3`, rising, k − 1 of them for k classes). The annual
   totals sorted wettest first; the bound between class j − 1 and j is the
   total at exceedance rank h = (k − j)(n + 1) ÷ k: Weibull plotting
@@ -5045,7 +5069,8 @@ exists), one column per class. Per cell:
   | `daysBelowEwr` | ≤ 0.05 | ≤ 0.20 | above |
 
   These defaults (`DEFAULT_OUTCOME_RISK_CUTOFFS`) are **placeholders
-  pending the hydrologist** (`OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
+  pending the hydrologist** (the client agreed to them, O1, issue #90;
+  `OUTCOME_RISK_CUTOFFS_PENDING_HYDROLOGIST`,
   and `cutoffsAreDefault` on the result, so a surface can say so). Days
   below reuse the portfolio traffic lights' 5 % / 20 % (roadmap D11, also
   unconfirmed); 90 % / 75 % of months is a judgement.
@@ -5088,8 +5113,8 @@ is not built yet (design §3.5).
 end of the day before) and a season end, inclusive, at most 366 days.
 `defaultOutlookSeason(asOf)` gives the next **1 October to 30 April** (the
 summer irrigation months of a winter-rainfall catchment; 1 October is the
-start of the water year, when the wet season's storage is known), a
-**judgement pending the client's O3** (`OUTLOOK_SEASON_PENDING_CLIENT`).
+start of the water year, when the wet season's storage is known),
+confirmed by the client (O3, issue #90).
 
 **Analogue years and the day mapping** (`outlook/season.ts`). An analogue
 is a contiguous stretch of the record as long as the season. Analogue
@@ -5190,7 +5215,7 @@ says so; the years are still returned.
 order, so a monthly plan ranks by the water it asks for. The planning
 figure is the first level whose requirement was met in at least
 `planningShare` of the analogue years (default `DEFAULT_PLANNING_SHARE` =
-0.8, **pending the client's O6**, `shareIsDefault` on the result; at the cut
+0.8, confirmed by the client, O6, issue #90; `shareIsDefault` on the result; at the cut
 counts). It is data: `describePlanningFigure` counts years ("85 %: met the
 EWR on every day of the season in 17 of 21 analogue years, the highest
 demand level to do so in at least 80 % of them") and never says "likely"
@@ -5287,7 +5312,7 @@ holding the season's middle day (1 January for the default 1 October –
 30 April season), or the middle day itself when that month starts on or
 before the decision date: half the season left to act on a cut, and a
 month's first day so a monthly plan and the Reserve's whole months start
-there. A **judgement pending the client's O3** (`REVIEW_DATE_PENDING_CLIENT`).
+there. Confirmed by the client (O3, issue #90: review on 1 January).
 
 **The bands.** Total farm dam storage (Σ over farms with a dam), in m³.
 Given as inner edges (thresholds): `[200 000, 400 000]` makes
@@ -5337,7 +5362,7 @@ with the band's start, summarised by `summariseOutlook`; the metric is the
 first band's choice for every band, so all are judged alike. The row
 holds the band, the start (total and per dam), the level picked (the
 highest by mean season demand meeting the requirement in at least the
-planning share of the years, default 80 % pending O6) or null, the reason
+planning share of the years, default 80 %, O6) or null, the reason
 (`met`, `noLevelMeets`, `notEnoughYears`, `noLevels`), the years met and
 the number of years, every level's years met, whether it clears the share,
 season-end storage and demand met (percentiles), and the band's whole
@@ -5900,7 +5925,7 @@ step when a definition changes.
 
 | Term | Meaning |
 | --- | --- |
-| **Unit** | The modeller workspace's name (issue #54 item 2a) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The code, API, CSV exports, this document and the farmer view say farm. Not a unit of measurement. |
+| **Hydrological unit** | The name users see (issue #54 item 2a; client question Q6, issue #90) for a node of kind `farm`: a farm, sub-catchment or town with land of its own, a runoff share, an optional dam and demands. The workspace, the farmer view, the farmer emails and the shared view all say it; the code, API, CSV exports and this document say farm. Not a unit of measurement. |
 | **A-pan** | Class-A evaporation pan. Monthly A-pan evaporation (mm) × crop factor ≈ crop water requirement. A daily A-pan record (series `evap_apan_mm`) replaces the monthly mean on the days it covers (§2.3a). |
 | **WR90 / WR2012** | *Water Resources of South Africa* studies (1990, 2012). They provide the S-pan evaporation (convert it before entering it as A-pan, §2.4a), MAP and naturalised flow data per quaternary catchment. |
 | **Crop factor** | A monthly multiplier from **A-pan** evaporation to crop water use. Not an FAO-56 Kc, which multiplies ET₀ (≈ 0.7–0.85 × pan). |

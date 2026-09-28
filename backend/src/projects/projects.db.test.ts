@@ -463,8 +463,8 @@ describe('a project with a nominated evidence run', () => {
 		const res = await owner.call('DELETE', `/projects/${projectId}`);
 		expect(res.status).toBe(409);
 		expect(res.body.error).toBe(
-			'this project can\'t be deleted: "Calibrated GR4J" is its nominated evidence run, and a project keeps its evidence run and nomination history for good. ' +
-				'A nomination can be replaced but not withdrawn; copy the project to start again without it.'
+			'this project can\'t be deleted: "Calibrated GR4J" is its nominated evidence run, and a project keeps its evidence run and nomination history for good, ' +
+				'even once a nomination is withdrawn; copy the project to start again without it.'
 		);
 		expect(res.body.details).toEqual({ evidenceRun: { id: runId, label: 'Calibrated GR4J' }, nominations: 1 });
 		expect((await owner.call('GET', `/projects/${projectId}`)).status).toBe(200);

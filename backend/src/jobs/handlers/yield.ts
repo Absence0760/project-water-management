@@ -1,6 +1,8 @@
 // `yield`: a dam's firm yield, or its storage–yield curve, on a saved run or
 // a scenario (roadmap WP-3.6, docs/model.md §2.13), as the editor who queued
-// it, under RLS. Writes one yield_result row and keeps the newest
+// it, under RLS, or as the applicant who queued it on their own application
+// (096_contributor_yield: yieldInputFor checks it again as they are now, so
+// the job dies once they lose the role or the dam). Writes one yield_result row and keeps the newest
 // YIELD_RESULTS_KEPT per run or scenario and dam.
 //
 // The engine is synchronous; a curve is one firm-yield search per capacity,
@@ -9,19 +11,22 @@
 // nothing stored.
 import { ENGINE_VERSION, firmYield, isMonotone, prepareYield, storageYieldCapacities, type YieldPoint, type YieldProblem } from '@water-management/engine';
 import { ApiError } from '../../http/errors.js';
-import { checkYieldNode, YIELD_RESULTS_KEPT, yieldInput, YieldPayload, type YieldPoints } from '../../yield/store.js';
+import { requireRole } from '../../projects/access.js';
+import { YIELD_RESULTS_KEPT, yieldInputFor, YieldPayload, type YieldPoints } from '../../yield/store.js';
 import { JobError } from '../errors.js';
 import { defineHandler } from '../registry.js';
 
 const CANCELLED = () => new JobError('cancelled', { retry: false });
 
 export const yieldHandler = defineHandler({
+	// And a contributor, on a dam of their own application only (yieldInputFor).
 	role: 'editor',
+	alsoRole: 'contributor',
 	payload: YieldPayload,
 	async run({ db, job, payload, progress }) {
-		const input = await yieldInput(db, job.projectId, payload);
-		// The run or scenario changed since the request was checked (a node removed): the user's to fix.
-		checkYieldNode(input, payload.nodeId, payload.kind);
+		const role = await requireRole(db, job.projectId, 'contributor');
+		// Also refuses a run or scenario changed since the request was checked (a node removed): the user's to fix.
+		const input = await yieldInputFor(db, job.projectId, role, job.actingUserId, payload);
 		const { pattern, assurance, tolerance, points: n } = payload.params;
 		let problem: YieldProblem;
 		try {

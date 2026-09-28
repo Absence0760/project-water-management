@@ -291,7 +291,7 @@
 					<NeedsAttention items={attentionItems} />
 					{#if runFarms.length}
 						<Lazy load={loadSupply}>
-							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Units & supply' }} />{/snippet}
+							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
 						</Lazy>
 					{/if}
 				</div>

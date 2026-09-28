@@ -71,7 +71,7 @@ describe('describeOp', () => {
 
 	it('says what each op changes, with the value it replaces', () => {
 		expect(d(raise)).toBe('Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³');
-		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.9 })).toBe('Lower farm: Irrigation efficiency 80 % → 90 %');
+		expect(d({ op: 'node.set', nodeId: LO, field: 'irrigationEfficiency', value: 0.75 })).toBe('Lower farm: Irrigation efficiency 90 % → 75 %');
 		expect(d({ op: 'node.remove', nodeId: LO })).toBe('Remove “Lower farm”');
 		expect(d({ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: 250_000 })).toBe('Upper farm: Orchard 20 ha → 25 ha');
 		expect(d({ op: 'cropArea.set', nodeId: UP, cropId: CROP, areaM2: 0 })).toBe('Upper farm: Orchard 20 ha → none');
@@ -88,7 +88,7 @@ describe('describeOp', () => {
 		);
 		expect(d({ op: 'series.scale', kind: 'rain_catchment_mm', factor: 0.9 })).toBe('Rainfall — catchment: × 0.9 (−10 %)');
 		expect(d({ op: 'series.scale', kind: 'rain_chirps_mm', factor: 1.25, from: '2022-01-01' })).toBe('Rainfall — CHIRPS: × 1.25 (+25 %), 2022-01-01 to end');
-		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every unit: 85 % of what they'd take (× 0.85)");
+		expect(d({ op: 'demand.scale', factor: 0.85 })).toBe("Irrigation demand of every hydrological unit: 85 % of what they'd take (× 0.85)");
 		expect(d({ op: 'demand.scale', factor: 0.7, nodeIds: [UP, LO], months: [12, 1, 2] })).toBe("Irrigation demand of Upper farm, Lower farm: 70 % of what they'd take (× 0.7), in Jan, Feb, Dec");
 		expect(d({ op: 'demand.scale', factor: 1.1, category: 'user' })).toBe("Demand of every other water user: 110 % of what they'd take (× 1.1)");
 		expect(d({ op: 'demand.scale', factor: 0.5, nodeIds: ['gone'] })).toBe("Irrigation demand of a node the base run doesn’t have: 50 % of what they'd take (× 0.5)");
@@ -107,7 +107,7 @@ describe('describeOp', () => {
 
 	it('describes additions from the op itself', () => {
 		const node = { ...newNode(4, LO), id: 'n9', name: 'Pump scheme', damCapacityM3: 50_000 };
-		expect(d({ op: 'node.add', node })).toBe('Add the unit “Pump scheme”, draining into Lower farm, dam 50\u202f000 m³');
+		expect(d({ op: 'node.add', node })).toBe('Add the hydrological unit “Pump scheme”, draining into Lower farm, dam 50\u202f000 m³');
 		const user = { ...newNode(4, G), id: 'n10', name: 'Town', kind: 'user' as const, userDemandM3Day: new Array(12).fill(300) };
 		expect(d({ op: 'node.add', node: user })).toBe('Add the other water user “Town”, draining into Outflow gauge, demand 300 m³/day every month');
 		expect(
@@ -213,7 +213,7 @@ describe('buildOp', () => {
 		});
 	});
 
-	it('says what is missing or out of range, in the units typed', () => {
+	it('says what is missing or out of range, in the hydrological units typed', () => {
 		expect(buildOp(draft({ kind: 'node.set', field: 'damCapacityM3', value: '1' }), m)).toEqual({ ok: false, error: 'Pick a node' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, value: '1' }), m)).toEqual({ ok: false, error: 'Pick what to change' });
 		expect(buildOp(draft({ kind: 'node.set', nodeId: UP, field: 'damMinPct', value: '150' }), m)).toEqual({ ok: false, error: 'Must be at most 100 %' });

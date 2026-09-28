@@ -156,7 +156,7 @@
 {#snippet source(p: PortfolioProject)}
 	<span class="sub">
 		{sourceText(p)}{#if p.publishedAt}, {fmtDay(p.publishedAt.slice(0, 10))}{/if}
-		{#if p.source === null && canPublish(p)}· run the model to see figures{:else if p.source === 'run' && canPublish(p)}· publish a run for unit figures{/if}
+		{#if p.source === null && canPublish(p)}· run the model to see figures{:else if p.source === 'run' && canPublish(p)}· publish a run for hydrological unit figures{/if}
 	</span>
 {/snippet}
 
@@ -207,7 +207,7 @@
 						</dd>
 					</div>
 					<div class="kpi">
-						<dt>Units short this week</dt>
+						<dt>Hydrological units short this week</dt>
 						<dd class="num-big">{farmsShortTotalText(totals) ?? 'Unknown'}</dd>
 					</div>
 					<div class="kpi">
@@ -249,7 +249,7 @@
 										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'status'))}>EWR, last 30 days <span aria-hidden="true">{indicator('status')}</span></button>
 									</th>
 									<th scope="col" aria-sort={ariaSort('farms')}>
-										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'farms'))}>Units short <span aria-hidden="true">{indicator('farms')}</span></button>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'farms'))}>Hydrological units short <span aria-hidden="true">{indicator('farms')}</span></button>
 									</th>
 									<th scope="col" aria-sort={ariaSort('dam')}>
 										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'dam'))}>Lowest dam <span aria-hidden="true">{indicator('dam')}</span></button>
@@ -289,7 +289,7 @@
 							{@render source(p)}
 							<dl>
 								<div><dt>EWR, last 30 days</dt><dd>{@render status(p)}{@render age(p)}</dd></div>
-								<div><dt>Units short</dt><dd>{@render farms(p)}</dd></div>
+								<div><dt>Hydrological units short</dt><dd>{@render farms(p)}</dd></div>
 								<div><dt>Lowest dam</dt><dd>{damText(p)}</dd></div>
 								<div><dt>Restriction</dt><dd>{restrictionText(p)}</dd></div>
 								<div><dt>Data</dt><dd>{@render dataCell(p)}</dd></div>

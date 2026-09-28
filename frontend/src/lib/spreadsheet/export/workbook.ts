@@ -101,7 +101,7 @@ export function ewrGridRows(summary: RunSummary): Row[] {
 		rows.push(['Run made before engine 0.3.0: no EWR grid. Run it again to see it.']);
 		return rows;
 	}
-	rows.push(['A day is not met when its EWR shortfall is below zero; a unit (farm) is gridded by its EWR charge (engine ≥ 0.17.0).']);
+	rows.push(['A day is not met when its EWR shortfall is below zero; a hydrological unit (farm) is gridded by its EWR charge (engine ≥ 0.17.0).']);
 	const grid = (title: string, cells: number[][], unit?: string) => {
 		rows.push([title]);
 		rows.push(['Water year', ...MONTHS_WY.map((m) => (unit ? `${m} (${unit})` : m)), unit ? `Year (${unit})` : 'Year']);

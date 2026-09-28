@@ -33,7 +33,7 @@ async function seed(page: Page, name: string) {
 	return project;
 }
 
-test('the header, crop list, demand chart and unit bars; Edit opens a crop’s factors in a sheet that saves', async ({ page, owner }) => {
+test('the header, crop list, demand chart and hydrological unit bars; Edit opens a crop’s factors in a sheet that saves', async ({ page, owner }) => {
 	void owner;
 	const project = await seed(page, 'Crops page');
 	await page.setViewportSize({ width: 1440, height: 960 });
@@ -263,7 +263,7 @@ async function seedBig(page: Page, name: string) {
 }
 
 test.describe('a big catchment', () => {
-	test('the chart and the unit bars stay on the first screen; the list scrolls in itself; named crops never share a colour', async ({ page, owner }) => {
+	test('the chart and the hydrological unit bars stay on the first screen; the list scrolls in itself; named crops never share a colour', async ({ page, owner }) => {
 		void owner;
 		const project = await seedBig(page, 'Crops page big');
 		await page.setViewportSize({ width: 1440, height: 960 });
@@ -273,7 +273,7 @@ test.describe('a big catchment', () => {
 		// The chart and the planted-area card, key included, are inside the window without scrolling the page.
 		const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month, stacked by crop \(Crop 01, .*Crop 09, Other \(21 crops\)\)/ });
 		await expect(chart).toBeInViewport({ ratio: 1 });
-		const card = (await page.getByRole('region', { name: 'Planted area by unit' }).boundingBox())!;
+		const card = (await page.getByRole('region', { name: 'Planted area by hydrological unit' }).boundingBox())!;
 		expect(card.y + card.height).toBeLessThanOrEqual(960);
 		const key = page.getByTestId('crops-bar-key');
 		await expect(key).toBeInViewport({ ratio: 1 });

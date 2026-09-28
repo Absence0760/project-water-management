@@ -273,6 +273,71 @@ describe('a nominated run is kept', () => {
 	});
 });
 
+// 098_nomination_withdrawal: a withdrawal is its own history row, with no run.
+describe('withdrawing the nomination', () => {
+	const withdraw = (u: User, pid: string, reason: unknown = 'the licence application was withdrawn') => u.call('POST', `/projects/${pid}/evidence/withdraw`, { reason });
+
+	it('adds a row with no run and a reason; the run is past, compare and the CSV say withdrawn; nominating again starts over', async () => {
+		const pid = await runnableProject(owner, 'Withdrawn');
+		await asOwner('INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3), ($1, $4, $5)', [pid, editor.id, 'editor', viewer.id, 'viewer']);
+		const r = await newRun(owner, pid, 'Evidence run');
+		// Nothing to withdraw yet.
+		const early = await withdraw(editor, pid);
+		expect(early.status).toBe(409);
+		expect(early.body.error).toBe('no run is nominated as evidence, so there is nothing to withdraw');
+		expect((await nominate(owner, r, 'the calibrated run', pid)).status).toBe(201);
+		// A viewer may not; a reason is required.
+		expect((await withdraw(viewer, pid)).status).toBe(403);
+		expect((await withdraw(editor, pid, '  ')).status).toBe(400);
+		const w = await withdraw(editor, pid);
+		expect(w.status, JSON.stringify(w.body)).toBe(201);
+		expect(w.body.nomination).toMatchObject({
+			withdrawn: true,
+			runId: null,
+			runLabel: null,
+			runoffModel: null,
+			engineVersion: null,
+			reason: 'the licence application was withdrawn',
+			nominatedBy: 'EvEditor'
+		});
+		expect((await history(viewer, pid)).map((n) => n.runId)).toEqual([r, null]);
+		const runs = (await viewer.call('GET', `/projects/${pid}/runs`)).body.runs as { id: string; evidence: string | null }[];
+		expect(runs.find((x) => x.id === r)?.evidence).toBe('past');
+		const cmp = await viewer.call('GET', `/compare/runs?a=${pid}:${r}&b=${pid}:${r}`);
+		expect(cmp.body.a.run.evidence).toMatchObject({
+			status: 'past',
+			replacedBy: { withdrawn: true, runId: null, nominatedBy: 'EvEditor', reason: 'the licence application was withdrawn' }
+		});
+		const res = await app.request(`/projects/${pid}/runs/${r}/export/summary.csv`, { headers: { cookie: viewer.cookie, origin: 'http://localhost:7777' } });
+		const csv = (await res.text()).split('\r\n');
+		expect(csv).toContain('Evidence nomination,"nominated before, since withdrawn"');
+		expect(csv.some((l) => /^Withdrawn,\d{4}-\d{2}-\d{2}T[^,]+,EvEditor,the licence application was withdrawn$/.test(l))).toBe(true);
+		// Twice in a row: nothing is nominated now.
+		expect((await withdraw(editor, pid)).status).toBe(409);
+		// The project stays undeletable (035): the history is kept, withdrawn or not.
+		const del = await owner.call('DELETE', `/projects/${pid}`);
+		expect(del.status).toBe(409);
+		expect(del.body.details).toEqual({ evidenceRun: null, nominations: 2 });
+		// Nominating the same run again makes it current again.
+		expect((await nominate(owner, r, 'reinstated', pid)).status).toBe(201);
+		const again = (await viewer.call('GET', `/projects/${pid}/runs`)).body.runs as { id: string; evidence: string | null }[];
+		expect(again.find((x) => x.id === r)?.evidence).toBe('current');
+	});
+
+	it('the table refuses a withdrawal with nothing nominated, and model columns without a run; stamps who and when', async () => {
+		const pid = await runnableProject(owner, 'Withdrawn SQL');
+		await expect(sql(owner, `INSERT INTO run_nomination (project_id, reason) VALUES ($1, 'nothing')`, [pid])).rejects.toMatchObject({ code: '23514' });
+		const r = await newRun(owner, pid, 'R');
+		await sql(owner, `INSERT INTO run_nomination (project_id, run_id, reason) VALUES ($1, $2, 'n')`, [pid, r]);
+		// The trigger clears model columns a withdrawal names, and stamps the author whatever the INSERT says.
+		await sql(owner, `INSERT INTO run_nomination (project_id, reason, runoff_model, engine_version, nominated_by) VALUES ($1, 'w', 'gr4j', '9.9.9', $2)`, [pid, editor.id]);
+		const rows = (await sql(owner, 'SELECT run_id, runoff_model, engine_version, nominated_by FROM run_nomination WHERE project_id = $1 ORDER BY nominated_at', [pid])).rows;
+		expect(rows[1]).toEqual({ run_id: null, runoff_model: null, engine_version: null, nominated_by: owner.id });
+		// A viewer's withdrawal is refused by RLS.
+		await expect(sql(viewer, `INSERT INTO run_nomination (project_id, reason) VALUES ($1, 'v')`, [projectId])).rejects.toThrow(/row-level security/);
+	});
+});
+
 describe('the history limit', () => {
 	it(`refuses nomination ${NOMINATIONS_PER_PROJECT_MAX + 1} in the API (409) and in the table`, async () => {
 		const pid = await runnableProject(owner, 'Limit');

@@ -4,8 +4,10 @@
 	// The CSV is previewed first: the server works out every row's outcome
 	// (added / invited / error) in a dry run that writes and mails nothing,
 	// and only then does "Send" do it for real. Owners only (the panel hides
-	// the button from everyone else).
-	import { api, type BulkFarmerResult, type FarmerEntry, type InviteLocale } from '$lib/api';
+	// the button from everyone else). One person may also join as a licence
+	// applicant with their farms (WP-3.3, 097_contributor_invite_farms): an
+	// irrigator applying to raise their own dam.
+	import { api, type BulkFarmerResult, type FarmerEntry, type FarmRole, type InviteLocale } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { LANGUAGES } from '$lib/i18n/state.svelte';
 	import { bulkSummary, farmNames, outcomeText, parseFarmerCsv, toggleFarm, type CsvFarmerRow, type FarmOption } from './farmers';
@@ -32,6 +34,8 @@
 	let email = $state('');
 	let picked = $state<string[]>([]);
 	let locale = $state<InviteLocale>('en');
+	let role = $state<FarmRole>('farmer');
+	const roleWord = $derived(role === 'contributor' ? 'an applicant' : 'a farmer');
 
 	// CSV mode.
 	let csv = $state('');
@@ -69,15 +73,16 @@
 		busy = true;
 		error = null;
 		try {
-			const r = await api.farmers.add(projectId, email.trim(), picked, locale);
+			const r = await api.farmers.add(projectId, email.trim(), picked, locale, role);
 			if (r.invited) {
 				ondone(`Invitation sent to ${r.invite.email} for ${farmNames(r.invite, farms).join(', ')}.`, r.invite);
 			} else {
-				ondone(`${r.farmer.displayName} added as a farmer on ${farmNames(r.farmer, farms).join(', ')}.`, r.farmer);
+				ondone(`${r.farmer.displayName} added as ${roleWord} on ${farmNames(r.farmer, farms).join(', ')}.`, r.farmer);
 			}
 			email = '';
 			picked = [];
 			locale = 'en';
+			role = 'farmer';
 			open = false;
 		} catch (e) {
 			error = msg(e);
@@ -140,7 +145,7 @@
 
 		{#if mode === 'single'}
 			<p class="muted small">
-				Someone with an account is added straight away. Anyone else gets an email to create one; they see their farm once they
+				Someone with an account is added straight away. Anyone else gets an email to create one; they see their hydrological unit once they
 				accept.
 			</p>
 			<div class="field">
@@ -148,7 +153,7 @@
 				<input id="invite-farmer-email" type="email" required autocomplete="off" placeholder="farmer@example.com" bind:value={email} />
 			</div>
 			<fieldset class="farms">
-				<legend>Their farms</legend>
+				<legend>Their hydrological units</legend>
 				{#each farms as farm (farm.id)}
 					<label class="check">
 						<input type="checkbox" checked={picked.includes(farm.id)} onchange={() => (picked = toggleFarm(picked, farm.id, farms))} />
@@ -157,16 +162,33 @@
 				{/each}
 			</fieldset>
 			<div class="field">
-				<label for="invite-farmer-lang">Email language</label>
-				<select id="invite-farmer-lang" bind:value={locale}>
-					{#each LANGUAGES as l (l.code)}<option value={l.code} lang={l.code}>{l.name}</option>{/each}
+				<label for="invite-farmer-role">Joins as</label>
+				<select id="invite-farmer-role" bind:value={role} aria-describedby="invite-farmer-role-help">
+					<option value="farmer">Farmer</option>
+					<option value="contributor">Applicant</option>
 				</select>
+				<p class="muted small" id="invite-farmer-role-help">
+					{#if role === 'contributor'}
+						A licence applicant who holds these farms: they see the published baseline and their own farms, and make
+						applications. The invitation email is in English.
+					{:else}
+						A farmer sees only their own farms’ figures.
+					{/if}
+				</p>
 			</div>
+			{#if role === 'farmer'}
+				<div class="field">
+					<label for="invite-farmer-lang">Email language</label>
+					<select id="invite-farmer-lang" bind:value={locale}>
+						{#each LANGUAGES as l (l.code)}<option value={l.code} lang={l.code}>{l.name}</option>{/each}
+					</select>
+				</div>
+			{/if}
 		{:else}
 			<p class="muted small" id="invite-csv-help">
-				One farm per row: <code>email,farm,language</code>. The farm name must match a unit’s name on the Network tab (capitals don’t
+				One hydrological unit per row: <code>email,farm,language</code>. The <code>farm</code> column is the hydrological unit’s name on the Network tab (capitals don’t
 				matter); language is a code ({#each LANGUAGES as l, i (l.code)}{i ? ', ' : ''}<code>{l.code}</code>{/each}) or the language’s
-				name, English if left out. A farmer with two farms gets two rows and one
+				name, English if left out. A farmer with two hydrological units gets two rows and one
 				email. At most 200 rows.
 			</p>
 			<div class="field">
@@ -176,7 +198,7 @@
 					rows="6"
 					spellcheck="false"
 					aria-describedby="invite-csv-help"
-					placeholder={'email,farm,language\nfarmer@example.com,' + (farms[0]?.name ?? 'Farm name') + ',en'}
+					placeholder={'email,farm,language\nfarmer@example.com,' + (farms[0]?.name ?? 'Hydrological unit name') + ',en'}
 					bind:value={csv}
 					oninput={csvChanged}
 				></textarea>
@@ -232,7 +254,7 @@
 			<button type="button" class="btn" onclick={() => (open = false)}>Cancel</button>
 			{#if mode === 'single'}
 				<button type="submit" form="invite-farmers-form" class="btn btn-primary" disabled={busy || !email.trim() || picked.length === 0}>
-					{busy ? 'Inviting…' : 'Invite farmer'}
+					{busy ? 'Inviting…' : role === 'contributor' ? 'Invite applicant' : 'Invite farmer'}
 				</button>
 			{:else if results}
 				<button type="button" class="btn" disabled={busy} onclick={previewCsv}>Preview again</button>

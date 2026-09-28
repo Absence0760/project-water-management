@@ -259,13 +259,13 @@
 	}
 
 	const METHODS: { value: FlowShareMethod; label: string; help: string }[] = [
-		{ value: 'area', label: 'By catchment area', help: "Each unit's share = its area ÷ the total unit area." },
+		{ value: 'area', label: 'By catchment area', help: "Each hydrological unit's share = its area ÷ the total hydrological unit area." },
 		{
 			value: 'hiLo',
 			label: 'High/low MAP split',
 			help: 'High-MAP areas share the high part of the split and low-MAP areas the low part (WR90/WR2012 practice).'
 		},
-		{ value: 'manual', label: 'Manual share per unit', help: 'Shares typed per unit on the Network tab ("Manual flow share").' }
+		{ value: 'manual', label: 'Manual share per hydrological unit', help: 'Shares typed per hydrological unit on the Network tab ("Manual flow share").' }
 	];
 	const method = $derived(METHODS.find((m) => m.value === s.flowShareMethod));
 	const chirpsOption = $derived(CHIRPS_BIAS_OPTIONS.find((o) => o.value === s.chirpsBiasCorrection));
@@ -423,7 +423,7 @@
 			<div class="field">
 				<span class="lbl"><label for="st-lef">Dam evaporation factor <span class="u">(× A-pan)</span></label><HelpTip key="settings.lakeEvapFactor" /></span>
 				<NumberInput id="st-lef" min={0} max={2} step={0.01} disabled={readonly} bind:value={s.lakeEvapFactor} aria-describedby="st-lef-h" />
-				<span class="hint" id="st-lef-h">Open-water evaporation from the units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
+				<span class="hint" id="st-lef-h">Open-water evaporation from the hydrological units’ dams as a multiple of A-pan. 0.75 by default; 0 turns dam evaporation off. WR90 lake factors are S-pan based: don't enter them here unchanged.</span>
 				<FieldHistoryLine field="settings:lakeEvapFactor" />
 				<label class="check">
 					<input
@@ -463,13 +463,13 @@
 					id="cal-catchmentAreaKm2"
 					min={0}
 					nullable
-					placeholder="{fmtNum(farmAreaKm2, 2)} (sum of units)"
+					placeholder="{fmtNum(farmAreaKm2, 2)} (sum of hydrological units)"
 					disabled={readonly}
 					bind:value={s.calibration.catchmentAreaKm2}
 					aria-describedby="cal-area-h"
 				/>
 				<span class="hint" id="cal-area-h">
-					Area the rain falls on. Leave blank to use the sum of the unit areas —
+					Area the rain falls on. Leave blank to use the sum of the hydrological unit areas —
 					<strong>{fmtNum(farmAreaKm2, 2)} km²</strong> now.{#if cal.catchmentAreaKm2 != null && Math.abs(cal.catchmentAreaKm2 - farmAreaKm2) > 0.005}
 						Overridden: {fmtNum(cal.catchmentAreaKm2, 2)} km² is used.{/if}
 				</span>
@@ -833,8 +833,8 @@
 	<!-- Flow share ----------------------------------------------------------------->
 	<section class="panel" id="set-share" aria-labelledby="share-h">
 		<div class="panel-head">
-			<h2 id="share-h">Flow share between units</h2>
-			<span class="muted small">Splits catchment natural flow and the EWR into per-unit parts</span>
+			<h2 id="share-h">Flow share between hydrological units</h2>
+			<span class="muted small">Splits catchment natural flow and the EWR into parts per hydrological unit</span>
 			<NotesDrawer projectId={project.id} target={settingTarget('share')} />
 		</div>
 		<div class="fields">
@@ -843,7 +843,7 @@
 				<select id="st-method" disabled={readonly} bind:value={s.flowShareMethod} aria-describedby="st-method-h">
 					{#each METHODS as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
 				</select>
-				<span class="hint" id="st-method-h">{method?.help} The resulting share per unit is shown on the Network tab.</span>
+				<span class="hint" id="st-method-h">{method?.help} The resulting share per hydrological unit is shown on the Network tab.</span>
 				<FieldHistoryLine field="settings:flowShareMethod" />
 			</div>
 			<fieldset class="plain hilo">
@@ -879,7 +879,7 @@
 		<p class="hint muted">
 			The flow that must stay in the river for the ecosystem (the Ecological Reserve). b023's <em>pragmatic</em> EWR is one fixed
 			flow per month, so farmers can plan for it; the model checks it at the EWR sites (the outlet and every gauge) and charges
-			each shortfall to the units upstream by their net impact that day.
+			each shortfall to the hydrological units upstream by their net impact that day.
 		</p>
 		<div class="ewr">
 			<div class="table-wrap">
@@ -924,7 +924,7 @@
 				</div>
 			</div>
 			<span class="hint">
-				Period the curtailment targets and the assurance of supply on Units & supply average over, e.g. the last dry season. Leave blank for the whole run.
+				Period the curtailment targets and the assurance of supply on Hydrological units average over, e.g. the last dry season. Leave blank for the whole run.
 			</span>
 			{#if reportError}<p class="err" role="alert">{reportError}</p>{/if}
 			<div class="field">
@@ -939,7 +939,7 @@
 					onchange={(v) => (s.assuranceAnnualThreshold = v ?? undefined)}
 					aria-describedby="st-aat-h"
 				/>
-				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
+				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
 				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
 			</div>
 		</fieldset>
