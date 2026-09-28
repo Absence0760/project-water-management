@@ -6,9 +6,10 @@
 	// under reduced motion, and the final figure before the script runs). The
 	// last is the one that earns trust: how closely the example's fitted model
 	// follows its weir's measured flow (the run's calibration NSE, from the
-	// engine: backend/scripts/landing-data.ts). No link to the engine audit:
-	// docs/design/landing-art.md says why.
+	// engine: backend/scripts/landing-data.ts). The first statement is backed by
+	// the engine audit's public summary, /methods, linked under the list.
 	import { onMount } from 'svelte';
+	import { base } from '$app/paths';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
@@ -54,6 +55,7 @@
 		<li>{t('Each project is private to its members, enforced by the database itself (row-level security).')}</li>
 		<li>{t('Daily data from CHIRPS rainfall and the DWS gauges.')}</li>
 	</ul>
+	<p class="methods"><a href="{base}/methods">{t('How the model is checked')}</a></p>
 	<p class="figures-head">{t('In the example catchment')}</p>
 	<dl class="figures" bind:this={el}>
 		{#each FIGURES as f, i (i)}
@@ -77,9 +79,19 @@
 		display: grid;
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 		gap: 1rem 2rem;
-		margin: 0 0 2.5rem;
+		margin: 0 0 1.25rem;
 		padding: 0;
 		list-style: none;
+	}
+	.methods {
+		margin: 0 0 2.5rem;
+	}
+	/* A 24 px target (WCAG 2.5.8). */
+	.methods a {
+		display: inline-block;
+		min-height: 24px;
+		padding-block: 0.1rem;
+		font-weight: 600;
 	}
 	.points li {
 		position: relative;

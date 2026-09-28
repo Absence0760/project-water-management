@@ -1745,8 +1745,8 @@ readable by anyone. The rules:
   role after a human approves the run.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
-  `/welcome`, issue #57) and the legal pages (`/privacy`, `/terms`,
-  [legal-status.md](./legal-status.md)) are static: it calls no API but `/auth/me` (the
+  `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,
+  [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
   layout's session check, which it doesn't wait for), shows only invented
   example data built into the bundle, loads nothing from a third party (no
   fonts, scripts, analytics or embeds), sets no cookie and stores nothing but

@@ -1,5 +1,6 @@
 <script lang="ts">
-	// The frame of the legal pages (/privacy, /terms): outside the app shell,
+	// The frame of the legal pages (/privacy, /terms) and the methods page
+	// (/methods, the engine audit's public summary): outside the app shell,
 	// like the landing page. A slim header with the way home and into the app,
 	// a readable column, a contents list (folded on a phone, where thirteen
 	// entries took the whole first screen), and the footer links. The header's
@@ -54,10 +55,11 @@
 	</main>
 
 	<footer class="foot">
-		<nav aria-label="Legal">
+		<nav aria-label="Site">
 			<a href="{base}/">Home</a>
 			<a href="{base}/privacy">Privacy notice</a>
 			<a href="{base}/terms">Terms of use</a>
+			<a href="{base}/methods">How the model is checked</a>
 			<a href="mailto:jared@jaredhoward.com">Contact</a>
 		</nav>
 	</footer>

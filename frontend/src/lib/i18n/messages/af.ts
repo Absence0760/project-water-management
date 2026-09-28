@@ -697,6 +697,8 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
+	// How the model is checked
+	'69391154': 'Hoe die model nagegaan word',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.

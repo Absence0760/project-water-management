@@ -1124,23 +1124,23 @@
 //             1061 KB on Vite 8 with Oxc, Vite 8's own minifier, which
 //             replaces Terser (frontend/vite.config.ts, build.minify). Largest
 //             tab chunk 54 → 53 KB, workers 28 / 27 KB. Headroom ~5 KB.
-// 2026-09-28  total 1066 → 1069 KB (measured 1067). The farm view's liability
-//             notices (issue #47, CPA s49 research R1/R2): the estimate
-//             callout before the first figure on each farm page, the
-//             one-time "Before you look at your farm" acknowledgement and its
-//             API call, and their English and Afrikaans words (+1 KB). No
-//             new dependency. Headroom ~2 KB.
-// 2026-09-28  total 1069 → 1075 KB (measured 1072 with the farm notices). Terms re-acceptance
-//             (issue #47, legal-status.md): the re-acceptance notice (its
-//             own 1.4 KB chunk, loaded only for an account on old terms),
-//             the Terms' main-points box on sign-up (0.5 KB), their
-//             Afrikaans words, and the longer prerendered Terms page. No
-//             new dependency. Headroom ~3 KB.
-// 2026-09-28  total 1075 → 1079 KB (measured 1076 with all of #47 merged).
-//             The signer's registration selects and warnings (signoff-3),
-//             the report's "Read this first" box and footer text, the
-//             share-page line and the workbook's disclaimer sheet (+~1 KB
-//             beyond the two entries above). No new dependency. Headroom ~3 KB.
+// 2026-09-28  total 1066 → 1073 KB (measured 1068 on Vite 8 + Oxc, after the
+//             Vite roll-up above; 1070 on Vite 5). The methods page
+//             (/methods, the engine audit's public summary, issue #57):
+//             prerendered with csr = false like the legal pages, so a visitor
+//             downloads no script, but SvelteKit still emits its page node
+//             (5.2 KB, its text, the departures and the generated known
+//             limitations), plus the trust strip's link and its Afrikaans
+//             word. No new dependency. Headroom ~5 KB.
+// 2026-09-28  total 1073 → 1083 KB (measured 1080, on Vite 8 with the
+//             methods page). Issue #47's liability work: the farm view's
+//             estimate callout and one-time acknowledgement, the Terms
+//             re-acceptance notice (its own chunk, loaded only for an account
+//             on old terms) and sign-up summary, the signer's registration
+//             selects (signoff-3), the report's "Read this first" box and
+//             footer text, the share-page line, the workbook's disclaimer
+//             sheet, and their Afrikaans words. No new dependency. Headroom
+//             ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1151,7 +1151,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1079,
+	totalCodeKb: 1083,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
