@@ -2434,7 +2434,7 @@ role and not before it.
         OIDC provider to plan against yet (plan.md Phase 6), and the role
         (read-only IAM + state read, trusted for pull requests without the
         `production` environment) is an IAM decision for the operator.
-        Trigger: the account exists and `terraform apply` has run once.
+        Trigger: the account exists and `terraform apply` has run once (#108).
       - ~~a CodeQL Python leg for `scripts/wbt-import`~~ **Done (2026-09-28,
         issue #75):** `security.yml` analyses `python` too (the importer and
         the smaller Python tools), on Python 3.14.
@@ -2458,7 +2458,7 @@ role and not before it.
       would have failed at init; the image now sets it. Still open: a full
       render through the handler needs the deployed site, bucket and queues
       (the production check refuses local URLs), so after the first deploy
-      render one report in production and check its alarms (#92).
+      render one report in production and check its alarms (#92; tracked in #108).
 - [x] **The DB test files ran in parallel**, although
       `backend/vitest.workspace.ts` sets `fileParallelism: false` for the
       `db` project and several tests say "a tick here sees only this file's
@@ -2958,7 +2958,7 @@ Applicant view and the Applications tab. Left:
       never a longer wait. Trigger: it recurs, in CI or a local loaded run.
       Checked 2026-09-28 (issue #75): not recurred; the failing `main` runs
       that day were `runs.spec.ts` (the run-cap list test), not the portfolio
-      spec.
+      spec. Tracked in #108.
 
 ## Landing page (issue #57)
 
