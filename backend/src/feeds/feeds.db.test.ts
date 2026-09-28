@@ -69,8 +69,13 @@ async function claimDue(limit = 50, all = false) {
 	for (const f of due) if (await withUser(f.actingUserId, (db) => claimFeed(db, f.id, all))) claimed.push(f);
 	return claimed;
 }
-/** Run what's queued, with no feed scheduling (the tests schedule explicitly). */
-const tick = () => runTick({ feeds: false });
+/**
+ * Run what's queued, with no scheduling: feeds are scheduled explicitly, and
+ * the alert and report schedulers would queue jobs for other files' leftover
+ * rules and schedules, which the counts here would include (an
+ * alerts.db.test.ts rule made "Run now" finish 2 jobs when that file ran first).
+ */
+const tick = () => runTick({ feeds: false, reports: false, alerts: false });
 
 describe('data_feed RLS and the routes', () => {
 	it('owners attach and change feeds; viewers read them with health; editors and strangers cannot write', async () => {
