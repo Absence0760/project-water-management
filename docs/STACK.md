@@ -134,7 +134,7 @@ pnpm check:env              # committed env files point only at the local stack
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
-pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock)
+pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock); bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
 pnpm test:guards            # node:test suites for scripts/guards, scripts/release and scripts/ingest
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
