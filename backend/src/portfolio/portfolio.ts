@@ -25,6 +25,7 @@ import { feedHealth, type HealthInput } from '../feeds/health.js';
 import type { FeedConfig, FeedSource } from '../feeds/config.js';
 import type { RecentShortfall } from '../publish/recent.js';
 import { ageDays, EWR_THRESHOLDS, ewrFigure, isStale, type EwrFigure, type EwrThresholds } from './status.js';
+import { recordedRainUntilSql } from '../series/lastDay.js';
 
 export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 
@@ -127,8 +128,7 @@ const MY_PROJECTS = `SELECT p.id, p.name, p.time_zone, app_project_role(p.id) AS
 const portfolioSql = (projects: string) => `
 	WITH proj AS (${projects})
 	SELECT pr.id, pr.name, pr.role, pr.time_zone, pr.team_settings,
-		to_char((SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
-			WHERE ts.project_id = pr.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0), 'YYYY-MM-DD') AS data_until,
+		to_char(${recordedRainUntilSql('pr.id')}, 'YYYY-MM-DD') AS data_until,
 		lr.created_at AS last_run_at, lr.id AS last_run_id, pub.run_id AS pub_run_id,
 		COALESCE(lr.created_at > pubrun.created_at, false) AS newer_run,
 		pub.published_at, pub.restriction_level, pub.restriction_pct,
@@ -154,7 +154,9 @@ const portfolioSql = (projects: string) => `
 	) pubrun ON true
 	LEFT JOIN LATERAL (
 		SELECT r.id, r.created_at, r.start_date, ${RUN_UNTIL} AS until, ${EWR_SET} AS ewr_set
-		FROM model_run r WHERE r.project_id = pr.id AND r.scenario_id IS NULL
+		-- A forecast run is guidance made beside the runs (daily with a GEFS
+		-- feed), never "a newer run" than the published one, nor the figures.
+		FROM model_run r WHERE r.project_id = pr.id AND r.scenario_id IS NULL AND r.trigger <> 'forecast'
 		ORDER BY r.created_at DESC LIMIT 1
 	) lr ON true
 	LEFT JOIN LATERAL (

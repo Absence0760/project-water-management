@@ -241,7 +241,6 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
  */
 const NO_WRITE = new Map<string, string>([
 	['POST /auth/login', 'the session is a signed cookie; a correct password leaves the lockout table as it was'],
-	['POST /auth/logout', 'the session is a signed cookie; logging out clears it in the browser'],
 	['POST /auth/invite-info', 'reads what an invite is for, so the sign-up page can name it'],
 	['POST /auth/resend-confirmation', 'an address with no account (the sweep’s): the same 202, and nothing to mail'],
 	['POST /me/alerts/resume', 'the owner’s alert emails are not paused, so there is nothing to resume']

@@ -154,6 +154,7 @@ describe('session watermark', () => {
 			.setIssuer('water-management')
 			.setIssuedAt(iatSeconds)
 			.setExpirationTime(iatSeconds + 3600)
+			.setJti(crypto.randomUUID())
 			.sign(new TextEncoder().encode(process.env.AUTH_JWT_SECRET!));
 
 	it('rejects tokens issued before sessions_revoked_at, including ones without iat_ms', async () => {

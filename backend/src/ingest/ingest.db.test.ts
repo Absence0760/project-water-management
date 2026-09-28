@@ -5,9 +5,10 @@ import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
-import { withApiKey, withUser } from '../db/tx.js';
+import { type Db, withApiKey, withUser } from '../db/tx.js';
 import { runTick } from '../jobs/runner.js';
 import { BAD_KEY } from './auth.js';
+import { heldSinceLastRun } from '../series/hold.js';
 import { INGEST_RATE } from './keys.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -42,6 +43,12 @@ async function newKey(pid: string, body: Record<string, unknown> = {}): Promise<
 
 const rain = (startDate: string, values: (number | null)[], name = '') => ({ kind: 'rain_catchment_mm', name, unit: 'mm', startDate, values });
 const merge = (key: string, body: unknown) => ingest('POST', '/series/merge', key, body);
+/** A person adds a series (PUT), for a key to merge into. */
+async function addSeries(u: User, pid: string, body: Record<string, unknown>) {
+	const res = await u.call('PUT', `/projects/${pid}/series`, body);
+	expect(res.status, JSON.stringify(res.body)).toBe(200);
+	return res.body.id as string;
+}
 
 beforeAll(async () => {
 	[owner, editor, viewer, stranger] = (await Promise.all(['Kowner', 'Keditor', 'Kviewer', 'Kstranger'].map((n) => signUp(n)))) as [User, User, User, User];
@@ -49,6 +56,8 @@ beforeAll(async () => {
 	otherProjectId = (await owner.call('POST', '/projects', { name: 'Other catchment' })).body.project.id;
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
 	expect((await owner.call('POST', `/projects/${projectId}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+	// A key adds days only to a rain series a person has added (issue #51, series/merge.ts assertKeyMayCreate): the ones the tests below push to.
+	for (const name of ['', 'Idempotent', 'Visible', 'Allowed gauge', 'Long']) await addSeries(owner, projectId, rain('2024-01-01', [null], name));
 }, 60_000);
 
 describe('owning API keys', () => {
@@ -208,14 +217,17 @@ describe('authenticating with a key', () => {
 describe('ingesting days', () => {
 	it("merges days into its own project's series, and the history names the key", async () => {
 		const { id, secret } = await newKey(projectId, { name: 'Rain gateway' });
-		const first = await merge(secret, { ...rain('2024-03-01', [0, 4.5, 12], 'Weir gauge'), source: 'gateway-7' });
+		// The project has no CHIRPS series yet, so the key may add one (a second of a kind is refused, below); it holds the automatic runs.
+		const chirps = (startDate: string, values: number[]) => ({ ...rain(startDate, values, 'Weir gauge'), kind: 'rain_chirps_mm' });
+		const first = await merge(secret, { ...chirps('2024-03-01', [0, 4.5, 12]), source: 'gateway-7' });
 		expect(first.status, JSON.stringify(first.body)).toBe(200);
-		expect(first.body.series).toMatchObject({ kind: 'rain_catchment_mm', name: 'Weir gauge', unit: 'mm', startDate: '2024-03-01', length: 3 });
+		expect(first.body.series).toMatchObject({ kind: 'rain_chirps_mm', name: 'Weir gauge', unit: 'mm', startDate: '2024-03-01', length: 3 });
 		expect(first.body.daysChanged).toBe(3);
 		// Automatic runs are off in this project: nothing is queued (the queued case is below).
 		expect(first.body.rerunQueuedFor).toBeNull();
+		expect(first.body.rerunHeld).toMatchObject({ newSeries: true, negative: 0, outlier: 0 });
 
-		const next = await merge(secret, rain('2024-03-03', [13, 2], 'Weir gauge'));
+		const next = await merge(secret, chirps('2024-03-03', [13, 2]));
 		expect(next.status).toBe(200);
 		expect(next.body.daysChanged).toBe(2);
 		const values = (await owner.call('GET', `/projects/${projectId}/series/${first.body.series.id}`)).body.values;
@@ -225,7 +237,7 @@ describe('ingesting days', () => {
 			`SELECT kind, actor_user_id, actor_api_key_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND subject->>'seriesId' = $2 ORDER BY id`,
 			[projectId, first.body.series.id]
 		);
-		expect(events.map((e) => e.kind)).toEqual(['series.created', 'series.merged']);
+		expect(events.map((e) => e.kind)).toEqual(['series.created', 'series.held', 'series.merged']);
 		for (const e of events) {
 			expect(e).toMatchObject({ actor_user_id: null, actor_api_key_id: id, actor_label: 'API key “Rain gateway”' });
 		}
@@ -236,7 +248,7 @@ describe('ingesting days', () => {
 		const history = await viewer.call('GET', `/projects/${projectId}/history?kind=series`);
 		expect(history.status).toBe(200);
 		const seen = history.body.items.filter((i: { subject?: { seriesId?: string } }) => i.subject?.seriesId === first.body.series.id);
-		expect(seen.map((i: { actor: string }) => i.actor)).toEqual(['API key “Rain gateway”', 'API key “Rain gateway”']);
+		expect(seen.map((i: { actor: string }) => i.actor)).toEqual(['API key “Rain gateway”', 'API key “Rain gateway”', 'API key “Rain gateway”']);
 	});
 
 	it('is idempotent: the same days again change nothing and record nothing', async () => {
@@ -415,6 +427,7 @@ describe('automatic re-runs from an ingest (042_auto_rerun.sql, WP-2.11)', () =>
 	/** A fresh project owned by `u`, automatic runs as given, and a key `u` made for it. */
 	async function keyed(u: User, autoRun: Record<string, unknown> | null) {
 		const pid = (await u.call('POST', '/projects', { name: 'Auto-run ingest' })).body.project.id as string;
+		await addSeries(u, pid, rain('2026-03-01', [null]));
 		if (autoRun) expect((await u.call('PATCH', `/projects/${pid}`, { settings: { autoRun } })).status).toBe(200);
 		const res = await createKey(pid, {}, u);
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
@@ -455,6 +468,7 @@ describe('automatic re-runs from an ingest (042_auto_rerun.sql, WP-2.11)', () =>
 		const creator = await signUp('Kcreator');
 		const pid = (await owner.call('POST', '/projects', { name: 'Orphaned key' })).body.project.id as string;
 		expect((await owner.call('POST', `/projects/${pid}/members`, { email: creator.email, role: 'owner' })).status).toBe(201);
+		await addSeries(owner, pid, rain('2026-03-01', [null]));
 		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true } } })).status).toBe(200);
 		const res0 = await createKey(pid, {}, creator);
 		expect(res0.status).toBe(201);
@@ -547,6 +561,77 @@ describe('a key pushing days that look wrong holds the automatic re-run (WP-2.16
 		expect(res.body.rerunQueuedFor).toEqual(expect.any(String));
 		expect(await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND kind = 'series.held'`, [pid])).toEqual([{ n: 2 }]);
 		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+});
+
+// Issue #51 (adversary finding 1): a run reads the first outlet series of
+// each kind by name (runs/execute.ts loadLiveInput). A key must not be able
+// to add a series that sorts ahead of the person's and so swap the model's
+// input, and a series it adds (of a kind the project lacks) holds the
+// automatic runs, since there is nothing to judge its days by.
+describe('a key can’t add a series the model would read in place of a person’s (issue #51)', () => {
+	let pid: string;
+	const pending = async () => (await asOwner(`SELECT 1 FROM job WHERE project_id = $1 AND kind = 'rerun' AND status = 'queued'`, [pid])).length;
+	const rainNames = async () => (await asOwner(`SELECT name FROM time_series WHERE project_id = $1 AND kind = 'rain_catchment_mm' ORDER BY name`, [pid])).map((r) => r.name);
+
+	beforeAll(async () => {
+		pid = (await owner.call('POST', '/projects', { name: 'Displaced input' })).body.project.id as string;
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: viewer.email, role: 'viewer' })).status).toBe(201);
+		await addSeries(owner, pid, rain('2024-01-01', [5, 0, 3], 'Weir'));
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { autoRun: { enabled: true, debounceMinutes: 0 } } })).status).toBe(200);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('refuses a second rain series that would sort first (409), even when the key is allowed that name', async () => {
+		const open = await newKey(pid, { name: 'Any series' });
+		const listed = await newKey(pid, { name: 'Listed', allowedSeries: [{ kind: 'rain_catchment_mm', name: 'AAA' }] });
+		for (const key of [open, listed]) {
+			const res = await merge(key.secret, rain('2024-01-01', [900, 900, 900], 'AAA'));
+			expect(res.status, JSON.stringify(res.body)).toBe(409);
+			expect(res.body.error).toMatch(/already has a rain_catchment_mm series/);
+		}
+		expect(await rainNames()).toEqual(['Weir']);
+		expect(await pending()).toBe(0);
+		// The model still reads the person's series.
+		const input = await owner.call('GET', `/projects/${pid}/model-input`);
+		expect(input.body.input.series.rain_catchment_mm.values).toEqual([5, 0, 3]);
+		// Positive control: the same key merges into the series that exists, and that queues the re-run as usual.
+		const ok = await merge(open.secret, rain('2024-01-04', [2], 'Weir'));
+		expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+		expect(ok.body).toMatchObject({ rerunHeld: null, rerunQueuedFor: expect.any(String) });
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('lets a person add the second series, which a key may then fill', async () => {
+		await addSeries(owner, pid, rain('2024-01-01', [null], 'Spare'));
+		const { secret } = await newKey(pid, { name: 'Spare logger' });
+		expect((await merge(secret, rain('2024-01-01', [1, 2], 'Spare'))).status).toBe(200);
+		expect(await rainNames()).toEqual(['Spare', 'Weir']);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('adds a series of a kind the project has none of, but holds the automatic runs for a person', async () => {
+		const { id, secret } = await newKey(pid, { name: 'Flow logger' });
+		const res = await merge(secret, { kind: 'flow_logger_m3s', name: 'Weir', unit: 'm3/s', startDate: '2024-01-01', values: [0.4, 0.5] });
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		expect(res.body).toMatchObject({ rerunQueuedFor: null, rerunHeld: { newSeries: true, negative: 0, outlier: 0, limitFrom: null } });
+		expect(await pending()).toBe(0);
+		const [held] = await asOwner(`SELECT actor_api_key_id, subject FROM audit_event WHERE project_id = $1 AND kind = 'series.held'`, [pid]);
+		expect(held).toMatchObject({ actor_api_key_id: id, subject: { kind: 'flow_logger_m3s', name: 'Weir', newSeries: true } });
+		// A later clean push into it is judged as usual, and the hold stands until a person runs the model.
+		const next = await merge(secret, { kind: 'flow_logger_m3s', name: 'Weir', unit: 'm3/s', startDate: '2024-01-03', values: [0.45] });
+		expect(next.body.rerunHeld).toBeNull();
+		expect(await withUser(owner.id, (db) => heldSinceLastRun(db, pid))).toBe(true);
+		await asOwner('DELETE FROM job WHERE project_id = $1', [pid]);
+	});
+
+	it('answers the kind check only to someone who may write the project', async () => {
+		const ask = (db: Db) => db.query<{ taken: boolean | null }>(`SELECT app_project_has_outlet_series($1, 'rain_catchment_mm') AS taken`, [pid]);
+		expect((await withUser(owner.id, ask)).rows[0]!.taken).toBe(true);
+		expect((await withUser(viewer.id, ask)).rows[0]!.taken).toBeNull();
+		expect((await withUser(stranger.id, ask)).rows[0]!.taken).toBeNull();
+		const elsewhere = await newKey(otherProjectId, { name: 'Other project' });
+		expect((await withApiKey(elsewhere.id, ask)).rows[0]!.taken).toBeNull();
 	});
 });
 
@@ -678,8 +763,10 @@ describe('a key that alone fills a series is judged by what a person last accept
 		expect((await owner.call('PUT', `/projects/${pid}/model`, model)).status).toBe(200);
 		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
 		key = await newKey(pid, { name: 'Logger gateway' });
-		// Every day of both series is the key's: '' is the one the model reads (the first rain series by name), 'spare' no run reads.
+		// Every day of both series is the key's (a person added each, empty, first: a key can't add a second rain series):
+		// '' is the one the model reads (the first rain series by name), 'spare' no run reads.
 		for (const name of ['', 'spare']) {
+			await addSeries(owner, pid, rain('2020-01-01', [null], name));
 			const res = await merge(key.secret, rain('2020-01-01', history, name));
 			expect(res.status, JSON.stringify(res.body)).toBe(200);
 		}

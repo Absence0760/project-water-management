@@ -12,7 +12,7 @@ import {
 	recordLinkChanges,
 	recordModelRevision
 } from '../history/record.js';
-import { dropInvite, inviteByEmail } from '../invites/invites.js';
+import { countInvites, dropInvite, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
@@ -27,6 +27,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { freshIds, IMPORT_MAX_BYTES, insertProjectFile, parseProjectFile, runImported } from './import.js';
 import { insertImportReport, latestImportReport, parseImportReport } from './importReport.js';
 import { loadMyOutcomes } from '../portfolio/portfolio.js';
+import { recordedRainUntilSql } from '../series/lastDay.js';
 
 type ProjectRow = {
 	id: string;
@@ -84,8 +85,9 @@ const SELECT_PROJECT = `
 		-- Freshness is recorded rain (catchment or CHIRPS): what a run is driven
 		-- by. A forecast runs into the future and observed flow only scores a
 		-- run, so either one would read "up to date" while the rain lags.
-		(SELECT max(ts.start_date + cardinality(ts."values") - 1) FROM time_series ts
-			WHERE ts.project_id = p.id AND ts.kind IN ('rain_catchment_mm', 'rain_chirps_mm') AND cardinality(ts."values") > 0) AS data_until,
+		-- To the last day with a value, not the last day stored: blank days a
+		-- logger sends for a dead sensor are no data (series/lastDay.ts).
+		${recordedRainUntilSql('p.id')} AS data_until,
 		(SELECT max(r.created_at) FROM model_run r WHERE r.project_id = p.id) AS last_run_at,
 		-- The current publication's date (022_publication; its partial unique
 		-- index answers it). Every member reads run_publication, farmers too.
@@ -405,6 +407,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		const result = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
+			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
+			await countInvites(c, db, 'project', id, 1);
 			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
 				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
 				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',

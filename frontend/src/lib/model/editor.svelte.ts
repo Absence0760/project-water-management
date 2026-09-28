@@ -170,6 +170,7 @@ export class ModelEditor {
 			count: d.sizing === 'perUnit' ? 0 : null,
 			monthlyFactor: null,
 			enabled: true,
+			schedule: null,
 			note: ''
 		};
 		// Not `(this.model.demandObjects ??= []).push(o)`: see addBorehole.

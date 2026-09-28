@@ -20,6 +20,7 @@ import { isRiverOfftake, offtakeOf } from '../network/offtake';
 import { cmpStr } from '../order';
 import { supplyOf, type PlanSupply } from '../network/supply';
 import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
+import { scheduleFactors } from '../network/demandSchedule';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -70,11 +71,13 @@ interface ObjectColumns {
 	returnShare: number[];
 	tier: number[];
 	monthly: Float64Array[];
+	/** Each object's schedule factor per day (engine ≥ 1.17.0), recomputed from the model; null without one. */
+	schedule: (Float64Array | null)[];
 }
-function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap): ObjectColumns | string | null {
+function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
 	const list = demandObjectsByNode(input.model, []).get(n.id);
 	if (!list) return null;
-	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [] };
+	const out: ObjectColumns = { demand: [], supplied: [], returnShare: [], tier: [], monthly: [], schedule: [] };
 	for (const o of list) {
 		const d = get.get(`${n.id}|${objectDemandKey(o.id)}`);
 		const g = get.get(`${n.id}|${objectSuppliedKey(o.id)}`);
@@ -84,6 +87,7 @@ function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap): Objec
 		out.returnShare.push(objectReturnShare(o));
 		out.tier.push(PRIORITY_TIER[o.priority] ?? 1);
 		out.monthly.push(objectMonthlyM3Day(o, []));
+		out.schedule.push(scheduleFactors(o.schedule, toEpochDay(run.startDate), run.days, [], ''));
 	}
 	return out;
 }
@@ -150,7 +154,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		// Return flow: the share β of the application losses (1 − e)·G (audit N1),
 		// of the crops' part when the unit has demand objects, which return their own shares (engine ≥ 1.7.0).
 		const returnPerSupplied = n.lossReturnFraction * (1 - runEfficiency(input, n));
-		const objs = objectColumns(input, n, get);
+		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		// Rain on the dam and evaporation from it (audit N2); runs before engine 0.16.0 have neither.
 		const Pd = get.get(`${n.id}|rain_on_dam`);
@@ -903,7 +907,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		const factorFrom = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, out.days) : 0;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
-		const objs = objectColumns(input, n, get);
+		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		const cap = n.damCapacityM3;
 		const dead = n.damMinPct * cap;
@@ -1098,8 +1102,10 @@ function checkObjectsDay(objs: ObjectColumns, t: number, wy: number, df: number,
 	for (let k = 0; k < n; k++) {
 		const d = objs.demand[k]![t]!;
 		const g = objs.supplied[k]![t]!;
-		const expect = objs.monthly[k]![wy]! * df;
-		if (Math.abs(d - expect) > tol(expect)) return `${where}: demand object ${k}'s demand ${d} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}`;
+		const sf = objs.schedule[k] ? objs.schedule[k]![t]! : 1;
+		const expect = objs.monthly[k]![wy]! * df * sf;
+		if (Math.abs(d - expect) > tol(expect))
+			return `${where}: demand object ${k}'s demand ${d} ≠ its month's ${objs.monthly[k]![wy]} × demand factor ${df}${objs.schedule[k] ? ` × schedule factor ${sf}` : ''}`;
 		if (g < -eps || g > d + eps) return `${where}: demand object ${k} got ${g}, outside [0, its demand ${d}]`;
 		got += g;
 		want[objs.tier[k]!]! += d;

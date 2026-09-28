@@ -1321,6 +1321,39 @@ export type DemandObjectPriority = (typeof DEMAND_OBJECT_PRIORITIES)[number];
 export const DEMAND_OBJECT_DESTINATIONS = ['internal', 'external'] as const;
 export type DemandObjectDestination = (typeof DEMAND_OBJECT_DESTINATIONS)[number];
 
+/**
+ * Which days a demand object's schedule window covers (engine ≥ 1.17.0,
+ * docs/model.md §2.7f): 'always' every day (with weekdays, a weekly
+ * pattern); 'yearly' a calendar span each year, `from`–`to` as MM-DD,
+ * wrapping the year end when `from` is later; 'range' once, `from`–`to` as
+ * YYYY-MM-DD; 'easter' `easterFrom`–`easterTo` days from Easter Sunday
+ * (−2 Good Friday, +1 Family Day). Every bound is inclusive.
+ */
+export const DEMAND_SCHEDULE_SPANS = ['always', 'yearly', 'range', 'easter'] as const;
+export type DemandScheduleSpan = (typeof DEMAND_SCHEDULE_SPANS)[number];
+
+/**
+ * One window of a demand object's schedule: on the days it covers, the
+ * object's demand is its month's demand × `factor` (0 = off). Set by date,
+ * never by river flow (issue #90 Q12). The later of two overlapping windows
+ * wins; a day no window covers runs at 1.
+ */
+export interface DemandScheduleWindow {
+	/** What it is, e.g. "Weekends" or "Christmas shutdown"; may be empty. */
+	label: string;
+	span: DemandScheduleSpan;
+	/** 'yearly': MM-DD; 'range': YYYY-MM-DD; null otherwise. */
+	from: string | null;
+	to: string | null;
+	/** 'easter': whole days from Easter Sunday; null otherwise. */
+	easterFrom: number | null;
+	easterTo: number | null;
+	/** ISO weekdays it covers (1 = Monday … 7 = Sunday); null = every day. */
+	weekdays: number[] | null;
+	/** × the demand on those days, 0–10; 0 = off. */
+	factor: number;
+}
+
 export interface DemandObject {
 	id: string;
 	/** The unit (a farm node) whose water supplies it. */
@@ -1344,6 +1377,12 @@ export interface DemandObject {
 	destination: DemandObjectDestination;
 	/** false = kept on record but not modelled (no demand, no results). */
 	enabled: boolean;
+	/**
+	 * Date windows with a factor on its daily demand (engine ≥ 1.17.0): 0 =
+	 * off that day, so no supply and no return. Null or absent = every day
+	 * at its month's demand.
+	 */
+	schedule?: DemandScheduleWindow[] | null;
 	/** Where the number comes from (meter records, a reconciliation strategy, a norm, the workbook), for the report. */
 	note: string;
 }
@@ -1529,6 +1568,12 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/**
+	 * The last day with a value (null: every day is blank): how far the data
+	 * reaches, where startDate + length − 1 counts the blank days a logger's
+	 * "no reading" stores. Absent from older clients' fixtures.
+	 */
+	lastValueDate?: string | null;
 	/** Sub-daily readings added up into days in this window (033_series_day_boundary.sql); null = daily values as uploaded. */
 	dayBoundary?: DayBoundary | null;
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
@@ -1641,6 +1686,8 @@ export interface DemandObjectSummary {
 	avgReturnedM3Day: number;
 	/** Days it got less than its demand (beyond float noise). */
 	daysShort: number;
+	/** Days its schedule switched it off (factor 0; engine ≥ 1.17.0, only on an object with a schedule). Never counted as short. */
+	daysOff?: number;
 }
 
 /**

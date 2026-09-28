@@ -59,6 +59,20 @@ async function as(cookie: string, method: string, path: string, body?: unknown) 
 }
 
 describe('render tokens', () => {
+	it('the session says it is the renderer’s on /auth/me, so the page renders the report even for an account behind on the terms (positive control: that account’s own session doesn’t)', async () => {
+		const owner = await signUp('RtTerms');
+		const { projectId, runId } = await withRun(owner, 'Terms behind');
+		// Accepted an older version: the app would ask again.
+		await asOwner('UPDATE app_user SET terms_version = $2 WHERE id = $1', [owner.id, '2020-01-01']);
+		const own = (await owner.call('GET', '/auth/me')).body.user;
+		expect(own.termsCurrent).toBe(false);
+		expect(own).not.toHaveProperty('renderSession');
+		const { cookie } = await exchange(await withUser(owner.id, (db) => issueRenderToken(db, projectId, runId)));
+		const res = await app.request('/auth/me', { headers: { cookie: cookie!, origin: ORIGIN } });
+		expect(res.status).toBe(200);
+		expect(((await res.json()) as { user: unknown }).user).toMatchObject({ id: owner.id, termsCurrent: false, renderSession: true });
+	});
+
 	it('a viewer issues one; it buys a session that reads that project and run (positive control) and nothing else', async () => {
 		const owner = await signUp('RtOwner');
 		const viewer = await signUp('RtViewer');

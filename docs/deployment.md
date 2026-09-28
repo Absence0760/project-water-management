@@ -213,10 +213,15 @@ is no SMTP password to store. Terraform provisions all of it in
 - **Alarms** (`alarms.tf`) on the account's `Reputation.BounceRate` > 2.5 % and
   `Reputation.ComplaintRate` > 0.05 %, half of the levels at which AWS puts an
   account under review (5 % / 0.1 %), notifying the alerts SNS topic.
-- **IAM:** the API Lambda role may call `ses:SendEmail` on the identity and the
+- **IAM:** the API and worker Lambda roles may call `ses:SendEmail` on this
+  account's SES identities in its own region (`identity/*`) and the
   configuration set only, with the condition
   `ses:FromAddress = no-reply@water-management.jaredhoward.com`. Nothing else.
-  The migrate Lambda gets nothing.
+  The wildcard is for the sandbox, which also authorises each send against the
+  **recipient's** verified identity (`identity/<address>`): naming only the
+  domain identity denies every sandbox send, the operator's own test
+  included. The From condition still pins the sender, and out of the sandbox
+  no recipient identity is checked. The migrate Lambda gets nothing.
 - **Network:** the API Lambda has no route out of the VPC, so it reaches SES
   through the **SES API interface endpoint** (`com.amazonaws.<region>.email`,
   private DNS on, 443 from the API Lambda's security group only). The SDK's
@@ -227,9 +232,22 @@ verified addresses (200/day, 1/second). Request production access once the
 identity shows `SUCCESS`; the exact commands are in
 [infra/README.md § Operator steps](../infra/README.md#operator-steps) (step
 8a). AWS reviews the request by hand, usually within a day. Until then,
-verify the operator's own address to test. While in the sandbox, a send to an
-unverified address fails; the backend logs it and still answers the request
-(`trySendMail`), so the site works but the email doesn't arrive.
+verify the operator's own address to test: a send to a verified address goes
+through (the IAM policy above allows the recipient's identity). While in the
+sandbox, a send to an unverified address fails with `MessageRejected`; the
+backend still answers the request (`trySendMail`: a mail error never changes
+the response, so it can't reveal whether an account exists), so the site works
+but the email doesn't arrive. It is not silent: `trySendMail` logs one line,
+`{"event":"mail_send_failed","kind":"reset","error":"MessageRejected","status":400}`
+(the template's kind and the SES error code, never the address, the subject or
+SES's error text, which names the recipient), and the `mail-send-failed` alarm
+emails the alerts topic on the first one. Expect it to fire while you test in
+the sandbox; after production access it means real mail is failing. To find
+which: CloudWatch Logs Insights on the API and worker log groups,
+`filter event = "mail_send_failed" | stats count() by kind, error`.
+`AccessDeniedException` means the IAM policy, `MessageRejected` an unverified
+recipient (sandbox) or a suppressed one, `TooManyRequestsException` the
+sending rate.
 
 Lambda environment (set by `infra/lambda.tf`):
 
@@ -338,9 +356,11 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 - Budget and alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / free storage / connections / freeable memory, SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
-  on the backend's `self_check_failed` structured log line (a saved run
-  failing one of the engine's own invariant checks — docs/security.md §
-  Infrastructure), and the job queue's five (DLQ depth, worker errors and
+  on the backend's `self_check_failed` structured log line in both the API's
+  and the worker's log group (a saved run failing one of the engine's own
+  invariant checks — docs/security.md § Infrastructure), one on
+  `mail_send_failed` in the same two log groups (an account, invitation or
+  report email that failed to send, § Email), and the job queue's five (DLQ depth, worker errors and
   throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in

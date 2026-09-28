@@ -1,6 +1,6 @@
 import type { SeriesMeta } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { freshness, freshnessOrder, guessSeries, headerLine, newDataSinceRun } from './freshness';
+import { dataEnd, freshness, freshnessOrder, guessSeries, headerLine, newDataSinceRun } from './freshness';
 
 const meta = (id: string, kind: string, name: string, startDate: string, length: number, updatedAt?: string) =>
 	({ id, kind, name, unit: '', startDate, length, ...(updatedAt ? { updatedAt } : {}) }) as SeriesMeta & { updatedAt?: string };
@@ -46,6 +46,18 @@ describe('freshness', () => {
 		expect(freshness([...later, meta('ch', 'rain_chirps_mm', 'CHIRPS', '2025-01-01', 100)], '2025-04-12')!.latest).toBe('2025-04-10');
 	});
 
+	it('counts to the last day with a value: blank days a logger stores after it ("no reading") are no data', () => {
+		const blanks = { ...meta('r', 'rain_catchment_mm', 'Logger', '2025-01-01', 100), lastValueDate: '2025-03-31' };
+		const f = freshness([blanks], '2025-04-12')!;
+		expect(f).toMatchObject({ latest: '2025-03-31', age: 12, stale: true });
+		expect(f.behind.map((s) => s.id)).toEqual(['r']);
+		// Positive control: the same series with values to its stored end (10 Apr) is fresh.
+		expect(freshness([{ ...blanks, lastValueDate: '2025-04-10' }], '2025-04-12')).toMatchObject({ latest: '2025-04-10', stale: false });
+		// Every day blank: it ends the day before it starts. No field (an older payload): the stored end.
+		expect(dataEnd({ startDate: '2025-01-01', length: 5, lastValueDate: null })).toBe('2024-12-31');
+		expect(dataEnd({ startDate: '2025-01-01', length: 5 })).toBe('2025-01-05');
+	});
+
 	it('is stale with no date when there is no recorded rain at all', () => {
 		expect(freshness([meta('fc', 'rain_forecast_mm', '', '2025-04-01', 30)], '2025-04-12')).toMatchObject({ latest: null, age: null, stale: true });
 	});
@@ -64,6 +76,12 @@ describe('newDataSinceRun', () => {
 			meta('pan', 'evap_apan_mm', '', '2025-01-01', 91) // daily A-pan drives demand, dams and GR4J (issue #45)
 		];
 		expect(newDataSinceRun(list, run).map((s) => s.id)).toEqual(['longer', 'fixed', 'pan']);
+	});
+
+	it('blank days past the run are no new data (positive control: a value past it is)', () => {
+		const blank = { ...meta('blank', 'rain_catchment_mm', '', '2025-01-01', 95), lastValueDate: '2025-03-31' };
+		expect(newDataSinceRun([blank], run)).toEqual([]);
+		expect(newDataSinceRun([{ ...blank, lastValueDate: '2025-04-02' }], run).map((s) => s.id)).toEqual(['blank']);
 	});
 
 	it('is empty with no run', () => expect(newDataSinceRun([meta('x', 'rain_catchment_mm', '', '2025-01-01', 9)], null)).toEqual([]));

@@ -84,6 +84,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'report_schedule.acting_user_id': { excluded: 'the project’s schedule; report_schedule.configured is in auditEvents' },
 	'report_schedule.created_by': { excluded: 'the project’s schedule; report_schedule.configured is in auditEvents' },
 	'report_schedule_recipient.user_id': { section: 'reportSubscriptions' },
+	'revoked_session.user_id': { excluded: 'ids of sessions the person signed out, no other data; kept until the token would have expired, 7 days at most' },
 	'run_nomination.nominated_by': { excluded: 'the project’s evidence nomination; its maker only' },
 	'run_publication.published_by': { excluded: 'the project’s publication; publication.published is in auditEvents' },
 	'run_publication.updated_by': { excluded: 'the project’s publication; its last editor only' },

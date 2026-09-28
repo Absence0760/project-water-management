@@ -224,7 +224,13 @@ describe('the figures, and where they come from', () => {
 		expect(dams).toHaveLength(2); // the dry farm has no dam
 		expect(after.lowestDamPct).toEqual({ nodeName: dams[0]!.name, pct: dams[0]!.pct });
 
-		// A newer run leaves the published figures in place, and says there's a newer one.
+		// A forecast run is guidance beside the runs (daily with a GEFS feed): never "a newer run", nor the figures.
+		const lastRunAt = after.lastRunAt;
+		expect((await admin.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2023-12-30', values: new Array(16).fill(2) })).status).toBe(200);
+		expect((await admin.call('POST', `/projects/${pid}/runs`, { label: 'f', forecast: true })).status).toBe(201);
+		expect(byId((await portfolio(admin)).body.projects, pid)).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: false, lastRunAt });
+
+		// A newer run leaves the published figures in place, and says there's a newer one (positive control).
 		await run(admin, pid);
 		const later = byId((await portfolio(admin)).body.projects, pid)!;
 		expect(later).toMatchObject({ source: 'published', sourceRunId: runId, newerRun: true, ewr: before.ewr });
@@ -252,6 +258,8 @@ describe('the figures, and where they come from', () => {
 				[pid, admin.id, failures, dataDate, `gauge ${failures}`]
 			);
 		}
+		// Blank days after them ("no reading" from a dead sensor) are no data: "Rain to" stays on the last value.
+		expect((await admin.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-09', values: [null, null] })).status).toBe(200);
 		const row = byId((await portfolio(admin)).body.projects, pid)!;
 		expect(row.dataUntil).toBe('2024-01-08');
 		expect(row.figuresUntil).toBe('2023-12-29');

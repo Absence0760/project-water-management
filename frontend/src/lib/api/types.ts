@@ -71,6 +71,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
+	renderSession?: boolean;
 	/**
 	 * Acknowledged the farm view's notice now in force (app_user.farm_notice_version,
 	 * 093, against the engine's FARMER_NOTICE_VERSION). The farm pages show the

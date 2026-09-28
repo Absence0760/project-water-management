@@ -38,9 +38,14 @@ describe('mail transport', () => {
 		vi.stubEnv('AWS_LAMBDA_FUNCTION_NAME', 'water-management-api');
 		const info = vi.spyOn(console, 'info').mockImplementation(() => {});
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-		await sendMail(mail);
+		await sendMail({ ...mail, kind: 'reset', subject: 'Ann Smith invited you' });
 		expect(info).not.toHaveBeenCalled();
-		expect(warn.mock.calls.flat().join(' ')).not.toContain('token');
+		const warned = warn.mock.calls.flat().join(' ');
+		expect(warned).not.toContain('token');
+		// Nor the subject (an invite's names people and farms) or the address.
+		expect(warned).not.toContain('Ann Smith');
+		expect(warned).not.toContain('@');
+		expect(warned).toContain('"reset"');
 	});
 
 	it('rejects an unknown transport, and trySendMail reports failure without the body', async () => {
@@ -49,6 +54,33 @@ describe('mail transport', () => {
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 		expect(await trySendMail(mail)).toBe(false);
 		expect(error.mock.calls.flat().join(' ')).not.toContain('secret link');
+	});
+
+	it('trySendMail logs one mail_send_failed line (the alarm’s event): kind and error code, never the address, subject or error text', async () => {
+		vi.stubEnv('MAIL_TRANSPORT', 'memory');
+		// What SES answers in the sandbox: the recipient's address is in the message.
+		const rejected = Object.assign(new Error('Email address is not verified. The following identities failed the check in region AF-SOUTH-1: ann@example.com'), {
+			name: 'MessageRejected',
+			$metadata: { httpStatusCode: 400 }
+		});
+		vi.spyOn(outbox, 'push').mockImplementation(() => {
+			throw rejected;
+		});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const invite = { ...mail, kind: 'farmer_invite' as const, subject: 'Ann Smith has given you access to Rietfontein in Twee' };
+		expect(await trySendMail(invite)).toBe(false);
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(error.mock.calls[0]).toHaveLength(1);
+		expect(JSON.parse(error.mock.calls[0]![0] as string)).toEqual({ event: 'mail_send_failed', kind: 'farmer_invite', error: 'MessageRejected', status: 400 });
+		const logged = error.mock.calls.flat().join(' ');
+		for (const leak of ['@', 'Ann Smith', 'Rietfontein', 'not verified', 'secret link']) expect(logged).not.toContain(leak);
+	});
+
+	it('a mail without a kind is logged as "unknown", not skipped', async () => {
+		vi.stubEnv('MAIL_TRANSPORT', 'carrier-pigeon');
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		expect(await trySendMail(mail)).toBe(false);
+		expect(JSON.parse(error.mock.calls[0]![0] as string)).toMatchObject({ event: 'mail_send_failed', kind: 'unknown', error: 'Error' });
 	});
 
 	it('refuses half an SMTP credential', async () => {

@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { jwtVerify, SignJWT } from 'jose';
-import { queryWithoutUser } from '../db/tx.js';
+import { queryWithoutUser, withUser } from '../db/tx.js';
 import type { RenderScope } from '../reports/scope.js';
 
 export const SESSION_COOKIE = 'wm_session';
@@ -34,6 +34,8 @@ export async function signSession(userId: string, scope?: RenderScope): Promise<
 		.setIssuer(ISSUER)
 		.setIssuedAt()
 		.setExpirationTime(`${ttl}s`)
+		// The session's own id, which POST /auth/logout revokes (102_session_revocation).
+		.setJti(crypto.randomUUID())
 		.sign(secret());
 }
 
@@ -60,6 +62,10 @@ export interface Session {
 	userId: string;
 	/** Set on a render session: the one project and run it may read. */
 	scope: RenderScope | null;
+	/** The token's id (`jti`), which signing out revokes (revokeSession). */
+	jti: string;
+	/** When the token expires, epoch seconds (`exp`). */
+	expiresAt: number;
 }
 
 /** User id from a valid session cookie, or null (readSessionClaims). */
@@ -69,10 +75,11 @@ export async function readSession(c: Context): Promise<string | null> {
 
 /**
  * The session from a valid cookie, or null. Besides the signature and
- * expiry, the account must still exist and the token must have been issued
+ * expiry, the account must still exist, the token must have been issued
  * after the user's `sessions_revoked_at` watermark (set by a password reset),
  * so resetting a password signs out every existing session, render sessions
- * included. A `scope` claim that isn't a well-formed project + run (with, if
+ * included, and its id (`jti`, required) must not have been signed out
+ * (POST /auth/logout, 102_session_revocation). A `scope` claim that isn't a well-formed project + run (with, if
  * any, a well-formed baseline project + run) makes the whole token invalid: a
  * render session never widens into a full one.
  */
@@ -81,11 +88,17 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 	if (!token) return null;
 	let userId: string;
 	let issuedMs: number;
+	let jti: string;
+	let expiresAt: number;
 	let scope: RenderScope | null = null;
 	try {
 		const { payload } = await jwtVerify(token, secret(), { issuer: ISSUER, algorithms: ['HS256'] });
 		if (typeof payload.sub !== 'string' || !UUID.test(payload.sub)) return null;
 		userId = payload.sub;
+		// A token without an id couldn't be signed out, so it isn't a session (every one signSession makes has one).
+		if (typeof payload.jti !== 'string' || !UUID.test(payload.jti) || typeof payload.exp !== 'number') return null;
+		jti = payload.jti.toLowerCase();
+		expiresAt = payload.exp;
 		issuedMs = typeof payload.iat_ms === 'number' ? payload.iat_ms : (payload.iat ?? 0) * 1000;
 		if (payload.scope !== undefined) {
 			const s = payload.scope as { p?: unknown; r?: unknown; a?: unknown } | null;
@@ -102,8 +115,22 @@ export async function readSessionClaims(c: Context): Promise<Session | null> {
 	}
 	// Every authenticated request reads this: one statement, no transaction round trips.
 	// app_user is under RLS (068) and this has no user yet: the narrow lookup.
-	const [row] = await queryWithoutUser<{ sessions_revoked_at: Date | null }>('SELECT sessions_revoked_at FROM app_session_revoked_at($1)', [userId]);
-	if (!row) return null;
+	const [row] = await queryWithoutUser<{ sessions_revoked_at: Date | null; revoked: boolean }>(
+		'SELECT sessions_revoked_at, revoked FROM app_session_state($1, $2)',
+		[userId, jti]
+	);
+	if (!row || row.revoked) return null;
 	if (row.sessions_revoked_at && issuedMs < row.sessions_revoked_at.getTime()) return null;
-	return { userId, scope };
+	return { userId, scope, jti, expiresAt };
+}
+
+/**
+ * Sign out this request's session on the server: its id is recorded until
+ * the token would have expired, so a copy of the cookie stops working too
+ * (102_session_revocation). No valid session: nothing to do.
+ */
+export async function revokeSession(c: Context): Promise<void> {
+	const session = await readSessionClaims(c);
+	if (!session) return;
+	await withUser(session.userId, (db) => db.query('SELECT app_revoke_session($1, to_timestamp($2))', [session.jti, session.expiresAt]));
 }

@@ -111,9 +111,10 @@ const NO_DELETE = new Set(['run_uncertainty', 'share_link', 'note', 'api_key', '
  * Written once, never changed, but trimmed: a yield result is what its job
  * computed on its run or scenario, and the job keeps only the newest few per
  * dam (040_yield.sql). An outlook member is written once, complete, by its
- * job, and goes with its outlook (063_seasonal_outlook.sql).
+ * job, and goes with its outlook (063_seasonal_outlook.sql). A signed-out
+ * session is recorded once and aged out (102_session_revocation.sql).
  */
-const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member']);
+const NO_UPDATE = new Set(['yield_result', 'seasonal_outlook_member', 'revoked_session']);
 /**
  * Written only through a SECURITY DEFINER function, never inserted by
  * water_app: a stored run input's key is the SHA-256 the database computes
@@ -186,6 +187,7 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'report_schedule.acting_user_id': 'set null',
 	'report_schedule.created_by': 'set null',
 	'report_schedule_recipient.user_id': 'cascade',
+	'revoked_session.user_id': 'cascade',
 	'run_nomination.nominated_by': 'restrict',
 	'run_publication.published_by': 'set null',
 	'run_publication.updated_by': 'set null',
