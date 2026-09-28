@@ -166,7 +166,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				priority: z.enum(DEMAND_OBJECT_PRIORITIES).default('shared'),
 				destination: z.enum(DEMAND_OBJECT_DESTINATIONS).default('internal'),
 				enabled: z.boolean().default(true),
-				// Date windows with a factor (engine 1.16.0, issue #90 Q4): the shape here, the meaning
+				// Date windows with a factor (engine 1.17.0, issue #90 Q4): the shape here, the meaning
 				// (real dates, spans in order) in the engine's modelRuleProblems. Absent = none.
 				schedule: z
 					.array(

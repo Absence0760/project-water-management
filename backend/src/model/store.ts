@@ -330,7 +330,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			priority: o.priority,
 			destination: o.destination,
 			enabled: o.enabled,
-			// No schedule and an empty one run alike (engine 1.16.0); store both as NULL.
+			// No schedule and an empty one run alike (engine 1.17.0); store both as NULL.
 			schedule: o.schedule?.length ? o.schedule : null,
 			note: o.note
 		})),

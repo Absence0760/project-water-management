@@ -5,7 +5,7 @@
 	// Each is a monthly m³/day or a count × litres per unit per day (grossed up
 	// for losses, × a monthly profile), with a return share, a priority against
 	// the crops, a destination and an on/off schedule by date
-	// (DemandScheduleFields, engine ≥ 1.16.0). The objects are the editor's own, so edits
+	// (DemandScheduleFields, engine ≥ 1.17.0). The objects are the editor's own, so edits
 	// land in the model directly.
 	import {
 		DEMAND_NORMS,

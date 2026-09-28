@@ -1,5 +1,5 @@
--- 098_demand_object_schedule — a demand object's daily schedule (engine
--- 1.16.0, issue #90 Q4 and Q12, docs/model.md §2.7f).
+-- 100_demand_object_schedule — a demand object's daily schedule (engine
+-- 1.17.0, issue #90 Q4 and Q12, docs/model.md §2.7f).
 --
 -- The client's answer: a demand's daily on/off pattern depends on its type
 -- (fixed for a town, varying for irrigation) and is set by date, not by
@@ -25,4 +25,4 @@ ALTER TABLE demand_object
 		);
 
 COMMENT ON COLUMN demand_object.schedule IS
-	'Date windows with a factor on the daily demand (0 = off), set by date only; the later window wins, an uncovered day runs at 1. NULL = none. Engine >= 1.16.0, docs/model.md 2.7f.';
+	'Date windows with a factor on the daily demand (0 = off), set by date only; the later window wins, an uncovered day runs at 1. NULL = none. Engine >= 1.17.0, docs/model.md 2.7f.';

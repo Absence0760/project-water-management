@@ -1,4 +1,4 @@
-// A demand object's on/off schedule (engine 1.16.0, issue #90 Q4 and Q12,
+// A demand object's on/off schedule (engine 1.17.0, issue #90 Q4 and Q12,
 // docs/model.md §2.7f): give a unit's town weekends off and an Easter peak in
 // the one-node form, reorder the windows, save, reload, run, and read its
 // days off in the run's demand-objects table.

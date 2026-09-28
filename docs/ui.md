@@ -1618,7 +1618,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   from**. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). The line below gives
   its mean m³/day as the engine sizes it; **Use October's demand for every
-  month** fills a monthly row. **On/off schedule** (engine ≥ 1.16.0, issue
+  month** fills a monthly row. **On/off schedule** (engine ≥ 1.17.0, issue
   #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
   its month's demand" until a window is added; a **Days the new window
   covers** picker beside **+ Add window** adds one, off (factor 0), with a

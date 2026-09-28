@@ -2668,8 +2668,8 @@ from the WP:
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
       workbook in the private seed settings.
-- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.16.0,
-      migration 098, issue #90 Q4 and Q12). The client answered: the daily
+- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.17.0,
+      migration 100, issue #90 Q4 and Q12). The client answered: the daily
       pattern depends on the demand type (a town's is fixed, irrigation's
       varies) and the switch is set by date, not by river flow. A `schedule`
       on the object: windows (every day, a yearly MM-DD span wrapping the

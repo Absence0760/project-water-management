@@ -1290,7 +1290,7 @@ function diffModel(ma: ProjectModel | undefined, mb: ProjectModel | undefined): 
 				: `${fmtValue((x.monthlyM3Day ?? []).reduce((s, v) => s + v, 0) / 12, 0)} m³/day on average`;
 		const describe = (x: DemandObject) =>
 			`${DEMAND_OBJECT_CATEGORY_LABEL[x.category] ?? x.category}, ${size(x)}, ${x.destination === 'external' ? 'piped out' : `return ${fmtValue(x.returnPct)}`}, priority ${x.priority}${x.schedule?.length ? `, ${x.schedule.length} schedule window${x.schedule.length === 1 ? '' : 's'}` : ''}${x.enabled ? '' : ', off'}`;
-		// No schedule, null and an empty one all run the same (engine ≥ 1.16.0). Each window in a fixed
+		// No schedule, null and an empty one all run the same (engine ≥ 1.17.0). Each window in a fixed
 		// key order, since a model read back from jsonb has its keys in Postgres's order, not the editor's.
 		const scheduleOf = (x: DemandObject) =>
 			x.schedule?.length

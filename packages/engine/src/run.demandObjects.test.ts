@@ -169,10 +169,10 @@ describe('demand objects in a run (engine 1.7.0)', () => {
 
 const window = (over: Partial<DemandScheduleWindow> = {}): DemandScheduleWindow => ({ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 0, ...over });
 
-describe('a demand object’s schedule (engine 1.16.0, issue #90 Q4)', () => {
-	it('is engine 1.16.0 or later', () => {
+describe('a demand object’s schedule (engine 1.17.0, issue #90 Q4)', () => {
+	it('is engine 1.17.0 or later', () => {
 		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
-		expect(maj! > 1 || (maj === 1 && min! >= 16)).toBe(true);
+		expect(maj! > 1 || (maj === 1 && min! >= 17)).toBe(true);
 	});
 
 	// 2020-10-01 was a Thursday: the run is Thu, Fri, Sat, Sun. Plenty of water every day.
@@ -249,7 +249,7 @@ describe('demand objects on random networks', () => {
 			expect(sameOutput({ ...a, summary: { ...a.summary, warnings: [] } }, { ...b, summary: { ...b.summary, warnings: [] } }), `seed ${seed}`).toBe(true);
 		}
 		expect(withObjects).toBeGreaterThan(5);
-		// The fuzz gives half the objects a schedule (engine ≥ 1.16.0), so the checks above ran on some.
+		// The fuzz gives half the objects a schedule (engine ≥ 1.17.0), so the checks above ran on some.
 		let scheduled = 0;
 		for (let seed = 1; seed <= 60; seed++) scheduled += (randomInput(seed, { maxDays: 400 }).model.demandObjects ?? []).filter((o) => o.schedule?.length).length;
 		expect(scheduled).toBeGreaterThan(5);

@@ -1292,7 +1292,7 @@ export const DEMAND_OBJECT_DESTINATIONS = ['internal', 'external'] as const;
 export type DemandObjectDestination = (typeof DEMAND_OBJECT_DESTINATIONS)[number];
 
 /**
- * Which days a demand object's schedule window covers (engine ≥ 1.16.0,
+ * Which days a demand object's schedule window covers (engine ≥ 1.17.0,
  * docs/model.md §2.7f): 'always' every day (with weekdays, a weekly
  * pattern); 'yearly' a calendar span each year, `from`–`to` as MM-DD,
  * wrapping the year end when `from` is later; 'range' once, `from`–`to` as
@@ -1348,7 +1348,7 @@ export interface DemandObject {
 	/** false = kept on record but not modelled (no demand, no results). */
 	enabled: boolean;
 	/**
-	 * Date windows with a factor on its daily demand (engine ≥ 1.16.0): 0 =
+	 * Date windows with a factor on its daily demand (engine ≥ 1.17.0): 0 =
 	 * off that day, so no supply and no return. Null or absent = every day
 	 * at its month's demand.
 	 */
@@ -1650,7 +1650,7 @@ export interface DemandObjectSummary {
 	avgReturnedM3Day: number;
 	/** Days it got less than its demand (beyond float noise). */
 	daysShort: number;
-	/** Days its schedule switched it off (factor 0; engine ≥ 1.16.0, only on an object with a schedule). Never counted as short. */
+	/** Days its schedule switched it off (factor 0; engine ≥ 1.17.0, only on an object with a schedule). Never counted as short. */
 	daysOff?: number;
 }
 

@@ -79,7 +79,7 @@ describe('demandObjectsByNode', () => {
 	});
 });
 
-describe('planObjects with a schedule (engine 1.16.0)', () => {
+describe('planObjects with a schedule (engine 1.17.0)', () => {
 	const sched = obj({ schedule: [{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [7], factor: 0 }] });
 	it('multiplies each day by its schedule factor and keeps the factors', () => {
 		// Epoch day 3 = 1970-01-04, a Sunday.

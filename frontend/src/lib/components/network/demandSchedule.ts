@@ -1,5 +1,5 @@
 // The demand-object schedule editor's list edits (DemandScheduleFields.svelte,
-// engine ≥ 1.16.0, docs/model.md §2.7f): a new window of each span with its
+// engine ≥ 1.17.0, docs/model.md §2.7f): a new window of each span with its
 // starting values, ticking a weekday on or off, and moving a window, whose
 // place in the list matters since the later of two windows covering a day
 // wins. Pure, so the rules are tested without mounting the form.

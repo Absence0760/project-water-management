@@ -2851,7 +2851,7 @@ regression suite is unchanged.
 | `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
-| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.16.0, migration 098; below); null or empty = every day at its month's demand |
+| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 100; below); null or empty = every day at its month's demand |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,
@@ -2898,7 +2898,7 @@ conservative reading where it didn't settle them):
   user is off the river are still open, so no off *reason* is modelled
   ([followups.md](./followups.md) "Demand objects: the off reason").
 
-**The schedule** (engine ≥ 1.16.0, issue #90 Q4 and Q12, `network/demandSchedule.ts`).
+**The schedule** (engine ≥ 1.17.0, issue #90 Q4 and Q12, `network/demandSchedule.ts`).
 The client's answer: the daily pattern depends on the demand type, fixed
 for a town, varying for irrigation, and it is set by date, not by river
 flow. So an object carries a list of windows, each a set of days and a
@@ -2936,7 +2936,7 @@ switching stays with the hands-off-flow rule (WP-3.8).
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
 supplied, return and days short, and, on an object with a schedule, its
-days off, engine ≥ 1.16.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
+days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so.
 
 **Checks.** `checkWorkings` recomputes each object's demand from the model
@@ -2949,7 +2949,7 @@ generator gives 25 % of networks up to three objects on half their units
 (monthly or per unit, any class, any return share, some piped out, some
 switched off, now and then one on a gauge or user, which the run skips with a
 warning), and half the objects a schedule of up to four windows of every
-span, overlapping, from off to a peak (engine ≥ 1.16.0); the doubled-crop-area law doubles the objects' demand too, since a
+span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area law doubles the objects' demand too, since a
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction. Hand examples: `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter

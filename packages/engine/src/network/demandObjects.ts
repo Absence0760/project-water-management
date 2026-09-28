@@ -139,7 +139,7 @@ export interface PlanObjects {
 	ids: string[];
 	/** Each object's daily abstraction demand (m³/day), after any demand factor and its schedule. */
 	demand: Float64Array[];
-	/** Each object's schedule factor per day (engine ≥ 1.16.0); null without a schedule that runs. */
+	/** Each object's schedule factor per day (engine ≥ 1.17.0); null without a schedule that runs. */
 	schedule: (Float64Array | null)[];
 	/** Each object's return share of what it gets (0 when external). */
 	returnShare: Float64Array;
@@ -154,7 +154,7 @@ export interface PlanObjects {
  * value (`wy[t]` = the day's water-year month index), times the node's
  * demand factor from run day `factorFrom` on (the demand.scale scenario op,
  * as for the crop requirement), times its schedule's factor that day
- * (engine ≥ 1.16.0; `day0` = the run's first epoch day, needed only when an
+ * (engine ≥ 1.17.0; `day0` = the run's first epoch day, needed only when an
  * object has a schedule). Warnings name what runs differently from what was
  * entered.
  */

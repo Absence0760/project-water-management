@@ -105,7 +105,7 @@ describe('modelRuleIssues', () => {
 				o('short', 'f', { monthlyM3Day: [1, 2] }),
 				o('noCount', 'f', { sizing: 'perUnit', monthlyM3Day: null }),
 				o('ext', 'f', { destination: 'external', returnPct: 0.3 }),
-				// A schedule (engine 1.16.0): one good window and one bad; and one with too many windows.
+				// A schedule (engine 1.17.0): one good window and one bad; and one with too many windows.
 				o('sched', 'f', { schedule: [win({ weekdays: [6, 7] }), win({ span: 'yearly', from: '12-01', to: null })] }),
 				o('many', 'f', { schedule: Array.from({ length: 25 }, () => win()) })
 			]

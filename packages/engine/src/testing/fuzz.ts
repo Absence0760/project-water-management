@@ -351,7 +351,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	addSupply(new Rng(seed ^ 0x5be0cd19), nodes);
 	// Demand objects (engine ≥ 1.7.0), from their own stream and last of all, so every seed's rest is what it was.
 	const demandObjects = randomDemandObjects(new Rng(seed ^ 0x9e3779b9), nodes);
-	// Their schedules (engine ≥ 1.16.0), from their own stream, so the objects themselves are what they were.
+	// Their schedules (engine ≥ 1.17.0), from their own stream, so the objects themselves are what they were.
 	addSchedules(new Rng(seed ^ 0x510e527f), demandObjects, start, days);
 	// Monthly transfer rates (engine ≥ 1.14.0), from their own stream, after everything else.
 	addMonthlyRates(new Rng(seed ^ 0x6a09e667), transfers);
@@ -590,7 +590,7 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 }
 
 /**
- * Schedules on half the demand objects (engine ≥ 1.16.0, docs/model.md
+ * Schedules on half the demand objects (engine ≥ 1.17.0, docs/model.md
  * §2.7f): up to four windows each, of every span (every day, yearly spans
  * that wrap the year end or not, a one-off range in or around the run,
  * Easter), on some weekdays or all, with factors from off (0, over-weighted)

@@ -20,7 +20,7 @@
 	// Each unit's demand objects (engine ≥ 1.7.0), unit by unit.
 	const objects = $derived((summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o }))));
 	const PRIORITY: Record<string, string> = { first: 'first', shared: 'with the crops', last: 'last' };
-	// Days a schedule switched an object off (engine ≥ 1.16.0): a column only when one has a schedule.
+	// Days a schedule switched an object off (engine ≥ 1.17.0): a column only when one has a schedule.
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
 </script>
 

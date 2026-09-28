@@ -271,7 +271,7 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), destination: 'external', returnPct: 0.2 }))).join()).toMatch(/nothing returns/);
 	});
 
-	describe('a schedule (engine 1.16.0, issue #90 Q4)', () => {
+	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
 		const monthly = { monthlyM3Day: new Array(12).fill(10) };
 		it('is none by default, and fills a window’s blanks', () => {
 			expect(ModelBody.parse(body(monthly)).demandObjects![0]!.schedule).toBeNull();

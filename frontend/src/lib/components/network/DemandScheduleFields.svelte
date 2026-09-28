@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A demand object's schedule (engine ≥ 1.16.0, issue #90 Q4, docs/model.md
+	// A demand object's schedule (engine ≥ 1.17.0, issue #90 Q4, docs/model.md
 	// §2.7f): date windows, each with a factor on the object's demand on the
 	// days it covers (0 = off). A window covers every day, a span of dates each
 	// year, a one-off date range or days around Easter, optionally on some

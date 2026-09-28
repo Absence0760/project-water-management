@@ -1,4 +1,4 @@
-// A demand object's daily schedule (engine ≥ 1.16.0, issue #90 Q4 and Q12,
+// A demand object's daily schedule (engine ≥ 1.17.0, issue #90 Q4 and Q12,
 // docs/model.md §2.7f): recurring date windows, each with a factor on the
 // object's demand for the days it covers (0 = off). Set by date only (the
 // client's answer to Q12), never by river flow. A window covers every day,

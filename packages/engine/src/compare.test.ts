@@ -580,7 +580,7 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Demand object "Town" removed from Rooikloof (was Municipal (town), 600 m³/day on average, return 0.5, priority first)']);
 	});
 
-	it('lists a demand object’s schedule change, and reads no schedule, null and an empty one alike (engine 1.16.0)', () => {
+	it('lists a demand object’s schedule change, and reads no schedule, null and an empty one alike (engine 1.17.0)', () => {
 		const a = snapshot();
 		const town = {
 			id: 'do',

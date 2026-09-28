@@ -1029,7 +1029,7 @@ internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, and an external one with a return share above 0.
 
-A demand object's `schedule` (engine ≥ 1.16.0, migration 098, issue #90 Q4,
+A demand object's `schedule` (engine ≥ 1.17.0, migration 100, issue #90 Q4,
 [model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
 default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
 ('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo
@@ -1348,7 +1348,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
   name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
   avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
-  in id order; `daysOff`, engine ≥ 1.16.0, only on an object with a schedule:
+  in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
   the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:

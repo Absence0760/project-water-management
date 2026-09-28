@@ -71,7 +71,7 @@ interface ObjectColumns {
 	returnShare: number[];
 	tier: number[];
 	monthly: Float64Array[];
-	/** Each object's schedule factor per day (engine ≥ 1.16.0), recomputed from the model; null without one. */
+	/** Each object's schedule factor per day (engine ≥ 1.17.0), recomputed from the model; null without one. */
 	schedule: (Float64Array | null)[];
 }
 function objectColumns(input: ModelInput, n: NetworkNode, get: SeriesMap, run: Pick<ModelOutput, 'startDate' | 'days'>): ObjectColumns | string | null {
