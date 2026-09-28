@@ -63,7 +63,7 @@ export const ACCOUNT_LINES: AccountLine[] = [
 	{ key: 'groundwaterM3', label: 'Groundwater pumped', side: 'in', optional: true },
 	{ key: 'transfersM3', label: 'Transfers (net)', side: 'in', optional: true },
 	{ key: 'landCoverM3', label: 'Removed by land cover', side: 'out', optional: true },
-	{ key: 'unallocatedM3', label: 'Natural flow not allocated to a unit', side: 'out', optional: true },
+	{ key: 'unallocatedM3', label: 'Natural flow not allocated to a hydrological unit', side: 'out', optional: true },
 	{ key: 'consumptiveIrrigationM3', label: 'Consumptive irrigation', side: 'out' },
 	{ key: 'otherUseM3', label: 'Other users (taken − returned)', side: 'out', optional: true },
 	{ key: 'damEvaporationM3', label: 'Dam evaporation', side: 'out', optional: true },

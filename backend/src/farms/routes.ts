@@ -10,6 +10,10 @@
 // (app_accept_invites). POST /farmers/bulk does the same for up to 200 CSV
 // rows at once, matching farms by name.
 //
+// POST /farmers also adds or invites a licence applicant (`role:
+// 'contributor'`, WP-3.3) with the farms they hold (097_contributor_invite_farms):
+// an irrigator applying to raise their own dam joins with their farm linked.
+//
 // A farmer leaves (or an owner removes one) through DELETE /members/:userId:
 // their links go with the membership (farm_link's foreign key cascades). A
 // pending invite is revoked through DELETE /invites/:inviteId, and its farms
@@ -31,7 +35,10 @@ import { requireRole, UUID } from '../projects/access.js';
 export const MAX_FARMS_PER_FARMER = 50;
 const NodeIds = z.array(z.string().uuid()).min(1).max(MAX_FARMS_PER_FARMER);
 const Email = z.string().trim().toLowerCase().email().max(254);
-const AddBody = z.object({ email: Email, nodeIds: NodeIds, locale: z.enum(LOCALES).default('en') });
+/** The farm-holding roles: a farmer, or a licence applicant with their farms (a contributor, WP-3.3). */
+const FarmRole = z.enum(['farmer', 'contributor']);
+type FarmRole = z.infer<typeof FarmRole>;
+const AddBody = z.object({ email: Email, nodeIds: NodeIds, locale: z.enum(LOCALES).default('en'), role: FarmRole.default('farmer') });
 const LinksBody = z.object({ nodeIds: NodeIds });
 
 /** Rows per bulk request: a WUA has 20–60 farmers, and 60 rows answer in well under 5 s locally. */
@@ -56,11 +63,13 @@ export interface ActiveFarmer {
 	nodeIds: string[];
 }
 
-/** A pending farmer invite; `expired` once past its expiry (it can be re-sent). */
+/** A pending farmer invite, or an applicant's with farms (097); `expired` once past its expiry (it can be re-sent). */
 export interface InvitedFarmer {
 	status: 'invited' | 'expired';
 	inviteId: string;
 	email: string;
+	/** What they join as. */
+	role: FarmRole;
 	nodeIds: string[];
 	invitedBy: string;
 	expiresAt: string;
@@ -84,16 +93,21 @@ async function activeFarmers(db: Db, projectId: string): Promise<ActiveFarmer[]>
 	return rows.map((r) => ({ status: 'active', ...r }));
 }
 
-/** Pending farmer invites. RLS on invite and invite_node shows them to owners only; anyone else gets none. */
+/**
+ * Pending farmer invites, and applicant invites that carry farms (an
+ * applicant's without farms is only on the members list). RLS on invite and
+ * invite_node shows them to owners only; anyone else gets none.
+ */
 async function invitedFarmers(db: Db, projectId: string, inviteId?: string): Promise<InvitedFarmer[]> {
-	const { rows } = await db.query<{ inviteId: string; email: string; nodeIds: string[]; invitedBy: string; expires_at: Date; locale: Locale }>(
-		`SELECT i.id AS "inviteId", i.email, u.display_name AS "invitedBy", i.expires_at, i.locale,
+	const { rows } = await db.query<{ inviteId: string; email: string; role: FarmRole; nodeIds: string[]; invitedBy: string; expires_at: Date; locale: Locale }>(
+		`SELECT i.id AS "inviteId", i.email, i.project_role::text AS role, u.display_name AS "invitedBy", i.expires_at, i.locale,
 			coalesce(array_agg(n.node_id ORDER BY n.node_id) FILTER (WHERE n.node_id IS NOT NULL), '{}') AS "nodeIds"
 		 FROM invite i
 		 JOIN app_user u ON u.id = i.invited_by
 		 LEFT JOIN invite_node n ON n.invite_id = i.id
-		 WHERE i.project_id = $1 AND i.project_role = 'farmer' AND ($2::uuid IS NULL OR i.id = $2)
+		 WHERE i.project_id = $1 AND i.project_role IN ('farmer', 'contributor') AND ($2::uuid IS NULL OR i.id = $2)
 		 GROUP BY i.id, u.display_name
+		 HAVING i.project_role = 'farmer' OR count(n.node_id) > 0
 		 ORDER BY i.created_at, i.email`,
 		[projectId, inviteId ?? null]
 	);
@@ -132,21 +146,29 @@ async function setLinks(db: Db, projectId: string, userId: string, nodeIds: stri
 	);
 }
 
-/** Add a verified account as a farmer (a membership, then its links), superseding any pending invite. */
-async function addFarmer(db: Db, projectId: string, user: { id: string; email: string; display_name: string }, nodeIds: string[], actor: string) {
-	await db.query(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, 'farmer')`, [projectId, user.id]);
+/** Add a verified account as a farmer or applicant (a membership, then its links), superseding any pending invite. */
+async function addFarmer(
+	db: Db,
+	projectId: string,
+	user: { id: string; email: string; display_name: string },
+	nodeIds: string[],
+	actor: string,
+	role: FarmRole = 'farmer'
+) {
+	await db.query(`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3)`, [projectId, user.id, role]);
 	await dropInvite(db, 'project', projectId, user.email);
-	await recordAudit(db, projectId, 'member.added', { userId: user.id, displayName: user.display_name, role: 'farmer' });
+	await recordAudit(db, projectId, 'member.added', { userId: user.id, displayName: user.display_name, role });
 	await setLinks(db, projectId, user.id, nodeIds, actor);
 	await recordLinkChanges(db, projectId, [], (await farmLinks(db, projectId)).filter((l) => l.userId === user.id), 'farmers_set');
 }
 
 /**
- * Invite `email` as a farmer of `nodeIds`: the invite (and its email) from
+ * Invite `email` as a farmer (or an applicant, `role`) of `nodeIds`: the invite (and its email) from
  * inviteByEmail, then its invite_node rows. `replace` sets the invite's farms
  * to exactly these (a re-invite from the single form); otherwise they are
  * added to the farms it already names (bulk rows, one farm each). The email
- * names every farm the invite will link.
+ * names every farm the invite will link; an applicant's is the ordinary
+ * invite email for their role (the farmer email speaks to a farmer).
  */
 async function inviteFarmer(
 	db: Db,
@@ -155,7 +177,8 @@ async function inviteFarmer(
 	nodeIds: string[],
 	locale: Locale,
 	unverifiedUserId: string | undefined,
-	replace: boolean
+	replace: boolean,
+	role: FarmRole = 'farmer'
 ): Promise<{ invite: InvitedFarmer; mail: PendingMail }> {
 	let farms = nodeIds;
 	if (!replace) {
@@ -167,10 +190,8 @@ async function inviteFarmer(
 		farms = [...new Set([...rows.map((r) => r.node_id), ...nodeIds])];
 	}
 	const { rows: named } = await db.query<{ name: string }>('SELECT name FROM node WHERE id = ANY($1::uuid[]) ORDER BY name', [farms]);
-	const { invite, mail } = await inviteByEmail(db, 'project', projectId, email, 'farmer', unverifiedUserId, {
-		farms: named.map((r) => r.name),
-		locale
-	});
+	const farmer = role === 'farmer' ? { farms: named.map((r) => r.name), locale } : undefined;
+	const { invite, mail } = await inviteByEmail(db, 'project', projectId, email, role, unverifiedUserId, farmer);
 	await db.query('DELETE FROM invite_node WHERE invite_id = $1 AND NOT (node_id = ANY($2::uuid[]))', [invite.id, farms]);
 	await db.query(
 		`INSERT INTO invite_node (invite_id, project_id, node_id)
@@ -179,7 +200,7 @@ async function inviteFarmer(
 		[invite.id, projectId, farms]
 	);
 	// No `mailed` flag (see POST /members): it would tell the owner whether the address has an account.
-	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role: 'farmer', farms: farms.length });
+	await recordAudit(db, projectId, 'invite.sent', { inviteId: invite.id, email: maskEmail(email), role, farms: farms.length });
 	return { invite: (await invitedFarmers(db, projectId, invite.id))[0]!, mail };
 }
 
@@ -223,10 +244,10 @@ export const farmerRoutes = new Hono<AuthEnv>()
 			// Same rule as adding a member: only an account that proved it owns the
 			// address is added directly, so pre-registering a farmer's email can't
 			// get you their farm. Anyone else is invited.
-			if (!user?.verified) return { invited: await inviteFarmer(db, id, body.email, nodeIds, body.locale, user?.id, true) };
+			if (!user?.verified) return { invited: await inviteFarmer(db, id, body.email, nodeIds, body.locale, user?.id, true, body.role) };
 			const { rows: member } = await db.query('SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2', [id, user.id]);
 			if (member[0]) throw new ApiError(409, 'already a member');
-			await addFarmer(db, id, user, nodeIds, c.get('userId'));
+			await addFarmer(db, id, user, nodeIds, c.get('userId'), body.role);
 			return { farmer: (await activeFarmers(db, id)).find((f) => f.userId === user.id)! };
 		});
 		// Mail goes out after the transaction commits, and never fails the request.

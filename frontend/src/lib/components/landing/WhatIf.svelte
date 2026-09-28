@@ -24,7 +24,7 @@
 	const scaleText = (i: number) => `×${fmt(w.damScale[i]!, w.damScale[i]! % 1 ? 2 : 0).replace(/0$/, '')}`;
 
 	const takeaway = $derived.by(() => {
-		if (ha === 0 && dam === 0) return t('This is the farm as it is today. Move a slider to change it.');
+		if (ha === 0 && dam === 0) return t('This is the hydrological unit as it is today. Move a slider to change it.');
 		const days = Math.round(moreDays);
 		const river =
 			days > 0
@@ -34,10 +34,10 @@
 					: t('The river is below the reserve about as often as today');
 		const farm =
 			Math.abs(supplyChange) < 0.5
-				? t('and the farm gets about as much of what it needs.')
+				? t('and the hydrological unit gets about as much of what it needs.')
 				: supplyChange > 0
-					? t('and the farm gets {points} points more of what it needs.', { points: fmt(supplyChange) })
-					: t('and the farm gets {points} points less of what it needs.', { points: fmt(-supplyChange) });
+					? t('and the hydrological unit gets {points} points more of what it needs.', { points: fmt(supplyChange) })
+					: t('and the hydrological unit gets {points} points less of what it needs.', { points: fmt(-supplyChange) });
 		return `${river}, ${farm}`;
 	});
 	/**
@@ -54,7 +54,7 @@
 	<div class="copy">
 		<h2 id="whatif-title">{t('Try a what-if')}</h2>
 		<p>
-			{t('{farm}, a farm in the example catchment, grows {ha} ha of apples. It wants to plant more, and could build a bigger dam. What would that do to the farm, and to the river?', { farm: w.farm, ha: w.baseHa })}
+			{t('{farm}, a hydrological unit in the example catchment, grows {ha} ha of apples. It wants to plant more, and could build a bigger dam. What would that do to the hydrological unit, and to the river?', { farm: w.farm, ha: w.baseHa })}
 		</p>
 		<p class="muted small">{t('Worked out in advance from {runs} runs of the model.', { runs: w.extraHa.length * w.damScale.length })}</p>
 	</div>
@@ -72,7 +72,7 @@
 		<div class="results" aria-live="polite">
 			<div class="figure">
 				<p class="what">{t('Irrigation supplied')}</p>
-				<p class="value">{t('{pct} % of what the farm needs', { pct: fmt(cell.supplied) })}</p>
+				<p class="value">{t('{pct} % of what the hydrological unit needs', { pct: fmt(cell.supplied) })}</p>
 				<div class="bars" aria-hidden="true">
 					<span class="bar-label">{t('Today')}</span>
 					<span class="track"><span class="bar today" style:width={barWidth(today.supplied, 100)}></span></span>

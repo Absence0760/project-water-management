@@ -43,7 +43,7 @@
 		farmHref: string;
 	} = $props();
 
-	const KIND = { farm: 'unit', gauge: 'gauge', user: 'other water user' } as const;
+	const KIND = { farm: 'hydrological unit', gauge: 'gauge', user: 'other water user' } as const;
 	const isOutlet = $derived(node.downstreamNodeId === null);
 	const downstream = $derived(nodes.find((n) => n.id === node.downstreamNodeId)?.name || '(unnamed)');
 	const name = $derived(node.name || '(unnamed)');

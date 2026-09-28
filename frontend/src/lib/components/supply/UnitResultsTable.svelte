@@ -14,7 +14,7 @@
 		startDate,
 		endDate,
 		heading = 'h3',
-		title = 'Units',
+		title = 'Hydrological units',
 		headingId
 	}: {
 		farms: readonly FarmSummary[];
@@ -57,26 +57,26 @@
 	const ariaSort = (k: FarmSortKey) => (sortKey === k ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined);
 
 	const COLS: { key: FarmSortKey; label: string; unit: string; title: string }[] = [
-		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the unit takes to meet it).' },
+		{ key: 'avgDemandM3Day', label: 'Demand', unit: 'm³/day', title: 'Mean abstraction demand over the run: the crop water requirement after effective rainfall ÷ irrigation efficiency (what the hydrological unit takes to meet it).' },
 		{ key: 'avgSuppliedM3Day', label: 'Supplied', unit: 'm³/day', title: 'Mean irrigation water actually supplied from dam and river.' },
 		{ key: 'avgDeficitM3Day', label: 'Deficit', unit: 'm³/day', title: 'Mean demand not supplied (demand − supplied).' },
-		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; units under ${SUPPLY_TARGET * 100} % are flagged.` },
-		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this unit that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).' }, // gitleaks:allow (a field name, not a secret)
-		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this unit was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
+		{ key: 'fractionSupplied', label: 'Supplied', unit: '% of demand', title: `Share of demand supplied; hydrological units under ${SUPPLY_TARGET * 100} % are flagged.` },
+		{ key: 'avgEwrShortfallM3Day', label: 'EWR charge', unit: 'm³/day charged', title: 'Mean share of the shortfall at the EWR sites below this hydrological unit that is charged to it, pro rata to its net impact, as a positive volume, as in the curtailment table (engine 0.17.0; older runs: the reach shortfall it adds).' }, // gitleaks:allow (a field name, not a secret)
+		{ key: 'daysEwrNotMet', label: 'EWR charged', unit: 'days', title: 'Days on which this hydrological unit was charged part of an EWR shortfall (older runs: days it added to a reach shortfall).' }
 	];
 </script>
 
 <svelte:element this={heading} class="units-h" id={headingId}>{title}</svelte:element>
 {#if farms.length === 0}
-	<p class="muted">This run has no unit results.</p>
+	<p class="muted">This run has no hydrological unit results.</p>
 {:else}
 	<div class="farm-head">
 		<p class="muted small">
 			{#if shortCount}
 				<span class="flag-key" aria-hidden="true"></span>
-				{shortCount} of {farms.length} unit{farms.length === 1 ? '' : 's'} received less than {fmtPct(SUPPLY_TARGET, 0)} of demand (highlighted).
+				{shortCount} of {farms.length} hydrological unit{farms.length === 1 ? '' : 's'} received less than {fmtPct(SUPPLY_TARGET, 0)} of demand (highlighted).
 			{:else}
-				All units received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
+				All hydrological units received at least {fmtPct(SUPPLY_TARGET, 0)} of demand.
 			{/if}
 			<span data-testid="farms-period">Daily averages over {wholeRecord}; the curtailment targets cover the reporting window.</span> Click a heading to sort.
 		</p>
@@ -89,7 +89,7 @@
 			<thead>
 				<tr>
 					<th scope="col" aria-sort={ariaSort('name')}>
-						<button type="button" class="sort" onclick={() => sortBy('name')}>Unit{#if sortKey === 'name'}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
+						<button type="button" class="sort" onclick={() => sortBy('name')}>Hydrological unit{#if sortKey === 'name'}<span class="dir" aria-hidden="true">{sortDir === 'asc' ? '▲' : '▼'}</span>{/if}</button>
 					</th>
 					{#each COLS as col (col.key)}
 						<th scope="col" class="num" aria-sort={ariaSort(col.key)} title={col.title}>
@@ -124,7 +124,7 @@
 			</tbody>
 			<tfoot>
 				<tr>
-					<th scope="row">All units</th>
+					<th scope="row">All hydrological units</th>
 					<td class="num">{fmtNum(totals.demand)}</td>
 					<td class="num">{fmtNum(totals.supplied)}</td>
 					<td class="num">{fmtNum(totals.deficit)}</td>

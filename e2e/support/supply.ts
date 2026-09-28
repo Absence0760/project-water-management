@@ -37,7 +37,7 @@ export async function seedSupplyProject(request: APIRequestContext, name: string
 /** Opens Units & supply (with `query`, e.g. `&run=…&unit=…`) and waits for the tiles and the drawn chart. */
 export async function openSupply(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=supply${query}`);
-	await expect(page.getByRole('heading', { level: 1, name: 'Units & supply' })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();
 	await expect(supplyTiles(page)).toHaveCount(4);
 	await expect(unitChart(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 }
@@ -49,7 +49,7 @@ export const supplyTiles = (page: Page) => page.locator('dl.kpis > [data-kpi]');
 export const supplyTile = (page: Page, id: 'supplied' | 'below' | 'week' | 'shortfall') => page.locator(`[data-kpi="${id}"]`);
 
 /** The unit cards, in page order. */
-export const unitCards = (page: Page) => page.getByRole('list', { name: 'Units' }).getByRole('listitem').filter({ has: page.locator('a.name') });
+export const unitCards = (page: Page) => page.getByRole('list', { name: 'Hydrological units' }).getByRole('listitem').filter({ has: page.locator('a.name') });
 
 /** The picked unit's panel. */
-export const unitChart = (page: Page) => page.getByRole('region', { name: /^Unit detail: / });
+export const unitChart = (page: Page) => page.getByRole('region', { name: /^Hydrological unit detail: / });

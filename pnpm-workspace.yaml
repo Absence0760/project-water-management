@@ -4,6 +4,16 @@ packages:
   - packages/*
   - e2e
 
+# Supply-chain delay: pnpm refuses to resolve a registry version published
+# less than 7 days ago (10080 minutes; pnpm >= 10.16, packageManager pins
+# 10.33.2). Most malicious releases are caught and unpublished within days.
+# Matches the 7-day Dependabot cooldown (.github/dependabot.yml). It applies
+# when pnpm resolves (a new dependency, `pnpm update`, a lockfile refresh);
+# `--frozen-lockfile` installs only what the lockfile already names. If a
+# fix can't wait a week, name that version under minimumReleaseAgeExclude
+# with a comment and remove it once the week has passed.
+minimumReleaseAge: 10080
+
 overrides:
   # @sveltejs/kit (2.70.3, the latest) still asks for cookie ^0.6.0, which has
   # GHSA-pxg6-pf52-xh8x (out-of-bounds characters accepted in a cookie's name,

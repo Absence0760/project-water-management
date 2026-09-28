@@ -19,12 +19,11 @@ import type { CurtailmentFarm, CurtailmentSummary, CurtailmentUser } from '@wate
 import { fmtDemandLeft, fmtVol } from './curtailment';
 
 /**
- * How the middle stage shares the water. Only the equal share exists: every
- * farm gets the same fraction of its demand (the engine's equitable share).
- * A per-category restriction (a % cut per user category, as DWS gazettes
- * restrictions) waits for the client's answer to plan.md O4; it would be a
- * second member of this union, labelled as a what-if, with its own
- * `shareStage` branch.
+ * How the middle stage shares the water: the equal share, every farm the
+ * same fraction of its demand (the engine's equitable share). The client
+ * confirmed one equal % for every category (plan.md O4, issue #90), so no
+ * per-category restriction is built; one would be a second member of this
+ * union, labelled as a what-if, with its own `shareStage` branch.
  */
 export type ShareRule = { kind: 'equal' };
 

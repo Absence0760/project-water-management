@@ -1,6 +1,6 @@
 // The numeric node fields, in the order the editor shows them, with units and
 // plain-language help. Percent fields are stored 0–1 and shown as %.
-import { IRRIGATION_SYSTEMS, type NetworkNode } from '@water-management/engine';
+import { IRRIGATION_SYSTEMS, type IrrigationSystemId, type NetworkNode } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 
 export type NodeNumberKey =
@@ -61,7 +61,7 @@ export const NODE_FIELDS: NodeField[] = [
 		unit: 'km²',
 		group: 'area',
 		aria: (n) => `Area of ${n}, km²`,
-		help: "The node's own runoff area, excluding nodes upstream of it. Unit areas set the area-based flow shares and add up to the catchment area."
+		help: "The node's own runoff area, excluding nodes upstream of it. Hydrological unit areas set the area-based flow shares and add up to the catchment area."
 	},
 	{
 		key: 'areaHiKm2',
@@ -86,7 +86,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'dam',
 		farmOnly: true,
 		aria: (n) => `Dam capacity of ${n}, m³`,
-		help: 'Full supply capacity of the unit’s dam. 0 means no dam: demand is met from the river only.'
+		help: 'Full supply capacity of the hydrological unit’s dam. 0 means no dam: demand is met from the river only.'
 	},
 	{
 		key: 'damInitialPct',
@@ -174,7 +174,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'routing',
 		farmOnly: true,
 		aria: (n) => `Own runoff entering the dam at ${n}, %`,
-		help: "Share of the unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
+		help: "Share of the hydrological unit's own runoff that enters the dam (the part of its area above the dam wall). The rest flows past below the dam."
 	},
 	{
 		key: 'divertCapacityM3Day',
@@ -192,7 +192,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'irrigation',
 		farmOnly: true,
 		aria: (n) => `Irrigation efficiency of ${n}, %`,
-		help: 'Share of the water abstracted that reaches the crop. The unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
+		help: 'Share of the water abstracted that reaches the crop. The hydrological unit abstracts crop requirement ÷ efficiency. Must be above 0 %; 100 % means no application losses.'
 	},
 	{
 		key: 'lossReturnFraction',
@@ -201,7 +201,7 @@ export const NODE_FIELDS: NodeField[] = [
 		group: 'irrigation',
 		farmOnly: true,
 		aria: (n) => `Share of irrigation losses returning to the river at ${n}, %`,
-		help: 'Share of the application losses that drains back to the river below the unit the same day (return flow). The rest leaves the catchment.'
+		help: 'Share of the application losses that drains back to the river below the hydrological unit the same day (return flow). The rest leaves the catchment.'
 	},
 	{
 		key: 'flowShareManual',
@@ -211,7 +211,7 @@ export const NODE_FIELDS: NodeField[] = [
 		farmOnly: true,
 		nullable: true,
 		aria: (n) => `Manual flow share of ${n}, %`,
-		help: "This unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; unit shares should add up to 100 %."
+		help: "This hydrological unit's share of catchment natural flow and of the EWR. Only used when the flow-share method (Settings & calibration) is Manual; hydrological unit shares should add up to 100 %."
 	},
 	{
 		key: 'boreholeCapacityM3Day', // gitleaks:allow (a field name, not a secret)
@@ -310,10 +310,12 @@ export function damHints(n: Pick<NetworkNode, 'kind' | 'damCapacityM3' | 'damMin
 }
 
 /**
- * The irrigation system whose indicative efficiency (IRRIGATION_SYSTEMS) this
- * value is, for the node form's helper; null for any other value.
+ * The irrigation system whose SABI 2021 efficiency (IRRIGATION_SYSTEMS) this
+ * value is, for the node form's helper; null for any other value (a farm
+ * saved with an efficiency from before the table was unified, 0.65 say,
+ * shows "Other" and keeps its value).
  */
-export function systemOf(efficiency: number): (typeof IRRIGATION_SYSTEMS)[number]['id'] | null {
+export function systemOf(efficiency: number): IrrigationSystemId | null {
 	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
 }
 

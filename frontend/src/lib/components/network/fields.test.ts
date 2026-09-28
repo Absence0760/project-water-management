@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { NEW_FARM_IRRIGATION } from '@water-management/engine';
 import { cardLabel, damHints, fmtVolume, hasDam, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
@@ -79,12 +80,20 @@ describe('damHints', () => {
 });
 
 describe('systemOf (irrigation system helper, N1)', () => {
-	it('names the system whose indicative efficiency this is; the first listed wins a tie', () => {
+	it('names the SABI 2021 system whose efficiency this is, and none for any other value', () => {
 		expect(systemOf(0.9)).toBe('drip');
-		expect(systemOf(0.85)).toBe('micro');
-		expect(systemOf(0.75)).toBe('sprinkler');
-		expect(systemOf(0.65)).toBe('flood');
-		expect(systemOf(0.8)).toBeNull();
+		expect(systemOf(0.82)).toBe('micro');
+		expect(systemOf(0.85)).toBe('pivot');
+		expect(systemOf(0.8)).toBe('sprinkler');
+		expect(systemOf(0.75)).toBe('movable');
+		expect(systemOf(0.7)).toBe('surface');
+		// A value from the old indicative table (flood 0.65) or anything else: "Other", kept as entered.
+		expect(systemOf(0.65)).toBeNull();
+		expect(systemOf(0.87)).toBeNull();
+	});
+
+	it('names drip for a new farm (the default, issue #90)', () => {
+		expect(systemOf(NEW_FARM_IRRIGATION.irrigationEfficiency)).toBe('drip');
 	});
 });
 

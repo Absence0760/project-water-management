@@ -283,7 +283,7 @@
 						</div>
 					{/if}
 					{#if farms.length === 0}
-						<p class="muted">No units yet. Add units on the <a href="?tab=network">Network</a>.</p>
+						<p class="muted">No hydrological units yet. Add hydrological units on the <a href="?tab=network">Network</a>.</p>
 					{:else}
 						{#if stacks.length && demandTotal.annual > 0}
 							<figure class="demand-chart" bind:this={figEl} bind:clientWidth={chartW} bind:clientHeight={chartH}>
@@ -298,7 +298,7 @@
 								highest in {WATER_YEAR_MONTHS[peakMonth]} at {fmtNum(demandTotal.monthly[peakMonth])} m³/day. Before effective rain and irrigation efficiency.
 							</p>
 						{:else if apanSet}
-							<p class="muted">No demand yet: add crops with their factors and each unit's planted area.</p>
+							<p class="muted">No demand yet: add crops with their factors and each hydrological unit's planted area.</p>
 						{/if}
 						<details class="show-table" bind:open={tableOpen}>
 							<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
@@ -311,14 +311,14 @@
 
 				<section class="panel area-card" aria-labelledby="crop-area-h">
 					<div class="panel-head">
-						<h3 id="crop-area-h">Planted area by unit</h3>
+						<h3 id="crop-area-h">Planted area by hydrological unit</h3>
 						<a class="btn btn-sm" href={withParam(page.url, 'grid', 'planted-areas')}>{readonly ? 'Areas table' : 'Edit areas'}</a>
 					</div>
 					{#if farms.length === 0 || crops.length === 0}
-						<p class="muted">Add at least one unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
+						<p class="muted">Add at least one hydrological unit (<a href="?tab=network">Network</a>) and one crop to enter planted areas.</p>
 					{:else}
 						{#if bars.length}
-							<ul class="bars" aria-label="Planted area by unit, largest first">
+							<ul class="bars" aria-label="Planted area by hydrological unit, largest first">
 								{#each bars as b (b.id)}
 									<li>
 										<a class="farm" href={withParam(page.url, 'farm', b.id)} aria-label="{b.name}: planted areas">{b.name}</a>

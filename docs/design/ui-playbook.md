@@ -44,7 +44,7 @@ section it belongs to, with the example that taught it.
 5. **Old links keep working.** `?tab=` values, overlay params and `#res-…`
    fragments are in emails, bookmarks, help and other pages. When a view
    moves, redirect its old URL (the Runs tab redirects moved `#res-…`
-   anchors to River & reserve and Units & supply; the Summary sends its
+   anchors to River & reserve and Hydrological units; the Summary sends its
    panels' heading ids, `#members-h` and the rest, to the Project page) and
    grep the app, the help guides, `docs/` and `backend/src/alerts` for links
    to repoint. Grep the prose too: "on the Summary tab" in History's
@@ -78,7 +78,7 @@ section it belongs to, with the example that taught it.
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Summary,
-  Network, Crops, Dams, River & reserve, Units & supply, the portfolio) is
+  Network, Crops, Dams, River & reserve, Hydrological units, the portfolio) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -131,7 +131,7 @@ section it belongs to, with the example that taught it.
   list (20rem, scrolling inside) so twenty runs don't push the results
   a screen down.
 - **Cards or list on one side, the picked item's detail on the other.** Dams
-  and Units & supply: a scrolling column of items (worst first), the picked
+  and Hydrological units: a scrolling column of items (worst first), the picked
   item's chart filling the rest, the pick in the URL so Back works. When
   the items are genuinely tabular (Data: last date, period, % missing,
   coverage, per-row actions), keep the table and stack it over the chart
@@ -174,7 +174,7 @@ section it belongs to, with the example that taught it.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
-  Units & supply show a default without writing it).
+  Hydrological units show a default without writing it).
 - **A short form starts on a fixed line; don't centre it in the height.**
   The sign-in pages centred their form, so the title sat anywhere from 230
   to 433 px down at 1440×960 depending on the page, and a wrong password's
@@ -201,7 +201,7 @@ section it belongs to, with the example that taught it.
   gives a chart its full toolbar).
 - **A header picker's label is for screen readers.** River & reserve's
   visible "Run" label sat on a line of its own above the select on a phone;
-  the other pickers (Units & supply, Allocations) wrap the select in a
+  the other pickers (Hydrological units, Allocations) wrap the select in a
   `<label>` with a visually hidden word, and River's select now carries
   `aria-label="Run"` (a wrapping label would fold the chosen option into
   its name), so the select fills its row (`workspace-phone.spec.ts` checks
@@ -435,7 +435,7 @@ section it belongs to, with the example that taught it.
   sign-in, account, alerts, `/share`) go through `t()` (ui.md § Language):
   changing their English invalidates the Afrikaans.
 - **Honest numbers:** a figure on an outcome page comes from the same helper
-  as the same figure elsewhere (Units & supply's irrigation supplied comes
+  as the same figure elsewhere (Hydrological units's irrigation supplied comes
   from `overview/latestRun.ts`, the per-year reserve days from the engine's
   `ewr_shortfall`), so two pages never disagree. The same holds for a
   status: Data's rows turned amber past 31 days on any series while the
@@ -562,7 +562,7 @@ Interaction details that bit:
   (`?tab=settings#set-…`) had silently done that until its page spec
   followed one; the tab now finds the element on mount and holds it with
   `holdAnchor` (`help/anchor.ts`), focusing its heading, as River & reserve,
-  Units & supply, Runs, Data and Project do. Test a fragment link by *loading* it,
+  Hydrological units, Runs, Data and Project do. Test a fragment link by *loading* it,
   not only by clicking the in-page menu. And a `page.goto` that changes only
   the fragment is a same-page jump, not a load: the River menu's first
   "loaded link" test passed on such a jump without loading anything, and the

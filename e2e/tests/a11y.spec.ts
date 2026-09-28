@@ -25,13 +25,13 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 		id: 'overview',
 		ready: async (p) => {
 			await expect(p.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
-			await expect(p.getByRole('region', { name: 'Supply by unit' })).toBeVisible();
+			await expect(p.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 			await expect(p.getByRole('region', { name: 'Active alerts' })).toHaveAttribute('data-ready', 'true');
 			await expect(p.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
 		}
 	},
 	{ id: 'network', ready: (p) => expect(p.getByRole('list', { name: 'Drainage tree' })).toBeVisible() },
-	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by unit' })).toBeVisible() },
+	{ id: 'crops', ready: (p) => expect(p.getByRole('heading', { name: 'Planted area by hydrological unit' })).toBeVisible() },
 	{ id: 'transfers', ready: (p) => expect(p.getByLabel('Source of transfer 1')).toBeVisible() },
 	{ id: 'settings', ready: (p) => expect(p.getByRole('heading', { name: 'Flow calibration' })).toBeVisible() },
 	{ id: 'series', ready: (p) => expect(p.getByRole('button', { name: 'View', exact: true })).toHaveCount(2) },
@@ -46,8 +46,8 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 	{
 		id: 'supply',
 		ready: async (p) => {
-			await expect(p.getByRole('region', { name: /^Unit detail: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
-			await expect(p.getByRole('region', { name: 'Unit results' }).getByRole('rowheader', { name: 'All units' })).toBeVisible();
+			await expect(p.getByRole('region', { name: /^Hydrological unit detail: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(p.getByRole('region', { name: 'Hydrological unit results' }).getByRole('rowheader', { name: 'All hydrological units' })).toBeVisible();
 			await expect(p.locator('#res-curtailment').getByTestId('curtailment-period')).toBeVisible();
 		}
 	},
@@ -183,7 +183,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
 				const project = await seedRunnableProject(page.request, 'A11y one node');
 				await page.goto(`/projects/${project.id}?tab=network`);
 				await openNodeForm(page);
-				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · unit' });
+				await page.getByLabel('Node to edit').selectOption({ label: '2. Upper farm · hydrological unit' });
 				await expect(page.getByLabel('Capacity (m³)')).toHaveValue('150\u202f000');
 				await expectNoViolations(page);
 				await closeModal(page);

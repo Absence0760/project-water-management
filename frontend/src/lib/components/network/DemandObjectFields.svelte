@@ -38,7 +38,7 @@
 	} = $props();
 
 	const PRIORITY_LABEL: Record<DemandObjectPriority, string> = {
-		first: 'First: before the unit’s crops',
+		first: 'First: before the hydrological unit’s crops',
 		shared: 'Shared: pro rata with the crops',
 		last: 'Last: after the crops'
 	};
@@ -48,7 +48,7 @@
 	};
 	/** What a per-unit object counts, by category. */
 	const unitWord = (c: DemandObjectCategory) => (c === 'livestock' ? 'head' : c === 'domestic' || c === 'municipal' ? 'people' : 'units');
-	const label = $derived(node.name || 'this unit');
+	const label = $derived(node.name || 'this hydrological unit');
 	let newCategory = $state<DemandObjectCategory>('municipal');
 
 	/** Its mean abstraction demand over the year, m³/day (the engine's own sizing). */
@@ -80,7 +80,7 @@
 
 <div class="objects" data-testid="demand-objects-{node.id}">
 	<p class="hint">
-		Demands on {label} that aren’t crops: a town, households, livestock or water piped elsewhere. Each adds to the unit’s demand and is supplied from
+		Demands on {label} that aren’t crops: a town, households, livestock or water piped elsewhere. Each adds to the hydrological unit’s demand and is supplied from
 		its dam, river pump and boreholes with the crops. <HelpTip key="demandObject.category" />
 	</p>
 	{#if objects.length === 0}

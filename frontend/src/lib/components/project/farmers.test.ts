@@ -14,8 +14,8 @@ describe('farmNames', () => {
 	});
 
 	it('counts links to farms the model no longer has instead of dropping them', () => {
-		expect(farmNames({ nodeIds: ['a', 'gone'] }, farms)).toEqual(['Farm A', 'a removed farm']);
-		expect(farmNames({ nodeIds: ['x', 'y'] }, farms)).toEqual(['2 removed farms']);
+		expect(farmNames({ nodeIds: ['a', 'gone'] }, farms)).toEqual(['Farm A', 'a removed hydrological unit']);
+		expect(farmNames({ nodeIds: ['x', 'y'] }, farms)).toEqual(['2 removed hydrological units']);
 	});
 });
 

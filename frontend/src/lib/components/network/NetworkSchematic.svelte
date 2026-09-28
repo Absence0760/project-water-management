@@ -431,7 +431,7 @@
 		     live drop status instead. -->
 		<div class="legend-line">
 			<ul class="legend" aria-hidden="true">
-				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Unit</li>
+				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Hydrological unit</li>
 				<li><svg width="16" height="16" viewBox="-9 -9 18 18"><rect class="farm dam" x="-8" y="-8" width="16" height="16" rx="3" /></svg> With dam</li>
 				<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
 				<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow</li>
@@ -489,10 +489,10 @@
 	{/if}
 
 	<ul class="legend" aria-hidden="true">
-		<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Unit</li>
+		<li><svg width="16" height="16" viewBox="-9 -9 18 18"><circle class="farm" r="7" /></svg> Hydrological unit</li>
 		<li>
 			<svg width="16" height="16" viewBox="-9 -9 18 18"><rect class="farm dam" x="-8" y="-8" width="16" height="16" rx="3" /></svg>
-			Unit with dam
+			Hydrological unit with dam
 		</li>
 		<li><svg width="16" height="16" viewBox="-10 -9 20 18"><path class="gauge" d="M-9,-7 H9 L0,9 Z" /></svg> Gauge</li>
 		<li><svg width="16" height="16" viewBox="-13 -10 26 22"><path class="gauge outlet" d="M-12,-9 H12 L0,11 Z" /></svg> Outflow gauge</li>

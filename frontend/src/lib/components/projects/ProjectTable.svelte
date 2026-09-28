@@ -126,7 +126,7 @@
 
 	const SORTABLE: { key: SortKey; label: string; cls: string; col: string }[] = [
 		{ key: 'status', label: 'EWR, last 30 days', cls: 'wide', col: 'c-ewr' },
-		{ key: 'farms', label: 'Units short', cls: 'wide', col: 'c-units' },
+		{ key: 'farms', label: 'Hydrological units short', cls: 'wide', col: 'c-units' },
 		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' }
 	];
 </script>
@@ -201,7 +201,7 @@
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
 						<span class="meta meta-narrow">
 							{#if o}<StatusPill p={o} />{:else}<span class="muted">{noFigures(p)}</span>{/if}
-							{#if o}<span class="line">{#if !farmsShortText(o)}Units short:{' '}{/if}{@render units(o)}</span>{/if}
+							{#if o}<span class="line">{#if !farmsShortText(o)}Hydrological units short:{' '}{/if}{@render units(o)}</span>{/if}
 						</span>
 						<span class="meta meta-narrow">
 							{@render freshBadge(p)}

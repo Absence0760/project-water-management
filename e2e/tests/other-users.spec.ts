@@ -48,7 +48,7 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await expect(row.getByRole('cell').first()).toHaveText('senior');
 	await expect(row.getByRole('cell').nth(1)).toHaveText('800');
 	// The curtailment report, on Units & supply since issue #17, lists it apart from the units, not curtailed (senior).
-	await page.getByRole('link', { name: 'Units & supply for this run' }).click();
+	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
 	const other = page.getByRole('table', { name: 'Other water users' });
 	await expect(other.getByRole('row', { name: /^Town/ })).toContainText('senior (not curtailed)');
 });

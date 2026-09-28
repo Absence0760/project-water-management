@@ -34,14 +34,11 @@ export interface ResolvedSeason extends OutlookSeason {
 /**
  * The default irrigation season: 1 October to 30 April (the summer irrigation
  * months of a winter-rainfall catchment, and 1 October is the start of the
- * water year, when the wet season's storage is known). A **judgement,
- * pending the client's O3** (plan.md § Decision-support outputs): a project
- * setting will replace it, so the answer changes a default, not code.
+ * water year, when the wet season's storage is known). Confirmed by the
+ * client (O3, issue #90; plan.md § Decision-support outputs); a project may
+ * set its own (settings.outlook.season).
  */
 export const DEFAULT_OUTLOOK_SEASON: Readonly<{ startMonth: number; startDay: number; endMonth: number; endDay: number }> = Object.freeze({ startMonth: 10, startDay: 1, endMonth: 4, endDay: 30 });
-
-/** True while DEFAULT_OUTLOOK_SEASON is unconfirmed (O3); a surface showing it should say so. */
-export const OUTLOOK_SEASON_PENDING_CLIENT = true;
 
 /** The longest season: a year (a longer one would draw an analogue's days twice). */
 export const OUTLOOK_SEASON_MAX_DAYS = 366;

@@ -1,25 +1,28 @@
 name: Dependabot auto-merge
 
 # Automatically squash-merges minor + patch Dependabot PRs once CI is
-# green. Saves review burden — `.github/dependabot.yml` configures 4
-# ecosystems (frontend npm, backend npm, studio npm, GitHub Actions),
-# each opening a few grouped PRs per week. Without this, most of the
-# human review time goes to bumping a patch version of an action or a
-# transitive lodash dep.
+# green, for package ecosystems only (npm, pip, docker-compose, terraform).
+# Saves review burden on the grouped weekly bumps.
 #
-# Major bumps stay manual. Major version jumps on `<cms>/*`, Svelte,
-# Hono, or the AWS SDK have historically needed code changes; auto-
-# merging those would actively damage release reliability.
+# Never auto-merged, a human reviews them:
+#   - major bumps (they have historically needed code changes);
+#   - GitHub Actions bumps of any size. An action runs inside the deploy
+#     job while it holds the AWS session, so a hijacked patch release
+#     (the tj-actions/changed-files pattern) would become the new SHA pin
+#     on main unread. The SHA pin only helps if someone reads what it moves to.
+#
+# Supply-chain delay: `.github/dependabot.yml` sets a 7-day `cooldown` on
+# every ecosystem, and `pnpm-workspace.yaml` sets `minimumReleaseAge` to the
+# same 7 days, so a version is a week old before it can land here.
 #
 # Repository setting required: "Allow auto-merge" enabled on
 # Settings → General → Pull Requests. Without it `gh pr merge --auto`
 # returns an error and the workflow no-ops; PRs sit waiting for a
 # human like before, so worst case is degenerate, not destructive.
 #
-# CI gating: the squash merge waits on the `Test and typecheck` job
-# in `ci.yml` (and any other required checks configured in branch
-# protection) before landing. A red CI run keeps the PR queued
-# indefinitely until either a human intervenes or the PR is closed.
+# CI gating: the squash merge waits on the required `CI gate` check
+# (ci.yml) before landing. A red CI run keeps the PR queued until a
+# human intervenes or the PR is closed.
 
 on:
   pull_request_target:
@@ -31,11 +34,12 @@ jobs:
   auto-merge:
     name: Auto-merge minor + patch
     runs-on: ubuntu-latest
-    # Pull-request author check guards against any non-dependabot
-    # PR accidentally tripping this. The fetch-metadata action below
-    # is hardened against forged commit messages from compromised
-    # branches, but a belt-and-braces author gate costs nothing.
-    if: github.actor == 'dependabot[bot]'
+    # The PR's author, not github.actor: the actor is whoever triggered
+    # this event, and Dependabot can be the actor of an event on a PR it
+    # did not open (a @dependabot rebase of someone else's branch, the
+    # "Dependabot confusion" pattern). fetch-metadata below also checks the
+    # author and commits, but this gate costs nothing.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 5
     permissions:
       # `pull_request_target` runs in the base-branch context — needs
@@ -54,8 +58,15 @@ jobs:
           # bump it isn't.
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # GitHub Actions bumps stay manual whatever their size (header).
+      # An allowlist, so it fails closed: fetch-metadata reads the ecosystem
+      # from the branch name (dependabot/<ecosystem>/..., `github_actions`
+      # for actions), and a name it doesn't list is left for a human.
       - name: Approve + auto-merge minor / patch
-        if: steps.meta.outputs.update-type == 'version-update:semver-minor' || steps.meta.outputs.update-type == 'version-update:semver-patch'
+        if: >-
+          contains(fromJSON('["npm_and_yarn", "pip", "docker_compose", "terraform"]'), steps.meta.outputs.package-ecosystem) &&
+          (steps.meta.outputs.update-type == 'version-update:semver-minor' ||
+          steps.meta.outputs.update-type == 'version-update:semver-patch')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_URL: ${{ github.event.pull_request.html_url }}

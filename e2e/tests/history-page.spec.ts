@@ -128,14 +128,14 @@ test('the filters are in the URL: Back steps through them, the parameter filter 
 	await expect(historyContext(page)).toHaveText(context!);
 
 	await filters.getByLabel('Kind of change').selectOption({ label: 'Model and settings' });
-	await filters.getByLabel('Unit').selectOption({ label: 'Upper farm' });
+	await filters.getByLabel('Hydrological unit').selectOption({ label: 'Upper farm' });
 	await expect(page).toHaveURL(new RegExp(`kind=revision.*unit=${p.upper}|unit=${p.upper}.*kind=revision`));
 	await expect(historyEntries(page).filter({ hasText: 'Lower farm: irrigation efficiency' })).toHaveCount(0);
 	await expect(historyEntries(page).filter({ hasText: 'Upper farm: dam capacity' })).toHaveCount(4);
 
 	await page.goBack();
 	await expect(page).not.toHaveURL(/unit=/);
-	await expect(filters.getByLabel('Unit')).toHaveValue('');
+	await expect(filters.getByLabel('Hydrological unit')).toHaveValue('');
 	await expect(filters.getByLabel('Kind of change')).toHaveValue('revision');
 	await page.goBack();
 	await expect(page).toHaveURL(/kind=series/);
@@ -211,7 +211,7 @@ test('on a phone each entry shows whole, with its restore button, and nothing sc
 	expect(box.height).toBeGreaterThanOrEqual(44);
 	// The two selects share a row; the parameter box has its own.
 	const filters = historyCard(page).getByRole('group', { name: 'Filter the history' });
-	const unit = (await filters.getByLabel('Unit').boundingBox())!;
+	const unit = (await filters.getByLabel('Hydrological unit').boundingBox())!;
 	const kind = (await filters.getByLabel('Kind of change').boundingBox())!;
 	expect(Math.abs(unit.y - kind.y)).toBeLessThan(2);
 	await filters.getByLabel('Kind of change').selectOption({ label: 'Data series' });

@@ -60,7 +60,7 @@ export const TAB_LABELS: Record<TabId, string> = {
 	settings: 'Settings & calibration',
 	runs: 'Runs & results',
 	river: 'River & reserve',
-	supply: 'Units & supply',
+	supply: 'Hydrological units',
 	dams: 'Dams',
 	compare: 'Compare runs',
 	scenarios: 'Scenarios',

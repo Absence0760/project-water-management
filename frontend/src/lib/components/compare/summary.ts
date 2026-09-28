@@ -127,7 +127,7 @@ export function outcomeRows(comparisons: readonly RunComparison[], dams: readonl
 			comparisons
 		),
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
-		row('farmsBelow', `Units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
+		row('farmsBelow', `Hydrological units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'hydrological units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
 		...farmRows(comparisons),
 		...(dams.some((m) => m.a !== null || m.b !== null)
 			? [
@@ -206,7 +206,7 @@ export function takeaways(rows: readonly OutcomeRow[], names: readonly string[],
 		if (sd !== null && sd !== undefined) {
 			const pp = Number((sd * 100).toFixed(1));
 			if (Math.abs(pp) >= MATERIAL.suppliedPp) {
-				out.push({ tone: pp > 0 ? 'better' : 'worse', text: `${name} supplies ${fmtNum(Math.abs(pp), 1)} pp ${pp > 0 ? 'more' : 'less'} of the units' demand` });
+				out.push({ tone: pp > 0 ? 'better' : 'worse', text: `${name} supplies ${fmtNum(Math.abs(pp), 1)} pp ${pp > 0 ? 'more' : 'less'} of the hydrological units' demand` });
 			}
 		}
 		const fd = get('farmsBelow')?.whatIfs[i]?.delta;
@@ -215,8 +215,8 @@ export function takeaways(rows: readonly OutcomeRow[], names: readonly string[],
 			const target = fmtPct(SUPPLY_TARGET, 0);
 			out.push(
 				n > 0
-					? { tone: 'worse', text: `${name} leaves ${plural(n, 'more unit')} below ${target} supplied` }
-					: { tone: 'better', text: `${name} brings ${plural(-n, 'unit')} up to ${target} supplied` }
+					? { tone: 'worse', text: `${name} leaves ${plural(n, 'more hydrological unit')} below ${target} supplied` }
+					: { tone: 'better', text: `${name} brings ${plural(-n, 'hydrological unit')} up to ${target} supplied` }
 			);
 		}
 		for (const r of rows.filter((x) => x.id.startsWith('farm:'))) {

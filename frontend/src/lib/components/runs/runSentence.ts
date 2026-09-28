@@ -50,15 +50,15 @@ function farmSentence(farms: NonNullable<SentenceInput['farms']>): string | null
 	const target = fmtPct(SUPPLY_TARGET, 0);
 	const short = farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET);
 	if (!short.length) {
-		return farms.length === 1 ? `${farms[0].name} got at least ${target} of its demand.` : `Every unit got at least ${target} of its demand.`;
+		return farms.length === 1 ? `${farms[0].name} got at least ${target} of its demand.` : `Every hydrological unit got at least ${target} of its demand.`;
 	}
 	// The lowest; on a tie, the first in the run's farm order.
 	const lowest = short.reduce((a, b) => (b.fractionSupplied < a.fractionSupplied ? b : a));
 	const at = `${lowest.name} at ${fmtPct(lowest.fractionSupplied)}`;
 	if (farms.length === 1) return `${lowest.name} got ${fmtPct(lowest.fractionSupplied)} of its demand, less than ${target}.`;
-	if (short.length === 1) return `1 of ${fmtNum(farms.length)} units got less than ${target} of its demand: ${at}.`;
+	if (short.length === 1) return `1 of ${fmtNum(farms.length)} hydrological units got less than ${target} of its demand: ${at}.`;
 	const count = short.length === farms.length ? `All ${fmtNum(farms.length)}` : `${fmtNum(short.length)} of ${fmtNum(farms.length)}`;
-	return `${count} units got less than ${target} of their demand; the lowest was ${at}.`;
+	return `${count} hydrological units got less than ${target} of their demand; the lowest was ${at}.`;
 }
 
 function calibrationSentence(cal: SentenceInput['calibration']): string | null {

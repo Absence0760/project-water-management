@@ -399,9 +399,11 @@ resource "aws_lambda_event_source_mapping" "worker_render_results" {
   function_name                      = aws_lambda_function.worker.arn
   batch_size                         = 10
   maximum_batching_window_in_seconds = 5
+  # Only the failed records are retried (lambda-worker.ts reports them).
+  function_response_types = ["ReportBatchItemFailures"]
 
   scaling_config {
-    maximum_concurrency = 2
+    maximum_concurrency = 2 # counted in worker_reserved_concurrency (4 triggers x 2)
   }
 
   depends_on = [aws_iam_role_policy.worker_reports]

@@ -2,9 +2,9 @@
 	// Settings → Seasonal outlook (issue #53 R5, docs/ui.md § Seasonal
 	// outlook): the season a new outlook runs (a decision date and a season
 	// end, as a month and day) and the planning share. Part of the Settings
-	// form (Save settings saves it), in the Settings tab's chunk. No model input. The defaults are the engine's and wait on
-	// the client (plan.md O3, O6); the section says so while they are in use.
-	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE, OUTLOOK_SEASON_PENDING_CLIENT, PLANNING_SHARE_PENDING_CLIENT } from '@water-management/engine';
+	// form (Save settings saves it), in the Settings tab's chunk. No model input. The defaults are the engine's, confirmed by
+	// the client (plan.md O3, O6, issue #90).
+	import { DEFAULT_OUTLOOK_SEASON, DEFAULT_PLANNING_SHARE } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { monthName } from '$lib/format/months';
 	import type { OutlookSettings } from '$lib/api/types';
@@ -33,7 +33,6 @@
 	<fieldset class="group">
 		<legend>
 			Season
-			{#if !value.season && OUTLOOK_SEASON_PENDING_CLIENT}<span class="badge badge-warn" data-testid="season-pending">Default pending the client</span>{/if}
 		</legend>
 		<label class="check">
 			<input type="checkbox" disabled={readonly} checked={!value.season} onchange={(e) => useDefaultSeason(e.currentTarget.checked)} />
@@ -65,13 +64,12 @@
 		{/if}
 		<p class="hint">
 			The decision date is the season’s first day: the outlook starts from the run’s state at the end of the day before, the latest such date the
-			run reaches. The season ends on the end date (the next one after the decision date). The choice waits on the client (O3).
+			run reaches. The season ends on the end date (the next one after the decision date).
 		</p>
 	</fieldset>
 	<fieldset class="group">
 		<legend>
 			Planning share
-			{#if value.planningShare === null && PLANNING_SHARE_PENDING_CLIENT}<span class="badge badge-warn" data-testid="share-pending">Default pending the client</span>{/if}
 		</legend>
 		<label class="check">
 			<input type="checkbox" disabled={readonly} checked={value.planningShare === null} onchange={(e) => useDefaultShare(e.currentTarget.checked)} />
@@ -85,7 +83,7 @@
 		{/if}
 		<p class="hint">
 			The outlook names the highest demand level that met the river’s requirement in at least this share of past years. It reports that trade-off; the
-			WUA decides the level. The share waits on the client (O6).
+			WUA decides the level.
 		</p>
 	</fieldset>
 	{#if error}<p class="err" role="alert">{error}</p>{/if}

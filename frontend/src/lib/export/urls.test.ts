@@ -59,8 +59,8 @@ describe('runDownloadItems', () => {
 			'Workbook (.xlsx)',
 			'Run summary (CSV)',
 			'Daily series — catchment (CSV)',
-			'Fragmented flow — all units (CSV)',
-			'Fragmented EWR — all units (CSV)',
+			'Fragmented flow — all hydrological units (CSV)',
+			'Fragmented EWR — all hydrological units (CSV)',
 			'Daily series — Upper farm (CSV)'
 		]);
 		expect(items[3]!.url).toBe(`/api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`);
@@ -72,7 +72,7 @@ describe('runDownloadItems', () => {
 	it('offers a preview on the two all-farms tables only, handing back which one', () => {
 		const asked: string[] = [];
 		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], { onPreview: (t) => asked.push(`${t.key} ${t.url}`) });
-		expect(items.filter((i) => i.preview).map((i) => i.label)).toEqual(['Fragmented flow — all units (CSV)', 'Fragmented EWR — all units (CSV)']);
+		expect(items.filter((i) => i.preview).map((i) => i.label)).toEqual(['Fragmented flow — all hydrological units (CSV)', 'Fragmented EWR — all hydrological units (CSV)']);
 		items[4]!.preview!();
 		items[3]!.preview!();
 		expect(asked).toEqual([`ewr /api/projects/${P}/runs/${R}/export/farms.csv?key=ewr`, `runoff /api/projects/${P}/runs/${R}/export/farms.csv?key=runoff`]);

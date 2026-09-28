@@ -71,7 +71,7 @@
 	</div>
 	<p class="hint muted">
 		Enter the naturalised flow the WR2012 study publishes for the quaternary catchment this project lies in. Each run then compares its
-		<strong>simulated natural flow</strong> (before units and dams take any water) with it, scaled to the modelled catchment. The numbers are
+		<strong>simulated natural flow</strong> (before hydrological units and dams take any water) with it, scaled to the modelled catchment. The numbers are
 		yours to enter; the app doesn’t ship WR2012 data.
 	</p>
 	<label class="check">

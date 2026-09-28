@@ -33,7 +33,7 @@
 		<p class="kicker">{t('Catchment water balance')}</p>
 		<h1 id="landing-title">{t('Every drop in the catchment, accounted for.')}</h1>
 		<p class="lede">
-			{t('Model a catchment day by day, from rainfall to river: what each farm is supplied, what its dam holds, and whether the river keeps its ecological reserve.')}
+			{t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')}
 		</p>
 		<div class="actions">
 			<a class="btn btn-primary btn-lg" href="{base}/login" onclick={signIn}>{t('Sign in')}</a>

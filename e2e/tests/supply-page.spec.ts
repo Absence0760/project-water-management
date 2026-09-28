@@ -13,7 +13,7 @@ import { openSupply, seedSupplyProject, supplyTile, supplyTiles, unitCards, unit
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const pcts = (page: Page) => unitCards(page).evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.level .v')?.textContent ?? 'NaN')));
 
-test('four tiles, a card per unit worst supplied first in the Summary’s bands, and the tables that moved from Runs & results', async ({ page, owner }) => {
+test('four tiles, a card per hydrological unit worst supplied first in the Summary’s bands, and the tables that moved from Runs & results', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedSupplyProject(page.request, 'Supply cards');
@@ -21,9 +21,9 @@ test('four tiles, a card per unit worst supplied first in the Summary’s bands,
 	const run = await createRun(page.request, project.id, 'Baseline');
 	await openSupply(page, project.id);
 
-	await expect(strip(page).getByRole('link', { name: 'Units & supply', exact: true })).toHaveAttribute('aria-current', 'page');
+	await expect(strip(page).getByRole('link', { name: 'Hydrological units', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 units · \d short this week · run “Baseline”, ran today$/);
+	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 hydrological units · \d short this week · run “Baseline”, ran today$/);
 	await expect(page.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
 
 	// The tiles: the Summary's irrigation supplied with its change (the same inputs, so no change), units below 95 %,
@@ -31,7 +31,7 @@ test('four tiles, a card per unit worst supplied first in the Summary’s bands,
 	await expect(supplyTiles(page)).toHaveCount(4);
 	await expect(supplyTile(page, 'supplied')).toContainText(/Irrigation supplied\s*[\d.]+%\s*of demand/);
 	await expect(supplyTile(page, 'supplied')).toContainText(/0 pp\s*no change vs previous run/);
-	await expect(supplyTile(page, 'below')).toContainText(/Units below 95%\s*\d\s*of 4/);
+	await expect(supplyTile(page, 'below')).toContainText(/Hydrological units below 95%\s*\d\s*of 4/);
 	await expect(supplyTile(page, 'week')).toContainText('2022-01-22 to 2022-01-28');
 	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short this week' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
 	await expect(supplyTile(page, 'shortfall')).toContainText(/Total shortfall\s*[\d.]+\s*Mm³\/a/);
@@ -64,15 +64,15 @@ test('four tiles, a card per unit worst supplied first in the Summary’s bands,
 
 	// The same bands as the Summary's Supply by unit.
 	await page.goto(`/projects/${project.id}`);
-	const summaryBands = page.getByRole('region', { name: 'Supply by unit' }).getByRole('listitem');
+	const summaryBands = page.getByRole('region', { name: 'Supply by hydrological unit' }).getByRole('listitem');
 	await expect(summaryBands).toHaveCount(4);
 	await expect(summaryBands.filter({ hasText: firstName })).toHaveAttribute('data-band', bands[0]!);
-	await page.getByRole('link', { name: 'More on Units & supply' }).click();
+	await page.getByRole('link', { name: 'More on Hydrological units' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=supply&run=${run}$`));
 
 	// Below the first screen: the unit results table, curtailment with its reporting window, and assurance of supply.
-	const results = page.getByRole('region', { name: 'Unit results' });
-	await expect(results.getByRole('rowheader', { name: 'All units' })).toBeVisible();
+	const results = page.getByRole('region', { name: 'Hydrological unit results' });
+	await expect(results.getByRole('rowheader', { name: 'All hydrological units' })).toBeVisible();
 	await expect(results.getByRole('rowheader', { name: /^Upper farm/ })).toBeVisible();
 	await expect(results.getByTestId('farms-period')).toHaveText(
 		'Daily averages over the whole record, 2021-10-01 to 2022-01-28 (120 days); the curtailment targets cover the reporting window.'
@@ -86,7 +86,7 @@ test('four tiles, a card per unit worst supplied first in the Summary’s bands,
 	expect(Math.abs(block!.y + block!.height - 960)).toBeLessThanOrEqual(24);
 });
 
-test('picking a unit charts its supply against demand, the link round-trips, Back returns, and the windows switch', async ({ page, owner }) => {
+test('picking a hydrological unit charts its supply against demand, the link round-trips, Back returns, and the windows switch', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedSupplyProject(page.request, 'Supply pick', 2, 800);
@@ -97,13 +97,13 @@ test('picking a unit charts its supply against demand, the link round-trips, Bac
 	const first = unitCards(page).first();
 	const firstName = (await first.locator('a.name').textContent())!.trim();
 	await expect(first.locator('a.name')).toHaveAttribute('aria-current', 'true');
-	await expect(unitChart(page).getByRole('heading')).toHaveText(`Unit detail: ${firstName}`);
+	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${firstName}`);
 
 	// Pick Upper farm (it has a dam): the URL names it, the chart and facts follow.
 	const upper = project.model.nodes[1]!;
 	await unitCards(page).filter({ hasText: 'Upper farm' }).locator('a.name').click();
 	await expect(page).toHaveURL(new RegExp(`[?&]unit=${upper.id as string}$`));
-	await expect(unitChart(page).getByRole('heading')).toHaveText('Unit detail: Upper farm');
+	await expect(unitChart(page).getByRole('heading')).toHaveText('Hydrological unit detail: Upper farm');
 	await expect(unitCards(page).filter({ hasText: 'Upper farm' }).locator('a.name')).toHaveAttribute('aria-current', 'true');
 	await expect(page.getByTestId('unit-facts')).toHaveText(/^Abstraction demand [\d\u202f]+ m³\/day, supplied [\d\u202f]+ m³\/day\s+\([\d.]+%\) · dam 150\u202f000 m³\.$/);
 	const fig = unitChart(page).locator('figure.chart');
@@ -130,12 +130,12 @@ test('picking a unit charts its supply against demand, the link round-trips, Bac
 	// Back returns to the worst unit; a reload of a unit link opens it.
 	await page.goBack();
 	await expect(page).not.toHaveURL(/[?&]unit=/);
-	await expect(unitChart(page).getByRole('heading')).toHaveText(`Unit detail: ${firstName}`);
+	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${firstName}`);
 	await page.goto(`/projects/${project.id}?tab=supply&unit=${upper.id as string}`);
-	await expect(unitChart(page).getByRole('heading')).toHaveText('Unit detail: Upper farm');
+	await expect(unitChart(page).getByRole('heading')).toHaveText('Hydrological unit detail: Upper farm');
 	// A unit the run doesn't have: the worst one instead.
 	await page.goto(`/projects/${project.id}?tab=supply&unit=nope`);
-	await expect(unitChart(page).getByRole('heading')).toHaveText(`Unit detail: ${firstName}`);
+	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${firstName}`);
 });
 
 test('the run follows run= and the header picker; Runs & results links here for its run; old Runs anchors land here', async ({ page, owner }) => {
@@ -147,7 +147,7 @@ test('the run follows run= and the header picker; Runs & results links here for 
 
 	// Runs & results: the run header links here, keeping the run shown.
 	await page.goto(`/projects/${project.id}?tab=runs&run=${earlier}`);
-	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Units & supply for this run' }).click();
+	await page.getByRole('navigation', { name: 'Outcomes for this run' }).getByRole('link', { name: 'Hydrological units for this run' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?tab=supply&run=${earlier}$`));
 	await expect(page.getByTestId('supply-summary')).toContainText('run “Earlier”');
 	// The oldest run has nothing before it, so no change is shown.
@@ -175,26 +175,26 @@ test('the run follows run= and the header picker; Runs & results links here for 
 	await expect(page.getByTestId('supply-summary')).toContainText('run “Latest”');
 });
 
-test('empty states: no run yet (owner and viewer), and no units in the model', async ({ page, owner, signIn }) => {
+test('empty states: no run yet (owner and viewer), and no hydrological units in the model', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await seedSupplyProject(page.request, 'Supply empty');
 	await page.goto(`/projects/${project.id}?tab=supply`);
-	await expect(page.getByRole('heading', { level: 1, name: 'Units & supply' })).toBeVisible();
-	await expect(page.getByTestId('supply-summary')).toHaveText('4 units');
-	await expect(page.getByText('No run yet. Run the model to see how much of each of the 4 units’ demand is supplied.')).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();
+	await expect(page.getByTestId('supply-summary')).toHaveText('4 hydrological units');
+	await expect(page.getByText('No run yet. Run the model to see how much of each of the 4 hydrological units’ demand is supplied.')).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Run the model (Runs & results)' })).toHaveAttribute('href', '?tab=runs');
 
 	const viewer = await signIn('Supply viewer');
 	await addMember(page.request, project.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(`/projects/${project.id}?tab=supply`);
-	await expect(viewer.page.getByText('No run yet. Once an editor runs the model, how much of each unit’s demand was supplied shows here.')).toBeVisible();
+	await expect(viewer.page.getByText('No run yet. Once an editor runs the model, how much of each hydrological unit’s demand was supplied shows here.')).toBeVisible();
 
-	const bare = await createProject(page.request, 'Supply no units');
+	const bare = await createProject(page.request, 'Supply no hydrological units');
 	const model = sampleModel();
 	await putModel(page.request, bare.id, { ...model, nodes: [model.nodes[0]!], cropAreas: [], transfers: [] });
 	await page.goto(`/projects/${bare.id}?tab=supply`);
-	await expect(page.getByTestId('supply-summary')).toHaveText('0 units');
-	await expect(page.getByText(/^No units in this catchment’s model yet\./)).toBeVisible();
+	await expect(page.getByTestId('supply-summary')).toHaveText('0 hydrological units');
+	await expect(page.getByText(/^No hydrological units in this catchment’s model yet\./)).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Open the Network' })).toHaveAttribute('href', '?tab=network');
 });
 
@@ -207,9 +207,9 @@ test('a viewer sees the page and its tables; it passes axe at desktop, in dark a
 	const v = viewer.page;
 	await v.setViewportSize({ width: 1440, height: 960 });
 	await openSupply(v, project.id);
-	await expect(strip(v).getByRole('link', { name: 'Units & supply', exact: true })).toBeVisible();
+	await expect(strip(v).getByRole('link', { name: 'Hydrological units', exact: true })).toBeVisible();
 	await expect(unitCards(v)).toHaveCount(4);
-	await expect(v.getByRole('region', { name: 'Unit results' }).getByRole('rowheader', { name: 'All units' })).toBeVisible();
+	await expect(v.getByRole('region', { name: 'Hydrological unit results' }).getByRole('rowheader', { name: 'All hydrological units' })).toBeVisible();
 	await expect(v.locator('#res-curtailment').getByTestId('curtailment-period')).toBeVisible();
 	await expectNoViolations(v);
 	await v.emulateMedia({ colorScheme: 'dark' });

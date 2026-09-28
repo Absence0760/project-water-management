@@ -8,11 +8,12 @@
 // and saving it alone leaves updated_at alone (projects/routes.ts).
 //
 // The cut-offs' defaults are the engine's DEFAULT_OUTCOME_RISK_CUTOFFS,
-// placeholders pending the hydrologist (client question O1, plan.md
-// § Decision-support outputs). A metric whose cut-offs are null uses them,
+// placeholders pending the hydrologist (question O1, plan.md
+// § Decision-support outputs: the client agreed to them, issue #90; the
+// hydrologist's confirmation is open). A metric whose cut-offs are null uses them,
 // and a surface says they are pending; a project that sets its own has
 // chosen, so the badge goes. The method's default, `auto`, is the engine's
-// (O2).
+// (O2, confirmed by the client, issue #90).
 import { DEFAULT_OUTCOME_RISK_CUTOFFS, validateOutcomeCutoffs, type OutcomeRiskCutoffs, type YearClassMethod } from '@water-management/engine';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
