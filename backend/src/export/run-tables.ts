@@ -1144,7 +1144,8 @@ export function* flowDurationLines(t: FdcPercentileTable | null): Generator<stri
 	}
 	yield csvRow(['Days ranked', 'Flow record', 'Q10 (m³/s)', 'Q50 (m³/s)', 'Q90 (m³/s)', 'Q95 (m³/s)', 'Days']);
 	const rows = (label: string, list: FdcPercentileRow[]) => list.map((r) => csvRow([label, FDC_RECORD_LABEL[r.record], r.q10, r.q50, r.q90, r.q95, r.n]));
-	yield* rows('Whole run', t.wholeRun);
+	if (t.forecastDays > 0) yield csvRow([`The ${t.forecastDays} forecast days are left out: every row ranks the ${t.runDays} days before them`]);
+	yield* rows(t.forecastDays > 0 ? 'Whole run before the forecast' : 'Whole run', t.wholeRun);
 	if (t.onObservedDays) yield* rows(`Observed days only (${t.observedDays} of ${t.runDays})`, t.onObservedDays);
 }
 

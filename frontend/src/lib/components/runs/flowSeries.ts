@@ -2,6 +2,7 @@
 // the printable report: which lines, in which colour, width and style.
 import { OBSERVED_SERIES_LABEL, type DailySeries } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
+import { fmtNum } from '$lib/format/number';
 
 /** The run's catchment series the flow charts draw (each absent when the run has none). */
 export interface CatchmentFlows {
@@ -90,4 +91,19 @@ export function ewrChartSeries(c: CatchmentFlows, conv: Convert): ChartSeries[] 
 	if (c.simulated) out.push({ label: 'Simulated outflow', startDate: c.simulated.startDate, values: conv(c.simulated), color: '--series-2', width: 1.25 });
 	if (c.ewr) out.push({ label: 'Pragmatic EWR', startDate: c.ewr.startDate, values: conv(c.ewr), style: 'step', color: '--chart-ref', width: 1.75 });
 	return out;
+}
+
+/**
+ * The flow-duration chart's caption: which days its curves rank. On a
+ * forecast run it says the forecast days are left out (issue #51), since
+ * the curves rank the history only. Undefined when there is nothing to say.
+ */
+export function fdcCaption(f: { onObserved: boolean; partial: boolean; obsDays: number; runDays: number; forecastDays: number }): string | undefined {
+	const days = f.onObserved
+		? `Every curve ranks the ${fmtNum(f.obsDays)} days with an observed reading, so they compare like with like.`
+		: f.partial
+			? `Natural and simulated flow rank all ${fmtNum(f.runDays)} days of the run${f.forecastDays ? ' before the forecast' : ''}; observed flow only its ${fmtNum(f.obsDays)} days with a reading.`
+			: '';
+	const forecast = f.forecastDays ? `The ${fmtNum(f.forecastDays)} forecast days are left out: the curves rank the history only.` : '';
+	return [days, forecast].filter(Boolean).join(' ') || undefined;
 }

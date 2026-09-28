@@ -1440,6 +1440,17 @@ tail and with it. Its output is
 - a self-check the run with the tail fails, added to the warnings as *self-check
   failed on the run with the forecast tail (…)*.
 
+**Record-wide views outside the run keep to the history too** (issue #51).
+The daily series run on into the tail, so anything that ranks or fits over
+a saved run's whole record must cut them first, or the forecast days leak
+back in:
+- the flow-duration curve and its Q10–Q95 table (the Runs tab, the summary
+  CSV, the `.xlsx` workbook, the report): `fdcPercentileTable(flows, { startDate,
+  forecastFrom })` cuts every record at `forecastFrom` and reports the days it
+  left out (`forecastDays`); a chart drawing the curves cuts its series with
+  `beforeForecast` (`views/fdc.ts`). A forecast run's table is the ordinary
+  run's to the bit.
+
 **Why two runs: the model is not causal.** The plan assumed a run with a
 tail and one without agree on every shared day because the simulation is
 causal. It isn't quite: a few figures are record-wide statistics, so a day at

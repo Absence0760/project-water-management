@@ -3092,7 +3092,9 @@ read it before.
   shades the forecast days with a hatched band and a dashed edge, labelled
   "Forecast" on the plot and in a text key under it (`LineChart`'s `band`
   option), so the band never rests on colour alone; the figure carries
-  `data-band-from`. The flow-duration curve has no time axis, so no band.
+  `data-band-from`. The flow-duration curve has no time axis, so no band: it and its Q table rank
+  only the days before the forecast, and the caption says how many forecast
+  days it left out (issue #51).
   The daily CSVs lead with an `F` column and the `.xlsx` sheets with a 1/0
   flag ([api.md § Export](./api.md#export)).
 - **On this page.** Above the results, the same menu as Settings &

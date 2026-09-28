@@ -181,13 +181,17 @@
 	// The printed report has no legend to click, so natural flow shows from the start.
 	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
 	const ewrLines = $derived(ewrChartSeries(flows, conv));
-	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function.
+	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function;
+	// a forecast run's forecast days left out (issue #51).
 	const fdc = $derived(
-		fdcPercentileTable({
-			...(flows.natural ? { natural: conv(flows.natural) } : {}),
-			...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
-			...(flows.observed ? { observed: conv(flows.observed) } : {})
-		})
+		fdcPercentileTable(
+			{
+				...(flows.natural ? { natural: conv(flows.natural) } : {}),
+				...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
+				...(flows.observed ? { observed: conv(flows.observed) } : {})
+			},
+			run ? { startDate: (flows.simulated ?? flows.natural)?.startDate ?? run.startDate, forecastFrom: run.summary.forecast?.from ?? null } : undefined
+		)
 	);
 	const days = $derived(run ? toEpochDay(run.endDate) - toEpochDay(run.startDate) + 1 : 0);
 	const farmNames = $derived(Object.fromEntries(nodes.map((n) => [n.id, n.name])));
