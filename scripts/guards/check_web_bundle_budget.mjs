@@ -1141,6 +1141,14 @@
 //             footer text, the share-page line, the workbook's disclaimer
 //             sheet, and their Afrikaans words. No new dependency. Headroom
 //             ~3 KB.
+// 2026-09-28  total 1083 → 1093 KB (measured 1088 on Vite 8, 1080 on main
+//             before it). Issue #72's allocations second slice: the engine's
+//             allocation mode (allocations/mode.ts), its self-check and the
+//             run comparison's allocation lines (verify and compare ship in
+//             the run worker and the pages both), the Settings tab's
+//             Registered volumes fields, the Allocations tab's licence
+//             conditions and mode note, and two help entries. No new
+//             dependency. Headroom ~5 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1151,7 +1159,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1083,
+	totalCodeKb: 1093,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
