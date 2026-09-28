@@ -152,7 +152,10 @@ export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 
 /** GET /projects/:id/farm/:nodeId (WP-2.6): everything the farm page renders, in one response. */
 export interface FarmView {
-	project: { id: string; name: string };
+	/** `timeZone`: the project's IANA zone (project.time_zone, 058), where "today" is counted. */
+	project: { id: string; name: string; timeZone: string };
+	/** Today's date where the catchment is (the project's zone) when the response was built: the page's "today" if it can't work it out itself. */
+	today: string;
 	farm: FarmProjection;
 	context: FarmContext;
 	publication: {

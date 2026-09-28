@@ -6,9 +6,9 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { localIsoDate } from '$lib/format/number';
 	import DamChart from '$lib/components/farm/DamChart.svelte';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import { farmToday } from '$lib/components/farm/numbers';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
@@ -26,7 +26,6 @@
 	const farm = new FarmState(api, () => session.user?.id ?? null);
 	// The account's unit (app_user.volume_unit), else this phone's.
 	const unit = $derived(session.user?.volumeUnit ?? readUnit());
-	const today = localIsoDate();
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
@@ -38,7 +37,7 @@
 		<div>
 			<h1>{t('Your dam')}</h1>
 			<p class="sub">{view.farm.name}</p>
-			<DatesLine line={datesLine(view, today)} />
+			<DatesLine line={datesLine(view, farmToday(view))} />
 		</div>
 		<EstimateNote />
 		{#if !d}
@@ -68,7 +67,7 @@
 
 			<DamChart farm={view.farm} caption={d.chartCaption} />
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
-			{@const forecast = forecastCard(view.farm, today)}
+			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
 
 			<section class="card" aria-labelledby="about-h">

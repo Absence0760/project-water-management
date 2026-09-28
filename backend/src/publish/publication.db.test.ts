@@ -509,10 +509,11 @@ describe('the farm view’s freshness', () => {
 	it('counts the figures’ age to the project’s today, not UTC’s (positive control: a UTC project)', async () => {
 		vi.useFakeTimers({ toFake: ['Date'], now: new Date('2024-01-05T23:30:00Z') });
 		const view = async () => (await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}`)).body;
-		expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: true });
+		// `today` and the zone go with it, so the page counts its own ages the same way (issue #51).
+		expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: true, today: '2024-01-06', project: { timeZone: 'Africa/Johannesburg' } });
 		await asOwner(`UPDATE project SET time_zone = 'UTC' WHERE id = $1`, [projectId]);
 		try {
-			expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: false });
+			expect(await view()).toMatchObject({ farm: { dataUntil: '2023-12-29' }, stale: false, today: '2024-01-05', project: { timeZone: 'UTC' } });
 		} finally {
 			await asOwner(`UPDATE project SET time_zone = DEFAULT WHERE id = $1`, [projectId]);
 		}

@@ -4835,7 +4835,11 @@ published.
   saved on this phone at …") over a reduced view. Cleared on sign-out, on a
   403/404, when another user signs in, after 30 days unused, and by the
   Menu's opt-out. No service worker, no polling: the page refetches when it
-  becomes visible again.
+  becomes visible again. Ages on it (the dates line, the forecast's) count
+  to today where the catchment is (`farmToday`: the project's zone from the
+  response, on this device's clock), never the phone's own zone, so a saved
+  copy ages with the day and a phone set to another zone agrees with the
+  server (issue #51).
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.

@@ -128,8 +128,11 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			);
 			const cv = cur.catchment_view;
 			const outlet = cv.sites.find((s) => s.isOutlet) ?? cv.sites[0];
+			// Counted to today where the catchment is (project.time_zone, 058), not UTC's day or the phone's.
+			const today = localDate(new Date(), p[0]!.timeZone);
 			const body: FarmView = {
-				project: { id, name: p[0]!.name },
+				project: { id, name: p[0]!.name, timeZone: p[0]!.timeZone },
+				today,
 				farm,
 				context: { farmsUpstream: ctx[0]?.farms_upstream ?? 0, farmsDownstream: ctx[0]?.farms_downstream ?? 0, farmCount: ctx[0]?.farm_count ?? 0 },
 				publication: {
@@ -146,8 +149,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					nextExpectedOn: cur.next_expected_on
 				},
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
-				// Counted to today where the catchment is (project.time_zone, 058), not UTC's day.
-				stale: isStale(farm.dataUntil, localDate(new Date(), p[0]!.timeZone))
+				stale: isStale(farm.dataUntil, today)
 			};
 			return c.json(body);
 		});
