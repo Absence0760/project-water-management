@@ -2162,7 +2162,10 @@ missing-data quality code (151, 165, 170, 172, 246, 247, 255), a blank value or
 a negative placeholder such as -999 is a gap, never a value. The summary adds a
 *DWS export* line (rows, the value column as the file's format block describes
 it, and how many rows were read as gaps and why) and the quality codes met; a
-sub-daily DWS export (a TIME column) is refused. In number fields, a comma is a thousands separator only in a
+sub-daily DWS export (a TIME column) is refused. A plain date,value CSV reads
+a negative value as a gap too (issue #51: every kind is a rain, flow or
+evaporation, so −999 or −1 is a "no reading" placeholder), and its summary
+adds a *Negative values* line with how many (`csv.ts` `negativeGaps`). In number fields, a comma is a thousands separator only in a
 valid grouping (1,500); otherwise a single comma is a decimal comma (1,5 = 1.5). The chart opens on the last 3 years and has
 a log scale for flows. When both a gauge and a logger flow exist, a table
 compares them per water year (engine `observedAgreement`) and flags years

@@ -4099,7 +4099,7 @@ primary catchment series only.
 
 | Check | Rule | Why |
 | --- | --- | --- |
-| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days |
+| Negative values | any rain or flow value < 0 | impossible; the gauge-vs-logger comparison skips such days, and from engine 1.16.0 (issue #51) a negative **flow** is read as missing everywhere (`prepare.ts` `alignFlow`: calibration statistics, the fit, plausibility, the `observed_flow` series), as the DWS import and the CSV upload read it, the warning saying so |
 | Outliers | a value above 5× (rain) or 10× (flow) the 99th percentile of the series' positive values, once there are at least 100 of them | wide on purpose: catches typing and unit errors (l/s loaded as m³/s, a misplaced decimal), not real floods |
 | Flat-lines | rain: the same non-zero value on 5+ consecutive days (A-pan 7). Flow (engine ≥ 1.12.0): the same value, zero included, on max(14, ⌈3·r / (0.01·Q)⌉) consecutive days, capped at 90, where r is the record's resolution and Q the value (below). Rain's zero stretches are normal | a stuck logger or a filled-in gap |
 | Zero-rain runs (issue #2) | catchment rain (`rain_catchment_mm`) exactly 0 on consecutive days, with **60+ of those days in the wet season**: the six calendar months with the highest mean daily rain in the series itself. Without a usable climatology (a calendar month with fewer than 56 valid days, or a series that never rains) the rule is a plain **180+ days** in any season. A blank, negative or non-zero day ends a run | missing data exported as 0 (see below) |
