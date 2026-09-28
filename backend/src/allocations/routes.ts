@@ -9,7 +9,7 @@
 // The app never decides whether a use is lawful: every response and screen
 // says "modelled use" against "registered volume".
 import { createHash } from 'node:crypto';
-import { compareAllocations, fromEpochDay, toEpochDay, type AllocationUseNode } from '@water-management/engine';
+import { beforeForecast, compareAllocations, fromEpochDay, toEpochDay, type AllocationUseNode } from '@water-management/engine';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -456,14 +456,23 @@ export const allocationRoutes = new Hono<AuthEnv>()
 	})
 	// A run's modelled use against the registered volumes, per farm or water
 	// user and water year (engine compareAllocations). Modelled, not metered.
+	// A forecast run's forecast days are left out (issue #51): its use is
+	// judged on the record, like every other historical figure of it.
 	.get('/:id/runs/:runId/allocations', async (c) => {
 		const { id, runId } = c.req.param();
 		const q = z.object({ tolerance: TOLERANCE }).parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			if (!UUID.test(runId)) throw new ApiError(404, 'not found');
-			const { rows: run } = await db.query<{ label: string; startDate: string; endDate: string; nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null }>(
-				`SELECT label, start_date AS "startDate", end_date AS "endDate", inputs->'model'->'nodes' AS nodes FROM model_run WHERE project_id = $1 AND id = $2`,
+			const { rows: run } = await db.query<{
+				label: string;
+				startDate: string;
+				endDate: string;
+				forecastFrom: string | null;
+				nodes: { id: string; name: string; kind: string; damCapacityM3?: number }[] | null;
+			}>(
+				`SELECT label, start_date AS "startDate", end_date AS "endDate", summary->'forecast'->>'from' AS "forecastFrom", inputs->'model'->'nodes' AS nodes
+				 FROM model_run WHERE project_id = $1 AND id = $2`,
 				[id, runId]
 			);
 			const r = run[0];
@@ -474,7 +483,10 @@ export const allocationRoutes = new Hono<AuthEnv>()
 				 WHERE run_id = $1 AND key IN ('supplied', 'groundwater_used', 'groundwater_to_dam', 'river_abstraction') AND node_id = ANY($2::uuid[])`,
 				[runId, users.map((n) => n.id)]
 			);
-			const get = (nodeId: string, key: string) => series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
+			const get = (nodeId: string, key: string) => {
+				const values = series.find((s) => s.nodeId === nodeId && s.key === key)?.values;
+				return values && Array.from(beforeForecast(values, r.startDate, r.forecastFrom));
+			};
 			const nodes: AllocationUseNode[] = users
 				.filter((n) => get(n.id, 'supplied'))
 				.map((n) => ({
@@ -502,6 +514,6 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					validTo: a.validTo
 				}))
 			});
-			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate }, comparison });
+			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, forecastFrom: r.forecastFrom }, comparison });
 		});
 	});
