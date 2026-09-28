@@ -184,7 +184,9 @@
 				shortfall is charged to the units upstream of it in proportion to their net impact that day (inflow + runoff +
 				transfers − outflow); the part the units did not cause is natural. A unit above several sites carries the
 				largest of its charges. The charge splits by what the unit can change: irrigating less, or storing less and
-				passing inflow.
+				passing inflow. <span data-testid="supply-cut-note"
+					>Supply cuts are larger than the irrigate-less charge because part of what a unit pumps returns to the river.</span
+				>
 			</p>
 		{/if}
 		{#if c.otherUsers?.length}
