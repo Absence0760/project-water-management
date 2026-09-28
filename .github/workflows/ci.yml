@@ -449,7 +449,7 @@ jobs:
           python-version: '3.14'
 
       - name: Install openpyxl
-        run: python -m pip install -r scripts/wbt-import/requirements.txt
+        run: python -m pip install --require-hashes -r scripts/wbt-import/requirements.txt
 
       - name: unittest
         run: python -m unittest discover -s scripts/wbt-import
