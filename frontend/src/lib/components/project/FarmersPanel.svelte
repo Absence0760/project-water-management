@@ -48,8 +48,9 @@
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 	const keyOf = (f: FarmerEntry) => (f.status === 'active' ? f.userId : f.inviteId);
 
-	async function load() {
-		loading = true;
+	/** `quiet`: refresh behind the list already shown (after a CSV), with no loading state in its place. */
+	async function load(quiet = false) {
+		loading = !quiet;
 		loadError = null;
 		try {
 			entries = await api.farmers.list(projectId);
@@ -71,7 +72,7 @@
 		message = text;
 		error = null;
 		if (entry) upsert(entry);
-		else void load(); // a CSV: many rows changed
+		else void load(true); // a CSV: many rows changed; the list stays up while it refreshes
 	}
 
 	function edit(f: Farmer) {
@@ -110,7 +111,7 @@
 		busy = inv.inviteId;
 		error = message = null;
 		try {
-			const r = await api.farmers.add(projectId, inv.email, inv.nodeIds.filter((id) => farms.some((f) => f.id === id)), inv.locale);
+			const r = await api.farmers.add(projectId, inv.email, inv.nodeIds.filter((id) => farms.some((f) => f.id === id)), inv.locale, inv.role ?? 'farmer');
 			if (r.invited) {
 				upsert(r.invite);
 				message =
@@ -119,7 +120,7 @@
 						: `An invitation went to ${inv.email} less than a minute ago: wait a moment before re-sending.`;
 			} else {
 				upsert(r.farmer);
-				message = `${inv.email} has an account now and was added as a farmer.`;
+				message = `${inv.email} has an account now and was added as ${inv.role === 'contributor' ? 'an applicant' : 'a farmer'}.`;
 			}
 		} catch (err) {
 			error = msg(err);
@@ -228,6 +229,7 @@
 						<li class:expired={inv.status === 'expired'}>
 							<div class="who">
 								<span class="email"><EmailText email={inv.email} /></span>
+								{#if inv.role === 'contributor'}<span class="badge">applicant</span>{/if}
 								<span class="meta">
 									{farmNames(inv, farms).join(', ') || 'no hydrological units left'} · invited by {inv.invitedBy} ·
 									{#if inv.status === 'expired'}

@@ -1159,7 +1159,13 @@ In short:
     contributor reads only their own linked farm's farm-scoped rows (as a
     farmer does) and none of the viewer or owner tables
     (`scenarios/contributor-tables.db.test.ts`, each with a positive
-    control). The notes route treats a contributor as a farmer (a farm note
+    control). The one later exception is their own yields
+    (`096_contributor_yield`): a yield job and its result on a dam of an
+    application they own, and nothing of anyone else's
+    (`yield/contributor.db.test.ts`). The worker admits a role below a job
+    kind's own only through `JobHandler.alsoRole`, exactly that role, and the
+    handler checks the target again as them; `jobs/trust.security.db.test.ts`
+    allowlists each such kind with its reason. The notes route treats a contributor as a farmer (a farm note
     on their own farm only), and the team portfolio query now requires
     `role >= 'viewer'` rather than `role <> 'farmer'`, which a contributor
     passed.

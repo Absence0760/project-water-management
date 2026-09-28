@@ -1975,19 +1975,17 @@ role and not before it.
         tags the exception, **Inputs not stored**, rather than badging every
         run "Reproducible"; the "Cited" lock is the existing **Published** /
         **Scenario base** tags without a ✕ (pending the hydrologist).
-  - [ ] **Withdrawing a nomination (un-nominate)**, considered and not built
-        (2026-09-26). Under #43's rule (035_project_evidence_guard: any
-        nomination row keeps the project for good) a withdrawal would not
-        make a project deletable, so its only value is honesty in the record:
-        today an applicant who drops an application can only *replace* the
-        nomination, so the history keeps claiming some run is "the evidence".
-        The durable fix, if an assessor or applicant asks for it: an
-        append-only history row with no run and a required reason (run_id,
-        runoff_model and engine_version NULL together), stamped by
-        `run_nomination_stamp`, shown as "Withdrawn on … by …" in the Runs
-        tab, compare and the summary CSV; the guard stays unchanged. Trigger:
-        a real licence application withdrawn, or an assessor asking what a
-        project stands behind after an application lapses.
+  - [x] **Withdrawing a nomination (un-nominate)**. Done in
+        `098_nomination_withdrawal` (issue #73): an append-only history row
+        with no run and a required reason (`run_id`, `runoff_model` and
+        `engine_version` NULL together), stamped by `run_nomination_stamp`,
+        allowed only while a run is nominated; `POST …/evidence/withdraw`
+        and the Evidence panel's **Withdraw the nomination…**; shown as
+        "Withdrawn on … by …" in the Runs tab's history and evidence line,
+        compare and the summary CSV. The guard (035) is unchanged: the
+        project stays undeletable. Tests: `runs/evidence.db.test.ts`
+        ("withdrawing the nomination"), the unit tests of both `evidence.ts`
+        and `export/run-tables.ts`, e2e `evidence.spec.ts`.
   - [x] **WP-2.3's publication-history trim skips cited runs' publications**
         (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
         newest 12, every publication whose run a scenario is based on, so
@@ -2870,18 +2868,18 @@ from the WP:
 
 ## Firm yield (WP-3.6)
 
-- [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
-      `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
-      they own". WP-3.3's first slice (044/045) landed the role without them:
-      a contributor reads no job and no yield result
-      (`scenarios/contributor-tables.db.test.ts`), and 045's
-      `yield_result_select` already hides a yield of an application from
-      anyone who can't read it. Trigger: the applicant's view of results
-      (followups.md § Applicants); a new migration adds those policies from
-      045's `yield_result_select` and 016's `job_insert` (023 for the job
-      kinds), with the positive-control DB test (a contributor
-      queues a yield for their own scenario, not another's or a run) and the
-      fail-closed test (the job dies once they lose the role).
+- [x] **Contributor policies.** Done in `096_contributor_yield` (issue #73):
+      a contributor queues a `yield` job as themselves on an application they
+      own, for their own farm's dam or one its `node.add` ops add, and reads,
+      inserts and trims only the results they computed; an assessor's yield
+      on the same application stays hidden from them. The API
+      (`yieldInputFor`) refuses a hidden dam with an unknown id's words, and
+      the handler re-checks as the acting user through the new
+      `JobHandler.alsoRole`, so the job dies once they lose the role or the
+      dam. Tests: `yield/contributor.db.test.ts` (positive controls and
+      fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
+      allowlist). Left for the applicant's view of results below: a Yield
+      panel on the Applicant view (the API is ready).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
       browser for an instant preview, through WP-1.17's preview worker
       (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
@@ -3002,10 +3000,15 @@ Applicant view and the Applications tab. Left:
       `test:backend:perf:db` portfolio median 114 ms (budget 500);
       `test:backend:perf`'s DB-free budgets unaffected by RLS (its GR4J
       example-run budget fails for an engine reason, tracked under Pipelines).
-- [ ] **Invite as an applicant with farms.** A contributor's farm links are
-      set by the owner after they join (`/farmers/:userId`); a farmer invite
-      carries farms, a contributor invite doesn't. Trigger: the first client
-      catchment with an irrigator applicant.
+- [x] **Invite as an applicant with farms.** Done in
+      `097_contributor_invite_farms` (issue #73): `POST /farmers` takes
+      `role: 'contributor'`, so the Invite farmers dialog's **Joins as**
+      *Applicant* adds a verified account, or invites any other address, as a
+      contributor with the farms they hold; accepting links them
+      (`app_accept_invites`, for the role the invite made them). A resend
+      from the members list keeps the farms. Tests:
+      `farms/invites.db.test.ts` ("inviting an applicant with farms"), e2e
+      `farmer-invites.spec.ts`.
 
 - [ ] **Portfolio e2e stalls under heavy parallel load** (seen once,
       2026-09-26, in 1 of 4 loaded batches of `help.spec.ts` +

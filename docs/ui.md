@@ -944,7 +944,10 @@ it scrolls, and isn't fitted to the window.
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
-  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  **Joins as** *Farmer* or *Applicant*, and for a farmer the email's
+  language; an applicant is a licence applicant who holds those farms,
+  WP-3.3, invited with the ordinary English invite email and badged
+  "applicant" in the pending list) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
   `project/farmers.ts`). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's
@@ -3584,9 +3587,16 @@ read it before.
   instead** when another run is current; `POST …/evidence`). A legacy-model
   run (a stored run from before engine 1.0.0, which removed the model) and
   the current evidence run say why they can't be nominated instead.
+  While a run is nominated, editors also get **Withdraw the nomination…**,
+  which opens a required **Why the nomination is withdrawn** textarea and
+  **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards
+  the section says "The project's nomination was withdrawn: no run is its
+  evidence now." and any run may be nominated again.
   Under it the **Nomination history**, newest first: "Nominated “A” on … by
-  …", then each "Replaced by “B” on … by …", each with the run's runoff model
-  and engine version and the reason, the current one badged. Nothing in the
+  …", then each "Replaced by “B” on … by …" or "Withdrawn on … by …" (a run
+  nominated after a withdrawal reads "Nominated" again), each nomination with
+  the run's runoff model and engine version, every row with its reason, the
+  current one badged. Nothing in the
   history can be edited or removed. In the runs list the current evidence run
   carries an **Evidence** badge and a replaced one **Former evidence**; neither
   has a delete button (the server refuses with `409`). The run header repeats

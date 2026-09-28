@@ -67,6 +67,7 @@ const LOWER_ROLE_WRITES = new Map<string, { why: string; viewer: number }>([
 	['POST /projects/:id/copy', { why: 'copies what a viewer can read into a new project of their own; the original is untouched', viewer: 201 }],
 	['DELETE /projects/:id/members/:userId', { why: 'anyone may leave (a farmer included); only an owner removes someone else (inline check)', viewer: 403 }],
 	['POST /projects/:id/reports', { why: 'a viewer renders a PDF of a run they can read, emailed to themselves only; other recipients need an editor', viewer: 202 }],
+	['POST /projects/:id/yield', { why: 'a contributor queues a yield on their own application only (yieldInputFor, 096); a viewer queues none', viewer: 403 }],
 	['POST /projects/:id/yield/:jobId/cancel', { why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job); a viewer queues none', viewer: 404 }],
 	['PUT /me/alerts/:projectId', { why: "the caller's own alert preferences, limited to the kinds their role gets", viewer: 200 }],
 	['POST /projects/:id/notes', { why: 'notes (WP-2.7): min farmer, RLS and the route scope what each role writes', viewer: 201 }],
@@ -149,7 +150,12 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['POST /projects/:id/scenarios/:sid/reopen', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
 	['GET /projects/:id/scenarios/:sid/share-candidates', { min: 'contributor', why: 'who an applicant may share their own application with' }],
 	['POST /projects/:id/scenarios/:sid/members', { min: 'contributor', why: 'an applicant shares their own application' }],
-	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }]
+	['DELETE /projects/:id/scenarios/:sid/members/:userId', { min: 'contributor', why: 'an applicant unshares their own application' }],
+	// Yield (WP-3.6, 096_contributor_yield): an applicant on a dam of their own application; RLS shows them only their own jobs and results.
+	['POST /projects/:id/yield', { min: 'contributor', why: "an applicant queues a yield of a dam of their own application (yieldInputFor); a viewer queues none" }],
+	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],
+	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],
+	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }]
 ]);
 
 /** Reads that need editor, and why. */

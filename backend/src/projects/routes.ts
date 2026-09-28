@@ -136,13 +136,18 @@ const PG_RESTRICT = '23001';
  * (issue #43). `details.evidenceRun` names the current nomination so the UI
  * can link to it; null when the trigger caught a nomination made mid-request.
  */
-function evidenceKept(run: { runId: string; runLabel: string; nominations: number } | null) {
-	const named = run ? `"${run.runLabel || 'Untitled run'}" is its nominated evidence run` : 'it has a nominated evidence run';
+function evidenceKept(run: { runId: string | null; runLabel: string | null; nominations: number } | null) {
+	// The newest row is a withdrawal (098): no current evidence run, but the history is still kept.
+	const named = !run
+		? 'it has a nominated evidence run'
+		: run.runId
+			? `"${run.runLabel || 'Untitled run'}" is its nominated evidence run`
+			: 'it has an evidence nomination history (its last nomination was withdrawn)';
 	return new ApiError(
 		409,
-		`this project can't be deleted: ${named}, and a project keeps its evidence run and nomination history for good. ` +
-			'A nomination can be replaced but not withdrawn; copy the project to start again without it.',
-		{ evidenceRun: run ? { id: run.runId, label: run.runLabel } : null, nominations: run?.nominations ?? null }
+		`this project can't be deleted: ${named}, and a project keeps its evidence run and nomination history for good, ` +
+			'even once a nomination is withdrawn; copy the project to start again without it.',
+		{ evidenceRun: run?.runId ? { id: run.runId, label: run.runLabel ?? '' } : null, nominations: run?.nominations ?? null }
 	);
 }
 
@@ -324,9 +329,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			// A project that has nominated an evidence run keeps it and its
 			// nomination history for good (issue #43); the project_evidence_guard
 			// trigger (035) refuses the DELETE too, whoever runs it.
-			const { rows: evidence } = await db.query<{ runId: string; runLabel: string; nominations: number }>(
+			const { rows: evidence } = await db.query<{ runId: string | null; runLabel: string | null; nominations: number }>(
 				`SELECT n.run_id AS "runId", r.label AS "runLabel", count(*) OVER ()::int AS nominations
-				 FROM run_nomination n JOIN model_run r ON r.id = n.run_id
+				 FROM run_nomination n LEFT JOIN model_run r ON r.id = n.run_id
 				 WHERE n.project_id = $1 ORDER BY n.nominated_at DESC LIMIT 1`,
 				[id]
 			);

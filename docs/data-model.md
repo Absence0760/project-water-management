@@ -406,6 +406,15 @@ by `CHECK`), `nominated_by` (→ `app_user`) and `nominated_at`. The newest row
 (by `nominated_at`, unique per project) is the **current** nomination; every
 older row is kept, so the history reads "nominated A on …, then replaced by
 B on … because …". A run can be nominated again later (A, B, A).
+**Withdrawals** (098_nomination_withdrawal) are rows too: `run_id`,
+`runoff_model` and `engine_version` all `NULL` (a `CHECK` keeps them
+together) and a required `reason`. After one, the project has no current
+evidence run until a run is nominated again; the withdrawn run reads as past
+evidence ("…, then withdrawn on … because …") and stays kept.
+`run_nomination_stamp` allows a withdrawal only while a run is nominated (the
+newest row has one), clears any model columns it names, and stamps who and
+when; the 50-row cap counts it. `project_evidence_guard` (035) is unchanged:
+any row keeps the project, withdrawn or not.
 
 - **Append-only by privilege.** `water_app` has `SELECT` and `INSERT` only: no
   `UPDATE`, `DELETE` or `TRUNCATE`, and the table has no update or delete
@@ -1655,7 +1664,7 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 | `email_token` | `user_id`, `purpose` (`verify` / `reset`), SHA-256 `token_hash`, `expires_at`, `created_at` |
 | `account_mail_quota` (078) | One row per reset or verification email sent: `user_id` (cascade), `device` (`NULL` for the address's shared count, else the `wm_device` cookie's random id), `sent_at`. For the daily cap; rows older than 24 hours are deleted on the next issue |
 | `invite` | Pending invitation: `email`, either `project_id` + `project_role` or `team_id` + `team_role`, `invited_by`, `token_hash`, `expires_at`, `last_sent_at`, `locale` (a `language` code, the email's language, default `en`; 034, 080); unique per (project, email) / (team, email) |
-| `invite_node` | The farms a pending **farmer** invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` invite of the same project |
+| `invite_node` | The farms a pending **farmer** or **applicant** (`contributor`, 097) invite links once accepted (034): `invite_id` (cascade), `project_id`, `node_id` (cascade). A trigger allows only `farm` nodes on a `farmer` or `contributor` invite of the same project |
 
 - Tokens are only ever touched before sign-in, through `SECURITY DEFINER`
   functions: `app_issue_email_token()` (per-address cooldown, then the daily
@@ -1669,10 +1678,10 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   updates must leave `invited_by` = the current user. `app_invite_for_token()` answers the
   public "what is this link for?" lookup; `app_accept_invites(user)` converts
   every live invite for the user's **verified** address into
-  `project_member` / `team_member` rows, links the farms of each farmer
-  invite (`farm_link` from `invite_node`, only where the membership really is
-  `farmer`: someone already on the project with another role keeps it and
-  gets no link), records `member.added` and `farmer.linked` (cause `invite`),
+  `project_member` / `team_member` rows, links the farms of each farmer or
+  applicant invite (`farm_link` from `invite_node`, only where the membership
+  really is the invite's role, 097: someone already on the project with
+  another role keeps it and gets no link), records `member.added` and `farmer.linked` (cause `invite`),
   gives an account with no `locale` yet the `locale` of the most recently
   sent invite it accepts (050_user_locale.sql, WP-2.5; a chosen locale is
   never overwritten), and deletes those invites. Invites cascade away with their project or team,
@@ -1864,8 +1873,18 @@ No job table of its own: `job` holds status, progress and errors.
 - **Indexes**: `(run_id, created_at DESC)` and `(scenario_id, created_at
   DESC)` (partial; they serve the list and cover those keys), `project_id`,
   `job_id`, `created_by`.
-- **Not yet**: the roadmap's "a contributor reads and inserts for their own
-  scenario" waits for WP-3.3's `contributor` role ([followups.md](./followups.md)).
+- **Contributors** (`096_contributor_yield`, WP-3.3): an applicant inserts,
+  reads and deletes only the results they computed themselves
+  (`created_by`), on an application they own, for a dam of it they may see
+  (`app_contributor_yield_target`: their farm links on it, or a node its own
+  `node.add` ops add). An assessor's yield on the same application stays
+  hidden from them. `job` gets the matching pair: a contributor queues a
+  `yield` job as themselves for such a target (never on a saved run) and
+  reads their own yield jobs. The API narrows the target further
+  (`yield/store.ts` `yieldInputFor`: an added node that took a hidden node's
+  id answers as an unknown one), and the job re-checks it as its acting user
+  (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
+  (`yield/contributor.db.test.ts`).
 
 ### Scenario sweeps (062_scenario_sweeps.sql)
 
