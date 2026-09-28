@@ -895,12 +895,14 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farm or feed of another project `404`. Once `data_stale` is on for any
   feed, a feed added later gets its own rule, on, at its source's default.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
-  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
+  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn, threshold }`:
   `mode` is what you get now (the database's own rule,
   `app_alert_my_mode`), `defaultMode` your role's default, `chosen` whether
   you set it, `ruleOn` whether the catchment has it switched on (off, you
   get nothing whatever you choose). A farmer has one `dam_below` choice per
-  own farm; everyone else one for every farm. `muted`: every alert email
+  own farm; everyone else one for every farm. `threshold` is a farm's dam
+  alert level, the WUA's rule for that farm as a fraction (0.3 = 30 %),
+  `null` for any other choice or a farm with no rule (issue #51). `muted`: every alert email
   for the catchment is off (a digest's one-click unsubscribe).
 - `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
   digest), `daily_digest` (in the 06:00 summary, 06:00 in the project's time zone), `off`.
@@ -1051,11 +1053,21 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, note (≤ 1000 chars) }[]`, at most 5 000. Defaults:
-other, monthly, null, null, null, 0, null, 0, shared, internal, true, ''.
-`PUT` refuses an object on a gauge, an other water user or an unknown node, a
-monthly one without 12 values, a per-unit one without a count and litres, and
-an external one with a return share above 0.
+'external'), enabled, schedule (below, or null), note (≤ 1000 chars) }[]`,
+at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
+internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
+user or an unknown node, a monthly one without 12 values, a per-unit one
+without a count and litres, and an external one with a return share above 0.
+
+A demand object's `schedule` (engine ≥ 1.17.0, migration 100, issue #90 Q4,
+[model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
+default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
+('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo
+('easter': whole days from Easter Sunday, −60 to 60; else null), weekdays (ISO
+1 = Monday … 7 = Sunday, at least one, or null = every day), factor (0–10, 0 =
+off) }`; the later of two windows covering a day wins. `PUT` refuses a date
+that doesn't exist, a span that ends before it starts and a factor out of
+range; an empty list is stored, and read back, as null.
 
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
@@ -1369,8 +1381,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
   name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
-  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort }[]`, in id
-  order). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
+  in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
+  the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
@@ -2019,7 +2032,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2030,7 +2043,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   share with the E7 headline and its band). `farm.river.equitableFraction`
   and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
-  D2), and `cutBeyondShare` is `false` (it is measured against the even
+  D2; for a viewer previewing the farm, counted as that farm's own farmer
+  would count them, 096), and `cutBeyondShare` is `false` (it is measured against the even
   share, so it would bound it); the stored projection keeps them.
   `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
   deficitDays, suppliedFraction }` only when the published run is a forecast
@@ -2042,6 +2056,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
+  `publishedBy` is the publisher's display name, `null` once that account
+  is gone (the page words it, "A former member", in the reader's language).
   The WUA's notice in every language it wrote it in, by code (`{}` for
   none); the page shows the reader's language, else English, else another,
   with a "not translated" line (`pickNotice`, design §7), so a language
@@ -2050,6 +2066,12 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
+- `today` is the date in the project's time zone (`project.timeZone`, 058)
+  when the response was built. The page counts ages (the dates line, a
+  forecast's age) to today in `project.timeZone` from the device's clock
+  (`farmToday`, `farm/numbers.ts`), so a saved copy or a tab left open moves
+  on with the day and a phone set to another zone counts the server's days;
+  `today` is its fallback when the browser doesn't know the zone.
 - `project.wuaName` is the WUA's name for the contact lines (`null` =
   "your WUA"); `farm.dataFrom` is the published run's first day, which
   "compared with last season" names when `lastSeason` is `null` (a

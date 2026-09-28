@@ -105,6 +105,19 @@ export function localIsoDate(now: Date = new Date()): string {
 	return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+const zoned = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * Today's calendar date in an IANA zone (YYYY-MM-DD), whatever zone the
+ * device is set to. Throws a RangeError for a zone Intl doesn't know.
+ */
+export function zonedIsoDate(now: Date, timeZone: string): string {
+	let f = zoned.get(timeZone);
+	if (!f) zoned.set(timeZone, (f = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })));
+	const p = Object.fromEntries(f.formatToParts(now).map((x) => [x.type, x.value]));
+	return `${p.year}-${p.month}-${p.day}`;
+}
+
 const GROUPED = /^-?\d{1,3}(,\d{3})+(\.\d+)?$/;
 const DECIMAL_COMMA = /^-?\d*,\d+$/;
 

@@ -9,12 +9,12 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { localIsoDate } from '$lib/format/number';
 	import CompareCard from '$lib/components/farm/CompareCard.svelte';
 	import DamCard from '$lib/components/farm/DamCard.svelte';
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import { farmToday } from '$lib/components/farm/numbers';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
 	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
@@ -40,7 +40,6 @@
 	const farm = new FarmState(api, () => session.user?.id ?? null);
 	// The account's unit (app_user.volume_unit), else this phone's.
 	let unit = $state(session.user?.volumeUnit ?? readUnit());
-	const today = localIsoDate();
 
 	// Up to this many farms here, the switcher is a row of chips above the
 	// name; past it, they fold under "Your farms in this catchment (N farms)" (a WUA previewing sees
@@ -110,7 +109,7 @@
 		<div>
 			<h1>{view.farm.name}</h1>
 			<p class="sub">{view.project.name}</p>
-			<DatesLine line={datesLine(view, today)} />
+			<DatesLine line={datesLine(view, farmToday(view))} />
 			{#if farm.updating && farm.fromSaved}<p class="fine" role="status">{stateText('updating')}</p>{/if}
 		</div>
 
@@ -142,9 +141,9 @@
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
 			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
-			{@const forecast = forecastCard(view.farm, today)}
+			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
-			<MonthlyChart farm={view.farm} />
+			<MonthlyChart farm={view.farm} {unit} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
 			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />

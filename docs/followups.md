@@ -2732,17 +2732,43 @@ from the WP:
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
       workbook in the private seed settings.
-- [ ] **Demand objects: the daily schedule.** Not built: date windows with a
-      factor, an uploaded daily factor series
-      through Add data, and the reason a day is off (not needed: no demand,
-      no return; supplied from elsewhere: no river take, the return goes on;
-      curtailed: a shortfall), with switched-off days reported apart from
-      short days. Durable fix: a `schedule` on the object (windows) and an
-      object-scoped series kind for the uploaded factor, applied in
-      `network/demandObjects.ts planObjects` before the split, with the
-      reason carried into the return (a per-day return override) and the
-      summary. Trigger: the client's answer on the schedule (fixed pattern or
-      uploaded series; what off means).
+- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.17.0,
+      migration 100, issue #90 Q4 and Q12). The client answered: the daily
+      pattern depends on the demand type (a town's is fixed, irrigation's
+      varies) and the switch is set by date, not by river flow. A `schedule`
+      on the object: windows (every day, a yearly MM-DD span wrapping the
+      year end, a one-off date range, days around Easter), narrowed to
+      weekdays, each with a factor (0 = off), the later window winning;
+      applied in `network/demandObjects.ts planObjects` before the split and
+      recomputed by the self-checks; days off reported apart from days
+      short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
+      ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
+      meaning: no demand, so no supply and nothing returned.
+- [ ] **Demand objects: the off reason.** Not built, because the client
+      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+      off days (occupancy, works downtime, load-shedding, switching to a
+      borehole), whether an off period can mean "supplied from elsewhere"
+      (no river take, the return goes on) or "curtailed" (counted as a
+      shortfall) rather than "not needed", and whether a treatment works
+      keeps discharging while its user is off the river. Today every off day
+      is "not needed" (no demand, no return). Durable fix: a `reason` on a
+      schedule window (`notNeeded` / `elsewhere` / `curtailed`), carried into
+      the return as a per-day override (an `elsewhere` day keeps its return,
+      from a set discharge or the recent mean) and into the summary
+      (curtailed days as short, elsewhere days as met elsewhere). Trigger:
+      the client's answer to the rest of Q12.
+- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
+      meter or works record of which days a demand ran, uploaded through Add
+      data as a daily factor on one object (the design's second source
+      beside the windows). Left out of the schedule PR because it isn't
+      bounded like the windows: it needs a series kind scoped to an object
+      (today's series are project- or node-scoped), its storage and
+      provenance, the Add data flow and preview, and a rule for days the
+      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
+      stored like the node series, multiplied after the schedule in
+      `planObjects` (a gap runs at the schedule's factor), with the checks
+      reading it the same way. Trigger: a client supplying such a record for
+      a demand whose pattern windows can't describe.
 - [ ] **Demand objects: a structured demand source.** The rule is decided
       (issue #54 Q11, confirmed by the client in issue #90): a demand comes
       from meter records where they exist, else the reconciliation
@@ -3102,6 +3128,21 @@ Applicant view and the Applications tab. Left:
       layout's app-wide code), then giving phones the 800 px render (`sizes`
       asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
       6), tracked on #92; measure there, then close #57.
+- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+      international persona). The page is prerendered once, in English, and
+      `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
+      `lang` switch together only once the app hydrates and loads the
+      catalogue. `lang="en"` is correct for what is on the page before then
+      (the words are English), so setting `lang="af"` early from the stored
+      choice would claim Afrikaans for English text, and an inline script
+      would also need its own hash in the meta CSP (`kit.csp` hash mode,
+      `infra/scripts/check-csp.mjs`). Durable fix: prerender the landing
+      page once per language (`/welcome` and an Afrikaans `/af/welcome`, or
+      the language as a path parameter with `entries`), each with its own
+      `lang`, `hreflang` links between them, and the root sending a stored
+      or browser choice to the right one. Trigger: the landing page is
+      linked from somewhere Afrikaans readers arrive first (a WUA's
+      Afrikaans newsletter), or a screen-reader user reports it.
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
@@ -3267,6 +3308,16 @@ Left, each with its trigger:
       click tracking on the configuration set (POPIA: say so in the privacy
       notice) or a "Was this useful?" link. Trigger: one season of alerts on
       production (#92).
+- [ ] **A farmer's own dam alert level** (issue #51, the farmer persona:
+      "40 %, chosen by me, before my planting decision"). The page now
+      shows the WUA's level for each farm (`AlertChoice.threshold`), but only
+      the WUA sets it (`alert_rule`, one per farm, editors). Letting a farmer
+      pick their own warning level (a per-subscription threshold on
+      `alert_subscription`, beside the WUA's) is a
+      decision for the WUA, not a build: an alert at a farmer's level is
+      still the model's estimate, and a level above the WUA's could read as
+      an earlier restriction. Trigger: the client decides whether farmers
+      may set their own level (plan.md §9 questions).
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.

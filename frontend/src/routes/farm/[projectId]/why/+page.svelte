@@ -7,8 +7,8 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { localIsoDate } from '$lib/format/number';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
+	import { farmToday } from '$lib/components/farm/numbers';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmPage from '$lib/components/farm/FarmPage.svelte';
 	import Rich from '$lib/i18n/Rich.svelte';
@@ -21,7 +21,6 @@
 	const projectId = $derived(page.params.projectId ?? '');
 	const asked = $derived(page.url.searchParams.get('node'));
 	const farm = new FarmState(api, () => session.user?.id ?? null);
-	const today = localIsoDate();
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
@@ -34,7 +33,7 @@
 		{@const s3 = step3(view.farm)}
 		<div class="intro">
 			<h1>{whyTitle(view.farm)}</h1>
-			<div><p class="sub">{view.farm.name}</p><DatesLine line={datesLine(view, today)} /></div>
+			<div><p class="sub">{view.farm.name}</p><DatesLine line={datesLine(view, farmToday(view))} /></div>
 			<p>{whyIntro(view.farm)}</p>
 		</div>
 		<EstimateNote />

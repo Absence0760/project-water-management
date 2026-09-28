@@ -203,6 +203,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.category', 'demandObject.priority', 'demandObject.returnPct', 'summary.demandObjects']
 	},
 	{
+		id: 'demand-schedule',
+		term: 'Demand schedule',
+		short: 'Date windows that scale a demand object’s daily demand (weekends, a season, a shutdown, Easter); a factor of 0 switches it off.',
+		category: 'network',
+		fields: ['demandObject.schedule']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',

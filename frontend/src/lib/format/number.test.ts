@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, localIsoDate, parseNum } from './number';
+import { fmtDate, fmtDay, fmtNum, fmtPct, fmtQty, fmtReading, localIsoDate, parseNum, zonedIsoDate } from './number';
 
 describe('fmtNum', () => {
 	it('adds thousands separators and rounds', () => {
@@ -140,5 +140,20 @@ describe('fmtDay', () => {
 			process.env.TZ = zone;
 			expect(fmtDay('2021-10-01')).toBe('1 Oct 2021');
 		}
+	});
+});
+
+describe('zonedIsoDate', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	it('is the date in the zone asked for, whatever the device’s zone', () => {
+		process.env.TZ = 'Pacific/Pago_Pago'; // UTC−11: the 5th on the device
+		const now = new Date('2024-01-05T23:30:00Z');
+		expect(localIsoDate(now)).toBe('2024-01-05');
+		expect(zonedIsoDate(now, 'Africa/Johannesburg')).toBe('2024-01-06');
+		expect(zonedIsoDate(now, 'UTC')).toBe('2024-01-05');
+		expect(() => zonedIsoDate(now, 'Not/AZone')).toThrow(RangeError);
 	});
 });

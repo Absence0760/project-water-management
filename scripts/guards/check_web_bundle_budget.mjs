@@ -1149,6 +1149,15 @@
 //             read as missing, the Reserve requirement line on the flow vs
 //             reserve chart, and the CHIRPS feed note. No new dependency.
 //             Headroom ~3 KB.
+// 2026-09-28  total 1089 → 1094 KB (measured 1090 with main, after #127,
+//             merged in; +4 KB on main). Demand-object on/off schedules (issue #90
+//             Q4, engine 1.17.0): the node form's schedule editor
+//             (DemandScheduleFields.svelte and its list helpers), the
+//             engine's window rules and Easter computus shared by the form's
+//             validation and the run, the Days off column and the help
+//             entry. Lazy-loading the editor would not lower this figure:
+//             the total sums every chunk, so a split only moves the bytes and
+//             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1159,7 +1168,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1089,
+	totalCodeKb: 1094,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
