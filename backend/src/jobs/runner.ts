@@ -10,6 +10,7 @@ import { type Db, withoutUser, withUser } from '../db/tx.js';
 import { type ScheduleResult, scheduleDueFeeds } from '../feeds/schedule.js';
 import { ApiError } from '../http/errors.js';
 import { purgeInvites } from '../invites/invites.js';
+import { safeError, stackFrames } from '../logging/safeError.js';
 import { requireRole } from '../projects/access.js';
 import { purgeReports, type ReportScheduleResult, scheduleDueReports } from '../reports/schedule.js';
 import { describeFailure, JobError, LeaseLostError } from './errors.js';
@@ -47,7 +48,9 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 			return 'lost';
 		}
 		const failure = describeFailure(err);
-		if (!failure.expected) console.error(`job ${job.id} (${job.kind}) failed:`, err);
+		// Name, code and stack frames only: an error's text can carry personal
+		// data (a pg error's detail holds row values, SES's names the recipient).
+		if (!failure.expected) console.error(JSON.stringify({ event: 'job_failed', jobId: job.id, kind: job.kind, ...safeError(err), at: stackFrames(err) }));
 		const status = await withoutUser((db) => finishJob(db, job, { ok: false, error: failure.message, retry: failure.retry }));
 		if (status === 'dead') {
 			// The alarm hook (infra/jobs.tf metric filter), and the owners' job_dead alert
