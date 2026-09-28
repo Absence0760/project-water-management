@@ -126,6 +126,9 @@ pnpm import:project <project.json> --email you@example.com [--name …] [--passw
                              # patch the settings and transfer rules (by end-node names), fit GR4J before importing (model.md §2.10b)
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
                              # GR4J at a few pan-coefficient choices, fixed vs refitted (no DB; refuses a monthly PE, settings.pe; model.md §2.4a)
+pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]
+                             # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
+                             # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
 

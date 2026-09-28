@@ -729,6 +729,9 @@ setting, so run comparison reads it as legacy.
     `'monthly'`: the pan coefficient doesn't reach GR4J there, so every case
     would give the same numbers. Set `settings.pe` to `{ kind: 'pan' }` in a
     copy of the project.json to see the pan-coefficient sensitivity.
+    To compare *fits* across pan presets together with other fit settings
+    (bounds, objective, exclusions, the WR2012 band), use `pnpm fit-sweep`
+    (§2.10b).
 - **No evaporation, no run** (engine ≥ 0.11.1). When GR4J's PE is 0 in
   every month (A-pan × pan coefficient under `pan`, or the monthly PE row
   under `monthly`, engine ≥ 0.31.0), GR4J is refused (`GR4J_NO_PET`), as a
@@ -4021,6 +4024,44 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   `pnpm seed:demo` reads the patch file and the switch per workbook from
   `WBT_SETTINGS` and `WBT_FIT=1` in `wbt-import.<Prefix>.env`, beside the
   workbooks (run-locally.md).
+- **Fit-settings sweep** (`pnpm fit-sweep <project.json> --grid <grid.json>`,
+  `backend/scripts/fit-sweep.ts`). The headless form of
+  the free / typical-bounds / band / both comparison: one fit per cell of
+  a grid of fit settings, so "what if we fit it this way" is a grid file,
+  not a hand-built table. The grid is JSON, every axis optional with one
+  default cell:
+  `panPresets` (`"project"`, the default, keeps the project's row; a preset
+  id from `PAN_COEFFICIENT_PRESETS`; a number for a flat row; or
+  `{ label, values }` with 12 water-year months), `bounds` (`wide` /
+  `typical`), `objectives` (any of `OBJECTIVES`), `exclusionSets` (named
+  lists of calibration exclusions, each with a reason, as stored ones are,
+  added on top of `settings.calibrationExclusions`; default `{ "none": [] }`),
+  `wr2012Band` (booleans; default the project's own
+  `calibrationPenalty.enabled`) and `wr2012Penalty` (`weight`, `marLowMm3`,
+  `marHighMm3` over the stored penalty, for the cells with the band on). The
+  file is checked with zod and every problem is named by its path; a band
+  cell needs a WR2012 reference and a penalty `wr2012PenaltyIssues`
+  accepts; a pan preset other than `"project"` is refused under a monthly
+  PE, as `pnpm pan-sensitivity` refuses it. Each cell runs `calibrate()`
+  with validation (split-sample, dry → wet, and the other observed record
+  when the project has both, as Fit at import picks it), then `runModel`
+  with the fitted parameters. The Markdown table has, per cell, X1–X4, the
+  score in the cell's own objective in-sample and on each validation test
+  (plus KGE′ in-sample and split-sample for every cell, since scores in
+  different objectives don't compare), simulated natural MAR over the whole
+  run, its ratio to the scaled WR2012 MAR (on the basis the run's WR2012
+  check uses) and EWR days not met; the header gives the engine version,
+  seed, starts, budget, fitted and independent records and each exclusion
+  set with its reasons, and the fits' notes follow the table. `--json`
+  writes the same results for tooling (CR-1's batch can reuse it). It
+  fits every cell and ranks nothing: the choice of fit stays the
+  hydrologist's, recorded with a reason. No database; each cell is a full
+  calibration, so a grid is capped at 24 cells unless `--max-cells`
+  raises it. It is not CR-21, which perturbs the inputs of one fit. A
+  report on the client catchment holds real figures, so it stays in the
+  gitignored `data/`. Paths are resolved from the directory the command
+  was typed in (both this and `pan-sensitivity` run through `pnpm -C
+  backend`, which moves the working directory).
 
 On a short or unrepresentative record, expect the validation columns to
 score well below the fit: such a record constrains the parameters poorly. That
