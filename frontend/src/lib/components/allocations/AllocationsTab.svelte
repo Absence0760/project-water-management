@@ -89,7 +89,7 @@
 
 	// --- the comparison for that run ---
 	let comparison = $state.raw<AllocationComparison | null>(null);
-	/** What the compared run's allocation mode did to its use (engine ≥ 1.16.0). */
+	/** What the compared run's allocation mode did to its use (engine ≥ 1.18.0). */
 	let runMode = $state<AllocationMode>('none');
 	let cLoading = $state(false);
 	let cError = $state<string | null>(null);

@@ -6,8 +6,9 @@ import { ApiError } from '../http/errors.js';
 import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/record.js';
 import { MAX_SERIES_ABS_VALUE, MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
-import { acceptedInput, anomalousPushedDays, type HeldDays, othersSuffice } from './hold.js';
+import { acceptedInput, anomalousPushedDays, type HeldDays, heldFor, othersSuffice } from './hold.js';
 import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
+import { lastValueDaySql } from './lastDay.js';
 
 export { MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate };
 
@@ -24,6 +25,27 @@ export async function assertRoomForSeries(db: Db, projectId: string): Promise<vo
 	const n = rows[0]!.n;
 	if (n === null) throw new ApiError(404, 'not found');
 	if (n >= SERIES_PER_PROJECT_MAX) throw new ApiError(409, `a project holds at most ${SERIES_PER_PROJECT_MAX} series; delete one it no longer needs first`);
+}
+
+/**
+ * Before an API key's merge creates a series: 409 when the project already
+ * has an outlet series of that kind (100_key_series_kind.sql). A run reads
+ * the first outlet series of each kind by name (runs/execute.ts
+ * loadLiveInput), so a key free to add a second one could name it to sort
+ * first and swap the model's input for its own days. A person adds the
+ * series (an upload, even of one day) and the key may then merge into it.
+ * Called after assertRoomForSeries, whose advisory lock serialises creates.
+ */
+export async function assertKeyMayCreate(db: Db, projectId: string, kind: string): Promise<void> {
+	const { rows } = await db.query<{ taken: boolean | null }>('SELECT app_project_has_outlet_series($1, $2) AS taken', [projectId, kind]);
+	const taken = rows[0]!.taken;
+	if (taken === null) throw new ApiError(404, 'not found');
+	if (taken) {
+		throw new ApiError(
+			409,
+			`the project already has a ${kind} series: an API key can only add days to a series that exists. Ask an editor to add this one first (an upload of one day is enough)`
+		);
+	}
 }
 
 /**
@@ -99,9 +121,12 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
 // "new data since the last run" even for corrections inside the run period.
 // product / productVersion: what the values are (032_series_provenance.sql), null = not recorded.
+// lastValueDate: the last day with a value (series/lastDay.ts), null when
+// every day is blank: "data up to", where startDate + length counts blanks.
 // rebuilding: a data feed is backfilling a confirmed replacement of this
 // series (feed_stage); the values here stay as they are until it swaps in.
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
+	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
@@ -258,6 +283,8 @@ export interface SeriesMetaRow {
 	startDate: string;
 	length: number;
 	updatedAt: string;
+	/** The last day with a value; null when every day is blank. */
+	lastValueDate: string | null;
 	product: string | null;
 	productVersion: string | null;
 	dayBoundary: string | null;
@@ -369,7 +396,10 @@ export async function mergeSeries(
 	if (owned.length === 0) owner = null;
 	const merged = mergeDaily(existing, incoming, { keepOnNull });
 	if (merged.values.length > MAX_SERIES_VALUES) throw new ApiError(413, `series would exceed ${MAX_SERIES_VALUES} days`);
-	if (!row) await assertRoomForSeries(db, projectId);
+	if (!row) {
+		await assertRoomForSeries(db, projectId);
+		if (byKey) await assertKeyMayCreate(db, projectId, body.kind);
+	}
 	const before = row
 		? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values, product: row.product, productVersion: row.productVersion }
 		: null;
@@ -545,14 +575,19 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 	}
 	// A key's push whose days look wrong holds the automatic re-run for a person to review (series/hold.ts).
 	// The accepted reference (the latest manual run's input) is read only when the series without the key's days is too short to judge by.
+	// A series the key created is held whatever its days: it becomes the model's input for its kind
+	// (assertKeyMayCreate allows it only when the kind had none), with nothing to judge its days by.
 	const flagged =
 		opts.via === 'api_key' && daysChanged > 0
-			? anomalousPushedDays(
-					body.kind,
-					r.before,
-					body,
-					r.keyDays,
-					r.before && !othersSuffice(r.before, body, r.keyDays) ? await acceptedInput(db, r.meta.id) : null
+			? heldFor(
+					!r.before,
+					anomalousPushedDays(
+						body.kind,
+						r.before,
+						body,
+						r.keyDays,
+						r.before && !othersSuffice(r.before, body, r.keyDays) ? await acceptedInput(db, r.meta.id) : null
+					)
 				)
 			: null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });

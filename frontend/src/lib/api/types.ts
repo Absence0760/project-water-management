@@ -71,6 +71,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
+	renderSession?: boolean;
 	/**
 	 * Acknowledged the farm view's notice now in force (app_user.farm_notice_version,
 	 * 093, against the engine's FARMER_NOTICE_VERSION). The farm pages show the
@@ -1310,7 +1312,7 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (100, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
+	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];

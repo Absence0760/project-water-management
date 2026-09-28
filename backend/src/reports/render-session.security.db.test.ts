@@ -209,6 +209,7 @@ describe('a session’s scope claim', () => {
 			.setIssuer('water-management')
 			.setIssuedAt()
 			.setExpirationTime('600s')
+			.setJti(crypto.randomUUID())
 			.sign(secret());
 
 	it('opens nothing when malformed, never a full session; a well-formed one reads its report (positive control)', async () => {

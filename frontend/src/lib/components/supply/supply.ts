@@ -10,7 +10,7 @@ import type { RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import { farmSupply, LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
 import { m3DayToMm3a, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { resolveWindow } from '$lib/components/runs/reportWindow';
+import { resolveWindow, type WindowRun } from '$lib/components/runs/reportWindow';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 
 /** The run before `id` by createdAt (the one its changes are against); null for the oldest or an unknown id. */
@@ -29,11 +29,12 @@ export function previousRunOf(runs: readonly RunMeta[] | null, id: string | null
 export const NOISE_M3 = 1e-6;
 
 /**
- * "This week": the run's last 7 days, the reporting window's "Last 7 days"
- * (reportWindow.ts), which the portfolio links to. On a forecast run, the 7
- * days before the forecast (issue #51), like every other figure on the page.
+ * "This week": the reporting window's "Last 7 days" (reportWindow.ts), the 7
+ * days to the run's last day of recorded rain, which on a forecast run is the
+ * day before the forecast (issue #51): the publication's count, which the
+ * portfolio shows and links here.
  */
-export function weekWindow(run: { startDate: string; endDate: string; forecastFrom?: string | null }): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
+export function weekWindow(run: WindowRun): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
 	const r = resolveWindow({ preset: 'last7' }, run, { reportStart: run.startDate, reportEnd: run.endDate });
 	if (!r.ok) throw new Error(r.error);
 	return r.window;

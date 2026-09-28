@@ -495,8 +495,10 @@ pnpm build                  # frontend/build (static) + backend/dist/lambda.mjs
   frontend must call the API with `credentials: 'include'`.
 
 **No email arrives in Mailpit**
-: Check `pnpm dev:mail:status`, and the backend console for `email "…" failed:
-  connect ECONNREFUSED 127.0.0.1:1026` (Mailpit isn't up). Reset and
+: Check `pnpm dev:mail:status`, and the backend console for
+  `{"event":"mail_send_failed","kind":"verify","error":"Error","code":"ESOCKET"}`
+  (Mailpit isn't up; the line names the email's kind and the error code, never
+  the address or subject). Reset and
   verification emails go out at most once a minute per address, so a quick
   second request is silently skipped.
 

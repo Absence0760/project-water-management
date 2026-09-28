@@ -1880,6 +1880,35 @@ the first non-modeller user is invited (WUA staff, a client reviewer), and
 with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
 role and not before it.
 
+- [ ] **Adding someone by email tells the adder whether they have an
+      account, and adds a verified account without asking it** (issue #51,
+      adversary finding 3). `POST /projects/:id/members`, `/farmers`,
+      `/farmers/bulk` and `POST /teams/:id/members` add a verified account
+      at once (`201 { member }` with its display name, bulk `status:
+      'added'`) and invite any other address (`201 { invited: true }`,
+      `'invited'`). Any registered user can create a project and so own
+      one, so this probes which addresses have verified accounts, learns
+      their display names, and makes a stranger a member (with the alert
+      mails that brings) without their consent. Built now: the daily cap on
+      adding by email, 300 a person and 300 a project or team, counted
+      before the lookup (`101_invite_throttle.sql`, `invites/invites.ts`
+      `INVITE_CAP`), which bounds both the probing and the invite mail.
+      **Not built, and one change:** every add by email becomes an invite,
+      and a verified account joins only when its holder accepts (a link in
+      the invite mail opening an accept page while signed in, or a pending
+      invitation on their project list), so every answer is the same
+      `{ invited: true, invite }` / `'invited'` and no display name is shown
+      before acceptance. Changing the response shape alone would not close
+      the leak: `GET /projects/:id/members` (and the farmers list) shows an
+      added account, with its name and address, at once, so the shape and
+      acceptance have to land together. Size: the invite routes, an accept
+      endpoint and page, the members and farmers panels' wording, and the
+      tests that add verified members directly (about 200 call sites use
+      `POST …/members` as setup and would need an accept step or a test
+      helper). Who: operator (product call: WUA staff lose "added at once").
+      Trigger: before public registration opens, or before the first
+      catchment with members outside the operator's own team.
+
 ## Features left half-way
 
 - [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
@@ -2619,7 +2648,7 @@ The first slice (2026-09-26: migration 038, engine `compareAllocations`,
 stores registered volumes and compares them with a run's modelled use. Left,
 from the WP:
 
-- [x] **Engine `allocationMode`** (2026-09-28, engine 1.16.0, issue #72):
+- [x] **Engine `allocationMode`** (2026-09-28, engine 1.18.0, issue #72):
       `none` | `cap` | `fullAllocation`, with `RunSummary.allocations`, the
       `allocations` self-check (`checkAllocations`, also in the fuzz's
       invariants) and every run's input carrying the volumes (no names).
@@ -2627,7 +2656,7 @@ from the WP:
       its whole-year registered volumes; `fullAllocation`: its demand scaled
       per water year to them, keeping its own seasonal shape (not the
       licence's months: those aren't applied yet, below). Warm starts carry
-      both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72)).
+      both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - [ ] **How the cap counts water drawn from a dam boreholes filled.** The
       cap counts every dam draw as surface use, so groundwater pumped into a
       dam and drawn out uses both volumes, where the comparison nets it
@@ -2642,7 +2671,7 @@ from the WP:
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
       extract (plan.md questions).
-- [x] **Licence conditions** (2026-09-28, migration 100, issue #72):
+- [x] **Licence conditions** (2026-09-28, migration 103, issue #72):
       `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
       form, the list, the import template and the export, and on the run's
       input.
@@ -2719,17 +2748,43 @@ from the WP:
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
       workbook in the private seed settings.
-- [ ] **Demand objects: the daily schedule.** Not built: date windows with a
-      factor, an uploaded daily factor series
-      through Add data, and the reason a day is off (not needed: no demand,
-      no return; supplied from elsewhere: no river take, the return goes on;
-      curtailed: a shortfall), with switched-off days reported apart from
-      short days. Durable fix: a `schedule` on the object (windows) and an
-      object-scoped series kind for the uploaded factor, applied in
-      `network/demandObjects.ts planObjects` before the split, with the
-      reason carried into the return (a per-day return override) and the
-      summary. Trigger: the client's answer on the schedule (fixed pattern or
-      uploaded series; what off means).
+- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.17.0,
+      migration 100, issue #90 Q4 and Q12). The client answered: the daily
+      pattern depends on the demand type (a town's is fixed, irrigation's
+      varies) and the switch is set by date, not by river flow. A `schedule`
+      on the object: windows (every day, a yearly MM-DD span wrapping the
+      year end, a one-off date range, days around Easter), narrowed to
+      weekdays, each with a factor (0 = off), the later window winning;
+      applied in `network/demandObjects.ts planObjects` before the split and
+      recomputed by the self-checks; days off reported apart from days
+      short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
+      ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
+      meaning: no demand, so no supply and nothing returned.
+- [ ] **Demand objects: the off reason.** Not built, because the client
+      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+      off days (occupancy, works downtime, load-shedding, switching to a
+      borehole), whether an off period can mean "supplied from elsewhere"
+      (no river take, the return goes on) or "curtailed" (counted as a
+      shortfall) rather than "not needed", and whether a treatment works
+      keeps discharging while its user is off the river. Today every off day
+      is "not needed" (no demand, no return). Durable fix: a `reason` on a
+      schedule window (`notNeeded` / `elsewhere` / `curtailed`), carried into
+      the return as a per-day override (an `elsewhere` day keeps its return,
+      from a set discharge or the recent mean) and into the summary
+      (curtailed days as short, elsewhere days as met elsewhere). Trigger:
+      the client's answer to the rest of Q12.
+- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
+      meter or works record of which days a demand ran, uploaded through Add
+      data as a daily factor on one object (the design's second source
+      beside the windows). Left out of the schedule PR because it isn't
+      bounded like the windows: it needs a series kind scoped to an object
+      (today's series are project- or node-scoped), its storage and
+      provenance, the Add data flow and preview, and a rule for days the
+      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
+      stored like the node series, multiplied after the schedule in
+      `planObjects` (a gap runs at the schedule's factor), with the checks
+      reading it the same way. Trigger: a client supplying such a record for
+      a demand whose pattern windows can't describe.
 - [ ] **Demand objects: a structured demand source.** The rule is decided
       (issue #54 Q11, confirmed by the client in issue #90): a demand comes
       from meter records where they exist, else the reconciliation
@@ -2846,6 +2901,16 @@ from the WP:
       FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)
+
+- [ ] **The project list's data age counts to the viewer's day, not the
+      project's** (WUA-manager persona, #51, Low). `projects/freshness.ts`
+      `daysSince` uses the browser's calendar date, while the portfolio's and
+      the outcome columns' `figuresAgeDays` / `stale` count to the project's
+      `today` (`project.time_zone`). The same `ProjectTable` row shows both,
+      so outside SAST they disagree by a day for part of each day. Durable
+      fix: pass the project's `today` (the outcomes row already carries it)
+      into `dataFreshness` and count to it, with a TZ-skewed unit test (rule
+      7). Do it with the next change to the project list.
 
 - [x] **Traffic-light thresholds per team (D11)** (2026-09-26).
       `055_team_settings` adds `team.settings` with a validated

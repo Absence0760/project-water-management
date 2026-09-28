@@ -13,7 +13,7 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 10 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.16.0, issue #72)
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 10 self-checks passed.'); // the 7th: EWR attribution (engine 0.17.0, audit Q17); the 8th: groundwater (0.23.0, WP-1.34); the 9th: land cover (0.24.0, WP-1.35); the 10th: registered volumes (1.18.0, issue #72)
 	await expect(checks.getByRole('listitem')).toHaveCount(10);
 	// The workspace's word: the engine's "farm" reads "unit" (#54), and the checks say which engine made them.
 	await expect(checks.getByRole('listitem').first()).toContainText('Every hydrological unit balances every day');

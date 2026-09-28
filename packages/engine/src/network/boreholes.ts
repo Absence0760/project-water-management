@@ -157,7 +157,7 @@ export const startsWaterYear = (month: ArrayLike<number>, t: number): boolean =>
  * of the surface in step 3, before the dam under river first and trigger
  * (rules 1, 2), after it on a run-of-river farm (rule 3); a supplemental
  * dam-target unit adds only what the dam lacks for the demand the river leaves.
- * `sRoom` and `gRoom` (engine ≥ 1.16.0, allocationMode 'cap'): the most the
+ * `sRoom` and `gRoom` (engine ≥ 1.18.0, allocationMode 'cap'): the most the
  * surface (dam and river) and the pumping units together may still give
  * today under the node's registered volumes; Infinity = no cap. A capped
  * surface leaves the rest of the demand to the supplemental and emergency

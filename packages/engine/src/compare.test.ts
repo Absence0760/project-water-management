@@ -550,7 +550,7 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Borehole "BH-01" removed from Rooikloof (was 300 m³/day, primary, annual cap 40\u202f000 m³, depletion 0.25)']);
 	});
 
-	it('lists registered volumes added, changed and removed, and the allocation mode and band (engine 1.16.0)', () => {
+	it('lists registered volumes added, changed and removed, and the allocation mode and band (engine 1.18.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
 		const al = { id: 'al', nodeId: 'copy-f1', waterSource: 'surface' as const, volumeM3PerYear: 120_000, validFrom: '2020-10-01', validTo: null };
@@ -597,6 +597,41 @@ describe('diffInputs', () => {
 			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 550 m³/day on average, piped out, priority first, monthly values changed'
 		]);
 		expect(texts(b, a)).toEqual(['Demand object "Town" removed from Rooikloof (was Municipal (town), 600 m³/day on average, return 0.5, priority first)']);
+	});
+
+	it('lists a demand object’s schedule change, and reads no schedule, null and an empty one alike (engine 1.17.0)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.schedule = [];
+		expect(texts(a, b)).toEqual([]);
+		// The same window with its keys in another order (as jsonb reads it back) is no change.
+		a.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		const c = structuredClone(a);
+		c.model.demandObjects![0]!.schedule = [{ factor: 0, to: null, span: 'always', from: null, label: 'Weekends', weekdays: [6, 7], easterTo: null, easterFrom: null }];
+		expect(texts(a, c)).toEqual([]);
+		delete a.model.demandObjects![0]!.schedule;
+		b.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first, 1 schedule window, schedule changed'
+		]);
 	});
 
 	it('describes a dam raise on a copied project by farm name', () => {

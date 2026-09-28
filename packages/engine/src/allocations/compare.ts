@@ -31,7 +31,7 @@ export interface AllocationEntry {
 	/** Last day it applies (ISO date, inclusive); null/absent = open. */
 	validTo?: string | null;
 	/**
-	 * Licence conditions (engine ≥ 1.16.0, issue #72): the calendar months
+	 * Licence conditions (engine ≥ 1.18.0, issue #72): the calendar months
 	 * (1–12) the use may happen in, and the most it may take at once (m³/s).
 	 * Recorded and shown; neither the comparison nor allocationMode `cap`
 	 * enforces them yet (docs/allocations.md). null/absent = none stated.

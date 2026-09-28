@@ -1,4 +1,4 @@
-// allocationMode (engine 1.16.0, issue #72, docs/model.md §2.12a) on the
+// allocationMode (engine 1.18.0, issue #72, docs/model.md §2.12a) on the
 // invented outlook catchment (two farms on vines into one outlet). Random
 // networks with allocations in every mode are in the engine fuzz
 // (../testing/fuzz.ts randomAllocations) and the warm-start invariants.
@@ -176,7 +176,7 @@ describe("allocationMode 'fullAllocation'", () => {
 		const x = withAllocations([{ id: 'u', nodeId: 'u', waterSource: 'surface', volumeM3PerYear: 5000 }], 'fullAllocation', (m) => {
 			// A senior user at the outlet, the farms above it.
 			const g = m.model.nodes.find((n) => n.id === 'g')!;
-			m.model.nodes.push({ ...g, id: 'u', name: 'Town', kind: 'user', sortOrder: 3, downstreamNodeId: null, userDemandM3Day: new Array(12).fill(100), userReturnPct: 0, userPriority: 'senior' });
+			m.model.nodes.push({ ...g, id: 'u', name: 'Town', kind: 'user', sortOrder: 3, downstreamNodeId: null, userDemandM3Day: new Array(12).fill(103), userReturnPct: 0, userPriority: 'senior' });
 			g.downstreamNodeId = 'u';
 		});
 		const r = runModelChecked(x);

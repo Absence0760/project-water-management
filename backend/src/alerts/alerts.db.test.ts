@@ -749,6 +749,66 @@ describe('per-feed staleness levels (057 feed_id)', () => {
 // The project's own day (058 time_zone, 059): the evaluator's "today", a
 // forecast's madeOn, and the digest's 06:00 are where the catchment is, never
 // UTC's or the server's. 23:30 UTC is already the next day in South Africa.
+describe('an EWR forecast behind the recorded rain', () => {
+	const now = new Date('2026-09-25T10:00:00Z');
+	/** makeProject's rain ends here (500 days from 2021-10-01). */
+	const RAIN_END = '2023-02-12';
+
+	it('a forecast run made before rain was recorded for its dry-assumed days neither opens nor clears the alert (positive control: a current one fires)', async () => {
+		const { id: pid, runId } = await makeProject(owner, 'Forecast behind');
+		const setForecast = (lastObserved: string, atRisk: number) =>
+			asOwner(`UPDATE model_run SET trigger = 'forecast', summary = jsonb_set(summary, '{forecast}', $2::jsonb) WHERE id = $1`, [
+				runId,
+				JSON.stringify({ from: '2026-09-25', to: '2026-10-10', days: 16, outletEwrDaysAtRisk: atRisk, lastObserved, perFarm: [] })
+			]);
+		await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3)`, [pid]);
+		const events = async () =>
+			(await asOwner(`SELECT state, value FROM alert_event WHERE project_id = $1 AND kind = 'ewr_forecast_fail' ORDER BY opened_at`, [pid])) as {
+				state: string;
+				value: number;
+			}[];
+		const evaluate = () => withUser(owner.id, (db) => evaluateAlerts(db, pid, { now }));
+
+		// Behind: it continued from 2023-01-01, but rain is recorded to 2023-02-12. Nothing opens.
+		await setForecast('2023-01-01', 16);
+		await evaluate();
+		expect(await events()).toEqual([]);
+		// Positive control: the same figures from a forecast run that continues from the last recorded day fire.
+		await setForecast(RAIN_END, 16);
+		await evaluate();
+		expect(await events()).toEqual([{ state: 'firing', value: 16 }]);
+		// Blank days sent after the rain ("no reading") are no data: the forecast is still current, and the event follows its figure.
+		expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2023-02-13', values: [null, null] })).status).toBe(200);
+		await setForecast(RAIN_END, 12);
+		await evaluate();
+		expect(await events()).toEqual([{ state: 'firing', value: 12 }]);
+		// New rain recorded: this forecast is behind it. The event is left as it is (neither cleared nor updated) until the re-made one decides…
+		expect((await owner.call('POST', `/projects/${pid}/series/merge`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2023-02-13', values: [4, 0] })).status).toBe(200);
+		await setForecast(RAIN_END, 0);
+		await evaluate();
+		expect(await events()).toEqual([{ state: 'firing', value: 12 }]);
+		// …which clears it.
+		await setForecast('2023-02-14', 0);
+		await evaluate();
+		expect(await events()).toEqual([{ state: 'cleared', value: 12 }]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+		await asOwner(`DELETE FROM alert_event WHERE project_id = $1`, [pid]);
+	});
+
+	it('a forecast run made by hand queues the alert check, as a scheduled one does (an ordinary run does not)', async () => {
+		const { id: pid } = await makeProject(owner, 'Forecast by hand');
+		await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'ewr_forecast_fail', 3)`, [pid]);
+		const checks = async () => (await asOwner(`SELECT payload->>'cause' AS cause FROM job WHERE project_id = $1 AND kind = 'alert_eval'`, [pid])) as { cause: string }[];
+		expect((await owner.call('POST', `/projects/${pid}/runs`, { label: 'plain' })).status).toBe(201);
+		expect(await checks()).toEqual([]);
+		// Positive control: a forecast after the recorded rain, run by hand.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2023-02-13', values: new Array(16).fill(1) })).status).toBe(200);
+		expect((await owner.call('POST', `/projects/${pid}/runs`, { label: 'by hand', forecast: true })).status).toBe(201);
+		expect(await checks()).toEqual([{ cause: 'forecast' }]);
+		await asOwner(`DELETE FROM job WHERE project_id = $1`, [pid]);
+	});
+});
+
 describe('the project’s local day', () => {
 	const zone = process.env.TZ;
 	afterAll(() => {
@@ -898,5 +958,40 @@ describe('the project’s local day', () => {
 		await asOwner(`UPDATE alert_delivery SET claimed_at = $2 WHERE user_id = $1 AND via = 'immediate' AND claimed_at > $2`, [u.id, `${today}T10:00:00Z`]);
 		await sendAlerts({ now: new Date(`${today}T15:00:00Z`) });
 		expect(await pending()).toEqual([{ status: 'digest', reason: 'over the daily cap' }]);
+	});
+});
+
+describe('a failed send is logged without personal data', () => {
+	it('logs the SES error code, never its text (which names the recipient), and retries the delivery', async () => {
+		await reset();
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'job_dead', 1) RETURNING id`, [projectId]);
+		const [e] = await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'firing', 1, '{"count":1}') RETURNING id`, [rule.id, projectId]);
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [e.id, owner.id, projectId]);
+		// What SES answers in the sandbox for an unverified recipient.
+		const rejected = Object.assign(new Error(`Email address is not verified. The following identities failed the check in region AF-SOUTH-1: ${owner.email}`), {
+			name: 'MessageRejected'
+		});
+		const push = vi.spyOn(outbox, 'push').mockImplementation(() => {
+			throw rejected;
+		});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const r = await sendAlerts();
+			expect(r.failed).toBe(1);
+			const lines = error.mock.calls.map((c) => c.join(' '));
+			const line = lines.find((l) => l.includes('alert_send_failed'));
+			// Positive control: the failure is logged, as one JSON line naming the event.
+			expect(JSON.parse(line!)).toEqual({ event: 'alert_send_failed', eventId: e.id, error: 'MessageRejected' });
+			for (const l of lines) {
+				expect(l).not.toContain(owner.email);
+				expect(l).not.toContain('not verified');
+			}
+		} finally {
+			push.mockRestore();
+			error.mockRestore();
+		}
+		expect(await asOwner(`SELECT status, reason FROM alert_delivery WHERE event_id = $1`, [e.id])).toEqual([{ status: 'pending', reason: 'send failed (MessageRejected)' }]);
+		await asOwner('DELETE FROM alert_delivery WHERE event_id = $1', [e.id]);
+		await reset();
 	});
 });

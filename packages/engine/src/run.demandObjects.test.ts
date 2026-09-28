@@ -4,10 +4,11 @@
 // exactly as before.
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
-import type { CropArea, CropDef, DemandObject, ModelInput, NetworkNode, RunSeries } from './project';
+import type { CropArea, CropDef, DemandObject, DemandScheduleWindow, ModelInput, NetworkNode, RunSeries } from './project';
 import { runModel, runModelWith, withVerification } from './run';
 import { cloneInput, randomInput } from './testing/fuzz';
 import { checkAll, sameOutput } from './testing/invariants';
+import { verifyRun } from './verify/verify';
 import { ENGINE_VERSION } from './version';
 
 const flat = (v: number) => new Array(12).fill(v);
@@ -166,6 +167,69 @@ describe('demand objects in a run (engine 1.7.0)', () => {
 	});
 });
 
+const window = (over: Partial<DemandScheduleWindow> = {}): DemandScheduleWindow => ({ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 0, ...over });
+
+describe('a demand object’s schedule (engine 1.17.0, issue #90 Q4)', () => {
+	it('is engine 1.17.0 or later', () => {
+		const [maj, min] = ENGINE_VERSION.split('.').map(Number);
+		expect(maj! > 1 || (maj === 1 && min! >= 17)).toBe(true);
+	});
+
+	// 2020-10-01 was a Thursday: the run is Thu, Fri, Sat, Sun. Plenty of water every day.
+	const plenty = [400, 400, 400, 400];
+	const weekendsOff = object({ schedule: [window({ label: 'Weekends', weekdays: [6, 7] })] });
+	const out = run(model([weekendsOff], plenty));
+
+	it('switches the object off on the days it covers: no demand, no supply, no return', () => {
+		expect(get(out, 'A', 'object_demand@town')).toEqual([50, 50, 0, 0]);
+		expect(get(out, 'A', 'object_supplied@town')).toEqual([50, 50, 0, 0]);
+		// The crops keep their 200 abstracted; return 0.25 × 200 + 0.5 × the town's supply.
+		expect(get(out, 'A', 'demand')).toEqual([250, 250, 200, 200]);
+		expect(get(out, 'A', 'return_flow')).toEqual([75, 75, 50, 50]);
+	});
+
+	it('counts the days off apart from the days short, and passes every self-check', () => {
+		const o = out.summary.farms.find((f) => f.nodeId === 'A')!.demandObjects![0]!;
+		expect(o.daysOff).toBe(2);
+		expect(o.daysShort).toBe(0);
+		expect(o.avgDemandM3Day).toBe(25);
+		expect(out.summary.verification?.passed, JSON.stringify(out.summary.verification?.checks.filter((c) => !c.passed))).toBe(true);
+	});
+
+	it('has no days-off figure on an object without a schedule', () => {
+		expect(run(model([object()], plenty)).summary.farms[0]!.demandObjects![0]!.daysOff).toBeUndefined();
+	});
+
+	it('multiplies the month’s demand, after the unit’s demand factor, and a peak can exceed 1', () => {
+		const m = model([object({ schedule: [window({ span: 'range', from: '2020-10-02', to: '2020-10-03', factor: 1.5 })] })], plenty);
+		m.input.model.nodes[0]!.demandFactor = flat(2);
+		expect(get(run(m), 'A', 'object_demand@town')).toEqual([100, 150, 150, 100]);
+	});
+
+	it('is caught by the self-check when the demand ignores it', () => {
+		// The same run checked against the model without the schedule: the objects' demand no longer adds up.
+		const bare = model([object()], plenty).input;
+		const bad = verifyRun(bare, out).verification;
+		expect(bad.passed).toBe(false);
+		expect(JSON.stringify(bad.checks.filter((c) => !c.passed))).toMatch(/demand object/);
+	});
+
+	it('runs a schedule that never changes a day (factor 1, or a window outside the run) exactly as no schedule', () => {
+		const none = run(model([object()], plenty));
+		for (const schedule of [[], [window({ factor: 1 })], [window({ span: 'range', from: '2019-01-01', to: '2019-12-31' })]]) {
+			const withIt = run(model([object({ schedule })], plenty));
+			// The series and supply match to the bit; only the days-off figure (0) is new.
+			expect(withIt.series).toEqual(none.series);
+		}
+	});
+
+	it('skips a malformed window with a warning and runs the rest', () => {
+		const o = run(model([object({ schedule: [window({ label: 'Bad', factor: -1 }), window({ weekdays: [7] })] })], plenty));
+		expect(get(o, 'A', 'object_demand@town')).toEqual([50, 50, 50, 0]);
+		expect(o.summary.warnings.join()).toMatch(/schedule window 1 \("Bad"\) is skipped/);
+	});
+});
+
 describe('demand objects on random networks', () => {
 	it('keep every invariant and, removed, leave the rest of the seed as it was', () => {
 		let withObjects = 0;
@@ -185,5 +249,9 @@ describe('demand objects on random networks', () => {
 			expect(sameOutput({ ...a, summary: { ...a.summary, warnings: [] } }, { ...b, summary: { ...b.summary, warnings: [] } }), `seed ${seed}`).toBe(true);
 		}
 		expect(withObjects).toBeGreaterThan(5);
+		// The fuzz gives half the objects a schedule (engine ≥ 1.17.0), so the checks above ran on some.
+		let scheduled = 0;
+		for (let seed = 1; seed <= 60; seed++) scheduled += (randomInput(seed, { maxDays: 400 }).model.demandObjects ?? []).filter((o) => o.schedule?.length).length;
+		expect(scheduled).toBeGreaterThan(5);
 	}, 300_000);
 });

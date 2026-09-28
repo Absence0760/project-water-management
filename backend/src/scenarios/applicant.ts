@@ -77,7 +77,7 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 			boreholes: (m.boreholes ?? []).filter((b) => own.has(b.nodeId)),
 			// Their own units' demand objects likewise (the table's farmer policy, 088); another unit's town or stock leaves nothing.
 			demandObjects: (m.demandObjects ?? []).filter((o) => own.has(o.nodeId)),
-			// Registered volumes on their own units (engine ≥ 1.16.0; allocation_select_farmer lets them read those); nobody else's.
+			// Registered volumes on their own units (engine ≥ 1.18.0; allocation_select_farmer lets them read those); nobody else's.
 			...(m.allocations ? { allocations: m.allocations.filter((a) => a.nodeId !== null && a.nodeId !== undefined && own.has(a.nodeId)) } : {})
 		},
 		anonymisedNodeIds

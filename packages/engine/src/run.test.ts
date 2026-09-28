@@ -2013,6 +2013,18 @@ describe('runModel — soundness warnings (audit W1–W5)', () => {
 		expect(warns(runModel(rainInput([0, 1, 2], '2021-01-01')), /no rainfall value/)).toHaveLength(0);
 	});
 
+	it('W2: names the blank days’ dates and how many fall in the reporting window', () => {
+		const out = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01'));
+		expect(warns(out, /no rainfall value/)).toEqual([
+			'3 of 6 days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): 2021-01-02, 2021-01-04 to 2021-01-05'
+		]);
+		const windowed = runModel(rainInput([0, null, 3, null, null, 0], '2021-01-01', { reportStart: '2021-01-04', reportEnd: '2021-01-06' }));
+		expect(warns(windowed, /no rainfall value/)[0]).toMatch(/: 2021-01-02, 2021-01-04 to 2021-01-05; 2 of them fall in the reporting window \(2021-01-04 to 2021-01-06\)$/);
+		// More periods than it lists: counted, not named.
+		const patchy = runModel(rainInput([1, null, 1, null, 1, null, 1, null, 1, null, 1], '2021-01-01'));
+		expect(warns(patchy, /no rainfall value/)[0]).toMatch(/^5 of 11 days .*: 2021-01-02, 2021-01-04, 2021-01-06 and 2 more periods$/);
+	});
+
 	it('W3: hi/lo shares warn when a farm area differs from its hi + lo areas (rain volume uses the area)', () => {
 		const out = run({
 			nodes: [node('A', { areaKm2: 10, areaHiKm2: 6, areaLoKm2: 3, downstreamNodeId: 'B' }), node('B', { sortOrder: 1, areaKm2: 5, areaHiKm2: 2, areaLoKm2: 3 })],

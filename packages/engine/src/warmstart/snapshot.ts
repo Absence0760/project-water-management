@@ -52,9 +52,9 @@ export interface ModelNodeState {
 	onRiver: boolean;
 	/** Each pumping unit's volume so far this water year (m³), in the plan's unit order; null without boreholes. */
 	boreholeUsedM3: number[] | null;
-	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.16.0); absent without a cap. */
+	/** Surface and groundwater use so far this water year under an allocation cap (m³, engine ≥ 1.18.0); absent without a cap. */
 	allocationUsedM3?: [number, number];
-	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.16.0); absent without one. */
+	/** A full allocation's demand factor for the water year in progress (engine ≥ 1.18.0); absent without one. */
 	allocationFactor?: number;
 	/**
 	 * The storage the day before left, when withDamStorage set another: only

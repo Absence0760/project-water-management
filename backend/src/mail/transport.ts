@@ -3,8 +3,8 @@
 //
 //   log    — default when unset. Prints the message to the console; nothing is
 //            sent. Needs no services at all. Inside Lambda it prints only the
-//            recipient + subject, so a misconfigured deploy never writes live
-//            reset links into CloudWatch.
+//            mail's kind, so a misconfigured deploy never writes live reset
+//            links, addresses or subjects into CloudWatch.
 //   smtp   — nodemailer to SMTP_HOST:SMTP_PORT. Local dev points it at Mailpit
 //            (`pnpm dev:mail:up`, UI on http://localhost:8026).
 //   ses    — Amazon SES v2 SendEmail with the Lambda's IAM role (production).
@@ -13,7 +13,14 @@
 // The SDK clients are imported lazily, so the log/memory paths (and the unit
 // tests) never load nodemailer or the AWS SDK.
 
+import { safeError } from '../logging/safeError.js';
+
+/** Which email this is, for logs: a failed send is logged by kind, never by subject or recipient. */
+export type MailKind = 'verify' | 'account_exists' | 'reset' | 'invite' | 'farmer_invite' | 'report_ready' | 'alert' | 'alert_digest';
+
 export type Mail = {
+	/** Set by every template (mail/templates.ts, mail/alerts.ts); the log line's `kind`. */
+	kind?: MailKind;
 	to: string;
 	subject: string;
 	text: string;
@@ -60,7 +67,8 @@ async function createTransport(kind: string): Promise<Send> {
 		case 'log':
 			return async (mail) => {
 				if (inLambda()) {
-					console.warn(`MAIL_TRANSPORT=log: not sending "${mail.subject}" (set MAIL_TRANSPORT=ses)`);
+					// The kind only: a subject can carry a person's or a farm's name.
+					console.warn(`MAIL_TRANSPORT=log: not sending a "${mail.kind ?? 'unknown'}" email (set MAIL_TRANSPORT=ses)`);
 					return;
 				}
 				const extra = Object.entries(mail.headers ?? {}).map(([k, v]) => `${k}: ${v}\n`).join('');
@@ -139,14 +147,18 @@ export async function sendMail(mail: Mail): Promise<void> {
  * Send, but never fail the request over it: a mail outage must not turn
  * "we sent you a link" endpoints into 500s (or, for forgot-password, into a
  * response that differs for known and unknown addresses). The failure is
- * logged without the message body, which carries a live token.
+ * one structured line, `{"event":"mail_send_failed","kind",…}`, which the
+ * `mail-send-failed` alarm counts (infra/alarms.tf): the mail's kind and the
+ * error's name/code only. Never the recipient, the subject (an invite's names
+ * a person and their farms) or the error's text (SES writes the recipient's
+ * address into it), and never the body, which carries a live token.
  */
 export async function trySendMail(mail: Mail): Promise<boolean> {
 	try {
 		await sendMail(mail);
 		return true;
 	} catch (err) {
-		console.error(`email "${oneLine(mail.subject)}" failed:`, (err as Error).message);
+		console.error(JSON.stringify({ event: 'mail_send_failed', kind: mail.kind ?? 'unknown', ...safeError(err) }));
 		return false;
 	}
 }

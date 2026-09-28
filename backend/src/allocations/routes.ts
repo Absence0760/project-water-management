@@ -59,7 +59,7 @@ const volume = z.number().finite().min(0).lt(1e12);
  */
 const FIELDS = {
 	nodeId: z.string().uuid().nullable(),
-	registrationNo: text(100),
+	registrationNo: text(103),
 	propertyRef: text(200),
 	/** The registered user's name; '' = none. Editors only (D3). */
 	holder: text(200),
@@ -71,7 +71,7 @@ const FIELDS = {
 	validFrom: isoDate.nullable(),
 	validTo: isoDate.nullable(),
 	reference: text(500),
-	// Licence conditions (100, issue #72): shown, not yet enforced by the engine.
+	// Licence conditions (103, issue #72): shown, not yet enforced by the engine.
 	months: z
 		.array(z.number().int().min(1).max(12))
 		.min(1)
@@ -127,7 +127,7 @@ const TOLERANCE = z.coerce.number().min(0).lt(1).optional();
 const RUN_INPUT_FIELDS = ['nodeId', 'waterSource', 'volumeM3PerYear', 'storageM3', 'validFrom', 'validTo'] as const;
 
 /**
- * Allocations are part of every run's input since engine 1.16.0 (the model's
+ * Allocations are part of every run's input since engine 1.18.0 (the model's
  * `allocations`, runs/execute.ts): a change to what the run reads is a change
  * to the project's inputs, so the Runs tab says the latest run is out of date
  * (project.updated_at, as a model save does).
@@ -163,7 +163,7 @@ export interface AllocationRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
-	/** Licence conditions (100): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. */
+	/** Licence conditions (103): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. */
 	months: number[] | null;
 	maxRateM3s: number | null;
 	conditions: string[];
@@ -587,7 +587,7 @@ export const allocationRoutes = new Hono<AuthEnv>()
 					validTo: a.validTo
 				}))
 			});
-			// What the run's allocation mode did to its use (engine ≥ 1.16.0; a run before it compared only).
+			// What the run's allocation mode did to its use (engine ≥ 1.18.0; a run before it compared only).
 			const allocationMode = (ALLOCATION_MODES as readonly string[]).includes(r.mode ?? '') ? (r.mode as AllocationMode) : 'none';
 			return c.json({ run: { id: runId, label: r.label, startDate: r.startDate, endDate: r.endDate, allocationMode }, comparison });
 		});

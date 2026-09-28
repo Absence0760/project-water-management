@@ -173,4 +173,9 @@ describe('coverageRows', () => {
 			['Rainfall — catchment', '1999-10-01', '2001-12-08', '800', '366']
 		]);
 	});
+
+	it('ends each series on its last value: blank days stored after it are no data', () => {
+		const logger: SeriesMeta = { id: '1', kind: 'rain_catchment_mm', name: 'Logger', unit: 'mm', startDate: '2026-09-01', length: 27, lastValueDate: '2026-09-25' };
+		expect(coverageRows([logger], { startDate: '2026-09-01', endDate: '2026-09-27' })).toEqual([['Rainfall — catchment · Logger', '2026-09-01', '2026-09-25', '27', '27']]);
+	});
 });

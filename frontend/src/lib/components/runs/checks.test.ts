@@ -152,7 +152,7 @@ const farmDay = (over: Partial<RunDay> = {}): RunDay => ({
 		offtake_in: 0,
 		offtake_used: 0,
 		offtake_to_dam: 0,
-		// Registered volumes (engine 1.16.0): a cap's room per source, a full allocation's demand factor; none here.
+		// Registered volumes (engine 1.18.0): a cap's room per source, a full allocation's demand factor; none here.
 		allocation_room_surface: 0,
 		allocation_room_groundwater: 0,
 		allocation_demand_factor: 0,

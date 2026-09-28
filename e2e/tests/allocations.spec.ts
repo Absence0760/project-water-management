@@ -6,7 +6,7 @@
 // layout, the sheets and the big case: allocations-page.spec.ts). A viewer
 // sees the volumes but no names and can't import. Axe-scanned, and on a
 // phone. Licence conditions entered in the sheet show in the list, and a run
-// capped at the registered volumes (settings.allocationMode, engine 1.16.0)
+// capped at the registered volumes (settings.allocationMode, engine 1.18.0)
 // says so above its comparison (issue #72). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, seedRunnableProject, updateSettings } from '../support/api.ts';

@@ -119,7 +119,7 @@ describe('projectBaseForApplicant', () => {
 		expect((view.model.landCover ?? []).map((p) => p.id)).toEqual(['p1']);
 		expect(view.model.boreholes).toEqual([base.model.boreholes![0]]);
 		expect(view.model.demandObjects).toEqual([base.model.demandObjects![0]]);
-		// Registered volumes (engine 1.16.0): their own only, never a neighbour's or an unmatched one.
+		// Registered volumes (engine 1.18.0): their own only, never a neighbour's or an unmatched one.
 		expect(view.model.allocations).toEqual([base.model.allocations![0]]);
 		expect(JSON.stringify(view)).not.toMatch(/777777|666666/);
 	});

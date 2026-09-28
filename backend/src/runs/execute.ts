@@ -77,7 +77,7 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook
 	// (projects/outlookSettings.ts) how a seasonal outlook is set up: none is a model input, so runs don't record them.
 	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
-	// Registered volumes (engine ≥ 1.16.0, issue #72): what settings.allocationMode caps or scales the run
+	// Registered volumes (engine ≥ 1.18.0, issue #72): what settings.allocationMode caps or scales the run
 	// to, and what its summary compares with. Only when the project has any, so a project without them
 	// runs on the same input as before.
 	const allocations = await allocationsForRun(db, projectId);

@@ -854,7 +854,7 @@ describe('SettingsPatch.assuranceAnnualThreshold (engine ≥ 0.32.0, WP-3.4)', (
 	});
 });
 
-describe('SettingsPatch allocation settings (engine ≥ 1.16.0, issue #72)', () => {
+describe('SettingsPatch allocation settings (engine ≥ 1.18.0, issue #72)', () => {
 	const ok = (patch: unknown) => SettingsPatch.safeParse(patch).success;
 
 	it('takes one of the three allocation modes', () => {

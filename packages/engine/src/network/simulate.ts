@@ -63,7 +63,7 @@ export interface PlanNode {
 	initialOnRiver?: boolean;
 	initialBoreholeUsedM3?: readonly number[];
 	/**
-	 * allocationMode 'cap' (engine ≥ 1.16.0, ../allocations/mode.ts,
+	 * allocationMode 'cap' (engine ≥ 1.18.0, ../allocations/mode.ts,
 	 * docs/model.md §2.12a): per water source, the registered volume (m³) of
 	 * the water year each day falls in; null = that source isn't capped.
 	 * Surface use (supplied − groundwater to the crop: the dam, the river pump
@@ -71,7 +71,7 @@ export interface PlanNode {
 	 * into the dam) per water year stay within it. Absent = no cap.
 	 */
 	allocationCap?: { surface: Float64Array | null; groundwater: Float64Array | null };
-	/** Surface and groundwater use so far this water year, the day before (a resumed run, engine ≥ 1.16.0); absent = 0. */
+	/** Surface and groundwater use so far this water year, the day before (a resumed run, engine ≥ 1.18.0); absent = 0. */
 	initialAllocationUsedM3?: readonly [number, number];
 	/**
 	 * Dead storage: capacity × the dam's minimum operating level (engine ≥
@@ -254,7 +254,7 @@ export interface NodeResult {
 	/** What each of the node's pumping units pumped per day (WP-3.9), in `borehole.units` order; absent without boreholes. */
 	boreholePumped?: Float64Array[];
 	/**
-	 * allocationMode 'cap' (engine ≥ 1.16.0): what each capped source may
+	 * allocationMode 'cap' (engine ≥ 1.18.0): what each capped source may
 	 * still take this water year, at the start of each day (m³): the year's
 	 * registered volume less its use so far. null for a source without a cap;
 	 * absent on a node without one.
@@ -482,7 +482,7 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 }
 
 /**
- * What a node may still take today under an allocation cap (engine ≥ 1.16.0):
+ * What a node may still take today under an allocation cap (engine ≥ 1.18.0):
  * [surface, groundwater], each the water year's registered volume less the
  * use so far, never below 0; Infinity for a source (or a node) without a cap.
  * Records the room in the node's allocation_room columns.
@@ -532,7 +532,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		}
 		return u;
 	});
-	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.16.0).
+	// Each capped node's surface and groundwater use so far this water year (allocationMode 'cap', engine ≥ 1.18.0).
 	const allocUsed = nodes.map((n) => (n.allocationCap ? Float64Array.from(n.initialAllocationUsedM3 ?? [0, 0]) : null));
 	// A resumed run's day 0 starts a water year only on 1 October (engine ≥ 1.1.0).
 	const startsYear = (t: number) => (t === 0 && plan.continued ? month[0] === 10 && plan.continued.monthBefore !== 10 : startsWaterYear(month, t));
@@ -848,7 +848,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			const qStart = qPrev + Pd - E - Sp;
 			// River off-take water delivered here (engine ≥ 1.14.0): it meets the demand first, then tops up the
 			// dam (the rules that say so, their share of what is left), and the rest flows on below the unit.
-			// The use left under an allocation cap (engine ≥ 1.16.0); Infinity when uncapped.
+			// The use left under an allocation cap (engine ≥ 1.18.0); Infinity when uncapped.
 			const [sRoom, gRoom] = allocationRoom(node, r, allocUsed[i]!, t);
 			const Xin = offtakes.length ? otIn[i]! : 0;
 			let Xused = 0;

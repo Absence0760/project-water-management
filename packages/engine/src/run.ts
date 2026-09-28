@@ -513,7 +513,7 @@ function runNetwork(
 			push(node.id, 'depletion_deficit', 'Stream depletion owed to the river (it had no flow left), taken off the first flow back', 'm³', r.depletionDeficit);
 			push(node.id, 'depletion_store', 'Stream depletion still to come (lag store)', 'm³', r.depletionStore);
 		}
-		// Registered volumes (engine ≥ 1.16.0): the cap's room at the start of each day, per capped source,
+		// Registered volumes (engine ≥ 1.18.0): the cap's room at the start of each day, per capped source,
 		// and the full-allocation demand factor, so the self-checks redo each day from the stored columns.
 		if (r.allocationRoom?.surface) push(node.id, ALLOCATION_SERIES.surfaceRoom.key, ALLOCATION_SERIES.surfaceRoom.label, 'm³', r.allocationRoom.surface);
 		if (r.allocationRoom?.groundwater) push(node.id, ALLOCATION_SERIES.groundwaterRoom.key, ALLOCATION_SERIES.groundwaterRoom.label, 'm³', r.allocationRoom.groundwater);
@@ -610,7 +610,7 @@ function runNetwork(
 	boreholeWarnings(nodes, plan, sim, observedKindPresent(series), warnings);
 	// Groundwater per node and water year (WP-3.9), for the caps, the GA context and the licensing comparisons.
 	const gwAnnual = groundwaterAnnualUse(nodes, plan, sim, start);
-	// Registered volumes against the run's use (engine ≥ 1.16.0).
+	// Registered volumes against the run's use (engine ≥ 1.18.0).
 	const allocations = runAllocations(input.model.allocations, built.allocation, settings, nodes, plan, sim, startDate);
 
 	// Other water users (WP-1.33): whole-run means, like FarmSummary.
@@ -640,6 +640,7 @@ function runNetwork(
 
 	const window = resolveReportWindow(settings, start, days, warnings);
 	const forecastRain = forecastRainDays(input, aligned, start, days, window, warnings);
+	missingRainWarning(input, aligned, start, days, window, warnings);
 	const posOf = (node: number) => posInOrder[node]!;
 	const curtailment = computeCurtailment(
 		nodes.flatMap((node, i) => {
@@ -1161,11 +1162,11 @@ export function buildNetworkPlan(
 		);
 	}
 
-	// Registered volumes (engine ≥ 1.16.0, ./allocations/mode.ts): matched here, a water user's demand
+	// Registered volumes (engine ≥ 1.18.0, ./allocations/mode.ts): matched here, a water user's demand
 	// scaled to its volume before its claim is passed down, and the rest of the mode put into the plan below.
 	const allocationMode = resolveAllocationMode(settings.allocationMode, []);
 	const allocation = matchAllocations(model.allocations, allocationMode, nodes, warnings);
-	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.16.0).
+	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
 	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings));
@@ -1178,7 +1179,7 @@ export function buildNetworkPlan(
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings) : undefined;
+		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
 	};
 
 	// River off-takes (engine ≥ 1.14.0, ./network/offtake.ts): each destination after its source.
@@ -1400,6 +1401,9 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 		const g = got[k]!;
 		let short = 0;
 		for (let t = 0; t < d.length; t++) if (g[t]! < d[t]! * (1 - 1e-12)) short++;
+		const s = po.schedule[k];
+		let off = 0;
+		if (s) for (let t = 0; t < s.length; t++) if (s[t] === 0) off++;
 		const avgDemand = mean(d);
 		const avgSupplied = mean(g);
 		return {
@@ -1413,7 +1417,8 @@ function objectSummaries(po: PlanObjects, got: Float64Array[], all: readonly imp
 			avgDeficitM3Day: avgDemand - avgSupplied,
 			fractionSupplied: avgDemand > 0 ? avgSupplied / avgDemand : 1,
 			avgReturnedM3Day: avgSupplied * po.returnShare[k]!,
-			daysShort: short
+			daysShort: short,
+			...(s ? { daysOff: off } : {})
 		};
 	});
 }
@@ -1446,7 +1451,7 @@ function otherUsers(
 	month: Uint8Array,
 	warnings: string[],
 	factorFrom: number,
-	/** allocationMode 'fullAllocation' (engine ≥ 1.16.0): scales user i's demand in place before its claim is passed down. */
+	/** allocationMode 'fullAllocation' (engine ≥ 1.18.0): scales user i's demand in place before its claim is passed down. */
 	scale?: (i: number, demand: Float64Array) => void
 ): { byNode: Map<number, OtherUser>; claims: (Float64Array | undefined)[] } {
 	const byNode = new Map<number, OtherUser>();
@@ -1504,7 +1509,7 @@ function otherUsers(
 
 /**
  * A full allocation's factor for the water year in progress on run day `at`
- * (a snapshot's, engine ≥ 1.16.0): the day's, or on the day after the run the
+ * (a snapshot's, engine ≥ 1.18.0): the day's, or on the day after the run the
  * last day's when that is the same water year; null without one.
  */
 function allocationFactorAt(ap: AllocationPlan, i: number, at: number, days: number, start: number): { allocationFactor: number } | null {
@@ -1515,7 +1520,7 @@ function allocationFactorAt(ap: AllocationPlan, i: number, at: number, days: num
 }
 
 /**
- * RunSummary.allocations (engine ≥ 1.16.0, issue #72): the mode, and per farm
+ * RunSummary.allocations (engine ≥ 1.18.0, issue #72): the mode, and per farm
  * or water user with an allocation the whole water years compared per water
  * source (compareAllocations on the run's own series, with
  * settings.allocationTolerance), the years a cap bound, and a full
@@ -1676,8 +1681,8 @@ function irrigation(n: NetworkNode, warnings: string[], fromCrops: (farmEfficien
 /**
  * Natural-flow volume / rain volume over the run (null without rain). A value
  * above 1 means the catchment gives back more water than fell on it, which no
- * catchment can do over a whole record: warn (audit H1, W1). Also counts the
- * days without any rainfall value, which the model silently treats as dry (W2).
+ * catchment can do over a whole record: warn (audit H1, W1). The days without
+ * any rainfall value are missingRainWarning's (W2).
  */
 function catchmentRunoffCoefficient(
 	input: ModelInput,
@@ -1694,16 +1699,9 @@ function catchmentRunoffCoefficient(
 	if (!kinds.some((k) => input.series?.[k])) return null;
 	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
 	let rainMm = 0;
-	let missing = 0;
 	for (let t = 0; t < natural.length; t++) {
 		const v = c[t] ?? ch[t] ?? f[t] ?? null;
-		if (v === null) missing++;
-		else if (v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
-	}
-	if (missing > 0) {
-		warnings.push(
-			`${missing} of ${natural.length} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm)`
-		);
+		if (v !== null && v > 0) rainMm += areal ? v * areal[waterYearIndex(month[t]!)]! : v;
 	}
 	const area = resolveCatchmentAreaKm2(settings.calibration, input);
 	if (!(rainMm > 0) || !(area > 0)) return null;
@@ -1926,6 +1924,52 @@ function forecastRainDays(
 			(inReport ? `; ${inReport === count ? 'all' : inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd}), so curtailment and the EWR sites cover forecast days` : '')
 	);
 	return { days: count, from, to, inReport, lastRecorded: lastRecorded >= 0 ? fromEpochDay(start + lastRecorded) : null };
+}
+
+/** How many blank-rain date ranges the W2 warning names before "and N more". */
+export const MISSING_RAIN_RANGES_LISTED = 3;
+
+/**
+ * W2: the days without any rainfall value (catchment, CHIRPS or forecast),
+ * which the model treats as dry (0 mm). The warning names their date ranges
+ * (the first MISSING_RAIN_RANGES_LISTED, then how many more) and how many
+ * fall in the reporting window, so a reader sees that "this week" ran on
+ * blank days, not only that some day somewhere did (engine ≥ 1.16.0).
+ * Nothing without a rain series.
+ */
+function missingRainWarning(
+	input: ModelInput,
+	aligned: (k: SeriesKind) => (number | null)[],
+	start: number,
+	days: number,
+	window: { from: number; to: number; reportStart: string; reportEnd: string },
+	warnings: string[]
+): void {
+	const kinds: SeriesKind[] = ['rain_catchment_mm', 'rain_chirps_mm', 'rain_forecast_mm'];
+	if (!kinds.some((k) => input.series?.[k])) return;
+	const [c, ch, f] = kinds.map(aligned) as [(number | null)[], (number | null)[], (number | null)[]];
+	const ranges: [number, number][] = [];
+	let missing = 0;
+	let inReport = 0;
+	for (let t = 0; t < days; t++) {
+		if ((c[t] ?? ch[t] ?? f[t] ?? null) !== null) continue;
+		missing++;
+		if (t >= window.from && t <= window.to) inReport++;
+		const last = ranges.at(-1);
+		if (last && last[1] === t - 1) last[1] = t;
+		else ranges.push([t, t]);
+	}
+	if (!missing) return;
+	const day = (t: number) => fromEpochDay(start + t);
+	const named = ranges.slice(0, MISSING_RAIN_RANGES_LISTED).map(([a, b]) => (a === b ? day(a) : `${day(a)} to ${day(b)}`));
+	const more = ranges.length - named.length;
+	const whole = window.from === 0 && window.to === days - 1;
+	warnings.push(
+		`${missing} of ${days} days have no rainfall value (catchment, CHIRPS or forecast); the model treats them as dry (0 mm): ` +
+			named.join(', ') +
+			(more ? ` and ${more} more period${more === 1 ? '' : 's'}` : '') +
+			(whole ? '' : `; ${inReport} of them fall in the reporting window (${window.reportStart} to ${window.reportEnd})`)
+	);
 }
 
 /**

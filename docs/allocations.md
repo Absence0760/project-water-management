@@ -4,7 +4,7 @@ Roadmap [WP-3.10](./roadmap/step-3-licensing.md#wp-310-water-use-allocations-war
 planned-work row **Water-use licences / allocations**, issue #45 ("No
 registered/licensed volume per water user (WARMS)"). This page covers
 storing the volumes, importing them, comparing them with a run's modelled
-use (the first slice), and, from the second (issue #72, engine 1.16.0),
+use (the first slice), and, from the second (issue #72, engine 1.18.0),
 licence conditions, the project's comparison band and the **allocation
 mode** that caps a run at the volumes or scales it to them. What is still to
 build is at the end.
@@ -31,9 +31,9 @@ one authorisation, for a farm or other water user (a `farm` or `user` node):
 | Registered user | the holder's name; see [Who sees what](#who-sees-what) |
 | Reference | free text: the letter, the extract, a note |
 | Source | the imported file (name and SHA-256), or none when typed in by hand |
-| Months | licence condition (100): the calendar months the use may happen in; none = none stated |
-| Maximum rate | licence condition (100): the most it may take at once, m³/s; optional |
-| Conditions | licence conditions in words (100), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
+| Months | licence condition (103): the calendar months the use may happen in; none = none stated |
+| Maximum rate | licence condition (103): the most it may take at once, m³/s; optional |
+| Conditions | licence conditions in words (103), up to 20, e.g. "No abstraction below 0.2 m³/s at the weir" |
 
 Licence conditions are recorded and shown (the list sums them up in one
 line, "Oct–Mar only · at most 0.05 m³/s · 2 conditions") but **not applied**
@@ -43,7 +43,7 @@ A farm may have several allocations (a registration and a later licence;
 surface and groundwater). The comparison adds up every allocation in force for
 the farm and source on each day.
 
-Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql-100_allocation_conditionssql).
+Tables and policies: [data-model.md § Allocations](./data-model.md#allocations-038_allocationssql-103_allocation_conditionssql).
 
 ## Importing
 
@@ -138,11 +138,11 @@ For a run, per farm or water user, per water source and per **water year**
 - Allocations not matched to a node, or matched to a node the run doesn't
   have, are counted and named, not compared.
 
-### The allocation mode (engine ≥ 1.16.0)
+### The allocation mode (engine ≥ 1.18.0)
 
 Settings › Registered volumes › **Allocation mode** (`settings.allocationMode`)
 decides what the volumes do to a run
-([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72)):
+([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)):
 
 - **Compare only** (the default): nothing; every run with volumes carries
   the comparison's whole-year figures in its summary.

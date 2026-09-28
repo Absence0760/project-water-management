@@ -170,9 +170,9 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
 `calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
 (`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`), and
-from engine 1.16.0 (issue #72) `allocationMode` (`none` | `cap` |
+from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
 `fullAllocation`: a full-allocation scenario on a base run is the "every
-registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72)).
+registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or

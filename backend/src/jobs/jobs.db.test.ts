@@ -220,7 +220,7 @@ describe('retries, backoff and dead-lettering', () => {
 				role: 'editor',
 				payload: z.object({}).passthrough(),
 				run: async () => {
-					throw Object.assign(new Error('duplicate key value violates unique constraint "secret_internal_idx"'), { code: '23505' });
+					throw Object.assign(new Error('duplicate key value violates unique constraint "secret_internal_idx"'), { code: '23505', detail: 'Key (email)=(ann@example.com) already exists.' });
 				}
 			})
 		};
@@ -245,6 +245,16 @@ describe('retries, backoff and dead-lettering', () => {
 		expect(row.finished_at).not.toBeNull();
 		expect(row.last_error).not.toContain('secret_internal_idx');
 		expect(spy).toHaveBeenCalledWith(expect.stringContaining('"event":"job_dead"'));
+		// The server log gets one JSON line per unexpected failure: the error's
+		// name and SQLSTATE and where it was thrown, never its text or detail.
+		const failed = spy.mock.calls.map((c) => c.join(' ')).filter((l) => l.includes('"event":"job_failed"'));
+		expect(failed).toHaveLength(2);
+		expect(JSON.parse(failed[0]!)).toMatchObject({ event: 'job_failed', jobId: job.id, kind: 'rerun', error: 'Error', code: '23505' });
+		expect(JSON.parse(failed[0]!).at.length).toBeGreaterThan(0);
+		for (const l of spy.mock.calls.map((c) => c.join(' '))) {
+			expect(l).not.toContain('ann@example.com');
+			expect(l).not.toContain('secret_internal_idx');
+		}
 		spy.mockRestore();
 	});
 

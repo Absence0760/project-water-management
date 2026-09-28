@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { safeNext } from './redirect';
-import { isLandingRoot, isPublicPath, routeAccess } from './session.svelte';
+import { isLandingRoot, isPublicPath, routeAccess, termsGateApplies } from './session.svelte';
 
 describe('safeNext', () => {
 	it('allows app-relative paths only', () => {
@@ -93,5 +93,20 @@ describe('routeAccess', () => {
 			expect(routeAccess(p, '', true)).toBe('show');
 		}
 		expect(routeAccess('/privacyx', '', false)).toBe('login');
+	});
+});
+
+describe('termsGateApplies', () => {
+	const report = '/projects/p1/report';
+	it('puts the re-acceptance step in place of an app page for a person who hasn’t accepted the terms in force', () => {
+		expect(termsGateApplies({ termsCurrent: false }, report)).toBe(true);
+		expect(termsGateApplies({ termsCurrent: true }, report)).toBe(false);
+		expect(termsGateApplies(null, report)).toBe(false);
+		// The legal pages stay readable from it.
+		expect(termsGateApplies({ termsCurrent: false }, '/terms')).toBe(false);
+	});
+
+	it('never for the report renderer’s session: it renders the report (positive control above: the same account’s own session is gated)', () => {
+		expect(termsGateApplies({ termsCurrent: false, renderSession: true }, report)).toBe(false);
 	});
 });

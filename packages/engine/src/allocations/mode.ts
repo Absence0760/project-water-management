@@ -1,4 +1,4 @@
-// allocationMode (engine ≥ 1.16.0, roadmap WP-3.10, issue #72, docs/model.md
+// allocationMode (engine ≥ 1.18.0, roadmap WP-3.10, issue #72, docs/model.md
 // §2.12a): registered volumes as a physical limit on a run, not only as a
 // comparison beside it.
 //
@@ -217,7 +217,7 @@ export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Floa
 }
 
 /**
- * Put the allocation mode into a built plan (engine ≥ 1.16.0): for 'cap'
+ * Put the allocation mode into a built plan (engine ≥ 1.18.0): for 'cap'
  * each unit's per-source budgets (PlanNode.allocationCap); for
  * 'fullAllocation' each farm's demand scaled (the crop requirement and the
  * demand objects alike, so D = F / e + objects scales with them; water users
@@ -264,7 +264,7 @@ export function planAllocations(
 	}
 }
 
-/** The run series the modes add (engine ≥ 1.16.0), per farm or water user they touch. */
+/** The run series the modes add (engine ≥ 1.18.0), per farm or water user they touch. */
 export const ALLOCATION_SERIES = {
 	surfaceRoom: { key: 'allocation_room_surface', label: 'Allocation cap: surface water it may still take this water year (start of day)' },
 	groundwaterRoom: { key: 'allocation_room_groundwater', label: 'Allocation cap: groundwater it may still take this water year (start of day)' },

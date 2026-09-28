@@ -172,7 +172,7 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
 	for (const n of base.model.nodes) n.lossReturnFraction = 0;
 	// Demand objects' returns (engine ≥ 1.7.0) likewise: a return from stored water helps the farms below today.
 	for (const o of base.model.demandObjects ?? []) o.returnPct = 0;
-	// An allocation mode (engine ≥ 1.16.0) is taken off: a full allocation scales every allocated unit's demand
+	// An allocation mode (engine ≥ 1.18.0) is taken off: a full allocation scales every allocated unit's demand
 	// back to its registered volume (a fixed demand beside a growing one, as above), and a cap ties supply to the
 	// volume, not the demand, so neither keeps the property. The allocations themselves stay (they only compare).
 	base.settings.allocationMode = 'none';

@@ -591,7 +591,10 @@ role, freshness, Add data) and each tab's own header:
   defaults to **append / update** (`POST /projects/:id/series/merge`): new
   days are added and overlapping days corrected. Days the file leaves blank
   keep their stored value. The preview counts new, changed and unchanged
-  days before anything is sent. **Replace** overwrites the whole series.
+  days before anything is sent, and warns about **blank days** between the
+  series' last value and the file's first day (`coverage.ts` `holeBefore`):
+  the merge stores them as blanks, and a run treats a blank rain day as dry.
+  **Replace** overwrites the whole series.
   **Overwrite confirm** (issue #54 item 3): an upload that would change
   stored days (a merge with changed days, or a Replace of a series holding
   values) asks first, in place of the submit button. It says how many days,
@@ -1653,11 +1656,25 @@ note's link on the Summary, `notes.ts` `noteHref`).
   from**. Per unit: **Number of** people / head / units, **Litres per** person
   / head / unit **a day** and **Distribution losses** (%). The line below gives
   its mean m³/day as the engine sizes it; **Use October's demand for every
-  month** fills a monthly row. Read-only for viewers; removing the unit asks
+  month** fills a monthly row. **On/off schedule** (engine ≥ 1.17.0, issue
+  #90 Q4, `DemandScheduleFields.svelte`, `demandSchedule.ts`): "Every day at
+  its month's demand" until a window is added; a **Days the new window
+  covers** picker beside **+ Add window** adds one, off (factor 0), with a
+  starting point per span (Every day: weekends, Sat and Sun ticked; Dates
+  each year: the Christmas break, 12-15 to 01-10; Date range, once: blank
+  dates; Around Easter: −2 to +1, Good Friday to Family Day). Each window has
+  a label (**Window n**), **Days** (the span; changing it resets the bounds),
+  its bounds (**From** / **To**: MM-DD each year, date pickers once, days
+  from Easter Sunday), **Factor** (0 = off, up to 10), **On** Mon–Sun
+  checkboxes (all ticked = every day), **Move window n up / down** (order
+  matters: the later window wins a day two cover) and **Remove window n**. A
+  window the run couldn't use says why under it ("Not used: …"), and the
+  save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
   yet and says so. After a run, the human-impact tables show **Demand
   objects**: per object its unit, priority, demand, supplied (m³/day and %),
-  days short and returned (or "piped out").
+  days short, days off (a column only when an object has a schedule; "–" on
+  one without) and returned (or "piped out").
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
   one-node form, farms only (`LandCoverFields.svelte`, `landcover.ts`):
   **+ Add land cover** adds a patch (invasive trees, full cover, no area yet);
@@ -2678,10 +2695,10 @@ which checks every catchment tab).
   curtailment reporting window (also the assurance of supply's window), and
   the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
   default 90 %: a water year counts as met at that supply ratio; engine ≥
-  0.32.0), and **Registered volumes** (engine ≥ 1.16.0, issue #72): the
+  0.32.0), and **Registered volumes** (engine ≥ 1.18.0, issue #72): the
   **allocation mode** (`settings.allocationMode`: *Compare only*, the
   default; *Cap use at the registered volume*; *Full allocation*, [model.md
-  §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72))
+  §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72))
   and the **comparison band** (± %, `settings.allocationTolerance`, default
   10 %, the Allocations tab's "within band"), each with its help tip and
   field history. Either is a model setting: saving it makes the latest run
@@ -3037,9 +3054,10 @@ read it before.
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
   under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
-  deficit above float noise on any of the run's last 7 days, or on a
-  forecast run the 7 days before the forecast, issue #51; the reporting
-  window's *Last 7 days* and the publication's own rule,
+  deficit above float noise on any of the 7 days to the run's last day of
+  recorded rain (on a forecast run, the 7 days before the forecast, issue
+  #51), the reporting window's *Last 7 days* and the publication's own rule,
+  so the portfolio's count and this page agree,
   `backend/src/publish/recent.ts`; with the number the curtailment table asks
   to cut; the tile links to the curtailment over those days); *Total
   shortfall* (Mm³/a and mean m³/day of demand not supplied). The week needs
@@ -3322,7 +3340,9 @@ read it before.
   (`#res-curtailment`) chooses the days the curtailment, other water users and
   EWR sites tables average over: **Project window** (the window the run
   reported over, from the project setting, with its dates in the option; the
-  default), **Last 7 / 14 / 30 days** (ending on the run's last day), **Whole
+  default), **Last 7 / 14 / 30 days** (ending on the run's last day of
+  recorded rain, `reportWindow.ts` `runDataUntil`, the publication's rule,
+  with a note when the run goes on past it as dry days), **Whole
   record**, or **Custom range** (From / To date fields, starting from the days
   shown, cut to the run with a note; a backwards range or one outside the run
   says so and shows the project window). Any window other than the run's own is
@@ -4148,7 +4168,7 @@ to where it was opened from. A viewer opening a sheet link gets the page.
 *modelled, not metered* and a difference is something to look into, not a
 finding; slim notes for volumes not matched to a unit (editors: "Change a
 volume to match it"), or matched to a unit the run doesn't have. A run made
-with an allocation mode (engine ≥ 1.16.0, Settings › Registered volumes)
+with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
 says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
 run capped each unit’s use at its registered volume per water year …") or a
 full allocation ("… what the river would look like if every registered user

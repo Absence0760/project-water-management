@@ -4,6 +4,7 @@ import { actAsUser, withoutUser, withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { trySendMail } from '../mail/transport.js';
 import { issueEmailToken, markVerified, verificationMail } from './email-routes.js';
+import { answerAlike } from './accountMail.js';
 import { accountExistsMail, siteLink } from '../mail/templates.js';
 import type { Mail } from '../mail/transport.js';
 import { buildSubjectExport, ExportThrottled } from './export.js';
@@ -11,7 +12,7 @@ import { attachment } from '../export/csv.js';
 import { DEFAULT_TIME_ZONE, localDate } from '../projects/timeZone.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { DUMMY_HASH, hashPassword, verifyPassword } from './password.js';
-import { clearSession, issueSession } from './session.js';
+import { clearSession, issueSession, revokeSession } from './session.js';
 import { clearDevice, issueDevice, trustedDevice } from './device.js';
 import { parseToken } from './tokens.js';
 import { readJson } from '../http/body.js';
@@ -223,22 +224,24 @@ export const authRoutes = new Hono<AuthEnv>()
 		return c.json({ user: toUser(result.row) }, 201);
 	})
 	// "Send the link again" on the sign-in page, signed out (issue #57). Always
-	// the same 202, whether or not the address has an account or still needs
+	// the same 202 after the same time, whether or not the address has an account or still needs
 	// confirming, so it can't be used to discover accounts; a link goes out
 	// only to an unconfirmed account, under the cooldown and daily cap (078).
 	.post('/resend-confirmation', async (c) => {
 		const body = z.object({ email }).parse(await readJson(c));
-		const mail = await withoutUser(async (db) => {
-			const { rows } = await db.query<{ id: string; email: string }>('SELECT id, email FROM app_auth_account($1)', [body.email]);
-			const user = rows[0];
-			if (!user) return null;
-			await actAsUser(db, user.id);
-			const { rows: me } = await db.query<{ verified: boolean }>('SELECT email_verified_at IS NOT NULL AS verified FROM app_user WHERE id = $1', [user.id]);
-			if (me[0]?.verified !== false) return null;
-			const sent = await verificationMail(db, user.id, user.email);
-			return 'mail' in sent ? sent.mail : null;
-		});
-		if (mail) await trySendMail(mail);
+		// The same time for every address too: the send isn't awaited (auth/accountMail.ts).
+		await answerAlike(() =>
+			withoutUser(async (db) => {
+				const { rows } = await db.query<{ id: string; email: string }>('SELECT id, email FROM app_auth_account($1)', [body.email]);
+				const user = rows[0];
+				if (!user) return null;
+				await actAsUser(db, user.id);
+				const { rows: me } = await db.query<{ verified: boolean }>('SELECT email_verified_at IS NOT NULL AS verified FROM app_user WHERE id = $1', [user.id]);
+				if (me[0]?.verified !== false) return null;
+				const sent = await verificationMail(db, user.id, user.email);
+				return 'mail' in sent ? sent.mail : null;
+			})
+		);
 		return c.json({ ok: true }, 202);
 	})
 	.post('/login', async (c) => {
@@ -285,7 +288,10 @@ export const authRoutes = new Hono<AuthEnv>()
 		issueDevice(c, row.email, row.sessions_revoked_at);
 		return c.json({ user: toUser(user) });
 	})
-	.post('/logout', (c) => {
+	// Signs this session out on the server too (its id is revoked, session.ts
+	// revokeSession), so a copied cookie stops working with the one cleared here.
+	.post('/logout', async (c) => {
+		await revokeSession(c);
 		clearSession(c);
 		return c.body(null, 204);
 	})
@@ -309,7 +315,11 @@ export const authRoutes = new Hono<AuthEnv>()
 			return rows[0];
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
-		return c.json({ user: toUser(row) });
+		// The report renderer's session (reports/scope.ts) says so: the page
+		// renders the report route for it, never the terms re-acceptance step
+		// (+layout.svelte termsGate), which only a person can pass. It can read
+		// one report and nothing else, and can't accept anything.
+		return c.json({ user: { ...toUser(row), ...(c.get('renderSession') ? { renderSession: true } : {}) } });
 	})
 	// "Download my data" (POPIA access; auth/export.ts): everything the app
 	// keeps about the signed-in person, as a JSON file. One a minute per account.

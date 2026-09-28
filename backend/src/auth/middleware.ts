@@ -3,8 +3,11 @@ import { ApiError } from '../http/errors.js';
 import { scopeAllows } from '../reports/scope.js';
 import { readSessionClaims } from './session.js';
 
-/** `edgeVerified`: the request passed the CloudFront shared-secret check (app.ts), so the edge's headers can be trusted (http/clientAddress.ts). */
-export type AuthEnv = { Variables: { userId: string; edgeVerified: boolean } };
+/**
+ * `edgeVerified`: the request passed the CloudFront shared-secret check (app.ts), so the edge's headers can be trusted (http/clientAddress.ts).
+ * `renderSession`: the session is the report renderer's (a `scope` claim, reports/scope.ts), set by requireUser.
+ */
+export type AuthEnv = { Variables: { userId: string; edgeVerified: boolean; renderSession?: boolean } };
 
 /**
  * Rejects with 401 unless the request carries a valid session. A render
@@ -19,5 +22,6 @@ export const requireUser = createMiddleware<AuthEnv>(async (c, next) => {
 		throw new ApiError(403, 'this session can only read one report');
 	}
 	c.set('userId', session.userId);
+	c.set('renderSession', !!session.scope);
 	await next();
 });

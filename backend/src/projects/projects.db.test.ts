@@ -72,6 +72,15 @@ describe('projects', () => {
 		expect(Date.parse(lastRunAt)).toBeGreaterThanOrEqual(before - 5_000);
 		// The single-project endpoint carries the same fields.
 		expect((await u.call('GET', `/projects/${projectId}`)).body.project).toMatchObject({ dataUntil: '2020-10-10', lastRunAt });
+
+		// A logger reporting "no reading" stores blank days: no data, so no fresher.
+		const blanks = await u.call('POST', `/projects/${projectId}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2020-10-11', values: [null, null, null] });
+		expect(blanks.status).toBe(200);
+		expect(blanks.body).toMatchObject({ length: 43, lastValueDate: '2020-10-10' });
+		expect((await find()).dataUntil).toBe('2020-10-10');
+		// Positive control: a value after the blanks moves it.
+		expect((await u.call('POST', `/projects/${projectId}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2020-10-14', values: [0] })).status).toBe(200);
+		expect((await find()).dataUntil).toBe('2020-10-14');
 	});
 
 	it('merges settings patches over defaults and drops keys the schema does not name', async () => {
