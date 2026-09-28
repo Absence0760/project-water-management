@@ -1158,9 +1158,17 @@
 //             entry. Lazy-loading the editor would not lower this figure:
 //             the total sums every chunk, so a split only moves the bytes and
 //             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
-// 2026-09-28  total 1094 → 1117 KB (measured 1114), largestWorkerKb 32 → 34
+// 2026-09-28  total 1094 → 1101 KB (measured 1098 with #115's schedules
+//             merged, 1093 before). Issue #72's allocations second slice:
+//             the engine's allocation mode (allocations/mode.ts), its
+//             self-check and the run comparison's allocation lines (verify
+//             and compare ship in the run worker and the pages both), the
+//             Settings tab's Registered volumes fields, the Allocations tab's
+//             licence conditions and mode note, and two help entries. No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-28  total 1101 → 1117 KB (measured 1114), largestWorkerKb 32 → 34
 //             (calibration worker measured 33). Issue #65, the calibration
-//             workflow batch (engine 1.18.0), one change: CR-21 sensitivity
+//             workflow batch (engine 1.19.0), one change: CR-21 sensitivity
 //             runs (River & reserve's Sensitivity panel and tornado, ~4 KB;
 //             the verdict module kept apart from the run by engineSplit.test.ts;
 //             sensitivityRuns in the calibration worker), CR-28 WR2012

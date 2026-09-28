@@ -57,7 +57,7 @@ describe('the notice', () => {
 		expect(n).toMatchObject({ level: 'advisory', label: 'Notice from the WUA · Advisory', heading: 'Please cut back', body: 'Irrigate at night.', lang: 'en' });
 		// The WUA's own words carry the cut; the percentage stands alone only without them.
 		expect(n.pctLine).toBeNull();
-		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, notice: {} } }))!.pctLine)).toBe('Set by the WUA: 15 % of registered use.');
+		expect(sp(shareNotice(view({ restriction: { level: 'restricted', pct: 15, notice: {} } }))!.pctLine)).toBe('Set by the WUA: a 15 % cut in registered water use.');
 		expect(sp(n.byline)).toMatch(/^Thandi Mokoena, 1[12] Jan 2024$/);
 	});
 

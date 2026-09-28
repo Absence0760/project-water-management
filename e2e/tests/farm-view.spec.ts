@@ -94,8 +94,16 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await page.reload();
 	const supplyAgain = page.getByRole('region', { name: 'Water you received this season' });
 	await expect(supplyAgain.getByRole('button', { name: 'ML' })).toHaveAttribute('aria-pressed', 'true');
+	// The 12-month table follows the chosen unit too (issue #51); the chart's axis stays in ML.
+	const months = page.getByRole('region', { name: 'Last 12 months, in ML' });
+	await months.getByText('Show the numbers', { exact: true }).click();
+	const monthsTable = months.getByRole('table');
+	await expect(monthsTable).toContainText(/\sML/);
+	await expect(monthsTable).not.toContainText('m³');
 	// Back to m³, the seeded farmer's default, for the other specs.
 	await supplyAgain.getByRole('button', { name: 'm³' }).click();
+	await expect(monthsTable).toContainText(/\sm³/);
+	await expect(monthsTable).not.toContainText('ML');
 	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
 
 	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table.
@@ -155,6 +163,8 @@ test('a farmer sees “Before you look at your farm” first; after I understand
 	await page.getByRole('button', { name: 'I understand' }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toBeVisible();
 	await expect(title).toHaveCount(0);
+	// The button went with the notice: focus lands on the farm's title, not <body> (WCAG 2.4.3, issue #51).
+	await expect(page.getByRole('heading', { level: 1, name: 'Upper farm' })).toBeFocused();
 	expect(await current()).toBe(true);
 	// Main page: the WUA's notice, then the estimate line, then the first figure card.
 	await expect(estimateNote(page)).toBeVisible();
@@ -216,6 +226,31 @@ test('a dropped signal keeps the saved figures on screen under the offline strip
 	// The estimate line here too: after the WUA's notice, before "At a glance".
 	await expectBefore(page.getByRole('region', { name: /^WUA notice · / }), estimateNote(page));
 	await expectBefore(estimateNote(page), page.getByRole('region', { name: 'At a glance' }));
+
+	// Try again's focus ring stands out from the strip (WCAG 1.4.11 / 2.4.7, issue #51): the strip
+	// swaps the page's colours, so the page's --focus was 1.67:1 on it in dark mode.
+	const retry = page.getByRole('button', { name: 'Try again' });
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		await retry.focus();
+		await page.keyboard.press('Shift+Tab');
+		await page.keyboard.press('Tab');
+		await expect(retry).toBeFocused();
+		const ratio = await retry.evaluate((el) => {
+			const rgb = (c: string) => c.match(/[\d.]+/g)!.slice(0, 3).map(Number);
+			const lum = ([r, g, b]: number[]) => {
+				const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+				return 0.2126 * f(r!) + 0.7152 * f(g!) + 0.0722 * f(b!);
+			};
+			const ring = getComputedStyle(el);
+			const ground = getComputedStyle(el.closest('.strip')!).backgroundColor;
+			if (ring.outlineStyle === 'none' || Number.parseFloat(ring.outlineWidth) < 2) return 0;
+			const [a, b] = [lum(rgb(ring.outlineColor)), lum(rgb(ground))];
+			return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+		});
+		expect(ratio, `${scheme}: focus ring against the strip`).toBeGreaterThanOrEqual(3);
+	}
+	await page.emulateMedia({ colorScheme: 'light' });
 	await context.setOffline(false);
 });
 

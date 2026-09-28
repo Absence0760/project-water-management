@@ -37,6 +37,8 @@ export async function openNodeForm(page: Page, name?: string) {
  * Clicks Save changes (the open grid's or sheet's, else the save bar's) and
  * waits for the model save (PUT …/model) to answer, whether it saved or was
  * refused, so a reload or a read that follows sees what the server has.
+ * The page takes the answer in a moment later: before a reload, wait for
+ * the save bar (or the sheet's "No unsaved changes") too.
  */
 export async function saveModelChanges(page: Page) {
 	const modal = page.locator('dialog[open]');

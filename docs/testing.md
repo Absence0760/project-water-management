@@ -17,7 +17,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
 | `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database | seconds |
-| `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4) | ~55 s, nearly all fixture |
+| `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
 ## Performance budgets
 
@@ -31,7 +31,8 @@ so it can't run beside `test:backend:db` either. Run them when you touch
 what they time: the engine's run loop, the portfolio query
 (`backend/src/portfolio/portfolio.ts`; a new join or per-row subquery), or
 the role functions every RLS policy calls (`app_project_role`,
-`app_has_role`). A
+`app_has_role`), or a model run's path (the engine, `runs/execute.ts`
+`storeRun`, the `rerun` job; the load checks). A
 budget should sit well above the measured time (the portfolio's is ~12×),
 so it catches a change in the query's shape, not machine noise.
 

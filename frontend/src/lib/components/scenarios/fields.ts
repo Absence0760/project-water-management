@@ -14,6 +14,8 @@ import {
 	SETTINGS_PATHS,
 	EWR_CHARGE_SOURCES,
 	LOW_FLOW_MEASURES,
+	ALLOCATION_MODE_LABEL,
+	ALLOCATION_MODES,
 	SUPPLY_RULES,
 	SUPPLY_RULE_LABEL,
 	TRANSFER_SET_FIELDS,
@@ -206,7 +208,9 @@ export const SETTINGS_SPECS: Record<SettingsPath, FieldSpec> = {
 	},
 	// Reserve method choices (engine ≥ 1.3.0, issue #64), pending the hydrologist.
 	ewrChargeSource: { label: 'EWR charge follows', spec: { t: 'enum', options: plain(EWR_CHARGE_SOURCES, { pragmatic: 'The pragmatic EWR', ruleTable: 'The rule tables' }) } },
-	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } }
+	lowFlowMeasure: { label: 'Low flows judged on', spec: { t: 'enum', options: plain(LOW_FLOW_MEASURES, { total: 'The month’s total flow', baseflow: 'The month’s base flow' }) } },
+	// Registered volumes (engine ≥ 1.18.0, issue #72): a full-allocation scenario is the cumulative-impact background.
+	allocationMode: { label: 'Allocation mode', spec: { t: 'enum', options: plain(ALLOCATION_MODES, ALLOCATION_MODE_LABEL) } }
 };
 
 export const SETTINGS_FIELDS = SETTINGS_PATHS.map((path) => ({ path, label: SETTINGS_SPECS[path].label }));

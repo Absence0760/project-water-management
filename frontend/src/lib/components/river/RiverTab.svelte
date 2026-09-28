@@ -280,7 +280,10 @@
 					<h2 id="years-h">Days below the reserve, each water year</h2>
 					<Lazy load={loadReserveYears}>
 						{#snippet children(ReserveYearsChart)}
-							<ReserveYearsChart runs={[{ name: name(shown!.run), projectId, runId: shown!.run.id, colour: 'var(--series-2)' }]} minHeight={200} />
+							<ReserveYearsChart
+								runs={[{ name: name(shown!.run), projectId, runId: shown!.run.id, colour: 'var(--series-2)', forecastFrom: shown!.run.summary.forecast?.from ?? null }]}
+								minHeight={200}
+							/>
 						{/snippet}
 					</Lazy>
 				</section>

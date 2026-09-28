@@ -62,6 +62,30 @@ export interface MigrationPlan {
 	problems: string[];
 }
 
+/**
+ * Why a run stopped, as a stable code plus file names. The message carries the
+ * detail (Postgres's error text, which can quote SQL or data); the fields are
+ * what the migrate Lambda may hand back to the public deploy log
+ * (lambda-migrate.ts `failureSummary`).
+ */
+export type MigrateErrorCode = 'integrity' | 'migration_failed' | 'lock_timeout' | 'statement_timeout';
+
+export class MigrateError extends Error {
+	constructor(
+		message: string,
+		readonly code: MigrateErrorCode,
+		/** The file(s) the run stopped on: the one that failed, or every file an integrity problem names. */
+		readonly migrations: string[],
+		/** Files this run had applied (committed) before it stopped. */
+		readonly applied: string[],
+		/** Files still pending when it stopped, the failed one included. */
+		readonly pending: string[]
+	) {
+		super(message);
+		this.name = 'MigrateError';
+	}
+}
+
 export function checksumOf(sql: string): string {
 	return createHash('sha256').update(sql, 'utf8').digest('hex');
 }
@@ -148,11 +172,17 @@ export async function migrate(databaseUrl: string, log = console.log, opts: Migr
 		const { rows } = await client.query<AppliedRow>('SELECT name, checksum FROM schema_migrations');
 		const plan = planMigrations(files, rows);
 		if (plan.problems.length) {
-			throw new Error(
+			// Each problem starts with the file it is about (planMigrations).
+			const named = [...new Set(plan.problems.map((p) => p.split(' ', 1)[0]!))];
+			throw new MigrateError(
 				`refusing to migrate: applied migrations are forward-only.\n  - ${plan.problems.join('\n  - ')}\n` +
 					'Put the applied file back as it was and make the change in a new NNN_*.sql. ' +
 					'A local database built from an edited 001 or a stale branch: `pnpm dev:db:reset`. ' +
-					'Production: docs/deployment.md § Migration integrity.'
+					'Production: docs/deployment.md § Migration integrity.',
+				'integrity',
+				named,
+				[],
+				plan.pending.map((f) => f.name)
 			);
 		}
 		for (const f of plan.backfill) {
@@ -182,7 +212,9 @@ export async function migrate(databaseUrl: string, log = console.log, opts: Migr
 						: e.code === '57014'
 							? ` (statement_timeout ${timeouts.statement_timeout}; a migration that needs longer says so with a "-- migrate: statement_timeout = …" line)`
 							: '';
-				throw new Error(`migration ${name} failed: ${e.message}${hint}`);
+				const code: MigrateErrorCode = e.code === '55P03' ? 'lock_timeout' : e.code === '57014' ? 'statement_timeout' : 'migration_failed';
+				const left = plan.pending.slice(plan.pending.findIndex((f) => f.name === name)).map((f) => f.name);
+				throw new MigrateError(`migration ${name} failed: ${e.message}${hint}`, code, [name], [...applied], left);
 			}
 			applied.push(name);
 			log(`applied ${name}`);

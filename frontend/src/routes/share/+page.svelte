@@ -188,10 +188,6 @@
 		font-size: 13px;
 		color: var(--text-2);
 	}
-	/* The switch and its (empty until it fails) status line don't wrap the header. */
-	.header-in :global(.lang) {
-		flex-wrap: nowrap;
-	}
 	.share-main {
 		max-width: 560px;
 		margin: 0 auto;

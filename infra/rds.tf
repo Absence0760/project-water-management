@@ -23,10 +23,26 @@ resource "aws_db_subnet_group" "main" {
   tags       = { Name = "${local.project}-db" }
 }
 
-resource "aws_db_parameter_group" "pg17" {
-  name        = "${local.project}-pg17"
-  family      = "postgres17"
-  description = "water-management Postgres 17: TLS enforced, slow-query logging."
+# The Postgres major version, shared by the parameter group's family and name
+# and the instance's engine_version.
+#
+# Major upgrade (e.g. 17 → 18): bump this, set
+# `allow_major_version_upgrade = true` on the instance for that one apply, and
+# plan. A new family forces a new parameter group; with `name_prefix` +
+# `create_before_destroy` Terraform creates the new group, moves the instance
+# onto it (the upgrade itself), then deletes the old one. A fixed `name` can't
+# do that: the replacement's name would collide with the group still in use.
+locals {
+  db_major_version = "17"
+}
+
+resource "aws_db_parameter_group" "main" {
+  # name_prefix, never name (see above). The provider appends a 26-character
+  # unique suffix; the prefix must be lowercase letters, digits and hyphens,
+  # start with a letter, contain no "--", and be at most 229 characters.
+  name_prefix = "${local.project}-pg${local.db_major_version}-"
+  family      = "postgres${local.db_major_version}"
+  description = "water-management Postgres ${local.db_major_version}: TLS enforced, slow-query logging."
 
   # Refuse any non-TLS connection (the default is already 1 on PG 15+, pinned
   # here so a default-group change can't silently loosen it).
@@ -86,10 +102,10 @@ resource "aws_db_instance" "main" {
   identifier = local.project
 
   engine                     = "postgres"
-  engine_version             = "17"
+  engine_version             = local.db_major_version
   auto_minor_version_upgrade = true
   instance_class             = var.db_instance_class
-  parameter_group_name       = aws_db_parameter_group.pg17.name
+  parameter_group_name       = aws_db_parameter_group.main.name
 
   storage_type          = "gp3"
   allocated_storage     = var.db_allocated_storage_gb

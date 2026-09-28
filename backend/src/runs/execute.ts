@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+	type AllocationEntry,
 	type ForecastRainSource,
 	forecastSplit,
 	gaugeSeriesKey,
@@ -76,7 +77,29 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook
 	// (projects/outlookSettings.ts) how a seasonal outlook is set up: none is a model input, so runs don't record them.
 	const { autoRun: _autoRun, outcomes: _outcomes, outlook: _outlook, ...settings } = mergeSettings(p[0]?.settings) as unknown as Record<string, unknown>;
-	return { input: { settings: settings as unknown as ModelInput['settings'], model, series }, seriesIds };
+	// Registered volumes (engine ≥ 1.18.0, issue #72): what settings.allocationMode caps or scales the run
+	// to, and what its summary compares with. Only when the project has any, so a project without them
+	// runs on the same input as before.
+	const allocations = await allocationsForRun(db, projectId);
+	return { input: { settings: settings as unknown as ModelInput['settings'], model: allocations.length ? { ...model, allocations } : model, series }, seriesIds };
+}
+
+/**
+ * A project's allocations as a run reads them (engine AllocationEntry), in id
+ * order: the volume, source, validity and match, and the licence conditions
+ * the engine records but doesn't enforce yet. Never the holder's name, the
+ * registration number or the property: a run's stored input is readable by
+ * every viewer, and the engine needs none of them (D3, docs/allocations.md §
+ * Who sees what). Read under the caller's RLS, like the rest of the input.
+ */
+export async function allocationsForRun(db: Db, projectId: string): Promise<AllocationEntry[]> {
+	const { rows } = await db.query<AllocationEntry>(
+		`SELECT id, node_id AS "nodeId", water_source AS "waterSource", volume_m3_year AS "volumeM3PerYear", storage_m3 AS "storageM3",
+			valid_from AS "validFrom", valid_to AS "validTo", months::int[] AS months, max_rate_m3s AS "maxRateM3s"
+		 FROM allocation WHERE project_id = $1 ORDER BY id`,
+		[projectId]
+	);
+	return rows;
 }
 
 /**

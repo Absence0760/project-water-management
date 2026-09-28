@@ -338,11 +338,13 @@
 		if (refA && projectA && refA.projectId !== (refB?.projectId ?? refA.projectId)) tags.push(projects.find((p) => p.id === refA.projectId)?.name ?? '');
 		return tags.filter(Boolean).join(' · ');
 	});
+	// A forecast run's bars stop before its forecast days (RunMeta.forecastFrom, from the runs lists loaded above).
+	const forecastOf = (ref: RunRef) => runs[ref.projectId]?.find((r) => r.id === ref.runId)?.forecastFrom ?? null;
 	const chartRuns = $derived(
 		refA
 			? [
-					{ name: NAME.a, projectId: refA.projectId, runId: refA.runId, colour: COLOUR.a },
-					...whatIfs.map((s) => ({ name: NAME[s], projectId: refOf(s)!.projectId, runId: refOf(s)!.runId, colour: COLOUR[s] }))
+					{ name: NAME.a, projectId: refA.projectId, runId: refA.runId, colour: COLOUR.a, forecastFrom: forecastOf(refA) },
+					...whatIfs.map((s) => ({ name: NAME[s], projectId: refOf(s)!.projectId, runId: refOf(s)!.runId, colour: COLOUR[s], forecastFrom: forecastOf(refOf(s)!) }))
 				]
 			: []
 	);

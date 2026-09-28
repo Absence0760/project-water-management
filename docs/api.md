@@ -174,8 +174,11 @@ in; `404` = not found **or** not a member (RLS hides the project — the API nev
 reveals that a project exists); `403` = member without the needed role (also a
 cross-origin form post rejected by the CSRF check, a write RLS refused, or, in
 production, a request that didn't come through CloudFront); `400` =
-validation (`details` = zod issues), or `{ error: "invalid JSON" }` for a
-body that isn't JSON (`backend/src/http/body.ts`); `409` = conflict (duplicate name or email,
+validation (`details` = zod issues), `{ error: "invalid JSON" }` for a
+body that isn't JSON (`backend/src/http/body.ts`), or `{ error: "bad request
+path" }` on any route for a path with an escaped unreserved character
+(`%61`), an escaped `/`, `\` or `%`, a malformed escape or a dot segment
+(`backend/src/http/rawPath.ts`; `%20` and non-ASCII escapes are fine); `409` = conflict (duplicate name or email,
 already a member, last owner/admin); `413` = request body over 4 MB (5 MB
 for `POST /projects/import`), a series over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
@@ -905,12 +908,14 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farm or feed of another project `404`. Once `data_stale` is on for any
   feed, a feed added later gets its own rule, on, at its source's default.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
-  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
+  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn, threshold }`:
   `mode` is what you get now (the database's own rule,
   `app_alert_my_mode`), `defaultMode` your role's default, `chosen` whether
   you set it, `ruleOn` whether the catchment has it switched on (off, you
   get nothing whatever you choose). A farmer has one `dam_below` choice per
-  own farm; everyone else one for every farm. `muted`: every alert email
+  own farm; everyone else one for every farm. `threshold` is a farm's dam
+  alert level, the WUA's rule for that farm as a fraction (0.3 = 30 %),
+  `null` for any other choice or a farm with no rule (issue #51). `muted`: every alert email
   for the catchment is off (a digest's one-click unsubscribe).
 - `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
   digest), `daily_digest` (in the 06:00 summary, 06:00 in the project's time zone), `off`.
@@ -1769,7 +1774,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migration 038,
+modelled use against them (roadmap WP-3.10, migrations 038 and 103,
 [allocations.md](./allocations.md)). The app compares; it never decides
 whether a use is lawful.
 
@@ -1777,17 +1782,21 @@ whether a use is lawful.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
 | POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
-| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; `holder: ''` removes the name | editor |
+| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; only the fields sent change (issue #72: before, every field not sent went back to its default, the name and registration number included); `holder: ''` removes the name | editor |
 | DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
 | POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
-| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1, default 0.1) | `{ run: { id, label, startDate, endDate }, comparison: AllocationComparison }` (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
-  storageM3, validFrom, validTo, reference, createdAt, updatedAt }`. `holder`
+  storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
+  createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
+  `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
+  (strings) are licence conditions (103, issue #72), recorded and shown, not
+  yet applied by the engine. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
@@ -1795,7 +1804,20 @@ whether a use is lawful.
   | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
-  reference? }` (dates `YYYY-MM-DD`).
+  reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
+  | null, maxRateM3s?: 0 ≤ r < 10⁶ | null, conditions?: up to 20 strings of
+  1–500 characters }` (dates `YYYY-MM-DD`).
+- Import: the template and a WARMS extract may carry `months` (numbers or
+  names, ranges over the new year: `Oct-Mar`), `max_rate_m3s` and
+  `conditions` (separated by `|`); a cell that doesn't read is a row problem.
+- Every run's input carries the project's allocations (engine ≥ 1.18.0:
+  `GET /projects/:id/model-input` and the stored run's `inputs.model.allocations`,
+  without names, registration numbers or properties), and a write that changes
+  what a run reads makes the latest run out of date (`project.updated_at`).
+  `settings.allocationMode` (`'none'` | `'cap'` | `'fullAllocation'`) and
+  `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
+  ([Projects](#projects)); `RunSummary.allocations` is the run's own
+  comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
@@ -2046,7 +2068,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2057,7 +2079,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   share with the E7 headline and its band). `farm.river.equitableFraction`
   and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
-  D2), and `cutBeyondShare` is `false` (it is measured against the even
+  D2; for a viewer previewing the farm, counted as that farm's own farmer
+  would count them, 096), and `cutBeyondShare` is `false` (it is measured against the even
   share, so it would bound it); the stored projection keeps them.
   `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
   deficitDays, suppliedFraction }` only when the published run is a forecast
@@ -2069,6 +2092,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
+  `publishedBy` is the publisher's display name, `null` once that account
+  is gone (the page words it, "A former member", in the reader's language).
   The WUA's notice in every language it wrote it in, by code (`{}` for
   none); the page shows the reader's language, else English, else another,
   with a "not translated" line (`pickNotice`, design §7), so a language
@@ -2077,6 +2102,12 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
+- `today` is the date in the project's time zone (`project.timeZone`, 058)
+  when the response was built. The page counts ages (the dates line, a
+  forecast's age) to today in `project.timeZone` from the device's clock
+  (`farmToday`, `farm/numbers.ts`), so a saved copy or a tab left open moves
+  on with the day and a phone set to another zone counts the server's days;
+  `today` is its fallback when the browser doesn't know the zone.
 - `project.wuaName` is the WUA's name for the contact lines (`null` =
   "your WUA"); `farm.dataFrom` is the published run's first day, which
   "compared with last season" names when `lastSeason` is `null` (a

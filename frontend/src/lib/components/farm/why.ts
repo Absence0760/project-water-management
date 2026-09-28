@@ -43,10 +43,26 @@ export type Step1 =
 
 export const kHidden = () => t('Not shown: with so few hydrological units in the catchment, it could reveal a neighbour’s figures.');
 
-/** "a little less than an even share (about 118 m³ a day)". Never "gain", never "you may take". */
-export function shareComparison(n: number): string {
+/**
+ * How the wording grows with the gap between the farm's supply and the even
+ * share, in percentage points: under `plain` it is "a little", from `much`
+ * "much" (issue #51: 57 % against 88 % is not "a little less").
+ */
+export const SHARE_GAP_POINTS = { plain: 10, much: 25 } as const;
+
+/**
+ * "a little less than an even share (about 118 m³ a day)", "less than …",
+ * "much less than …", by the gap in percentage points between what the farm
+ * received and the even share. Never "gain", never "you may take".
+ * `n` is aboveBelowShareM3Day: positive below the share.
+ */
+export function shareComparison(n: number, gapPoints: number): string {
 	if (Math.abs(n) < DEMAND_PCT_FLOOR_M3_DAY) return t('about an even share');
-	return t(n > 0 ? 'a little less than an even share (about {amount})' : 'a little more than an even share (about {amount})', { amount: fmtM3Day(Math.abs(n)) });
+	const v = { amount: fmtM3Day(Math.abs(n)) };
+	const gap = Math.abs(gapPoints);
+	if (gap >= SHARE_GAP_POINTS.much) return t(n > 0 ? 'much less than an even share (about {amount})' : 'much more than an even share (about {amount})', v);
+	if (gap >= SHARE_GAP_POINTS.plain) return t(n > 0 ? 'less than an even share (about {amount})' : 'more than an even share (about {amount})', v);
+	return t(n > 0 ? 'a little less than an even share (about {amount})' : 'a little more than an even share (about {amount})', v);
 }
 
 export function step1(farm: FarmProjection): Step1 {
@@ -64,7 +80,7 @@ export function step1(farm: FarmProjection): Step1 {
 		youPct: pos(you),
 		shareLabel: t('even share {pct}', { pct: share }),
 		youLabel: t('you {pct}', { pct: mine }),
-		you: tRich('You received **{pct}**: {comparison}.', { pct: mine, comparison: shareComparison(r.aboveBelowShareM3Day) }),
+		you: tRich('You received **{pct}**: {comparison}.', { pct: mine, comparison: shareComparison(r.aboveBelowShareM3Day, (r.equitableFraction - you) * 100) }),
 		check: tRich('**This is a fairness check, not extra water for you.** Whether more water can reach your hydrological unit depends on where you are on the river and what is in your dam. {notPart}', { notPart })
 	};
 }
@@ -167,7 +183,8 @@ export function step3(farm: FarmProjection): Step3 | null {
 	const got = Math.round(r.suppliedM3Day);
 	const cut = Math.round(r.supplyCutM3Day);
 	const need = Math.round(r.demandM3Day);
-	const leaves = Math.round(r.suppliedM3Day - r.supplyCutM3Day);
+	// From the rounded rows, so the table adds up as shown (1 772 − 38 = 1 734, not 1 735; issue #51).
+	const leaves = got - cut;
 	const pct = fmtPct(r.headline);
 	return {
 		heading: t('3. Where {pct} comes from', { pct }),

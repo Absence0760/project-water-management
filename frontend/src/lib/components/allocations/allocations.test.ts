@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, comparisonRows, pickUnit, previewOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
+import { allocationsContext, comparisonRows, conditionsFromText, conditionsSummary, MODE_NOTE, monthsText, pickUnit, previewOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
 
 const comparison = () =>
 	compareAllocations({
@@ -125,7 +125,37 @@ describe('previewOrder', () => {
 describe('TEMPLATE_CSV', () => {
 	it('has the backend template header', () => {
 		expect(TEMPLATE_CSV.split('\r\n')[0]).toBe(
-			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference'
+			'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions'
 		);
+	});
+});
+
+describe('licence conditions (issue #72)', () => {
+	it('writes months as runs over the new year, from the first in the water year', () => {
+		expect(monthsText(null)).toBe('');
+		expect(monthsText([])).toBe('');
+		expect(monthsText([1, 2, 3, 10, 11, 12])).toBe('Oct–Mar');
+		expect(monthsText([6, 8])).toBe('Jun, Aug');
+		expect(monthsText([9, 10])).toBe('Sep–Oct');
+		expect(monthsText([4, 5, 11])).toBe('Nov, Apr–May');
+		expect(monthsText([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])).toBe('all year');
+	});
+
+	it('sums a volume’s conditions up in one line, or nothing when it states none', () => {
+		expect(conditionsSummary({ months: null, maxRateM3s: null, conditions: [] })).toBeNull();
+		expect(conditionsSummary({ months: [10, 11], maxRateM3s: 0.05, conditions: ['a', 'b'] })).toBe('Oct–Nov only · at most 0.05 m³/s · 2 conditions');
+		expect(conditionsSummary({ months: null, maxRateM3s: 0, conditions: ['a'] })).toBe('at most 0 m³/s · 1 condition');
+	});
+
+	it('reads the conditions box one condition a line', () => {
+		expect(conditionsFromText('  Stop below 0.2 m³/s \r\n\n Meter monthly\n')).toEqual(['Stop below 0.2 m³/s', 'Meter monthly']);
+		expect(conditionsFromText('')).toEqual([]);
+	});
+
+	it('says what a run’s allocation mode did, and nothing for compare only', () => {
+		expect(MODE_NOTE.none).toBeNull();
+		expect(MODE_NOTE.cap).toMatch(/capped each unit’s use at its registered volume/);
+		expect(MODE_NOTE.fullAllocation).toMatch(/every registered user took their entitlement/);
+		for (const t of [MODE_NOTE.cap!, MODE_NOTE.fullAllocation!]) expect(t).not.toMatch(/lawful|unlawful|illegal|compliant/i);
 	});
 });

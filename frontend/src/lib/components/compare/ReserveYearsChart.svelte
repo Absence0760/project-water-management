@@ -6,6 +6,8 @@
 		runId: string;
 		/** CSS colour of its bars. */
 		colour: string;
+		/** A forecast run's first forecast day (RunMeta.forecastFrom): the bars count the days before it only. */
+		forecastFrom?: string | null;
 	}
 </script>
 
@@ -30,7 +32,7 @@
 	let error = $state<string | null>(null);
 	let attempt = $state(0);
 
-	const key = $derived(runs.map((r) => `${r.projectId}:${r.runId}`).join('|'));
+	const key = $derived(runs.map((r) => `${r.projectId}:${r.runId}:${r.forecastFrom ?? ''}`).join('|'));
 	$effect(() => {
 		const k = key;
 		const list = runs;
@@ -43,7 +45,7 @@
 			if (k !== key) return;
 			const failed = res.find((x): x is PromiseRejectedResult => x.status === 'rejected' && !(x.reason instanceof ApiError && x.reason.status === 404));
 			if (failed) error = failed.reason instanceof Error ? failed.reason.message : String(failed.reason);
-			years = res.map((x) => (x.status === 'fulfilled' ? reserveDaysByWaterYear(x.value.startDate, x.value.values) : null));
+			years = res.map((x, i) => (x.status === 'fulfilled' ? reserveDaysByWaterYear(x.value.startDate, x.value.values, list[i]!.forecastFrom ?? null) : null));
 			loading = false;
 		});
 	});

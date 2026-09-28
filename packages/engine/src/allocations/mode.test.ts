@@ -1,0 +1,233 @@
+// allocationMode (engine 1.18.0, issue #72, docs/model.md §2.12a) on the
+// invented outlook catchment (two farms on vines into one outlet). Random
+// networks with allocations in every mode are in the engine fuzz
+// (../testing/fuzz.ts randomAllocations) and the warm-start invariants.
+import { describe, expect, it } from 'vitest';
+import { toEpochDay, waterYearOf } from '../calendar';
+import { testCatchment } from '../outlook/testCatchment';
+import type { ModelInput, ModelOutput } from '../project';
+import { captureModelState, runModel, runModelChecked, runModelFrom, runModelWithoutChecks } from '../run';
+import { applyScenario } from '../scenario';
+import { checkResume } from '../testing/warmstartInvariants';
+import type { AllocationEntry } from './compare';
+import { ALLOCATION_SERIES, fullAllocationFactors, registeredOver, usableAllocations, yearBudgets } from './mode';
+
+const col = (out: ModelOutput, nodeId: string | null, key: string) => out.series.find((x) => x.nodeId === nodeId && x.key === key)?.values;
+
+/** Σ of a daily column per water year of the run. */
+function perYear(out: ModelOutput, values: readonly number[]): Map<number, number> {
+	const d0 = toEpochDay(out.startDate);
+	const m = new Map<number, number>();
+	values.forEach((v, t) => m.set(waterYearOf(d0 + t), (m.get(waterYearOf(d0 + t)) ?? 0) + v));
+	return m;
+}
+
+const withAllocations = (allocations: AllocationEntry[], mode?: 'none' | 'cap' | 'fullAllocation', edit?: (x: ModelInput) => void): ModelInput => {
+	const x = testCatchment();
+	x.model.allocations = allocations;
+	if (mode) x.settings.allocationMode = mode;
+	edit?.(x);
+	return x;
+};
+
+// Farm A's mean surface use per water year without any cap, the scale every volume below is set from.
+const base = runModelWithoutChecks(testCatchment());
+const meanA = [...perYear(base, col(base, 'a', 'supplied')!).values()].reduce((s, v, _, a) => s + v / a.length, 0);
+
+describe("allocationMode 'none' (the default)", () => {
+	it('changes no series: the allocations only add the summary', () => {
+		const out = runModelWithoutChecks(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2 }]));
+		expect(out.series).toEqual(base.series);
+		expect(out.summary.warnings).toEqual(base.summary.warnings);
+		expect(base.summary.allocations).toBeUndefined();
+		const s = out.summary.allocations!;
+		expect(s.mode).toBe('none');
+		expect(s.tolerance).toBe(0.1);
+		expect(s.nodes.map((n) => [n.nodeId, n.sources.map((x) => x.waterSource)])).toEqual([['a', ['surface']]]);
+		// Every whole year uses about twice the volume: over.
+		const src = s.nodes[0]!.sources[0]!;
+		expect(src.yearsOver).toBeGreaterThan(src.wholeYears / 2);
+		expect(src.capReached).toBeUndefined();
+	});
+
+	it('reads settings.allocationTolerance, and warns about a bad one', () => {
+		// A volume at the mean use: some years above it by more than 10 %, none by more than 99 %.
+		const at = (tolerance: number) => runModelWithoutChecks(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA }], 'none', (x) => (x.settings.allocationTolerance = tolerance))).summary.allocations!;
+		expect(at(0.99).tolerance).toBe(0.99);
+		expect(at(0.99).nodes[0]!.sources[0]!.yearsOver).toBe(0);
+		expect(at(0.1).nodes[0]!.sources[0]!.yearsOver).toBeGreaterThan(0);
+		const bad = runModelWithoutChecks(withAllocations([], 'none', (x) => (x.settings.allocationTolerance = 2)));
+		expect(bad.summary.warnings.some((w) => /allocation tolerance "2"/.test(w))).toBe(true);
+	});
+});
+
+describe("allocationMode 'cap'", () => {
+	const volume = meanA / 2;
+	const input = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume }], 'cap');
+	const out = runModelChecked(input);
+
+	it('keeps each water year’s surface use within the registered volume, and the run passes every self-check', () => {
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		for (const [wy, used] of perYear(out, col(out, 'a', 'supplied')!)) expect(used, String(wy)).toBeLessThanOrEqual(volume * (1 + 1e-9));
+		// It binds: every year of the record needs more than half its mean.
+		const reached = out.summary.allocations!.nodes[0]!.sources[0]!.capReached!;
+		expect(reached.length).toBeGreaterThan(5);
+		for (const r of reached) expect(r.usedM3).toBeCloseTo(volume, 3);
+	});
+
+	it('publishes the room at the start of each day, falling by the day’s use and full again on 1 October', () => {
+		const room = col(out, 'a', ALLOCATION_SERIES.surfaceRoom.key)!;
+		const G = col(out, 'a', 'supplied')!;
+		const k = toEpochDay('2003-10-01') - toEpochDay(out.startDate);
+		expect(room[k]).toBeCloseTo(volume, 6);
+		expect(room[k + 1]).toBeCloseTo(volume - G[k]!, 6);
+		expect(col(out, 'a', ALLOCATION_SERIES.groundwaterRoom.key)).toBeUndefined();
+		// Farm B has no allocation: no cap, no column, and a warning names it.
+		expect(col(out, 'b', ALLOCATION_SERIES.surfaceRoom.key)).toBeUndefined();
+		expect(out.summary.warnings.some((w) => /no registered volume, so nothing caps their use \(Farm B\)/.test(w))).toBe(true);
+	});
+
+	it('leaves a farm the cap doesn’t touch as it was, and the dam holds what the capped farm didn’t take', () => {
+		expect(col(out, 'b', 'supplied')).toEqual(col(base, 'b', 'supplied'));
+		const before = col(base, 'a', 'dam_storage')!;
+		const after = col(out, 'a', 'dam_storage')!;
+		expect(after.reduce((s, v) => s + v, 0)).toBeGreaterThan(before.reduce((s, v) => s + v, 0));
+	});
+
+	it('lets the boreholes supply what the capped surface can’t, within the groundwater volume', () => {
+		const gwVolume = meanA / 4;
+		const x = withAllocations(
+			[
+				{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume },
+				{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: gwVolume }
+			],
+			'cap',
+			(m) => (m.model.boreholes = [{ id: 'bh', nodeId: 'a', name: 'Borehole', capacityM3Day: 1e6, annualCapM3: null, mode: 'supplemental', emergencyBelowPct: 0, target: 'direct', depletionFactor: 0.5 }])
+		);
+		const r = runModelChecked(x);
+		expect(r.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const gw = col(r, 'a', 'groundwater_used')!;
+		const G = col(r, 'a', 'supplied')!;
+		for (const [wy, used] of perYear(r, gw)) expect(used, String(wy)).toBeLessThanOrEqual(gwVolume * (1 + 1e-9));
+		for (const [wy, used] of perYear(r, G.map((g, t) => g - gw[t]!))) expect(used, String(wy)).toBeLessThanOrEqual(volume * (1 + 1e-9));
+		// With a supplemental borehole uncapped by capacity, the groundwater volume is what binds it.
+		const reached = r.summary.allocations!.nodes[0]!.sources.find((s) => s.waterSource === 'groundwater')!.capReached!;
+		expect(reached.length).toBeGreaterThan(0);
+	});
+
+	it('counts the whole water year’s volume even when the run starts inside it', () => {
+		const budgets = yearBudgets([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 3650 }], 'surface', toEpochDay('2002-04-01'), 400);
+		expect(budgets![0]).toBeCloseTo(3650, 9);
+		// A licence valid from 1 April is prorated to its days of the year (183 of 365).
+		const late = yearBudgets([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 3650, validFrom: '2002-04-01' }], 'surface', toEpochDay('2001-10-01'), 10);
+		expect(late![0]).toBeCloseTo(1830, 9);
+		expect(yearBudgets([{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: 1 }], 'surface', 0, 10)).toBeNull();
+	});
+
+	for (const at of ['2004-02-29', '2006-10-01', '2009-05-17']) {
+		it(`resumed from a snapshot on ${at}, every series is the uninterrupted capped run’s to the bit`, () => {
+			const full = runModelWithoutChecks(input);
+			expect(checkResume(input, toEpochDay(at) - toEpochDay(full.startDate), full)).toBeNull();
+		});
+	}
+
+	it('a run resumed inside a water year counts the year’s use before the snapshot in its cap summary', () => {
+		const full = runModelWithoutChecks(input);
+		const tail = runModelFrom(captureModelState(input, '2009-05-17'), input);
+		const reached = (o: ModelOutput) => o.summary.allocations!.nodes[0]!.sources[0]!.capReached!;
+		// 2008/09 bound in the uninterrupted run; the resumed run, 4½ months from its end, still says so, with the same use.
+		const y2008 = reached(full).find((r) => r.waterYear === 2008)!;
+		expect(y2008).toBeDefined();
+		const resumed = reached(tail).find((r) => r.waterYear === 2008)!;
+		expect(resumed.usedM3).toBeCloseTo(y2008.usedM3, 6);
+		expect(reached(tail).map((r) => r.waterYear)).toEqual(reached(full).map((r) => r.waterYear).filter((y) => y >= 2008));
+	});
+});
+
+describe("allocationMode 'fullAllocation'", () => {
+	const volume = meanA * 1.5;
+	const input = withAllocations(
+		[
+			{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: volume * 0.8 },
+			{ id: 'g', nodeId: 'a', waterSource: 'groundwater', volumeM3PerYear: volume * 0.2 }
+		],
+		'fullAllocation'
+	);
+	const out = runModelChecked(input);
+
+	it('scales the demand to the registered volume in every water year, keeping its seasonal pattern', () => {
+		expect(out.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const D = col(out, 'a', 'demand')!;
+		for (const [wy, d] of perYear(out, D)) expect(d, String(wy)).toBeCloseTo(volume, 3);
+		// The pattern: in whole years the scaled demand is the unscaled one × one factor.
+		const D0 = col(base, 'a', 'demand')!;
+		const k = col(out, 'a', ALLOCATION_SERIES.demandFactor.key)!;
+		for (let t = 0; t < D.length; t += 97) expect(D[t]).toBeCloseTo(D0[t]! * k[t]!, 6);
+		const scaled = out.summary.allocations!.nodes[0]!.scaled!;
+		expect(scaled.every((y) => Math.abs(y.registeredM3 - volume) < 1e-6 * volume)).toBe(true);
+	});
+
+	it('leaves a unit without a volume as modelled, with a warning', () => {
+		expect(col(out, 'b', 'demand')).toEqual(col(base, 'b', 'demand'));
+		expect(out.summary.warnings.some((w) => /their demand is left as modelled \(Farm B\)/.test(w))).toBe(true);
+	});
+
+	it('scales a senior water user before its demand is passed to the farms upstream', () => {
+		const x = withAllocations([{ id: 'u', nodeId: 'u', waterSource: 'surface', volumeM3PerYear: 5000 }], 'fullAllocation', (m) => {
+			// A senior user at the outlet, the farms above it.
+			const g = m.model.nodes.find((n) => n.id === 'g')!;
+			m.model.nodes.push({ ...g, id: 'u', name: 'Town', kind: 'user', sortOrder: 3, downstreamNodeId: null, userDemandM3Day: new Array(12).fill(103), userReturnPct: 0, userPriority: 'senior' });
+			g.downstreamNodeId = 'u';
+		});
+		const r = runModelChecked(x);
+		expect(r.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		const D = col(r, 'u', 'demand')!;
+		for (const [wy, d] of perYear(r, D)) expect(d, String(wy)).toBeCloseTo(5000, 6);
+		// The farms upstream pass the scaled demand, in their shares: Σ of their claims is the user's demand.
+		const Zs = col(r, 'g', 'senior_requirement')!;
+		for (let t = 0; t < D.length; t += 101) expect(Zs[t]).toBeCloseTo(D[t]!, 9);
+	});
+
+	it('takes none of a volume in a year its unit has no demand, with a warning', () => {
+		const f = fullAllocationFactors([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 100 }], new Float64Array(400), toEpochDay('2001-10-01'), 400);
+		expect([...new Set(f.factor)]).toEqual([0]);
+		expect(f.unscaled).toEqual([2001, 2002]);
+	});
+});
+
+describe('the allocations a run reads', () => {
+	it('leaves out a row whose volume, source or dates don’t read, with a warning', () => {
+		const w: string[] = [];
+		const ok = usableAllocations(
+			[
+				{ id: 'ok', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 },
+				{ id: 'neg', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: -1 },
+				{ id: 'src', nodeId: 'a', waterSource: 'rain' as never, volumeM3PerYear: 1 },
+				{ id: 'date', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, validFrom: '2001-02-30' },
+				{ id: 'order', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1, validFrom: '2002-01-01', validTo: '2001-01-01' }
+			],
+			w
+		);
+		expect(ok.map((a) => a.id)).toEqual(['ok']);
+		expect(w).toHaveLength(4);
+	});
+
+	it('an unknown mode only compares, with a warning', () => {
+		const out = runModel(withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 1 }], 'bogus' as never));
+		expect(out.summary.allocations!.mode).toBe('none');
+		expect(out.summary.warnings.some((w) => /allocationMode "bogus"/.test(w))).toBe(true);
+	});
+
+	it('registeredOver prorates each allocation by its valid days in the water year', () => {
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365, validTo: '2001-10-10' }];
+		expect(registeredOver(a, 2001, toEpochDay('2001-10-01'), toEpochDay('2002-09-30'))).toBeCloseTo(10, 12);
+	});
+
+	it('a scenario can switch the mode (settings.set allocationMode)', () => {
+		const x = withAllocations([{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: meanA / 2 }]);
+		const r = applyScenario(x, [{ op: 'settings.set', path: 'allocationMode', value: 'cap' }]);
+		expect(r.problems).toEqual([]);
+		expect(r.input.settings.allocationMode).toBe('cap');
+		expect(applyScenario(x, [{ op: 'settings.set', path: 'allocationMode', value: 'nope' as never }]).problems[0]).toMatch(/allocationMode/);
+	});
+});

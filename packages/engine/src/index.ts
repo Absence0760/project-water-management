@@ -88,3 +88,4 @@ export * from './units';
 export * from './seriesProvenance';
 export * from './liability';
 export * from './allocations/compare';
+export * from './allocations/mode';

@@ -260,6 +260,21 @@ test('the confirm-email banner goes once the link is used', async ({ page }) => 
 	await expect(banner).toHaveCount(0);
 });
 
+// WCAG 2.4.3 (issue #51): Dismiss takes the banner, and itself, away; focus
+// goes on to the page below instead of falling back to <body>.
+test('dismissing the confirm-email banner moves focus to the page’s title', async ({ page }) => {
+	const user = await register(page.context().request, 'Dismisses banner', { verified: false });
+	await signInUnconfirmed(page.context(), user);
+	const banner = page.getByRole('region', { name: 'Email confirmation' });
+	await page.goto('/');
+	const title = page.getByRole('heading', { level: 1, name: 'Projects' });
+	await expect(title).toBeVisible();
+	await banner.getByRole('button', { name: 'Dismiss' }).focus();
+	await page.keyboard.press('Enter');
+	await expect(banner).toHaveCount(0);
+	await expect(title).toBeFocused();
+});
+
 test('a confirmation link works signed out', async ({ page, playwright }) => {
 	const api = await playwright.request.newContext();
 	const user = await register(api, 'Other device', { verified: false });

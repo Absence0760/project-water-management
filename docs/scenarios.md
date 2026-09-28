@@ -169,7 +169,10 @@ Ranges are the backend's (`backend/src/model/validate.ts`).
 `simulationStart`, `simulationEnd`,
 `reportStart`, `reportEnd`, `calibrationStart`, `calibrationEnd`,
 `calibrationFlowKind`, `pe`, and from engine 1.3.0 (issue #64) `ewrChargeSource`
-(`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`).
+(`pragmatic` | `ruleTable`) and `lowFlowMeasure` (`total` | `baseflow`), and
+from engine 1.18.0 (issue #72) `allocationMode` (`none` | `cap` |
+`fullAllocation`: a full-allocation scenario on a base run is the "every
+registered user takes their entitlement" background, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 Ranges follow `backend/src/projects/settings.ts`.
 `pe` (engine ≥ 0.31.0, issue #39) takes a whole PE input, GR4J's source
 of potential evaporation: `{ kind: 'pan' }` with no other key, or
@@ -743,7 +746,7 @@ scenario is `'team'`, and behaves exactly as above).
     own range-checked value can't break alone) reads only `op N (…):
     doesn't apply to the catchment as modelled` (`MASKED_RULE`). The
     wording is the recommended default, **pending the client**
-    ([issue #50](https://github.com/Absence0760/project-water-management/issues/50));
+    ([issue #90](https://github.com/Absence0760/project-water-management/issues/90));
     rules about the network's shape and names keep their words.
 
   Afterwards each hidden node and crop gets its real name back, suffixed

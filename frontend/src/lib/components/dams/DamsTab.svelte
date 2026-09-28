@@ -17,12 +17,13 @@
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import type { DailySeries } from '@water-management/engine';
+	import { beforeForecast, type DailySeries } from '@water-management/engine';
 	import { api, type Run, type RunMeta, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
 	import Sparkline from '$lib/components/charts/Sparkline.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { runHref } from '$lib/components/overview/attention';
+	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { AGO_DAYS, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
 	import { pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
@@ -128,7 +129,9 @@
 				4,
 				(n) => {
 					if (current()) damsDone = n;
-				}
+				},
+				// A forecast run's cards are its record's (issue #51); the chart still shows the forecast days, in their band.
+				r.summary.forecast?.from ?? null
 			)
 				.then((l) => {
 					if (!current()) return;
@@ -151,7 +154,9 @@
 	const total = $derived(damsToday(levels));
 	const runText = $derived(latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null);
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
-	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(storage.get(c.nodeId)!, c.capacityM3) : null])));
+	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
+	const record = (s: DailySeries): DailySeries => ({ startDate: s.startDate, values: Array.from(beforeForecast(s.values, s.startDate, run?.summary.forecast?.from)) });
+	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3) : null])));
 	const pct = (v: number) => `${fmtNum(v, 0)}%`;
 	const BAND_WORDS = { 'at-min': 'at its minimum level', low: `below ${LOW_PCT}%`, ok: '' } as const;
 	/** Why a card has no level: before a run, while loading, or the run has no storage for it. */
@@ -346,6 +351,7 @@
 										series={chartSeries}
 										recentDays={FLOW_OPEN_DAYS}
 										windows={FLOW_WINDOWS}
+										band={forecastBand(run?.summary.forecast?.from)}
 										pannable={false}
 										caption="Dashed: the dam's capacity{picked.minPct > 0 ? ' and its minimum operating level' : ''}."
 									/>

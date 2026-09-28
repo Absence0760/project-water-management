@@ -1,5 +1,6 @@
 import {
 	ACCUMULATION_MODES,
+	ALLOCATION_MODES,
 	CALIBRATION_BOUNDS,
 	CALIBRATION_FLOW_KINDS,
 	CHIRPS_BIAS_MODES,
@@ -565,6 +566,9 @@ export const SettingsPatch = z
 		// Annual assurance of supply (engine ≥ 0.32.0, WP-3.4): a water year is
 		// met when supplied ÷ demand reaches it. A fraction in (0, 1].
 		assuranceAnnualThreshold: z.number().finite().gt(0).max(1),
+		// Registered volumes (engine ≥ 1.18.0, issue #72): what they do to a run, and the comparison's band, a fraction in [0, 1).
+		allocationMode: z.enum(ALLOCATION_MODES),
+		allocationTolerance: z.number().finite().min(0).lt(1),
 		// Monthly lake factors (WP-3.5), water-year months; null = lakeEvapFactor every month.
 		lakeEvapFactorMonthly: z.array(z.number().finite().min(0).max(2)).length(12).nullable(),
 		apanMm: monthly,

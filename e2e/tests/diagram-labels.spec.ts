@@ -7,7 +7,7 @@
 // names, and on every help diagram, at desktop and phone widths.
 import type { Page } from '@playwright/test';
 import { createProject, createRun, node, putModel, putSeries, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
-import { checkDiagramLabels } from '../support/diagrams.ts';
+import { checkDiagramLabels, waitForMapFit } from '../support/diagrams.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -101,6 +101,8 @@ test.describe('the example catchments', () => {
 			for (const size of SIZES) {
 				await page.setViewportSize(size);
 				await expect(page.locator('svg.schematic g.node').first()).toBeVisible();
+				// Measured only once the map is re-laid out for this width (issue #138).
+				await waitForMapFit(page);
 				const r = await expectCleanSchematic(page, `${example} at ${size.width}`);
 				expect(r.smallestPx, `${example} at ${size.width}`).toBeGreaterThanOrEqual(10.99);
 				// Sandspruit is taller than its card at 1440 × 960: it scrolls in the card rather than centring
@@ -135,6 +137,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 		// Each colouring changes the figure under every name (the width of the labels).
 		for (const colourBy of ['supply', 'dam', 'area', 'none']) {
 			await page.getByLabel('Colour hydrological units by').selectOption(colourBy);
+			await waitForMapFit(page);
 			await expectCleanSchematic(page, `map at ${size.width}, coloured by ${colourBy}`);
 		}
 		// The node list: what a node drains into never squeezes its name, and nothing runs past the card.

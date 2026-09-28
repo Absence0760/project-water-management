@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { AlertEvent, AlertRule } from '$lib/api/types';
 import { eventText, feedRuleLabel, groupRules, thresholdFromInput, thresholdLabel, thresholdProblem, thresholdToInput } from './alerts';
 import { ApiError } from '$lib/api/client';
-import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, unsubscribedText } from './words';
+import { choiceLabel, farmAlertText, fragmentToken, modeLabel, resumeProblem, suppressedText, thresholdLine, unsubscribedText } from './words';
 
 // A token's shape (43 base64url characters); low entropy, so no secret scanner mistakes it for a key.
 const TOKEN = 'a'.repeat(20) + '_-' + 'b'.repeat(21);
@@ -41,6 +41,16 @@ describe('the preferences page’s words', () => {
 		expect(choiceLabel({ kind: 'dam_below', nodeName: null })).toBe('Dam running low');
 		expect(choiceLabel({ kind: 'restriction_published', nodeName: null })).toBe('Restriction notices from the WUA');
 		expect(['immediate', 'daily_digest', 'off'].map((m) => modeLabel(m as 'off'))).toEqual(['Right away', 'Once a day (06:00)', 'Off']);
+	});
+
+	// Issue #51: the page never said at what level a farmer is warned.
+	it('says the level a farm’s dam alert warns below, only when the WUA has it on', () => {
+		const dam = { kind: 'dam_below' as const, nodeId: 'n1', ruleOn: true, threshold: 0.3 };
+		expect(thresholdLine(dam)?.replace(/\u00a0/g, ' ')).toBe('Warns when the model puts your dam below 30 %. Your WUA sets this level.');
+		expect(thresholdLine({ ...dam, ruleOn: false })).toBeNull();
+		expect(thresholdLine({ ...dam, threshold: null })).toBeNull();
+		expect(thresholdLine({ ...dam, nodeId: null })).toBeNull();
+		expect(thresholdLine({ kind: 'restriction_published', nodeId: null, ruleOn: true, threshold: null })).toBeNull();
 	});
 
 	it('names every kind of alert, and each in an unsubscribe sentence', () => {
@@ -97,6 +107,10 @@ describe('the workspace’s Active alerts', () => {
 		expect(eventText(event({ kind: 'data_stale', detail: { feeds: [{ label: 'DWS gauge flow', overdue: 10 }] } }))).toBe('Late: DWS gauge flow (10 days)');
 		expect(eventText(event({ kind: 'job_dead', detail: { count: 1 } }))).toBe('1 background job failed in the last 24 hours');
 		expect(eventText(event({ kind: 'feed_failing', detail: {} }))).toBe('A data feed is failing');
+		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 2', pct: 20.4 } }))).toBe(
+			'Restriction in place: Level 2, a 20 % cut in registered water use'
+		);
+		expect(eventText(event({ kind: 'restriction_published', nodeId: null, nodeName: null, detail: { level: 'Level 1' } }))).toBe('Restriction in place: Level 1');
 	});
 });
 

@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import pg from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { checksumOf, migrate } from '../../scripts/migrate.js';
+import { checksumOf, migrate, MigrateError } from '../../scripts/migrate.js';
 import { OWNER_URL, TEST_DB } from '../__tests__/test-db.js';
 
 const SCRATCH = `${TEST_DB}_migrate`;
@@ -78,6 +78,8 @@ describe('migrate', () => {
 		await write('001_a.sql', 'CREATE TABLE a (id int, extra text);');
 		await write('002_b.sql', 'CREATE TABLE b (id int);');
 		await expect(migrate(URL_, quiet, { dir })).rejects.toThrow(/refusing to migrate[\s\S]*001_a\.sql was applied but its contents have changed/);
+		// The names the migrate Lambda hands the public deploy log (lambda-migrate.ts).
+		await expect(migrate(URL_, quiet, { dir })).rejects.toMatchObject({ code: 'integrity', migrations: ['001_a.sql'], applied: [], pending: ['002_b.sql'] });
 		expect(await tables()).toEqual(['a']);
 	});
 
@@ -118,10 +120,15 @@ describe('migrate', () => {
 	});
 
 	it('rolls a failed file back and does not record it', async () => {
-		await write('001_a.sql', 'CREATE TABLE a (id int); SELECT no_such_function();');
-		await expect(migrate(URL_, quiet, { dir })).rejects.toThrow(/migration 001_a\.sql failed/);
-		expect(await tables()).toEqual([]);
-		expect(await rows()).toEqual([]);
+		await write('001_a.sql', 'CREATE TABLE a (id int);');
+		await write('002_b.sql', 'CREATE TABLE b (id int); SELECT no_such_function();');
+		await write('003_c.sql', 'CREATE TABLE c (id int);');
+		const err = await migrate(URL_, quiet, { dir }).catch((e: unknown) => e);
+		expect(err).toBeInstanceOf(MigrateError);
+		expect((err as Error).message).toMatch(/migration 002_b\.sql failed/);
+		expect(err).toMatchObject({ code: 'migration_failed', migrations: ['002_b.sql'], applied: ['001_a.sql'], pending: ['002_b.sql', '003_c.sql'] });
+		expect(await tables()).toEqual(['a']);
+		expect((await rows()).map((r) => r.name)).toEqual(['001_a.sql']);
 	});
 
 	it('stops a statement past the statement timeout, and a file can raise its own', async () => {
@@ -129,6 +136,7 @@ describe('migrate', () => {
 		await expect(migrate(URL_, quiet, { dir, timeouts: { statement_timeout: '100ms' } })).rejects.toThrow(
 			/migration 001_slow\.sql failed: .*statement timeout.*\(statement_timeout 100ms;/
 		);
+		await expect(migrate(URL_, quiet, { dir, timeouts: { statement_timeout: '100ms' } })).rejects.toMatchObject({ code: 'statement_timeout' });
 		expect(await rows()).toEqual([]);
 		await write('001_slow.sql', '-- migrate: statement_timeout = 5s\nSELECT pg_sleep(0.5);');
 		expect(await migrate(URL_, quiet, { dir, timeouts: { statement_timeout: '100ms' } })).toEqual(['001_slow.sql']);
@@ -145,6 +153,7 @@ describe('migrate', () => {
 			await expect(migrate(URL_, quiet, { dir, timeouts: { lock_timeout: '100ms' } })).rejects.toThrow(
 				/migration 002_alter\.sql failed: .*lock timeout.*\(lock_timeout 100ms: another session held a lock/
 			);
+			await expect(migrate(URL_, quiet, { dir, timeouts: { lock_timeout: '100ms' } })).rejects.toMatchObject({ code: 'lock_timeout', migrations: ['002_alter.sql'] });
 			await holder.query('ROLLBACK');
 		} finally {
 			await holder.end();
