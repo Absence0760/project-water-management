@@ -4,7 +4,11 @@
 
 Please **do not** open a public GitHub issue for security vulnerabilities.
 
-Email the maintainer at <contact-email> (replace this placeholder with your actual address before publishing the repo). Include:
+Report it privately through GitHub's private vulnerability reporting: open
+<https://github.com/Absence0760/project-water-management/security/advisories/new>
+(or the repository's **Security** tab → **Report a vulnerability**). Only the
+maintainers see the report, and the fix is coordinated in that draft advisory.
+Include:
 
 - A description of the vulnerability and its impact
 - Steps to reproduce (PoC if possible)
