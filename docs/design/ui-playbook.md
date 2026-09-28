@@ -640,6 +640,18 @@ Interaction details that bit:
   for any alert could run on the boot error, which had no `<title>` (axe
   `document-title`). Wait for the text (`toHaveText(/This link is invalid/)`);
   `app.html` now carries a default title for the states before a page mounts.
+- **The section title is not the tab.** The section header (its `h1` and
+  count) renders once the model loads; the tab's body is a lazy chunk that
+  lands after it. A page helper waits for the tab's own content (the
+  Transfers page's `openTransfers` waits for its rules card) before a spec
+  reads anything with a non-retrying call (`allTextContents`,
+  `boundingBox`, `evaluate`).
+- **Reload after a save only once the page has taken it in.** The PUT's
+  response reaching the network (`saveModelChanges`) is not the editor
+  holding it: the save bar goes when it does. Wait for the bar to go
+  (`toBeHidden`), as every save-then-reload spec does, so the reload leaves
+  a saved page rather than one mid-save behind its unsaved-changes guard
+  (issue #138, `transfers-page.spec.ts`).
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
