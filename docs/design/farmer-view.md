@@ -112,7 +112,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 | "You were asked to help on 56 of the 102 days" | days with `ewr_charge` < 0 in the season (E5) | A different count from the sites' days (§11 F10) |
 | "Pump about 220 m³ a day less (2.6 l/s). Averaged over all 102 days that is 121 m³ a day." | season total of −ΔG ÷ charged days [121.2 × 102 ÷ 56]; `CF.ewrSupplyCutM3Day` | The per-day figure applies on the days the river needs it (§11 F9) |
 | "Your dam also held back about 120 m³ a day the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn't, the WUA may talk to you about it." | season total of R_store ÷ charged days [65.4 × 102 ÷ 56]; `CF.ewrChargeStorageM3Day` | Information, not an instruction, until the node records release works (E9, §11 F11). Shown only above the floor (§6.2) |
-| "Why?" step 3: received 3 179 − pump less 121 = 3 058 ≈ 83 % of 3 691 | `CF.suppliedM3Day`, −ΔG, `CF.demandM3Day` | Lets a farmer check the headline by hand |
+| "Why?" step 3: received 3 179 − pump less 121 = 3 058 ≈ 83 % of 3 691 | `CF.suppliedM3Day`, −ΔG, `CF.demandM3Day` | Lets a farmer check the headline by hand. Each row is rounded to whole m³ and "Leaves" is worked out from the rounded rows, so the sum adds up as shown (issue #51) |
 | "The river's share of your water is more than an even share of the catchment's supply. The WUA may need to look at this." | `CF.ewrCutBeyondShareM3Day` > 0 | Only when it applies |
 
 ### Q3 How is my dam doing?

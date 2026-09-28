@@ -149,6 +149,13 @@ describe('step 3: where 83 % comes from', () => {
 		);
 	});
 
+	// Issue #51 (Rietspruit): each row rounded on its own gave 1 772 − 38 = 1 735.
+	it('adds up as shown: Leaves is You received less Pump less, after rounding', () => {
+		const s = step3(farm((f) => ((f.river.suppliedM3Day = 1772.4), (f.river.supplyCutM3Day = 37.6))))!;
+		expect(s.rows.slice(0, 3).map((r) => sp(r.value))).toEqual(['1 772 m³ a day', '− 38 m³ a day', '1 734 m³ a day']);
+		expect(txt(s.sum)).toMatch(/^1 734 is about /);
+	});
+
 	it('is left out with no headline', () => {
 		expect(step3(farm((f) => (f.river.headline = null)))).toBeNull();
 	});

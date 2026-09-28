@@ -183,7 +183,8 @@ export function step3(farm: FarmProjection): Step3 | null {
 	const got = Math.round(r.suppliedM3Day);
 	const cut = Math.round(r.supplyCutM3Day);
 	const need = Math.round(r.demandM3Day);
-	const leaves = Math.round(r.suppliedM3Day - r.supplyCutM3Day);
+	// From the rounded rows, so the table adds up as shown (1 772 − 38 = 1 734, not 1 735; issue #51).
+	const leaves = got - cut;
 	const pct = fmtPct(r.headline);
 	return {
 		heading: t('3. Where {pct} comes from', { pct }),
