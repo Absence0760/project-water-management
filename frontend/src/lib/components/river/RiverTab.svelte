@@ -8,8 +8,8 @@
 	// first screen is the height left below its top (measured, as the Summary's
 	// is). Below it, the panels that were Runs & results' River & Reserve group,
 	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
-	// the uncertainty bands, the outcome matrix, the seasonal outlook and the
-	// water account.
+	// the uncertainty bands (with the sensitivity runs under them), the outcome
+	// matrix, the seasonal outlook and the water account.
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { goto } from '$app/navigation';
@@ -28,6 +28,7 @@
 	import { holdAnchor } from '$lib/help/anchor';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import UncertaintyPanel from '$lib/components/uncertainty/UncertaintyPanel.svelte';
+	import SensitivityPanel from '$lib/components/uncertainty/SensitivityPanel.svelte';
 	import OutcomeMatrixPanel from '$lib/components/outcomes/OutcomeMatrixPanel.svelte';
 	import OutlookPanel from '$lib/components/outlook/OutlookPanel.svelte';
 	import WaterAccountPanel from '$lib/components/reliability/WaterAccountPanel.svelte';
@@ -308,10 +309,12 @@
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
 			</div>
-			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify. -->
+			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify, and under
+			     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->
 			<div class="panel" id="res-uncertainty">
 				{#key shownRun.id}
 					<UncertaintyPanel {projectId} runId={shownRun.id} runEngineVersion={shownRun.engineVersion} canEdit={canEdit} />
+					<SensitivityPanel {projectId} runId={shownRun.id} />
 				{/key}
 			</div>
 			<div class="panel" id="res-outcomes">

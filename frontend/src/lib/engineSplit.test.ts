@@ -29,6 +29,7 @@ const LIGHT = [
 	'runoff/pet.ts',
 	'reference/wr2012Settings.ts',
 	'uncertainty/options.ts',
+	'uncertainty/sensitivityVerdict.ts',
 	'network/damCurve.ts'
 ];
 
@@ -41,6 +42,7 @@ const HEAVY = [
 	'calibrate/calibrate.ts',
 	'calibrate/objective.ts',
 	'uncertainty/ensemble.ts',
+	'uncertainty/sensitivity.ts',
 	'network/simulate.ts',
 	'network/dam.ts',
 	'reference/wr2012.ts',

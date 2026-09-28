@@ -1158,6 +1158,14 @@
 //             entry. Lazy-loading the editor would not lower this figure:
 //             the total sums every chunk, so a split only moves the bytes and
 //             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
+// 2026-09-28  total 1094 → 1100 KB (measured 1097, +6 on 1091 for the same
+//             tree without it). The sensitivity runs (calibration research
+//             CR-21): River & reserve's Sensitivity panel, its tornado chart
+//             and helpers (~4 KB in the tab's chunk), the engine's verdict
+//             module the page reads (~0.7 KB, kept apart from the run by
+//             engineSplit.test.ts, which put the worker's engine back in the
+//             worker: without it the total was 1098) and sensitivityRuns in
+//             the calibration worker (~1 KB). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1168,7 +1176,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1094,
+	totalCodeKb: 1100,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

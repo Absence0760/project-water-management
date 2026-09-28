@@ -715,11 +715,13 @@ setting, so run comparison reads it as legacy.
     says so. All three presets sit inside 0.6–0.85. From engine 0.31.0 the
     run warns only under `pe.kind: 'pan'`: with a monthly PE, GR4J doesn't
     use the coefficient.
-  - **Testing the effect of a choice.** There is no automated sensitivity
-    harness yet (that is CR-21, [calibration-research.md](./calibration-research.md));
-    until it exists, `pnpm pan-sensitivity <project.json>`
-    (`backend/scripts/pan-sensitivity.ts`) is the manual way to see how much a
-    pan-coefficient choice moves a catchment's results: it runs GR4J at a few
+  - **Testing the effect of a choice.** The sensitivity runs (§2.10g,
+    CR-21, engine ≥ 1.18.0) move the pan coefficient ±15 % with GR4J's
+    parameters held fixed, beside rain, dam evaporation, abstraction and the
+    dams' starting storage, and report EWR compliance as a range.
+    `pnpm pan-sensitivity <project.json>`
+    (`backend/scripts/pan-sensitivity.ts`) is the deeper manual check of the
+    pan coefficient alone, **refitting** at each value: it runs GR4J at a few
     values (flat 0.60, 0.70, 0.85, and a preset) and reports MAR, Q95 and EWR
     compliance, both with GR4J's parameters held fixed and refitted, scored
     against the logger record. The script takes any project.json and carries
@@ -4925,6 +4927,92 @@ limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
 The registration choices themselves, and which categories may sign or only
 warn, are `liability/registration.ts` (issue #47).
+
+### 2.10g Sensitivity runs: EWR compliance as a range (engine ≥ 1.18.0, calibration research CR-21)
+
+The uncertainty bands (§2.10e) sample the runoff parameters the observed
+record can't rule out. Some inputs the record can't settle at all, and a
+fit would only trade them against its parameters: how much rain really fell
+on the catchment, the pan coefficient, how much open water a farm dam loses,
+how much is really abstracted, and how full the dams were on the first day.
+CR-21 carries them through as **sensitivity factors**, never as free
+parameters (Renard et al. 2010; Oudin et al. 2006 on biased rain and PE
+inputs; Hughes & Mantel 2010 on the uncertainty of South African natural
+and modified flow simulations), and reports EWR compliance as a central
+value with a low–high range. Code: `packages/engine/src/uncertainty/sensitivity.ts`
+(`sensitivityRuns`, `sensitivityPlan`, `siteValues`) and, apart from the
+run so a page can show and re-judge a result without loading it,
+`sensitivityVerdict.ts` (the factors, the default ranges and thresholds,
+`siteVerdict`). It changes no run's results.
+
+**One factor at a time.** The **central run** is the project as it stands.
+Each factor is then run at its low and at its high with everything else at
+the project's values, so at most 11 model runs (`runModelWithoutChecks`, as
+the ensemble's members). Each change is a scenario op (`applyScenario`,
+[scenarios.md](./scenarios.md)), checked and applied as a scenario would:
+
+| Factor | Low / high (default) | What changes | Skipped when |
+| --- | --- | --- | --- |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
+| Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
+| Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it | no unit or user has demand over the reporting window |
+| Initial dam storage | empty / full | every dam's `damInitialPct` 0 / 1 (`node.set`) | no farm has a dam |
+
+The ranges are CR-21's, except the dam evaporation factor's: ±15 % gives
+0.64–0.86 around the default 0.75, a little wider than open water's 0.7–0.8
+× Class-A pan (Linsley et al. 1982), since a farm dam's depth and siting
+are rarely known. Each multiplier can be changed (above 0, at most 2) and a
+factor left out; one not run is listed with its reason. The runoff
+parameters stay the project's throughout: calibration-research.md § 5 applies
+a rain range with the calibrated parameters held fixed, and a refit per case
+is `pnpm pan-sensitivity`'s job (§2.4a), not this one's.
+
+**At each EWR site** (the outlet and each gauge that is an EWR site, §2.7b,
+as the curtailment table lists them), each run reports:
+
+- **EWR days not met** over the reporting window (`settings.reportStart …
+  reportEnd`, §2.11), and the share of the window's days met;
+- the **shortfall volume** over the window, Mm³ (the site's mean daily
+  shortfall × the window's days);
+- with a Reserve rule table (§2.9c), the share of the run's complete months
+  **meeting the table**.
+
+**The envelope and the verdict.** The envelope is the lowest and highest
+value over the central run and every factor's low and high. It is not a
+joint bound: one factor at a time ignores their interactions, and two
+factors at their worst together can go further. The verdict judges one
+metric per site: the months meeting the rule table where the site has one,
+otherwise the share of days the pragmatic EWR was met. Against the
+**decision threshold** it reads:
+
+- **meets**: the whole envelope is at or above the threshold;
+- **fails**: the whole envelope is below it;
+- **not determinable with current data**: the envelope crosses it (CR-21's
+  wording), whatever the central value says;
+- no data, when the site has nothing to judge.
+
+A rule table states the requirement but not the share of months that must
+meet it, and the pragmatic EWR has no pass mark, so the threshold is a
+project choice: **0.8** for both (`SENSITIVITY_THRESHOLDS`) until the
+hydrologist or the licensing authority gives one. The screen lets it be
+changed and re-judges without re-running (`siteVerdict`).
+
+**Deterministic and not stored.** No sampling: the same input and options
+give the same result (tested). Like `pnpm pan-sensitivity` it is a live
+diagnostic: the browser runs it from the stored run's inputs
+(`…/model-input`) in the calibration worker, and nothing is saved; a
+screenshot or the table is the record. The tests check each factor's
+direction on a synthetic catchment (more rain, fewer days not met and a
+smaller shortfall; a higher pan coefficient, more dam evaporation or more
+abstraction, a larger shortfall; a dam that starts full, a smaller one) and
+the verdict's cases. **Cost:** 11 runs take 0.4–0.9 s on the example
+catchments (Node, warm; 2026-09-28; `backend/src/model/examples.perf.test.ts`
+budgets 2 s).
+
+**For the hydrologist:** the ranges (especially abstraction ±30 % and the
+dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
+not findings.
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
