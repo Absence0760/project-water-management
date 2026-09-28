@@ -10,6 +10,7 @@
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
+	import { focusPageStart } from '$lib/a11y/focusPage';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { clearAllSaved } from '$lib/components/farm/savedCopy';
@@ -36,9 +37,12 @@
 			session.user = await api.auth.acceptTerms();
 		} catch (err) {
 			error = errorText(err);
+			return;
 		} finally {
 			busy = false;
 		}
+		// The requested page replaces this one (the root layout): focus its title or #main, not <body> (WCAG 2.4.3).
+		await focusPageStart();
 	}
 
 	async function signOut() {

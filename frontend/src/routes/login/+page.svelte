@@ -171,11 +171,11 @@
 		justify-items: start;
 	}
 	.resent {
-		font-size: 0.85rem;
+		font-size: 1rem;
 	}
 	.forgot {
 		align-self: flex-end;
-		font-size: 0.85rem;
+		font-size: 1rem;
 		text-decoration: underline;
 		/* Comfortable tap target without growing the visible text. */
 		padding: 0.35rem 0;
@@ -190,7 +190,7 @@
 		border: 1px dashed var(--border-strong);
 		border-radius: var(--radius);
 		background: var(--surface-2);
-		font-size: 0.8rem;
+		font-size: 1rem;
 		color: var(--text-2);
 	}
 </style>

@@ -28,19 +28,38 @@
 </div>
 
 <style>
+	/* The wrapper draws the field (border, fill, focus ring) and lays the input
+	   and the toggle side by side, so the toggle takes exactly its own width.
+	   It used to sit over the input's end with a fixed 4.25rem reserve, which
+	   Afrikaans "Versteek" (70 px) overran, covering the end of a revealed
+	   password (WCAG 1.4.4 / 1.4.10). */
 	.pw {
-		position: relative;
 		display: flex;
+		align-items: center;
+		gap: 2px;
+		padding-right: 4px;
+		background: var(--surface);
+		border: 1px solid var(--border-input);
+		border-radius: var(--radius-sm);
+	}
+	.pw:hover {
+		border-color: var(--text-muted);
+	}
+	.pw:has(input:focus-visible) {
+		outline: 2px solid var(--focus);
+		outline-offset: 2px;
 	}
 	.pw input {
 		flex: 1;
-		padding-right: 4.25rem !important;
+		min-width: 0;
+		border: 0;
+		background: transparent;
+	}
+	.pw input:focus-visible {
+		outline: none;
 	}
 	.toggle {
-		position: absolute;
-		right: 4px;
-		top: 50%;
-		transform: translateY(-50%);
+		flex: none;
 		min-height: 34px;
 		padding: 0 0.7rem;
 		border: none;
@@ -48,8 +67,9 @@
 		background: transparent;
 		color: var(--accent);
 		font: inherit;
-		font-size: 0.85rem;
+		font-size: 1rem;
 		font-weight: 600;
+		white-space: nowrap;
 		cursor: pointer;
 	}
 	.toggle:hover {
