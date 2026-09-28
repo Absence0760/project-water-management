@@ -295,9 +295,11 @@
 		font-size: 14px;
 		color: var(--text-muted);
 	}
+	/* The page's full width, not a reading measure: at 72ch it wrapped to a
+	   third line and pushed About below a 1440 × 960 laptop screen. Two lines
+	   at 1120 px; the phone's 560 px column is narrower than any measure. */
 	.caveat {
 		margin: 8px 0 0;
-		max-width: 72ch;
 	}
 	.share :global(details > summary) {
 		min-height: var(--tap);
