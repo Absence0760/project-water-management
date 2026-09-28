@@ -526,7 +526,7 @@ const longDate = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(i
  * ≥ 1.11.0), or "(run from empty dams)" without one; a midpoint band names
  * the storage it ran from.
  */
-export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'metric' | 'share' | 'representative'>, row: ReviewTriggerRow): string {
+export function describeTriggerRow(table: Pick<ReviewTriggers, 'reviewDate' | 'metric' | 'share' | 'representative'>, row: Omit<ReviewTriggerRow, 'outlook'>): string {
 	const on = `on ${longDate(table.reviewDate)}`;
 	const where =
 		row.band.fromM3 > 0

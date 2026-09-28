@@ -7,7 +7,12 @@
 	`outlook` job, docs/api.md § Seasonal outlooks). Per level: season-end
 	storage, the share of demand met and the river's requirement as the
 	median with the 10–90 % range, the years met, and the planning figure in
-	the engine's words. Its own chunk: River & reserve (river/RiverTab.svelte) loads it lazily.
+	the engine's words. Then the review triggers (R6): for each band of dam
+	storage on the review date, the highest level that met the rule, in the
+	engine's words (./triggers.ts). An editor can publish one level to the
+	project's farmers (R5, E3): each farm page then shows its own figures at
+	that level until the season ends, or the WUA withdraws it. Its own chunk:
+	River & reserve (river/RiverTab.svelte) loads it lazily.
 
 	It reports what the analogue years did at each level; it never picks one.
 	The pending state follows the outlook's own status and its job's (polled),
@@ -16,9 +21,10 @@
 <script lang="ts">
 	import { onDestroy, untrack } from 'svelte';
 	import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE } from '@water-management/engine';
-	import { api, type Outlook, type OutlookSettings, type RunMeta } from '$lib/api';
+	import { api, type Outlook, type OutlookPublication, type OutlookSettings, type RunMeta } from '$lib/api';
+	import { buildTriggersView } from './triggers';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
-	import { fmtDate } from '$lib/format/number';
+	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { monthName } from '$lib/format/months';
 	import { resolveOutlook } from './settings';
 	import {
@@ -78,6 +84,44 @@
 		return buildOutlookView({ ...outlook, result: outlook.result });
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
+	const triggers = $derived(outlook && shown?.kind === 'complete' ? buildTriggersView(outlook) : null);
+
+	// Publishing to farmers (R5, E3): the project's current publication, and the level an editor picks.
+	let publication = $state<OutlookPublication | null>(null);
+	let publishLevel = $state('');
+	let publishing = $state(false);
+	let publishError = $state<string | null>(null);
+	const runLevels = $derived(view ? view.rows.filter((r) => r.kind === 'ran').map((r) => ({ id: r.id, label: r.label })) : []);
+	const publishedHere = $derived(!!publication && !!outlook && publication.outlookId === outlook.id);
+	$effect(() => {
+		if (runLevels.length && !runLevels.some((l) => l.id === publishLevel)) publishLevel = runLevels[0]!.id;
+	});
+
+	async function publishToFarmers() {
+		if (!outlook || !publishLevel) return;
+		publishing = true;
+		publishError = null;
+		try {
+			publication = await api.outlooks.publish(projectId, outlook.id, publishLevel);
+		} catch (err) {
+			publishError = msg(err);
+		} finally {
+			publishing = false;
+		}
+	}
+
+	async function withdraw() {
+		publishing = true;
+		publishError = null;
+		try {
+			await api.outlooks.withdraw(projectId);
+			publication = null;
+		} catch (err) {
+			publishError = msg(err);
+		} finally {
+			publishing = false;
+		}
+	}
 
 	/** Follow a pending outlook on its own status until it completes or its job stops. */
 	async function poll(id: string) {
@@ -96,9 +140,10 @@
 		loading = true;
 		loadError = null;
 		try {
-			const [newest] = await api.outlooks.list(projectId, { baseRunId: run.id });
+			const [[newest], current] = await Promise.all([api.outlooks.list(projectId, { baseRunId: run.id }), api.outlooks.publication(projectId)]);
 			if (!live) return;
 			outlook = newest ?? null;
+			publication = current;
 			if (newest?.status === 'complete') outlook = await api.outlooks.get(projectId, newest.id);
 			else if (newest && outlookState(newest).kind === 'pending') timer = setTimeout(() => poll(newest.id), 1500);
 		} catch (e) {
@@ -259,6 +304,91 @@
 				This counts past years; it is not a decision. The WUA decides the season’s level and publishes it as the restriction notice.
 			</p>
 
+			{#if triggers && triggers.kind !== 'none'}
+				<h4 id="triggers-h">Review triggers</h4>
+				<div data-testid="outlook-triggers">
+					{#if triggers.kind === 'notDrawn'}
+						<p class="muted" data-testid="triggers-not-drawn">Review on {triggers.reviewDate}: no trigger table. {triggers.problem}</p>
+					{:else}
+						<p class="small">
+							Review on <strong data-testid="triggers-review-date">{triggers.reviewDate}</strong>. For each band of total dam storage on that day, the
+							highest demand level that met the river’s requirement for the rest of the season in at least {view.share} of past years. Drawn on
+							<span data-testid="triggers-ran-on">{triggers.ranOn}</span>, the latest review date in the run’s record, as a rule for that day of the year.
+							{triggers.bandsFrom}
+						</p>
+						<div class="scroll">
+							<table class="levels" data-testid="triggers-table">
+								<caption class="visually-hidden">Review triggers: the demand level by dam storage on the review date</caption>
+								<thead>
+									<tr>
+										<th scope="col">Dam storage on the review date</th>
+										<th scope="col">Demand level</th>
+										<th scope="col">Years met in full</th>
+										<th scope="col">Every level</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each triggers.rows as r (r.band)}
+										<tr>
+											<th scope="row">{r.band}<span class="band">{r.fromShare} of capacity and up</span></th>
+											<td class="stat"><strong>{r.level ?? 'No level'}</strong></td>
+											<td class="stat">{r.met}</td>
+											<td class="stat">
+												{#each r.perLevel as l (l.label)}<span class="band">{l.label}: {l.met}{l.meets ? '' : ' (below the share)'}</span>{/each}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<ul class="words" data-testid="triggers-words">
+							{#each triggers.rows as r (r.band)}<li>{r.words}</li>{/each}
+						</ul>
+						{#if triggers.notes.length}
+							<ul class="warnings" data-testid="triggers-notes">
+								{#each triggers.notes as n (n)}<li>{n}</li>{/each}
+							</ul>
+						{/if}
+						{#if triggers.warnings.length || triggers.failures.length}
+							<ul class="warnings" data-testid="triggers-warnings">
+								{#each [...triggers.warnings, ...triggers.failures] as w (w)}<li>{w}</li>{/each}
+							</ul>
+						{/if}
+						<p class="hint">These count past years from each storage; they are not a rule the app applies. The WUA decides what to do on the review date.</p>
+					{/if}
+				</div>
+			{/if}
+
+			<h4 id="publish-h">Farmers</h4>
+			<div data-testid="outlook-publish">
+				{#if publication}
+					<p class="small" data-testid="outlook-published" data-here={publishedHere}>
+						Published to farmers: <strong>{publication.level.label}</strong> for {fmtDay(publication.decisionDate)} – {fmtDay(publication.seasonEnd)}, on
+						{fmtDate(publication.publishedAt, true)}{publication.publishedBy ? ` by ${publication.publishedBy}` : ''}, {publication.farms}
+						{publication.farms === 1 ? 'hydrological unit' : 'hydrological units'}{publishedHere ? '' : ' (from another outlook)'}.
+					</p>
+				{:else}
+					<p class="small muted" data-testid="outlook-not-published">No outlook is published to farmers.</p>
+				{/if}
+				{#if canEdit && runLevels.length}
+					<div class="start">
+						<div class="field">
+							<label for="outlook-publish-level">Level the WUA has set</label>
+							<select id="outlook-publish-level" bind:value={publishLevel} disabled={publishing}>
+								{#each runLevels as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+							</select>
+						</div>
+						<button type="button" class="btn btn-primary" onclick={publishToFarmers} disabled={publishing || !publishLevel}>Publish to farmers</button>
+						{#if publication}<button type="button" class="btn" onclick={withdraw} disabled={publishing}>Withdraw</button>{/if}
+					</div>
+					<p class="hint">
+						Each linked farmer then sees, on their farm page, what that level gave their own hydrological unit in past years, until the season ends. It
+						replaces the outlook published before. Publish the level the WUA decided; the app doesn’t choose one.
+					</p>
+				{/if}
+				{#if publishError}<div class="alert alert-error" role="alert">{publishError}</div>{/if}
+			</div>
+
 			{#if view.years.length}
 				<details class="years">
 					<summary>Every analogue year</summary>
@@ -409,5 +539,10 @@
 	}
 	h4 {
 		margin: 0.75rem 0 0.25rem;
+	}
+	.words {
+		font-size: 0.85rem;
+		margin: 0.5rem 0 0;
+		padding-left: 1.2rem;
 	}
 </style>

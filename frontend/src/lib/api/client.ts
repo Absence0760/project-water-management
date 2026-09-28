@@ -101,6 +101,7 @@ import type {
 	Sweep,
 	SweepRequest,
 	Outlook,
+	OutlookPublication,
 	OutlookRequest,
 	YieldJob,
 	YieldRequest,
@@ -723,7 +724,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			list: (id: string, q: { baseRunId?: string } = {}) =>
 				request<{ outlooks: Outlook[] }>('GET', `${p(id)}/outlooks${q.baseRunId ? `?${new URLSearchParams({ baseRunId: q.baseRunId })}` : ''}`).then((r) => r.outlooks),
 			/** One outlook, with its result once complete. */
-			get: (id: string, outlookId: string) => request<{ outlook: Outlook }>('GET', `${p(id)}/outlooks/${enc(outlookId)}`).then((r) => r.outlook)
+			get: (id: string, outlookId: string) => request<{ outlook: Outlook }>('GET', `${p(id)}/outlooks/${enc(outlookId)}`).then((r) => r.outlook),
+			/** Publish one level to the project's farmers (issue #53 R5): it ends the current publication. */
+			publish: (id: string, outlookId: string, levelId: string) =>
+				request<{ publication: OutlookPublication }>('POST', `${p(id)}/outlooks/${enc(outlookId)}/publish`, { levelId }).then((r) => r.publication),
+			/** The current publication to farmers, or null. */
+			publication: (id: string) => request<{ publication: OutlookPublication | null }>('GET', `${p(id)}/outlook-publication`).then((r) => r.publication),
+			/** Withdraw it: the farm pages stop showing it. */
+			withdraw: (id: string) => request<{ publication: OutlookPublication }>('DELETE', `${p(id)}/outlook-publication`).then((r) => r.publication)
 		},
 		compare: {
 			/** Compare run B against run A; each ref is "<projectId>:<runId>" (projects may differ). */

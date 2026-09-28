@@ -13,7 +13,9 @@
 	import CompareCard from '$lib/components/farm/CompareCard.svelte';
 	import DamCard from '$lib/components/farm/DamCard.svelte';
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
+	import OutlookCard from '$lib/components/farm/OutlookCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
+	import { outlookCard } from '$lib/components/farm/outlookCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
@@ -144,6 +146,9 @@
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, today)}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
+			<!-- "This season" (issue #53 R5, E3): only while the WUA has a seasonal outlook published. -->
+			{@const seasonOutlook = outlookCard(view, today)}
+			{#if seasonOutlook}<OutlookCard vm={seasonOutlook} />{/if}
 			<MonthlyChart farm={view.farm} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />

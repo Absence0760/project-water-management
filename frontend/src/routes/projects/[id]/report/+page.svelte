@@ -324,7 +324,7 @@
 								{#snippet children(ImpactSection)}<ImpactSection
 										data={impact!}
 										series={impactSeries ?? { background: { natural: null, ewrShortfall: null }, application: { ewrShortfall: null } }}
-										outcomes={project.settings.outcomes}
+										outcomes={project!.settings.outcomes}
 										{nodes}
 										ewrRules={settings.ewrRules}
 									/>{/snippet}
