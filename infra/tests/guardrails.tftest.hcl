@@ -804,6 +804,7 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.ses_complaint_rate,
       aws_cloudwatch_metric_alarm.jobs_dlq_depth,
       aws_cloudwatch_metric_alarm.worker_errors,
+      aws_cloudwatch_metric_alarm.worker_throttles,
       aws_cloudwatch_metric_alarm.jobs_backlog,
       aws_cloudwatch_metric_alarm.job_dead,
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth,
@@ -897,8 +898,8 @@ run "background_jobs" {
     error_message = "Worker Lambda: nodejs24.x, lambda-worker.handler, 1024 MB, 300 s."
   }
   assert {
-    condition     = aws_lambda_function.worker.reserved_concurrent_executions == 2
-    error_message = "Worker concurrency must be capped at 2 by default (spend + DB connections)."
+    condition     = aws_lambda_function.worker.reserved_concurrent_executions == 8
+    error_message = "Worker concurrency must be capped at 8 by default: its four SQS triggers x 2, and no more (spend + DB connections)."
   }
   assert {
     condition     = length(aws_lambda_function.worker.vpc_config) == 1 && aws_lambda_function.worker.vpc_config[0].security_group_ids == toset([aws_security_group.worker_lambda.id])
@@ -1588,5 +1589,140 @@ run "mail_failures_and_log_privacy" {
       contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_statement=none")
     )
     error_message = "The parameter group must keep TLS forced and log_statement = none."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Lambda concurrency caps: never unreserved (-1), and the worker's cap covers
+# every SQS trigger it has
+# ---------------------------------------------------------------------------
+
+run "rejects_unreserved_api_concurrency" {
+  command = plan
+
+  variables {
+    lambda_reserved_concurrency = -1
+  }
+
+  expect_failures = [var.lambda_reserved_concurrency]
+}
+
+run "rejects_unreserved_migrate_concurrency" {
+  command = plan
+
+  variables {
+    migrate_reserved_concurrency = -1
+  }
+
+  expect_failures = [var.migrate_reserved_concurrency]
+}
+
+run "rejects_unreserved_worker_concurrency" {
+  command = plan
+
+  variables {
+    worker_reserved_concurrency = -1
+  }
+
+  expect_failures = [var.worker_reserved_concurrency]
+}
+
+run "rejects_unreserved_fetcher_concurrency" {
+  command = plan
+
+  variables {
+    fetcher_reserved_concurrency = -1
+  }
+
+  expect_failures = [var.fetcher_reserved_concurrency]
+}
+
+run "rejects_unreserved_renderer_concurrency" {
+  command = plan
+
+  variables {
+    renderer_reserved_concurrency = -1
+  }
+
+  expect_failures = [var.renderer_reserved_concurrency]
+}
+
+run "rejects_worker_concurrency_below_its_triggers" {
+  command = plan
+
+  variables {
+    worker_reserved_concurrency = 2
+  }
+
+  expect_failures = [var.worker_reserved_concurrency]
+}
+
+run "worker_sqs_triggers" {
+  command = plan
+
+  # Enables the renderer too, so every SQS trigger in the stack is planned.
+  variables {
+    renderer_image_tag = "0.4.0"
+  }
+
+  assert {
+    condition = aws_lambda_function.worker.reserved_concurrent_executions >= sum([
+      for m in [
+        aws_lambda_event_source_mapping.worker_jobs,
+        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_render_results,
+        aws_lambda_event_source_mapping.worker_mail_events,
+      ] : m.scaling_config[0].maximum_concurrency
+    ])
+    error_message = "The worker's reserved concurrency must cover the sum of its SQS triggers' maximum_concurrency, or throttled messages burn receive counts into the DLQs."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.fetcher.reserved_concurrent_executions >= aws_lambda_event_source_mapping.fetcher_requests.scaling_config[0].maximum_concurrency &&
+      aws_lambda_function.renderer[0].reserved_concurrent_executions >= aws_lambda_event_source_mapping.renderer_requests[0].scaling_config[0].maximum_concurrency
+    )
+    error_message = "The fetcher's and renderer's reserved concurrency must cover their SQS trigger's maximum_concurrency."
+  }
+  assert {
+    condition = alltrue([
+      for m in [
+        aws_lambda_event_source_mapping.worker_jobs,
+        aws_lambda_event_source_mapping.worker_ingest_results,
+        aws_lambda_event_source_mapping.worker_render_results,
+        aws_lambda_event_source_mapping.worker_mail_events,
+      ] : m.function_name == aws_lambda_function.worker.arn && try(contains(m.function_response_types, "ReportBatchItemFailures"), false)
+    ])
+    error_message = "Every worker SQS trigger must honour partial batch failures (ReportBatchItemFailures), so one bad record doesn't dead-letter its batch."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.worker_throttles.metric_name == "Throttles" &&
+      aws_cloudwatch_metric_alarm.worker_throttles.dimensions["FunctionName"] == aws_lambda_function.worker.function_name &&
+      aws_cloudwatch_metric_alarm.worker_throttles.threshold == 0
+    )
+    error_message = "Any worker throttle must alarm."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# WAF: the auth rate limit matches the decoded, normalised path
+# ---------------------------------------------------------------------------
+
+run "waf_auth_rule_matches_decoded_path" {
+  command = plan
+
+  assert {
+    condition = [
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      t.type if t.priority == 0
+    ] == ["URL_DECODE"]
+    error_message = "The auth rate limit must URL-decode the path first, or /api/%61uth/login slips past it."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
   }
 }

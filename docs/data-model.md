@@ -2327,9 +2327,34 @@ ids are rejected.
 
 ## Migrations
 
-- Files: `backend/migrations/NNN_description.sql`, applied in order. The runner
-  records applied files in `schema_migrations` and runs each file in its own
-  transaction.
+- Files: `backend/migrations/NNN_description.sql`, applied in filename
+  (string) order. The runner (`backend/scripts/migrate.ts`, shared by
+  `pnpm dev:db:migrate`, the dev server, the test and e2e setups and the
+  migrate Lambda) records each applied file in `schema_migrations` with a
+  sha256 of its contents, and runs each file in its own transaction.
+- **Forward-only is enforced.** Before applying anything, the runner refuses
+  (a non-zero exit, or a failed deploy) and names the file when an applied
+  file's contents changed, an applied file is missing (deleted or renamed),
+  or a pending file sorts before the latest applied one (two branches took
+  numbers out of order: renumber the late one after the latest). Rows
+  recorded before checksums existed get theirs from the current file on the
+  first run, and are held to it from then on. The `checksum` column is added
+  by the runner's own bootstrap (it creates `schema_migrations`), not by a
+  numbered migration, since it has to exist before any numbered file can be
+  checked. `001` may still be edited until the first production deploy: the
+  test and e2e setups rebuild their schema from scratch every run, so they
+  pick an edit up; a dev database refuses it, and `pnpm dev:db:reset`
+  rebuilds it. Production recovery: [deployment.md § Migration
+  integrity](./deployment.md#migration-integrity).
+- **Timeouts.** Each migration's transaction runs with `lock_timeout = 5s`
+  (so it fails instead of queueing behind live traffic, with every later
+  query queued behind it) and `statement_timeout = 240s` (under the migrate
+  Lambda's 300 s, so a runaway statement fails cleanly). A migration that
+  genuinely needs longer says so in a comment line, which the checksum then
+  covers: `-- migrate: statement_timeout = 900s` or
+  `-- migrate: lock_timeout = 30s` (`0` = no limit). Past ~280 s, raise the
+  migrate Lambda's `timeout` in `infra/lambda.tf` in the same change, or
+  split the work (expand/contract, batched backfills).
 - Run as `water` (`MIGRATION_DATABASE_URL`), never as `water_app`.
 - After the files, the runner syncs the `language` table from the engine's
   language table (insert only; [Languages](#languages-080_languagesql)).

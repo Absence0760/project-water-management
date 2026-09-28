@@ -53,6 +53,13 @@ The checklist for these is issue #62; the history scrub is #63.
       version and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
+- [ ] **Raise the Lambda concurrent-executions quota before the first apply
+      (2026-09-28, infra audit).** A new account's quota is 10 and AWS keeps
+      10 unreserved, so every reserved concurrency fails to apply until it is
+      raised, and `-1` (unreserved) is now refused by the variables'
+      validation. In af-south-1 request at least the sum of the reservations
+      + 10 (33 at the defaults; ask for 1000) and wait for the grant:
+      infra/README.md § Operator steps, step 3.
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses

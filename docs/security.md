@@ -128,7 +128,10 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the address is looked at, so once throttled a taken and a free address get
   the same answer, and a refused attempt isn't counted, so hammering never
   extends the wait. The WAF's per-IP `/api/auth/*` rule (100 per 5 minutes)
-  stays in front of it.
+  stays in front of it; it matches the path after `URL_DECODE` and
+  `NORMALIZE_PATH`, so a percent-encoded spelling the API still routes to the
+  auth handlers (`/api/%61uth/login`), or one with `//` or dot segments,
+  can't slip past it.
   - *The client address* (`http/clientAddress.ts`) is the `X-Viewer-Address`
     header, which the `/api` CloudFront Function (`api_strip_prefix`,
     `infra/s3_cloudfront.tf`) sets from the connection's IP, overwriting any
