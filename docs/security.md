@@ -1806,6 +1806,22 @@ readable by anyone. The rules:
   alarm, so a model bug in production is paged, not just shown as a warning
   on the one run.
 
+
+### Accepted IaC findings
+
+CI's Trivy config scan (`terraform.yml`, Terraform and
+`backend/renderer.Dockerfile`, HIGH/CRITICAL to the Security tab) flags these
+on purpose-built resources. Each carries a `#trivy:ignore:<ID>` with its reason
+beside the resource; a new ignore needs a line here too.
+
+| Finding | Resources | Why it stays |
+| --- | --- | --- |
+| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
+
+Revisit AWS-0132 for `reports` if a client contract asks for customer-held
+keys or key-level audit of report reads.
+
 ## Liability
 
 Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.

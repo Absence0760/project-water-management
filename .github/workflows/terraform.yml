@@ -8,8 +8,9 @@ name: Terraform
 #      (infra/tests/guardrails.tftest.hcl), also credential-free. This is the
 #      plan CI can run: it pins IAM, the OIDC trust postcondition, RDS privacy,
 #      the CloudFront wiring, WAF, SES, alarms and the budget.
-#   4. Trivy IaC scan for known-bad patterns (public buckets, `Action: *`,
-#      open ingress). Advisory (exit-code 0), results to the Security tab.
+#   4. Trivy config scan (Terraform and the renderer Dockerfile) for
+#      known-bad patterns (public buckets, `Action: *`, open ingress, root
+#      containers). Advisory (exit-code 0), HIGH/CRITICAL to the Security tab.
 #
 # 1-3 are `bin/check-infra.sh`, the same script as `pnpm check:infra`.
 #
@@ -65,14 +66,22 @@ jobs:
         with:
           persist-credentials: false
 
+      # From the repo root, not infra/: SARIF paths are relative to scan-ref,
+      # and code scanning can't place `alarms.tf` (it needs `infra/alarms.tf`),
+      # which the Security tab reported as a Trivy configuration error. The
+      # root scan also covers backend/renderer.Dockerfile. Accepted findings
+      # carry a `#trivy:ignore:<ID>` with the reason beside the resource
+      # (docs/security.md § Accepted IaC findings).
       - name: Trivy config scan
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: config
-          scan-ref: infra
+          scan-ref: .
           format: sarif
           output: trivy-iac.sarif
           severity: CRITICAL,HIGH
+          # Without this, `severity` filters the table output only and SARIF carries every level.
+          limit-severities-for-sarif: true
           exit-code: '0'
 
       # Code scanning (the Security tab) needs a public repo, or GitHub
