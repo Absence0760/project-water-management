@@ -139,6 +139,7 @@ export const SCORE_ROWS: ScoreRow[] = [
 	{ key: 'nse', label: 'NSE', unit: '', ideal: '1' },
 	{ key: 'nseSqrt', label: 'NSE on √Q', unit: '', ideal: '1' },
 	{ key: 'nseLog', label: 'NSE on log Q', unit: '', ideal: '1' },
+	{ key: 'kgeLowHigh', label: 'KGE′ on Q and 1/Q', unit: '', ideal: '1' },
 	{ key: 'volumeErrorPct', label: 'Volume error', unit: '%', ideal: '0' },
 	{ key: 'fdcHighPct', label: 'High flows (top 2 %)', unit: '%', ideal: '0' },
 	{ key: 'fdcMidSlopePct', label: 'FDC mid-slope', unit: '%', ideal: '0' },

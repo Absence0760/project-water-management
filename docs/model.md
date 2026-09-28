@@ -3779,6 +3779,11 @@ daily fits, so the app no longer labels daily NSE or PBIAS with them
 (calibration research CR-6). The benchmark that does carry over is the mean
 flow, which scores NSE 0 and KGE −0.41 (Knoben et al. 2019).
 
+log-NSE is a low-flow check, not a low-flow calibration target. When a fit
+will feed an EWR (low-flow) decision, fit to the mean of KGE′(Q) and
+KGE′(1/Q) instead (Fit automatically's `kgeLowHigh` objective, §2.10b;
+calibration research CR-3).
+
 The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow
 > 0. The engine skips blank days and keeps observed zeros.
@@ -3862,9 +3867,19 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     once, so a few wet years can't dominate the score;
   - **non-parametric KGE** (Pool et al. 2018);
   - **NSE on √Q** (medium flows);
-  - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows).
+  - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows);
+  - **the mean of KGE′(Q) and KGE′(1/(Q + ε))** (`kgeLowHigh`, engine ≥
+    1.18.0, calibration research CR-3), ε = 1 % of the mean observed flow,
+    the same ε added to observed and simulated flows (Pushpalatha et al.
+    2012; Garcia et al. 2017). The inverse-flow half weights recessions and
+    low flows, the plain half keeps the peaks and the water balance, so
+    neither end is traded away. **The suggested objective when the fit feeds
+    an EWR (low-flow) decision**; the default stays KGE′. Because ε scales
+    with the flows, the score doesn't depend on the flow unit. A simulation
+    with no flow at all has no score (the KGE′ half needs a positive mean).
 
-  KGE is never applied to log flows (Santos et al. 2018).
+  KGE is never applied to log flows (Santos et al. 2018); on 1/(Q + ε) it
+  is, since those stay positive and its bias and CV terms keep their meaning.
 - **Reported with every fit** (`FitScores`): all of the above, plain NSE, the
   volume error, and the Yilmaz et al. (2008) flow-duration signatures:
   - %BiasFHV: volume of the top 2 % of flows;

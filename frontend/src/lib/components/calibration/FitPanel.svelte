@@ -334,7 +334,7 @@
 								<tr>
 									<th scope="row">{r.label} <span class="muted">(ideal {r.ideal})</span></th>
 									{#each columns as c (c.id)}
-										<td class="num" class:val={c.validation}>{fmtScore(c.scores[r.key] as number | null, r.unit)}</td>
+										<td class="num" class:val={c.validation}>{fmtScore((c.scores[r.key] as number | null | undefined) ?? null, r.unit)}</td>
 									{/each}
 								</tr>
 							{/each}

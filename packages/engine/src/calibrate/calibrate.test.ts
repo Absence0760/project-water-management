@@ -190,6 +190,11 @@ describe('calibrate', () => {
 		const yearly = calibrate(input, { budget: 100, objective: 'kgeYearly', validate: false });
 		expect(yearly.objective).toBe('kgeYearly');
 		expect(yearly.fit.scores.kgeYearly!).toBeGreaterThanOrEqual(yearly.before.scores.kgeYearly!);
+		// The low/high-flow objective (CR-3) is accepted, optimised and reported.
+		const lowHigh = calibrate(input, { budget: 100, objective: 'kgeLowHigh', validate: false });
+		expect(lowHigh.objective).toBe('kgeLowHigh');
+		expect(lowHigh.fit.scores.kgeLowHigh!).toBeGreaterThanOrEqual(lowHigh.before.scores.kgeLowHigh!);
+		expect(lowHigh.startResults.every((r) => r.score === null || r.score <= lowHigh.fit.scores.kgeLowHigh! + 1e-12)).toBe(true);
 	}, 60_000);
 
 	it('scores only observed days inside the calibration window and outside exclusions', () => {

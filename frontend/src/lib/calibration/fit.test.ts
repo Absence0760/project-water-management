@@ -10,6 +10,7 @@ const scores = (kge: number) => ({
 	nse: 0.4,
 	nseSqrt: 0.5,
 	nseLog: 0.3,
+	kgeLowHigh: 0.4,
 	volumeErrorPct: 5,
 	fdcHighPct: -10,
 	fdcMidSlopePct: 20,

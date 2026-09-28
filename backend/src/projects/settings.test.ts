@@ -680,6 +680,12 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
+	it('accepts the low/high-flow objective (CR-3, engine ≥ 1.18.0) and its score, and refuses an unknown objective', () => {
+		const scored = { ...period, scores: { ...period.scores, kgeLowHigh: 0.55 } };
+		expect(ok({ ...record, objective: 'kgeLowHigh', fit: scored, before: scored })).toBe(true);
+		expect(ok({ ...record, objective: 'kgeLog' })).toBe(false);
+	});
+
 	it('accepts an optional forcing block (the pan coefficient / A-pan the fit ran under), and a record from before it without', () => {
 		const forcing = { panCoefficient: new Array(12).fill(0.7), apanMm: [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100] };
 		expect(ok(record)).toBe(true); // no forcing: a record from before it existed

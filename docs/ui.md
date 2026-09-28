@@ -2615,7 +2615,8 @@ which checks every catchment tab).
     one was chosen; the validation columns are shaded. Each column header
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
-    variants, volume error and the FDC signatures.
+    variants, KGE′ on Q and 1/Q (engine ≥ 1.18.0; "–" on a stored record made
+    before it), volume error and the FDC signatures.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
