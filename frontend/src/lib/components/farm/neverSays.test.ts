@@ -7,6 +7,7 @@ import type { FarmView } from '@water-management/engine';
 import * as cards from './cards';
 import * as chart from './chart';
 import * as dam from './dam';
+import * as notice from './farmNotice';
 import { forecastCard } from './forecastCard';
 import { vaalbankFixture } from './fixture';
 import * as why from './why';
@@ -35,6 +36,8 @@ function everything(v: FarmView): string[] {
 		cards.whoCanSee(),
 		cards.privacy(),
 		cards.disclaimer(),
+		notice.farmNoticeTitle(),
+		notice.farmNoticePoints(),
 		cards.farmSummaryLine(f),
 		why.whyTitle(f),
 		why.whyIntro(f),

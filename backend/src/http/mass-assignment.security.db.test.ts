@@ -18,7 +18,7 @@
 // route that accepted the hostile body wrote rows (or is listed as writing
 // none, with the reason), the sweep's detector finds a hostile value written
 // on purpose, and the legitimate fields of a few routes are read back.
-import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -116,6 +116,7 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /auth/logout': async () => ({ as: await freshUser('Mlogout') }),
 	'POST /auth/logout-everywhere': async () => ({ as: await freshUser('Meverywhere') }),
 	'PATCH /auth/me': () => ({ body: { displayName: 'Mass Owner' } }),
+	'POST /auth/me/farm-notice': async () => ({ as: await freshUser('Mnotice'), body: { version: FARMER_NOTICE_VERSION } }),
 	'POST /auth/change-password': async () => ({ as: await freshUser('Mpassword'), body: { currentPassword: 'correct horse', newPassword: 'correct horse battery' } }),
 	'POST /auth/forgot-password': () => ({ as: null, body: { email: ctx.owner.email } }),
 	'POST /auth/reset-password': async () => {

@@ -1117,6 +1117,12 @@
 //             (shared by the run worker and the pages), the water-account
 //             and balance lines, the help, report and scenario lines. No new
 //             dependency. Headroom ~3 KB.
+// 2026-09-28  total 1066 → 1069 KB (measured 1067). The farm view's liability
+//             notices (issue #47, CPA s49 research R1/R2): the estimate
+//             callout before the first figure on each farm page, the
+//             one-time "Before you look at your farm" acknowledgement and its
+//             API call, and their English and Afrikaans words (+1 KB). No
+//             new dependency. Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1127,7 +1133,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1066,
+	totalCodeKb: 1069,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

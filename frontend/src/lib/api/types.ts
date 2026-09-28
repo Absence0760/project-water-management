@@ -70,6 +70,12 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/**
+	 * Acknowledged the farm view's notice now in force (app_user.farm_notice_version,
+	 * 093, against the engine's FARMER_NOTICE_VERSION). The farm pages show the
+	 * notice instead of the figures while this is false.
+	 */
+	farmNoticeCurrent?: boolean;
 }
 
 export interface UserPreferences {
