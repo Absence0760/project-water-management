@@ -22,7 +22,12 @@ permissions:
   contents: read
 
 jobs:
-  # Classifies the diff; heavy jobs gate on `code == 'true'`.
+  # Classifies the diff; heavy jobs gate on `code == 'true'`. Only a pull
+  # request may skip them: a push to main (or a manual run) always runs the
+  # full suite. The release preflight reads `CI gate` on the tagged commit
+  # alone, so a docs-only push after a red code push must not turn it green
+  # without the code having passed (scripts/guards/check_workflows.mjs,
+  # rule `push-full`).
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -36,8 +41,10 @@ jobs:
       - id: diff
         name: Anything besides docs changed?
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
         run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then echo "code=true" >> "$GITHUB_OUTPUT"; exit 0; fi
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
             echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
