@@ -4932,7 +4932,9 @@ uninterrupted run's to the bit (`warmstart.invariants.test.ts`, whose random
 networks carry allocations in every mode).
 
 **Yield** (§2.13): the probed dam's own cap is taken off (a yield is what the
-dam can give, not what is registered); the other units keep theirs.
+dam can give, not what is registered); the other units keep theirs. Automatic
+calibration (§2.10b) builds its network plan the same way, so a project set
+to cap or full allocation is fitted against the flows the mode produces.
 
 **Checks** (`verify/checks.ts` `checkAllocations`, the `allocations` self-check
 on every saved run, and the engine fuzz with allocations in a quarter of its
