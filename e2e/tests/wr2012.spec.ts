@@ -41,7 +41,7 @@ test('entering WR2012 data is checked for plausibility, saved, and every run rep
 	// A MAR larger than the rain on the quaternary: 100 mm × 50 km² = 5 Mm³/a.
 	const map = section.getByLabel(/^Quaternary MAP/);
 	await map.fill('100');
-	await expect(section.getByText(/The MAR \(1 200 Mm³\/a\) is more than the rain on the quaternary \(100 mm × 50 km² = 5 Mm³\/a\)\./)).toBeVisible();
+	await expect(section.getByText(/The MAR \(1\u202f200 Mm³\/a\) is more than the rain on the quaternary \(100 mm × 50 km² = 5 Mm³\/a\)\./)).toBeVisible();
 	await expect(save).toBeDisabled();
 	await map.fill('');
 
