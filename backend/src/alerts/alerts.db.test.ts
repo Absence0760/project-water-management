@@ -900,3 +900,38 @@ describe('the project’s local day', () => {
 		expect(await pending()).toEqual([{ status: 'digest', reason: 'over the daily cap' }]);
 	});
 });
+
+describe('a failed send is logged without personal data', () => {
+	it('logs the SES error code, never its text (which names the recipient), and retries the delivery', async () => {
+		await reset();
+		const [rule] = await asOwner(`INSERT INTO alert_rule (project_id, kind, threshold) VALUES ($1, 'job_dead', 1) RETURNING id`, [projectId]);
+		const [e] = await asOwner(`INSERT INTO alert_event (rule_id, project_id, state, value, detail) VALUES ($1, $2, 'firing', 1, '{"count":1}') RETURNING id`, [rule.id, projectId]);
+		await asOwner(`INSERT INTO alert_delivery (event_id, user_id, project_id, mode) VALUES ($1, $2, $3, 'immediate')`, [e.id, owner.id, projectId]);
+		// What SES answers in the sandbox for an unverified recipient.
+		const rejected = Object.assign(new Error(`Email address is not verified. The following identities failed the check in region AF-SOUTH-1: ${owner.email}`), {
+			name: 'MessageRejected'
+		});
+		const push = vi.spyOn(outbox, 'push').mockImplementation(() => {
+			throw rejected;
+		});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const r = await sendAlerts();
+			expect(r.failed).toBe(1);
+			const lines = error.mock.calls.map((c) => c.join(' '));
+			const line = lines.find((l) => l.includes('alert_send_failed'));
+			// Positive control: the failure is logged, as one JSON line naming the event.
+			expect(JSON.parse(line!)).toEqual({ event: 'alert_send_failed', eventId: e.id, error: 'MessageRejected' });
+			for (const l of lines) {
+				expect(l).not.toContain(owner.email);
+				expect(l).not.toContain('not verified');
+			}
+		} finally {
+			push.mockRestore();
+			error.mockRestore();
+		}
+		expect(await asOwner(`SELECT status, reason FROM alert_delivery WHERE event_id = $1`, [e.id])).toEqual([{ status: 'pending', reason: 'send failed (MessageRejected)' }]);
+		await asOwner('DELETE FROM alert_delivery WHERE event_id = $1', [e.id]);
+		await reset();
+	});
+});

@@ -174,7 +174,20 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   keeps its own sign-in lockout (070) and its own reset allowance.
 - **Mail failures never change the response** (`trySendMail` logs the error
   without the body, which contains a live token). Mail is sent after the
-  transaction commits, so a mailed link always refers to a stored token.
+  transaction commits, so a mailed link always refers to a stored token. The
+  log line is `{"event":"mail_send_failed","kind",…}`: the template's kind and
+  the error's name/code only (`logging/safeError.ts`), never the recipient,
+  the subject (a farmer invite's names a person and their farms) or the
+  error's text (SES's `MessageRejected` names the recipient). A CloudWatch
+  alarm counts it (`infra/alarms.tf`, `mail_send_failed`), so a broken send is
+  paged rather than silent.
+- **No personal data in server logs.** Mail, alert and job failures log
+  through `safeError` (`backend/src/logging/safeError.ts`): the error's name,
+  machine code (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for
+  an unexpected job failure. Never an error's message or a pg `detail`, which
+  can carry an address or row values. Postgres logs no bind values either
+  (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
+  slow statement is logged without its parameters.
 - **Email verification** is not required to sign in (V1). It *is* required to
   claim invitations: `app_accept_invites()` only converts invites for a
   **verified** address, so someone who registers an invitee's address first
@@ -1825,9 +1838,10 @@ readable by anyone. The rules:
   — failed check ids only, never a farm name, date or value — when a saved
   run fails one of the engine's self-checks (docs/model.md § Verification).
   A CloudWatch log metric filter + alarm on that line (`infra/alarms.tf`,
-  `self_check_failed`) notifies the same alerts SNS topic as every other
-  alarm, so a model bug in production is paged, not just shown as a warning
-  on the one run.
+  `self_check_failed`), on both the API's log group and the worker's (whose
+  automatic re-runs and forecast runs save runs too), notifies the same
+  alerts SNS topic as every other alarm, so a model bug in production is
+  paged, not just shown as a warning on the one run.
 
 
 ### Accepted IaC findings

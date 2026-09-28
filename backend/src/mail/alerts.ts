@@ -173,6 +173,7 @@ export function alertMail(to: Recipient, project: { id: string; name: string }, 
 	const { tr, lang } = translator(to.locale);
 	const { what, body } = alertLines(facts, tr, project.name, lang);
 	const mail = render(
+		'alert',
 		to.email,
 		tr.t('mail.alert.subject', { what, project: project.name }),
 		{
@@ -205,6 +206,7 @@ export function digestMail(to: Recipient, project: { id: string; name: string },
 	if (more > 0) paragraphs.push(tr.t('mail.alert.digest.more', { more }));
 	paragraphs.push(...liabilityLines(items.map((f) => f.kind), to.farmer, tr));
 	const mail = render(
+		'alert_digest',
 		to.email,
 		tr.t('mail.alert.digest.subject', { project: project.name, product: PRODUCT }),
 		{

@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as alertTemplates from './alerts.js';
 import * as templates from './templates.js';
 import type { AlertFacts } from './alerts.js';
-import type { Mail } from './transport.js';
+import type { Mail, MailKind } from './transport.js';
 
 const smtpSent: Record<string, unknown>[] = [];
 vi.mock('nodemailer', () => ({
@@ -88,6 +88,21 @@ const exportedBuilders = [...Object.entries(templates), ...Object.entries(alertT
 describe('every email template, against hostile names', () => {
 	it('covers every exported …Mail builder (a new template joins this sweep)', () => {
 		expect(exportedBuilders).toEqual(Object.keys(builders).sort());
+	});
+
+	it('every template says its kind (the mail_send_failed log line names it; never the subject)', () => {
+		const expected: Record<string, MailKind> = {
+			verifyEmailMail: 'verify',
+			resetPasswordMail: 'reset',
+			accountExistsMail: 'account_exists',
+			inviteMail: 'invite',
+			farmerInviteMail: 'farmer_invite',
+			reportReadyMail: 'report_ready',
+			alertMail: 'alert',
+			digestMail: 'alert_digest'
+		};
+		expect(Object.keys(expected).sort()).toEqual(Object.keys(builders).sort());
+		for (const [name, build] of Object.entries(builders)) for (const m of build()) expect(m.kind, name).toBe(expected[name]);
 	});
 
 	it.each(Object.keys(builders))('%s: user text is escaped in the HTML, never markup, and reaches the mail (positive control)', (name) => {
