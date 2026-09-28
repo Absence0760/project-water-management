@@ -947,6 +947,16 @@ run "background_jobs" {
     error_message = "EventBridge must tick the worker every 5 minutes."
   }
   assert {
+    condition = (
+      aws_cloudwatch_event_target.worker_tick.retry_policy[0].maximum_retry_attempts == 0 &&
+      aws_cloudwatch_event_target.worker_tick.retry_policy[0].maximum_event_age_in_seconds == 300 &&
+      aws_lambda_function_event_invoke_config.worker_tick.function_name == aws_lambda_function.worker.function_name &&
+      aws_lambda_function_event_invoke_config.worker_tick.maximum_retry_attempts == 0 &&
+      aws_lambda_function_event_invoke_config.worker_tick.maximum_event_age_in_seconds == 300
+    )
+    error_message = "A worker tick must never be retried or outlive one tick (EventBridge target and Lambda's async queue): stale ticks would pile up for hours on a struggling worker."
+  }
+  assert {
     condition     = aws_lambda_permission.worker_tick.principal == "events.amazonaws.com" && aws_lambda_permission.worker_tick.source_arn == aws_cloudwatch_event_rule.worker_tick.arn
     error_message = "Only the tick rule may invoke the worker through EventBridge."
   }

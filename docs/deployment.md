@@ -651,7 +651,12 @@ plan-only until the first deploy):
   Lambda. An **EventBridge rule ticks the worker every 5 minutes** as well,
   which runs retries whose backoff has passed and anything whose wake-up was
   lost, so a failed `SendMessage` (logged, never an error to the user) delays
-  a job by at most one tick.
+  a job by at most one tick. A tick is never retried: the EventBridge target
+  and the worker's async invoke config both allow 0 retries and a maximum
+  event age of 300 s, so a tick that can't be delivered or is throttled is
+  dropped (counted by `worker-tick-failed` or `worker-throttles`) instead of
+  queueing for up to 24 hours (EventBridge's default) or 6 hours (Lambda's)
+  and piling stale ticks onto a struggling worker; the next tick recovers.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
@@ -682,7 +687,7 @@ plan-only until the first deploy):
   stopped altogether (the tick rule disabled, reserved concurrency set to 0)
   alarms even though it emits no backlog metric; `worker-tick-failed`,
   EventBridge `FailedInvocations` > 0 on the tick rule (the invoke
-  permission or target broken); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
+  permission or target broken; with no retries each failed tick counts once); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
   (a metric filter on the worker's `job_dead` log line). A project with the

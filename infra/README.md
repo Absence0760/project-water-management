@@ -83,7 +83,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   `maximum_concurrency`, 4 × 2, or throttled messages burn receive counts into
   the DLQs), triggered by the SQS `jobs`, `ingest-results`, `render-results`
   and `mail-events` queues (partial batch failures reported, so one bad record
-  is retried alone) and an EventBridge tick every 5 minutes
+  is retried alone) and an EventBridge tick every 5 minutes (never retried,
+  by EventBridge or Lambda's async queue, and dropped after 300 s: the next
+  tick recovers)
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
   `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
   downloads the data feeds' sources: no VPC, no database URL or secret, 512
@@ -474,7 +476,9 @@ and regional DKIM domains), MAIL FROM, DMARC, TLS-required configuration set,
 the least-privilege `ses:SendEmail` policy and the VPC endpoint; the
 background-job stack (queue SSE, the DLQ after 5 receives, visibility ≥ 6×
 the worker timeout, the worker's runtime / size / concurrency / VPC / env and
-no owner credentials, the 5-minute tick and its invoke permission, the SQS
+no owner credentials, the 5-minute tick, its invoke permission and its
+zero-retry, 300-second-maximum-age delivery (EventBridge target and Lambda
+async config), the SQS
 event source, the SQS endpoint's policy naming only the two roles and the
 jobs queue, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
