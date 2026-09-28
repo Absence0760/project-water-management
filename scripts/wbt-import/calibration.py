@@ -106,12 +106,12 @@ def extract_calibration_window(wb) -> dict[str, Any]:
         try:
             out[key] = _iso_or_none(_cell(wb, name))
         except (KeyError, ValueError):
-            pass
+            out[key] = None  # missing or unreadable: the engine's default
     try:
         use = _cell(wb, "rUseFlow")
         out["calibrationFlowKind"] = _USE_FLOW_KINDS.get(int(use)) if isinstance(use, (int, float)) else None
     except (KeyError, ValueError):
-        pass
+        out["calibrationFlowKind"] = None  # missing or unreadable: the engine's default
     if out["calibrationStart"] and out["calibrationEnd"] and out["calibrationStart"] > out["calibrationEnd"]:
         out["calibrationStart"] = out["calibrationEnd"] = None
     return out
