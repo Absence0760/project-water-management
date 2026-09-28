@@ -2792,18 +2792,18 @@ from the WP:
 
 ## Firm yield (WP-3.6)
 
-- [ ] **Contributor policies.** The roadmap widens `job` INSERT/SELECT and
-      `yield_result` SELECT/INSERT to "a contributor, for a job on a scenario
-      they own". WP-3.3's first slice (044/045) landed the role without them:
-      a contributor reads no job and no yield result
-      (`scenarios/contributor-tables.db.test.ts`), and 045's
-      `yield_result_select` already hides a yield of an application from
-      anyone who can't read it. Trigger: the applicant's view of results
-      (followups.md § Applicants); a new migration adds those policies from
-      045's `yield_result_select` and 016's `job_insert` (023 for the job
-      kinds), with the positive-control DB test (a contributor
-      queues a yield for their own scenario, not another's or a run) and the
-      fail-closed test (the job dies once they lose the role).
+- [x] **Contributor policies.** Done in `095_contributor_yield` (issue #73):
+      a contributor queues a `yield` job as themselves on an application they
+      own, for their own farm's dam or one its `node.add` ops add, and reads,
+      inserts and trims only the results they computed; an assessor's yield
+      on the same application stays hidden from them. The API
+      (`yieldInputFor`) refuses a hidden dam with an unknown id's words, and
+      the handler re-checks as the acting user through the new
+      `JobHandler.alsoRole`, so the job dies once they lose the role or the
+      dam. Tests: `yield/contributor.db.test.ts` (positive controls and
+      fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
+      allowlist). Left for the applicant's view of results below: a Yield
+      panel on the Applicant view (the API is ready).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
       browser for an instant preview, through WP-1.17's preview worker
       (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist

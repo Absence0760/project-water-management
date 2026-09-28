@@ -155,14 +155,18 @@ describe('a contributor and the tables added alongside WP-3.3', () => {
 		expect((await applicant.call('GET', `${P()}/allocations`)).status).toBe(403);
 	});
 
-	it('reads no yield result and no job (a viewer does)', async () => {
+	// Their own yield jobs and results on their own application: yield/contributor.db.test.ts (095).
+	it('reads no yield result and no job of anyone else (a viewer does)', async () => {
 		const y = await insertYield({ runId: published });
 		const job = await withUser(owner.id, async (db) => (await db.query<{ id: string }>(`INSERT INTO job (project_id, kind) VALUES ($1, 'rerun') RETURNING id`, [projectId])).rows[0]!.id);
 		expect(await idsAs(applicant, 'yield_result')).toEqual([]);
 		expect(await idsAs(applicant, 'job')).toEqual([]);
 		expect(await idsAs(viewer, 'yield_result')).toContain(y);
 		expect(await idsAs(viewer, 'job')).toContain(job);
-		expect((await applicant.call('GET', `${P()}/yield?runId=${published}`)).status).toBe(403);
+		const listed = await applicant.call('GET', `${P()}/yield?runId=${published}`);
+		expect(listed.status).toBe(200);
+		expect(listed.body.results).toEqual([]);
+		expect((await viewer.call('GET', `${P()}/yield?runId=${published}`)).body.results.map((r: { id: string }) => r.id)).toContain(y);
 	});
 
 	it('reads no API key (the owner does)', async () => {

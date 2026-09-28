@@ -89,6 +89,17 @@ const LOWER_THAN_EDITOR: Partial<Record<JobKind, { role: Role; why: string }>> =
 	report_render: { role: 'viewer', why: 'a viewer can already read everything the PDF holds (the report route); emailing others is refused to viewers by POST /reports' }
 };
 
+/**
+ * The kinds that also run for one role below their own (JobHandler.alsoRole),
+ * exactly that role, with the handler checking what it may do there.
+ */
+const ALSO_ROLE: Partial<Record<JobKind, { role: Role; why: string }>> = {
+	yield: {
+		role: 'contributor',
+		why: "an applicant's yield of a dam of their own application; yieldInputFor refuses any other target (yield/contributor.db.test.ts, 095_contributor_yield)"
+	}
+};
+
 describe('every job kind re-checks the acting user’s role when it runs', () => {
 	it('every kind has a handler, none runs for less than a viewer, and only the allowlisted kinds run for less than an editor', () => {
 		expect(Object.keys(handlers).sort()).toEqual([...JOB_KINDS].sort());
@@ -96,6 +107,7 @@ describe('every job kind re-checks the acting user’s role when it runs', () =>
 			const role = handlers[kind]!.role;
 			expect(rank[role], kind).toBeGreaterThanOrEqual(rank.viewer);
 			expect(role, kind).toBe(LOWER_THAN_EDITOR[kind]?.role ?? 'editor');
+			expect(handlers[kind]!.alsoRole, kind).toBe(ALSO_ROLE[kind]?.role);
 		}
 	});
 
@@ -117,6 +129,16 @@ describe('every job kind re-checks the acting user’s role when it runs', () =>
 		expect(await jobRow(atRole.id)).toEqual({ status: 'dead', last_error: 'the job’s payload is not valid' });
 
 		const refused = `the user who queued this job no longer has the ${role} role on the project`;
+		// Its extra role, exactly (a contributor, not a viewer): past the check, to the payload.
+		const also = handler.alsoRole;
+		if (also) {
+			const a = await signUp(`RoleAlso-${kind}`);
+			expect((await owner.call('POST', `/projects/${pid}/members`, { email: a.email, role: also })).status).toBe(201);
+			const { job: atAlso } = await withUser(u.id, (db) => enqueueJob(db, { projectId: pid, kind, payload: probe, maxAttempts: 1 }));
+			await asOwner('UPDATE job SET acting_user_id = $2 WHERE id = $1', [atAlso.id, a.id]);
+			await tick();
+			expect(await jobRow(atAlso.id)).toEqual({ status: 'dead', last_error: 'the job’s payload is not valid' });
+		}
 		// Demoted one rung (an editor to viewer), where there is one below that still reads the project.
 		if (role === 'editor') {
 			const { job: demoted } = await enqueue(u, pid, kind, probe);

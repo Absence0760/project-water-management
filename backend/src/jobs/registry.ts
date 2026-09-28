@@ -54,6 +54,13 @@ export interface JobContext<P> {
 export interface JobHandler<P = unknown> {
 	/** The least project role the acting user must still hold when the job runs. */
 	role: Role;
+	/**
+	 * One role below `role` that may also run it (exactly that role, not the
+	 * ones between), when the handler itself checks what that role may do:
+	 * `yield`'s contributor, on their own application only (yieldInputFor,
+	 * 095_contributor_yield). Allowlisted in trust.security.db.test.ts.
+	 */
+	alsoRole?: Role;
 	/** Validates the stored payload. A payload that fails is dead at once. */
 	payload: z.ZodType<P>;
 	/**

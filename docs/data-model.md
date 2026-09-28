@@ -1861,8 +1861,18 @@ No job table of its own: `job` holds status, progress and errors.
 - **Indexes**: `(run_id, created_at DESC)` and `(scenario_id, created_at
   DESC)` (partial; they serve the list and cover those keys), `project_id`,
   `job_id`, `created_by`.
-- **Not yet**: the roadmap's "a contributor reads and inserts for their own
-  scenario" waits for WP-3.3's `contributor` role ([followups.md](./followups.md)).
+- **Contributors** (`095_contributor_yield`, WP-3.3): an applicant inserts,
+  reads and deletes only the results they computed themselves
+  (`created_by`), on an application they own, for a dam of it they may see
+  (`app_contributor_yield_target`: their farm links on it, or a node its own
+  `node.add` ops add). An assessor's yield on the same application stays
+  hidden from them. `job` gets the matching pair: a contributor queues a
+  `yield` job as themselves for such a target (never on a saved run) and
+  reads their own yield jobs. The API narrows the target further
+  (`yield/store.ts` `yieldInputFor`: an added node that took a hidden node's
+  id answers as an unknown one), and the job re-checks it as its acting user
+  (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
+  (`yield/contributor.db.test.ts`).
 
 ### Scenario sweeps (062_scenario_sweeps.sql)
 
