@@ -1,31 +1,53 @@
 // The disclaimer printed on the report and its results (roadmap WP-3.13,
-// Step 2 decision D10). DRAFT: the wording has not been through the client's
-// legal adviser; docs/followups.md § Blocking releases (operator) tracks that,
-// and docs/legal/disclaimer-review.md is the pack sent for the review (its
-// quotes are tested against this file).
-// Every surface that shows it also shows `DISCLAIMER.status === 'draft'` as a
-// visible "draft, pending legal review" line, so an unreviewed text can't
+// Step 2 decision D10). The wording below was accepted by the operator on
+// 2026-09-28, after a pre-counsel review; no external legal adviser has
+// reviewed it. docs/legal/disclaimer-review.md is the review pack (its quotes
+// are tested against this file).
+// A future edit may go back to `status: 'draft'` (with a `draft-` version):
+// every surface that shows the disclaimer then shows DISCLAIMER_DRAFT_NOTE as
+// a visible "draft, pending legal review" line, so an unreviewed text can't
 // pass for the agreed one. Change the words → bump `version` (a sign-off
 // records the version it was shown).
 
 export interface Disclaimer {
 	/** Bumped whenever a word changes; sign-offs and packs record it. */
 	version: string;
-	/** 'draft' until the client's legal adviser has agreed the wording. */
+	/** 'draft' while the wording is unreviewed; 'agreed' once accepted. */
 	status: 'draft' | 'agreed';
 	paragraphs: readonly string[];
 }
 
 export const DISCLAIMER: Disclaimer = {
-	version: 'draft-2026-09-26',
-	status: 'draft',
+	version: '2026-09-28',
+	status: 'agreed',
 	paragraphs: [
-		'These results come from a computer model of the catchment. They are estimates made from the historical record of rainfall and flow, not measurements or forecasts, and they can be wrong.',
-		'This report supports, and does not replace, the specialist hydrology report. Any decision on a water-use licence belongs to the responsible authority (National Water Act, sections 27 and 41).',
-		'Modelled shortfalls, curtailment and equitable shares are not official restrictions or allocations. Only a notice from the Water User Association or the responsible authority is.',
-		'The platform operator gives no hydrological opinion. The model, its inputs and its results are the responsibility of the person who made the run and, where the run is signed off, of the professional who signed it.'
+		'These results are estimates from a computer model of the catchment. They are not measurements or predictions of what will happen, and they can be wrong.',
+		'This report supports, and does not replace, the specialist hydrology report. It is not an authorisation to use water. Only the responsible authority decides that, under the National Water Act, 1998 (sections 22, 27 and 41).',
+		'Modelled shortfalls, curtailment and equitable shares are not official restrictions or allocations. Only a notice from a body with the legal power to make one, such as the responsible authority or the water user association, is.',
+		'The person who made this run chose its inputs and settings. Where the run is signed off, the signature is that professional’s own statement.',
+		'This software is provided as it is. Its operator did not prepare this report, checks none of its inputs or results, and, as far as the law allows, accepts no responsibility to anyone who relies on it. Have the results checked by a qualified hydrologist before you act on them. Account holders’ use of the service is governed by its Terms of use.'
 	]
 };
 
 /** The line shown beside a draft disclaimer. */
 export const DISCLAIMER_DRAFT_NOTE = 'Draft wording, pending the client’s legal review (decision D10).';
+
+/**
+ * Where a forecast run's forecast rain came from (stored with the run,
+ * backend runs/execute.ts): 'chirps_gefs' when every forecast day was written
+ * by a CHIRPS-GEFS data feed, 'other' otherwise (an uploaded forecast, or
+ * days a person wrote over).
+ */
+export type ForecastRainSource = 'chirps_gefs' | 'other';
+
+/**
+ * The line a report of a forecast run prints (WP-2.12): from `from` (its
+ * first forecast day, YYYY-MM-DD as the report prints dates) the run uses
+ * forecast rain, not recorded rain. It credits CHIRPS-GEFS only when the
+ * run recorded that source; any other or unknown source gets the plain line,
+ * so an uploaded forecast is never attributed to it.
+ */
+export function FORECAST_RAIN_NOTE(from: string, source?: ForecastRainSource | null): string {
+	const what = source === 'chirps_gefs' ? 'forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M)' : 'forecast rain';
+	return `From ${from}, this run uses ${what}, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`;
+}

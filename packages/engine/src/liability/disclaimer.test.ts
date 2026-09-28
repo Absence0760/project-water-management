@@ -3,7 +3,7 @@
 // a changed word fails here until the pack sent to the adviser says it too.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { DISCLAIMER } from './disclaimer';
+import { DISCLAIMER, FORECAST_RAIN_NOTE } from './disclaimer';
 import { SIGNOFF_STATEMENT_VERSION, signoffStatement } from './signoff';
 
 const PACK = readFileSync(new URL('../../../../docs/legal/disclaimer-review.md', import.meta.url), 'utf8');
@@ -13,6 +13,22 @@ describe('DISCLAIMER', () => {
 		// Flipping to agreed without a new version (or the reverse) would let
 		// a sign-off record a draft version for agreed words.
 		expect(DISCLAIMER.version.startsWith('draft-')).toBe(DISCLAIMER.status === 'draft');
+	});
+});
+
+describe('FORECAST_RAIN_NOTE', () => {
+	it('credits CHIRPS-GEFS, with its citation, only for a CHIRPS-GEFS forecast', () => {
+		expect(FORECAST_RAIN_NOTE('2026-09-29', 'chirps_gefs')).toBe(
+			'From 2026-09-29, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.'
+		);
+	});
+
+	it('names no product for any other or unknown source (an uploaded forecast)', () => {
+		const plain =
+			'From 2026-09-29, this run uses forecast rain, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.';
+		expect(FORECAST_RAIN_NOTE('2026-09-29', 'other')).toBe(plain);
+		expect(FORECAST_RAIN_NOTE('2026-09-29', null)).toBe(plain);
+		expect(FORECAST_RAIN_NOTE('2026-09-29')).toBe(plain);
 	});
 });
 

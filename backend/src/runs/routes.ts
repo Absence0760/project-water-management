@@ -109,8 +109,11 @@ export const runRoutes = new Hono<AuthEnv>()
 			// names its nodes and fills the workbook's Inputs sheet. Its input
 			// series' dates, hashes and product/version (inputSeries; the values
 			// are in series_blob): the fit record compares the CHIRPS version.
+			// forecastRainSource: a forecast run's rain source ('chirps_gefs' |
+			// 'other', runs/execute.ts forecastRainSource), null otherwise.
 			const { rows } = await db.query(
-				`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model, r.inputs->'series' AS "inputSeries" ${FROM_RUN}
+				`SELECT ${RUN_META}, r.summary, r.inputs->'settings' AS settings, r.inputs->'model' AS model, r.inputs->'series' AS "inputSeries",
+					r.inputs->>'forecastRainSource' AS "forecastRainSource" ${FROM_RUN}
 				 WHERE r.project_id = $1 AND r.id = $2`,
 				[
 					id,

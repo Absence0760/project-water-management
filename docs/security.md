@@ -1816,9 +1816,10 @@ readable by anyone. The rules:
 Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 - **Disclaimer.** Every report ends with the disclaimer (engine
-  `DISCLAIMER`, versioned). It is **draft** wording until the client's legal
-  adviser agrees it (decision D10; an operator item in followups.md §
-  Blocking releases), and the report says so in bold beside it.
+  `DISCLAIMER`, versioned). Version `2026-09-28` is agreed: the operator
+  accepted it after a pre-counsel review, not an external legal adviser
+  (decision D10). A wording marked `draft` shows a bold draft line beside
+  it on every surface.
 - **Known limitations can't be left out quietly.** The report's validation
   statement lists every open engine-audit.md item, generated from the doc;
   a test fails when the committed list and the doc differ.

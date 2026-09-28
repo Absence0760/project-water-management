@@ -4529,8 +4529,12 @@ one). It changes no run output; 0.31.2 only adds it to the engine's surface.
   `limitations.test.ts` parses the doc again and fails when the two differ,
   so an audit item's status can't change without the list following it.
 
-The same module holds the draft disclaimer (`DISCLAIMER`, versioned, marked
-draft until the client's legal review, Step 2 D10) and the sign-off
+The same module holds the disclaimer (`DISCLAIMER`, versioned; version
+`2026-09-28`, status `agreed`: accepted by the operator after a pre-counsel
+review, Step 2 D10; a later edit may mark it `draft` again, and every surface
+then shows `DISCLAIMER_DRAFT_NOTE`), the forecast-rain line a forecast run's
+report prints (`FORECAST_RAIN_NOTE(from, source)`, naming CHIRPS-GEFS and its DOI
+only for source `chirps_gefs`, a plain line otherwise) and the sign-off
 statement (`signoffStatement(run)`, `signoff-2`): the ten confirmations (the
 signer's identity and registration, competence, conflicts of interest, the
 input data, then WP-3.13's calibration, EWR tables, works, assurance levels,

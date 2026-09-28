@@ -143,6 +143,31 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 }
 
 /**
+ * Make a project's forecast series look written by a CHIRPS-GEFS feed, every
+ * day of it, as the feed's ingest leaves it (time_series.feed_id + feed_days,
+ * 031_feed_days): a disabled feed with no acting user, which no worker tick
+ * (data-feeds.spec.ts) ever finds due, owns the series' days. A forecast run
+ * then records CHIRPS-GEFS as its rain source. The real ingest path is
+ * covered by backend/src/feeds/forecast.db.test.ts.
+ */
+export async function plantGefsForecastDays(projectId: string): Promise<void> {
+	await withDb(async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled)
+			 SELECT $1, 'chirps_gefs', '{"cells":[{"lat":-20.1,"lon":25.1}]}'::jsonb, 'rain_forecast_mm', name, false
+			 FROM time_series WHERE project_id = $1 AND kind = 'rain_forecast_mm' RETURNING id`,
+			[projectId]
+		);
+		if (rows.length !== 1) throw new Error(`project ${projectId}: no single forecast series`);
+		await db.query(
+			`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange(start_date, start_date + cardinality("values")))
+			 WHERE project_id = $1 AND kind = 'rain_forecast_mm'`,
+			[projectId, rows[0]!.id]
+		);
+	});
+}
+
+/**
  * Move an application's submission `days` back (and its decision, if it has
  * one, to the day after), as one submitted that long ago sits in the
  * database. The scenario trigger stamps both with now() and never lets them

@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
+	type ForecastRainSource,
 	forecastSplit,
 	gaugeSeriesKey,
 	resolveFitRecord,
@@ -296,6 +297,8 @@ export interface RunPlan {
 	privateLabel?: boolean;
 	/** For a run of the live model: the series each input kind was read from (stored as run_input_series.series_id, 056). */
 	seriesIds?: InputSeriesIds;
+	/** A forecast run of the live model: where its forecast days' rain came from (inputs.forecastRainSource, forecastRainSource below). */
+	forecastRainSource?: ForecastRainSource;
 }
 
 /** The engine half of a run: no database. Injectable in tests (runOutsideTransaction). */
@@ -323,9 +326,30 @@ export async function prepareRun(
 	trigger: RunTrigger = 'manual'
 ): Promise<RunPlan> {
 	const { input: live, seriesIds } = await loadLiveInput(db, projectId);
-	if (trigger === 'forecast' && !forecastSplit(live).forecastFrom) throw new NoForecastRainError();
+	const forecastFrom = trigger === 'forecast' ? forecastSplit(live).forecastFrom : null;
+	if (trigger === 'forecast' && !forecastFrom) throw new NoForecastRainError();
 	const input = trigger === 'forecast' ? live : withoutForecastTail(live);
-	return { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds };
+	const plan: RunPlan = { projectId, label: typeof label === 'function' ? label(input) : label, input, trigger, seriesIds };
+	if (forecastFrom) plan.forecastRainSource = await forecastRainSource(db, seriesIds.rain_forecast_mm, forecastFrom);
+	return plan;
+}
+
+/**
+ * Where a forecast run's forecast rain came from, for the report's line
+ * (engine FORECAST_RAIN_NOTE): 'chirps_gefs' only when a CHIRPS-GEFS data
+ * feed wrote every day of the forecast series from the first forecast day to
+ * its end (time_series.feed_id + feed_days, 031_feed_days: a person's upload
+ * or edit releases the days it covers, so any such day makes it 'other').
+ */
+export async function forecastRainSource(db: Db, seriesId: string | undefined, from: string): Promise<ForecastRainSource> {
+	if (!seriesId) return 'other';
+	const { rows } = await db.query<{ gefs: boolean | null }>(
+		`SELECT f.source = 'chirps_gefs' AND s.feed_days @> daterange($2::date, s.start_date + cardinality(s."values")) AS gefs
+		 FROM time_series s LEFT JOIN data_feed f ON f.project_id = s.project_id AND f.id = s.feed_id
+		 WHERE s.id = $1`,
+		[seriesId, from]
+	);
+	return rows[0]?.gefs === true ? 'chirps_gefs' : 'other';
 }
 
 /**
@@ -460,7 +484,9 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 				} satisfies SnapshotSeries
 			])
 		),
-		...(scenario ? { scenario } : {})
+		...(scenario ? { scenario } : {}),
+		// A forecast run: where its forecast rain came from (the report credits CHIRPS-GEFS only on 'chirps_gefs').
+		...(plan.forecastRainSource ? { forecastRainSource: plan.forecastRainSource } : {})
 	};
 	// The id is made here, not RETURNING'd: RETURNING needs the new row to pass
 	// a SELECT policy, and a contributor running their application reads no

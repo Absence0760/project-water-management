@@ -1499,8 +1499,9 @@ must build WP-2.15 Phase B.
 ### WP-3.13 Liability and credibility: disclaimers, validation statement, sign-off
 
 - **Status (2026-09-26): first slice built**, on the report route
-  (`/projects/:id/report`): the draft disclaimer (pending the client's legal
-  review, followups.md § Blocking releases), `validationStatement` with the
+  (`/projects/:id/report`): the disclaimer (draft then; agreed by the
+  operator on 2026-09-28 after a pre-counsel review, version `2026-09-28`),
+  `validationStatement` with the
   limitations generated from engine-audit.md (`pnpm gen:limitations`, a
   doc-parsing test), and the immutable sign-off on a **run**
   (`036_signoff.sql`, `GET/POST /projects/:id/runs/:runId/signoffs`, bound

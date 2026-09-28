@@ -3778,8 +3778,9 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   the EWR (or months met) and the season-end storage. Then the years not
   used and why (outside the record, a rainless day, the season itself,
   over the 40-year limit, a failed member), members the engine refused,
-  the engine's warnings, and the draft disclaimer's first and third
-  paragraphs with its draft note (D10).
+  the engine's warnings, and the disclaimer's first and third paragraphs
+  (not predictions; not official restrictions or allocations), with the
+  draft note only while the wording is marked draft (D10).
 - **No recommendation.** The panel reports how past years went at each
   level and never picks one (a unit test holds the view model to that, and
   the e2e spec checks the rendered panel).
@@ -4356,7 +4357,13 @@ exists, says so with a link to Runs & results.
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
   legacy-model warning for a stored run from before engine 1.0.0, the run's
-  summary sentence, contents), then numbered
+  summary sentence, for a forecast run (WP-2.12) the engine's
+  `FORECAST_RAIN_NOTE` line, "From <first forecast day>, this run uses
+  forecast rain, not recorded rain. …", as a warning (`report/sections.ts`
+  `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
+  doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
+  `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
+  uploaded forecast, then the contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;
@@ -4407,9 +4414,11 @@ exists, says so with a link to Runs & results.
     can't be signed; a viewer
     sees neither. Loaded with the report (`GET …/signoffs`), so
     `data-report-ready` waits for it and the server-side PDF prints it.
-  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): the draft
-    wording with a bold *Draft wording, pending the client's legal review
-    (decision D10)* line and its version, until the wording is agreed.
+  - **Disclaimer** (`Disclaimer.svelte`, engine `DISCLAIMER`): its five
+    paragraphs and its version (`2026-09-28`, agreed: accepted by the
+    operator after a pre-counsel review). While the engine marks a wording
+    `draft`, a bold *Draft wording, pending the client's legal review
+    (decision D10)* line stands above it.
 
   Not yet: the published-by line and restriction notice (WP-2.3), changes
   since the previous publication (WP-2.4).
