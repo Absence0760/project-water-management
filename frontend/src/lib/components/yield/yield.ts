@@ -18,9 +18,13 @@ export const ASSURANCE_OPTIONS = [
 export const HISTORICAL_NOTE =
 	'Historical: these numbers replay the one rainfall and flow record the project has. A stochastic yield, over many possible records, can be materially lower; it is not computed here.';
 
-/** The runs a yield can use on the Network tab: runs of the model itself, newest first. */
+/**
+ * The runs a yield can use on the Network tab: runs of the model itself,
+ * newest first, never a forecast run (issue #51: a yield is judged on
+ * history, and the API refuses a forecast run with 409).
+ */
 export function modelRuns(runs: readonly RunMeta[] | null | undefined): RunMeta[] {
-	return (runs ?? []).filter((r) => !r.scenarioId);
+	return (runs ?? []).filter((r) => !r.scenarioId && r.trigger !== 'forecast');
 }
 
 /** The status line for a yield job; null once it is done (the results show instead). */

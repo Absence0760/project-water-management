@@ -60,7 +60,10 @@ export function yieldDedupeKey(r: YieldRequest): string {
  * The model input the yield runs on, under the caller's RLS: a run's stored
  * input, or a scenario's ops applied to its base run's (refused when an op
  * doesn't apply, as a scenario run is). A run or scenario of another project,
- * or one the caller can't see, is 404.
+ * or one the caller can't see, is 404. A forecast run is 409 (issue #51): its
+ * input runs on past the record on forecast rain (WP-2.12), and a firm yield
+ * is a historical figure, so it is judged on history, as sweeps and
+ * scenarios are (a scenario's base is refused the same way, loadBaseInput).
  */
 export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest, 'runId' | 'scenarioId'>): Promise<ModelInput> {
 	if (r.scenarioId) {
@@ -69,8 +72,9 @@ export async function yieldInput(db: Db, projectId: string, r: Pick<YieldRequest
 		if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
 		return check.input;
 	}
-	const { rows } = await db.query('SELECT 1 FROM model_run WHERE project_id = $1 AND id = $2', [projectId, r.runId]);
+	const { rows } = await db.query<{ trigger: string }>('SELECT "trigger" FROM model_run WHERE project_id = $1 AND id = $2', [projectId, r.runId]);
 	if (!rows[0]) throw new ApiError(404, 'run not found');
+	if (rows[0].trigger === 'forecast') throw new ApiError(409, 'that run is a forecast run; a yield is judged on history, so use an ordinary run of the model');
 	try {
 		return await loadRunInput(db, r.runId!);
 	} catch (err) {

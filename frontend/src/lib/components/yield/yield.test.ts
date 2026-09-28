@@ -91,7 +91,8 @@ describe('labels', () => {
 		expect(patternLabel(new Array(12).fill(1))).toBe('custom monthly shape');
 		expect(assuranceLabel(1)).toBe('firm');
 		expect(assuranceLabel(0.95)).toBe('95 % assurance');
-		const runs = [{ id: 'a', scenarioId: 's' }, { id: 'b', scenarioId: null }, { id: 'c' }] as RunMeta[];
+		const runs = [{ id: 'f', scenarioId: null, trigger: 'forecast' }, { id: 'a', scenarioId: 's' }, { id: 'b', scenarioId: null, trigger: 'manual' }, { id: 'c' }] as RunMeta[];
+		// A forecast run is never offered (issue #51: a yield is judged on history).
 		expect(modelRuns(runs).map((r) => r.id)).toEqual(['b', 'c']);
 		expect(modelRuns(null)).toEqual([]);
 	});

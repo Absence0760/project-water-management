@@ -1450,6 +1450,8 @@ back in:
   left out (`forecastDays`); a chart drawing the curves cuts its series with
   `beforeForecast` (`views/fdc.ts`). A forecast run's table is the ordinary
   run's to the bit;
+- firm yield (§2.13) refuses a forecast run (409), as sweeps, outlooks and
+  scenarios do;
 - the automatic fit (§2.10b): the browser's `fitInput` (`frontend/src/lib/calibration/fit.ts`)
   applies `withoutForecastTail` to the live input (`GET /model-input`, which
   carries the forecast series whole) after the form's settings are in, as a
@@ -4869,7 +4871,9 @@ the model is unchanged (the version moved to 0.34.0 for the new API).
 **Definitions.** Every result is **historical**: it replays the one record
 the project has. Stochastic yield, from many synthetic records, can be
 materially less reliable than the historical firm yield (Water SA 2022) and
-is Step 4; the UI says so next to every number.
+is Step 4; the UI says so next to every number. Never on a forecast run
+(issue #51): its input runs on past the record on forecast rain (§2.4f), so
+the API refuses one (409) and the Network tab doesn't offer it.
 
 - **Historical firm yield** of dam *d*: the largest draft *x* (m³/day) that
   *d* supplies on every day of the record without a single failure day, the
