@@ -167,8 +167,11 @@ in; `404` = not found **or** not a member (RLS hides the project — the API nev
 reveals that a project exists); `403` = member without the needed role (also a
 cross-origin form post rejected by the CSRF check, a write RLS refused, or, in
 production, a request that didn't come through CloudFront); `400` =
-validation (`details` = zod issues), or `{ error: "invalid JSON" }` for a
-body that isn't JSON (`backend/src/http/body.ts`); `409` = conflict (duplicate name or email,
+validation (`details` = zod issues), `{ error: "invalid JSON" }` for a
+body that isn't JSON (`backend/src/http/body.ts`), or `{ error: "bad request
+path" }` on any route for a path with an escaped unreserved character
+(`%61`), an escaped `/`, `\` or `%`, a malformed escape or a dot segment
+(`backend/src/http/rawPath.ts`; `%20` and non-ASCII escapes are fine); `409` = conflict (duplicate name or email,
 already a member, last owner/admin); `413` = request body over 4 MB (5 MB
 for `POST /projects/import`), a series over 60 000 days, or an export over 5 MB; `429` = an email was sent to this
 address moments ago, or sign-in is locked for this address (with
