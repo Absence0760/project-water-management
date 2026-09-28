@@ -21,7 +21,7 @@
 		"terser": "5.51.2",
 		"typescript": "5.5.4",
 		"vite": "5.4.0",
-		"vitest": "^2.1.9",
+		"vitest": "^4.1.11",
 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
 	},
 	"type": "module",
