@@ -39,7 +39,7 @@
 	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
+	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
@@ -110,7 +110,7 @@
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
 			const [pairs, so, cmp] = await Promise.all([
 				Promise.all(
-					CATCHMENT_FLOW_KEYS.filter(([, k]) => have(k)).map(
+					[...CATCHMENT_FLOW_KEYS, EWR_RULE_KEY].filter(([, k]) => have(k)).map(
 						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
 					)
 				),
@@ -378,7 +378,7 @@
 							height={260}
 							log
 							series={ewrLines}
-							caption="Days the outflow dips below the dashed EWR line count as EWR not met."
+							caption={`Days the outflow dips below the pragmatic EWR line count as EWR not met.${flows.ewrRule ? ` ${EWR_RULE_CAPTION}` : ''}`}
 						/>
 						{#each summary.ewrAssurance ?? [] as site (site.nodeId ?? '(outlet)')}
 							<div class="sub"><EwrAssurancePanel sites={[site]} print /></div>

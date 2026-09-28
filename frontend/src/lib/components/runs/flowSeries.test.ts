@@ -72,6 +72,16 @@ describe('ewrChartSeries', () => {
 			['Pragmatic EWR', 'step']
 		]);
 	});
+
+	it('adds the outlet’s Reserve rule requirement when the run has one (issue #51)', () => {
+		const out = ewrChartSeries({ simulated: d(2), ewr: d(1), ewrRule: d(3) }, conv);
+		expect(out.map((s) => [s.label, s.style, s.color])).toEqual([
+			['Simulated outflow', undefined, '--series-2'],
+			['Pragmatic EWR', 'step', '--chart-ref'],
+			['Reserve rule requirement', 'step', '--series-3']
+		]);
+		expect(out[2]!.values).toEqual([30, 30]);
+	});
 });
 
 describe('fdcCaption (issue #51)', () => {

@@ -653,8 +653,15 @@ put the results first; its first screen follows board A1 of the redesign
   The **days below the reserve are shaded** (LineChart's `shade`), from the
   run's own `ewr_shortfall` series (`overview/summaryChart.ts`
   `belowReserve`: negative on a day the engine counted as EWR not met), so
-  the caption's count ("Shaded: the 23 days the outflow was below the dashed
-  EWR line") is the EWR card's; a run that always met it says so. On the
+  the caption's count ("Shaded: the 23 days the outflow was below the pragmatic
+  EWR line") is the EWR card's; a run that always met it says so. When the
+  outlet has a Reserve rule table the chart also draws its requirement
+  (the run's catchment-level `ewr_rule` series, `EWR_RULE_KEY`) as a second
+  step line, *Reserve rule requirement*, and the caption says it is each
+  month's requirement judged month by month, so the chart shows the line the
+  "Reserve rules met" headline is judged by, not only the pragmatic EWR
+  (issue #51; the printed report's EWR chart too). A rule table at another
+  site isn't drawn: this chart's flow is the outlet's. On the
   first screen it fills its panel (`fill`: the plot gets the panel's height
   less the chart's own head, legend and caption, measured from the drawn
   chart). It is its own chunk, since it pulls in uPlot, so the page's first

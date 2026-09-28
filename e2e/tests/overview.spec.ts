@@ -177,7 +177,7 @@ test('the flow chart: 30 days / 1 year / All, and the days below the reserve sha
 	await expect(fig).toHaveAttribute('data-shaded', /^\d+$/);
 	const card = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="ewr"]');
 	const notMet = /(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1];
-	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the dashed EWR line (EWR not met).`);
+	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the pragmatic EWR line (EWR not met).`);
 });
 
 test('needs attention cards and supply by unit: coloured by how much it matters, each unit opens its drawer, and both lead to Units & supply', async ({ page, owner }) => {
