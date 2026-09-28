@@ -86,7 +86,7 @@ The checklist for these is issue #62; the history scrub is #63.
       the adviser reviews both languages. Left: send the pack, get the
       agreed wording, apply it (§ 5 of the pack).
 
-- [ ] **Client data in git history (#63).** Decided 2026-09-28: the public
+- [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
       stays in the private `project-water-management-old`, because rewriting
       reworded prose across every past commit can't be shown complete. Done:
@@ -96,9 +96,10 @@ The checklist for these is issue #62; the history scrub is #63.
       medium findings), the value list joined the terms list in
       `infra-secrets/water-management/` (so `pnpm check:terms` guards it),
       and the issues that quote client data are re-filed clean at their own
-      numbers, the originals archived there. Left: publish (rename the old
-      repo, create the new one, move the issues, make it public), then tick
-      this.
+      numbers, the originals archived there. Published 2026-09-28: the old
+      repo is the private `-old`, the new one holds that single commit and
+      issues #1–77 on their old numbers, and `pnpm check:terms` passes on
+      its tree and history (checked from a fresh mirror clone).
 
 - [ ] **GitHub plan.** The repo is private on a free plan, so:
       - required reviewers and branch protection aren't available, which means
