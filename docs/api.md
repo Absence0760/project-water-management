@@ -1062,7 +1062,7 @@ internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, and an external one with a return share above 0.
 
-A demand object's `schedule` (engine ≥ 1.17.0, migration 100, issue #90 Q4,
+A demand object's `schedule` (engine ≥ 1.17.0, migration 105, issue #90 Q4,
 [model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
 default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
 ('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo

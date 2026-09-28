@@ -105,7 +105,7 @@ export async function currentFor(db: Db, projectId: string, nodeId: string): Pro
  * least k − 1 other holders. cutBeyondShare is measured against that share,
  * so it goes with it (it would bound K_tot). The farm page and the
  * data-subject export (auth/export.ts) both go through here. Counted as
- * `nodeId`'s own farmer would count it (096), so the WUA's "Preview as
+ * `nodeId`'s own farmer would count it (104), so the WUA's "Preview as
  * farmer" hides the even share where that farmer's page does.
  */
 export async function farmerProjection(db: Db, projectId: string, nodeId: string, view: FarmProjection): Promise<FarmProjection> {
