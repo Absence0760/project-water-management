@@ -331,7 +331,12 @@ in the `inputs` jsonb). Runs stored before it have no hash. Since migration
 same hash (see **Stored run inputs** below), so re-uploading a series no
 longer stops an older run being recomputed; a run saved before 020 still
 can't be. `GET /compare/runs` returns the whole snapshot, and
-`GET …/runs/:runId` its `settings`. The compare "what changed" list (engine `diffInputs`, see
+`GET …/runs/:runId` its `settings`. A forecast run's snapshot also holds
+`forecastRainSource` (`chirps_gefs` | `other`, `runs/execute.ts`
+`forecastRainSource`): `chirps_gefs` only when the forecast series'
+`feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
+the first forecast day to the series' end (031_feed_days), read when the
+run is made; the report's forecast line credits CHIRPS-GEFS only then. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.

@@ -17,10 +17,18 @@ describe('DISCLAIMER', () => {
 });
 
 describe('FORECAST_RAIN_NOTE', () => {
-	it('names the first forecast day, the forecast product and its citation', () => {
-		expect(FORECAST_RAIN_NOTE('2026-09-29')).toBe(
+	it('credits CHIRPS-GEFS, with its citation, only for a CHIRPS-GEFS forecast', () => {
+		expect(FORECAST_RAIN_NOTE('2026-09-29', 'chirps_gefs')).toBe(
 			'From 2026-09-29, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.'
 		);
+	});
+
+	it('names no product for any other or unknown source (an uploaded forecast)', () => {
+		const plain =
+			'From 2026-09-29, this run uses forecast rain, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.';
+		expect(FORECAST_RAIN_NOTE('2026-09-29', 'other')).toBe(plain);
+		expect(FORECAST_RAIN_NOTE('2026-09-29', null)).toBe(plain);
+		expect(FORECAST_RAIN_NOTE('2026-09-29')).toBe(plain);
 	});
 });
 

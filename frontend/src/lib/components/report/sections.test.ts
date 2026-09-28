@@ -79,13 +79,23 @@ describe('isReportReady', () => {
 });
 
 describe('forecastNote', () => {
-	it('gives a forecast run the forecast-rain line from its first forecast day', () => {
-		const summary = { forecast: { from: '2022-01-29', to: '2022-02-11' } } as unknown as Pick<Run['summary'], 'forecast'>;
-		expect(forecastNote(summary)).toBe(FORECAST_RAIN_NOTE('2022-01-29'));
-		expect(forecastNote(summary)).toMatch(/^From 2022-01-29, this run uses forecast rain \(CHIRPS-GEFS/);
+	type F = Pick<Run, 'summary' | 'forecastRainSource'>;
+	const forecastRun = (source?: Run['forecastRainSource']): F =>
+		({ summary: { forecast: { from: '2022-01-29', to: '2022-02-11' } }, ...(source !== undefined ? { forecastRainSource: source } : {}) }) as unknown as F;
+
+	it('credits CHIRPS-GEFS on a forecast run whose forecast days a CHIRPS-GEFS feed wrote', () => {
+		expect(forecastNote(forecastRun('chirps_gefs'))).toBe(FORECAST_RAIN_NOTE('2022-01-29', 'chirps_gefs'));
+		expect(forecastNote(forecastRun('chirps_gefs'))).toMatch(/^From 2022-01-29, this run uses forecast rain \(CHIRPS-GEFS/);
 	});
 
-	it('gives any other run none', () => {
-		expect(forecastNote({} as Pick<Run['summary'], 'forecast'>)).toBeNull();
+	it('gives any other forecast run (uploaded, or its source not recorded) the plain line', () => {
+		const plain = /^From 2022-01-29, this run uses forecast rain, not recorded rain\./;
+		expect(forecastNote(forecastRun('other'))).toMatch(plain);
+		expect(forecastNote(forecastRun(null))).toMatch(plain);
+		expect(forecastNote(forecastRun())).toMatch(plain);
+	});
+
+	it('gives a run with no forecast days none', () => {
+		expect(forecastNote({ summary: {} } as unknown as F)).toBeNull();
 	});
 });

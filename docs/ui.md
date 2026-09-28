@@ -4359,8 +4359,11 @@ exists, says so with a link to Runs & results.
   legacy-model warning for a stored run from before engine 1.0.0, the run's
   summary sentence, for a forecast run (WP-2.12) the engine's
   `FORECAST_RAIN_NOTE` line, "From <first forecast day>, this run uses
-  forecast rain (CHIRPS-GEFS, …), not recorded rain. …", as a warning
-  (`report/sections.ts` `forecastNote`), then the contents), then numbered
+  forecast rain, not recorded rain. …", as a warning (`report/sections.ts`
+  `forecastNote`); it names "(CHIRPS-GEFS, Climate Hazards Center,
+  doi:10.15780/G2PH2M)" only when the run's `forecastRainSource` is
+  `chirps_gefs` (a CHIRPS-GEFS feed wrote every forecast day), never for an
+  uploaded forecast, then the contents), then numbered
   sections: **Network** (the schematic of the run's own model, farms
   coloured by supply; the screen scrolls the usual drawing, paper prints the
   wrapped one, in page-high bands when it is taller than a page;

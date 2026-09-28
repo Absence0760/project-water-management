@@ -6,6 +6,7 @@ import type {
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
+	ForecastRainSource,
 	InputChange,
 	MemberResult,
 	NoticeText,
@@ -679,6 +680,13 @@ export interface Run extends RunMeta {
 	 * saved before 032). The fit record compares the CHIRPS one.
 	 */
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
+	/**
+	 * A forecast run's rain source (GET …/runs/:runId only): 'chirps_gefs'
+	 * when a CHIRPS-GEFS feed wrote every forecast day, 'other' otherwise; null
+	 * for any other run and a forecast run stored before it was recorded. The
+	 * report credits CHIRPS-GEFS only on 'chirps_gefs'.
+	 */
+	forecastRainSource?: ForecastRainSource | null;
 	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model

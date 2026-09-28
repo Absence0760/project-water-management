@@ -83,6 +83,10 @@ describe('POST /runs { forecast }', () => {
 		const list = (await viewer.call('GET', `/projects/${projectId}/runs`)).body.runs as { id: string; trigger: string; forecastFrom: string | null }[];
 		expect(list.find((r) => r.id === f.body.run.id)).toMatchObject({ trigger: 'forecast', forecastFrom: FORECAST_FROM });
 		expect(list.find((r) => r.id === o.body.run.id)).toMatchObject({ trigger: 'manual', forecastFrom: null });
+		// Where the forecast rain came from (the report's line): an uploaded forecast is 'other', never CHIRPS-GEFS
+		// (feeds/forecast.db.test.ts has the positive control); an ordinary run records none.
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${f.body.run.id}`)).body.run.forecastRainSource).toBe('other');
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${o.body.run.id}`)).body.run.forecastRainSource).toBeNull();
 	});
 
 	it('refuses a forecast run with no forecast tail (409, nothing stored), and a viewer (403)', async () => {

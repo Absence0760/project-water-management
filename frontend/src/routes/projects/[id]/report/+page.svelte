@@ -281,8 +281,8 @@
 						</p>
 					{/if}
 					<p class="lede">{runSentence(summary)}</p>
-					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain. -->
-					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(summary)}</p>{/if}
+					<!-- A forecast run (WP-2.12): the days from its first forecast day use forecast rain (CHIRPS-GEFS named only when it was the source). -->
+					{#if summary.forecast}<p class="alert alert-warning" data-testid="report-forecast-note">{forecastNote(run)}</p>{/if}
 					<nav aria-label="Contents">
 						<ol>
 							{#each sections.slice(1) as c (c.id)}<li><a href="#rep-{c.id}">{c.title}</a></li>{/each}

@@ -4533,7 +4533,8 @@ The same module holds the disclaimer (`DISCLAIMER`, versioned; version
 `2026-09-28`, status `agreed`: accepted by the operator after a pre-counsel
 review, Step 2 D10; a later edit may mark it `draft` again, and every surface
 then shows `DISCLAIMER_DRAFT_NOTE`), the forecast-rain line a forecast run's
-report prints (`FORECAST_RAIN_NOTE(from)`, naming CHIRPS-GEFS and its DOI) and the sign-off
+report prints (`FORECAST_RAIN_NOTE(from, source)`, naming CHIRPS-GEFS and its DOI
+only for source `chirps_gefs`, a plain line otherwise) and the sign-off
 statement (`signoffStatement(run)`): the five confirmations of WP-3.13, the
 limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).

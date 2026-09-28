@@ -33,9 +33,21 @@ export const DISCLAIMER: Disclaimer = {
 export const DISCLAIMER_DRAFT_NOTE = 'Draft wording, pending the client’s legal review (decision D10).';
 
 /**
+ * Where a forecast run's forecast rain came from (stored with the run,
+ * backend runs/execute.ts): 'chirps_gefs' when every forecast day was written
+ * by a CHIRPS-GEFS data feed, 'other' otherwise (an uploaded forecast, or
+ * days a person wrote over).
+ */
+export type ForecastRainSource = 'chirps_gefs' | 'other';
+
+/**
  * The line a report of a forecast run prints (WP-2.12): from `from` (its
  * first forecast day, YYYY-MM-DD as the report prints dates) the run uses
- * CHIRPS-GEFS forecast rain, not recorded rain.
+ * forecast rain, not recorded rain. It credits CHIRPS-GEFS only when the
+ * run recorded that source; any other or unknown source gets the plain line,
+ * so an uploaded forecast is never attributed to it.
  */
-export const FORECAST_RAIN_NOTE = (from: string): string =>
-	`From ${from}, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`;
+export function FORECAST_RAIN_NOTE(from: string, source?: ForecastRainSource | null): string {
+	const what = source === 'chirps_gefs' ? 'forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M)' : 'forecast rain';
+	return `From ${from}, this run uses ${what}, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`;
+}

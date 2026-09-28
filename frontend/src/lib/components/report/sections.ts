@@ -44,9 +44,13 @@ export function reportSections(run: ReportRun, opts: { impact?: boolean } = {}):
 	return out;
 }
 
-/** The cover's forecast-rain line: only for a forecast run (summary.forecast, WP-2.12), from its first forecast day; else null. */
-export const forecastNote = (summary: Pick<Run['summary'], 'forecast'>): string | null =>
-	summary.forecast ? FORECAST_RAIN_NOTE(summary.forecast.from) : null;
+/**
+ * The cover's forecast-rain line: only for a forecast run (summary.forecast,
+ * WP-2.12), from its first forecast day, crediting CHIRPS-GEFS only when the
+ * run recorded it as the source (an uploaded forecast gets the plain line); else null.
+ */
+export const forecastNote = (run: Pick<Run, 'summary' | 'forecastRainSource'>): string | null =>
+	run.summary.forecast ? FORECAST_RAIN_NOTE(run.summary.forecast.from, run.forecastRainSource) : null;
 
 /** The charts drawn by these sections. */
 export function reportCharts(sections: readonly ReportSection[]): ReportChartId[] {
