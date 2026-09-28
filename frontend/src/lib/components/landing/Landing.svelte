@@ -28,7 +28,7 @@
 	const abs = (path: string) => new URL(`${base}${path}`, page.url).href;
 	const title = $derived(t('Water Management: daily water balance for a catchment'));
 	const description = $derived(
-		t('Model a catchment day by day, from rainfall to river: what each farm is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
+		t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
 	);
 	// The contour texture, set inline on each element that shows it: a url() in
 	// an inline style resolves against the page, where one passed through a

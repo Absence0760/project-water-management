@@ -39,12 +39,12 @@ export const en = {
 
 	// The farmer invite (WP-2.2).
 	'mail.farmer.subject': '{inviter} has given you access to {farms} in {catchment}',
-	'mail.farmer.heading': 'Your farm on {product}',
+	'mail.farmer.heading': 'Your hydrological unit on {product}',
 	'mail.farmer.body': '{inviter} has given you access to {farms} in {catchment}.',
-	'mail.farmer.privacy': "You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.",
+	'mail.farmer.privacy': "You will see your own hydrological unit's water, dam and any restriction notice, and nothing about your neighbours' hydrological units.",
 	'mail.farmer.estimate':
 		'The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.',
-	'mail.farmer.yourFarm': 'your farm',
+	'mail.farmer.yourFarm': 'your hydrological unit',
 	'mail.farmer.and': 'and',
 
 	// Accepting an invite: shared by every invite email.
@@ -61,7 +61,7 @@ export const en = {
 
 	// Alert emails (WP-2.13): the frame shared by every alert and the digest.
 	'mail.alert.subject': '{what} — {project}',
-	'mail.alert.openFarm': 'Open your farm',
+	'mail.alert.openFarm': 'Open your hydrological unit',
 	'mail.alert.openProject': 'Open the catchment',
 	'mail.alert.model':
 		'This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.',
@@ -129,7 +129,7 @@ export const sections: Record<string, string> = {
 	'mail.reset': 'Email: reset your password. Sent from “Forgot password?” on the sign-in page.',
 	'mail.exists': 'Email: sent when someone signs up with an address that already has a confirmed account. It says so, and offers a new password in case the owner forgot theirs. The sign-up page itself says the same thing either way (“check your email”), so it can’t be used to find out who has an account.',
 	'mail.farmer':
-		'Email: the farmer invite. The WUA gives a farmer access to their farm(s) in a catchment. {farms} is one or more farm names joined with “and” (or “your farm”).',
+		'Email: the farmer invite. The WUA gives a farmer access to their hydrological unit(s), the model’s name for a farm, in a catchment. {farms} is one or more hydrological unit names joined with “and” (or “your hydrological unit”).',
 	'mail.invite':
 		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet.',
 	'mail.alert':
@@ -140,8 +140,8 @@ export const sections: Record<string, string> = {
 
 /** Notes for single keys, where the section doesn't say enough. */
 export const notes: Partial<Record<MailKey, string>> = {
-	'mail.farmer.yourFarm': 'Stands in for {farms} when the invite names no farm.',
-	'mail.farmer.and': 'Joins the last two farm names: “Vaalbank and Rustenvrede”.',
+	'mail.farmer.yourFarm': 'Stands in for {farms} when the invite names no hydrological unit.',
+	'mail.farmer.and': 'Joins the last two hydrological unit names: “Vaalbank and Rustenvrede”.',
 	'mail.alert.subject': 'The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment.',
 	'mail.alert.model.dam.staff': 'Under a dam alert sent to the WUA’s staff, not the farmer: the same as mail.alert.model, about a member’s dam.',
 	'mail.alert.model.staff': 'Under the river-flow forecast alert, which only the WUA’s staff get.',

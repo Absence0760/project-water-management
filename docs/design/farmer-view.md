@@ -32,7 +32,7 @@ often in Afrikaans. In **under 30 seconds** they can answer:
 | Q1 | How much water will I get? | The notice, "Water you received", the dam's days-left line, "Next 14 days" |
 | Q2 | Will I be curtailed? | The notice (official). "Looking back" and the "Why?" screen (modelled) |
 | Q3 | How is my dam doing? | The dam card and the dam screen |
-| Q4 | Am I treated fairly next to my neighbours, without seeing their data? | "Why?" step 1 (the even share), "Your farm on the river", the privacy line |
+| Q4 | Am I treated fairly next to my neighbours, without seeing their data? | "Why?" step 1 (the even share), "Your hydrological unit on the river", the privacy line |
 
 Three rules shape everything else:
 
@@ -146,7 +146,7 @@ A farm with no dam (`damCapacityM3 = 0`) gets no dam card and no dam screen.
 | "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment" | counts from the network topology (E6) | D1 option (b): counts only, no names, no positions |
 | "The same rules apply to every farm" | fixed text. True by construction: the curtailment and attribution rules are symmetric and order-free (model.md §2.7b, "Order-free") | – |
 | "River at Sandspruit Outlet: below its reserve on all of the last 30 days" | `catchment_view`: days not met over the last 30 days at the outlet | A count, never a flow volume (§10.3) |
-| "Your farm's figures are seen by you, anyone else linked to this farm, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my farm" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5). Built: `GET …/farm/:nodeId/access` (names and roles, no emails) |
+| "Your farm's figures are seen by you, anyone else linked to this hydrological unit, and the WUA's staff and modeller. Other farmers can't see them, and you can't see theirs." + "Who can see my hydrological unit" | fixed text, true by WP-2.1's RLS and FV-D5; the link lists the people with access (name and role) | One wording everywhere (§11 F5). Built: `GET …/farm/:nodeId/access` (names and roles, no emails) |
 
 ## 4. Gaps: asks of the engine, the data model and the API
 
@@ -186,6 +186,7 @@ breakdown; not in the first release.
 | Natural shortfall | "only because of low rain" | "net weens min reën" | natural |
 | Modelled | "worked out by the model" / "the model's estimate" | "deur die model bereken" | simulated |
 | WUA | "the WUA" | "die WGV" (Watergebruikersvereniging) | – |
+| A farm node (`kind: 'farm'`; the workspace's hydrological unit) | "hydrological unit" ("your hydrological unit", "Who can see my hydrological unit"): the client's choice, issue #90 Q6, the same term as the workspace, chosen knowing it is more technical for farmers | "hidrologiese eenheid" / "hidrologiese eenhede" ("jou hidrologiese eenheid"; the i18n-translator and i18n-checker agents, 2026-09-28) | "farm" for the node ("farmer" for the person and "farm dam" for the kind of dam stay) |
 
 Jargon appears only behind "What do these words mean?" (WP-2.6 acceptance),
 and the Afrikaans help carries the same entries. The Afrikaans column was
@@ -254,7 +255,7 @@ The prototype has one board per screen, numbered as below.
 One column, 16 px gutters, max width 560 px centred on larger screens (the
 roadmap's "desktop is the same column"). Cards, top to bottom:
 
-1. **Header:** "My farm", the Afrikaans / English switch, Menu.
+1. **Header:** "My hydrological unit", the Afrikaans / English switch, Menu.
 2. **Title block:** the farm's name (h1), the catchment, then "Published by
    the WUA on 12 Jan 2024. Data up to 10 Jan 2024." Amber, with a clock icon
    and "N days ago", when `stale` (`series/freshness.ts` `STALE_DAYS`).
@@ -269,7 +270,7 @@ roadmap's "desktop is the same column"). Cards, top to bottom:
 7. **Next 14 days** (hidden until WP-2.12).
 8. **Last 12 months** chart, with "Show the numbers".
 9. **Compared with last season.**
-10. **Your farm on the river**, with the privacy line and "Who can see my
+10. **Your hydrological unit on the river**, with the privacy line and "Who can see my
     farm".
 11. Links: download my figures (CSV); what do these words mean; email me
     when the WUA posts a notice or my dam gets low (WP-2.13).
@@ -289,7 +290,7 @@ Applied to the E7 headline:
 | OK | ≥ 90 % and no storage part above the floor | "Model: OK" |
 | Watch | 70 % ≤ headline < 90 %, or a storage part ≥ the floor | "Model: watch" |
 | Short | < 70 % | "Model: short" |
-| none | demand under `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) in the season | no chip and no %: "Your farm needed very little water this season." A storage part still shows its line on "Why?" |
+| none | demand under `DEMAND_PCT_FLOOR_M3_DAY` (1 m³/day) in the season | no chip and no %: "Your hydrological unit needed very little water this season." A storage part still shows its line on "Why?" |
 
 The floor for the storage part is the same 1 m³/day, so crumbs don't flip a
 farm to Watch. The band never uses the warning or danger fills: those belong
@@ -316,13 +317,13 @@ screen-reader user can jump by heading.
 
 | State | Design |
 | --- | --- |
-| Loading (5) | Skeleton cards the height of the real ones (no layout shift), `aria-busy` on `main`, one visually hidden `role="status"` "Loading your farm…", and after 3 s "Slow signal? This can take a moment." |
+| Loading (5) | Skeleton cards the height of the real ones (no layout shift), `aria-busy` on `main`, one visually hidden `role="status"` "Loading your hydrological unit…", and after 3 s "Slow signal? This can take a moment." |
 | No publication (6) | The farm's name, a dashed empty card "Your WUA hasn't published figures yet", "Email me when it's ready" (the publication alert, WP-2.13), "Questions? Contact [WUA]" |
 | Error (7) | `role="alert"`, "We couldn't load your farm", "Your figures are safe; nothing was changed", Try again (the `LoadState` retry), and a contact line after a second failure. No raw error text (CLAUDE.md rule 6) |
 | Offline or out of date (8) | A dark status strip "No signal. These are the figures saved on this phone at 07:42 on 19 Jan 2024." over a reduced view (the notice, received %, dam %). Charts, "Why?" and downloads say they need a connection. Stale data gets the amber dates line, online or not |
 | Several farms (9) | `/farm`: a card per linked farm across projects: name, catchment, the notice level, received % and dam % (or "no dam", or "not published yet"). A farmer with one farm goes straight to its view |
 | Preview as farmer (viewer+) | The same page under a banner "You're previewing Vaalbank as its farmer sees it". A farmer never sees it |
-| Access removed | The next request answers 403 or 404: "You no longer have access to this farm. Contact [WUA]." The saved copy is cleared (§9) |
+| Access removed | The next request answers 403 or 404: "You no longer have access to this hydrological unit. Contact [WUA]." The saved copy is cleared (§9) |
 | No last season | "Not available: the model's data starts on [date]." |
 
 ## 7. Visual design and accessibility
@@ -430,7 +431,7 @@ irrigators. So the design proposes:
 - a board member who farms gets the **farmer** role on their own farm, like
   any other farmer; a catchment-only board view (aggregates at ≥ `k`, no
   per-farm rows) is a candidate for WP-2.14 if boards ask for one;
-- "Who can see my farm" lists everyone with access to the farm, by name and
+- "Who can see my hydrological unit" lists everyone with access to the farm, by name and
   role, so the promise can be checked;
 - the wording is one sentence everywhere (§3 Q4).
 
@@ -483,7 +484,7 @@ when the WUA board is the neighbours.
 | 1. How much water will I get? | ~25 s for "what I got". Nothing for the rest of the season; "What the model expects … you would have" read as a forecast | Past-tense "Looking back" card; days-left line on the dam; E3 tracked |
 | 2. Will I be cut? (each notice level) | ~5 to 8 s. An amber "Watch" chip under an amber notice, and under "no restriction", confused official with modelled | Neutral dashed model card; a loud "No restriction from the WUA"; the model card collapses under a restriction |
 | 3. How is my dam doing, when do I stop? | ~12 s for "how". No "when"; the stop label was 11 px | Days-left line; 13 px minimum; the zero-stop-level case |
-| 4. Am I treated fairly? Can neighbours see mine? | ~30 s (bottom of the page). The screens leaked nothing, but the series behind them could, and the "WUA" in the privacy line may be neighbours | Flow series out of the allowlist; `k` by holders; FV-D5; one privacy sentence and "Who can see my farm" |
+| 4. Am I treated fairly? Can neighbours see mine? | ~30 s (bottom of the page). The screens leaked nothing, but the series behind them could, and the "WUA" in the privacy line may be neighbours | Flow series out of the allowlist; `k` by holders; FV-D5; one privacy sentence and "Who can see my hydrological unit" |
 | 5. Explain "Why?" back | Arithmetic checked out against the engine, but the headline counted the even share as water | E7 headline; per-charged-day figures; the two counts split |
 
 **Findings and what changed.** Every finding is either designed in (✅) or
@@ -495,7 +496,7 @@ tracked with a trigger (⏭).
 | F2 | "What the model expects" reads as a forecast; the modeller's window may not be this season | high, defect | ✅ "Looking back", past tense; curtailment over the season (§2, E5) |
 | F3 | The prototype showed a farm short with its dam half full, which the engine can't produce | high, defect | ✅ Prototype rebuilt from an engine run (`figures.ts`); the "short … at its stop level" line (§3 Q1) |
 | F4 | No quota, so a % cut can't become m³; "received" not labelled modelled | high, gap | ✅ Modelled label on the supply card. ⏭ E8 in Step 3 |
-| F5 | "Only you and the WUA" isn't safe when the board is neighbours; two wordings | high, defect | ✅ One wording, "Who can see my farm", FV-D5 for the client and the CISO / Security Analyst |
+| F5 | "Only you and the WUA" isn't safe when the board is neighbours; two wordings | high, defect | ✅ One wording, "Who can see my hydrological unit", FV-D5 for the client and the CISO / Security Analyst |
 | F6 | `inflow_upstream`, gauge and outlet flows reveal neighbours in small catchments | medium, defect | ✅ Out of the farmer allowlists (§10.3) |
 | F7 | `k` counts farm nodes, not owners | medium, defect | ✅ `k` by holders (§10.3) |
 | F8 | The model band used the notice colours | medium, defect | ✅ Neutral band (§6.2), loud official "no restriction" |
@@ -573,7 +574,7 @@ settled something this spec left open:*
 - "Compared with last season" from `lastSeason`, not `/history`.
 - The saved copy and its rules (§9).
 - Routes: also `routes/farm/[projectId]/why/+page.svelte`,
-  `routes/farm/[projectId]/dam/+page.svelte` and a "Who can see my farm"
+  `routes/farm/[projectId]/dam/+page.svelte` and a "Who can see my hydrological unit"
   panel. Components: the roadmap's list plus `NoticeCard` and `LookingBack`.
 - Afrikaans boards reviewed by the translator before the build starts.
 - E9 (release works) as a follow-up.

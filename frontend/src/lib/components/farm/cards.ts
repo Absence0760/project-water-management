@@ -95,7 +95,7 @@ export function systemName(efficiency: number): string {
 }
 
 // i18n-section: farm.supply
-export const littleNeed = () => t('Your farm needed very little water this season.');
+export const littleNeed = () => t('Your hydrological unit needed very little water this season.');
 
 /** "Short on 16 days in Nov and Dec, all when your dam was down to its stop level." */
 export function shortLine(farm: FarmProjection): string {
@@ -309,14 +309,14 @@ export function compareCard(farm: FarmProjection): CompareVm {
 
 // i18n-section: farm.river
 /** The one privacy sentence, the same everywhere (§3 Q4, §11 F5). */
-export const privacy = () => t('Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.');
+export const privacy = () => t('Your hydrological unit’s figures are seen by you, anyone else linked to this hydrological unit, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.');
 
 /** "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment. The same rules apply to every farm." */
 export function positionLine(view: FarmView): string {
 	const { farmsUpstream: up, farmsDownstream: down, farmCount: n } = view.context;
-	const upText = up === 0 ? t('No farm is') : up === 1 ? t('1 farm is') : t('{n} farms are', { n: up });
+	const upText = up === 0 ? t('No hydrological unit is') : up === 1 ? t('1 hydrological unit is') : t('{n} hydrological units are', { n: up });
 	const downText = down === 0 ? t('none is') : down === 1 ? t('1 is') : t('{n} are', { n: down });
-	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm.', { up: upText, down: downText, count: count(FARMS, n) });
+	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every hydrological unit.', { up: upText, down: downText, count: count(FARMS, n) });
 }
 
 /** "River at Sandspruit Outlet: below its reserve on all of the last 30 days." A count, never a flow volume. */
@@ -330,15 +330,15 @@ export function outletLine(view: FarmView): Rich {
 /** "Who can see my farm" (§10.2): the people, by name, from GET …/farm/:nodeId/access; the roles alone if that fails. */
 export const whoCanSee = () => ({
 	// i18n-section: farm.who
-	heading: t('Who can see my farm'),
-	people: [t('You'), t('Anyone else linked to this farm'), t('The WUA’s staff'), t('The WUA’s modeller')],
-	not: t('Other farmers can’t see your farm’s figures, and you can’t see theirs.'),
+	heading: t('Who can see my hydrological unit'),
+	people: [t('You'), t('Anyone else linked to this hydrological unit'), t('The WUA’s staff'), t('The WUA’s modeller')],
+	not: t('Other farmers can’t see your hydrological unit’s figures, and you can’t see theirs.'),
 	loading: t('Loading the names…'),
 	failed: t('Couldn’t load the names just now. Your WUA can tell you who these people are.')
 });
 
 const ACCESS_ROLES = {
-	farmer: msg('linked to this farm'),
+	farmer: msg('linked to this hydrological unit'),
 	viewer: msg('WUA, can read'),
 	editor: msg('WUA, can change the model'),
 	owner: msg('WUA, manages who has access'),
@@ -364,20 +364,20 @@ export function farmSummaryLine(farm: FarmProjection): string {
 	return `${got} · ${dam}`;
 }
 
-export const farmsPrivacy = () => t('Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.');
+export const farmsPrivacy = () => t('Each hydrological unit’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.');
 
 // ---- States (§6.5, boards 5 to 8) ---------------------------------------------
 
 const STATE_KEYS = {
 	// i18n-section: farm.state
-	loading: msg('Loading your farm…'),
+	loading: msg('Loading your hydrological unit…'),
 	slow: msg('Slow signal? This can take a moment.'),
-	errorTitle: msg('We couldn’t load your farm'),
+	errorTitle: msg('We couldn’t load your hydrological unit'),
 	errorText: msg('Check your signal and try again. Your figures are safe; nothing was changed.'),
 	noPublication: msg('Your WUA hasn’t published figures yet'),
 	noPublicationText: msg('When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.'),
 	contact: msg('Questions? Contact your WUA.'),
-	removed: msg('You no longer have access to this farm. Contact your WUA.'),
+	removed: msg('You no longer have access to this hydrological unit. Contact your WUA.'),
 	needsConnection: msg('Charts, “Why?” and downloads need a connection.'),
 	updating: msg('Updating…')
 };

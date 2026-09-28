@@ -17,7 +17,7 @@ export function fmtM3Day(m3Day: number): string {
 export const DAYS = plural({ one: 'day', other: 'days' });
 export const WEEKS = plural({ one: 'week', other: 'weeks' });
 export const POINTS = plural({ one: 'point', other: 'points' });
-export const FARMS = plural({ one: 'farm', other: 'farms' });
+export const FARMS = plural({ one: 'hydrological unit', other: 'hydrological units' });
 
 /** A whole-number count with its noun: count(DAYS, 1) → "1 day", count(FARMS, 3) → "3 farms". */
 export function count(noun: Plural, n: number): string {

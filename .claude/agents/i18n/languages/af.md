@@ -29,8 +29,12 @@ catchment, "WGV" for WUA. "m³" and "ML" stay unchanged (never translated).
 One Afrikaans term per English word, the same everywhere it appears:
 "gelyke deel" (even share), "die rivier se reserwe" (the river's reserve),
 "pomp minder" (pump less), "deur die model bereken" (calculated by the
-model), "die WGV" (the WUA). §5.1 has the fuller table, and the words to
-avoid.
+model), "die WGV" (the WUA), "hidrologiese eenheid" / "hidrologiese
+eenhede" (hydrological unit, the app's name for a farm node since issue #90
+Q6; "jou hidrologiese eenheid", "die bladsy oor jou hidrologiese eenheid"
+for "your hydrological unit page"; never "plaas" for the node, though
+"boer" stays for the farmer and "plaasdam" for a farm dam). §5.1 has the
+fuller table, and the words to avoid.
 
 ## Ordinal forms
 
@@ -40,6 +44,9 @@ with `{n}`.
 ## Provenance
 
 Every farmer-facing string was first translated 2026-09-26 (issue #49): 505
-site messages, 70 email strings and the 8 farmer glossary entries. No
+site messages, 70 email strings and the 8 farmer glossary entries. The
+strings that named a farm node were re-translated 2026-09-28 for "hydrological
+unit" (issue #90 Q6): 64 site messages, 4 email strings and the 8 glossary
+entries. No
 native speaker has reviewed it yet (docs/followups.md § Afrikaans) — flag
 anything you're unsure of rather than guessing.

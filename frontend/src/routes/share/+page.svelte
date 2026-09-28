@@ -124,12 +124,12 @@
 					{#if result.months}
 						<FlowChart months={result.months} />
 					{:else}
-						<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few farms, the river’s flows could reveal a farm’s water use.')}</p>
+						<p class="fine" role={result.chartFailed ? 'status' : undefined}>{result.chartFailed ? t('Couldn’t load the flow chart just now.') : t('The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.')}</p>
 					{/if}
 
 					<section class="card" aria-labelledby="about-h">
 						<h2 id="about-h">{t('About this page')}</h2>
-						<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.')}</p>
+						<p>{t('This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.')}</p>
 						<p class="sub">{farmsLine(cv)}</p>
 						<!-- That it is a model estimate that can be wrong is the caveat under the heading. -->
 						<p class="fine">{t('This link works until it expires or is withdrawn.')}</p>
