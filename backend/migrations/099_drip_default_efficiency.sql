@@ -1,4 +1,4 @@
--- 095_drip_default_efficiency — a new farm's irrigation efficiency defaults to
+-- 099_drip_default_efficiency — a new farm's irrigation efficiency defaults to
 -- drip (0.9) instead of 0.8. Latest definition of the column: 006_farm_dam_ops
 -- (NOT NULL DEFAULT 0.8, CHECK 0 < e <= 1; the CHECK is unchanged).
 --

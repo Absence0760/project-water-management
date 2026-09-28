@@ -1070,7 +1070,7 @@ export const NEW_FARM_IRRIGATION_SYSTEM: IrrigationSystemId = 'drip';
 
 /**
  * Irrigation settings of a new farm (audit N1): drip's efficiency (0.90,
- * NEW_FARM_IRRIGATION_SYSTEM; migration 095 sets the column default to match),
+ * NEW_FARM_IRRIGATION_SYSTEM; migration 099 sets the column default to match),
  * half of its losses returning. Only a newly created farm takes it: a saved
  * farm keeps its stored efficiency, and the run never reads this, so it is
  * not a model change.

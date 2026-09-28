@@ -706,7 +706,7 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
     **Answered by the client, 2026-09-28 (issue #90):**
     - **Default irrigation system:** drip (0.90, SABI 2021). New farms start
       on it; the engine keeps one SABI 2021 table (model.md § Irrigation
-      efficiency, migration 095).
+      efficiency, migration 099).
     - **Demand priority:** senior/junior is enough; a demand with both parts
       is two demand objects (model.md §2.7f).
     - **Demand sources:** meter records, else the reconciliation strategy's

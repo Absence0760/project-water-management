@@ -2642,7 +2642,7 @@ from the WP:
       (drip 0.90, micro 0.82, pivot 0.85, permanent sprinkler 0.80, movable
       sprinkler 0.75, surface 0.70); the crop library's `LIBRARY_SYSTEMS`
       re-exports it and the farmer view names the nearest of it. New farms
-      start on drip (`NEW_FARM_IRRIGATION` e = 0.90; migration 095 sets the
+      start on drip (`NEW_FARM_IRRIGATION` e = 0.90; migration 099 sets the
       column default). Saved farms keep their values (a value off the table
       shows "Other" in the helper); no engine version change, since the run
       reads neither ([model.md § Irrigation efficiency](./model.md)). Still

@@ -1,11 +1,11 @@
-// Migration 095: a new farm's irrigation efficiency defaults to drip (0.9,
+// Migration 099: a new farm's irrigation efficiency defaults to drip (0.9,
 // issue #90), matching the engine's NEW_FARM_IRRIGATION (docs/data-model.md
 // § node). The row-level mapping 006 did is pinned by migration-006.db.test.ts.
 import { NEW_FARM_IRRIGATION } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { asOwner } from '../__tests__/helpers.js';
 
-describe('migration 095: drip as the default irrigation efficiency', () => {
+describe('migration 099: drip as the default irrigation efficiency', () => {
 	it('defaults node.irrigation_efficiency to the engine’s new-farm value, 0.9, and the loss return to 0.5', async () => {
 		const rows = (await asOwner(
 			`SELECT column_name, column_default FROM information_schema.columns
