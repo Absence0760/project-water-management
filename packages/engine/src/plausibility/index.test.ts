@@ -113,6 +113,23 @@ describe('plausibility checks in a run', () => {
 		// Without an observed record there is nothing to naturalise or double-mass; the season comes from natural flow.
 		expect(out.summary.plausibility!.naturalised).toBeNull();
 		expect(out.summary.plausibility!.flowDoubleMass).toBeNull();
+		expect(out.summary.plausibility!.recession).toBeNull();
 		expect(out.summary.plausibility!.drySeason!.source).toBe('natural_flow');
+	});
+
+	it('recession diagnostics (engine ≥ 1.18.0): the calibration record’s dry recessions against the simulated outflow on the same days', () => {
+		const { input: x, natural } = input((sim) => sim.map((v) => v / 86_400));
+		const out = runModelWith(x, () => ({ naturalFlowM3Day: natural }));
+		const r = out.summary.plausibility!.recession!;
+		expect(r.flowKind).toBe('flow_observed_m3s');
+		// Rain is 1 mm every day (at the threshold, so dry): the sine's falling half-years are the recessions, one a year.
+		expect(r.segments.length).toBeGreaterThan(0);
+		expect(r.segments.length).toBeLessThan(8);
+		for (const [a, b] of r.segments) expect(b - a).toBeGreaterThanOrEqual(5);
+		// Observed = simulated: the same fit.
+		expect(r.simulated!.a).toBeCloseTo(r.observed!.a, 9);
+		expect(r.simulated!.b).toBeCloseTo(r.observed!.b, 9);
+		expect(r.agrees).toBeNull();
+		expect(out.summary.warnings.filter((w) => w.startsWith('Recession diagnostics:'))).toHaveLength(1);
 	});
 });
