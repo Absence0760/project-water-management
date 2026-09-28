@@ -5,7 +5,10 @@
 //   2. EWR results split by good-rain and fallback-rain years (./rainSource.ts);
 //   3. the double-mass curve of observed flow against rain (./flowDoubleMass.ts);
 //   4. dry-season low-flow duration curves (./lowFlow.ts), in the dry season
-//      of ./season.ts.
+//      of ./season.ts;
+//   and, from engine 1.18.0, the recession diagnostics (../recession, CR-13):
+//   the calibration record's rain-free recessions against the simulated
+//   outflow's on the same days.
 // They only report and warn: none changes a model result.
 //
 // Checks 1 and 4 also run at each gauge node inside the network that has an
@@ -17,6 +20,7 @@ import type { EwrAssuranceSite } from '../reserve/assurance';
 import type { RunoffModelId } from '../runoff/types';
 import { flowDoubleMass, flowDoubleMassWarning, type FlowDoubleMass } from './flowDoubleMass';
 import { lowFlowCurves, lowFlowWarning, type LowFlowCurves } from './lowFlow';
+import { recessionCheck, recessionWarnings, type RecessionCheck } from '../recession/check';
 import { naturalisedCheck, naturalisedWarning, type NaturalisedCheck } from './naturalised';
 import { rainSourceEwr, rainSourceWarnings, type RainSourceEwr } from './rainSource';
 import { drySeason, seasonMask, type DrySeason } from './season';
@@ -40,6 +44,12 @@ export interface PlausibilityChecks {
 	flowDoubleMass: FlowDoubleMass | null;
 	/** Check 4; null without a dry season. */
 	lowFlow: LowFlowCurves | null;
+	/**
+	 * Recession diagnostics on the calibration record (engine ≥ 1.18.0,
+	 * ../recession); null without one or without rain, absent on runs made
+	 * before 1.18.0.
+	 */
+	recession?: RecessionCheck | null;
 	/**
 	 * Checks 1 and 4 at each gauge node with an observed record of its own
 	 * (engine ≥ 1.4.0), in node-id order; absent when none has one (every
@@ -150,6 +160,10 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 		naturalM3Day: x.naturalM3Day,
 		excluded: x.excluded
 	});
+	const recession =
+		cal && obs && x.rainMm
+			? recessionCheck({ flowKind: cal, observedM3s: obs, simulatedM3Day: x.simulatedM3Day, rainMm: x.rainMm, excluded: x.excluded })
+			: null;
 	const gauges = (x.gauges ?? []).map((g) => gaugeChecks(g, x, season, inSeason));
 	const atGauges = gauges.flatMap((g) => [naturalisedWarning(g.naturalised), lowFlowWarning(g.lowFlow)].flatMap((w) => (w ? [atGauge(g.name, w)] : [])));
 	const warnings = [
@@ -157,11 +171,12 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 		...rainSourceWarnings(rainSource),
 		flowDoubleMassWarning(dm),
 		lowFlowWarning(lowFlow),
+		...recessionWarnings(recession),
 		...(x.gaugeRecordWarnings ?? []),
 		...atGauges
 	].filter((w): w is string => w !== null);
 	return {
-		checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow, ...(gauges.length ? { gauges } : {}) },
+		checks: { drySeason: season, naturalised, rainSource, flowDoubleMass: dm, lowFlow, recession, ...(gauges.length ? { gauges } : {}) },
 		warnings
 	};
 }

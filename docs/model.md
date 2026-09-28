@@ -4542,6 +4542,97 @@ key, no new warning (`gauges.test.ts` pins that the rest of the summary and
 every series are unchanged). The run comparison sets both runs' checks side
 by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
 
+#### Recession diagnostics (engine ≥ 1.18.0, calibration-research.md CR-13)
+
+A fifth check, on the calibration record (`packages/engine/src/recession/`,
+kept in `RunSummary.plausibility.recession`; absent on older runs, null
+without an observed record or rain). After rain stops the river falls at a
+pace set by how the catchment drains; the check compares that pace in the
+record with GR4J's on the same days. Since engine 1.0.0 there is no imported
+recession table to overlay (it went with the legacy model), so the
+segments are a check on the simulated recessions, not a calibration of a
+table. It only reports and warns.
+
+**Segments** (`segments.ts`). The specification is TOSSH (Gnann et al. 2021),
+`util_RecessionSegments.m` with the defaults `sig_RecessionAnalysis.m` passes
+it, plus the rain rule CR-13 asks for (Tallaksen 1995; Stoelzle et al. 2013;
+Dralle et al. 2017):
+
+| Setting | Default | Source |
+| --- | --- | --- |
+| `recessionLength` | 5 days | TOSSH `recession_length` |
+| `nStart` | 1 day dropped after the peak | TOSSH `n_start` |
+| `epsM3s` | 0 (strictly falling) | TOSSH `eps` (mm/timestep there) |
+| start | at the peak | TOSSH `start_of_recession = 'peak'`; the `'baseflow'` start (Lyne–Hollick, `filter_par` 0.925) is not ported |
+| `rainThresholdMm` | 1 mm/day | CR-13 (house default, for the hydrologist) |
+| `dQdtMethod` | `ETS` | TOSSH `dQdt_method` |
+
+A step from day t − 1 to day t is part of a recession when both days' flows
+are recorded, above zero (TOSSH sets zeros to NaN) and not excluded, the
+catchment rain (the run's final rain) on t and on t − 1 is known and at most
+the threshold, and Q(t) < Q(t − 1) + eps. A run of such steps from its peak p
+to its last day e is kept when e − p ≥ `recessionLength` + `nStart`, and the
+segment is [p + `nStart`, e]: at least 6 days with the defaults. A missing
+flow or rain day, a wet day, a zero or a rise ends a run. The rain rule means
+the first step after a storm day can't count (rain the day before), so the
+peak is the day after the storm and the segment starts two days after it.
+The day mask is the run's calibration exclusions; per-day flow quality flags
+(extrapolated, infilled, suspect: CR-18, not built yet) will join the same
+mask. Two departures from TOSSH, both about where a run ends: a run cut off
+by the end of the record is kept like one cut off by a gap (TOSSH drops an
+unpaired last run), and there is no Lyne–Hollick start (the rain rule and
+`nStart` keep the quickflow out).
+
+**−dQ/dt and the fit** (`analysis.ts`, TOSSH `util_dQdt.m` and
+`util_FitPowerLaw.m`). Time in days, Q in m³/s. The default, exponential time
+stepping (Roques et al. 2017, TOSSH's default): from each day i of a segment
+of L days, a least-squares line through Q(i … i + m) gives −dQ/dt (its slope)
+at their mean, weighted by the line's R², with m = 1 + ⌈0.1·L·e^(−1/(γk))⌉ for
+the k-th day and γ the segment's decay rate fitted in semilog space through
+its first day (γ < 0 → 0); it steps while i + m ≤ the segment's last day.
+`BN` (Brutsaert & Nieber 1977) takes Q(t − 1) − Q(t) at the pair's mean,
+`backwards` the same at Q(t) (Thomas et al. 2015). Points whose −dQ/dt is not
+positive are dropped, as TOSSH does. One power law −dQ/dt = a·Q^b is fitted
+through every segment's points (TOSSH `fit_individual = false`, `fitting_type
+= 'linear'`): least squares of log(−dQ/dt) on log Q with each row multiplied
+by its weight (R² floored at 10⁻¹⁸), from 3 points at least whose flows span
+a factor of 1.2 or more (`RECESSION_MIN_Q_RANGE`, not in TOSSH: across a
+narrower range b isn't identifiable, and a simulated flow that barely moved
+gave b ≈ 127 in the engine's fuzz tests); a fit or rate that overflows is
+left out (null), since a summary keeps only finite numbers. a is in
+(m³/s)^(1−b) per day; b = 1 is a linear store (an exponential recession).
+
+**The simulated recession** is the simulated outflow's points on the
+**observed** segments' days, by the same method, fitted the same way (a
+segment with a zero or missing simulated day gives no points). The two are
+compared at the **reference flow**, the median Q of the observed points, by
+the recession rate −dQ/dt ÷ Q = a·Q^(b−1) of each fit (a alone can't be
+compared when the b differ). `rateRatio` = simulated ÷ observed, `bDiff` =
+simulated b − observed b.
+
+**Warnings** (indicative thresholds, engine constants for the hydrologist to
+confirm):
+
+- fewer than **8** segments (`RECESSION_MIN_SEGMENTS`; CR-15: a recession fit
+  from fewer than about 8 isn't stable; TOSSH itself warns below 10): the run
+  says so and the comparison is not judged (`agrees` null);
+- with 8 or more, the simulated rate more than a **factor of 2** from the
+  observed (`RECESSION_RATE_WARN_FACTOR`: a recession halving its flow in half
+  or twice the time), or b more than **0.5** apart (`RECESSION_B_WARN_DIFF`:
+  the method alone moves b by a few tenths, Stoelzle et al. 2013, Jachens et
+  al. 2020), or a simulated outflow that barely falls on those days (no
+  simulated fit), sets `agrees` false and warns, pointing at GR4J's routing
+  and groundwater parameters (X2, X3) and dry-spell abstraction.
+
+The Runs tab's Plausibility checks panel plots log(−dQ/dt) against log Q for
+both, with the two lines ([ui.md](./ui.md)); the points are rebuilt in the
+browser from the run's stored `observed_flow` and `simulated_outflow` with
+the engine's `recessionPoints`, so the summary keeps only the segments and
+fits. The summary CSV has a *Recession diagnostics* block
+([api.md](./api.md#export)). The check stays at the outlet: it doesn't run at
+gauges inside the network. Per-segment fits, bootstrap bands and seasonal
+tags are CR-15.
+
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
 A single run gives one number for EWR days not met, curtailment and the annual

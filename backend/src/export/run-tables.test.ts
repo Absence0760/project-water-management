@@ -1032,7 +1032,37 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Runoff model,gr4j');
 		expect(lines.some((l) => l.startsWith("Q90 on the calibration record's dry-season days,observed gauge,days,"))).toBe(true);
 		expect(lines).toContain('Curve,On the days of,Days,Q1,Q2,Q5,Q10,Q20,Q30,Q40,Q50,Q60,Q70,Q75,Q80,Q85,Q90,Q95,Q98,Q99');
-		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(2);
+		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(3);
+		// A constant record has no recession: the block says so.
+		expect(lines).toContain('Recession diagnostics (−dQ/dt = a·Q^b on rain-free recession segments)');
+		expect(lines).toContain('Record,observed gauge,segments,0,min. length (days),5,days dropped after the peak,1,allowed rise (m³/s),0,rain threshold (mm/day),1,−dQ/dt method,ETS');
+		expect(lines).toContain('observed gauge,too few points to fit');
+		expect(lines).toContain('simulated outflow,too few points to fit');
+		expect(lines).toContain('Simulated recession agrees (indicative),"not judged (fewer than 8 segments, or no observed fit)"');
+	});
+
+	it('writes both recession fits and the comparison (engine ≥ 1.18.0)', () => {
+		const lines = [
+			...plausibilityLines({
+				...checks,
+				recession: {
+					...checks.recession!,
+					segments: [[3, 12]],
+					observed: { a: 0.05, b: 1, points: 40, segments: 9, minQM3s: 0.1, maxQM3s: 9 },
+					simulated: { a: 0.1, b: 1.2, points: 38, segments: 9, minQM3s: 0.1, maxQM3s: 8 },
+					referenceFlowM3s: 1,
+					observedRate: 0.05,
+					simulatedRate: 0.1,
+					rateRatio: 2,
+					bDiff: 0.2,
+					agrees: true
+				}
+			})
+		];
+		expect(lines).toContain('observed gauge,0.05,1,0.05,40,9');
+		expect(lines).toContain('simulated outflow,0.1,1.2,0.1,38,9');
+		expect(lines).toContain('Reference flow (m³/s),1,rate ratio (simulated ÷ observed),2,b difference (simulated − observed),0.2');
+		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
@@ -1056,6 +1086,10 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no observed flow record');
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
+		expect(none).toContain('Run made before engine 1.18.0: no recession diagnostics');
+		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
+			'Not checked: needs an observed flow record and catchment rain'
+		);
 		const lines = [...summaryCsvLines(meta, { ...summary, plausibility: checks })];
 		expect(lines).toContain('Plausibility checks');
 		expect(lines).toContain('Water years judged,2,failed,2');

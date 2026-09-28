@@ -15,6 +15,7 @@ import {
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
 	LOW_FLOW_WARN_FACTOR,
+	RECESSION_MIN_SEGMENTS,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
 	type CalibrationStats,
@@ -332,8 +333,9 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * The hydrologist plausibility checks (engine ≥ 0.25.0, model.md §2.10d): the
  * dry season, then natural vs observed + abstraction per water year, EWR days
  * by rain source, the double-mass check of observed flow against rain and the
- * dry-season low-flow duration curves, then the first and last of those again
- * at each gauge node with a record of its own (engine ≥ 1.4.0). Unrounded.
+ * dry-season low-flow duration curves, the recession diagnostics (engine ≥
+ * 1.18.0), then the first and last of those again at each gauge node with a
+ * record of its own (engine ≥ 1.4.0). Unrounded.
  */
 export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
 	yield csvRow(['Plausibility checks']);
@@ -354,6 +356,8 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	yield* flowDoubleMassLines(p.flowDoubleMass);
 	yield '';
 	yield* lowFlowLines(p.lowFlow);
+	yield '';
+	yield* recessionLines(p.recession);
 	// Checks 1 and 4 at each gauge node with a record of its own (engine ≥ 1.4.0), against the simulated flow there.
 	for (const g of p.gauges ?? []) {
 		yield '';
@@ -479,6 +483,48 @@ function* lowFlowLines(lf: Plausibility['lowFlow']): Generator<string> {
 	}
 	yield csvRow(['Curve', 'On the days of', 'Days', ...lf.points.map((p) => `Q${p}`)]);
 	for (const c of lf.curves) yield csvRow([RECORD_TEXT[c.source] ?? c.source, c.pairedWith ? RECORD_TEXT[c.pairedWith] : 'every dry-season day', c.days, ...c.flowsM3s]);
+}
+
+/** The recession diagnostics (engine ≥ 1.18.0, model.md §2.10d, CR-13): the settings, both fits and the comparison. */
+function* recessionLines(r: Plausibility['recession']): Generator<string> {
+	yield csvRow(['Recession diagnostics (−dQ/dt = a·Q^b on rain-free recession segments)']);
+	if (r === undefined) {
+		yield csvRow(['Run made before engine 1.18.0: no recession diagnostics']);
+		return;
+	}
+	if (r === null) {
+		yield csvRow(['Not checked: needs an observed flow record and catchment rain']);
+		return;
+	}
+	const o = r.options;
+	yield csvRow([
+		'Record',
+		RECORD_TEXT[r.flowKind],
+		'segments',
+		r.segments.length,
+		'min. length (days)',
+		o.recessionLength,
+		'days dropped after the peak',
+		o.nStart,
+		'allowed rise (m³/s)',
+		o.epsM3s,
+		'rain threshold (mm/day)',
+		o.rainThresholdMm,
+		'−dQ/dt method',
+		o.dQdtMethod
+	]);
+	yield csvRow(['Flow', 'a ((m³/s)^(1−b) per day)', 'b', '−dQ/dt ÷ Q at the reference flow (per day)', 'Points', 'Segments']);
+	for (const [label, f, rate] of [
+		[RECORD_TEXT[r.flowKind], r.observed, r.observedRate],
+		['simulated outflow', r.simulated, r.simulatedRate]
+	] as const) {
+		yield csvRow(f ? [label, f.a, f.b, rate, f.points, f.segments] : [label, 'too few points to fit']);
+	}
+	yield csvRow(['Reference flow (m³/s)', r.referenceFlowM3s, 'rate ratio (simulated ÷ observed)', r.rateRatio, 'b difference (simulated − observed)', r.bDiff]);
+	yield csvRow([
+		'Simulated recession agrees (indicative)',
+		r.agrees === null ? `not judged (fewer than ${RECESSION_MIN_SEGMENTS} segments, or no observed fit)` : yesNo(r.agrees)
+	]);
 }
 
 /** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */

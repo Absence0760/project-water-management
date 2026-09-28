@@ -34,6 +34,7 @@ export * from './evaporation/apanDaily';
 export * from './accumulation';
 export * from './doublemass';
 export * from './plausibility';
+export * from './recession';
 export * from './uncertainty';
 export * from './modelRules';
 export * from './scenario';

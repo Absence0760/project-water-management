@@ -863,6 +863,13 @@ export const TIPS: HelpTipText[] = [
 		category: 'results'
 	},
 	{
+		id: 'plausibility-recession',
+		term: 'Recession diagnostics',
+		short: 'How fast flow falls in rain-free spells (−dQ/dt against Q), in the record and in the model on the same days.',
+		units: 'm³/s; m³/s per day',
+		category: 'results'
+	},
+	{
 		id: 'ewr-agreement',
 		term: 'EWR test against observed flow',
 		short: "Does the model fall below the EWR on the days the observed river did? A 2×2 table of observed days, with scores.",

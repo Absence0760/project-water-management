@@ -3739,8 +3739,22 @@ read it before.
   record (engine ≥ 1.4.0), **At gauges in the network**: a row per gauge with
   its record, the share of the catchment's natural flow above it, check 1's
   failing water years and check 4's Q90 ratio with *within* / *outside the
-  factor of 2* (a failing gauge's row shaded), and a fifth line in the check
-  list. The Compare page sets these checks side by side
+  factor of 2* (a failing gauge's row shaded), and a line in the check
+  list. From engine 1.18.0, after the low-flow curves, **Recession
+  diagnostics** (`runs/RecessionDiagnostics.svelte`, helpers in
+  `runs/recession.ts`; [model.md §2.10d](./model.md), *Recession
+  diagnostics*, CR-13): the segment rules in one sentence, a verdict (the
+  simulated recession rate at the observed points' median flow as *n× faster
+  / slower*, the difference in b, and whether that is within the indicative
+  limits; *Not judged* with fewer than 8 segments), a scatter of −dQ/dt
+  against Q on log–log axes for the record and for the simulated outflow on
+  the same days with each fitted line (`LineChart` in `xy` mode: x is
+  log₁₀ Q labelled as flows, y its log scale; the points are rebuilt in the
+  browser from the run's stored `observed_flow` and `simulated_outflow`
+  series with the engine's `recessionPoints`, so the summary holds only the
+  segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
+  points and segments per fit. The check list gains a *Recessions* line on
+  those runs; an older run shows neither. The Compare page sets these checks side by side
   ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17; dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
