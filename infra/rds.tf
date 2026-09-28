@@ -42,11 +42,32 @@ resource "aws_db_parameter_group" "pg17" {
     value = "1000"
   }
 
-  # Never log DDL text — the migrate Lambda's ALTER ROLE carries a password
-  # verifier (a SCRAM hash, not plaintext, but still no reason to log it).
+  # No statement is logged for its type (the default, pinned): DDL, including
+  # the migrate Lambda's `ALTER ROLE water_app … PASSWORD 'SCRAM-SHA-256$…'`,
+  # is not logged just for being DDL. It does NOT keep a statement's text out
+  # of the log altogether: log_min_duration_statement above logs the full text
+  # of anything slower than 1 s, whatever its type. DDL can't take bind
+  # parameters, so a slow ALTER ROLE (a cold instance, a lock wait on
+  # pg_authid) would log the verifier. That is a salted SCRAM verifier, never
+  # the plaintext (lambda-migrate.ts computes it in-process), in a log group
+  # only this account's operators can read, kept 30 days.
   parameter {
     name  = "log_statement"
     value = "none"
+  }
+
+  # Never log bind values. With log_min_duration_statement on, Postgres 17
+  # appends "parameters: $1 = '…'" to every slow statement, in full by default
+  # (-1): email addresses, farm names, a whole series blob. 0 logs none, for
+  # slow statements and (the _on_error twin, pinned too) for failed ones.
+  # Both are dynamic: no reboot.
+  parameter {
+    name  = "log_parameter_max_length"
+    value = "0"
+  }
+  parameter {
+    name  = "log_parameter_max_length_on_error"
+    value = "0"
   }
 
   lifecycle {

@@ -694,14 +694,19 @@ run "email_ses" {
     error_message = "Configuration set must require TLS and suppress bounces + complaints."
   }
 
-  # IAM: one action, two named resources, pinned From address.
+  # IAM: one action, this account's identities (the sandbox authorises the
+  # recipient's too) + the configuration set, pinned From address.
   assert {
     condition     = data.aws_iam_policy_document.lambda_ses.statement[0].actions == toset(["ses:SendEmail"])
     error_message = "The API Lambda may only call ses:SendEmail."
   }
   assert {
-    condition     = data.aws_iam_policy_document.lambda_ses.statement[0].resources == toset([aws_sesv2_email_identity.domain.arn, aws_sesv2_configuration_set.main.arn])
-    error_message = "ses:SendEmail must be scoped to the domain identity and the configuration set."
+    condition     = data.aws_iam_policy_document.lambda_ses.statement[0].resources == toset(["arn:aws:ses:af-south-1:000000000000:identity/*", aws_sesv2_configuration_set.main.arn])
+    error_message = "ses:SendEmail must be scoped to this account's SES identities in its own region (sandbox sends authorise the recipient's identity too) and the configuration set: no other account, region or resource type."
+  }
+  assert {
+    condition     = length(data.aws_iam_policy_document.lambda_ses.statement) == 1 && length(data.aws_iam_policy_document.lambda_ses.statement[0].condition) == 1
+    error_message = "The identity/* grant is safe only with the ses:FromAddress condition on the same, single statement."
   }
   assert {
     condition     = one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).variable == "ses:FromAddress" && one(data.aws_iam_policy_document.lambda_ses.statement[0].condition).values == tolist(["no-reply@water-management.jaredhoward.com"])
@@ -830,8 +835,11 @@ run "alarms" {
 
   # --- Self-check-failed metric filter + alarm ----------------------------
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.log_group_name == aws_cloudwatch_log_group.lambda.name
-    error_message = "The self-check filter must read the backend API Lambda's own log group."
+    condition = (
+      aws_cloudwatch_log_metric_filter.self_check_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.log_group_name == aws_cloudwatch_log_group.worker.name
+    )
+    error_message = "Self-check failures must be counted from both log groups: the API's (user runs) and the worker's (automatic re-runs, forecast runs)."
   }
   assert {
     condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.event = \"self_check_failed\" }"
@@ -1525,4 +1533,60 @@ run "rejects_bad_renderer_image_tag" {
   }
 
   expect_failures = [var.renderer_image_tag]
+}
+
+# Email that fails to send is never silent (trySendMail logs mail_send_failed
+# and the route still answers 200), the worker's self-check failures alarm
+# like the API's, and slow-query logging never records bind values.
+run "mail_failures_and_log_privacy" {
+  command = plan
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.pattern == aws_cloudwatch_log_metric_filter.self_check_failed.pattern &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.metric_transformation[0].name == aws_cloudwatch_metric_alarm.self_check_failed.metric_name &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.self_check_failed.namespace
+    )
+    error_message = "The worker's self-check filter must match the same event and feed the metric the self-check alarm watches."
+  }
+
+  assert {
+    condition = (
+      toset([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.log_group_name]) == toset([aws_cloudwatch_log_group.lambda.name, aws_cloudwatch_log_group.worker.name]) &&
+      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.event = \"mail_send_failed\" }"])
+    )
+    error_message = "mail_send_failed must be counted from both the API's and the worker's log group, by the exact event name trySendMail logs."
+  }
+  assert {
+    condition = alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed :
+      f.metric_transformation[0].name == aws_cloudwatch_metric_alarm.mail_send_failed.metric_name &&
+      f.metric_transformation[0].namespace == aws_cloudwatch_metric_alarm.mail_send_failed.namespace
+    ])
+    error_message = "The mail-send alarm must watch the metric both filters emit."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.mail_send_failed.threshold == 0 &&
+      aws_cloudwatch_metric_alarm.mail_send_failed.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.mail_send_failed.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.mail_send_failed.treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.mail_send_failed.alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "One failed email must page the alerts topic."
+  }
+
+  assert {
+    condition = (
+      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length=0") &&
+      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_parameter_max_length_on_error=0")
+    )
+    error_message = "Slow-statement and error logging must never record bind values (addresses, farm names, series): log_parameter_max_length(_on_error) = 0."
+  }
+  assert {
+    condition = (
+      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "rds.force_ssl=1") &&
+      contains([for p in aws_db_parameter_group.pg17.parameter : "${p.name}=${p.value}"], "log_statement=none")
+    )
+    error_message = "The parameter group must keep TLS forced and log_statement = none."
+  }
 }

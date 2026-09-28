@@ -153,6 +153,10 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 # a warning on that one run. The filter matches the event name only; the line
 # never carries user data or a value that could identify the client (just the
 # failed checks' ids, e.g. "balance", "ewrAttribution").
+#
+# Runs are saved by the API (a user's run) AND by the worker (the automatic
+# re-run after new feed data, forecast runs: jobs/handlers/rerun.ts), so one
+# filter per log group feeds the same metric, and the one alarm sees both.
 
 resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
   name           = "${local.project}-self-check-failed"
@@ -180,6 +184,71 @@ resource "aws_cloudwatch_metric_alarm" "self_check_failed" {
   alarm_description   = "A saved run failed one of the engine's self-checks (invariant violation) — a model bug, not a user error. Open the run's Self-checks panel to see which check and trace the day; docs/model.md § Verification."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
+}
+
+# The worker's half: same pattern, same metric (name + namespace), so the
+# alarm above counts self-check failures from either Lambda.
+resource "aws_cloudwatch_log_metric_filter" "self_check_failed_worker" {
+  name           = "${local.project}-self-check-failed-worker"
+  log_group_name = aws_cloudwatch_log_group.worker.name
+  pattern        = aws_cloudwatch_log_metric_filter.self_check_failed.pattern
+
+  metric_transformation {
+    name          = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].name
+    namespace     = aws_cloudwatch_log_metric_filter.self_check_failed.metric_transformation[0].namespace
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+# --- Email that failed to send ----------------------------------------------
+# trySendMail (backend/src/mail/transport.ts) never fails the request over a
+# mail error (a sign-up or forgot-password answer must not depend on it), so
+# without this a broken send is silent: the user is told "we sent you a
+# link". It logs one structured line instead:
+#   {"event":"mail_send_failed","kind":"reset","error":"MessageRejected"}
+# the template's kind and the error's name/code only, never an address, a
+# subject or the error's text. A sandbox rejection (MessageRejected: the
+# recipient isn't verified), an IAM denial, throttling or the SES endpoint
+# being unreachable are API errors, not SES events, so the configuration-set
+# bounce/complaint alarms below never see them. The API sends the account
+# emails and invitations; the worker sends report links, so both log groups
+# feed one metric. (Alert emails have their own alarm, jobs.tf
+# alert_mail_failures.)
+
+resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
+  for_each = {
+    api    = aws_cloudwatch_log_group.lambda.name
+    worker = aws_cloudwatch_log_group.worker.name
+  }
+  name           = "${local.project}-mail-send-failed-${each.key}"
+  log_group_name = each.value
+  pattern        = "{ $.event = \"mail_send_failed\" }"
+
+  metric_transformation {
+    name          = "MailSendFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
+  alarm_name          = "${local.project}-mail-send-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "MailSendFailed"
+  namespace           = "${local.project}/Application"
+  period              = 900
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "An account, invitation or report email failed to send (the user was still told it was sent). Search the API and worker log groups for event = mail_send_failed: kind says which email, error the SES/SMTP error code (MessageRejected in the SES sandbox = recipient not verified; AccessDenied = IAM). Runbook: docs/deployment.md § Email."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  depends_on = [aws_cloudwatch_log_metric_filter.mail_send_failed]
 }
 
 # --- Migrate Lambda --------------------------------------------------------

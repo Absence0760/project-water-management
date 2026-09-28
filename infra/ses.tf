@@ -358,16 +358,23 @@ resource "aws_route53_record" "dmarc" {
   records = [local.dmarc_record]
 }
 
-# --- IAM: the API Lambda may send, as no-reply@, through this identity only -
+# --- IAM: the API Lambda may send, as no-reply@ only -----------------------
 
 data "aws_iam_policy_document" "lambda_ses" {
   statement {
     sid     = "SendAsNoReplyOnly"
     actions = ["ses:SendEmail"]
-    # SES v2 SendEmail authorises against the identity AND the configuration
-    # set the message uses; both are named, nothing else.
+    # SES v2 SendEmail authorises against the sending identity AND the
+    # configuration set the message uses. In the SES sandbox it ALSO
+    # authorises against each recipient's verified identity
+    # (identity/<address>), so naming only the domain identity denies every
+    # sandbox send, the operator's own test included (AccessDenied on
+    # identity/<recipient>). Hence identity/* in this account and region:
+    # the sender stays pinned by the ses:FromAddress condition below, and in
+    # production (out of the sandbox) no recipient identity is checked, so
+    # the wildcard grants nothing more than the domain identity did.
     resources = [
-      aws_sesv2_email_identity.domain.arn,
+      "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*",
       aws_sesv2_configuration_set.main.arn,
     ]
     condition {
