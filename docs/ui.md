@@ -4977,6 +4977,9 @@ digest). The modeller workspace stays English.
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
+  The prerendered `/welcome` ships `lang="en"` (`app.html`) because its
+  prerendered words are English; `lang` follows the words once the page
+  hydrates (a per-language prerender is in followups.md § Landing page).
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
 - **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer
