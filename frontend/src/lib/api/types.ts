@@ -612,14 +612,17 @@ export const RUN_NOTES_MAX = 4000;
 export type EvidenceStatus = 'current' | 'past';
 
 /** One row of a project's evidence history (GET …/evidence, oldest first; the last is current). */
+/** A row of the evidence history: a run nominated, or a withdrawal of the nomination before it (097: every run field null). */
 export interface Nomination {
 	id: string;
-	runId: string;
-	runLabel: string;
-	runCreatedAt: string;
+	/** A withdrawal: no run, only who, when and why. Absent from an older API (every row a nomination). */
+	withdrawn?: boolean;
+	runId: string | null;
+	runLabel: string | null;
+	runCreatedAt: string | null;
 	/** Copied from the run when it was nominated. */
-	runoffModel: StoredRunoffModelId;
-	engineVersion: string;
+	runoffModel: StoredRunoffModelId | null;
+	engineVersion: string | null;
 	reason: string;
 	nominatedAt: string;
 	nominatedBy: string | null;
@@ -670,7 +673,8 @@ export interface RunEvidence {
 	nominatedAt: string;
 	nominatedBy: string | null;
 	reason: string;
-	replacedBy: { runId: string; runLabel: string; nominatedAt: string; nominatedBy: string | null; reason: string } | null;
+	/** The row after it: another run nominated, or (`withdrawn`, no run) the nomination withdrawn. */
+	replacedBy: { withdrawn?: boolean; runId: string | null; runLabel: string | null; nominatedAt: string; nominatedBy: string | null; reason: string } | null;
 }
 
 export interface Run extends RunMeta {

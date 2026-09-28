@@ -1959,19 +1959,17 @@ role and not before it.
         tags the exception, **Inputs not stored**, rather than badging every
         run "Reproducible"; the "Cited" lock is the existing **Published** /
         **Scenario base** tags without a ✕ (pending the hydrologist).
-  - [ ] **Withdrawing a nomination (un-nominate)**, considered and not built
-        (2026-09-26). Under #43's rule (035_project_evidence_guard: any
-        nomination row keeps the project for good) a withdrawal would not
-        make a project deletable, so its only value is honesty in the record:
-        today an applicant who drops an application can only *replace* the
-        nomination, so the history keeps claiming some run is "the evidence".
-        The durable fix, if an assessor or applicant asks for it: an
-        append-only history row with no run and a required reason (run_id,
-        runoff_model and engine_version NULL together), stamped by
-        `run_nomination_stamp`, shown as "Withdrawn on … by …" in the Runs
-        tab, compare and the summary CSV; the guard stays unchanged. Trigger:
-        a real licence application withdrawn, or an assessor asking what a
-        project stands behind after an application lapses.
+  - [x] **Withdrawing a nomination (un-nominate)**. Done in
+        `097_nomination_withdrawal` (issue #73): an append-only history row
+        with no run and a required reason (`run_id`, `runoff_model` and
+        `engine_version` NULL together), stamped by `run_nomination_stamp`,
+        allowed only while a run is nominated; `POST …/evidence/withdraw`
+        and the Evidence panel's **Withdraw the nomination…**; shown as
+        "Withdrawn on … by …" in the Runs tab's history and evidence line,
+        compare and the summary CSV. The guard (035) is unchanged: the
+        project stays undeletable. Tests: `runs/evidence.db.test.ts`
+        ("withdrawing the nomination"), the unit tests of both `evidence.ts`
+        and `export/run-tables.ts`, e2e `evidence.spec.ts`.
   - [x] **WP-2.3's publication-history trim skips cited runs' publications**
         (024_scenarios, 2026-09-25): `run_publication_cap` keeps, beyond the
         newest 12, every publication whose run a scenario is based on, so

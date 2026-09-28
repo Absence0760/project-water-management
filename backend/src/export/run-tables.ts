@@ -617,7 +617,7 @@ export function* accumulationLines(a: RunSummary['rainAccumulation']): Generator
 /**
  * Whether the run is the project's nominated evidence run (010_run_nomination):
  * always a status row, then this run's nomination (when, who, why) and, for a
- * replaced one, what replaced it. A reader of the sheet alone can tell a run
+ * replaced one, what replaced it (another run, or a withdrawal: 097). A reader of the sheet alone can tell a run
  * the project stands behind from one it has moved away from.
  */
 export function* evidenceLines(e: RunEvidence | null): Generator<string> {
@@ -625,9 +625,11 @@ export function* evidenceLines(e: RunEvidence | null): Generator<string> {
 		yield csvRow(['Evidence nomination', 'not nominated']);
 		return;
 	}
-	yield csvRow(['Evidence nomination', e.status === 'current' ? 'the nominated evidence run' : 'nominated before, since replaced']);
+	const after = e.replacedBy;
+	yield csvRow(['Evidence nomination', e.status === 'current' ? 'the nominated evidence run' : after?.withdrawn ? 'nominated before, since withdrawn' : 'nominated before, since replaced']);
 	yield csvRow(['Nominated', e.nominatedAt, e.nominatedBy ?? '', e.reason]);
-	if (e.replacedBy) yield csvRow(['Replaced by', e.replacedBy.runLabel || 'Untitled run', e.replacedBy.nominatedAt, e.replacedBy.nominatedBy ?? '', e.replacedBy.reason]);
+	if (after?.withdrawn) yield csvRow(['Withdrawn', after.nominatedAt, after.nominatedBy ?? '', after.reason]);
+	else if (after) yield csvRow(['Replaced by', after.runLabel || 'Untitled run', after.nominatedAt, after.nominatedBy ?? '', after.reason]);
 }
 
 /**

@@ -129,3 +129,56 @@ describe('nominateBlocker', () => {
 		expect(nominateBlocker({ id: 'b', legacy: false }, [])).toBeNull();
 	});
 });
+
+// 097_nomination_withdrawal: a withdrawal row has no run.
+describe('a withdrawn nomination', () => {
+	const w = (day: number): Nomination => ({
+		...nom('x', day),
+		withdrawn: true,
+		runId: null,
+		runLabel: null,
+		runCreatedAt: null,
+		runoffModel: null,
+		engineVersion: null,
+		reason: 'application lapsed'
+	});
+
+	it('leaves no current nomination; nominating again after it is current (the control)', () => {
+		expect(currentNomination([nom('a', 1), w(2)])).toBeNull();
+		expect(currentNomination([nom('a', 1), w(2), nom('b', 3)])?.runId).toBe('b');
+		// An older API without `withdrawn` still reads a row with no run as one.
+		expect(currentNomination([nom('a', 1), { ...w(2), withdrawn: undefined }])).toBeNull();
+	});
+
+	it('reads "Withdrawn on … by …" in the history, and the next run as nominated, not a replacement', () => {
+		const e = historyEntries([nom('a', 1), w(2), nom('b', 3)], fmt);
+		expect(e.map((x) => x.text)).toEqual(['Nominated “Run A” on 2026-09-01 by Ann', 'Withdrawn on 2026-09-02 by Ann', 'Nominated “Run B” on 2026-09-03 by Ann']);
+		expect(e[1]).toMatchObject({ runId: null, model: '', current: false, reason: 'application lapsed' });
+		expect(e[2]!.current).toBe(true);
+	});
+
+	it('says the run was withdrawn in its evidence line and in compare, and raises no model-drift warning', () => {
+		expect(evidenceLine('a', [nom('a', 1), w(2)], fmt)).toBe('Nominated as evidence on 2026-09-01 by Ann; withdrawn on 2026-09-02 by Ann.');
+		expect(
+			compareEvidenceNote(
+				'A',
+				{
+					status: 'past',
+					nominatedAt: '2026-09-01T08:00:00.000Z',
+					nominatedBy: 'Ann',
+					reason: 'r',
+					replacedBy: { withdrawn: true, runId: null, runLabel: null, nominatedAt: '2026-09-02T08:00:00.000Z', nominatedBy: 'Ben', reason: 'lapsed' }
+				},
+				fmt
+			)
+		).toBe('Run A was the evidence run, nominated on 2026-09-01 by Ann (“r”), then the nomination was withdrawn on 2026-09-02 by Ben because “lapsed”.');
+		expect(modelDriftWarning([run('z', '2026-12-01T00:00:00Z', 'legacy')], [nom('a', 1), w(2)])).toBeNull();
+		// Control: before the withdrawal the same newer legacy run is warned about.
+		expect(modelDriftWarning([run('z', '2026-12-01T00:00:00Z', 'legacy')], [nom('a', 1)])).not.toBeNull();
+	});
+
+	it('lets the formerly current run be nominated again', () => {
+		expect(nominateBlocker({ id: 'a', legacy: false }, [nom('a', 1), w(2)])).toBeNull();
+		expect(nominateBlocker({ id: 'a', legacy: false }, [nom('a', 1)])).not.toBeNull();
+	});
+});

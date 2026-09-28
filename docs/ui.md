@@ -3554,9 +3554,16 @@ read it before.
   instead** when another run is current; `POST …/evidence`). A legacy-model
   run (a stored run from before engine 1.0.0, which removed the model) and
   the current evidence run say why they can't be nominated instead.
+  While a run is nominated, editors also get **Withdraw the nomination…**,
+  which opens a required **Why the nomination is withdrawn** textarea and
+  **Withdraw the nomination** (`POST …/evidence/withdraw`, 097); afterwards
+  the section says "The project's nomination was withdrawn: no run is its
+  evidence now." and any run may be nominated again.
   Under it the **Nomination history**, newest first: "Nominated “A” on … by
-  …", then each "Replaced by “B” on … by …", each with the run's runoff model
-  and engine version and the reason, the current one badged. Nothing in the
+  …", then each "Replaced by “B” on … by …" or "Withdrawn on … by …" (a run
+  nominated after a withdrawal reads "Nominated" again), each nomination with
+  the run's runoff model and engine version, every row with its reason, the
+  current one badged. Nothing in the
   history can be edited or removed. In the runs list the current evidence run
   carries an **Evidence** badge and a replaced one **Former evidence**; neither
   has a delete button (the server refuses with `409`). The run header repeats

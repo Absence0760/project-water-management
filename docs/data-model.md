@@ -406,6 +406,15 @@ by `CHECK`), `nominated_by` (→ `app_user`) and `nominated_at`. The newest row
 (by `nominated_at`, unique per project) is the **current** nomination; every
 older row is kept, so the history reads "nominated A on …, then replaced by
 B on … because …". A run can be nominated again later (A, B, A).
+**Withdrawals** (097_nomination_withdrawal) are rows too: `run_id`,
+`runoff_model` and `engine_version` all `NULL` (a `CHECK` keeps them
+together) and a required `reason`. After one, the project has no current
+evidence run until a run is nominated again; the withdrawn run reads as past
+evidence ("…, then withdrawn on … because …") and stays kept.
+`run_nomination_stamp` allows a withdrawal only while a run is nominated (the
+newest row has one), clears any model columns it names, and stamps who and
+when; the 50-row cap counts it. `project_evidence_guard` (035) is unchanged:
+any row keeps the project, withdrawn or not.
 
 - **Append-only by privilege.** `water_app` has `SELECT` and `INSERT` only: no
   `UPDATE`, `DELETE` or `TRUNCATE`, and the table has no update or delete
