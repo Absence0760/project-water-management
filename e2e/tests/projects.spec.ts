@@ -418,6 +418,14 @@ test.describe('fifty projects', () => {
 		await expect(page.getByRole('rowheader')).toHaveCount(1);
 		await expect(page.getByRole('rowheader', { name: 'Big scoping catchment 49' })).toBeVisible();
 		await expect(page.getByRole('status').filter({ hasText: /projects? shown/ })).toHaveText('1 project shown');
+		// Cleared, the card fills the window again: measuring what sits below it from the document's height
+		// counted the empty window under the one-row list and left the card at its 320 px floor.
+		await page.getByLabel('Search projects').fill('');
+		await expect(page.getByRole('rowheader')).toHaveCount(50);
+		const gap = () => page.evaluate(() => innerHeight - document.querySelector('.list-card')!.getBoundingClientRect().bottom);
+		await expect.poll(gap).toBeLessThanOrEqual(24);
+		expect(await gap()).toBeGreaterThanOrEqual(0);
+		expect(await page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(0);
 
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto('/');
