@@ -243,10 +243,13 @@ fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
-The tabs are grouped into three sections (issue #17, option A · Results
-first): **Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations),
-**Build the model** (Network, Crops & demand, Transfers, Data, Settings &
-calibration) and **Review** (Project, Applications, History). The sections are
+The tabs are grouped into three sections, in this order: **Build the
+model** (Network, Crops & demand, Transfers, Data, Settings & calibration),
+**Review** (Project, Applications, History) and, at the bottom,
+**Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams,
+Compare runs, Scenarios, Allocations). Issue #17's option A put Outcomes
+first; the operator moved it last on 2026-09-27. The Summary is still the
+tab a project opens on. The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in

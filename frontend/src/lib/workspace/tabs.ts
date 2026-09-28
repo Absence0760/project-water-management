@@ -175,15 +175,15 @@ export function stripTabs<T extends string>(visible: readonly T[], open: T, rend
 }
 
 /**
- * The sidebar's sections (issue #17, option A · Results first): what the
- * model produced first, then what it's made of, then the review work. Purely
- * layout: which tabs a role sees is still `visibleTabs`, and the URLs stay
- * `?tab=<id>`.
+ * The sidebar's sections: what the model is made of, then the review work,
+ * then what it produced (the operator's order, 2026-09-27; issue #17's
+ * option A had the outcomes first). Purely layout: which tabs a role sees is
+ * still `visibleTabs`, and the URLs stay `?tab=<id>`.
  */
 export const NAV_SECTIONS = [
-	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 	{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
-	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
+	{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
+	{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 ] as const satisfies readonly { id: string; label: string; tabs: readonly TabId[] }[];
 
 export type NavSectionId = (typeof NAV_SECTIONS)[number]['id'];

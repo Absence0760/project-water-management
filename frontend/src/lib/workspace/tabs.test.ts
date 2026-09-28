@@ -177,11 +177,11 @@ describe('navSections', () => {
 		expect(new Set(listed).size).toBe(listed.length);
 	});
 
-	it('puts outcomes first, then the model, then review', () => {
+	it('puts the model first, then review, then the outcomes at the bottom', () => {
 		expect(navSections(ALL_TABS)).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] },
 			{ id: 'model', label: 'Build the model', tabs: ['network', 'crops', 'transfers', 'series', 'settings'] },
-			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] }
+			{ id: 'review', label: 'Review', tabs: ['project', 'applications', 'history'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'river', 'supply', 'runs', 'dams', 'compare', 'scenarios', 'allocations'] }
 		]);
 	});
 
@@ -206,20 +206,20 @@ describe('navSections', () => {
 	it('orders by section whatever order the tabs arrive in, and drops empty sections', () => {
 		// A viewer before "Show model inputs".
 		expect(navSections(visibleTabs('viewer', {}, PAGE))).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] },
-			{ id: 'model', label: 'Build the model', tabs: ['series'] }
+			{ id: 'model', label: 'Build the model', tabs: ['series'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview', 'runs', 'scenarios', 'allocations'] }
 		]);
 		expect(navSections<TabId>(['history', 'overview'])).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
-			{ id: 'review', label: 'Review', tabs: ['history'] }
+			{ id: 'review', label: 'Review', tabs: ['history'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] }
 		]);
 		expect(navSections<TabId>([])).toEqual([]);
 	});
 
 	it('puts a tab no section lists at the end of "Build the model"', () => {
 		expect(navSections(['overview', 'newthing', 'network'])).toEqual([
-			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] },
-			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] }
+			{ id: 'model', label: 'Build the model', tabs: ['network', 'newthing'] },
+			{ id: 'outcomes', label: 'Outcomes', tabs: ['overview'] }
 		]);
 	});
 });
