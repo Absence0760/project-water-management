@@ -1211,9 +1211,17 @@ must build WP-2.15 Phase B.
   uses the existing borehole series (`groundwater_used`, WP-1.34), so it
   doesn't wait on WP-3.9. Deviations: the import sends the file as JSON text
   (≤ 2 MB, CSV only), not multipart ≤ 5 MB with XLSX; preview and commit are
-  `…/import` and `…/import/commit` with no stored preview id. Left:
-  `allocationMode` (`cap`, `fullAllocation`), `settings.allocationTolerance`,
-  XLSX and column mapping, licence conditions, the farm view and the chart
+  `…/import` and `…/import/commit` with no stored preview id. Second slice
+  (2026-09-28, issue #72): engine `allocationMode` (`cap`,
+  `fullAllocation`) with `RunSummary.allocations` and the `allocations`
+  self-check (engine 1.16.0, [model.md §2.12a](../model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72)),
+  allocations on every run's input, `settings.allocationTolerance`, and
+  licence conditions (migration 095: `months`, `max_rate_m3s`, `conditions`,
+  recorded and shown, not yet applied). Deviations: `fullAllocation` keeps the
+  unit's own demand shape rather than a monthly pattern of the allocation
+  (the licence's months aren't applied yet), and `conditions` is a list of
+  texts. Left: applying the licence conditions, XLSX and column mapping, the
+  farm view and the chart
   ([followups.md § Allocations](../followups.md#allocations-wp-310),
   [allocations.md](../allocations.md)).
 - **Goal.** For each farm, registered and licensed volumes next to

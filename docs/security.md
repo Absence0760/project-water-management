@@ -1542,7 +1542,17 @@ database:
   counts, never names. The export's `holder` column is only in an editor's
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
-  cells (`'` prefix), as every export does.
+  cells (`'` prefix), as every export does. A licence condition in words
+  (095) is checked like the holder: a 13-digit number there is a row problem.
+- **Run inputs** (engine ≥ 1.16.0, issue #72): every run's stored input
+  carries the project's allocations so the run replays, but only what the
+  engine reads (id, unit, source, volume, storage, validity, months, maximum
+  rate), never the holder's name, the registration number or the property
+  (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
+  appears). A viewer reads a run's input and could read the volumes anyway;
+  an applicant's projection of a published base keeps only the allocations on
+  their own units (`scenarios/applicant.ts`), and a contributor never reads a
+  run's summary, whose comparison names every unit.
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to

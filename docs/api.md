@@ -1704,7 +1704,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migration 038,
+modelled use against them (roadmap WP-3.10, migrations 038 and 095,
 [allocations.md](./allocations.md)). The app compares; it never decides
 whether a use is lawful.
 
@@ -1712,17 +1712,21 @@ whether a use is lawful.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
 | POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
-| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; `holder: ''` removes the name | editor |
+| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; only the fields sent change (issue #72: before, every field not sent went back to its default, the name and registration number included); `holder: ''` removes the name | editor |
 | DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
 | POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
-| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1, default 0.1) | `{ run: { id, label, startDate, endDate }, comparison: AllocationComparison }` (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.16.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
-  storageM3, validFrom, validTo, reference, createdAt, updatedAt }`. `holder`
+  storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
+  createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
+  `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
+  (strings) are licence conditions (095, issue #72), recorded and shown, not
+  yet applied by the engine. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
@@ -1730,7 +1734,20 @@ whether a use is lawful.
   | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
-  reference? }` (dates `YYYY-MM-DD`).
+  reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
+  | null, maxRateM3s?: 0 ≤ r < 10⁶ | null, conditions?: up to 20 strings of
+  1–500 characters }` (dates `YYYY-MM-DD`).
+- Import: the template and a WARMS extract may carry `months` (numbers or
+  names, ranges over the new year: `Oct-Mar`), `max_rate_m3s` and
+  `conditions` (separated by `|`); a cell that doesn't read is a row problem.
+- Every run's input carries the project's allocations (engine ≥ 1.16.0:
+  `GET /projects/:id/model-input` and the stored run's `inputs.model.allocations`,
+  without names, registration numbers or properties), and a write that changes
+  what a run reads makes the latest run out of date (`project.updated_at`).
+  `settings.allocationMode` (`'none'` | `'cap'` | `'fullAllocation'`) and
+  `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
+  ([Projects](#projects)); `RunSummary.allocations` is the run's own
+  comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1160-issue-72)).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
