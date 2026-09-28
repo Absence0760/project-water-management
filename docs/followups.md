@@ -1693,12 +1693,20 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       instead of shrinking. Durable fix: redraw those five narrower (fewer
       boxes per row, or stacked) so they fit the column whole at 1280 and
       up. Waits on the operator's choice (keep the scroll, or redraw).
-- [ ] **Deleting a scenario's released base run sometimes answers 404**
-      (issue #77, found 2026-09-28): the scenarios e2e fails ~1 in 15. The
-      run's kept check passes but the DELETE removes no row, so either RLS
-      (`app_run_kept`) and `RUN_KEPT_SQL` disagree for a moment or something
-      else removed it; the Runs tab also shows the API's raw English. Detail,
-      durable fix and trigger in the issue.
+- [x] **Deleting a scenario's released base run sometimes answers 404**
+      (issue #77, found 2026-09-28, fixed 2026-09-28): the scenarios e2e
+      failed ~1 in 15. The cause was in the browser, not RLS (an editor's
+      `model_run_delete` policy never used `app_run_kept`): the Runs tab reads
+      its list as it opens, and when the delete answered before that read, the
+      older list arrived last, put the run back and opened it, and the run's
+      `GET` answered "not found". The page and the Runs tab now count their
+      changes to the run list and read it again when a list read before a
+      change answers after it (`runs.spec.ts` holds the read past the delete
+      to pin it). The server's kept rule is now one definition
+      (`RUN_KEPT_SQL` calls `app_run_kept`); the route locks the run, answers
+      `404` only for a run that isn't there and `409` for a delete RLS refuses;
+      the Runs tab words a run that's gone instead of showing "not found", and
+      a delete of a run already gone just removes it from the list.
 - [x] **"Sign out everywhere" button** (2026-09-24): the header's account
       menu has *Sign out* and *Sign out everywhere*.
 - [x] **Account page and password change while signed in** (WP-1.9, issue

@@ -35,7 +35,7 @@
 	import { ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
+	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
@@ -214,7 +214,7 @@
 		} catch (e) {
 			if (detailFor === id) {
 				detail = null;
-				detailError = msg(e);
+				detailError = runErrorText(e);
 			}
 		} finally {
 			if (detailFor === id) detailLoading = false;
@@ -332,7 +332,7 @@
 			const { pinned } = await api.runs.setPinned(projectId, r.id, !r.pinned);
 			commit(runs.map((x) => (x.id === r.id ? { ...x, pinned } : x)));
 		} catch (err) {
-			actionError = msg(err);
+			actionError = runErrorText(err);
 		}
 	}
 
@@ -341,15 +341,19 @@
 		actionError = null;
 		try {
 			await api.runs.remove(projectId, r.id);
-			forgetRun(r.id);
-			commit(runs.filter((x) => x.id !== r.id));
-			if (selectedId === r.id) {
-				detail = null;
-				detailFor = '';
-				select(runs[0]?.id ?? null);
-			}
 		} catch (err) {
-			actionError = msg(err);
+			// Already gone (deleted elsewhere, or trimmed): it leaves the list all the same.
+			if (!isRunGone(err)) {
+				actionError = runErrorText(err);
+				return;
+			}
+		}
+		forgetRun(r.id);
+		commit(runs.filter((x) => x.id !== r.id));
+		if (selectedId === r.id) {
+			detail = null;
+			detailFor = '';
+			select(runs[0]?.id ?? null);
 		}
 	}
 

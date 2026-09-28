@@ -74,7 +74,7 @@
 <SectionHeader title="Applications" {badge} {context} {actions} {notices} />
 
 <LoadState {loading} {error} retry={load}>
-	<ScenariosTab projectId={project.id} runs={null} canEdit={false} applicant publishedRunId={publication?.runId ?? null} onRunsChange={() => {}} />
+	<ScenariosTab projectId={project.id} runs={null} canEdit={false} applicant publishedRunId={publication?.runId ?? null} onRunsChange={() => {}} reloadRuns={async () => {}} />
 </LoadState>
 
 <style>
