@@ -300,7 +300,9 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 			? catchment.slice()
 			: kind === 'rain_chirps_mm' && chirpsUsed
 				? chirpsUsed.slice()
-				: alignSeries(series[kind], start, days);
+				: FLOW_KINDS.has(kind)
+					? alignFlow(series[kind], start, days)
+					: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
@@ -349,6 +351,24 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		apanDaily,
 		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
 	};
+}
+
+/** The flow series kinds (m³/s): a record a gauge or logger reads, never below zero. */
+const FLOW_KINDS: ReadonlySet<SeriesKind> = new Set(['flow_observed_m3s', 'flow_logger_m3s', 'flow_reference_m3s']);
+
+/**
+ * A flow record aligned to the run, a negative value as missing (engine
+ * 1.16.0, issue #51). A flow is never below zero, so a negative one is a
+ * placeholder, the -999 of a re-saved DWS export or a logger's -1 "no
+ * reading", and the DWS import already reads it as a gap (dws.ts). Scored
+ * as a value it dragged every calibration statistic towards it; now the
+ * calibration, the fit, the plausibility checks and the observed_flow
+ * series all skip it, and the negative-values data-quality warning says so.
+ */
+export function alignFlow(s: DailySeries | undefined, start: number, days: number): (number | null)[] {
+	const out = alignSeries(s, start, days);
+	for (let t = 0; t < days; t++) if (out[t] !== null && out[t]! < 0) out[t] = null;
+	return out;
 }
 
 export function alignSeries(s: DailySeries | undefined, start: number, days: number): (number | null)[] {

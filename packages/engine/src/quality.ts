@@ -410,7 +410,9 @@ export function checkSeries(kind: SeriesKind, s: DailySeries): SeriesCheck[] {
 			text:
 				kind === 'evap_apan_mm'
 					? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Evaporation can't be negative; the run uses the monthly A-pan mean on these days`
-					: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
+					: kind.startsWith('flow_')
+						? `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Flow can't be negative (−999 and −1 are common "no reading" placeholders); the run treats these days as missing, so the calibration statistics, the fit and the plausibility checks skip them`
+						: `${name}: ${plural(negDays, 'negative value')} (${eg(neg)}). Rain and flow can't be negative; the gauge-vs-logger comparison skips these days`
 		});
 	}
 

@@ -1080,7 +1080,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'pbias',
 		term: 'PBIAS (percent bias)',
-		short: '100 × Σ(obs − sim) / Σobs. Positive means the model under-predicts the total volume; 0 is unbiased.',
+		short: '100 × Σ(obs − sim) / Σobs. Positive = the model is too dry; 0 is unbiased. The calibration panel says it in words.',
 		units: '%',
 		category: 'fit',
 		fields: ['stats.pbias']
@@ -1120,7 +1120,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'volume-error',
 		term: 'Volume error',
-		short: 'How much more (+) or less (−) water the model produces than was observed over the calibration window, in %.',
+		short: 'Simulated minus observed volume over the window, as a % of observed: PBIAS with the opposite sign (+ = too wet).',
 		units: '%',
 		category: 'fit',
 		fields: ['stats.volumeErrorPct']

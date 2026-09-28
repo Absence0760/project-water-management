@@ -18,7 +18,7 @@
 	import { page } from '$app/state';
 	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
-	import { apanDailyOfInput, chirpsSourceOfInput } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -39,7 +39,7 @@
 	import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from '$lib/components/report/sections';
 	import { cachedSeries } from '$lib/components/runs/cache';
 	import EwrAssurancePanel from '$lib/components/runs/EwrAssurancePanel.svelte';
-	import { CATCHMENT_FLOW_KEYS, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
+	import { CATCHMENT_FLOW_KEYS, EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, hydrographSeries, observedCaption, observedSources, type CatchmentFlows, type ObservedSources } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
@@ -110,7 +110,7 @@
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
 			const [pairs, so, cmp] = await Promise.all([
 				Promise.all(
-					CATCHMENT_FLOW_KEYS.filter(([, k]) => have(k)).map(
+					[...CATCHMENT_FLOW_KEYS, EWR_RULE_KEY].filter(([, k]) => have(k)).map(
 						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
 					)
 				),
@@ -181,13 +181,17 @@
 	// The printed report has no legend to click, so natural flow shows from the start.
 	const hydro = $derived(hydrographSeries(flows, conv, false, sources));
 	const ewrLines = $derived(ewrChartSeries(flows, conv));
-	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function.
+	// The Runs tab's FDC Q10–Q95 table (issue #45), from the same engine function;
+	// a forecast run's forecast days left out (issue #51).
 	const fdc = $derived(
-		fdcPercentileTable({
-			...(flows.natural ? { natural: conv(flows.natural) } : {}),
-			...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
-			...(flows.observed ? { observed: conv(flows.observed) } : {})
-		})
+		fdcPercentileTable(
+			{
+				...(flows.natural ? { natural: conv(flows.natural) } : {}),
+				...(flows.simulated ? { simulated: conv(flows.simulated) } : {}),
+				...(flows.observed ? { observed: conv(flows.observed) } : {})
+			},
+			run ? { startDate: (flows.simulated ?? flows.natural)?.startDate ?? run.startDate, forecastFrom: run.summary.forecast?.from ?? null } : undefined
+		)
 	);
 	const days = $derived(run ? toEpochDay(run.endDate) - toEpochDay(run.startDate) + 1 : 0);
 	const farmNames = $derived(Object.fromEntries(nodes.map((n) => [n.id, n.name])));
@@ -347,7 +351,7 @@
 							requestedStart={settings.calibrationStart ?? null}
 							requestedEnd={settings.calibrationEnd ?? null}
 						/>
-						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} />{/if}
+						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} />{/if}
 						<LineChart
 							print
 							bind:ready={hydroDrawn}
@@ -374,7 +378,7 @@
 							height={260}
 							log
 							series={ewrLines}
-							caption="Days the outflow dips below the dashed EWR line count as EWR not met."
+							caption={`Days the outflow dips below the pragmatic EWR line count as EWR not met.${flows.ewrRule ? ` ${EWR_RULE_CAPTION}` : ''}`}
 						/>
 						{#each summary.ewrAssurance ?? [] as site (site.nodeId ?? '(outlet)')}
 							<div class="sub"><EwrAssurancePanel sites={[site]} print /></div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OBSERVED_SERIES_LABEL } from '@water-management/engine';
-import { ewrChartSeries, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
+import { ewrChartSeries, fdcCaption, hydrographSeries, observedCaption, observedLabels, observedSources } from './flowSeries';
 
 const d = (v: number) => ({ startDate: '2020-01-01', values: [v, v] });
 const conv = (s: { values: (number | null)[] }) => s.values.map((v) => (v == null ? null : v * 10));
@@ -71,5 +71,29 @@ describe('ewrChartSeries', () => {
 			['Simulated outflow', undefined],
 			['Pragmatic EWR', 'step']
 		]);
+	});
+
+	it('adds the outlet’s Reserve rule requirement when the run has one (issue #51)', () => {
+		const out = ewrChartSeries({ simulated: d(2), ewr: d(1), ewrRule: d(3) }, conv);
+		expect(out.map((s) => [s.label, s.style, s.color])).toEqual([
+			['Simulated outflow', undefined, '--series-2'],
+			['Pragmatic EWR', 'step', '--chart-ref'],
+			['Reserve rule requirement', 'step', '--series-3']
+		]);
+		expect(out[2]!.values).toEqual([30, 30]);
+	});
+});
+
+describe('fdcCaption (issue #51)', () => {
+	const base = { onObserved: false, partial: false, obsDays: 0, runDays: 200, forecastDays: 0 };
+	it('says nothing on an ordinary run with a full or no gauge', () => {
+		expect(fdcCaption(base)).toBeUndefined();
+	});
+	it('names the forecast days left out on a forecast run', () => {
+		expect(fdcCaption({ ...base, forecastDays: 14 })).toBe('The 14 forecast days are left out: the curves rank the history only.');
+		expect(fdcCaption({ ...base, partial: true, obsDays: 120, forecastDays: 14 })).toBe(
+			'Natural and simulated flow rank all 200 days of the run before the forecast; observed flow only its 120 days with a reading. The 14 forecast days are left out: the curves rank the history only.'
+		);
+		expect(fdcCaption({ ...base, partial: true, onObserved: true, obsDays: 120 })).toBe('Every curve ranks the 120 days with an observed reading, so they compare like with like.');
 	});
 });

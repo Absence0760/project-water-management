@@ -243,3 +243,20 @@ describe('parseSeriesCsv delimiters and decimal separators', () => {
 		});
 	});
 });
+
+describe('negative values (issue #51)', () => {
+	it('reads a negative value as a gap, counted, as the DWS import does', () => {
+		const p = parseSeriesCsv('date,value\n2020-01-01,-999\n2020-01-02,0.5\n2020-01-03,-1\n2020-01-04,0');
+		expect(p.values).toEqual([null, 0.5, null, 0]);
+		expect(p.negativeGaps).toBe(2);
+		expect([p.rowCount, p.missingCount]).toEqual([2, 2]);
+		// Positive control: a file without one says nothing, and 0 is a value.
+		expect(parseSeriesCsv('date,value\n2020-01-01,0\n2020-01-02,0.5')).not.toHaveProperty('negativeGaps');
+	});
+
+	it('leaves a negative sub-daily reading out of its day’s total', () => {
+		const p = parseSeriesCsv('date,value\n2020-01-01 09:00,-999\n2020-01-01 10:00,2\n2020-01-02 09:00,1', { dayBoundary: '08:00' });
+		expect(p.negativeGaps).toBe(1);
+		expect(p.values[0]).toBe(2);
+	});
+});

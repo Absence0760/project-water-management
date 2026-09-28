@@ -414,6 +414,17 @@
 					</dd>
 				</div>
 			{/if}
+			{#if parsed.negativeGaps}
+				<div class="wide">
+					<dt>Negative values</dt>
+					<dd data-testid="negative-gaps">
+						<span class="warn-text"
+							>{fmtNum(parsed.negativeGaps)} read as gaps: rain, flow and evaporation are never below zero, so a negative value (−999, −1) is a
+							“no reading” placeholder.</span
+						>
+					</dd>
+				</div>
+			{/if}
 			{#if parsed.dws}
 				{@const d = parsed.dws}
 				{@const dropped = d.gaps.code + d.gaps.negative + d.gaps.blank}

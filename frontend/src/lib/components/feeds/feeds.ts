@@ -252,6 +252,18 @@ export function describePlace(f: Pick<FeedMeta, 'source' | 'config'>): string {
 	return `${cells.length} cells`;
 }
 
+/**
+ * What a feed's target series means for the model, when it isn't the obvious
+ * one (issue #51): CHIRPS written into the catchment rain series *is* the
+ * catchment rain, used raw (docs/model.md "Where the CHIRPS and forecast
+ * series come from"). Null for every other choice.
+ */
+export function targetHint(source: FeedSource, kind: string): string | null {
+	if (source === 'chirps' && kind === 'rain_catchment_mm')
+		return 'CHIRPS becomes the catchment rain itself: used as published, with no bias correction, and the checks against CHIRPS lose their reference. Pick it only for a catchment with no rain gauge.';
+	return null;
+}
+
 export const describeTarget = (f: Pick<FeedMeta, 'targetKind' | 'targetName'>) => `${kindLabel(f.targetKind)}${f.targetName ? ` · ${f.targetName}` : ''}`;
 
 /**
