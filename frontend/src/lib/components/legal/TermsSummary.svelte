@@ -42,7 +42,7 @@
 	}
 	.lang {
 		margin: 0.5rem 0 0;
-		font-size: 0.9rem;
+		font-size: 1rem;
 		color: var(--text-2);
 	}
 </style>

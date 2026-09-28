@@ -1158,6 +1158,14 @@
 //             entry. Lazy-loading the editor would not lower this figure:
 //             the total sums every chunk, so a split only moves the bytes and
 //             adds a chunk's overhead. No new dependency. Headroom ~4 KB.
+// 2026-09-28  total 1094 → 1101 KB (measured 1098 with #115's schedules
+//             merged, 1093 before). Issue #72's allocations second slice:
+//             the engine's allocation mode (allocations/mode.ts), its
+//             self-check and the run comparison's allocation lines (verify
+//             and compare ship in the run worker and the pages both), the
+//             Settings tab's Registered volumes fields, the Allocations tab's
+//             licence conditions and mode note, and two help entries. No new
+//             dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1168,7 +1176,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1094,
+	totalCodeKb: 1101,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

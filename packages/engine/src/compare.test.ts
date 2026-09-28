@@ -550,6 +550,25 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Borehole "BH-01" removed from Rooikloof (was 300 m³/day, primary, annual cap 40\u202f000 m³, depletion 0.25)']);
 	});
 
+	it('lists registered volumes added, changed and removed, and the allocation mode and band (engine 1.18.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const al = { id: 'al', nodeId: 'copy-f1', waterSource: 'surface' as const, volumeM3PerYear: 120_000, validFrom: '2020-10-01', validTo: null };
+		b.model.allocations = [al];
+		expect(texts(a, b)).toEqual(['Registered volume added to Rooikloof (surface 120\u202f000 m³/a, valid 2020-10-01 to …)']);
+		// A copy with fresh ids lines it up by (unit name, water source).
+		const c = copyWithFreshIds(b);
+		c.model.allocations = [{ ...al, id: 'al-copy', nodeId: 'copy-copy-f1', volumeM3PerYear: 90_000 }];
+		expect(texts(b, c)).toEqual(['Rooikloof: registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to … → surface 90\u202f000 m³/a, valid 2020-10-01 to …']);
+		expect(texts(b, a)).toEqual(['Registered volume removed from Rooikloof (was surface 120\u202f000 m³/a, valid 2020-10-01 to …)']);
+		// A snapshot without the settings compared only at ±10 %: the same as saying so.
+		const d = copyWithFreshIds(a);
+		d.settings = { ...d.settings, allocationMode: 'none', allocationTolerance: 0.1 };
+		expect(texts(a, d)).toEqual([]);
+		d.settings = { ...d.settings, allocationMode: 'cap', allocationTolerance: 0.15 };
+		expect(texts(a, d)).toEqual(['Allocation mode: Compare only → Cap use at the registered volume', 'Allocation comparison band: ±10% → ±15%']);
+	});
+
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);

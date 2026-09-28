@@ -119,14 +119,20 @@ export function runDataUntil(run: WindowRun): string {
  * recorded rain (runDataUntil), with a note when the run goes on past it. On a
  * forecast run (`forecastFrom`, WP-2.12) that is the last day before the
  * forecast (issue #51): the latest days of the record, never forecast days
- * read as "this week". "Whole record" and a custom range may still reach into
- * the forecast; forecastDaysIn says so.
+ * read as "this week". "Whole record" and a custom range end there too, with a
+ * note: a forecast run's historical figures never average over its forecast
+ * days (the forecast has its own card). On an ordinary run whose forecast
+ * rain filled days after the record, forecastDaysIn says how many are in.
  */
 export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { reportStart: string; reportEnd: string }): WindowResolution {
 	const d0 = toEpochDay(run.startDate);
 	const d1 = toEpochDay(run.endDate);
+	const from = forecastStart(run);
+	// The record's last day: the day before a forecast run's forecast, else the run's.
+	const rec = from ? Math.min(d1, Math.max(d0, toEpochDay(from) - 1)) : d1;
+	const beforeForecast = `It ends on ${fromEpochDay(rec)}, the last day before the forecast.`;
 	if (choice.preset === 'project') return { ok: true, window: fromDays(d0, toEpochDay(own.reportStart), toEpochDay(own.reportEnd)), note: null };
-	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, d1), note: null };
+	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, rec), note: rec < d1 ? beforeForecast : null };
 	const n = LAST_DAYS[choice.preset];
 	if (n) {
 		const until = runDataUntil(run);
@@ -140,7 +146,7 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 				: null,
 			e < d1
 				? forecast
-					? `It ends on ${until}, the last day before the forecast.`
+					? beforeForecast
 					: `Ends on the last day of recorded rain, ${until}; the run goes on to ${run.endDate} without it.`
 				: null
 		].filter((x): x is string => x !== null);
@@ -151,12 +157,18 @@ export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { repor
 	const b = toEpochDay(choice.end);
 	if (a > b) return { ok: false, error: 'The window must start before it ends.' };
 	if (b < d0 || a > d1) return { ok: false, error: `The window ${choice.start} to ${choice.end} is outside this run (${run.startDate} to ${run.endDate}).` };
+	if (a > rec) return { ok: false, error: `The window ${choice.start} to ${choice.end} is in the forecast: this run's record ends on ${fromEpochDay(rec)}.` };
 	const ca = Math.max(a, d0);
-	const cb = Math.min(b, d1);
+	const cb = Math.min(b, rec);
 	return {
 		ok: true,
 		window: fromDays(d0, ca, cb),
-		note: ca !== a || cb !== b ? `Cut to the run: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.` : null
+		note:
+			cb < Math.min(b, d1)
+				? `Cut to the record before the forecast: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+				: ca !== a || cb !== b
+					? `Cut to the run: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+					: null
 	};
 }
 

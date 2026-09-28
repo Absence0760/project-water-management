@@ -498,6 +498,28 @@ Interaction details that bit:
   email*, and focus fell back to the start of the page. The sign-in pages'
   `h1` takes `tabindex="-1"` and `focusAuthTitle()` (`layout/AuthCard.svelte`)
   focuses it after the swap; test it with `toBeFocused()`.
+  Outside the sign-in card, a control that removes itself (the farm notice's
+  *I understand*, *Accept the new terms*, the banner's *Dismiss*) calls
+  `focusPageStart()` (`lib/a11y/focusPage.ts`): the new page's `h1`, or
+  `#main` while it loads.
+- **Motion that runs longer than 5 s needs a way to stop it** (WCAG 2.2.2);
+  reduced motion doesn't count. The landing hero has a pause toggle; the
+  sign-in panel's decoration simply stops after 4.8 s. Never animate text a
+  reader is meant to read: the hero's reserve tag faded in for 3 s of every
+  14, so it was hidden 76 % of the time.
+- **Don't reserve a fixed space for a control laid over a field.** The
+  password field's *Show* sat over the input's end with a 4.25rem reserve;
+  Afrikaans *Versteek* is 70 px and covered the revealed password. Let the
+  wrapper draw the field and put the control beside the input
+  (`PasswordInput.svelte`), so its space follows its words.
+- **A bar that swaps the page's colours needs its own focus ring.** The farm
+  view's offline strip is `--text` on `--bg` reversed, so the global
+  `--focus` ring was 1.67:1 on it in dark mode; its controls use the strip's
+  text colour (16:1). Compute a ring's contrast against what it sits on, in
+  both themes.
+- **A compact control in a header doesn't wrap.** The EN | AF pair wrapped
+  at 320 px and doubled the sticky farm header to 93 px; the compact switch
+  is `nowrap` now. Let a title or back link give instead.
 - **An animation's first frame is its still frame.** The landing's hero is
   prerendered on its loop's last frame (dams full, the tag shown), and the
   loop started at 0 %, so the moment the script turned motion on the dams
@@ -640,6 +662,18 @@ Interaction details that bit:
   for any alert could run on the boot error, which had no `<title>` (axe
   `document-title`). Wait for the text (`toHaveText(/This link is invalid/)`);
   `app.html` now carries a default title for the states before a page mounts.
+- **The section title is not the tab.** The section header (its `h1` and
+  count) renders once the model loads; the tab's body is a lazy chunk that
+  lands after it. A page helper waits for the tab's own content (the
+  Transfers page's `openTransfers` waits for its rules card) before a spec
+  reads anything with a non-retrying call (`allTextContents`,
+  `boundingBox`, `evaluate`).
+- **Reload after a save only once the page has taken it in.** The PUT's
+  response reaching the network (`saveModelChanges`) is not the editor
+  holding it: the save bar goes when it does. Wait for the bar to go
+  (`toBeHidden`), as every save-then-reload spec does, so the reload leaves
+  a saved page rather than one mid-save behind its unsaved-changes guard
+  (issue #138, `transfers-page.spec.ts`).
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
@@ -662,6 +696,16 @@ Interaction details that bit:
   1440, 1280 and 390, and on paper (`emulateMedia({ media: 'print' })`).
   Two lines of one label are one `<text>` with a `<tspan>`, or the checker
   (and a reader) sees two labels touching.
+- **A layout that follows its box settles after the resize, not at it.**
+  `setViewportSize` returns before the page's ResizeObservers and media-query
+  change events have run, so a drawing sized from them (the Network map's
+  `fill`) is still the old width's for a frame or more; a check straight after
+  it measured the old drawing, or read the box and the labels on either side
+  of the re-layout (`diagram-labels.spec.ts` at 390, issue #138). Have the
+  component say what it was laid out for (the schematic's `data-fit`) and wait
+  until that matches the box now (`waitForMapFit`), after every resize and
+  every change that re-lays it out, never a sleep. A new layout sized from its
+  box gets the same kind of signal.
 - **A scroll box with nothing focusable inside fails axe**
   (`scrollable-region-focusable`): the Download → Preview table has only
   text, so a keyboard user couldn't scroll it. Give the box `tabindex="0"`,

@@ -256,6 +256,42 @@ describe('the run comparison', () => {
 		expect(x.surface.years[0].modelledM3).toBeCloseTo(sum(s.supplied!) - sum(s.groundwater_used!) - Math.min(toDam, damDraw), 3);
 	});
 
+	it("leaves a forecast run's forecast days out (issue #51); an ordinary run of the same record is the control", async () => {
+		const pid = (await owner.call('POST', '/projects', { name: 'Allocations: forecast' })).body.project.id;
+		const crop = { id: crypto.randomUUID(), name: 'Lucerne', cropFactor: monthly(0.9) };
+		const weir = node('Weir', null);
+		const farm = node('Forecast farm', weir.id);
+		const m = { nodes: [weir, farm], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 60_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, m)).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(200), ewrPragmaticM3PerDay: monthly(300) } })).status).toBe(200);
+		const rain = Array.from({ length: 400 }, (_, i) => (i % 9 === 0 ? 25 : i % 4 === 0 ? 3 : 0));
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: rain })).status).toBe(200);
+		const ordinary = await owner.call('POST', `/projects/${pid}/runs`, { label: 'ordinary' });
+		expect(ordinary.status, JSON.stringify(ordinary.body)).toBe(201);
+		// 30 dry days of forecast rain after the 400-day record (2021-10-01 … 2022-11-04): the farm irrigates through them.
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2022-11-05', values: new Array(30).fill(0) })).status).toBe(200);
+		const forecast = await owner.call('POST', `/projects/${pid}/runs`, { label: 'forecast', forecast: true });
+		expect(forecast.status, JSON.stringify(forecast.body)).toBe(201);
+		const use = async (id: string) => {
+			const res = await owner.call('GET', `/projects/${pid}/runs/${id}/allocations`);
+			expect(res.status, JSON.stringify(res.body)).toBe(200);
+			return res.body;
+		};
+		const f = await use(forecast.body.run.id);
+		expect(f.run.forecastFrom).toBe('2022-11-05');
+		// The forecast run stored the forecast days, and they held use.
+		const [stored] = await asOwner(`SELECT "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = 'supplied'`, [forecast.body.run.id, farm.id]);
+		const tail = (stored.values as number[]).slice(400);
+		expect(tail).toHaveLength(30);
+		expect(tail.reduce((s, v) => s + v, 0)).toBeGreaterThan(0);
+		// Its comparison is the ordinary run's to the m³: the record only.
+		const o = await use(ordinary.body.run.id);
+		expect(o.run.forecastFrom).toBeNull();
+		const years = (b: { comparison: { nodes: { nodeId: string; surface: { years: { waterYear: number; modelledM3: number }[] } }[] } }) =>
+			b.comparison.nodes.find((n) => n.nodeId === farm.id)!.surface.years.map((y) => [y.waterYear, Math.round(y.modelledM3)]);
+		expect(years(f)).toEqual(years(o));
+	});
+
 	it('takes a tolerance, and refuses one out of range', async () => {
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=0.25`)).body.comparison.tolerance).toBe(0.25);
 		expect((await viewer.call('GET', `/projects/${projectId}/runs/${runId}/allocations?tolerance=2`)).status).toBe(400);

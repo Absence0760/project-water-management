@@ -21,7 +21,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 	it(`leaves every series before the day as the base's to the bit and scales demand from it, on ${N} random networks`, () => {
 		let scaledDays = 0;
 		for (let seed = 1; seed <= N; seed++) {
-			const base = randomInput(seed, { maxNodes: 10, maxDays: 500 });
+			const base = randomInput(seed, { maxNodes: 10, maxDays: 500, allocationModes: false });
 			const x = runModel(base);
 			if (x.days < 3) continue;
 			const g = new Rng(seed ^ 0x51ed27);
@@ -51,7 +51,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 	}, 300_000);
 
 	it('passes the self-checks (the crop-requirement working reads the factor from the day)', () => {
-		const base = randomInput(3, { maxNodes: 6, maxDays: 400 });
+		const base = randomInput(3, { maxNodes: 6, maxDays: 400, allocationModes: false });
 		const x = runModel(base);
 		const from = fromEpochDay(toEpochDay(x.startDate) + Math.floor(x.days / 2));
 		const r = applyScenario({ ...base, settings: { ...base.settings, demandFactorFrom: from } }, everyone(base, 0.5));
@@ -60,7 +60,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 	});
 
 	it('before the run means every day, after it no day; absent or null is every day', () => {
-		const base = randomInput(5, { maxNodes: 6, maxDays: 300 });
+		const base = randomInput(5, { maxNodes: 6, maxDays: 300, allocationModes: false });
 		const scaled = applyScenario(base, everyone(base, 0.5)).input;
 		const every = runModel(scaled);
 		const before = runModel({ ...scaled, settings: { ...scaled.settings, demandFactorFrom: '1900-01-01' } });
@@ -72,7 +72,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 	});
 
 	it('ignores a value that is not an ISO date, with a warning', () => {
-		const base = randomInput(9, { maxNodes: 6, maxDays: 300 });
+		const base = randomInput(9, { maxNodes: 6, maxDays: 300, allocationModes: false });
 		const scaled = applyScenario(base, everyone(base, 0.5)).input;
 		const out = runModel({ ...scaled, settings: { ...scaled.settings, demandFactorFrom: '1 Oct' } });
 		expect(out.series).toEqual(runModel(scaled).series);
@@ -80,7 +80,7 @@ describe('settings.demandFactorFrom (engine 0.44.0)', () => {
 	});
 
 	it('scales month by month from the day (a months-form op)', () => {
-		const base = randomInput(11, { maxNodes: 6, maxDays: 500 });
+		const base = randomInput(11, { maxNodes: 6, maxDays: 500, allocationModes: false });
 		const x = runModel(base);
 		const cut = Math.floor(x.days / 3);
 		const day0 = toEpochDay(x.startDate);

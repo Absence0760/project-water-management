@@ -19,6 +19,13 @@
 		e.preventDefault();
 		start.call(document, () => goto(`${base}/login`));
 	}
+
+	// The diorama loops for as long as it is on screen, so the visitor can stop
+	// it (WCAG 2.2.2 Pause, Stop, Hide): a toggle, pressed = stopped on the
+	// still frame. Shown only where the scene can move (motion allowed, script
+	// running); under reduced motion nothing moves and there is nothing to stop.
+	let paused = $state(false);
+	let canMove = $state(false);
 </script>
 
 <section class="hero" aria-labelledby="landing-title">
@@ -34,7 +41,7 @@
 		</div>
 	</div>
 	<div class="art">
-		<Diorama mode="hero" priority>
+		<Diorama mode="hero" priority {paused} bind:canMove>
 			{#snippet tag()}
 				<span class="gauge-tag">
 					<strong>{t('Reserve met on {pct} % of days', { pct: fmt(DATA.hero.reserveMetPct) })}</strong>
@@ -42,6 +49,14 @@
 				</span>
 			{/snippet}
 		</Diorama>
+		{#if canMove}
+			<button type="button" class="pause" aria-pressed={paused} onclick={() => (paused = !paused)}>
+				<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+					{#if paused}<path d="M4 2.5 L13 8 L4 13.5 Z" />{:else}<path d="M3.5 2.5 H6.5 V13.5 H3.5 Z M9.5 2.5 H12.5 V13.5 H9.5 Z" />{/if}
+				</svg>
+				<span class="visually-hidden">{t('Pause the animation')}</span>
+			</button>
+		{/if}
 	</div>
 </section>
 
@@ -91,7 +106,30 @@
 	}
 	.art {
 		view-transition-name: catchment-scene;
+		position: relative;
 		min-width: 0;
+	}
+	.pause {
+		position: absolute;
+		right: 0.75rem;
+		bottom: 0.75rem;
+		display: grid;
+		place-items: center;
+		width: 40px;
+		height: 40px;
+		padding: 0;
+		color: var(--text);
+		background: var(--surface);
+		border: 1px solid var(--border-strong);
+		border-radius: 50%;
+		box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+		cursor: pointer;
+	}
+	.pause svg {
+		fill: currentColor;
+	}
+	.pause:hover {
+		background: var(--surface-2);
 	}
 	.gauge-tag {
 		display: grid;
@@ -101,7 +139,8 @@
 		border-radius: var(--radius);
 		background: var(--surface);
 		box-shadow: 0 6px 18px rgb(0 0 0 / 0.14);
-		font-size: 0.8rem;
+		/* The sign-in and landing pages' small-text floor: 14 px (1rem of the 14 px root). */
+		font-size: 1rem;
 		line-height: 1.3;
 		white-space: nowrap;
 	}

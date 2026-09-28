@@ -13,6 +13,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { register } from '../support/api.ts';
 import { plantEmailToken } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { words } from '../support/lang.ts';
 
 /** Well-formed, but no such token: the server answers "this link is no good". */
 const DEAD_TOKEN = 'q'.repeat(43);
@@ -192,4 +193,70 @@ test('the password field’s Show / Hide button is named for what it does, and t
 	await expect(page.getByRole('button', { name: 'Hide password' })).toBeVisible();
 	await page.getByRole('button', { name: 'Hide password' }).click();
 	await expect(field).toHaveAttribute('type', 'password');
+});
+
+// Issue #51 (the accessibility persona). The toggle sits beside the text, taking
+// its own width, so a long word (Afrikaans "Versteek", 70 px) never covers the
+// end of a revealed password (WCAG 1.4.4 / 1.4.10).
+for (const lang of ['en', 'af'] as const) {
+	test(`the password’s Show / Hide button never covers the field’s text, ${lang}`, async ({ page }) => {
+		const w = lang === 'en' ? (english: string) => english : await words(lang);
+		await page.addInitScript((code) => localStorage.setItem('wm.locale', code), lang);
+		await page.setViewportSize({ width: 360, height: 740 });
+		await page.goto('/login');
+		const field = page.locator('#password');
+		for (const name of ['Show password', 'Hide password']) {
+			const toggle = page.getByRole('button', { name: w(name) });
+			await expect(toggle).toBeVisible();
+			const [input, button] = await Promise.all([field.boundingBox(), toggle.boundingBox()]);
+			// The input's box (its text area and padding) ends before the button starts.
+			expect(input!.x + input!.width, `${name}: the input runs under the button`).toBeLessThanOrEqual(button!.x + 0.5);
+			await toggle.click();
+		}
+	});
+}
+
+// No text under 14 px on the sign-in pages (issue #51): they were the smallest
+// text in the app (11–12 px labels, hints and links) on the first screen a
+// reduced-vision farmer meets. Every visible text, at a phone's width.
+for (const lang of ['en', 'af'] as const) {
+	test(`the sign-in pages set no text under 14 px, ${lang}`, async ({ page }) => {
+		await page.addInitScript((code) => localStorage.setItem('wm.locale', code), lang);
+		await page.setViewportSize({ width: 390, height: 844 });
+		const w = lang === 'en' ? (english: string) => english : await words(lang);
+		for (const path of ['/login', '/register', '/forgot-password']) {
+			await page.goto(path);
+			// In the language's words (the Privacy notice link is on every one of them).
+			await expect(page.getByRole('link', { name: w('Privacy notice') }).first()).toBeVisible();
+			const small = await page.evaluate(() => {
+				const out: string[] = [];
+				const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+				for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+					const el = n.parentElement;
+					if (!el || !n.textContent?.trim() || !el.checkVisibility({ visibilityProperty: true, opacityProperty: true })) continue;
+					if (el.closest('.visually-hidden')) continue;
+					const size = Number.parseFloat(getComputedStyle(el).fontSize);
+					if (size < 14) out.push(`${size}px: ${n.textContent.trim().slice(0, 40)}`);
+				}
+				return out;
+			});
+			expect(small, path).toEqual([]);
+		}
+	});
+}
+
+// WCAG 2.2.2 Pause, Stop, Hide (issue #51): the sign-in panel's catchment is
+// decoration beside the form, so rather than a pause button it moves for under
+// 5 s and then holds still.
+test('the sign-in panel’s scene moves for under 5 s, then holds still', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.clock.install();
+	await page.goto('/login');
+	const scene = page.locator('.panel-brand svg.scene');
+	await expect(scene).toHaveAttribute('data-still', 'no');
+	const running = () => scene.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
+	expect(await running()).toBeGreaterThan(0);
+	await page.clock.runFor(4_999);
+	await expect(scene).toHaveAttribute('data-still', 'yes');
+	expect(await running()).toBe(0);
 });

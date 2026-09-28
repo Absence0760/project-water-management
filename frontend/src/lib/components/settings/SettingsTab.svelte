@@ -5,6 +5,8 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import { settingTarget } from '$lib/components/notes/notes';
 	import {
+		ALLOCATION_MODE_LABEL,
+		ALLOCATION_MODES,
 		CALIBRATION_FLOW_KINDS,
 		fitRecordCaveats,
 		fitRecordStatus,
@@ -23,6 +25,7 @@
 		type ProjectSettings,
 		type SeriesProvenance,
 		type ApanDailyFingerprint,
+		type AllocationMode,
 		type SeriesMeta
 	} from '@water-management/engine';
 	import { apanDailyOfValues } from '$lib/series/provenance';
@@ -942,6 +945,44 @@
 				<span class="hint" id="st-aat-h">A water year counts as met when at least this share of a hydrological unit's demand was supplied. 90 % by default: a project choice, not a standard.</span>
 				<FieldHistoryLine field="settings:assuranceAnnualThreshold" />
 			</div>
+		</fieldset>
+		<fieldset class="plain" data-testid="settings-allocations">
+			<legend>Registered volumes <HelpTip key="settings.allocationMode" /></legend>
+			<div class="form-row">
+				<div class="field">
+					<label for="st-alloc-mode">Allocation mode</label>
+					<select
+						id="st-alloc-mode"
+						disabled={readonly}
+						value={s.allocationMode ?? 'none'}
+						onchange={(e) => (s.allocationMode = e.currentTarget.value as AllocationMode)}
+						aria-describedby="st-alloc-mode-h"
+					>
+						{#each ALLOCATION_MODES as m (m)}<option value={m}>{ALLOCATION_MODE_LABEL[m]}</option>{/each}
+					</select>
+				</div>
+				<div class="field">
+					<span class="lbl"><label for="st-alloc-tol">Comparison band <span class="u">(± %)</span></label><HelpTip key="settings.allocationTolerance" /></span>
+					<NumberInput
+						id="st-alloc-tol"
+						min={0}
+						max={99}
+						scale={100}
+						disabled={readonly}
+						value={s.allocationTolerance ?? 0.1}
+						onchange={(v) => (s.allocationTolerance = v ?? undefined)}
+						aria-describedby="st-alloc-tol-h"
+					/>
+					<FieldHistoryLine field="settings:allocationTolerance" />
+				</div>
+			</div>
+			<span class="hint" id="st-alloc-mode-h">
+				What the Allocations tab’s registered volumes do to a run. Compare only (the default) changes nothing; a cap keeps each unit’s surface and groundwater use per
+				water year within its volumes; a full allocation scales each unit’s demand to its volumes, for “if every registered user took their entitlement”. Licence
+				conditions (months, rates) aren’t applied yet.
+			</span>
+			<span class="hint" id="st-alloc-tol-h">Modelled use within this share of a registered volume counts as “within band”. ±10 % by default, pending the hydrologist.</span>
+			<FieldHistoryLine field="settings:allocationMode" />
 		</fieldset>
 	</section>
 
