@@ -67,27 +67,29 @@ jobs:
         # and a handful of other GHA-specific sinks. Cheap to run — adds
         # ~30s to the matrix.
         #
-        # For Python-backed templates (web-python, anything shipping a Lambda
-        # written in Python), add `python` to the matrix:
-        #   language: [javascript-typescript, actions, python]
-        # Python uses `build-mode: none` like the other languages — no
-        # autobuilder needed for the security-and-quality query suite. For
-        # the analyzer to pick the right interpreter (matters when checking
-        # version-specific Python deprecations), also add a setup-python
-        # step before "Initialize CodeQL":
-        #   - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        #     with: { python-version: '3.14' }
-        language: [javascript-typescript, actions]
+        # python covers the workbook importer (scripts/wbt-import, which
+        # parses client workbooks: the one Python that reads untrusted
+        # input) and the smaller tools (brand/, scripts/help-art,
+        # scripts/landing-art, .claude/hooks). `build-mode: none` like the
+        # others; the setup-python step below gives the analyzer the
+        # interpreter the importer runs on (ci.yml, wbt-import).
+        language: [javascript-typescript, actions, python]
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Set up Python
+        if: matrix.language == 'python'
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: ${{ matrix.language }}
-          # No compile step — both languages are interpreted. Skips the
+          # No compile step — every language here is interpreted. Skips the
           # autobuild tracer and shaves a few minutes off each run.
           build-mode: none
           # security-and-quality is the broadest of the three suites
