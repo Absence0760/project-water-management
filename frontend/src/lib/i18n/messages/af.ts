@@ -81,6 +81,32 @@ export const af: Catalogue = {
 	'c184a764': 'Volgens die reënvoorspelling kan jou dam onder die waarskuwingsvlak van {threshold} daal: ongeveer {pct} rondom {date}.',
 	// Your dam is below the alert level of {threshold}: about {pct} on {date}.
 	'321b2d7f': 'Jou dam is onder die waarskuwingsvlak van {threshold}: ongeveer {pct} op {date}.',
+	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
+	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
+	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
+	'6449202d': 'As jy ’n verslag, uitvoer of deelskakel aan iemand gee, gee dit in geheel aan, en moenie ’n lopie wat nie afgeteken is nie as bewys vir ’n lisensieaansoek gebruik nie.',
+	// The Terms now start with a short version of the main points.
+	'48f71c1c': 'Die Voorwaardes begin nou met ’n kort weergawe van die hoofpunte.',
+	// {page} · Water Management
+	'96d7c65d': '{page} · Water Management',
+	// Our terms have changed
+	'530477d8': 'Ons voorwaardes het verander',
+	// Read what changed, then accept the new Terms of use and Privacy notice to carry on.
+	'5ad23668': 'Lees wat verander het, en aanvaar dan die nuwe Gebruiksvoorwaardes en Privaatheidskennisgewing om voort te gaan.',
+	// What changed
+	'e8345543': 'Wat verander het',
+	// Terms of use
+	'953dc886': 'Gebruiksvoorwaardes',
+	// Privacy notice
+	'016ac231': 'Privaatheidskennisgewing',
+	// Saving…
+	'74119e7f': 'Stoor tans…',
+	// Accept the new terms
+	'c67007cf': 'Aanvaar die nuwe voorwaardes',
+	// Signing out…
+	'53ed2592': 'Teken tans uit…',
+	// Sign out
+	'8b4f3c70': 'Teken uit',
 	// Sent — check your inbox (and spam folder).
 	'beb2912f': 'Gestuur — kyk in jou inkassie (en gemorspos).',
 	// Email confirmation
@@ -143,12 +169,8 @@ export const af: Catalogue = {
 	'874e0640': 'Wat beteken hierdie woorde?',
 	// Account
 	'59f8a2fc': 'Rekening',
-	// Privacy notice
-	'016ac231': 'Privaatheidskennisgewing',
 	// Don’t keep a copy on this phone
 	'adfda47f': 'Moenie ’n kopie op hierdie foon hou nie',
-	// Sign out
-	'8b4f3c70': 'Teken uit',
 	// Back to the workspace
 	'9ab2f19d': 'Terug na die werkruimte',
 	// Try again
@@ -337,8 +359,8 @@ export const af: Catalogue = {
 	'aeedf2e8': 'WGV',
 	// (you)
 	'394c6255': '(jy)',
-	// These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction.
-	'ee93a305': 'Hierdie syfers kom van ’n rekenaarmodel van die opvanggebied. Hulle kan verkeerd wees. Net ’n kennisgewing van jou WGV is ’n beperking.',
+	// These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
+	'5e0adb36': 'Hierdie syfers is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.',
 	// very little water needed
 	'ac1332f5': 'baie min water nodig',
 	// {pct} of water needed
@@ -439,8 +461,20 @@ export const af: Catalogue = {
 	'096438fe': 'Niemand meet jou dam hiervoor nie. Die model bereken die vlak elke dag uit reën, die rivier wat invloei, en die water wat jou gewasse nodig het.',
 	// If your gauge plate reads very differently, or your pump stops at another level, tell your WUA. It helps them correct the model.
 	'294b89aa': 'As jou peilplaat heel anders lees, of jou pomp by ’n ander vlak stop, sê vir jou WGV. Dit help hulle om die model reg te stel.',
-	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA is a restriction.
-	'f64a019a': 'Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV is ’n beperking.',
+	// Before you look at your farm
+	'72542aec': 'Voordat jy na jou plaas kyk',
+	// The figures here come from a computer model of the catchment, run for your WUA. Nobody measures your dam or your water use for this app.
+	'9343015e': 'Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV uitgevoer word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.',
+	// They are estimates, and they can be wrong. Check your dam and your water yourself before you act on them.
+	'fc70e559': 'Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy op die syfers optree.',
+	// Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction. Nothing else on these pages is.
+	'5e91fa9d': 'Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is ’n beperking nie.',
+	// The people who run this app don’t check the WUA’s figures and, as far as the law allows, accept no responsibility for losses from relying on them. See the {terms}, section 13.
+	'39185b23': 'Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, sover die wet dit toelaat, geen verantwoordelikheid vir verliese wat ontstaan omdat iemand daarop staatmaak nie. Sien die {terms}, afdeling 13.',
+	// I understand
+	'678bb07e': 'Ek verstaan',
+	// Forecasts change, and this is worked out by the model, not a promise. Only a notice from your WUA or from DWS is a restriction.
+	'bcdaf277': 'Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
 	// Next {days}
 	'0f4c3e21': 'Volgende {days}',
 	// Lowest dam level expected: about {pct} around {date}
@@ -503,8 +537,6 @@ export const af: Catalogue = {
 	'6cff79ac': 'Word gelees deur die WGV en enigiemand anders wat aan hierdie plaas gekoppel is.',
 	// Add note
 	'b6439108': 'Voeg nota by',
-	// Saving…
-	'74119e7f': 'Stoor tans…',
 	// Write something first.
 	'81dc7120': 'Skryf eers iets.',
 	// Too long: {length} of {max} characters.
@@ -597,10 +629,10 @@ export const af: Catalogue = {
 	'e31fe149': 'Jy het nodig gehad',
 	// {leaves} is about **{pct}** of the {need} you needed.
 	'78fd83cd': '{leaves} is ongeveer **{pct}** van die {need} wat jy nodig gehad het.',
-	// Only a notice from your WUA is a restriction. Right now: **no restriction**.
-	'09d3c636': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
-	// Only a notice from your WUA is a restriction. Right now: **{level}**.
-	'a99180e3': 'Net ’n kennisgewing van jou WGV is ’n beperking. Op die oomblik: **{level}**.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **no restriction**.
+	'4967ee19': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik is daar **geen beperking** nie.',
+	// Only a notice from your WUA or from DWS is a restriction. Right now: **{level}**.
+	'4ddcc30a': 'Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking. Op die oomblik: **{level}**.',
 	// Not your allocation or licence. It doesn’t know your registered water use.
 	'678ca7b2': 'Nie jou toekenning of lisensie nie. Dit ken nie jou geregistreerde watergebruik nie.',
 	// Not a forecast. It looks back over {span}.
@@ -665,8 +697,6 @@ export const af: Catalogue = {
 	'ff101d6d': 'Sien jou opvanggebied dag vir dag.',
 	// Footer
 	'575cffd2': 'Voetskrif',
-	// Terms of use
-	'953dc886': 'Gebruiksvoorwaardes',
 	// How the model is checked
 	'69391154': 'Hoe die model nagegaan word',
 	// What you get
@@ -819,6 +849,18 @@ export const af: Catalogue = {
 	'd0e44714': 'Bereken dekades se daaglikse vloei in sekondes.',
 	// Check the environmental flow requirement (EWR) against every farm’s use.
 	'65909895': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke plaas se gebruik.',
+	// The main things you agree to
+	'0a1c21b6': 'Die belangrikste dinge waartoe jy instem',
+	// Results are model estimates and can be wrong. Check them before you rely on them.
+	'b9189589': 'Die resultate is skattings van die model en kan verkeerd wees. Gaan dit na voordat jy daarop staatmaak.',
+	// As far as the law allows, we are not responsible for losses from decisions made on the results, and our total liability to you is limited to the fees you paid in the last 12 months or US $100, whichever is more (Terms §13).
+	'4a481dd3': 'Sover die wet dit toelaat, is ons nie verantwoordelik vir verliese weens besluite wat op die resultate geneem is nie, en ons totale aanspreeklikheid teenoor jou is beperk tot die fooie wat jy in die afgelope 12 maande betaal het of US $100, watter bedrag ook al die grootste is (Voorwaardes §13).',
+	// If someone claims against us because of what you put in or how you used the service, you cover that claim (Terms §14).
+	'1642b612': 'As iemand ’n eis teen ons instel weens wat jy ingevoer het of hoe jy die diens gebruik het, dra jy die koste van daardie eis (Voorwaardes §14).',
+	// If you live or are based in South Africa, South African law and South African courts apply; otherwise, Virginia law and courts. Either way, your rights under the consumer and data-protection law where you live still apply (Terms §15).
+	'7f91a8a0': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en Suid-Afrikaanse howe; andersins die reg en howe van Virginia. In albei gevalle geld jou regte kragtens die verbruikers- en databeskermingsreg van die plek waar jy woon steeds (Voorwaardes §15).',
+	// The Terms are in English; this summary is in your language.
+	'782a6b6b': 'Die Voorwaardes is in Engels; hierdie opsomming is in jou taal.',
 	// River flow each month, in m³ a day
 	'a0ddf26e': 'Riviervloei elke maand, in m³ per dag',
 	// Ecological reserve
@@ -855,6 +897,8 @@ export const af: Catalogue = {
 	'cd1a360e': 'Onder sy reserwe op {n} van die afgelope {days}.',
 	// {n} of {days} below it this season (since {date}).
 	'a8344db9': '{n} van {days} hierdie seisoen daaronder (sedert {date}).',
+	// A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
+	'8431cc26': '’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.',
 	// {farms} in the catchment.
 	'aecf2c05': '{farms} in die opvanggebied.',
 	// Language
@@ -873,8 +917,10 @@ export const af: Catalogue = {
 	'7f8f9853': 'Te veel pogings om met hierdie adres in te teken. Probeer weer oor {wait}, of stel jou wagwoord terug.',
 	// Too many accounts were made from your network. Try again in {wait}.
 	'f8d1f4b2': 'Te veel rekeninge is van jou netwerk af geskep. Probeer weer oor {wait}.',
-	// The Terms of use or Privacy notice changed since this page opened. Reload the page, read them, and sign up again.
-	'c3395d0e': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy, lees hulle en registreer weer.',
+	// The Terms of use or Privacy notice changed since this page opened. Reload the page and read them again.
+	'b7c3703c': 'Die Gebruiksvoorwaardes of die Privaatheidskennisgewing het verander sedert jy hierdie bladsy oopgemaak het. Herlaai die bladsy en lees hulle weer.',
+	// This notice changed since the page opened. Reload the page and read it again.
+	'e8f9dfe9': 'Hierdie kennisgewing het verander sedert die bladsy oopgemaak is. Herlaai die bladsy en lees dit weer.',
 	// Your current password is wrong.
 	'ee4b7db1': 'Jou huidige wagwoord is verkeerd.',
 	// Your password was changed somewhere else a moment ago. Sign in again.
@@ -937,8 +983,6 @@ export const af: Catalogue = {
 	'c5951029': 'Gebruik hoogstens 100 karakters.',
 	// Enter your current password.
 	'f555922c': 'Tik jou huidige wagwoord in.',
-	// {page} · Water Management
-	'96d7c65d': '{page} · Water Management',
 	// Email
 	'43352167': 'E-pos',
 	// Status
@@ -1135,8 +1179,8 @@ export const af: Catalogue = {
 	'4b568eda': 'die projek {name}',
 	// the team {name}
 	'bbe4f51e': 'die span {name}',
-	// By creating an account, you agree to the {terms} and {privacy}.
-	'db2110ec': 'Deur ’n rekening te skep, aanvaar jy die {terms} en die {privacy}.',
+	// I have read the main points above and accept the {terms} and {privacy}.
+	'074c540e': 'Ek het die hoofpunte hierbo gelees en aanvaar die {terms} en die {privacy}.',
 	// Password must be 8–200 characters.
 	'fe087f11': 'Wagwoord moet 8–200 karakters lank wees.',
 	// The two passwords don’t match. Type the same password in both.
@@ -1163,8 +1207,6 @@ export const af: Catalogue = {
 	'a33d5294': 'Hierdie uitnodiging na **{target}** is vir **{email}**, nie vir die rekening waarmee jy ingeteken is nie.',
 	// To accept it, sign out and create an account for {email}. To use this account instead, ask {inviter} to invite {me}.
 	'd7e05349': 'Om dit te aanvaar, teken uit en skep ’n rekening vir {email}. Om eerder hierdie rekening te gebruik, vra {inviter} om {me} uit te nooi.',
-	// Signing out…
-	'53ed2592': 'Teken tans uit…',
 	// Sign out and accept as {email}
 	'f5eed39b': 'Teken uit en aanvaar as {email}',
 	// Stay signed in and go to your projects
@@ -1253,8 +1295,8 @@ export const af: Catalogue = {
 	'254af6c5': 'Oor hierdie bladsy',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no farm’s figures.
 	'60cadb22': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen plaas se syfers nie.',
-	// A model of the catchment, not measurements; it can be wrong. This link works until it expires or is withdrawn.
-	'e4b3fdc4': '’n Model van die opvanggebied, nie metings nie; dit kan verkeerd wees. Hierdie skakel werk totdat dit verval of teruggetrek word.',
+	// This link works until it expires or is withdrawn.
+	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
 	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
 	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// We’ve sent a new link to {email}.

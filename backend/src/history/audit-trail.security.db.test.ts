@@ -51,7 +51,9 @@ async function signOff(u: User, run: string, pid = projectId) {
 	const { statement, statementSha256 } = (await u.call('GET', path)).body;
 	const res = await u.call('POST', path, {
 		fullName: 'Trail Signer',
-		registrationBody: 'SACNASP',
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationField: 'water_resources',
 		registrationNo: '1',
 		scope: 'the trail',
 		confirmed: statement.confirmations.map((k: { id: string }) => k.id),

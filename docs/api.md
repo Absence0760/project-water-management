@@ -21,7 +21,9 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/logout` | – | `204`, clears cookie |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
+| POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
 | GET | `/auth/me/export` | – | `200` a JSON file (`Content-Disposition: attachment; filename="my-data_<date>.json"`, `Cache-Control: no-store`): the signed-in person's data-subject export; `429` + `Retry-After` within a minute of the last one (signed in) |
+| POST | `/auth/me/farm-notice` | `{ version }` | "I understand" on the farm view's "Before you look at your farm" notice: `version` is the one the page showed (the engine's `FARMER_NOTICE_VERSION`, `packages/engine/src/legal.ts`); any other is `409 farm_notice_changed` (`params.version`: the current one). Stored on the account with the database's time (`app_user.farm_notice_version` / `farm_notice_accepted_at`, 093). `200 { user }` (signed in) |
 | PATCH | `/auth/me` | `{ displayName?, locale?, volumeUnit?, preferences? }` | `200 { user }`; `400` a blank or over-100-character name, an unknown `locale` or `volumeUnit`, malformed `preferences`, or nothing to change (signed in) |
 | POST | `/auth/change-password` | `{ currentPassword, newPassword }` | `200 { user }` + a fresh cookie for this device; revokes **every other** session; `403` wrong current password; `429` + `Retry-After` while the address is locked; `400` new password not 8–200 characters (signed in) |
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
@@ -68,7 +70,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -85,8 +87,17 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   `termsCurrent` is whether the account accepted the terms and privacy
   notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
   `false` after the version changes, and for an account a script made
-  (`seed:examples`, `import:project`: they accept nothing). Nothing asks
-  again yet ([legal-status.md](./legal-status.md)).
+  (`seed:examples`, `import:project`: they accept nothing). The app then
+  shows its re-acceptance notice before any page, and `POST
+  /auth/me/accept-terms` records the new version
+  ([legal-status.md](./legal-status.md)). Only the app is gated: other
+  calls still answer.
+  `farmNoticeCurrent` is whether the account acknowledged the farm view's
+  notice now in force (`app_user.farm_notice_version` =
+  `FARMER_NOTICE_VERSION`, 093): `false` until the farmer presses "I
+  understand" (`POST /auth/me/farm-notice`), and again after the version
+  changes; the farm pages show the notice instead of the figures until then
+  ([ui.md § Farmer view](./ui.md)).
 - **`GET /auth/me/export`** ("download my data", POPIA access;
   `backend/src/auth/export.ts`, 054_subject_export.sql) returns one JSON
   document, `{ format: 'water-management.subject-export', version: 1,
@@ -97,7 +108,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   or `[]` if they never saved any. `account` is
   the `app_user` row without the password hash (so it includes
   `termsVersion` and `termsAcceptedAt`, the terms accepted at sign-up,
-  087). `farms` is one entry per farm
+  087, and `farmNoticeVersion` and `farmNoticeAcceptedAt`, the farm view
+  notice acknowledged, 093). `farms` is one entry per farm
   linked to the person (`projectId`, `farmName`, `linkedAt`, `linkedBy`),
   with the registered volumes matched to that farm (`allocations`, holder
   name included) and the current publication's figures for it as the farm
@@ -186,7 +198,8 @@ unless it is listed there with why its status says enough.
 | `signin_locked` | 429 | sign-in or a password change while the address is locked; `params.seconds` (also `Retry-After`) |
 | `account_exists` | 409 | sign-up **through an invite link** with an address that has an account (an ordinary sign-up answers the same `202` either way) |
 | `signup_throttled` | 429 | `POST /auth/register` past the sign-up throttle (10 an hour per client address, 500 an hour in all), before the address is looked at; `params.seconds` (also `Retry-After`) |
-| `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or with a version that isn't the current one (a sign-up page loaded before the terms changed); `params.version` is the current one. Checked before the sign-up throttle counts |
+| `terms_not_accepted` | 400 | `POST /auth/register` without `acceptTerms`, or `POST /auth/me/accept-terms` without `version`, or with a version that isn't the current one (a page loaded before the terms changed); `params.version` is the current one. On sign-up, checked before the sign-up throttle counts |
+| `farm_notice_changed` | 409 | `POST /auth/me/farm-notice` with a version that isn't the current one (a farm page loaded before the notice changed); `params.version` is the current one |
 | `wrong_current_password` | 403 | `POST /auth/change-password` |
 | `password_changed_elsewhere` | 409 | a concurrent password change won |
 | `link_invalid` | 400 | a reset or confirmation link that is used, expired or malformed |
@@ -1145,7 +1158,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | POST | `/projects/:id/runs` | `{ label?, forecast? }` | `201 { run, removedRunIds }` — `removedRunIds`: older runs deleted by the per-project cap (for a forecast run: the project's older forecast run). `forecast: true` makes a **forecast run** (below); `409` when there is no forecast rain after the last observed rain day. The engine runs with no database connection held; your role is checked again before the run is stored, so if you lose editor access meanwhile the answer is `403`/`404` and nothing is stored. The run records the inputs it was computed from, even if the project changes while it runs ([architecture.md § A model run](./architecture.md#a-model-run)) | editor |
 | GET | `/projects/:id/model-input` | – | `{ input: ModelInput }`: exactly what a run would use (settings merged over the defaults, the model, the first series of each kind by name), for the in-browser engine (automatic calibration) | viewer |
 | GET | `/projects/:id/runs` | – | `{ runs: RunMeta[] }` (newest first) | viewer |
-| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off | viewer |
+| GET | `/projects/:id/runs/:runId` | – | `{ run: run & { settings, model, verified }, series: { nodeId, key, label, unit }[] }`; `settings` is the run's own settings snapshot (below) and `model` its model snapshot (`{ nodes, crops, cropAreas, transfers, … }` as they were when it ran; the `.xlsx` workbook names its node sheets and fills its Inputs sheet from it); `verified`: its server stamp still matches its rows (security.md § Run stamps), false for a run written past the model run or changed since, which can't be signed off; `forecastRainSource`: a forecast run's rain source, `chirps_gefs` when a CHIRPS-GEFS feed wrote every forecast day (from the first to the forecast series' end), `other` otherwise (an uploaded forecast, or a day a person wrote), `null` for any other run and a forecast run stored before it was recorded; the report credits CHIRPS-GEFS only on `chirps_gefs` | viewer |
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
@@ -1657,15 +1670,33 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/runs/:runId/signoffs` | – | `{ statement, statementSha256, disclaimer: { version, status }, cannotSign, signoffs: Signoff[] }` (oldest first). `cannotSign` is why the caller can't sign (`requires editor role`, or the legacy-run reason, or the forecast-run one, WP-2.12, or the unverified-run one, security.md § Run stamps), `null` when they can | viewer |
-| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
+| POST | `/projects/:id/runs/:runId/signoffs` | `{ fullName, registrationBody: 'sacnasp' \| 'ecsa', registrationCategory, registrationField, registrationNo, scope, confirmed: string[], statementSha256 }` | `201 { signoff }`. `400` for a category or field that isn't one of the body's, and for a candidate, certificated or specified category, with the reason (a candidate works under a professional's supervision, so the supervising professional signs); `409` when `statementSha256` isn't the current statement's (it changed since it was shown: read it again); `400` when a confirmation id is missing from `confirmed`; `409` for a legacy run (a stored run from before engine 1.0.0, which removed that model; workbook comparison only, audit H1), or a forecast run (`409`, WP-2.12: a sign-off is judged on the record, and a forecast run's last days are modelled on forecast rain); `409` `run_unverified` for a run whose server stamp is missing or no longer matches its rows (a run written past the model run, or changed since; security.md § Run stamps) | editor |
 
 - `statement` is the engine's `signoffStatement(run)`: `{ version, runId,
   engineVersion, scenario, confirmations: { id, text }[], limitations:
   Limitation[], notes: string[], disclaimerVersion }`. `statementSha256` is
   the SHA-256 hex of its RFC 8785 text (`signoffStatementText`); a sign-off
-  sends it back and the server recomputes it.
-- `Signoff = { id, runId, fullName, registrationBody, registrationNo, scope,
-  statementVersion, statementSha256, disclaimerVersion, signedAt, mine }`.
+  sends it back and the server recomputes it. The current version is
+  `signoff-3` (issue #47), with ten confirmation ids, in order: `identity`,
+  `competence`, `conflict`, `inputs`, `calibration`, `ewr`, `works`,
+  `assurance`, `plausibility`, `limitations`; `confirmed` must hold every
+  one. The signer's details are `fullName`, the registration as codes of
+  the engine's lists (`liability/registration.ts`: `registrationBody`
+  `sacnasp` or `ecsa`; `registrationCategory`, e.g. `pr_sci_nat`, `pr_eng`;
+  `registrationField`, a SACNASP field of practice such as
+  `water_resources` or an ECSA discipline such as `civil`),
+  `registrationNo` (free text, 1–50) and `scope`. A warn-level choice (Pr
+  Techni Eng, Pr Cert Eng, an unusual field) is the dialog's warning, not an
+  error.
+- New sign-offs are always made against the current statement. A stored
+  sign-off keeps the `statementVersion` and `statementSha256` it recorded
+  (earlier ones say `signoff-1` or `signoff-2`), and is listed beside newer
+  ones unchanged.
+- `Signoff = { id, runId, fullName, registrationBody, registrationCategory,
+  registrationField, registrationNo, scope, statementVersion,
+  statementSha256, disclaimerVersion, signedAt, mine }`. On a `signoff-1` or
+  `-2` sign-off `registrationBody` is the signer's free text and category
+  and field are `null` (not recorded).
 - There is no route to change or remove a sign-off, and RLS allows neither. A
   signed run is **cited** ([Runs](#runs)): it can't be deleted or trimmed.
   Each sign-off is in the project's history (`signoff.created`).
@@ -2482,6 +2513,17 @@ stored run from before engine 1.0.0, audit H1) start with a leading comment line
 `# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
 ahead of the usual header row.
 
+**Disclaimer line.** Every CSV of a run's results (`daily.csv`, `farms.csv`,
+`summary.csv`; not the input series' `export.csv`, the allocations export or
+the farm view's `…/farm/:nodeId/export.csv`, whose download on the farm view
+gets the farm view's own translated disclaimer line added by the page) carries the report disclaimer's key point on a `#`
+line (engine `CSV_DISCLAIMER_COMMENT`, quoted in
+[legal/disclaimer-review.md § 1](./legal/disclaimer-review.md)), after a
+legacy run's warning and before the provenance line:
+`# model estimates that can be wrong; not an authorisation to use water; as far as the law allows the operator of this software accepts no responsibility to anyone who relies on this file; see the report disclaimer (version <disclaimer version>)`.
+It holds no comma, quote or `=`, so a reader that doesn't skip comments sees
+one text cell.
+
 **Provenance line.** Every `daily.csv` and `farms.csv` (not the input
 series' `export.csv`) starts with a `#` line saying which run made it, so the
 file still says so once it is renamed or pasted into a workbook (operator
@@ -2496,8 +2538,8 @@ percent-encoded (`%XX`, UTF-8; `decodeURIComponent` or Python's
 control character (tab, CR, LF, the Unicode line separators), so a run label
 can never end the line, add a key or a CSV cell, and the whole line is one
 cell starting with `#`, which no spreadsheet runs as a formula (split on `;`,
-each part starts with a space and a key). The header row is therefore row 2
-(row 3 on a legacy run): read the file with
+each part starts with a space and a key). The header row is therefore row 3,
+after the disclaimer and provenance lines (row 4 on a legacy run): read the file with
 `pandas.read_csv(path, comment='#')` (or `skiprows` the `#` lines); a plain
 `pandas.read_csv(path)` takes the `#` line as the header.
 
@@ -2526,7 +2568,8 @@ order:
 
 | Sheet | From | Content |
 | --- | --- | --- |
-| Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, the flow-duration percentiles (Q10–Q95; a small flow in m³/s, l/s or Mm³ that three decimals would show as 0.000 gets the decimals for two significant figures, issue #45), WR2012, the column guide (a legacy run's `# runoff_model=legacy …` line first) |
+| Read this first | engine `DISCLAIMER` | The report disclaimer's five paragraphs (the Terms URL on the site's own address) and its version |
+| Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, the flow-duration percentiles (Q10–Q95; a small flow in m³/s, l/s or Mm³ that three decimals would show as 0.000 gets the decimals for two significant figures, issue #45), WR2012, the column guide (the CSV's `#` lines first: a legacy run's `# runoff_model=legacy …`, then the disclaimer line) |
 | Catchment, then one per node | bulk route | `date` + the daily CSV's columns and headers for the catchment, then each node with series in the run's network order (b023's element sheets); the daily CSV's `#` provenance line isn't repeated here, the Summary sheet names the run |
 | Curtailment | summary CSV | Curtailment targets, land cover, other users, EWR sites |
 | EWR grid | `summary.ewrCompliance` | Days simulated, then per site (the outlet, each farm) days not met and volume short (m³), water year × month (Oct … Sep) with a year total |

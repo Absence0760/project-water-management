@@ -352,7 +352,7 @@ export function accessLine(p: { displayName: string; role: string; you: boolean 
 }
 
 // i18n-section: farm
-export const disclaimer = () => t('These figures come from a computer model of the catchment. They can be wrong. Only a notice from your WUA is a restriction.');
+export const disclaimer = () => t('These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.');
 
 // ---- Several farms (/farm, board 9) ------------------------------------------
 

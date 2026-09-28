@@ -5,8 +5,10 @@
 // advisory lock and the second caller finds it done.
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { APIRequestContext } from '@playwright/test';
-import { withSetupLock } from './db.ts';
+import { request as playwrightRequest, type APIRequestContext } from '@playwright/test';
+import { LEGAL_VERSION } from '../../packages/engine/src/legal.ts';
+import { acknowledgeFarmNotice } from './api.ts';
+import { setTermsVersion, withSetupLock } from './db.ts';
 import { API_URL, APP_E2E_URL } from './env.ts';
 
 // DEV-ONLY demo credentials, as printed by `pnpm seed:examples`.
@@ -14,6 +16,8 @@ export const DEMO = { email: 'demo@example.com', password: 'demo-password' };
 export const ANALYST = { email: 'analyst@example.com', password: 'demo-password' };
 export const FARMER1 = { email: 'farmer1@example.com', password: 'demo-password' };
 export const FARMER2 = { email: 'farmer2@example.com', password: 'demo-password' };
+/** Every demo account `seed:examples` makes. */
+const DEMO_EMAILS = [DEMO.email, ANALYST.email, FARMER1.email, FARMER2.email, 'applicant@example.com'];
 export const KLEINBERG = 'Example · Kleinberg (winter rainfall)';
 export const DROEVLEI = 'Example · Droëvlei (water-stressed)';
 export const SANDSPRUIT = 'Example · Sandspruit (summer rainfall, larger network)';
@@ -30,11 +34,25 @@ const SEED_LOCK = 25_014;
 export async function seedExamplesOnce(request: APIRequestContext): Promise<void> {
 	await withSetupLock(SEED_LOCK, async () => {
 		const probe = await request.post(`${API_URL}/auth/login`, { data: DEMO });
-		if (probe.ok()) return; // already seeded earlier in this run (another spec, or --repeat-each)
-		execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
-			cwd: backendDir,
-			env: { ...process.env, DATABASE_URL: APP_E2E_URL },
-			stdio: 'pipe'
-		});
+		// Unless already seeded earlier in this run (another spec, or --repeat-each).
+		if (!probe.ok()) {
+			execFileSync('pnpm', ['exec', 'tsx', 'scripts/seed-examples.ts'], {
+				cwd: backendDir,
+				env: { ...process.env, DATABASE_URL: APP_E2E_URL },
+				stdio: 'pipe'
+			});
+		}
+		// The script's accounts accepted no terms; the specs aren't about the re-acceptance notice.
+		await setTermsVersion(DEMO_EMAILS, LEGAL_VERSION);
+		// Either way, the seed's farmers have pressed "I understand" on the farm view's
+		// notice, so the specs that use them meet their figures (each in its
+		// own context, leaving the caller's session alone).
+		for (const farmer of [FARMER1, FARMER2]) {
+			const ctx = await playwrightRequest.newContext();
+			const login = await ctx.post(`${API_URL}/auth/login`, { data: farmer });
+			if (!login.ok()) throw new Error(`seeded farmer sign-in: ${login.status()}`);
+			await acknowledgeFarmNotice(ctx);
+			await ctx.dispose();
+		}
 	});
 }

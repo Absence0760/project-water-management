@@ -121,7 +121,16 @@ export async function collectWorkbookInput(
 	// A forecast run (WP-2.12): every daily sheet leads with the forecast flag, as the daily CSVs do.
 	const flagged = (t: DailyTable | null) => (t && run.summary.forecast ? withForecastFlag(t, run.summary.forecast.from) : t);
 	return {
-		input: { summaryCsv, summary: run.summary, settings: run.settings, model: run.model, catchment: flagged(catchment), nodes: nodes.map((t) => flagged(t)!) },
+		input: {
+			summaryCsv,
+			summary: run.summary,
+			settings: run.settings,
+			model: run.model,
+			catchment: flagged(catchment),
+			nodes: nodes.map((t) => flagged(t)!),
+			// The worker runs on the site's own origin: the disclaimer's Terms URL.
+			site: globalThis.location?.origin ?? ''
+		},
 		filename
 	};
 }

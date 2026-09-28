@@ -4,7 +4,15 @@
 // A sign-off is immutable: there is no route to change or remove one, and RLS
 // gives water_app no UPDATE or DELETE on the table either.
 import { createHash } from 'node:crypto';
-import { DISCLAIMER, signoffStatement, signoffStatementText, type SignoffStatement } from '@water-management/engine';
+import {
+	DISCLAIMER,
+	REGISTRATION_BODIES,
+	registrationCheck,
+	signoffStatement,
+	signoffStatementText,
+	type RegistrationBodyCode,
+	type SignoffStatement
+} from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -26,9 +34,16 @@ const text = (max: number) =>
 
 /** Why a legacy run can't be signed. */const LEGACY = 'a legacy (b023 workbook) run, from before engine 1.0.0 removed that model, is a workbook comparison only, not evidence (audit H1), so it cannot be signed off';
 
+const BODIES = REGISTRATION_BODIES.map((b) => b.code) as [RegistrationBodyCode, ...RegistrationBodyCode[]];
+/** A category or field code; which ones a body has is checked by the engine's registrationCheck. */
+const code = z.string().regex(/^[a-z_]{1,40}$/, 'must be a registration code');
+
 export const SignoffBody = z.object({
 	fullName: text(200),
-	registrationBody: text(100),
+	/** The body, category and field as fixed choices (engine liability/registration.ts, issue #47). */
+	registrationBody: z.enum(BODIES),
+	registrationCategory: code,
+	registrationField: code,
 	registrationNo: text(50),
 	scope: text(1000),
 	/** The ids of the confirmations ticked: all of the statement's must be. */
@@ -41,7 +56,11 @@ export interface SignoffRow {
 	id: string;
 	runId: string;
 	fullName: string;
+	/** 'sacnasp' or 'ecsa' from signoff-3; the signer's free text on older rows. */
 	registrationBody: string;
+	/** Null on a signoff-1 or -2 row: category and field not recorded. */
+	registrationCategory: string | null;
+	registrationField: string | null;
 	registrationNo: string;
 	scope: string;
 	statementVersion: string;
@@ -53,7 +72,7 @@ export interface SignoffRow {
 }
 
 const SELECT = `SELECT id, run_id AS "runId", full_name AS "fullName", registration_body AS "registrationBody",
-	registration_no AS "registrationNo", scope, statement_version AS "statementVersion",
+	registration_category AS "registrationCategory", registration_field AS "registrationField", registration_no AS "registrationNo", scope, statement_version AS "statementVersion",
 	statement_sha256 AS "statementSha256", disclaimer_version AS "disclaimerVersion", signed_at AS "signedAt",
 	user_id IS NOT DISTINCT FROM app_current_user_id() AS mine
 	FROM signoff`;
@@ -120,10 +139,27 @@ export const signoffRoutes = new Hono<AuthEnv>()
 				throw new ApiError(409, 'the sign-off statement has changed since it was shown (a new limitation or wording); read it again and sign the new one');
 			const missing = statement.confirmations.filter((k) => !body.confirmed.includes(k.id));
 			if (missing.length) throw new ApiError(400, `every statement must be confirmed; missing: ${missing.map((k) => k.id).join(', ')}`);
+			// A candidate, certificated or specified category can't sign; a warning is the dialog's, not an error.
+			const reg = registrationCheck(body.registrationBody, body.registrationCategory, body.registrationField);
+			if (reg.invalid) throw new ApiError(400, reg.invalid);
+			if (reg.block) throw new ApiError(400, reg.block);
 			const { rows } = await db.query<{ id: string }>(
-				`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version)
-				 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-				[id, runId, body.fullName, body.registrationBody, body.registrationNo, body.scope, statement.version, expected, statement.disclaimerVersion]
+				`INSERT INTO signoff (project_id, run_id, user_id, full_name, registration_body, registration_category, registration_field, registration_no, scope,
+					statement_version, statement_sha256, disclaimer_version)
+				 VALUES ($1, $2, app_current_user_id(), $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+				[
+					id,
+					runId,
+					body.fullName,
+					body.registrationBody,
+					body.registrationCategory,
+					body.registrationField,
+					body.registrationNo,
+					body.scope,
+					statement.version,
+					expected,
+					statement.disclaimerVersion
+				]
 			);
 			const signoffId = rows[0]!.id;
 			await recordAudit(db, id, 'signoff.created', {
@@ -131,6 +167,8 @@ export const signoffRoutes = new Hono<AuthEnv>()
 				runId,
 				fullName: body.fullName,
 				registrationBody: body.registrationBody,
+				registrationCategory: body.registrationCategory,
+				registrationField: body.registrationField,
 				registrationNo: body.registrationNo,
 				statementVersion: statement.version,
 				statementSha256: expected

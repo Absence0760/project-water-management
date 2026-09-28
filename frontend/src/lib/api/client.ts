@@ -2,7 +2,7 @@
 // session cookie (credentials: 'include') and turns a non-2xx response into an
 // ApiError carrying the HTTP status and the server's message.
 import type { Locale } from '@water-management/engine/languages';
-import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 import type {
 	AllocationComparison,
 	DailySeries,
@@ -235,6 +235,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 					...(inviteToken ? { inviteToken } : {}),
 					...(locale ? { locale } : {})
 				}),
+			/**
+			 * The re-acceptance step (docs/legal-status.md): accept the terms
+			 * version this build shows (LEGAL_VERSION) after they changed.
+			 * ApiError 400 terms_not_accepted = they changed again since.
+			 */
+			acceptTerms: () => request<{ user: User }>('POST', '/auth/me/accept-terms', { version: LEGAL_VERSION }).then((r) => r.user),
 			logout: () => request<void>('POST', '/auth/logout'),
 			/** Signs out every device (this one included): revokes every session issued before now. */
 			logoutEverywhere: () => request<void>('POST', '/auth/logout-everywhere'),
@@ -243,6 +249,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			 * Changes only the fields sent. `locale: null` goes back to following the browser.
 			 * `preferences`: the keys sent replace the account's (`hiddenTabs: []` shows every section again).
 			 */
+			/** "I understand" on the farm view's notice: records the version this build shows (409 farm_notice_changed if it is no longer current). */
+			acknowledgeFarmNotice: () =>
+				request<{ user: User }>('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION }).then((r) => r.user),
 			updateMe: (patch: { displayName?: string; locale?: Locale | null; volumeUnit?: 'm3' | 'ML'; preferences?: Partial<UserPreferences> }) =>
 				request<{ user: User }>('PATCH', '/auth/me', patch).then((r) => r.user),
 			/**

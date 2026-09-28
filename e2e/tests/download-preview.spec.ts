@@ -17,7 +17,8 @@ test('the all-farms preview shows the downloaded file’s table, finds a date, s
 
 	// The file, as the download gives it.
 	const csv = await (await page.request.get(`${API_URL}/projects/${project.id}/runs/${runId}/export/farms.csv?key=runoff`)).text();
-	const [provenance, head, ...body] = csv.replace(/^﻿/, '').trim().split('\r\n');
+	const [disclaimer, provenance, head, ...body] = csv.replace(/^﻿/, '').trim().split('\r\n');
+	expect(disclaimer).toMatch(/^# model estimates /); // the disclaimer line first (docs/api.md § Export)
 	expect(provenance).toMatch(/^# run=Baseline; engine=/); // the run's provenance line, ahead of the header (docs/api.md § Export)
 	const farms = head!.split(',').slice(1);
 	expect(farms).toHaveLength(2);

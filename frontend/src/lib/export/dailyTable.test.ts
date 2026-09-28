@@ -1,3 +1,4 @@
+import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { csvCells, parseDailyCsv } from './dailyTable';
 
@@ -42,6 +43,14 @@ describe('parseDailyCsv', () => {
 		expect(t.legacy).toBe(false);
 		expect(t.headers).toEqual(['A']);
 		expect(t.dates).toEqual(['2024-01-01']);
+	});
+
+	it('reads past the disclaimer line that leads every result CSV to the provenance and the table', () => {
+		const t = parseDailyCsv(`﻿${CSV_DISCLAIMER_COMMENT}\r\n${PROVENANCE}\r\ndate,A\r\n2024-01-01,3\r\n`);
+		expect(t.provenance?.run).toBe('Baseline v2');
+		expect(t.legacy).toBe(false);
+		expect(t.headers).toEqual(['A']);
+		expect(t.columns).toEqual([[3]]);
 	});
 
 	it('decodes a percent-encoded label with the separators, a quote and a line break in it', () => {

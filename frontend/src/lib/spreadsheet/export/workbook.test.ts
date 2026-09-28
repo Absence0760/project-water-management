@@ -1,4 +1,4 @@
-import type { RunSummary } from '@water-management/engine';
+import { DISCLAIMER, withSite, type RunSummary } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import * as XLSX from 'xlsx/dist/xlsx.mini.min';
 import { parseCsv } from './csv';
@@ -118,8 +118,16 @@ describe('buildWorkbook', () => {
 		wb = read(await buildWorkbook(input()));
 	});
 
+	it('leads with the disclaimer, every paragraph with the Terms URL filled in, and its version', async () => {
+		const rows = aoa(read(await buildWorkbook(input({ site: 'https://water.example.com' }))).Sheets['Read this first']!).map((r) => r[0]);
+		DISCLAIMER.paragraphs.forEach((p, i) => expect(rows).toContain(`${i + 1}. ${withSite(p, 'https://water.example.com')}`));
+		expect(rows.some((r) => String(r).endsWith('Terms of use: https://water.example.com/terms.'))).toBe(true);
+		expect(rows).toContain(`Disclaimer version ${DISCLAIMER.version}.`);
+	});
+
 	it('names the sheets in order, Excel-safe and unique', () => {
 		expect(wb.SheetNames).toEqual([
+			'Read this first',
 			'Summary',
 			'Catchment',
 			'=Upper farm',
@@ -396,14 +404,15 @@ describe('the zip container', () => {
 		}
 		expect(entries).toBeGreaterThan(5);
 		const p = parts(bytes);
-		expect([...p.keys()]).toEqual(expect.arrayContaining(['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet2.xml']));
-		// Sheet 2 (the farm) holds the same XML SheetJS writes from the full cells.
+		expect([...p.keys()]).toEqual(expect.arrayContaining(['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/worksheets/sheet3.xml']));
+		// Sheet 3 (the farm, after Read this first and Summary) holds the same XML SheetJS writes from the full cells.
 		const wb = XLSX.utils.book_new();
+		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x']]), 'Read this first');
 		XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['x']]), 'Summary');
 		XLSX.utils.book_append_sheet(wb, dailyCells(XLSX, t), 'F');
 		const full = XLSX.CFB.read(new Uint8Array(XLSX.write(wb, { type: 'array', bookType: 'xlsx', compression: false })), { type: 'array' });
-		const expected = new TextDecoder().decode(XLSX.CFB.find(full, '/xl/worksheets/sheet2.xml').content);
-		expect(p.get('xl/worksheets/sheet2.xml')!.replace(/ s="\d+"/g, '')).toBe(expected.replace(/ s="\d+"/g, ''));
+		const expected = new TextDecoder().decode(XLSX.CFB.find(full, '/xl/worksheets/sheet3.xml').content);
+		expect(p.get('xl/worksheets/sheet3.xml')!.replace(/ s="\d+"/g, '')).toBe(expected.replace(/ s="\d+"/g, ''));
 	});
 
 	it('keeps a multi-year run small (real deflate) and reads every cell back', async () => {

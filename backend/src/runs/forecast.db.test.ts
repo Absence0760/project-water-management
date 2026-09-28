@@ -83,6 +83,10 @@ describe('POST /runs { forecast }', () => {
 		const list = (await viewer.call('GET', `/projects/${projectId}/runs`)).body.runs as { id: string; trigger: string; forecastFrom: string | null }[];
 		expect(list.find((r) => r.id === f.body.run.id)).toMatchObject({ trigger: 'forecast', forecastFrom: FORECAST_FROM });
 		expect(list.find((r) => r.id === o.body.run.id)).toMatchObject({ trigger: 'manual', forecastFrom: null });
+		// Where the forecast rain came from (the report's line): an uploaded forecast is 'other', never CHIRPS-GEFS
+		// (feeds/forecast.db.test.ts has the positive control); an ordinary run records none.
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${f.body.run.id}`)).body.run.forecastRainSource).toBe('other');
+		expect((await viewer.call('GET', `/projects/${projectId}/runs/${o.body.run.id}`)).body.run.forecastRainSource).toBeNull();
 	});
 
 	it('refuses a forecast run with no forecast tail (409, nothing stored), and a viewer (403)', async () => {
@@ -164,9 +168,10 @@ describe('forecast days in exports and in the farm view', () => {
 		const daily = await text(viewer, `/projects/${projectId}/runs/${forecastRun}/export/daily.csv`);
 		expect(daily.status).toBe(200);
 		const all = daily.body.replace(/^﻿/, '').trim().split('\r\n');
-		// The run's provenance on a leading # line, then the header (docs/api.md § Export).
-		expect(all[0]).toMatch(/^# run=[^;]*; engine=/);
-		const lines = all.slice(1);
+		// The disclaimer and the run's provenance on leading # lines, then the header (docs/api.md § Export).
+		expect(all[0]).toMatch(/^# model estimates /);
+		expect(all[1]).toMatch(/^# run=[^;]*; engine=/);
+		const lines = all.slice(2);
 		const head = lines[0]!.split(',');
 		expect(head[1]).toBe('forecast (F = modelled on forecast rain)');
 		expect(head.some((h) => h.startsWith('"Rain source') || h.startsWith('Rain source'))).toBe(true);
@@ -175,8 +180,8 @@ describe('forecast days in exports and in the farm view', () => {
 		expect(byDate.get(FORECAST_FROM)).toBe('F');
 		expect(byDate.get('2022-11-18')).toBe('F');
 		const farms = await text(viewer, `/projects/${projectId}/runs/${forecastRun}/export/farms.csv?key=supplied`);
-		expect(farms.body.replace(/^﻿/, '').split('\r\n')[0]).toMatch(/^# run=/);
-		expect(farms.body.replace(/^﻿/, '').split('\r\n')[1]!.split(',')[1]).toBe('forecast (F = modelled on forecast rain)');
+		expect(farms.body.replace(/^﻿/, '').split('\r\n')[1]).toMatch(/^# run=/);
+		expect(farms.body.replace(/^﻿/, '').split('\r\n')[2]!.split(',')[1]).toBe('forecast (F = modelled on forecast rain)');
 		const summary = await text(viewer, `/projects/${projectId}/runs/${forecastRun}/export/summary.csv`);
 		expect(summary.body).toContain('First forecast day,2022-11-05');
 		// Positive control: an ordinary run's daily CSV has no forecast column.

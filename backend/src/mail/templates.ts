@@ -187,6 +187,8 @@ export function farmerInviteMail(
 			paragraphs: [
 				tr.t('mail.farmer.body', v),
 				tr.t('mail.farmer.privacy'),
+				// Before the sign-up button: the farmer reads it before they can see a figure (CPA s49 research, R4).
+				tr.t('mail.farmer.estimate'),
 				tr.t(confirm ? 'mail.invite.confirm' : 'mail.invite.signUp', v)
 			],
 			action: { label: tr.t(confirm ? 'mail.invite.confirmAction' : 'mail.invite.signUpAction'), url },

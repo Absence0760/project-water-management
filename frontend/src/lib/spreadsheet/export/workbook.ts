@@ -10,7 +10,7 @@
 // millions of cells, so the writer streams each daily sheet's rows into bytes
 // rather than holding an object or a string per cell, and ./zip.ts packs the
 // parts with the platform's real deflate.
-import type { RunSummary } from '@water-management/engine';
+import { DISCLAIMER, DISCLAIMER_DRAFT_NOTE, withSite, type RunSummary } from '@water-management/engine';
 import type { Cell } from './csv';
 import { parseCsv } from './csv';
 import { cellFormat, DATE_FORMAT, numberFormat, unitOf } from './formats';
@@ -44,6 +44,8 @@ export interface WorkbookInput {
 	catchment: DailyTable | null;
 	/** In network order. */
 	nodes: DailyTable[];
+	/** The site's address, for the disclaimer's Terms URL (the worker's own origin); '' leaves the path. */
+	site?: string;
 }
 
 type Row = Cell[];
@@ -202,6 +204,22 @@ export function inputRows(settings: Record<string, unknown> | null | undefined, 
 	return rows;
 }
 
+/**
+ * The workbook's first sheet (docs/legal/disclaimer-review.md § 1): the
+ * report disclaimer, all five paragraphs, and its version, so a workbook
+ * passed on without its report still carries it.
+ */
+export function readFirstRows(site = ''): Row[] {
+	return [
+		['Read this first: these are model results. The disclaimer below applies to every sheet of this workbook.'],
+		...(DISCLAIMER.status === 'draft' ? [[DISCLAIMER_DRAFT_NOTE]] : []),
+		[],
+		...DISCLAIMER.paragraphs.map((p, i) => [`${i + 1}. ${withSite(p, site)}`]),
+		[],
+		[`Disclaimer version ${DISCLAIMER.version}.`]
+	];
+}
+
 // ── Daily sheets ───────────────────────────────────────────────────────────
 
 /**
@@ -217,7 +235,7 @@ export const dailyDay0 = (t: DailyTable): number => Date.parse(`${t.startDate}T0
 
 // ── The workbook ───────────────────────────────────────────────────────────
 
-/** Sheet order: the summary, the daily tables, then the reports and inputs. */
+/** Sheet order: the disclaimer, the summary, the daily tables, then the reports and inputs. */
 const AFTER_DAILY: SummarySheet[] = ['Curtailment', 'Reserve compliance', 'Annual volumes', 'Data checks'];
 
 /** One sheet of the workbook: rows of cells, or a daily table. */
@@ -227,10 +245,13 @@ export type SheetPlan = { name: string; rows: Row[]; widths: number[] } | { name
 export function workbookPlan(input: WorkbookInput): SheetPlan[] {
 	const byName = splitSummary(parseCsv(input.summaryCsv));
 	const name = sheetNamer();
-	const fixed = ['Summary', 'Catchment', ...AFTER_DAILY, 'EWR grid', 'Inputs', 'Warnings'];
+	const fixed = ['Read this first', 'Summary', 'Catchment', ...AFTER_DAILY, 'EWR grid', 'Inputs', 'Warnings'];
 	for (const f of fixed) name(f);
 
-	const plan: SheetPlan[] = [{ name: 'Summary', rows: byName.get('Summary') ?? [], widths: [44] }];
+	const plan: SheetPlan[] = [
+		{ name: 'Read this first', rows: readFirstRows(input.site), widths: [120] },
+		{ name: 'Summary', rows: byName.get('Summary') ?? [], widths: [44] }
+	];
 	if (input.catchment) plan.push({ name: 'Catchment', daily: input.catchment });
 	for (const t of input.nodes) plan.push({ name: name(t.name), daily: t });
 	for (const s of AFTER_DAILY) {

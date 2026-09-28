@@ -59,7 +59,7 @@ erDiagram
 
 | Table | Purpose | b023 workbook origin |
 | --- | --- | --- |
-| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (a `language` code, NULL = not chosen; 080) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql); `terms_version` (the terms and privacy notice accepted at sign-up, their effective date `YYYY-MM-DD`, the engine's `LEGAL_VERSION`) and `terms_accepted_at` (stamped by the database, never the caller: `app_register` and the `app_user_terms_stamp` trigger, which also refuses to clear a record), both NULL for an account a script made, 087_terms_acceptance.sql | none (the workbook has no users) |
+| `app_user` | Account: email (citext, unique), display name, bcrypt hash; `locale` (a `language` code, NULL = not chosen; 080) and `volume_unit` (`m3` / `ML`, default `m3`), 050_user_locale.sql (WP-2.5); `data_exported_at`, the last data-subject export (the one-a-minute limit, 054_subject_export.sql); `terms_version` (the terms and privacy notice accepted at sign-up, their effective date `YYYY-MM-DD`, the engine's `LEGAL_VERSION`) and `terms_accepted_at` (stamped by the database, never the caller: `app_register` and the `app_user_terms_stamp` trigger, which also refuses to clear a record), both NULL for an account a script made, 087_terms_acceptance.sql; `farm_notice_version` (the farm view's "Before you look at your farm" notice acknowledged with "I understand", its effective date, the engine's `FARMER_NOTICE_VERSION`) and `farm_notice_accepted_at` (stamped by the database through the `app_user_farm_notice_stamp` trigger, which also refuses to clear a record), both NULL until acknowledged, 093_farm_notice.sql | none (the workbook has no users) |
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
@@ -333,7 +333,12 @@ in the `inputs` jsonb). Runs stored before it have no hash. Since migration
 same hash (see **Stored run inputs** below), so re-uploading a series no
 longer stops an older run being recomputed; a run saved before 020 still
 can't be. `GET /compare/runs` returns the whole snapshot, and
-`GET …/runs/:runId` its `settings`. The compare "what changed" list (engine `diffInputs`, see
+`GET …/runs/:runId` its `settings`. A forecast run's snapshot also holds
+`forecastRainSource` (`chirps_gefs` | `other`, `runs/execute.ts`
+`forecastRainSource`): `chirps_gefs` only when the forecast series'
+`feed_id` is a CHIRPS-GEFS feed and its `feed_days` cover every day from
+the first forecast day to the series' end (031_feed_days), read when the
+run is made; the report's forecast line credits CHIRPS-GEFS only then. The compare "what changed" list (engine `diffInputs`, see
 [run-comparison.md](./run-comparison.md)) sees a series being extended or
 trimmed, and values edited within the same dates when both runs carry a hash.
 The same hash could later drive an "inputs changed since this run" flag.
@@ -852,23 +857,39 @@ run's stored input (above), never the live model.
 
 ### Sign-offs (036_signoff.sql)
 
-Roadmap WP-3.13. A registered professional's signature on one run: that its
-calibration, EWR tables, network (or scenario) and assurance levels are
-appropriate, and that they read its known limitations
+Roadmap WP-3.13. A registered professional's signature on one run: who they
+are and that the work is within their competence, free of an undisclosed
+conflict; that its input data, calibration, EWR tables, network (or
+scenario) and assurance levels are appropriate; that they reviewed the
+results for plausibility; and that they read its known limitations
 ([model.md §2.10f](./model.md#210f-validation-statement-and-known-limitations-engine--0312-roadmap-wp-313)).
 
 - **`signoff`**: `id`, `project_id` (→ `project`, cascade), `run_id` (→
   `model_run`, `NO ACTION`: a project delete still cascades, any other delete
   of a signed run fails), `user_id` (→ `app_user`, `SET NULL` so an account
   deletion keeps the professional record), `full_name` (1–200),
-  `registration_body` (1–100, e.g. SACNASP), `registration_no` (1–50,
+  `registration_body` (1–100: `sacnasp` or `ecsa` from `signoff-3`, the
+  signer's free text on earlier rows), `registration_category` and
+  `registration_field` (092_signoff_registration: codes of the engine's
+  `liability/registration.ts` lists, shape `^[a-z_]{1,40}$`; NULL on
+  `signoff-1` and `-2` rows), `registration_no` (1–50,
   self-declared, never checked against the register), `scope` (1–1 000: what
   the signature covers, in the signer's words), `statement_version`
-  (`signoff-1`), `statement_sha256` (hex: the SHA-256 of the engine
+  (`signoff-3` today; rows made earlier keep `signoff-1` or `signoff-2`, and
+  every row keeps the version and hash it was signed under), `statement_sha256` (hex: the SHA-256 of the engine
   statement's RFC 8785 text, `signoffStatementText`), `disclaimer_version`,
   `signed_at`. Indexes cover the project, the run and the user.
   `signoff_same_project` (`assert_same_project('run_id')`): the run is one of
   the project's.
+- **Registration recorded (092).** `signoff_registration_recorded`: a row of
+  any statement version but `signoff-1` and `signoff-2` has a `sacnasp` or
+  `ecsa` body and a category and field. The allowed codes, and which
+  categories may sign, live in the engine, not the database, so a
+  re-prescribed category list (the draft Natural Scientific Professions
+  Bill) is a code change; the route refuses a candidate, certificated or
+  specified category. The table is insert-only, so the conditional check
+  binds every new row and leaves older ones as recorded.
+  `app_subject_export` carries both columns.
 - **Immutable.** `water_app` has `SELECT, INSERT` only and no policy allows
   `UPDATE` or `DELETE` (catalogue `APPEND_ONLY`). A correction is a second
   sign-off.
@@ -884,8 +905,8 @@ appropriate, and that they read its known limitations
   nothing. Each sign-off writes `audit_event` `signoff.created` in the same
   transaction.
 - **Not yet**: the WP's `target = 'pack'` (WP-3.14 adds it with packs), MFA
-  on signing (Step 4), sign-off in the data export (the POPIA export,
-  WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
+  on signing (Step 4). A signer's sign-offs are in their data export
+  (`app_subject_export`, 054; the registration columns since 092). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
 
 ### Allocations (038_allocations.sql)

@@ -7,6 +7,7 @@
 // checks the outcome end to end for a farmer and for a co-owner, with the
 // project's other members as the positive control.
 import { beforeAll, describe, expect, it } from 'vitest';
+import { FARMER_NOTICE_VERSION } from '@water-management/engine/legal';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
 
@@ -60,6 +61,8 @@ describe('deleting a farmer’s account', () => {
 		const mine = (await farmer.call('GET', `/projects/${projectId}/notes`)).body.notes[0];
 		expect((await farmer.call('DELETE', `/projects/${projectId}/notes/${mine.id}`)).status).toBe(204);
 		expect((await farmer.call('POST', `/projects/${projectId}/notes`, { body: 'kept note', nodeId: farmA.id, visibility: 'farm' })).status).toBe(201);
+		// Both farmers acknowledged the farm view's notice (093): the record is on the account row.
+		for (const u of [farmer, other]) expect((await u.call('POST', '/auth/me/farm-notice', { version: FARMER_NOTICE_VERSION })).status).toBe(200);
 		await asOwner('DELETE FROM app_user WHERE id = $1', [farmer.id]);
 	});
 
@@ -68,6 +71,12 @@ describe('deleting a farmer’s account', () => {
 		expect(await asOwner('SELECT 1 FROM farm_link WHERE user_id = $1', [farmer.id])).toEqual([]);
 		// Positive control: the other farmer keeps theirs.
 		expect(await asOwner('SELECT node_id FROM farm_link WHERE user_id = $1', [other.id])).toEqual([{ node_id: farmB.id }]);
+	});
+
+	it('takes their farm notice acknowledgement with the account row, like the terms record', async () => {
+		expect(await asOwner('SELECT 1 FROM app_user WHERE id = $1', [farmer.id])).toEqual([]);
+		// Positive control: the farmer who stays keeps theirs.
+		expect(await asOwner('SELECT farm_notice_version FROM app_user WHERE id = $1', [other.id])).toEqual([{ farm_notice_version: FARMER_NOTICE_VERSION }]);
 	});
 
 	it('pseudonymises the audit log: "Deleted user" as actor and as subject, the events kept', async () => {

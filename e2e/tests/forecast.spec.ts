@@ -2,10 +2,13 @@
 // forecast on a project with a forecast series past its record; the run is
 // tagged, its forecast days get their own panel, every daily chart shades them
 // with a text key (not colour alone, axe-clean), and the daily CSV marks them
-// F. Published, the forecast run gives the linked farmer a "Next 14 days"
+// F; its report says on the cover that those days use forecast rain,
+// crediting CHIRPS-GEFS only when a CHIRPS-GEFS feed wrote them.
+// Published, the forecast run gives the linked farmer a "Next 14 days"
 // card; an ordinary run of the same data stops at the record.
 import { putSeries, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
+import { plantGefsForecastDays } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -61,14 +64,24 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	// The daily CSV leads with the forecast flag.
 	const csv = await page.request.get(`${API_URL}/projects/${project.id}/runs/${runId}/export/daily.csv`);
 	expect(csv.status()).toBe(200);
-	const [provenance, ...lines] = (await csv.text()).replace(/^﻿/, '').trim().split('\r\n');
-	// Row 1 says which run made the file (docs/api.md § Export), the header follows it.
+	const [disclaimer, provenance, ...lines] = (await csv.text()).replace(/^﻿/, '').trim().split('\r\n');
+	// Row 1 is the disclaimer, row 2 says which run made the file (docs/api.md § Export), the header follows it.
+	expect(disclaimer).toMatch(/^# model estimates /);
 	expect(provenance).toMatch(/^# run=Next fortnight; engine=[^;]+; runoff_model=gr4j; created=[^;]+; period=2021-10-01\.\.2022-02-11$/);
 	expect(lines[0]!.split(',').slice(0, 2)).toEqual(['date', 'forecast (F = modelled on forecast rain)']);
 	const flag = new Map(lines.slice(1).map((l) => [l.slice(0, 10), l.split(',')[1]]));
 	expect(flag.get('2022-01-28')).toBe('');
 	expect(flag.get(FROM)).toBe('F');
 	expect(flag.get(TO)).toBe('F');
+
+	// Its report says, on the cover, that the days from the first forecast day use forecast rain;
+	// an uploaded forecast names no product (a CHIRPS-GEFS feed's: the next test).
+	await page.goto(`/projects/${project.id}/report?run=${runId}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('report-forecast-note')).toHaveText(
+		`From ${FROM}, this run uses forecast rain, not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`
+	);
+	await page.goto(`/projects/${project.id}?tab=runs&run=${runId}`);
 
 	// An ordinary run of the same data stops at the record, with no band.
 	await page.getByLabel(/^Run label/).fill('Record only');
@@ -78,6 +91,10 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(page.locator('#res-hydrograph figure')).toHaveAttribute('data-ready', 'true');
 	await expect(page.locator('#res-hydrograph figure')).not.toHaveAttribute('data-band-from');
 	await expect(page.getByTestId('forecast-panel')).toHaveCount(0);
+	// …and its report has no forecast-rain line.
+	await page.goto(`/projects/${project.id}/report?run=${new URL(page.url()).searchParams.get('run')}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('report-forecast-note')).toHaveCount(0);
 
 	// Published, the forecast run gives the linked farmer their Next 14 days.
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
@@ -90,4 +107,20 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	await expect(card).toContainText('Forecast');
 	await expect(card).toContainText('Forecasts change');
 	await expectNoViolations(farmer.page, { include: '[data-testid="farm-forecast"]' });
+});
+
+test('a forecast run whose forecast days a CHIRPS-GEFS feed wrote credits CHIRPS-GEFS on its report', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'GEFS forecast');
+	await putSeries(page.request, project.id, { kind: 'rain_forecast_mm', unit: 'mm', startDate: FROM, values: Array.from({ length: 14 }, (_, i) => (i % 4 === 0 ? 9 : 0)) });
+	await plantGefsForecastDays(project.id);
+	const res = await page.request.post(`${API_URL}/projects/${project.id}/runs`, { data: { label: 'GEFS fortnight', forecast: true } });
+	expect(res.status()).toBe(201);
+	const runId = ((await res.json()) as { run: { id: string } }).run.id;
+
+	await page.goto(`/projects/${project.id}/report?run=${runId}`);
+	await expect(page.locator('main[data-report-ready="true"]')).toBeVisible();
+	await expect(page.getByTestId('report-forecast-note')).toHaveText(
+		`From ${FROM}, this run uses forecast rain (CHIRPS-GEFS, Climate Hazards Center, doi:10.15780/G2PH2M), not recorded rain. Rain forecasts are often wrong, more so further ahead, and each new forecast replaces the last.`
+	);
 });

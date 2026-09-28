@@ -9,7 +9,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { plantInviteToken } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { fillNewPassword } from '../support/signup.ts';
+import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
 
 const CSV = fileURLToPath(new URL('../fixtures/farmers.csv', import.meta.url));
 
@@ -48,6 +48,7 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 	await expect(v.getByText('invited you to the project Invite-a-farmer catchment')).toBeVisible();
 	await v.getByLabel('Display name').fill('Invited Farmer');
 	await fillNewPassword(v, PASSWORD);
+	await agreeToTerms(v);
 	await v.getByRole('button', { name: 'Create account and join' }).click();
 	await expect(v).toHaveURL(new RegExp(`/farm/${project.id}`));
 	await expect(v.getByRole('heading', { level: 2, name: 'Your WUA hasn’t published figures yet' })).toBeVisible();

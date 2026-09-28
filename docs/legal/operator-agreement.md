@@ -94,6 +94,17 @@ changed in writing.
 example a court order), it will tell the Client first unless the law forbids
 that.
 
+## 3A. The Client's duties
+
+3A.1 The Client confirms that, for the personal information it puts into the
+service, (a) it has a lawful basis under section 11; (b) it will make its
+members and invitees aware of the matters in section 18, including its own
+name and address as responsible party, before or as soon as reasonably
+practicable after their information is entered; and (c) it has considered
+whether matching registered water-use records (such as WARMS registration
+numbers) to farms or people needs prior authorisation under sections 57
+and 58, and has obtained it where needed.
+
 ## 4. Confidentiality (s20(b))
 
 4.1 The Operator treats the Client's personal information as confidential
@@ -286,6 +297,15 @@ protection cap is appropriate)*.
 12.3 Nothing in this agreement limits a data subject's rights under POPIA,
 or either party's liability where the law does not allow it to be limited.
 
+12.4 **Farm figures shown to the Client's members.** Where the Client
+publishes farm figures to its members (the farm view, share links, alert
+emails), the Client presents them as model estimates, not measurements,
+and keeps the service's notices on them in place (the estimate line and
+the "Before you look at your farm" acknowledgement). The Client is
+responsible for its own notices to its members, including as their
+supplier where the Consumer Protection Act 68 of 2008 treats its supply of
+the farm view to them as a transaction (section 5(6)(a)).
+
 ## 13. General
 
 13.1 **Order of precedence.** For the Client's personal information, this
@@ -294,10 +314,9 @@ agreement wins over the Terms of use where they conflict.
 13.2 **Changes.** Only in writing signed (or confirmed by email) by both
 parties.
 
-13.3 **Governing law.** [For counsel: South African law for this agreement,
-since it implements POPIA for a South African responsible party, or
-Virginia law to match the Terms of use. Whichever is chosen, POPIA applies to
-the processing regardless.]
+13.3 **Governing law.** This agreement is governed by the law of the
+Republic of South Africa, and the South African courts have jurisdiction over
+disputes under it. POPIA applies to the processing in any case.
 
 13.4 **Notices.** To the Operator at `jared@jaredhoward.com`; to the Client
 at [email]. A security-compromise notice (clause 7) also goes to [the
@@ -323,7 +342,11 @@ Signed by the Operator: ____________________ Jared Howard Date: ________
 - **Section 72.** Is a binding agreement (72(1)(a)) the right basis for the
   Operator's own access from the US, or should the Client also rely on
   72(1)(b)/(d) (necessary for the contract)?
-- **Liability carve-outs** (clause 12.2) and **governing law** (13.3) are
-  deliberately left open.
+- **Liability carve-outs** (clause 12.2) are deliberately left open.
+  **Governing law** (13.3) is South African law (the operator's decision,
+  2026-09-28, matching Terms §15 for South African users).
+- **Clause 3A** (the Client's own s18 notice, its lawful basis, and the
+  s57–58 question for WARMS matching) is from pre-counsel research
+  (2026-09-28); confirm the s57 reading before the first signature.
 - **Mailbox provider** (clause 6.1): confirm the provider and its data-
   protection terms before the first signature.

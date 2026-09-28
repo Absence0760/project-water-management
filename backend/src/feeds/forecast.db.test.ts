@@ -9,6 +9,7 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine';
 import { afterEach, describe, expect, it } from 'vitest';
 import { asOwner, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { forecastRainSource } from '../runs/execute.js';
 import { fetchWindow, utcToday } from './fetch.js';
 import { FIXTURE_CELL } from './fixtures.js';
 import { ingestResult } from './ingest.js';
@@ -120,6 +121,22 @@ describe('forecast issues in the series', () => {
 		expect(await older).toEqual({ merged: 0, lastDate: null });
 		expect((await forecast(owner, pid))!).toEqual(expect.objectContaining({ startDate: day(0), values: new Array(16).fill(5) }));
 		expect((await feedRow(feedId)).last_meta).toMatchObject({ issued: day(0) });
+	});
+
+	it('a forecast run credits CHIRPS-GEFS only while the feed wrote every forecast day: a person’s write makes it “other”', async () => {
+		const { owner, pid, ingest } = await forecastFeed('GefsSource');
+		await ingest(issue(0, 5));
+		const seriesId = ((await owner.call('GET', `/projects/${pid}/series`)).body.series as { id: string; kind: string }[]).find((x) => x.kind === 'rain_forecast_mm')!.id;
+		const source = (from: string) => withUser(owner.id, (db) => forecastRainSource(db, seriesId, from));
+		expect(await source(day(0))).toBe('chirps_gefs');
+		expect(await source(day(3))).toBe('chirps_gefs');
+		// A day before the feed's first is not its own.
+		expect(await source(day(-1))).toBe('other');
+		// A person's replace makes every day theirs (031_feed_days).
+		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: day(0), values: new Array(16).fill(5) })).status).toBe(200);
+		expect(await source(day(0))).toBe('other');
+		// No series at all: nothing to credit.
+		expect(await withUser(owner.id, (db) => forecastRainSource(db, undefined, day(0)))).toBe('other');
 	});
 
 	it.each([
