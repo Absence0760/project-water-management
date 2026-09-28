@@ -120,7 +120,7 @@
 		margin: 0 0 0.75rem;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.8rem;
+		font-size: 1rem;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
 		color: #36c6e0;
@@ -139,7 +139,7 @@
 		padding: 0;
 		display: grid;
 		gap: 0.6rem;
-		font-size: 0.95rem;
+		font-size: 1rem;
 		color: #c5d3e1;
 	}
 	.copy li {
@@ -209,10 +209,23 @@
 		width: 100%;
 		min-height: 42px;
 		padding: 0.5rem 0.7rem;
-		font-size: 0.95rem;
+		font-size: 1rem;
+	}
+	/* Inside the password field's own box (PasswordInput draws the border): the same 42 px overall. */
+	.form-box :global(.pw input) {
+		min-height: 40px;
 	}
 	.form-box :global(.field) {
 		margin-bottom: 1rem;
+	}
+	/* The sign-in pages' small-text floor is 14 px (1rem of the 14 px root):
+	   the app's own field labels (0.85rem) and hints (0.8rem) were 11–12 px on
+	   the first screen a reduced-vision farmer meets. auth-pages.spec.ts
+	   measures every visible text on these pages. */
+	.form-box :global(.field > label),
+	.form-box :global(.field > .label),
+	.form-box :global(.hint) {
+		font-size: 1rem;
 	}
 	/* Every action is a full-width button under the form (not the demo's small one). */
 	.form-box :global(.btn:not(.btn-sm)) {
@@ -224,20 +237,22 @@
 		text-align: center;
 		min-height: 44px;
 		margin-top: 0.5rem;
-		font-size: 0.95rem;
+		font-size: 1rem;
 	}
 	.footer {
 		margin-top: 1.25rem;
 		padding-top: 1rem;
 		border-top: 1px solid var(--border);
-		font-size: 0.9rem;
+		font-size: 1rem;
 		color: var(--text-2);
 	}
 	.legal {
 		display: flex;
-		gap: 1.25rem;
+		/* At 14 px, Afrikaans' two long words don't fit one 320 px row. */
+		flex-wrap: wrap;
+		gap: 0.25rem 1.25rem;
 		margin-top: 0.75rem;
-		font-size: 0.8rem;
+		font-size: 1rem;
 	}
 	.legal a {
 		color: var(--text-muted);

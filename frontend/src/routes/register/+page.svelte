@@ -313,7 +313,7 @@
 		align-items: flex-start;
 		gap: 0.5rem;
 		margin: 0 0 0.25rem;
-		font-size: 0.9rem;
+		font-size: 1rem;
 		color: var(--text-2);
 	}
 	/* A 24 px target (WCAG 2.5.8), level with the first line. */
@@ -331,7 +331,7 @@
 	}
 	.status {
 		margin: 0.5rem 0 0;
-		font-size: 0.85rem;
+		font-size: 1rem;
 		color: var(--text-2);
 	}
 	.status:empty {
@@ -365,6 +365,6 @@
 	}
 	.invite p + p {
 		margin-top: 0.25rem;
-		font-size: 0.85rem;
+		font-size: 1rem;
 	}
 </style>
