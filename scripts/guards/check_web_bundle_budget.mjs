@@ -1141,6 +1141,17 @@
 //             footer text, the share-page line, the workbook's disclaimer
 //             sheet, and their Afrikaans words. No new dependency. Headroom
 //             ~3 KB.
+// 2026-09-28  total 1083 → 1090 KB (measured 1083 locally on the branch, 1079
+//             on origin/main at the same commit, so +4 KB; CI read 1085 before
+//             main was merged in). Demand-object on/off schedules (issue #90
+//             Q4, engine 1.17.0): the node form's schedule editor
+//             (DemandScheduleFields.svelte and its list helpers), the
+//             engine's window rules and Easter computus shared by the form's
+//             validation and the run, the Days off column and the help
+//             entry. Lazy-loading the editor would not lower this figure:
+//             the total sums every chunk, so a split only moves the bytes and
+//             adds a chunk's overhead. No new dependency. Headroom ~7 KB,
+//             left on purpose for #114 and #117, which land next.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1151,7 +1162,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1083,
+	totalCodeKb: 1090,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
