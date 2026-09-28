@@ -174,10 +174,10 @@ button:
 > [I understand]
 
 > Voordat jy na jou plaas kyk
-> - Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV geloop word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.
-> - Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy daarop optree.
-> - Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is een nie.
-> - Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, so ver die wet toelaat, geen verantwoordelikheid vir verliese omdat daarop staatgemaak is nie. Sien die {terms}, afdeling 13.
+> - Die syfers hier kom van ’n rekenaarmodel van die opvanggebied, wat vir jou WGV uitgevoer word. Niemand meet jou dam of jou watergebruik vir hierdie app nie.
+> - Dit is skattings, en dit kan verkeerd wees. Kyk self na jou dam en jou water voordat jy op die syfers optree.
+> - Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Niks anders op hierdie bladsye is ’n beperking nie.
+> - Die mense wat hierdie app bedryf, kontroleer nie die WGV se syfers nie en aanvaar, sover die wet dit toelaat, geen verantwoordelikheid vir verliese wat ontstaan omdat iemand daarop staatmaak nie. Sien die {terms}, afdeling 13.
 >
 > [Ek verstaan]
 
@@ -212,7 +212,7 @@ view's *why* page and the farmer glossary say the same about restrictions:
 
 > A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.
 
-> ’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die operateur van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.
+> ’n Modelskatting wat verkeerd kan wees, nie ’n meting, lisensie of beperking nie. Sover die wet dit toelaat, aanvaar die bedrywer van hierdie sagteware geen verantwoordelikheid teenoor enigiemand wat op hierdie bladsy staatmaak nie.
 
 **River-flow (EWR) forecast alerts, WUA staff only** (`mail.alert.model.staff`):
 
