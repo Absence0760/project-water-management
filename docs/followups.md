@@ -2662,7 +2662,7 @@ from the WP:
 
 ## Rain forcing and the second configuration's calibration (issue #54)
 
-- [x] **Areal rainfall correction** (2026-09-27, engine 1.8.0). A fixed
+- [x] **Areal rainfall correction** (2026-09-27, engine 1.13.0). A fixed
       factor per month on the rain GR4J runs on, with its method and source,
       recorded in the fit record's forcing ([model.md §2.4g](./model.md);
       Settings → Flow calibration). Demand and the dams keep the recorded

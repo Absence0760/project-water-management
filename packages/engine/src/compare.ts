@@ -615,7 +615,7 @@ function peChange(ra: unknown, rb: unknown): string | null {
 	return parts.length ? parts.join('; ') : null;
 }
 
-/** An areal rainfall correction in words (engine ≥ 1.8.0): "none", or "× 1.9 (map: …)" / "× 1.5–2.1 by month (…)". */
+/** An areal rainfall correction in words (engine ≥ 1.13.0): "none", or "× 1.9 (map: …)" / "× 1.5–2.1 by month (…)". */
 export function arealRainText(a: ArealRain | null): string {
 	if (!a) return 'none';
 	const lo = Math.min(...a.factors);
@@ -626,7 +626,7 @@ export function arealRainText(a: ArealRain | null): string {
 
 /**
  * The change of settings.arealRain between two runs, or null. A run saved
- * without one (engine < 1.8.0) ran with none. Two corrections name the months
+ * without one (engine < 1.13.0) ran with none. Two corrections name the months
  * whose factor changed; a changed method or source note is listed too, since
  * it is part of the run's record.
  */

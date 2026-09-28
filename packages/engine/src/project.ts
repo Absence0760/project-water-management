@@ -305,7 +305,7 @@ export interface ProjectSettings {
 	 */
 	pe: PeInput;
 	/**
-	 * Areal rainfall correction (engine ≥ 1.8.0, docs/model.md §2.4g): the
+	 * Areal rainfall correction (engine ≥ 1.13.0, docs/model.md §2.4g): the
 	 * rain GR4J runs on (catchment rain, else corrected CHIRPS, else
 	 * forecast) × a factor per water-year month, turning a point or gridded
 	 * series into the catchment's areal rain (orographic rain a valley gauge
@@ -589,7 +589,7 @@ export function resolvePe(raw: unknown, warnings: string[]): PeInput {
 }
 
 /**
- * How an areal rainfall factor was derived (engine ≥ 1.8.0, docs/model.md
+ * How an areal rainfall factor was derived (engine ≥ 1.13.0, docs/model.md
  * §2.4g). 'map': an independent mean annual precipitation for the catchment
  * (a WR2012 quaternary MAP, an isohyetal or gridded MAP averaged over the
  * catchment) ÷ the forcing's own mean annual rain, the preferred basis.
@@ -601,7 +601,7 @@ export function resolvePe(raw: unknown, warnings: string[]): PeInput {
 export const AREAL_RAIN_METHODS = ['map', 'stations', 'fitted'] as const;
 export type ArealRainMethod = (typeof AREAL_RAIN_METHODS)[number];
 
-/** `settings.arealRain` (engine ≥ 1.8.0): the rain GR4J runs on × `factors` (water-year months, Oct–Sep). */
+/** `settings.arealRain` (engine ≥ 1.13.0): the rain GR4J runs on × `factors` (water-year months, Oct–Sep). */
 export interface ArealRain {
 	factors: Monthly;
 	method: ArealRainMethod;
@@ -648,7 +648,7 @@ export function resolveArealRain(raw: unknown, warnings: string[]): ArealRain | 
 	return { factors: [...r.factors] as unknown as Monthly, method: r.method, source: r.source.trim() };
 }
 
-/** The run's areal rain column (engine ≥ 1.8.0): rain_final × the month's areal factor, output only with a correction. */
+/** The run's areal rain column (engine ≥ 1.13.0): rain_final × the month's areal factor, output only with a correction. */
 export const AREAL_RAIN_COLUMN = { key: 'rain_areal', label: 'Areal catchment rainfall (final rainfall × areal factor, the rain GR4J runs on)', unit: 'mm' } as const;
 
 /** The run warning for an areal factor fitted to the flow record (method 'fitted'). */
@@ -1938,7 +1938,7 @@ export interface RunoffBalance {
 	/** Rain the model ran on: after the areal rainfall correction when there is one. */
 	rainMm: number;
 	/**
-	 * The areal rainfall correction the run applied (engine ≥ 1.8.0,
+	 * The areal rainfall correction the run applied (engine ≥ 1.13.0,
 	 * settings.arealRain, docs/model.md §2.4g) and the rain before it; absent
 	 * without one.
 	 */
@@ -2185,7 +2185,7 @@ export interface WaterBalanceRow {
 	/** Start year of the water year (Oct–Sep); null for the whole-run row. */
 	waterYear: number | null;
 	days: number;
-	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.8.0); null when the run has no rain series. */
+	/** Catchment rain after gap-filling (rain_final, mm; rain_areal with an areal rainfall correction, engine ≥ 1.13.0); null when the run has no rain series. */
 	rainMm: number | null;
 	/** Natural flow as depth over the catchment (mm); null without an area. */
 	naturalFlowMm: number | null;

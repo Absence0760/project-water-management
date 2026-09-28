@@ -1009,7 +1009,7 @@ and the series explorer:
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
 | `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from with rain-source periods (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Only output when the settings list a period | NaN when no source has a value |
-| `rain_areal` (engine ≥ 1.8.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
+| `rain_areal` (engine ≥ 1.13.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
 calendar month (Oct … Sep) with the factor applied, its source (own month,
@@ -1488,11 +1488,11 @@ may keep an older issue's first day before today's; after the last observed
 rain those days are forecast-sourced and so in the tail, never read as
 observed.
 
-### 2.4g Areal rainfall correction (engine ≥ 1.8.0)
+### 2.4g Areal rainfall correction (engine ≥ 1.13.0)
 
 `settings.arealRain` (`ArealRain` in `packages/engine/src/project.ts`),
 applied in `runoffForcing` (`runoff/simulate.ts`). Absent or null (the
-default) = no correction: every run before 1.8.0, and every project that
+default) = no correction: every run before 1.13.0, and every project that
 doesn't set it, gives the same numbers as before.
 
 **Why.** GR4J conserves water (§2.4a), so it can only make the flow a gauge
@@ -1574,7 +1574,7 @@ answer is a better field series (an in-valley gauge as a rain-source period,
 (`fitRecord.forcing.arealRain`, null = none; §2.10b). A different factor in
 any month, or a correction added or removed, is a forcing change ("Forcing
 changed since fit"); a changed `method` or `source` alone is not, as with the
-PE input's source note. A record made before 1.8.0 ran with none, so it is
+PE input's source note. A record made before 1.13.0 ran with none, so it is
 flagged only once a correction with some factor ≠ 1 is set. Run comparison
 lists a change of the correction among the settings ("Areal rainfall
 correction (GR4J): none → × 1.92 (map: …)"), and the report's inputs table
@@ -3747,7 +3747,7 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   pan coefficient or A-pan evaporation it is taken from), the areal rainfall
   correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods
   or zero-rain run handling has changed since the fit. …".
-  **The areal rainfall correction (engine ≥ 1.8.0, §2.4g).**
+  **The areal rainfall correction (engine ≥ 1.13.0, §2.4g).**
   `forcing.arealRain` is always recorded (null = none). A different factor
   in any month, or a correction added or removed, is a forcing change; its
   `method` and `source` alone are not. A record without it ran with none, so

@@ -336,7 +336,7 @@ and, for a workbook whose gauge is the catchment's own and whose rain record
 needs an areal correction (issue #54's second configuration), to import the
 gauge as observed flow, apply a settings patch kept beside the workbooks (an
 areal rainfall correction from an independent MAP, the calibration window and
-flow series; [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--180))
+flow series; [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130))
 and fit GR4J to the gauge before the initial run
 ([model.md §2.10b](./model.md#210b-automatic-calibration-engine--050-issue-4-phase-4),
 "Fit at import"; a few minutes):

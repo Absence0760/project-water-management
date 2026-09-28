@@ -1,4 +1,4 @@
-// The areal rainfall correction (settings.arealRain, engine ≥ 1.8.0,
+// The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0,
 // docs/model.md §2.4g): GR4J's rain × a factor per water-year month, with its
 // provenance. Irrigation demand and the dams keep the recorded rain.
 // Synthetic catchment: invented values only (public repo).

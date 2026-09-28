@@ -312,7 +312,7 @@ describe('SettingsPatch.pe (engine ≥ 0.31.0, issue #39)', () => {
 	});
 });
 
-describe('SettingsPatch.arealRain (engine ≥ 1.8.0)', () => {
+describe('SettingsPatch.arealRain (engine ≥ 1.13.0)', () => {
 	const ok = (arealRain: unknown) => SettingsPatch.safeParse({ arealRain }).success;
 	const areal = { factors: new Array(12).fill(1.9), method: 'map', source: 'invented MAP 560 mm ÷ the forcing’s mean annual rain' };
 

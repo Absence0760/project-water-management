@@ -78,7 +78,7 @@
 					<dt>GR4J potential evaporation <HelpTip key="settings.pe" /></dt>
 					<dd>{peText(recordedPe)}{#if recordedPe.kind === 'monthly'}: {monthsText(recordedPe.mm, 0)} mm{/if}</dd>
 				</div>
-				<!-- Engine ≥ 1.8.0 (docs/model.md §2.4g): a forcing without it ran with none. -->
+				<!-- Engine ≥ 1.13.0 (docs/model.md §2.4g): a forcing without it ran with none. -->
 				<div data-testid="fit-areal-rain">
 					<dt>Areal rainfall correction <HelpTip key="settings.arealRain" /></dt>
 					<dd>{arealRainText(resolveArealRain(record.forcing.arealRain, []))}</dd>

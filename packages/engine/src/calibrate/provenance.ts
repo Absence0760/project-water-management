@@ -213,7 +213,7 @@ export interface FitRecord {
 		rainSource?: RainSourcePeriod[];
 		pe?: PeInput;
 		/**
-		 * The areal rainfall correction the fit ran under (engine ≥ 1.8.0,
+		 * The areal rainfall correction the fit ran under (engine ≥ 1.13.0,
 		 * docs/model.md §2.4g); null = none. Absent on a record made before it,
 		 * which ran with none, so a correction added since is a change.
 		 */
@@ -269,7 +269,7 @@ export interface FitContext {
 		rainSource?: RainSourcePeriod[];
 		/** GR4J's PE input (engine ≥ 0.31.0); absent = `{ kind: 'pan' }`. */
 		pe?: PeInput | null;
-		/** The areal rainfall correction (engine ≥ 1.8.0); absent = none. */
+		/** The areal rainfall correction (engine ≥ 1.13.0); absent = none. */
 		arealRain?: ArealRain | null;
 		panCoefficientSource?: string;
 	};
@@ -466,7 +466,7 @@ function forcingDiff(
 		apanMm: panReachesGr4j && !closeArray(settings.apanMm, record.forcing.apanMm),
 		// Engine ≥ 0.31.0. A forcing without it ran pan coefficient × A-pan, so a monthly PE now is a change.
 		pe: peChanged(pe, resolvePe(record.forcing.pe, [])),
-		// Engine ≥ 1.8.0. A forcing without it ran with none, so a correction added since is a change.
+		// Engine ≥ 1.13.0. A forcing without it ran with none, so a correction added since is a change.
 		arealRain: arealRainChanged(resolveArealRain(settings.arealRain, []), resolveArealRain(record.forcing.arealRain, [])),
 		// Absent on a forcing recorded before this field existed: nothing to compare, so never flagged.
 		chirpsBiasCorrection: record.forcing.chirpsBiasCorrection !== undefined && settings.chirpsBiasCorrection !== record.forcing.chirpsBiasCorrection,

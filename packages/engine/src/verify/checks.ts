@@ -44,7 +44,7 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // ewr_rule (engine ≥ 0.21.0) is NaN outside complete calendar months: a part
 // month at either end of the run is not assessed against the Reserve rules.
 // ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
-// rain_areal (engine ≥ 1.8.0) is rain_final × the areal factor, so NaN where rain_final is.
+// rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**

@@ -1091,7 +1091,7 @@
 //             landing review fixes (+1 KB) and the demand objects (above),
 //             each measured without the other). Headroom ~3 KB.
 // 2026-09-27  total 1045 → 1049 KB (measured 1046, +4 on 1042). The areal
-//             rainfall correction (engine 1.8.0): its Settings group and
+//             rainfall correction (engine 1.13.0): its Settings group and
 //             form helpers, the help entry, the fit-provenance and report
 //             lines, and the engine's areal-rain code shared by the run and
 //             fit workers. No new dependency. Headroom ~3 KB.

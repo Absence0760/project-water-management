@@ -115,7 +115,7 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * Settings replaced whole by a patch, never merged: a fit record describes
  * one fit, and a PE input is one kind or the other (merging `{ kind: 'pan' }`
  * over a stored monthly row would keep a stale `mm` and `source`), and an
- * areal rainfall correction (engine ≥ 1.8.0) is one set of factors with its
+ * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
  * own source.
  */
 const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain']);
@@ -337,7 +337,7 @@ const PeInput = z.discriminatedUnion('kind', [
 ]);
 
 /**
- * settings.arealRain (engine ≥ 1.8.0, docs/model.md §2.4g): the rain GR4J
+ * settings.arealRain (engine ≥ 1.13.0, docs/model.md §2.4g): the rain GR4J
  * runs on × 12 water-year monthly factors (each within the CHIRPS clamp,
  * 0.25–4), with how they were derived and a required source note; null =
  * none. Replaced whole on a patch. The engine's arealRainError applies the
@@ -456,7 +456,7 @@ export const FitRecord = z
 				rainSource: RainSource.optional(),
 				// Engine ≥ 0.31.0 (issue #39): GR4J's PE input. Optional, as above; absent = ran as 'pan'.
 				pe: PeInput.optional(),
-				// Engine ≥ 1.8.0: the areal rainfall correction (null = none). Optional, as above; absent = ran with none.
+				// Engine ≥ 1.13.0: the areal rainfall correction (null = none). Optional, as above; absent = ran with none.
 				arealRain: ArealRain.nullable().optional(),
 				// Engine ≥ 0.31.1: where the pan-coefficient row came from (provenance only). Optional, as above.
 				panCoefficientSource: z.string().max(PE_SOURCE_MAX).optional(),
@@ -540,7 +540,7 @@ export const SettingsPatch = z
 		panCoefficient: z.array(z.number().min(0).max(2)).length(12),
 		// GR4J's PE input (engine project.ts PeInput, issue #39); replaced whole.
 		pe: PeInput,
-		// The areal rainfall correction on GR4J's rain (engine ≥ 1.8.0, project.ts ArealRain); replaced whole, null = none.
+		// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, project.ts ArealRain); replaced whole, null = none.
 		arealRain: ArealRain.nullable(),
 		// Where the pan-coefficient row came from (engine ≥ 0.31.1): free text, provenance only; '' = none.
 		panCoefficientSource: z.string().trim().max(PE_SOURCE_MAX),

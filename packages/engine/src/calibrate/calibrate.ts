@@ -39,7 +39,7 @@ import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
 
-/** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.8.0), as runModel's WR2012 check reads it. */
+/** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.13.0), as runModel's WR2012 check reads it. */
 const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
 	rain && areal ? rain.map((v, t) => (v === null ? null : v * areal[waterYearIndex(month[t]!)]!)) : rain;
 

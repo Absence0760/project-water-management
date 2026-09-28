@@ -147,7 +147,7 @@
 	const peSourceBad = $derived(pe.kind === 'monthly' && (!pe.source.trim() || pe.source.length > PE_SOURCE_MAX));
 	// A monthly row the form had before switching to pan, so switching back brings it back (unsaved).
 	let lastMonthlyPe = $state<EditablePe | null>(null);
-	// The areal rainfall correction on GR4J's rain (engine ≥ 1.8.0, §2.4g); the one switched off is kept until saved.
+	// The areal rainfall correction on GR4J's rain (engine ≥ 1.13.0, §2.4g); the one switched off is kept until saved.
 	const areal = $derived((s.arealRain ?? null) as unknown as EditableArealRain | null);
 	const arealError = $derived(arealRainFormError(areal));
 	const arealFlat = $derived(areal ? flatFactor(areal) : null);
@@ -525,7 +525,7 @@
 			<span class="hint" id="gr4j-x2-h">{x2.help} Off, X2 is 0 and the water balance closes within the catchment; on, the exchange is reported as its own series.</span>
 			<FieldHistoryLine field="settings:gr4j.x2" />
 		</fieldset>
-		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.8.0): GR4J's rain only;
+		<!-- The areal rainfall correction (settings.arealRain, engine ≥ 1.13.0): GR4J's rain only;
 		     irrigation demand's effective rain and rain on the dams keep the recorded rain. -->
 		<fieldset class="plain areal" data-testid="areal-rain">
 			<legend>Areal rainfall correction <HelpTip key="settings.arealRain" /></legend>

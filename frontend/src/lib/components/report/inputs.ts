@@ -42,7 +42,7 @@ export function settingsRows(s: RunSettings, run: { startDate: string; endDate: 
 		// Engine ≥ 0.31.1: under pan × A-pan, where the pan-coefficient row came from, when noted.
 		const kpSource = s.pe?.kind !== 'monthly' && s.panCoefficientSource ? ` (pan coefficient: ${s.panCoefficientSource})` : '';
 		rows.push(['GR4J potential evaporation', peText(s.pe) + kpSource]);
-		// Engine ≥ 1.8.0 (docs/model.md §2.4g); a snapshot without it ran with none.
+		// Engine ≥ 1.13.0 (docs/model.md §2.4g); a snapshot without it ran with none.
 		rows.push(['Areal rainfall correction (GR4J rain)', arealRainText(resolveArealRain(s.arealRain, []))]);
 	}
 	rows.push(

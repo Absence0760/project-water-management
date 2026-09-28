@@ -1,5 +1,5 @@
 // The Settings form's areal rainfall correction (settings.arealRain, engine ≥
-// 1.8.0, docs/model.md §2.4g): switching it on and off, filling one factor
+// 1.13.0, docs/model.md §2.4g): switching it on and off, filling one factor
 // into every month, and the check that blocks Save.
 import { AREAL_RAIN_FACTOR_MAX, AREAL_RAIN_FACTOR_MIN, PE_SOURCE_MAX, type ArealRain, type ArealRainMethod, type ProjectSettings } from '@water-management/engine';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';

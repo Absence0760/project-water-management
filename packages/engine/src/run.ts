@@ -268,7 +268,7 @@ function runNetwork(
 	const runoffCoefficient = catchmentRunoffCoefficient(input, settings, natural, aligned, warnings, nf.balance, areal, month);
 	// The day's rainfall after gap-filling: catchment, else corrected CHIRPS, else forecast.
 	const finalRain = runRain(aligned, !!(series.rain_catchment_mm || series.rain_chirps_mm || series.rain_forecast_mm), days);
-	// The rain on the catchment as GR4J ran on it (engine ≥ 1.8.0, §2.4g): rain_final × the areal
+	// The rain on the catchment as GR4J ran on it (engine ≥ 1.13.0, §2.4g): rain_final × the areal
 	// factor. What the catchment's own water balance reads (the WR2012 rain scaling, the water
 	// account, the plausibility checks); the same array as finalRain without a correction.
 	const catchmentRain = areal && finalRain ? finalRain.map((v, t) => (v === null ? null : v * areal[waterYearIndex(month[t]!)]!)) : finalRain;
@@ -1526,7 +1526,7 @@ function catchmentRunoffCoefficient(
 	aligned: (k: SeriesKind) => (number | null)[],
 	warnings: string[],
 	balance: NaturalFlowInput['balance'],
-	/** The areal rainfall factors (engine ≥ 1.8.0, §2.4g), water-year months; null = none. */
+	/** The areal rainfall factors (engine ≥ 1.13.0, §2.4g), water-year months; null = none. */
 	areal: readonly number[] | null,
 	month: ArrayLike<number>
 ): number | null {

@@ -283,7 +283,7 @@ describe('fitRecordFor', () => {
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});
 
-	it('records the areal rainfall correction the fit ran under (engine ≥ 1.8.0)', () => {
+	it('records the areal rainfall correction the fit ran under (engine ≥ 1.13.0)', () => {
 		const arealRain = { factors: new Array(12).fill(1.9) as unknown as ProjectSettings['panCoefficient'], method: 'map' as const, source: 'invented MAP ÷ forcing mean' };
 		const rec = fitRecordFor(report(), { ...defaultProjectSettings(), arealRain }, { validate: false, validationRecord: null });
 		expect(rec.forcing!.arealRain).toEqual(arealRain);

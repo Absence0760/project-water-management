@@ -466,7 +466,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 		s.runoffModel = d.runoffModel;
 	}
 	s.pe = resolvePe(raw?.pe, warnings);
-	// The areal rainfall correction (engine ≥ 1.8.0, docs/model.md §2.4g).
+	// The areal rainfall correction (engine ≥ 1.13.0, docs/model.md §2.4g).
 	s.arealRain = resolveArealRain(raw?.arealRain, warnings);
 	if (s.arealRain?.method === 'fitted') warnings.push(AREAL_RAIN_FITTED_WARNING);
 	// Provenance only (never read by the model): a string, capped like the PE source.

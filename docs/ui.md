@@ -2270,8 +2270,8 @@ which checks every catchment tab).
     demand. X2 is behind a "Let the catchment gain or lose groundwater" checkbox;
     unticking it sets X2 back to 0.
     Then the **Areal rainfall correction** group (`settings.arealRain`,
-    engine ≥ 1.8.0, `settings/arealRain.ts`;
-    [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--180)):
+    engine ≥ 1.13.0, `settings/arealRain.ts`;
+    [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130)):
     a checkbox "Scale the rain GR4J runs on to the catchment's areal rain"
     (on: × 1 in every month, method Independent MAP, source blank; off:
     null, and the correction switched off comes back if ticked again before
