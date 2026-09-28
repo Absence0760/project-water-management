@@ -1117,6 +1117,13 @@
 //             (shared by the run worker and the pages), the water-account
 //             and balance lines, the help, report and scenario lines. No new
 //             dependency. Headroom ~3 KB.
+// 2026-09-28  total 1066 → 1073 KB (measured 1070). The methods page
+//             (/methods, the engine audit's public summary, issue #57):
+//             prerendered with csr = false like the legal pages, so a visitor
+//             downloads no script, but SvelteKit still emits its page node
+//             (5.2 KB, its text, the departures and the generated known
+//             limitations), plus the trust strip's link and its Afrikaans
+//             word. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1127,7 +1134,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1066,
+	totalCodeKb: 1073,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

@@ -95,6 +95,7 @@
 				<a href="{base}/register">{t('Create an account')}</a>
 				<a href="{base}/privacy">{t('Privacy notice')}</a>
 				<a href="{base}/terms">{t('Terms of use')}</a>
+				<a href="{base}/methods">{t('How the model is checked')}</a>
 			</nav>
 		</div>
 	</footer>

@@ -118,13 +118,14 @@ that contradicts itself.
   engine by `landing-data.ts` (`hero.calibrationNse`), never typed in. It
   replaced "35 runs behind the what-if above", a count of work done rather
   than a reason to trust the result.
-- **No link to the engine audit.** The brief asked for a link to a public
-  summary of the engine audit. None is given: the audit (`docs/engine-audit.md`)
-  lives in the source repository, which isn't guaranteed to be public (it has
-  been private), and there is no public page that summarises it. A link a
-  visitor may not be able to open is worse than none, so the page says it in
-  words ("every place it departs from the workbook is written down"). When the
-  site serves a public summary, link it from that statement in `Trust.svelte`.
+- **The engine audit's public summary, `/methods`** ("How the model is
+  checked"), is linked under the trust statements and from the footer. The site
+  serves it itself (prerendered, like the legal pages) rather than linking
+  straight to `docs/engine-audit.md`, which is written for the engine's
+  maintainers; the page links the full audit in the public source for anyone
+  who wants the evidence. Its known limitations and "pending" marks come from
+  the engine's generated list, so it can't drift from the audit
+  ([ui.md § Methods page](../ui.md#methods-page)).
 - **Texture**: the contours at 5 % behind the hero and the footer, drifting a
   pixel or two over 40 s; a meandering river line between sections instead of
   rules.

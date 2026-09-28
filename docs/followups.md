@@ -2935,12 +2935,9 @@ Applicant view and the Applications tab. Left:
       four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
       quality bar). They can't be measured on the local static server.
       Trigger: the first deploy (Phase 6); then close #57.
-- [ ] **A public summary of the engine audit** for the trust strip's first
-      point. None exists and the repo isn't reliably public, so the page
-      gives no link ([design/landing-art.md](./design/landing-art.md)).
-      Durable fix: a short public page (the audit's findings and decisions,
-      no client data) linked from the trust strip. Trigger: before the page
-      is promoted, or the repo is made public.
+- [x] **A public summary of the engine audit** for the trust strip's first
+      point: `/methods` ("How the model is checked"), linked from the trust
+      strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
 
 ## Legal pages and POPIA (issues #47, #48)
 
