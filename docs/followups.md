@@ -8,8 +8,8 @@ Tick items off (or move them into an issue) as they are done.
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
 the history scrub #63, the legal go-live gates #103, the information officer's POPIA
-questions #90,
-the hydrologist's decisions #46, applicant decisions #50, the Step 2
+questions and the applicant decisions (D1–D3, WP-3.3) #90,
+the hydrologist's decisions #46, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
 The buildable work is filed in batches by area, one issue per batch, so a
@@ -3026,7 +3026,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #50](https://github.com/Absence0760/project-water-management/issues/50); step-3 § 11), built on the
+- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
@@ -3061,7 +3061,7 @@ Applicant view and the Applications tab. Left:
       `scenarios/oracles.db.test.ts` ("ids and counts"), each with its
       positive control ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 - [ ] **The wording of a value rule refused because of hidden data**
-      ([issue #50](https://github.com/Absence0760/project-water-management/issues/50)).
+      ([issue #90](https://github.com/Absence0760/project-water-management/issues/90)).
       Built on the recommended default: the applicant is told only "doesn't
       apply to the catchment as modelled" (`MASKED_RULE`), never which rule
       or the hidden values; the assessors, checking the same application,
@@ -3069,14 +3069,15 @@ Applicant view and the Applications tab. Left:
       namespace). **Pending the client**: whether an applicant may be told
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
-      Trigger: the client's answer on issue #50.
+      Trigger: the client's answer on issue #90.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
-      are gauge data). Pending the hydrologist.
+      are gauge data). Pending the hydrologist and the licensing authority
+      (issue #90).
 - [x] **Performance of `run_series_select`.** Every viewer read of run series
       now evaluates `app_hidden_scenario_runs()` and the contributor policy's
       two helpers once per query (hashed subplans; the contributor ones exit
