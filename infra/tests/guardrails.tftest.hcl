@@ -462,6 +462,19 @@ run "production_guardrails" {
     condition     = aws_db_instance.main.engine == "postgres" && aws_db_instance.main.engine_version == "17"
     error_message = "Database must be PostgreSQL 17 (same major as local dev)."
   }
+  # A major upgrade replaces the parameter group (new family), so it must be
+  # create-before-destroy under a generated name: a fixed `name` collides with
+  # the group the instance is still using (rds.tf § locals).
+  # Lifecycle settings aren't plan attributes, so that half reads the source
+  # (the resource block, up to its closing brace at column 0).
+  assert {
+    condition = (
+      aws_db_parameter_group.main.name_prefix == "water-management-pg17-"
+      && aws_db_parameter_group.main.family == "postgres17"
+      && can(regex("create_before_destroy\\s*=\\s*true", regex("(?s)resource \"aws_db_parameter_group\" \"main\" \\{.*?\\n\\}", file("rds.tf"))))
+    )
+    error_message = "The DB parameter group must use name_prefix (never a fixed name), the postgres17 family, and lifecycle { create_before_destroy = true }."
+  }
   assert {
     condition     = aws_db_instance.main.instance_class == "db.t4g.micro" && aws_db_instance.main.multi_az == false
     error_message = "Default DB must be single-AZ db.t4g.micro."
