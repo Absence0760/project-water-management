@@ -32,7 +32,7 @@
 	import { movedHref, resultGroups } from './sections';
 	import { supplyHref } from '$lib/components/supply/links';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { ranAgo } from '$lib/components/overview/latestRun';
+	import { historyDays, ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
@@ -642,7 +642,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={runDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
+					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
 				</section>
 			</section>
 			{#if summary.forecast}

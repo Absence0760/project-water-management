@@ -56,6 +56,8 @@ describe('this week', () => {
 		expect(weekWindow({ startDate: '2022-01-01', endDate: '2022-01-28' })).toMatchObject({ reportStart: '2022-01-22', reportEnd: '2022-01-28', from: 21, to: 27, days: 7 });
 		// A run shorter than a week: all of it.
 		expect(weekWindow({ startDate: '2022-01-01', endDate: '2022-01-03' })).toMatchObject({ from: 0, to: 2, days: 3 });
+		// A forecast run: the 7 days before the forecast, never forecast days read as this week (issue #51).
+		expect(weekWindow({ startDate: '2022-01-01', endDate: '2022-01-28', forecastFrom: '2022-01-15' })).toMatchObject({ reportStart: '2022-01-08', reportEnd: '2022-01-14', from: 7, to: 13, days: 7 });
 	});
 	it('counts the days with a deficit above noise, nulls and float dust not counted', () => {
 		const d = [5, 0, 1e-9, null, 2, 3, 0.5, 9];
