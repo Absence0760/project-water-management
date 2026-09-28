@@ -2907,10 +2907,11 @@ regression suite is unchanged.
 | `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
+| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 100; below); null or empty = every day at its month's demand |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,
-as for the crop requirement, issue #53 R1):
+as for the crop requirement, issue #53 R1, × its schedule's factor that day):
 
 ```
 D   = F / e + Σ o_k                         (the unit's abstraction demand)
@@ -2945,10 +2946,45 @@ conservative reading where it didn't settle them):
   reconciliation strategy's AADD usually includes losses, so only a demand
   sized per unit is grossed up. Where distribution losses go (to the river or
   out of the catchment) is not modelled: they are consumed.
-- *No daily on/off yet.* The schedule (date windows with a factor, an
-  uploaded factor series, and the reason a day is off) is a follow-up
-  ([followups.md](./followups.md) "Demand objects: the daily schedule"); a
-  monthly profile covers the seasonal part.
+- *Off means no demand.* A day the schedule switches off (factor 0) has
+  no demand, so no supply and nothing returned: the "not needed" reading.
+  The client has said the switch is set by date (issue #90 Q12); what
+  causes off days, whether an off day can instead mean "supplied from
+  elsewhere" (no river take, the return goes on) or "curtailed" (a
+  shortfall), and whether a treatment works keeps discharging while its
+  user is off the river are still open, so no off *reason* is modelled
+  ([followups.md](./followups.md) "Demand objects: the off reason").
+
+**The schedule** (engine ≥ 1.17.0, issue #90 Q4 and Q12, `network/demandSchedule.ts`).
+The client's answer: the daily pattern depends on the demand type, fixed
+for a town, varying for irrigation, and it is set by date, not by river
+flow. So an object carries a list of windows, each a set of days and a
+factor on the object's demand on those days (0 = off, above 1 a peak, at
+most 10). A window covers:
+
+| `span` | Days |
+| --- | --- |
+| `always` | every day (with weekdays: a weekly pattern, e.g. weekends off) |
+| `yearly` | `from`–`to` as MM-DD every year, inclusive; wraps the year end when `from` is later (`12-15`–`01-10`); `02-29` counts only in a leap year |
+| `range` | `from`–`to` as YYYY-MM-DD, once (a works shutdown) |
+| `easter` | `easterFrom`–`easterTo` whole days from Easter Sunday, −60 to 60 (−2 Good Friday, +1 Family Day), Western (Gregorian) Easter |
+
+and `weekdays` (ISO 1 = Monday … 7 = Sunday, null = all) narrows any span.
+The later of two windows that cover a day sets its factor, so a list reads
+top to bottom as "then, on these days, instead"; a day no window covers
+runs at 1. The factor multiplies the month's demand after the demand factor:
+o_k(t) = monthly_k[m] × df[m] × s_k(t). An object's schedule ranges over
+at most 24 windows. A window the run can't use (a bad date, a factor out of
+range, an Easter span past 60 days) is refused on save and skipped with a
+warning by the run. A schedule that changes no day (every factor 1, or
+windows outside the run) runs to the bit as no schedule.
+
+*Not built yet:* an uploaded daily factor series (a meter record of which
+days a works ran) needs an object-scoped series kind, its upload through
+Add data and its storage; it's a follow-up
+([followups.md](./followups.md) "Demand objects: an uploaded daily factor
+series"), to be built when a client has such a record. Flow-triggered
+switching stays with the hands-off-flow rule (WP-3.8).
 - *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
   crops and its objects alike; the client wants every category cut by the
   same % (#53 O4, issue #90), so no per-category restriction is planned, and
@@ -2963,10 +2999,12 @@ conservative reading where it didn't settle them):
 **Outputs** (only on a unit with an enabled object): per object the series
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
-supplied, return and days short). The unit's `demand`, `supplied`, `deficit`
+supplied, return and days short, and, on an object with a schedule, its
+days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so.
 
-**Checks.** `checkWorkings` recomputes each object's demand from the model,
+**Checks.** `checkWorkings` recomputes each object's demand from the model
+(its schedule included),
 checks D = F / e + Σ o_k, 0 ≤ G_k ≤ o_k, Σ G_k ≤ G, the class order (no later
 class gets water while an earlier one is short) and equal shares within a
 class, and T from the parts; `checkBalance` closes the unit with that T; the
@@ -2974,10 +3012,12 @@ EWR attribution check uses G − T as the unit's consumptive use. The fuzz
 generator gives 25 % of networks up to three objects on half their units
 (monthly or per unit, any class, any return share, some piped out, some
 switched off, now and then one on a gauge or user, which the run skips with a
-warning); the doubled-crop-area law doubles the objects' demand too, since a
+warning), and half the objects a schedule of up to four windows of every
+span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area law doubles the objects' demand too, since a
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction. Hand examples: `run.demandObjects.test.ts`,
-`network/demandObjects.test.ts`.
+`network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
+dates, the year-end wrap, 29 February, overlap order).
 
 ### 2.8 Outputs
 

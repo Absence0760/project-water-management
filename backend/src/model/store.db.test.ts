@@ -147,8 +147,15 @@ describe('model store', () => {
 			],
 			// Demand objects (engine 1.7.0, 088) on the farm (a unit), out of name order on purpose: one monthly, one per unit.
 			demandObjects: [
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1200, litresPerUnitDay: 90, lossPct: 0.2, monthlyFactor: [1, 1, 2.5, 2.5, 1, 1, 1, 1, 1, 1, 1, 0.5], returnPct: 0.35, priority: 'first', destination: 'internal', enabled: true, note: 'Red Book norm' },
-				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, note: '' }
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1200, litresPerUnitDay: 90, lossPct: 0.2, monthlyFactor: [1, 1, 2.5, 2.5, 1, 1, 1, 1, 1, 1, 1, 0.5], returnPct: 0.35, priority: 'first', destination: 'internal', enabled: true,
+					// A schedule (engine 1.17.0, 100), in its order: weekends at half, Easter at a peak.
+					schedule: [
+						{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 },
+						{ label: 'Easter', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 1.8 },
+						{ label: 'Works shutdown', span: 'range', from: '2021-07-01', to: '2021-07-14', weekdays: null, easterFrom: null, easterTo: null, factor: 0 }
+					],
+					note: 'Red Book norm' },
+				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Bulk export', category: 'external', sizing: 'monthly', monthlyM3Day: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12.25], count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0, priority: 'last', destination: 'external', enabled: false, schedule: null, note: '' }
 			]
 		};
 		const put = await u.call('PUT', `/projects/${projectId}/model`, model);
@@ -225,6 +232,27 @@ describe('model store', () => {
 		expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { effectiveRainFractionMonthly: null } })).status).toBe(200);
 		const cleared = await withUser(u.id, (db) => loadSettingsAndModel(db, projectId));
 		expect((cleared.settings as { effectiveRainFractionMonthly: unknown }).effectiveRainFractionMonthly).toBeNull();
+	});
+
+	it('stores a demand object’s schedule (engine 1.17.0, 100): an empty one as none, a bad window refused', async () => {
+		const u = await signUp('Schedule');
+		const projectId = await newProject(u, 'Demand schedule');
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { sortOrder: 1 });
+		const town = { id: crypto.randomUUID(), nodeId: farm.id, name: 'Town', category: 'municipal', sizing: 'monthly', monthlyM3Day: monthly(5), count: null, litresPerUnitDay: null, lossPct: 0, monthlyFactor: null, returnPct: 0.5, priority: 'first', destination: 'internal', enabled: true, note: '' };
+		const put = (schedule: unknown) => u.call('PUT', `/projects/${projectId}/model`, { nodes: [outlet, farm], crops: [], cropAreas: [], transfers: [], demandObjects: [{ ...town, schedule }] });
+		const stored = async () => (await withUser(u.id, (db) => loadModel(db, projectId))).demandObjects![0]!.schedule;
+		expect((await put([])).status).toBe(200);
+		expect(await stored()).toBeNull();
+		const weekends = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		expect((await put(weekends)).status).toBe(200);
+		expect(await stored()).toEqual(weekends);
+		// A date that doesn't exist, and 25 windows: refused, the stored schedule untouched.
+		expect((await put([{ span: 'range', from: '2021-02-30', to: '2021-03-01', factor: 0 }])).status).toBe(400);
+		expect((await put(Array.from({ length: 25 }, () => weekends[0])))).toMatchObject({ status: 400 });
+		expect(await stored()).toEqual(weekends);
+		// The column's own guard, past the API: not an empty list, not an object.
+		for (const bad of ['[]', '{}']) await expect(withUser(u.id, (db) => db.query('UPDATE demand_object SET schedule = $2::jsonb WHERE id = $1', [town.id, bad]))).rejects.toThrow(/demand_object_schedule_shape/);
 	});
 
 	it('loads an empty model as empty lists, and settings with the model in one call', async () => {

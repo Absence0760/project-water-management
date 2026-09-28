@@ -2732,17 +2732,43 @@ from the WP:
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
       workbook in the private seed settings.
-- [ ] **Demand objects: the daily schedule.** Not built: date windows with a
-      factor, an uploaded daily factor series
-      through Add data, and the reason a day is off (not needed: no demand,
-      no return; supplied from elsewhere: no river take, the return goes on;
-      curtailed: a shortfall), with switched-off days reported apart from
-      short days. Durable fix: a `schedule` on the object (windows) and an
-      object-scoped series kind for the uploaded factor, applied in
-      `network/demandObjects.ts planObjects` before the split, with the
-      reason carried into the return (a per-day return override) and the
-      summary. Trigger: the client's answer on the schedule (fixed pattern or
-      uploaded series; what off means).
+- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.17.0,
+      migration 100, issue #90 Q4 and Q12). The client answered: the daily
+      pattern depends on the demand type (a town's is fixed, irrigation's
+      varies) and the switch is set by date, not by river flow. A `schedule`
+      on the object: windows (every day, a yearly MM-DD span wrapping the
+      year end, a one-off date range, days around Easter), narrowed to
+      weekdays, each with a factor (0 = off), the later window winning;
+      applied in `network/demandObjects.ts planObjects` before the split and
+      recomputed by the self-checks; days off reported apart from days
+      short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
+      ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
+      meaning: no demand, so no supply and nothing returned.
+- [ ] **Demand objects: the off reason.** Not built, because the client
+      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+      off days (occupancy, works downtime, load-shedding, switching to a
+      borehole), whether an off period can mean "supplied from elsewhere"
+      (no river take, the return goes on) or "curtailed" (counted as a
+      shortfall) rather than "not needed", and whether a treatment works
+      keeps discharging while its user is off the river. Today every off day
+      is "not needed" (no demand, no return). Durable fix: a `reason` on a
+      schedule window (`notNeeded` / `elsewhere` / `curtailed`), carried into
+      the return as a per-day override (an `elsewhere` day keeps its return,
+      from a set discharge or the recent mean) and into the summary
+      (curtailed days as short, elsewhere days as met elsewhere). Trigger:
+      the client's answer to the rest of Q12.
+- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
+      meter or works record of which days a demand ran, uploaded through Add
+      data as a daily factor on one object (the design's second source
+      beside the windows). Left out of the schedule PR because it isn't
+      bounded like the windows: it needs a series kind scoped to an object
+      (today's series are project- or node-scoped), its storage and
+      provenance, the Add data flow and preview, and a rule for days the
+      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
+      stored like the node series, multiplied after the schedule in
+      `planObjects` (a gap runs at the schedule's factor), with the checks
+      reading it the same way. Trigger: a client supplying such a record for
+      a demand whose pattern windows can't describe.
 - [ ] **Demand objects: a structured demand source.** The rule is decided
       (issue #54 Q11, confirmed by the client in issue #90): a demand comes
       from meter records where they exist, else the reconciliation

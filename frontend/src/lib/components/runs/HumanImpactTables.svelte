@@ -20,6 +20,8 @@
 	// Each unit's demand objects (engine ≥ 1.7.0), unit by unit.
 	const objects = $derived((summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o }))));
 	const PRIORITY: Record<string, string> = { first: 'first', shared: 'with the crops', last: 'last' };
+	// Days a schedule switched an object off (engine ≥ 1.17.0): a column only when one has a schedule.
+	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
 </script>
 
 {#if objects.length}
@@ -39,6 +41,7 @@
 					<th scope="col" class="num">Supplied<br /><span class="u">m³/day</span></th>
 					<th scope="col" class="num">Supplied<br /><span class="u">%</span></th>
 					<th scope="col" class="num">Days short</th>
+					{#if anyOff}<th scope="col" class="num">Days off</th>{/if}
 					<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
 				</tr>
 			</thead>
@@ -52,6 +55,7 @@
 						<td class="num">{fmtNum(o.avgSuppliedM3Day)}</td>
 						<td class="num">{fmtPct(o.fractionSupplied)}</td>
 						<td class="num">{fmtNum(o.daysShort, 0)}</td>
+						{#if anyOff}<td class="num">{o.daysOff === undefined ? '–' : fmtNum(o.daysOff, 0)}</td>{/if}
 						<td class="num">{o.destination === 'external' ? 'piped out' : fmtNum(o.avgReturnedM3Day)}</td>
 					</tr>
 				{/each}

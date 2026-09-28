@@ -152,6 +152,12 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['element-farm', 'element-user', 'supply-rule'],
 		source: 'docs/model.md §2.7f; issue #54 item 2b; CSIR Red Book §J (2005); KZN DARD livestock water requirements'
 	},
+	'demand-schedule': {
+		long: 'A demand object’s schedule is a list of windows, each a set of days and a factor on the object’s demand on those days. A window covers every day, a span of dates each year (1 December to 15 January wraps the year end), a one-off date range, or days around Easter (−2 is Good Friday, +1 Family Day), and can be narrowed to some weekdays: every day on Saturday and Sunday is a weekend pattern. A factor of 0 switches the object off, 0.5 halves it, 1.8 is a peak.\n\nWhere two windows cover a day, the later one in the list sets it, so the list reads “then, on these days, instead”; a day no window covers runs at the month’s demand. A day switched off has no demand, so no supply and nothing returned, and the results count it apart from days short. The switch is set by date only, not by the river’s flow.',
+		aliases: ['on/off pattern', 'weekends off', 'holiday', 'shutdown', 'Easter', 'daily pattern', 'schedule'],
+		related: ['demand-object'],
+		source: 'docs/model.md §2.7f; issue #90 Q4 and Q12'
+	},
 	'supply-rule': {
 		long: 'Dam only (the default) is what the model always did: irrigation draws on the hydrological unit’s dam alone. River first pumps from the river below the dam, up to the pump’s capacity, and the dam covers the rest. Trigger uses the dam until it holds less than the trigger level at the start of a day, then pumps from the river first until the dam is back at the stop level. Run of river has no dam: the pump takes what the river gives, up to its capacity, and the rest is a deficit.\n\nThe pump only takes the flow below the dam that the hydrological unit need not pass: the senior water users’ demand below it, and a pass-inflow release’s target, stay in the river. The capacity is m³/day: pumps × m³/h per pump × 24. With no capacity set, only the river’s flow limits the pumping, and the run says so.',
 		aliases: ['pump capacity', 'river abstraction', 'pump scenario', 'river first', 'run of river', 'dam first'],

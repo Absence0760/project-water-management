@@ -270,4 +270,23 @@ describe('demand objects (engine 1.7.0, issue #54 item 2b)', () => {
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), nodeId: gauge.id }))).join()).toMatch(/only a unit has demand objects/);
 		expect(modelProblems(ModelBody.parse(body({ monthlyM3Day: new Array(12).fill(1), destination: 'external', returnPct: 0.2 }))).join()).toMatch(/nothing returns/);
 	});
+
+	describe('a schedule (engine 1.17.0, issue #90 Q4)', () => {
+		const monthly = { monthlyM3Day: new Array(12).fill(10) };
+		it('is none by default, and fills a window’s blanks', () => {
+			expect(ModelBody.parse(body(monthly)).demandObjects![0]!.schedule).toBeNull();
+			const parsed = ModelBody.parse(body({ ...monthly, schedule: [{ span: 'always', weekdays: [6, 7], factor: 0 }] }));
+			expect(parsed.demandObjects![0]!.schedule).toEqual([{ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }]);
+			expect(modelProblems(parsed)).toEqual([]);
+		});
+		it('refuses a bad shape: an unknown span, a factor out of range, weekday 0, a fractional Easter offset, too many windows', () => {
+			for (const w of [{ span: 'monthly', factor: 1 }, { span: 'always', factor: -1 }, { span: 'always', factor: 11 }, { span: 'always', weekdays: [0], factor: 0 }, { span: 'easter', easterFrom: 0.5, easterTo: 1, factor: 0 }])
+				expect(ModelBody.safeParse(body({ ...monthly, schedule: [w] })).success, JSON.stringify(w)).toBe(false);
+			expect(ModelBody.safeParse(body({ ...monthly, schedule: Array.from({ length: 25 }, () => ({ span: 'always', factor: 1 })) })).success).toBe(false);
+		});
+		it('refuses a window the run can’t use: a date that doesn’t exist, a span that ends before it starts', () => {
+			expect(modelProblems(ModelBody.parse(body({ ...monthly, schedule: [{ span: 'yearly', from: '02-30', to: '03-01', factor: 0 }] }))).join()).toMatch(/schedule window 1: a yearly span needs/);
+			expect(modelProblems(ModelBody.parse(body({ ...monthly, schedule: [{ label: 'Shutdown', span: 'range', from: '2021-07-14', to: '2021-07-01', factor: 0 }] }))).join()).toMatch(/window 1 \("Shutdown"\): its date range ends/);
+		});
+	});
 });
