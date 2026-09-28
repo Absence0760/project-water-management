@@ -19,7 +19,7 @@
 		"svelte": "5.57.1",
 		"svelte-check": "4.7.6",
 		"terser": "5.51.2",
-		"typescript": "5.5.4",
+		"typescript": "7.0.2",
 		"vite": "5.4.0",
 		"vitest": "^2.1.9",
 		"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
