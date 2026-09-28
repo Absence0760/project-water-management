@@ -34,6 +34,12 @@
 //      catches it; a key poisoning slowly can lift this bar, but only until
 //      the first manual run, and the held event says `own` so the reviewer
 //      knows how weak it was.
+// A push that creates a series is held whatever its days (heldFor,
+// `newSeries` in the held event): the series becomes the model's input for
+// its kind and has no history for step 1 to 3 to judge by. A key may create
+// a series only of a kind the project has no outlet series of (series/merge.ts
+// assertKeyMayCreate, 100_key_series_kind), so it can never displace the
+// series a run reads.
 // The hold ends when a person runs the model (the Run button or a queued
 // manual re-run; not a scenario run): they have looked at the data, fixed it
 // or accepted it.
@@ -58,6 +64,8 @@ export interface HeldDays {
 	examples: { date: string; value: number }[];
 	/** Which values the outlier limit came from; null: there was none (too few non-zero days anywhere). */
 	limitFrom: LimitFrom | null;
+	/** The push created the series: held whatever its days (heldFor). */
+	newSeries: boolean;
 }
 
 type Daily = { startDate: string; values: (number | null)[] };
@@ -153,7 +161,7 @@ export function anomalousPushedDays(
 ): HeldDays | null {
 	const limit = outlierLimit(kind, before, pushed, keyDays, accepted);
 	const d0 = toEpochDay(pushed.startDate);
-	const held: HeldDays = { negative: 0, outlier: 0, examples: [], limitFrom: limit?.from ?? null };
+	const held: HeldDays = { negative: 0, outlier: 0, examples: [], limitFrom: limit?.from ?? null, newSeries: false };
 	pushed.values.forEach((v, i) => {
 		if (v === null || !Number.isFinite(v)) return;
 		const negative = v < 0;
@@ -163,6 +171,20 @@ export function anomalousPushedDays(
 		if ((negative || outlier) && held.examples.length < HELD_EXAMPLES) held.examples.push({ date: fromEpochDay(d0 + i), value: v });
 	});
 	return held.negative || held.outlier ? held : null;
+}
+
+/**
+ * Whether a key's push holds the automatic runs: its flagged days
+ * (anomalousPushedDays), or, when the push created the series (`created`),
+ * always. A series a key creates becomes the model's input for its kind (a
+ * key may create one only when the kind has none, series/merge.ts
+ * assertKeyMayCreate), and has no history to judge its days by: the outlier
+ * limit is null, so without this any value but a negative would go straight
+ * into an automatic run.
+ */
+export function heldFor(created: boolean, flagged: HeldDays | null): HeldDays | null {
+	if (!created) return flagged;
+	return { ...(flagged ?? { negative: 0, outlier: 0, examples: [], limitFrom: null }), newSeries: true };
 }
 
 /**

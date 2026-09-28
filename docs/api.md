@@ -1910,7 +1910,10 @@ CORS (gateways aren't browsers), JSON bodies only.
 | POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
-  `mergeInto`): the series is created if it doesn't exist, only the days sent
+  `mergeInto`): the series is created if it doesn't exist (only when the
+  project has no outlet series of that kind: otherwise `409`, and a person
+  adds the series first, since a run reads the first of each kind by name
+  and a key must not be able to replace it; issue #51), only the days sent
   are touched (a `null` clears a day here, where the UI's merge keeps the
   stored value), units are converted to the kind's
   canonical unit, and the version and day-boundary guards answer `409` as
@@ -1924,10 +1927,11 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
-- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom }`
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom, newSeries }`
   when days this push carried look wrong by the engine's data-quality rules
-  (a negative rain or flow, or a value above the outlier limit), else
-  `null`. The limit needs 100 non-zero days and comes from the first of
+  (a negative rain or flow, or a value above the outlier limit), or when the
+  push created the series (`newSeries: true`, held whatever its days: it is
+  now what runs read for its kind), else `null`. The limit needs 100 non-zero days and comes from the first of
   these that has them; `limitFrom` says which (`null`: none had, so only
   negatives were checked): `others`, the series without this push's days
   and without the days this key wrote before that nobody has written
@@ -1943,7 +1947,8 @@ CORS (gateways aren't browsers), JSON bodies only.
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in
-  `allowedSeries`, or a scope the key lacks; `429` with `Retry-After`
+  `allowedSeries`, or a scope the key lacks; `409` for a new series of a
+  kind the project already has (and the version and day-boundary guards); `429` with `Retry-After`
   (seconds) past the rate limit; `400` for a body that isn't valid; `413`
   when the series would pass 60 000 days.
 - **Rate limit.** A token bucket per key: 60 requests, refilled at 60 a

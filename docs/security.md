@@ -490,8 +490,9 @@ and nothing else.
   them count again: they are that person's values now. **Limits** (a
   partial mitigation):
   - a plausible wrong value, inside the series' usual range, isn't caught;
-  - the outlier rule needs 100 non-zero days in the series, so a new or
-    short series is checked for negatives only;
+  - the outlier rule needs 100 non-zero days in the series, so a short
+    series is checked for negatives only (a new one a key creates is held
+    whatever its days, below);
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -511,6 +512,31 @@ and nothing else.
     even one absurd value through; this still catches that, and a key
     poisoning slowly can lift it only until the first manual run. A run
     saved before 056 records no series, so it is no reference either.
+
+- **A key can't swap the model's input** (issue #51). A run reads the
+  first outlet series of each kind by name (`runs/execute.ts`
+  `loadLiveInput`), so a key free to create series could add one named to
+  sort ahead of the person's and the model would read the key's days, with
+  nothing held (a new series has no history for the outlier limit). Two
+  rules close it, for every key, whatever its `allowedSeries`:
+  - a key may **create** a series only of a kind the project has no outlet
+    series of; otherwise the merge is `409` and a person adds the series
+    first (an upload of one day is enough), after which the key may merge
+    into it (`series/merge.ts` `assertKeyMayCreate`, through
+    `app_project_has_outlet_series`, SECURITY DEFINER because a key limited
+    to some series can't see the others, `100_key_series_kind.sql`; called
+    under the series cap's per-project advisory lock, so two keys can't add
+    the second series of a kind at once);
+  - a push that **creates** a series always holds the automatic runs
+    (`newSeries: true` in `series.held` and `rerunHeld`, `series/hold.ts`
+    `heldFor`): the series becomes the model's input for its kind, so a
+    person looks before a run reads it.
+
+  Tests: `ingest/ingest.db.test.ts` "a key can’t add a series the model
+  would read in place of a person’s" (a second rain series refused for an
+  open and an allow-listed key, the model input unchanged, a merge into the
+  existing series as the positive control, a new kind held, the kind check
+  answering only writers).
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the

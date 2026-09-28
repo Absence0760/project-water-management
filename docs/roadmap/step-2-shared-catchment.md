@@ -2298,7 +2298,9 @@ logger key.
 - **A leaked or mis-configured gateway key poisons a series** → key
   allowlist; data-quality checks (engine `seriesRowFlags`) on each key
   ingest, with negative or outlier days holding the auto re-run for review
-  (`series.held`, built in WP-2.16, `series/hold.ts`); one-click revoke;
+  (`series.held`, built in WP-2.16, `series/hold.ts`); a key can't add a
+  second series of a kind (so it can't replace the series a run reads), and
+  a series it adds holds the auto re-run too (issue #51); one-click revoke;
   `series.merged` events identify the key.
   - Recovery: for UI merges, restore from `series_revision`. Key and feed
     merges don't write revisions, so recovery means re-fetching or
