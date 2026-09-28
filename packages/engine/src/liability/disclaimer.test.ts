@@ -32,6 +32,13 @@ describe('the cover, footer and export lines', () => {
 		expect(DISCLAIMER.paragraphs.every((p, i) => i === 4 || !p.includes('{site}'))).toBe(true);
 	});
 
+	it('trims every trailing slash, and a long run of slashes returns at once', () => {
+		expect(withSite('{site}/terms', 'https://water.example.com///')).toBe('https://water.example.com/terms');
+		expect(withSite('{site}/terms', '///')).toBe('/terms');
+		const hostile = `${'/'.repeat(200_000)}x`;
+		expect(withSite('{site}', hostile)).toBe(hostile);
+	}, 5_000);
+
 	it('names the Disclaimer section, and every signer on the cover (a body code by its short name, an older free-text body as typed)', () => {
 		expect(REPORT_READ_FIRST(12)).toContain('(see the Disclaimer, section 12)');
 		expect(REPORT_SIGNED_BY([{ fullName: 'A Person', registrationBody: 'ecsa', registrationNo: '123' }, { fullName: 'B Person', registrationBody: 'SACNASP', registrationNo: '9' }])).toBe(

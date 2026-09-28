@@ -37,7 +37,13 @@ export const DISCLAIMER: Disclaimer = {
  * frontend knows it as its own origin (the server PDF prints the public site,
  * RENDER_SITE_URL), so a printed report carries the Terms URL in full.
  */
-export const withSite = (text: string, site: string): string => text.replaceAll('{site}', site.replace(/\/+$/, ''));
+export const withSite = (text: string, site: string): string => {
+	// Trailing slashes trimmed by index, not /\/+$/: that pattern retries from
+	// every '/' in a long run of them (CodeQL js/polynomial-redos).
+	let end = site.length;
+	while (end > 0 && site[end - 1] === '/') end--;
+	return text.replaceAll('{site}', site.slice(0, end));
+};
 
 /**
  * The report cover's "Read this first" box (delict review §5.2): the
