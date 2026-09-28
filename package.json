@@ -53,7 +53,7 @@
 		"build": "pnpm -r run build",
 		"build:frontend": "pnpm -C frontend build",
 		"build:backend": "pnpm -C backend build",
-		"//-- check --": "Typecheck every workspace, plus the repo guards CI runs: committed env files stay local (check:env), workflow pins/OIDC/gate rules + actionlint (check:workflows), frontend bundle ceilings (check:bundle, after build:frontend), advisory privacy-doc drift vs origin/main (check:compliance), no client-identifying term in any tracked file or path (check:terms; needs ../infra-secrets/water-management/client-terms.txt, else a no-op), every language's translation sheet is current and no glossary translation is stale (check:i18n lists what is untranslated or stale, for every language; fix with gen:i18n:sheet / gen:i18n:stamp <lang> <id>).",
+		"//-- check --": "Typecheck every workspace, plus the repo guards CI runs: committed env files stay local (check:env), workflow pins/OIDC/gate rules + actionlint (check:workflows), frontend bundle ceilings (check:bundle, after build:frontend), advisory privacy-doc drift vs origin/main (check:compliance), no client-identifying term in any tracked file or path (check:terms; needs ../infra-secrets/water-management/client-terms.txt, else a no-op), every language's translation sheet is current and no glossary translation is stale (check:i18n lists what is untranslated or stale, for every language; fix with gen:i18n:sheet / gen:i18n:stamp <lang> <id>). The five Playwright pins agree and are exact (check:pins: backend and renderer-deps playwright-core, its lockfile, e2e's @playwright/test, the renderer image tag; scripts/guards/check_playwright_pins.mjs).",
 		"check": "pnpm -r run check",
 		"check:env": "node scripts/guards/check_env_isolation.mjs",
 		"check:workflows": "bin/check-workflows.sh",
@@ -61,6 +61,7 @@
 		"check:compliance": "node scripts/guards/check_compliance_drift.mjs",
 		"check:terms": "node scripts/guards/check_client_terms.mjs",
 		"check:i18n": "node scripts/guards/i18n_sheet.mjs --check",
+		"check:pins": "node scripts/guards/check_playwright_pins.mjs",
 		"//-- test --": "test:changed = the fast inner loop: typecheck + vitest --changed for only what the working changes touch (seconds; db tests too when :5434 is up; never e2e), see docs/testing.md. test = unit tests everywhere (no DB, no wall-clock assertions; the gate before a commit). test:guards = node:test suites for the CI/release guards in scripts/. test:backend:db needs dev:db:up; it migrates and uses the water_test database (water_test_w<n> in a git worktree, backend/src/__tests__/test-db.ts). test:engine:perf / test:backend:perf are separate performance-budget targets (median of several runs; not part of `test` because a busy machine or parallel workspaces would make a hard wall-clock ceiling flake — run them alone). test:backend:perf:db is the same for budgets that need Postgres (dev:db:up; it rebuilds the checkout's water_test… like test:backend:db, so never beside it); not in CI either.",
 		"test": "pnpm -r run test",
 		"test:changed": "node scripts/test-changed.mjs",
@@ -79,7 +80,9 @@
 		"test:e2e:install": "pnpm -C e2e install:browsers",
 		"check:e2e": "pnpm -C e2e check",
 		"//-- infra --": "Terraform in infra/: credential-free fmt -check + validate + plan-only `terraform test` (mocked providers, tests/guardrails.tftest.hcl). Needs terraform (tfenv, infra/.terraform-version). Never plans against or applies to AWS; see infra/README.md.",
-		"check:infra": "bin/check-infra.sh"
+		"check:infra": "bin/check-infra.sh",
+		"//-- renderer --": "The report renderer's container image (backend/renderer.Dockerfile, the release path's image): check:renderer-image packages the Lambdas, builds the image and smoke-tests it as Lambda runs it (Chromium prints a PDF; the handler answers under the Lambda runtime interface emulator, pinned in infra/scripts/smoke-renderer-image.sh; the init check refuses a missing setting). Needs docker; no AWS account; ~3.5 GB image. CI runs the same (ci.yml, renderer-image); see docs/deployment.md § Reports.",
+		"check:renderer-image": "bin/check-renderer-image.sh"
 	},
 	"engines": {
 		"node": ">=24"
