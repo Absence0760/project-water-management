@@ -64,8 +64,9 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	// The daily CSV leads with the forecast flag.
 	const csv = await page.request.get(`${API_URL}/projects/${project.id}/runs/${runId}/export/daily.csv`);
 	expect(csv.status()).toBe(200);
-	const [provenance, ...lines] = (await csv.text()).replace(/^﻿/, '').trim().split('\r\n');
-	// Row 1 says which run made the file (docs/api.md § Export), the header follows it.
+	const [disclaimer, provenance, ...lines] = (await csv.text()).replace(/^﻿/, '').trim().split('\r\n');
+	// Row 1 is the disclaimer, row 2 says which run made the file (docs/api.md § Export), the header follows it.
+	expect(disclaimer).toMatch(/^# model estimates /);
 	expect(provenance).toMatch(/^# run=Next fortnight; engine=[^;]+; runoff_model=gr4j; created=[^;]+; period=2021-10-01\.\.2022-02-11$/);
 	expect(lines[0]!.split(',').slice(0, 2)).toEqual(['date', 'forecast (F = modelled on forecast rain)']);
 	const flag = new Map(lines.slice(1).map((l) => [l.slice(0, 10), l.split(',')[1]]));

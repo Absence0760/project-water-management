@@ -2490,6 +2490,16 @@ stored run from before engine 1.0.0, audit H1) start with a leading comment line
 `# runoff_model=legacy; workbook comparison only; not evidence (audit H1)`,
 ahead of the usual header row.
 
+**Disclaimer line.** Every CSV of a run's results (`daily.csv`, `farms.csv`,
+`summary.csv`; not the input series' `export.csv`, the allocations export or
+the farm view's own CSV) carries the report disclaimer's key point on a `#`
+line (engine `CSV_DISCLAIMER_COMMENT`, quoted in
+[legal/disclaimer-review.md § 1](./legal/disclaimer-review.md)), after a
+legacy run's warning and before the provenance line:
+`# model estimates that can be wrong; not an authorisation to use water; as far as the law allows the operator of this software accepts no responsibility to anyone who relies on this file; see the report disclaimer (version <disclaimer version>)`.
+It holds no comma, quote or `=`, so a reader that doesn't skip comments sees
+one text cell.
+
 **Provenance line.** Every `daily.csv` and `farms.csv` (not the input
 series' `export.csv`) starts with a `#` line saying which run made it, so the
 file still says so once it is renamed or pasted into a workbook (operator
@@ -2504,8 +2514,8 @@ percent-encoded (`%XX`, UTF-8; `decodeURIComponent` or Python's
 control character (tab, CR, LF, the Unicode line separators), so a run label
 can never end the line, add a key or a CSV cell, and the whole line is one
 cell starting with `#`, which no spreadsheet runs as a formula (split on `;`,
-each part starts with a space and a key). The header row is therefore row 2
-(row 3 on a legacy run): read the file with
+each part starts with a space and a key). The header row is therefore row 3,
+after the disclaimer and provenance lines (row 4 on a legacy run): read the file with
 `pandas.read_csv(path, comment='#')` (or `skiprows` the `#` lines); a plain
 `pandas.read_csv(path)` takes the `#` line as the header.
 
@@ -2534,7 +2544,8 @@ order:
 
 | Sheet | From | Content |
 | --- | --- | --- |
-| Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, the flow-duration percentiles (Q10–Q95; a small flow in m³/s, l/s or Mm³ that three decimals would show as 0.000 gets the decimals for two significant figures, issue #45), WR2012, the column guide (a legacy run's `# runoff_model=legacy …` line first) |
+| Read this first | engine `DISCLAIMER` | The report disclaimer's five paragraphs (the Terms URL on the site's own address) and its version |
+| Summary | summary CSV | Run details and notes, evidence, self-checks, farm summary, catchment, calibration, the flow-duration percentiles (Q10–Q95; a small flow in m³/s, l/s or Mm³ that three decimals would show as 0.000 gets the decimals for two significant figures, issue #45), WR2012, the column guide (the CSV's `#` lines first: a legacy run's `# runoff_model=legacy …`, then the disclaimer line) |
 | Catchment, then one per node | bulk route | `date` + the daily CSV's columns and headers for the catchment, then each node with series in the run's network order (b023's element sheets); the daily CSV's `#` provenance line isn't repeated here, the Summary sheet names the run |
 | Curtailment | summary CSV | Curtailment targets, land cover, other users, EWR sites |
 | EWR grid | `summary.ewrCompliance` | Days simulated, then per site (the outlet, each farm) days not met and volume short (m³), water year × month (Oct … Sep) with a year total |

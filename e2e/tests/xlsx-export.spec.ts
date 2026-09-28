@@ -51,11 +51,13 @@ async function csv(request: APIRequestContext, path: string) {
 }
 
 /**
- * A daily CSV's table: the rows after its leading `# run=…` provenance line, which the workbook
+ * A daily CSV's table: the rows after its leading `#` disclaimer and `# run=…` provenance lines, which the workbook
  * carries once, on its Summary sheet, rather than atop every daily sheet.
  */
 async function dailyCsv(request: APIRequestContext, path: string) {
-	const [provenance, ...rows] = await csv(request, path);
+	const [disclaimer, provenance, ...rows] = await csv(request, path);
+	expect(disclaimer![0]).toMatch(/^# model estimates /);
+	expect(disclaimer).toHaveLength(1);
 	expect(provenance![0]).toMatch(/^# run=Baseline; engine=/);
 	expect(provenance).toHaveLength(1); // one cell: the line holds no comma or quote
 	return rows;
@@ -122,8 +124,9 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 	await expect(status).toHaveText(/^Downloaded workbook-export_baseline_workbook_\d{4}-\d{2}-\d{2}\.xlsx$/);
 
 	const wb = XLSX.read(await readFile((await file.path())!), { type: 'buffer', cellNF: true, cellText: true });
-	// Network order after the catchment; a formula-looking farm name is a plain sheet name.
+	// The disclaimer first; network order after the catchment; a formula-looking farm name is a plain sheet name.
 	expect(wb.SheetNames).toEqual([
+		'Read this first',
 		'Summary',
 		'Catchment',
 		'Outflow gauge',
@@ -170,6 +173,8 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 		for (const [ref, cell] of Object.entries(wb.Sheets[name]!)) if (!ref.startsWith('!')) expect((cell as XLSX.CellObject).f).toBeUndefined();
 	}
 	expect(sheetText(wb.Sheets['Inputs']!).some((r) => r[0] === "'=Upper farm")).toBe(true);
+	// The disclaimer sheet carries the Terms URL in full, on the site's own address.
+	expect(sheetText(wb.Sheets['Read this first']!).some((r) => r[0]?.endsWith(`Terms of use: ${new URL(page.url()).origin}/terms.`))).toBe(true);
 });
 
 test('the workbook shows progress per node and Cancel stops it', async ({ page, owner }) => {
