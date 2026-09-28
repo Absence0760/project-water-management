@@ -107,7 +107,7 @@ describe('deleting a co-owner’s account', () => {
 		await asOwner('DELETE FROM app_user WHERE id = $1', [coOwner.id]);
 	});
 
-	it('keeps the publication, the key and the share link, with no creator; the farm view names a former member', async () => {
+	it('keeps the publication, the key and the share link, with no creator; the farm view names no one (the page words it)', async () => {
 		expect(await asOwner('SELECT published_by FROM run_publication WHERE project_id = $1', [projectId])).toEqual([{ published_by: null }]);
 		expect(await asOwner('SELECT created_by, revoked_at FROM api_key WHERE project_id = $1', [projectId])).toEqual([{ created_by: null, revoked_at: null }]);
 		expect(await asOwner('SELECT created_by FROM share_link WHERE project_id = $1', [projectId])).toEqual([{ created_by: null }]);
@@ -115,7 +115,8 @@ describe('deleting a co-owner’s account', () => {
 		expect(await asOwner('SELECT notes, notes_updated_by FROM model_run WHERE id = $1', [runId])).toEqual([{ notes: 'checked against the gauge', notes_updated_by: null }]);
 		const view = await other.call('GET', `/projects/${projectId}/farm/${farmB.id}`);
 		expect(view.status).toBe(200);
-		expect(view.body.publication.publishedBy).toBe('a former member');
+		// null, not English words: the farm page says “A former member” in the reader's language (issue #51).
+		expect(view.body.publication.publishedBy).toBeNull();
 	});
 
 	it('pseudonymises every event they made, and drops their pending invites', async () => {

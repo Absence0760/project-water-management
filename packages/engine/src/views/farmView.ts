@@ -157,7 +157,8 @@ export interface FarmView {
 	context: FarmContext;
 	publication: {
 		publishedAt: string;
-		publishedBy: string;
+		/** The publisher's display name; null once that account is gone (the page says "A former member" in the reader's language). */
+		publishedBy: string | null;
 		engineVersion: string;
 		restriction: {
 			level: RestrictionLevel;

@@ -29,6 +29,7 @@ import {
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
 import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');
 const txt = (r: Rich | null | undefined) => (r ? sp(plainText(r)) : r);
@@ -66,6 +67,16 @@ describe('the notice', () => {
 		expect(n.heading).toBe('Please cut back where you can');
 		expect(n.body).toBe('The river at the outlet is below its reserve. Irrigate at night and cut back where you can. The board meets on 20 Jan to decide on restrictions.');
 		expect(n.byline).toBe('Example WUA, 12 Jan 2024');
+	});
+
+	// Issue #51: the API sent English "a former member", which leaked into the Afrikaans byline.
+	it('words a deleted publisher from the catalogue', async () => {
+		const v = vaalbankFixture();
+		v.publication.publishedBy = null;
+		expect(noticeCard(v)!.byline).toBe('A former member, 12 Jan 2024');
+		await setLocale('af', await markedCatalogue());
+		expect(noticeCard(v)!.byline).toMatch(/^\[af\] A former member, /);
+		await setLocale('en');
 	});
 
 	it('is null with no restriction (the page says "No restriction from the WUA")', () => {

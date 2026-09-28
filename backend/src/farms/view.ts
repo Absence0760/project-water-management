@@ -134,7 +134,8 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				context: { farmsUpstream: ctx[0]?.farms_upstream ?? 0, farmsDownstream: ctx[0]?.farms_downstream ?? 0, farmCount: ctx[0]?.farm_count ?? 0 },
 				publication: {
 					publishedAt: cur.published_at.toISOString(),
-					publishedBy: cur.published_by_name ?? 'a former member',
+					// null once that account is gone: the page words it in the reader's language.
+					publishedBy: cur.published_by_name,
 					engineVersion: cv.engineVersion,
 					restriction: {
 						level: cur.restriction_level,

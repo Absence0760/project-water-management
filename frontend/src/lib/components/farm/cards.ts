@@ -68,7 +68,8 @@ export function noticeCard(view: FarmView): NoticeVm | null {
 		body,
 		// pct is the published percentage, 0–100 (022_publication.sql), not a fraction.
 		pctLine: !title && !body && r.pct != null ? t('Set by the WUA: a {pct} cut in registered water use.', { pct: fmtPct(r.pct / 100) }) : null,
-		byline: `${view.publication.publishedBy}, ${fmtStampDay(view.publication.publishedAt)}`,
+		// As /share: the API sends null for a deleted publisher, never English words.
+		byline: `${view.publication.publishedBy ?? t('A former member')}, ${fmtStampDay(view.publication.publishedAt)}`,
 		title,
 		lang: picked?.lang ?? null,
 		langNote: picked && picked.lang !== i18n.locale ? t(WRITTEN_ONLY_IN, { language: languageName(picked.lang) }) : null

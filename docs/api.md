@@ -1997,6 +1997,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
+  `publishedBy` is the publisher's display name, `null` once that account
+  is gone (the page words it, "A former member", in the reader's language).
   The WUA's notice in every language it wrote it in, by code (`{}` for
   none); the page shows the reader's language, else English, else another,
   with a "not translated" line (`pickNotice`, design §7), so a language
