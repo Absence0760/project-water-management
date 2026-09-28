@@ -5,6 +5,7 @@
 import { expectNoViolations } from '../support/a11y.ts';
 import { LEGAL_VERSION } from '../support/api.ts';
 import { legalEffective } from '../../packages/engine/src/legal.ts';
+import { ENGINE_VERSION } from '../../packages/engine/src/version.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -101,4 +102,40 @@ test('the landing footer, the sign-in pages and the sign-up form link both pages
 	await expect(agree.getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
 	await expect(agree.getByRole('link', { name: 'Privacy notice' })).toHaveAttribute('href', '/privacy');
 	await expect(page.getByRole('navigation', { name: 'Legal' })).toHaveCount(0);
+});
+
+// The methods page (/methods): the engine audit's public summary, in the same
+// frame, backing the landing page's first trust statement (issue #57).
+test('/methods is prerendered HTML with the engine version, the known limitations and the full audit', async ({ request }) => {
+	const res = await request.get('/methods');
+	expect(res.status()).toBe(200);
+	const html = await res.text();
+	expect(html).toMatch(/<h1[^>]*>How the model is checked<\/h1>/);
+	expect(html).toContain(`Engine version ${ENGINE_VERSION}`);
+	// The known limitations are the list every report prints, generated from
+	// docs/engine-audit.md (N1 is open there; limitations.test.ts pins it).
+	expect(html).toContain('6. Known limitations');
+	expect(html).toMatch(/<td data-label="Item"[^>]*>N1<\/td>/);
+	expect(html).toContain('https://github.com/Absence0760/project-water-management/blob/main/docs/engine-audit.md');
+});
+
+test('the trust strip links the methods page, which passes an a11y scan light and dark, on a desktop and a phone', async ({ page }) => {
+	test.setTimeout(60_000);
+	await page.goto('/');
+	await page.getByRole('region', { name: 'Why trust it' }).getByRole('link', { name: 'How the model is checked' }).click();
+	await expect(page).toHaveURL('/methods');
+	await expect(page.getByRole('heading', { level: 1, name: 'How the model is checked' })).toBeVisible();
+	for (const scheme of ['light', 'dark'] as const) {
+		await page.emulateMedia({ colorScheme: scheme });
+		for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+			await page.setViewportSize(size);
+			await page.goto('/methods');
+			await expect(page.getByRole('heading', { level: 1, name: 'How the model is checked' })).toBeVisible();
+			await expectNoViolations(page);
+			await expectNoSidewaysScroll(page);
+		}
+	}
+	await page.getByRole('contentinfo').getByRole('link', { name: 'Home' }).click();
+	await expect(page).toHaveURL('/');
+	await expect(page.getByRole('contentinfo').getByRole('link', { name: 'How the model is checked' })).toHaveAttribute('href', '/methods');
 });

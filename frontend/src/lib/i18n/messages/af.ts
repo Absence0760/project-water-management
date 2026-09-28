@@ -667,6 +667,8 @@ export const af: Catalogue = {
 	'575cffd2': 'Voetskrif',
 	// Terms of use
 	'953dc886': 'Gebruiksvoorwaardes',
+	// How the model is checked
+	'69391154': 'Hoe die model nagegaan word',
 	// What you get
 	'89089e78': 'Wat jy kry',
 	// Screens from the app itself.
