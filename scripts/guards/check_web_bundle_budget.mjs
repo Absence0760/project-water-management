@@ -1166,7 +1166,7 @@
 //             Settings tab's Registered volumes fields, the Allocations tab's
 //             licence conditions and mode note, and two help entries. No new
 //             dependency. Headroom ~3 KB.
-// 2026-09-28  total 1101 → 1117 KB (measured 1114), largestWorkerKb 32 → 34
+// 2026-09-28  total 1101 → 1127 KB (measured 1124 with main merged), largestWorkerKb 32 → 34
 //             (calibration worker measured 33). Issue #65, the calibration
 //             workflow batch (engine 1.19.0), one change: CR-21 sensitivity
 //             runs (River & reserve's Sensitivity panel and tornado, ~4 KB;
@@ -1192,7 +1192,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1117,
+	totalCodeKb: 1127,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,
