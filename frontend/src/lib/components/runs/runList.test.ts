@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultRunId, filterRuns, runYears } from './runList';
+import { ApiError } from '$lib/api/client';
+import { defaultRunId, filterRuns, isRunGone, RUN_GONE, runErrorText, runYears } from './runList';
 
 describe('runYears', () => {
 	it('shows the first and last year', () => {
@@ -47,5 +48,19 @@ describe('defaultRunId', () => {
 	it('has no default without runs', () => {
 		expect(defaultRunId([], 'viewer')).toBeNull();
 		expect(defaultRunId([], 'owner')).toBeNull();
+	});
+});
+
+describe('runErrorText (issue #77)', () => {
+	it("words a run that's gone, never the API's bare \"not found\"", () => {
+		const gone = new ApiError(404, 'not found');
+		expect(isRunGone(gone)).toBe(true);
+		expect(runErrorText(gone)).toBe(RUN_GONE);
+	});
+	it("keeps the server's own sentence for a refusal (positive control)", () => {
+		const kept = new ApiError(409, 'this run is pinned; unpin it before deleting it');
+		expect(isRunGone(kept)).toBe(false);
+		expect(runErrorText(kept)).toBe('this run is pinned; unpin it before deleting it');
+		expect(isRunGone(new Error('not found'))).toBe(false);
 	});
 });

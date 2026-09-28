@@ -141,6 +141,28 @@
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);
+	/**
+	 * Bumped by every change to `runs` a tab or this page makes (a run made,
+	 * deleted, pinned…). A list read from the server before a change is stale:
+	 * applied after it, it would bring back a run just deleted (issue #77), so
+	 * fetchRuns reads again instead.
+	 */
+	let runsChanges = 0;
+	function setRuns(list: RunMeta[] | null) {
+		runsChanges++;
+		runs = list;
+	}
+	/** Re-read the run list; throws on failure (the list keeps its values). */
+	async function fetchRuns(): Promise<void> {
+		for (;;) {
+			const seen = runsChanges;
+			const list = await api.runs.list(projectId);
+			if (seen === runsChanges) {
+				runs = list;
+				return;
+			}
+		}
+	}
 	let saveBarHeight = $state(0);
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
@@ -236,7 +258,7 @@
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label);
 			const { summary: _s, ...meta } = r;
-			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
+			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
 			await goto(`?tab=runs&run=${r.id}`, { noScroll: true });
 		} catch (e) {
@@ -281,7 +303,7 @@
 			project = p;
 			editor.load(m);
 			series = sl;
-			runs = rl;
+			setRuns(rl);
 		} catch (e) {
 			// A farmer gets 403 from the workspace's routes: their view of this
 			// project is the farm page (WP-2.6). An applicant's is the Applicant
@@ -313,9 +335,8 @@
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */
 	async function loadLists() {
-		const [sl, rl] = await Promise.allSettled([api.series.list(projectId), api.runs.list(projectId)]);
+		const [sl] = await Promise.allSettled([api.series.list(projectId), fetchRuns()]);
 		if (sl.status === 'fulfilled') series = sl.value;
-		if (rl.status === 'fulfilled') runs = rl.value;
 	}
 
 	// Reload when the route param changes (e.g. navigating between projects).
@@ -704,7 +725,7 @@
 								{runs}
 								canRun={canEdit}
 								modelDirty={editor.dirty}
-								onRunsChange={(l) => (runs = l)}
+								onRunsChange={setRuns}
 								onInputsRestored={reloadInputs}
 							/>
 						{/snippet}
@@ -735,7 +756,7 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={(l) => (runs = l)} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={fetchRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>

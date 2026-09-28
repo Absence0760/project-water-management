@@ -35,7 +35,7 @@
 	import { ranAgo } from '$lib/components/overview/latestRun';
 	import { holdAnchor } from '$lib/help/anchor';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import { defaultRunId, filterRuns, RUN_FILTER_FROM, runYears } from './runList';
+	import { defaultRunId, filterRuns, isRunGone, RUN_FILTER_FROM, runErrorText, runYears } from './runList';
 	import { publishedRunIds } from './publication';
 	import { riverHref } from '$lib/components/river/links';
 	// Panels every shown run renders (evidence, "Check reproduction", "Changes since this run",
@@ -128,14 +128,31 @@
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+	/**
+	 * Bumped by every change this tab makes to `runs` (a run made, deleted,
+	 * pinned…). A list read before a change is stale: applied after it, it
+	 * brought back a run just deleted (issue #77), so load reads again instead.
+	 */
+	let runsChanges = 0;
+	function setRuns(next: RunMeta[]) {
+		runsChanges++;
+		runs = next;
+		onRunsChange?.(runs);
+	}
+
 	async function load() {
 		if (!runs.length) loading = true;
 		loadError = null;
 		try {
-			const [list, history] = await Promise.all([api.runs.list(projectId), api.runs.nominations(projectId)]);
-			runs = list;
-			nominations = history;
-			onRunsChange?.(runs);
+			for (;;) {
+				const seen = runsChanges;
+				const [list, history] = await Promise.all([api.runs.list(projectId), api.runs.nominations(projectId)]);
+				if (seen !== runsChanges) continue;
+				runs = list;
+				nominations = history;
+				onRunsChange?.(runs);
+				break;
+			}
 		} catch (e) {
 			loadError = msg(e);
 		} finally {
@@ -169,8 +186,7 @@
 	const heldByPublication = $derived(publishedRunIds(publication?.history));
 	function published(p: { current: Publication; history: PublicationMeta[] }) {
 		publication = p;
-		runs = runs.map((r) => ({ ...r, published: r.id === p.current.runId }));
-		onRunsChange?.(runs);
+		setRuns(runs.map((r) => ({ ...r, published: r.id === p.current.runId })));
 	}
 	onDestroy(() => clearInterval(timer));
 
@@ -200,7 +216,7 @@
 		} catch (e) {
 			if (detailFor === id) {
 				detail = null;
-				detailError = msg(e);
+				detailError = runErrorText(e);
 			}
 		} finally {
 			if (detailFor === id) detailLoading = false;
@@ -267,8 +283,7 @@
 			label = '';
 			const { summary: _summary, ...meta } = r;
 			// Drop the oldest runs the server trimmed to stay within its cap.
-			runs = [meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
-			onRunsChange?.(runs);
+			setRuns([meta, ...runs.filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			select(r.id);
 		} catch (err) {
 			actionError = msg(err);
@@ -284,8 +299,7 @@
 		if (detail?.run.id === updated.id) detail = { ...detail, run: { ...detail.run, ...fields } };
 		const cached = detailCache.get(updated.id);
 		if (cached) detailCache.set(updated.id, { ...cached, run: { ...cached.run, ...fields } });
-		runs = runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r));
-		onRunsChange?.(runs);
+		setRuns(runs.map((r) => (r.id === updated.id ? { ...r, ...fields } : r)));
 	}
 
 	// Each run's place in the evidence history, from the history itself so a
@@ -306,8 +320,7 @@
 	function nominated(history: Nomination[]) {
 		nominations = history;
 		const status = (id: string) => evidenceById.get(id) ?? null;
-		runs = runs.map((r) => ({ ...r, evidence: status(r.id) }));
-		onRunsChange?.(runs);
+		setRuns(runs.map((r) => ({ ...r, evidence: status(r.id) })));
 	}
 
 	/** The scenarios based on a run (024_scenarios): it is kept, and can't be deleted, while they exist. */
@@ -319,10 +332,9 @@
 		actionError = null;
 		try {
 			const { pinned } = await api.runs.setPinned(projectId, r.id, !r.pinned);
-			runs = runs.map((x) => (x.id === r.id ? { ...x, pinned } : x));
-			onRunsChange?.(runs);
+			setRuns(runs.map((x) => (x.id === r.id ? { ...x, pinned } : x)));
 		} catch (err) {
-			actionError = msg(err);
+			actionError = runErrorText(err);
 		}
 	}
 
@@ -331,16 +343,19 @@
 		actionError = null;
 		try {
 			await api.runs.remove(projectId, r.id);
-			forgetRun(r.id);
-			runs = runs.filter((x) => x.id !== r.id);
-			onRunsChange?.(runs);
-			if (selectedId === r.id) {
-				detail = null;
-				detailFor = '';
-				select(runs[0]?.id ?? null);
-			}
 		} catch (err) {
-			actionError = msg(err);
+			// Already gone (deleted elsewhere, or trimmed): it leaves the list all the same.
+			if (!isRunGone(err)) {
+				actionError = runErrorText(err);
+				return;
+			}
+		}
+		forgetRun(r.id);
+		setRuns(runs.filter((x) => x.id !== r.id));
+		if (selectedId === r.id) {
+			detail = null;
+			detailFor = '';
+			select(runs[0]?.id ?? null);
 		}
 	}
 
