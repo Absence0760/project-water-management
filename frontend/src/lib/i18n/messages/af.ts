@@ -6,8 +6,10 @@
 // Provenance (2026-09-26, issue #49): every entry was written by the
 // af-translator agent and reviewed by the af-checker agent
 // (.claude/agents/i18n/), then applied with `pnpm gen:i18n:apply`. No native
-// speaker has reviewed it yet; that review is open in docs/followups.md
-// § Afrikaans (WP-2.5). Corrections go straight into this file.
+// speaker has reviewed it yet: the client's native-speaker translator will,
+// before farmers are invited in Afrikaans (confirmed by the client, issue
+// #90; tracked in docs/followups.md § Afrikaans (WP-2.5)). Corrections go
+// straight into this file.
 //
 // Each entry is keyed by the message's id, the Id column of the sheet (a hash
 // of the English, $lib/i18n/msg.ts), with the English in a comment above it:

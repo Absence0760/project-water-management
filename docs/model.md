@@ -2857,7 +2857,7 @@ regression suite is unchanged.
 | Field | Meaning |
 | --- | --- |
 | `nodeId` | the unit (a farm node) whose water supplies it; only a unit has objects |
-| `name`, `note` | a label, and where the number comes from (meter records, a reconciliation strategy's AADD, a norm, the workbook), so reports can say how solid it is (Q11) |
+| `name`, `note` | a label, and where the number comes from, so reports can say how solid it is (Q11). The rule, decided with the client (issue #90): use meter records where they exist, else the reconciliation strategy's AADD, else population × litres per person per day, and record which one was used. Today that record is the free-text `note`; a structured source field is a follow-up ([followups.md](./followups.md) "Demand objects: a structured demand source") |
 | `category` | `domestic`, `municipal`, `industrial`, `livestock`, `irrigation` (irrigation not modelled from crops), `external`, `other`: the register's categories. It sets a new object's defaults and how it reads; the engine treats every category alike |
 | `sizing` | `monthly`: `monthlyM3Day`, the abstraction demand in m³/day per water-year month (Oct–Sep). `perUnit`: `count` × `litresPerUnitDay` ÷ 1000 × `monthlyFactor[m]` ÷ (1 − `lossPct`) |
 | `lossPct` | `perUnit` only: distribution losses as a share of what is abstracted, 0 ≤ l < 1 (the Red Book designs with 15–25 %; measured non-revenue water is higher). A `monthly` demand is taken as abstracted, losses included |
@@ -2898,7 +2898,8 @@ conservative reading where it didn't settle them):
 - *Priority is within the unit.* `first` is the basic-needs order the NWA
   gives domestic supply; across units, the existing senior/junior user
   priority applies. Splitting one demand into senior and junior slices is two
-  objects (Q14).
+  objects (Q14). The client confirmed senior/junior is enough (issue #90):
+  no finer priority classes.
 - *The monthly demand is what is abstracted.* A meter record or a
   reconciliation strategy's AADD usually includes losses, so only a demand
   sized per unit is grossed up. Where distribution losses go (to the river or
@@ -2908,8 +2909,15 @@ conservative reading where it didn't settle them):
   ([followups.md](./followups.md) "Demand objects: the daily schedule"); a
   monthly profile covers the seasonal part.
 - *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
-  crops and its objects alike; a per-category restriction is #53 R3, and a
-  scenario op to add or scale one object is a follow-up.
+  crops and its objects alike; the client wants every category cut by the
+  same % (#53 O4, issue #90), so no per-category restriction is planned, and
+  a scenario op to add or scale one object is a follow-up.
+- *Restrictions and basic needs (decided, not built).* The client agreed
+  (issue #90) that a restriction never cuts domestic supply below a
+  basic-needs floor of 25 litres per person per day, that cuts follow DWS's
+  % restrictions, and that a municipality's own restriction levels are an
+  optional display only. Nothing in the engine applies a floor yet
+  ([followups.md](./followups.md) "Restrictions: the basic-needs floor").
 
 **Outputs** (only on a unit with an enabled object): per object the series
 `object_demand@<id>` and `object_supplied@<id>`, and

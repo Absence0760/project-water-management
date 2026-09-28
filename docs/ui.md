@@ -5003,8 +5003,10 @@ digest). The modeller workspace stays English.
   terminology, `.claude/agents/i18n/languages/<code>.md`: meaning,
   placeholders, bold, plural forms, register, and one term for one English
   word across the whole set, with §5.1 of `docs/design/farmer-view.md` as
-  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet
-  (docs/followups.md § Afrikaans). The wording goes to real farmers, so a
+  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet.
+  The client's native-speaker translator will, before farmers are invited
+  in Afrikaans (confirmed by the client, issue #90; docs/followups.md
+  § Afrikaans). The wording goes to real farmers, so a
   new string in any language goes through the same two steps:
   `pnpm gen:i18n:export <lang> <dir>` writes what's still on that language's
   sheet as JSON batches, the translator agent fills them, the checker

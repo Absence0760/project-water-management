@@ -703,6 +703,25 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
       if it varies), what hands-off flow or EWR condition applies, what are
       its losses, and does it run full or draw only what is ordered?
 
+    **Answered by the client, 2026-09-28 (issue #90):**
+    - **Default irrigation system:** drip (0.90, SABI 2021). New farms start
+      on it; the engine keeps one SABI 2021 table (model.md § Irrigation
+      efficiency, migration 095).
+    - **Demand priority:** senior/junior is enough; a demand with both parts
+      is two demand objects (model.md §2.7f).
+    - **Demand sources:** meter records, else the reconciliation strategy's
+      AADD, else population × litres per person per day, recording which
+      (model.md §2.7f; a structured field is in followups.md).
+    - **GIS:** open data only (Copernicus 30 m DEM, WR2012, other openly
+      licensed layers), proposed by the app and confirmed by the modeller
+      (planned-work.md § Catchment map).
+    - **Restrictions and basic needs:** a 25 l/person/day domestic floor,
+      DWS % cuts, municipal levels as an optional display. Agreed, not built
+      (followups.md "Restrictions: the basic-needs floor").
+    - **Afrikaans:** the client's native-speaker translator reviews the
+      farmer text before farmers are invited in Afrikaans (followups.md
+      § Afrikaans).
+
 ### Product
 
 10. **Who uses it?** Only the hydrologist, or also farmers, catchment forums,

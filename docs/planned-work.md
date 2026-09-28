@@ -76,7 +76,7 @@ Status: ⬜ not started · 🚧 partly there · ✅ done.
 ### Maps
 | Feature | Why | Effort |
 | --- | --- | --- |
-| ⬜ **Catchment map** | Upload the catchment boundary (GeoJSON/shapefile), place farms, dams and gauges on a map, draw the network over the terrain. Hydrologists think spatially; clients recognise farms on a map faster than in a tree. The client's GIS-import request (#54 item 4) starts here. MapLibre with self-hosted Protomaps tiles (the estate already runs this pattern in project-running). | L |
+| ⬜ **Catchment map** | Upload the catchment boundary (GeoJSON/shapefile), place farms, dams and gauges on a map, draw the network over the terrain. Hydrologists think spatially; clients recognise farms on a map faster than in a tree. The client's GIS-import request (#54 item 4) starts here. **Data (decided with the client, issue #90, #54 Q7):** open data only (the Copernicus 30 m DEM, WR2012, and other openly licensed layers), no licensed layers; the app proposes (areas, the network over the terrain) and the modeller confirms before anything enters the model. MapLibre with self-hosted Protomaps tiles (the estate already runs this pattern in project-running). | L |
 | ⬜ **Derive areas from the map** | Farm catchment areas (km²) computed from drawn polygons instead of typed. | M |
 
 ### Collaboration, governance, reporting

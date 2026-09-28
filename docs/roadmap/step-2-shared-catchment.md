@@ -99,8 +99,10 @@ Must be true before starting:
 6. **An Afrikaans translator/reviewer** is named (the client, or someone they
    trust). The Afrikaans now in the app (2026-09-26, issue #49) is written
    by the `af-translator` agent and reviewed by the `af-checker` agent, at
-   the operator's call; a native speaker's review before Afrikaans-speaking
-   farmers are invited stays open (docs/followups.md § Afrikaans).
+   the operator's call. **Named (2026-09-28, issue #90):** the client's
+   native-speaker translator will review the Afrikaans farmer text, the
+   liability lines included, before Afrikaans-speaking farmers are invited;
+   the review itself stays open (docs/followups.md § Afrikaans).
 
 Decisions still open that block specific WPs: D1–D4 block WP-2.1 and WP-2.3,
 D6 blocks WP-2.10, D7 blocks WP-2.12, D9 blocks WP-2.15 (see §11).
@@ -786,7 +788,7 @@ audit log of model changes yet" from Known gaps).
 
 ### WP-2.5 Internationalisation foundation and Afrikaans
 
-> **Status: built; Afrikaans complete, native review pending** (`050_user_locale.sql`,
+> **Status: built; Afrikaans complete, native review pending (the client's translator will do it before farmers are invited in Afrikaans, confirmed issue #90)** (`050_user_locale.sql`,
 > `frontend/src/lib/i18n/`, `backend/src/mail/i18n/`;
 > [ui.md § Language](../ui.md#language), [api.md § Auth](../api.md#auth)).
 > Where the build departs from the plan below, and why:
@@ -796,7 +798,10 @@ audit log of model changes yet" from Known gaps).
 >   An unknown key still fails `pnpm check`. Every string has Afrikaans now
 >   (2026-09-26, issue #49: 505 site messages, 70 email strings, 8 glossary
 >   entries), written by the `af-translator` agent and reviewed by the
->   `af-checker` agent; a native speaker's review is open.
+>   `af-checker` agent; a native speaker's review is open: the client's
+>   native-speaker translator will do it, the liability lines included,
+>   before farmers are invited in Afrikaans (confirmed by the client, issue
+>   #90).
 > - **`<html lang>` follows the words**, not the choice: it is `af` only
 >   while the Afrikaans catalogue is complete (it is), and dates follow it
 >   too; numbers switch to the decimal comma at once, and so does the WUA's
