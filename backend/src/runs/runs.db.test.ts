@@ -155,6 +155,66 @@ describe('run storage cap', () => {
 	});
 });
 
+describe('DELETE /projects/:id/runs/:runId (issue #77)', () => {
+	it('keeps exactly the runs app_run_kept keeps: the route and the database share one rule', async () => {
+		const u = await signUp('Keeper');
+		const projectId = await runnable(u);
+		const make = async (label: string) => (await u.call('POST', `/projects/${projectId}/runs`, { label })).body.run.id as string;
+		const [plain, pinned, nominated, base] = [await make('plain'), await make('pinned'), await make('nominated'), await make('base')];
+		expect((await u.call('PATCH', `/projects/${projectId}/runs/${pinned}`, { pinned: true })).status).toBe(200);
+		expect((await u.call('POST', `/projects/${projectId}/evidence`, { runId: nominated, reason: 'calibrated' })).status).toBe(201);
+		const farm = ((await asOwner(`SELECT id FROM node WHERE project_id = $1 AND name = 'Upper'`, [projectId])) as { id: string }[])[0]!.id;
+		const sc = await u.call('POST', `/projects/${projectId}/scenarios`, {
+			name: 'Keeps its base',
+			baseRunId: base,
+			ops: [{ op: 'node.set', nodeId: farm, field: 'damCapacityM3', value: 1000 }]
+		});
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const kept = async (id: string) => ((await asOwner('SELECT app_run_kept($1) AS k', [id])) as { k: boolean }[])[0]!.k;
+		for (const id of [pinned, nominated, base]) {
+			expect(await kept(id), id).toBe(true);
+			expect((await u.call('DELETE', `/projects/${projectId}/runs/${id}`)).status, id).toBe(409);
+		}
+		// Positive control: the plain run is neither, and goes.
+		expect(await kept(plain)).toBe(false);
+		expect((await u.call('DELETE', `/projects/${projectId}/runs/${plain}`)).status).toBe(204);
+		// The scenario deleted, its base is released, and deletes.
+		expect((await u.call('DELETE', `/projects/${projectId}/scenarios/${sc.body.scenario.id}`)).status).toBe(204);
+		expect(await kept(base)).toBe(false);
+		expect((await u.call('DELETE', `/projects/${projectId}/runs/${base}`)).status).toBe(204);
+	});
+
+	it('answers one of two deletes of the same run with 204 and the other with 404, and records one deletion', async () => {
+		const u = await signUp('Twice');
+		const projectId = await runnable(u);
+		const runId = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'twice' })).body.run.id as string;
+		const statuses = (await Promise.all([1, 2].map(() => u.call('DELETE', `/projects/${projectId}/runs/${runId}`)))).map((r) => r.status);
+		expect(statuses.sort()).toEqual([204, 404]);
+		const audit = await asOwner(`SELECT 1 FROM audit_event WHERE project_id = $1 AND kind = 'run.deleted'`, [projectId]);
+		expect(audit).toHaveLength(1);
+	});
+
+	it('answers a delete that row-level security refuses with 409, not "not found"', async () => {
+		const u = await signUp('Refused');
+		const projectId = await runnable(u);
+		const make = async (label: string) => (await u.call('POST', `/projects/${projectId}/runs`, { label })).body.run.id as string;
+		const refused = await make('refused by rls');
+		const control = await make('control');
+		// A stand-in for a policy that refuses the delete (none does for an editor today).
+		await asOwner(`CREATE POLICY zz_test_refuse_delete ON model_run AS RESTRICTIVE FOR DELETE USING (label <> 'refused by rls')`);
+		try {
+			const res = await u.call('DELETE', `/projects/${projectId}/runs/${refused}`);
+			expect(res.status).toBe(409);
+			expect(res.body.error).toBe("this run can't be deleted");
+			expect((await u.call('GET', `/projects/${projectId}/runs/${refused}`)).status).toBe(200);
+			// Positive control: the policy lets any other run go.
+			expect((await u.call('DELETE', `/projects/${projectId}/runs/${control}`)).status).toBe(204);
+		} finally {
+			await asOwner('DROP POLICY zz_test_refuse_delete ON model_run');
+		}
+	});
+});
+
 describe('GET /projects/:id/model-input', () => {
 	it('returns what a run uses: merged settings, the model, the first series of each kind by name', async () => {
 		const u = await signUp('Inputter');

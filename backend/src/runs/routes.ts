@@ -296,12 +296,14 @@ export const runRoutes = new Hono<AuthEnv>()
 			// A kept run (RUN_KEPT_SQL) isn't deleted: one a publication holds, or
 			// something else cites (model_run_cited, 021_series_blob and
 			// 022_publication), or the evidence history names is kept (their foreign
-			// keys refuse it too); a pinned one until it is unpinned.
+			// keys refuse it too); a pinned one until it is unpinned. The row is
+			// locked (FOR UPDATE) so the check and the DELETE see the same run.
 			const { rows: kept } = await db.query<{ pinned: boolean; published: boolean; cited: boolean; kept: boolean }>(
-				`SELECT r.pinned, ${RUN_PUBLISHED_SQL} AS published, model_run_cited(r.id) AS cited, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2`,
+				`SELECT r.pinned, ${RUN_PUBLISHED_SQL} AS published, model_run_cited(r.id) AS cited, ${RUN_KEPT_SQL} AS kept FROM model_run r WHERE r.project_id = $1 AND r.id = $2 FOR UPDATE`,
 				[id, runId]
 			);
-			if (kept[0]?.kept)
+			if (!kept[0]) throw new ApiError(404, 'not found');
+			if (kept[0].kept)
 				throw new ApiError(
 					409,
 					kept[0].published
@@ -316,7 +318,9 @@ export const runRoutes = new Hono<AuthEnv>()
 				'DELETE FROM model_run WHERE project_id = $1 AND id = $2 RETURNING label, created_at',
 				[id, runId]
 			);
-			if (!gone[0]) throw new ApiError(404, 'not found');
+			// The row is locked and was readable, so nothing else removed it: row-level
+			// security refused the delete. That is a refusal, not "not found".
+			if (!gone[0]) throw new ApiError(409, "this run can't be deleted");
 			await recordAudit(db, id, 'run.deleted', { runIds: [runId], label: gone[0].label, runCreatedAt: gone[0].created_at.toISOString(), reason: 'deleted' });
 			return c.body(null, 204);
 		});
