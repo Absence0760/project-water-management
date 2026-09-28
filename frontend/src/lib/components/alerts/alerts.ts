@@ -40,7 +40,8 @@ export function eventText(e: AlertEvent): string {
 		case 'job_dead':
 			return `${n(d.count)} background ${n(d.count) === 1 ? 'job' : 'jobs'} failed in the last 24 hours`;
 		case 'restriction_published':
-			return `Restriction in place: ${String(d.level ?? '')}${typeof d.pct === 'number' ? `, ${fmtNum(d.pct)} %` : ''}`;
+			// A cut, never a bare "20 %" (which reads as an allowance; the farm page's words, farm/cards.ts).
+			return `Restriction in place: ${String(d.level ?? '')}${typeof d.pct === 'number' ? `, a ${pct(d.pct / 100)} cut in registered water use` : ''}`;
 	}
 }
 
