@@ -17,7 +17,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { cachedSeries } from '$lib/components/runs/cache';
-	import { ewrChartSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
+	import { EWR_RULE_CAPTION, EWR_RULE_KEY, ewrChartSeries, type CatchmentFlows } from '$lib/components/runs/flowSeries';
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import { fmtNum } from '$lib/format/number';
 	import { belowReserve, FLOW_OPEN_DAYS, FLOW_WINDOWS } from './summaryChart';
@@ -48,11 +48,8 @@
 		pannable?: boolean;
 	} = $props();
 
-	const SLOTS = [
-		['simulated', 'simulated_outflow'],
-		['ewr', 'ewr'],
-		['shortfall', 'ewr_shortfall']
-	] as const;
+	// The outlet's Reserve rule requirement too, when it has a table (issue #51): the headline judges that line.
+	const SLOTS = [['simulated', 'simulated_outflow'], ['ewr', 'ewr'], EWR_RULE_KEY, ['shortfall', 'ewr_shortfall']] as const;
 	/** The chart's height when it doesn't fill, and the least it gets when it does. */
 	const FIXED_H = 240;
 	const MIN_H = 180;
@@ -93,13 +90,14 @@
 	const band = $derived(forecastBand(forecastFrom));
 	const shade = $derived(flows.shortfall ? belowReserve(flows.shortfall) : []);
 	const shortDays = $derived(shade.reduce((n, r) => n + (Date.parse(r.end) - Date.parse(r.start)) / 86_400_000 + 1, 0));
-	const caption = $derived(
+	const pragmatic = $derived(
 		flows.shortfall && shortDays === 0
-			? 'The outflow never fell below the dashed EWR line: the EWR was met every day.'
+			? 'The outflow never fell below the pragmatic EWR line: the EWR was met every day.'
 			: flows.shortfall
-			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'} the outflow was below the dashed EWR line (EWR not met).`
-			: 'Days the outflow dips below the dashed EWR line count as EWR not met.'
+			? `Shaded: the ${fmtNum(shortDays)} day${shortDays === 1 ? '' : 's'} the outflow was below the pragmatic EWR line (EWR not met).`
+			: 'Days the outflow dips below the pragmatic EWR line count as EWR not met.'
 	);
+	const caption = $derived(flows.ewrRule ? `${pragmatic} ${EWR_RULE_CAPTION}` : pragmatic);
 
 	// Filling: the plot gets what the slot leaves after the chart's own head,
 	// legend and caption (measured from the drawn chart, so wrapping is counted).

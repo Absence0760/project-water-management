@@ -104,6 +104,22 @@ describe('POST /projects/:id/yield', () => {
 		await tick();
 	});
 
+	it('refuses a forecast run with 409 (a yield is judged on history, issue #51); an ordinary run of the same data is accepted', async () => {
+		const owner = await signUp('YieldForecast');
+		const c = await catchment(owner, 'Yield forecast');
+		// 14 days of forecast rain after the 90-day record (2020-01-01 … 2020-03-30).
+		const put = await owner.call('PUT', `/projects/${c.projectId}/series`, { kind: 'rain_forecast_mm', unit: 'mm', startDate: '2020-03-31', values: new Array(14).fill(5) });
+		expect(put.status).toBe(200);
+		const f = await owner.call('POST', `/projects/${c.projectId}/runs`, { label: 'forecast', forecast: true });
+		expect(f.status, JSON.stringify(f.body)).toBe(201);
+		const refused = await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: f.body.run.id, kind: 'firm' });
+		expect(refused.status).toBe(409);
+		expect(refused.body.error).toMatch(/forecast run/);
+		expect((await asOwner(`SELECT count(*)::int AS n FROM job WHERE project_id = $1 AND kind = 'yield'`, [c.projectId]))[0].n).toBe(0);
+		// Positive control: the ordinary run, made before the forecast was added.
+		expect((await owner.call('POST', `/projects/${c.projectId}/yield`, { nodeId: c.dam.id, runId: c.runId, kind: 'firm' })).status).toBe(202);
+	});
+
 	it('a yield on a scenario runs its ops on the base run: a raised dam yields more', async () => {
 		const owner = await signUp('YieldScenario');
 		const c = await catchment(owner);

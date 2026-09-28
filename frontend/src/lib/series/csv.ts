@@ -29,6 +29,13 @@ export interface ParsedSeries {
 	subDaily?: SubDailyInfo;
 	/** A DWS export's quality codes and the rows it dropped as gaps (./dws.ts). */
 	dws?: DwsImport;
+	/**
+	 * Rows of a plain CSV whose value was negative, read as gaps (issue #51):
+	 * every series kind is a rain, flow or evaporation, never below zero, so
+	 * a negative is a "no reading" placeholder (-999, -1), as the DWS import
+	 * reads it. Absent when there were none.
+	 */
+	negativeGaps?: number;
 }
 
 /** How a sub-daily file was added up into days (issue #40 (b), 033_series_day_boundary.sql). */
@@ -324,6 +331,7 @@ export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary }
 	const readingsOn = new Map<number, number>();
 	let timed = false;
 	let readings = 0;
+	let negativeGaps = 0;
 	for (let r = skip; r < rows.length; r++) {
 		const cells = cellsOf[r]!;
 		const i = rows[r]!.n - 1;
@@ -342,6 +350,10 @@ export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary }
 		if (rawVal !== '' && !NO_READING.test(rawVal)) {
 			value = readNumber(rawVal, decimal);
 			if (!Number.isFinite(value)) throw new CsvError(`"${cells[1]}" is not a number`, i + 1);
+			if (value < 0) {
+				negativeGaps++;
+				value = null;
+			}
 		}
 		const minutes = parseTime(cells[0] ?? '');
 		if (minutes !== null && Number.isNaN(minutes)) throw new CsvError(`"${cells[0]}" has a time that isn't HH:MM`, i + 1);
@@ -367,7 +379,8 @@ export function parseSeriesCsv(text: string, opts: { dayBoundary?: DayBoundary }
 	const out: ParsedSeries = {
 		...denseDays(byDay),
 		dateOrder: order,
-		dateOrderAssumed: assumed
+		dateOrderAssumed: assumed,
+		...(negativeGaps ? { negativeGaps } : {})
 	};
 	if (opts.dayBoundary) {
 		// The file's interval: the most common count of readings in a day (the larger on a tie).

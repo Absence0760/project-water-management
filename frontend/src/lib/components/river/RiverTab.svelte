@@ -22,7 +22,7 @@
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from '$lib/components/overview/attention';
-	import { runDays } from '$lib/components/overview/latestRun';
+	import { historyDays } from '$lib/components/overview/latestRun';
 	import { detailCache } from '$lib/components/runs/cache';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -133,7 +133,7 @@
 	const shown = $derived(detail && detail.run.id === pick?.run.id ? detail : null);
 	const summary = $derived(shown?.run.summary ?? null);
 	const kpis = $derived(
-		shown ? riverKpis(shown.run.summary, runDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: runDays(previous) } : null) : []
+		shown ? riverKpis(shown.run.summary, historyDays(shown.run), previous && previous.id === pick?.previous?.id ? { summary: previous.summary, days: historyDays(previous) } : null) : []
 	);
 
 	// --- a link to one of the panels (`#res-reserve`, or an old Runs & results link sent here):

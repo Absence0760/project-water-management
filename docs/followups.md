@@ -1790,6 +1790,29 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       back for every window. A view over a saved run, so no
       `ENGINE_VERSION` bump; `curtailmentOverWindow.test.ts` checks it
       against `runModel` on seeded networks.
+- [ ] **Human-impact tables sit inside the Summary with no menu entry, and
+      Other water users is shown twice** (hydrologist persona, issue #51,
+      2026-09-28; remainder of F4). `runs/RunSummaryView.svelte` renders
+      `HumanImpactTables` (land cover, groundwater, demand objects, other
+      water users) under the run summary, where the section menu can't reach
+      it, and Units & supply's curtailment table lists the other users again.
+      **Durable fix:** move `HumanImpactTables` to the Units & supply page as
+      its own section with a rail entry (`supply/supply.ts` `SUPPLY_NAV`),
+      keep one copy of Other water users there, and leave a link in the
+      Summary. A layout move, so per the UI playbook it needs an e2e spec
+      pinning the rendered tables before the move and the ui.md page-order
+      update. **Trigger:** the next Units & supply or Summary layout change
+      (UI batch #76).
+- [ ] **The water balance by water year is reachable only under Dig deeper ›
+      Self-checks** (hydrologist persona, issue #51, 2026-09-28; remainder of
+      F13). It is the first table a hydrologist hands a client, and
+      `runs/SelfChecksPanel.svelte` (line ~117) is the only place it shows.
+      **Durable fix:** a *Water balance* section in Model quality
+      (`runs/sections.ts`) showing the same table, from the component the
+      self-check uses, with the self-check line linking to it; pin the table
+      with an e2e spec first, as the playbook asks for moved UI.
+      **Trigger:** with the item above, or the next Model quality change
+      (UI batch #76).
 
 ## Roles and what each member sees
 

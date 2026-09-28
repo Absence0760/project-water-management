@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api/client';
 import {
+	targetHint,
 	conflictMessage,
 	describePlace,
 	describeWrites,
@@ -244,5 +245,14 @@ describe('errorText', () => {
 		expect(errorText(new ApiError(0, 'Could not reach the server'))).toBe('Could not reach the server');
 		expect(errorText(new TypeError("Cannot read properties of undefined (reading 'feeds')"))).toBe('Something went wrong. Try again, or reload the page.');
 		expect(errorText('boom')).toBe('Something went wrong. Try again, or reload the page.');
+	});
+});
+
+describe('targetHint (issue #51)', () => {
+	it('warns that CHIRPS into the catchment rain series is used raw; nothing for the usual targets', () => {
+		expect(targetHint('chirps', 'rain_catchment_mm')).toMatch(/^CHIRPS becomes the catchment rain itself: used as published, with no bias correction/);
+		expect(targetHint('chirps', 'rain_chirps_mm')).toBeNull();
+		expect(targetHint('chirps_gefs', 'rain_forecast_mm')).toBeNull();
+		expect(targetHint('dws', 'flow_observed_m3s')).toBeNull();
 	});
 });

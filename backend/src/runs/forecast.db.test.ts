@@ -190,6 +190,23 @@ describe('forecast days in exports and in the farm view', () => {
 		expect(plain.body).not.toContain('forecast (F');
 	});
 
+	it('the summary CSV’s flow-duration table ranks the history only: the ordinary run’s numbers (issue #51)', async () => {
+		const o = (await post(owner, projectId, {})).body.run.id as string;
+		// The FDC block: from its title to the next blank line, split into "record → Q10 … Q95, days".
+		const fdcRows = async (runId: string) => {
+			const lines = (await text(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`)).body.split('\r\n');
+			const at = lines.findIndex((l) => l.startsWith('Flow-duration percentiles'));
+			const block = lines.slice(at, lines.indexOf('', at));
+			return { block, rows: block.filter((l) => /^(Whole run|Observed days)/.test(l)).map((l) => l.split(',').slice(1).join(',')) };
+		};
+		const [f, ord] = [await fdcRows(forecastRun), await fdcRows(o)];
+		expect(ord.rows.length).toBeGreaterThan(0);
+		expect(f.rows).toEqual(ord.rows);
+		expect(f.rows[0]!.split(',').at(-1)).toBe(String(DAYS));
+		expect(f.block).toContain(`The ${FORECAST_DAYS} forecast days are left out: every row ranks the ${DAYS} days before them`);
+		expect(ord.block.some((l) => l.includes('forecast days are left out'))).toBe(false);
+	});
+
 	it('publishing a forecast run gives the farmer their own farm’s forecast days, and the history stops the day before', async () => {
 		expect((await owner.call('POST', `/projects/${projectId}/publication`, { runId: forecastRun })).status).toBe(201);
 		const view = (await farmer.call('GET', `/projects/${projectId}/farm/${farm.id}`)).body;

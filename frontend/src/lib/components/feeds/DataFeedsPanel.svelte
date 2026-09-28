@@ -28,6 +28,7 @@
 		healthMessage,
 		keptNote,
 		needsAttention,
+		targetHint,
 		separateName,
 		STATE_LABELS,
 		takeoverOf,
@@ -62,6 +63,8 @@
 	let separateButton = $state<HTMLButtonElement>();
 
 	const source = $derived(data?.sources.find((s) => s.source === draft.source));
+	// What the chosen series means for the model when it isn't the obvious one (CHIRPS as the catchment rain, issue #51).
+	const kindHint = $derived(targetHint(draft.source, draft.targetKind));
 	const attention = $derived(data ? needsAttention(data.feeds) : 0);
 	const sourceLabel = (f: FeedMeta) => data?.sources.find((s) => s.source === f.source)?.label ?? f.source;
 
@@ -313,9 +316,10 @@
 					</div>
 					<div class="field">
 						<label for="{uid}-kind">Into series</label>
-						<select id="{uid}-kind" bind:value={draft.targetKind}>
+						<select id="{uid}-kind" bind:value={draft.targetKind} aria-describedby={kindHint ? `${uid}-kind-hint` : undefined}>
 							{#each source?.kinds ?? [] as k (k)}<option value={k}>{kindLabel(k)}</option>{/each}
 						</select>
+						{#if kindHint}<p class="hint" id="{uid}-kind-hint">{kindHint}</p>{/if}
 					</div>
 					<div class="field">
 						<label for="{uid}-name">Series name <span class="muted">(optional)</span></label>

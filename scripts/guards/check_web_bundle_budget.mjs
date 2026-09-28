@@ -1141,14 +1141,22 @@
 //             footer text, the share-page line, the workbook's disclaimer
 //             sheet, and their Afrikaans words. No new dependency. Headroom
 //             ~3 KB.
-// 2026-09-28  total 1083 → 1093 KB (measured 1088 on Vite 8, 1080 on main
-//             before it). Issue #72's allocations second slice: the engine's
-//             allocation mode (allocations/mode.ts), its self-check and the
-//             run comparison's allocation lines (verify and compare ship in
-//             the run worker and the pages both), the Settings tab's
+// 2026-09-28  total 1083 → 1089 KB (measured 1086 with main merged in).
+//             Issue #51's forecast-leak fixes: a forecast run's history-only
+//             day counts, windows and flow-duration ranking (flowSeries,
+//             reportWindow, views/fdc), fitting on the record only and the
+//             CHIRPS-factor drift flag (calibrate/provenance), negative flows
+//             read as missing, the Reserve requirement line on the flow vs
+//             reserve chart, and the CHIRPS feed note. No new dependency.
+//             Headroom ~3 KB.
+// 2026-09-28  total 1089 → 1096 KB (measured 1093 with #51's fixes merged,
+//             1086 before). Issue #72's allocations second slice: the
+//             engine's allocation mode (allocations/mode.ts), its self-check
+//             and the run comparison's allocation lines (verify and compare
+//             ship in the run worker and the pages both), the Settings tab's
 //             Registered volumes fields, the Allocations tab's licence
 //             conditions and mode note, and two help entries. No new
-//             dependency. Headroom ~5 KB.
+//             dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1159,7 +1167,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1093,
+	totalCodeKb: 1096,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

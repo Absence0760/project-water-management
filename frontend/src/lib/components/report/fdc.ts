@@ -14,7 +14,9 @@ export function fdcReportRows(t: FdcPercentileTable): string[][] {
 
 /** Which days the table ranks, for its title. */
 export function fdcReportDays(t: FdcPercentileTable): string {
-	return t.onObservedDays
+	const days = t.onObservedDays
 		? `every record on the ${fmtNum(t.observedDays)} days with an observed reading`
 		: `all ${fmtNum(t.runDays)} days of the run`;
+	// A forecast run's table ranks its history only (issue #51).
+	return t.forecastDays > 0 ? `${days} before the forecast (its ${fmtNum(t.forecastDays)} forecast days left out)` : days;
 }

@@ -1,7 +1,7 @@
 // The fit behind each compared run's parameters (issue #4): its in-sample
 // score next to its validation scores, from each run's stored fit record.
 // Pure, so it is unit-tested; FitValidationCompare.svelte draws it.
-import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+import { describeFitRecord, fitRecordStatus, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type FitScores, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
 import { objectiveName } from '$lib/calibration/fit';
 
 export interface FitValidationRow {
@@ -28,16 +28,19 @@ const forcingChangedText = (
 	r: FitRecord | null,
 	settings: Partial<ProjectSettings> | null | undefined,
 	chirpsSource: SeriesProvenance | null | undefined,
-	apanDaily: ApanDailyFingerprint | null | undefined
+	apanDaily: ApanDailyFingerprint | null | undefined,
+	chirpsFactors: ChirpsFactorSet[] | null | undefined
 ): string => {
 	if (!r) return '–';
 	if (!settings) return 'unknown';
-	const s = fitRecordStatus(settings, r, { chirpsSource, apanDaily });
+	const s = fitRecordStatus(settings, r, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) });
 	return s.chirpsSourceChanged
 		? 'yes (another CHIRPS product or version)'
 		: s.apanDailyChanged
 			? 'yes (another daily A-pan series)'
-			: s.forcingChanged
+			: s.chirpsFactorsChanged
+				? 'yes (the CHIRPS factors drifted)'
+				: s.forcingChanged
 				? 'yes'
 				: 'no';
 };
@@ -55,7 +58,9 @@ export function fitValidationRows(
 	/** Each run's CHIRPS series product and version (its input snapshot); undefined when not recorded. */
 	chirps: { a?: SeriesProvenance | null; b?: SeriesProvenance | null } = {},
 	/** Each run's daily A-pan series (its input snapshot, issue #45); undefined when not known. */
-	apanDaily: { a?: ApanDailyFingerprint | null; b?: ApanDailyFingerprint | null } = {}
+	apanDaily: { a?: ApanDailyFingerprint | null; b?: ApanDailyFingerprint | null } = {},
+	/** Each run's applied CHIRPS factor sets (chirpsFactorSets of its summary, issue #51); undefined when not known. */
+	chirpsFactors: { a?: ChirpsFactorSet[] | null; b?: ChirpsFactorSet[] | null } = {}
 ): FitValidationRow[] | null {
 	if (!ra && !rb) return null;
 	const both = (f: (r: FitRecord) => string) => ({ a: ra ? f(ra) : '–', b: rb ? f(rb) : '–' });
@@ -81,6 +86,6 @@ export function fitValidationRows(
 			})
 		},
 		{ label: 'Parameters edited since fit', ...both((r) => (r.editedParams?.length ? `yes (${r.editedParams.join(', ')})` : 'no')) },
-		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA, chirps.a, apanDaily.a), b: forcingChangedText(rb, settingsB, chirps.b, apanDaily.b) }
+		{ label: 'Forcing changed since fit', a: forcingChangedText(ra, settingsA, chirps.a, apanDaily.a, chirpsFactors.a), b: forcingChangedText(rb, settingsB, chirps.b, apanDaily.b, chirpsFactors.b) }
 	];
 }

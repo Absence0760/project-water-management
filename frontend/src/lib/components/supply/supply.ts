@@ -28,8 +28,12 @@ export function previousRunOf(runs: readonly RunMeta[] | null, id: string | null
 /** A deficit below this (m³/day) is float noise, not a short day: the publication's own rule (backend publish/recent.ts). */
 export const NOISE_M3 = 1e-6;
 
-/** "This week": the run's last 7 days, the reporting window's "Last 7 days" (reportWindow.ts), which the portfolio links to. */
-export function weekWindow(run: { startDate: string; endDate: string }): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
+/**
+ * "This week": the run's last 7 days, the reporting window's "Last 7 days"
+ * (reportWindow.ts), which the portfolio links to. On a forecast run, the 7
+ * days before the forecast (issue #51), like every other figure on the page.
+ */
+export function weekWindow(run: { startDate: string; endDate: string; forecastFrom?: string | null }): { reportStart: string; reportEnd: string; from: number; to: number; days: number } {
 	const r = resolveWindow({ preset: 'last7' }, run, { reportStart: run.startDate, reportEnd: run.endDate });
 	if (!r.ok) throw new Error(r.error);
 	return r.window;
