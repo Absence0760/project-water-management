@@ -629,6 +629,14 @@ conditions come before any client numbers:
       2. **Use the gauge as a regional wet/dry index only.** Use it to rank
          water years for the dry→wet test design and the Phase 9 forcing,
          never as a calibration or validation target for this river.
+         **Done (engine 1.18.0, issue #65):** the dry → wet test ranks water
+         years by the reference gauge's water-year mean flow when it covers
+         them (`rankYearsBy`, the default when a reference exists), falls
+         back to the record's own flow with a note, and never scores it
+         (tested); `differential.rankedBy` is in the report and fit record and
+         shown beside the test. The Phase 9 ensemble has no year ranking (its
+         held-out split is chronological), so nothing changes there
+         (model.md §2.10b).
       3. **The durable fix for parameter uncertainty is a proxy-basin model.**
          Build a gauged neighbouring catchment as its own project in the
          app, with its own rain, farm dams and irrigation, and calibrate it
@@ -718,8 +726,11 @@ the reports):
   it, and a hand edit after Apply marks it "parameters edited since fit"
   (model.md §2.10b). The Runs page shows the in-sample score next to those
   validation scores.
-  - [ ] Shade excluded periods on the Runs hydrograph (WP-1.3 planned it;
-        the calibration panel lists them instead for now).
+  - [x] Shade excluded periods on the Runs hydrograph. **Done (2026-09-28,
+        issue #65):** the hydrograph tints the run's own calibration
+        exclusions (from its settings snapshot, never the project's current
+        ones) with a text key listing each period and its reason (ui.md,
+        `runs/exclusionShading.ts`).
 - **Q6: uncertainty.** SA Reserve practice uses confidence ratings and
   assurance rules, not a numeric band. Show monthly compliance against the
   EWR assurance rules, not a raw count of days below the EWR (done, engine
@@ -870,7 +881,7 @@ the reports):
       engine 1.0.0, ahead of its 2026-11-30 deadline; the operator waived the
       hydrologist-review trigger ([plan.md](./plan.md) Decisions,
       [model.md §2.4](./model.md#24-natural-flow-from-rain-flow-data)).
-- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it.
+- [ ] **Phase 7 of issue #4 (IHACRES)** only if the hydrologist asks for it. Asked in issue #90 (2026-09-28).
 - [x] **Persona tooling** (2026-09-24): `tsx` is an engine dev dependency
       (same pin as the backend), so `pnpm -C packages/engine exec tsx` works.
 
@@ -880,17 +891,31 @@ The review in [calibration-research.md](./calibration-research.md) turned into
 34 recommendations (CR-1 … CR-34), with priorities and effort. Open items, in
 the suggested order (the IDs carry the detail):
 
-- [ ] **Cheap first:** CR-3 KGE(Q)+KGE(1/Q) objective, CR-34
+- [x] **Cheap first:** CR-3 KGE(Q)+KGE(1/Q) objective, CR-34
       record-representativeness note. CR-2 multi-start DDS (engine 0.13.0,
       model.md §2.10b) and CR-6 drop Moriasi words on daily scores
-      (model.md §2.10) are done.
+      (model.md §2.10) are done. **Done (engine 1.18.0, issue #65):** CR-3
+      is the `kgeLowHigh` objective (mean of KGE′ on Q and on 1/(Q+ε),
+      ε = Q̄/100), suggested for EWR decisions, default still KGE′; CR-34
+      is `report.representativeness` (scored days and water years, each
+      year's rain percentile and dry / near normal / wet class against the
+      run's complete water years of rain, the mean against the long-term
+      mean, and notes when the record can't test wet or dry years or has
+      fewer than 5), shown in Fit automatically (model.md §2.10b).
 - [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #2) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
       the rain slice that CR-18 then generalises.
-- [ ] **Fit-settings sweep (headless).** The free / typical-bounds / band /
+- [x] **Fit-settings sweep (headless).** **Done (2026-09-28, issue #65):**
+      `pnpm fit-sweep <project.json> --grid <grid.json>`
+      (`backend/scripts/fit-sweep.ts`, model.md §2.10b) fits every cell of
+      pan preset × bounds × objective × named exclusion set × WR2012 band,
+      with validation, into one Markdown table (and `--json` for CR-1), the
+      engine version, seed, starts and budget in the header, ranking
+      nothing; at most 24 cells unless `--max-cells`. It also fixed
+      `pnpm pan-sensitivity` not finding root-relative paths. The free / typical-bounds / band /
       both comparison (above, under "Make the logger fit identifiable") was
       built by hand, and every further "what if we fit it this way" repeats
       that. Generalise `backend/scripts/pan-sensitivity.ts` into a script
@@ -906,14 +931,38 @@ the suggested order (the IDs carry the detail):
       CR-1 below can then reuse its batch and report code. Do it
       before CR-1, or as soon as the hydrologist asks for another
       side-by-side of fits.
-- [ ] **Ensemble and reporting:** ~~CR-1 behavioural ensemble with the EWR
+- [x] **Ensemble and reporting:** ~~CR-1 behavioural ensemble with the EWR
       range~~ (done as Phase 9, engine 0.26.0: a few hundred Latin-hypercube
       sets in one worker, not 10–20k across several; more workers are the
-      scaling step if the hydrologist wants larger samples) → CR-5 bootstrap CIs and benchmarks → CR-21 sensitivity runs and
-      "not determinable" → CR-28 WR2012 five-statistic table (confirm the
-      thresholds in WRC TT 689/690 first) → CR-29 compliance as %time, %volume,
-      FDC overlays and %nMAR (monthly compliance, deficit volume and the FDC
-      check landed in engine 0.21.0 / 0.33.0; the rest of CR-29 is open).
+      scaling step if the hydrologist wants larger samples) → ~~CR-5
+      bootstrap CIs and benchmarks~~ → ~~CR-21 sensitivity runs and "not
+      determinable"~~ → ~~CR-28 WR2012 five-statistic table~~ → ~~CR-29
+      compliance as %time, %volume, FDC overlays and %nMAR~~. **Done
+      (engine 1.18.0, issue #65):**
+      - CR-5 (`calibrate/bootstrap.ts`): 90 % water-year block-bootstrap
+        intervals on KGE′, NSE and `kgeLowHigh` (1 000 resamples, fixed
+        seed, none under 3 water years of ≥ 30 days), and mean-flow and
+        ±7-day day-of-year climatology benchmarks on every scored period,
+        shown in Fit automatically (model.md §2.10b).
+      - CR-21 (`uncertainty/sensitivity.ts`, model.md §2.10g): one factor
+        at a time (rain ×0.9/1.1, pan coefficient and dam lake-evaporation
+        factor ±15 %, abstraction ×0.7/1.3, dams empty/full), EWR
+        compliance per site as central + low–high with a "not determinable
+        with current data" verdict and a tornado on River & reserve. Not
+        stored: a live diagnostic like `pnpm pan-sensitivity`; a stored,
+        server-checked version would need a table like `run_uncertainty`.
+        Joint (not one-at-a-time) extremes and era-specific rain ranges are
+        not modelled. The ranges and the 0.8 threshold are defaults for the
+        hydrologist (issue #90).
+      - CR-28 (`reference/wr2012Fit.ts`, model.md §2.10): the five
+        statistics on complete water years of monthly flows beside KGE′/NSE
+        in the fit results, a run's calibration panel and the summary CSV.
+        The bands (4/4/6/6/8 %) and the seasonal-index definition are
+        labelled indicative until checked in WRC TT 689/690 (issue #90).
+      - CR-29 (model.md §2.9c): % of time and of volume not met per month
+        from daily data beside the monthly verdict, monthly FDC overlays
+        of natural, present-day and (on the compare page) scenario flow on
+        the EWR curve, and the EWR as %nMAR.
 - [ ] **Automated calibration with pre-declared rules.** Today every pass
       of the calibrate → review → adjust → refit loop needs a person, because
       the choices (exclusions, forcing, which fit to keep) are made after the
@@ -945,17 +994,24 @@ the suggested order (the IDs carry the detail):
       person enters once. **Depends on:** the sweep → CR-18/19 → CR-1 →
       Background jobs. **Needs the hydrologist to sign off** the default
       rules (flag thresholds, selection score, filters) before any automated
-      fit is used as evidence; add that to [plan.md](./plan.md) with the
-      other hydrologist questions. Trigger: once the sweep and CR-18 have
-      landed.
-- [ ] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
+      fit is used as evidence; the question is in issue #90. Trigger: once
+      the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Still
+      waiting on CR-18.
+- [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
-      dropped: engine 1.0.0 removed the legacy model (issue #16).
-- [ ] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
+      dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
+      (engine 1.18.0, issue #65):** TOSSH-default recession segments with a
+      1 mm/day rain rule, −dQ/dt against Q (ETS) for the observed record and
+      GR4J's simulated outflow on the same days, power-law fits compared at
+      the median flow (indicative warnings with 8 or more segments, "Not
+      judged" below), in the Plausibility checks panel and the summary CSV
+      (model.md §2.10d). CR-18's flags plug into its day mask when built.
+- [x] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which MAR estimate to trust (CR-7). CR-18 is
-      already plan.md hydrologist Q2; add the other three to
-      [plan.md](./plan.md) when the review session is booked.
+      already plan.md hydrologist Q2. **Moved (2026-09-28):** all of them,
+      with the defaults issue #65 built on (CR-5, CR-13, CR-21, CR-28,
+      CR-34, the dry → wet ranking), are in issue #90.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
       uncertainty and BFI, CR-23 CHIRPS quantile mapping, CR-24 alternative
