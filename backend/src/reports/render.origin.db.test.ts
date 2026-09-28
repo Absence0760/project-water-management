@@ -134,7 +134,7 @@ describe.skipIf(!haveChromium)('the renderer stays on its configured site and AP
 			res.end();
 		};
 		const err = await renderReportPdf(target, options()).catch((e: unknown) => e);
-		expect(err).toEqual(new RenderError(LEFT));
+		expect(err).toEqual(new RenderError(LEFT, { retry: false }));
 		expect((err as RenderError).retry).toBe(false);
 		expect((err as RenderError).message).not.toContain(urls.elsewhere);
 		expect(hits.site.length).toBe(1);
@@ -147,7 +147,7 @@ describe.skipIf(!haveChromium)('the renderer stays on its configured site and AP
 			res.end();
 		};
 		const err = await renderReportPdf(target, options()).catch((e: unknown) => e);
-		expect(err).toEqual(new RenderError(LEFT));
+		expect(err).toEqual(new RenderError(LEFT, { retry: false }));
 		expect(hits.site).toEqual([`GET /projects/${target.projectId}/report?run=${target.runId}`, 'GET /hop']);
 		expect(hits.elsewhere).toEqual([]);
 	});
@@ -162,7 +162,7 @@ describe.skipIf(!haveChromium)('the renderer stays on its configured site and AP
 				</script>`
 			);
 		const err = await renderReportPdf(target, options()).catch((e: unknown) => e);
-		expect(err).toEqual(new RenderError(LEFT));
+		expect(err).toEqual(new RenderError(LEFT, { retry: false }));
 		expect(hits.site.length).toBeGreaterThan(0);
 		expect(hits.elsewhere).toEqual([]);
 	});
