@@ -164,13 +164,37 @@ other signed-out route still goes to `/login?next=`.
 a slim header with the way home and **Open the app** (to `/login`, which sends
 a signed-in reader on to their projects: a static page can't know the session,
 so it doesn't claim "Sign in"), a contents list (folded behind a
-**Contents (13 sections)** disclosure on a phone, where the list alone filled
+**Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
 the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in
-`AuthCard`), and in the sign-up form's own sentence, directly above its button ("By creating an account, you agree to the Terms of use and Privacy notice"). Drafts before counsel review: what they assume
-and what is open is in [legal-status.md](./legal-status.md).
+`AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
+**The short version**: the four main points of `lib/components/legal/termsSummary.ts`,
+the same list the sign-up form and the re-acceptance notice show translated
+(`TermsSummary.svelte`). Research-based wording the operator accepted without
+counsel: what it assumes and what is open is in [legal-status.md](./legal-status.md).
+
+**Sign-up assent.** Directly above the sign-up button (invitations
+included): a bordered box, **The main things you agree to**, with the four
+points in the reader's language (and, in another language, "The Terms are
+in English; this summary is in your language"), then a required, unticked
+checkbox, "I have read the main points above and accept the Terms of use
+and Privacy notice", whose label links both pages. The browser won't submit
+the form until it is ticked. With the box at body size the sign-up form is taller
+than a window, so it is the one sign-in page that scrolls (to the end of the
+form and no further; `auth-pages.spec.ts`).
+
+**Re-acceptance notice.** When the terms change (`LEGAL_VERSION`), a
+signed-in account whose `termsCurrent` is false (it accepted an older
+version, or none) sees, on any app page, a full-page notice in the sign-in
+pages' frame instead (`auth-extras/TermsUpdate.svelte`, loaded by the root
+layout): **Our terms have changed**, what changed (a short list rewritten
+with each version), links to both pages, the same main points, **Accept the
+new terms** (`POST /auth/me/accept-terms`) and **Sign out**. The URL stays
+the page asked for, which renders once accepted. The public pages (the legal
+pages, emailed links, share links) aren't held behind it. Translated.
+`e2e/tests/terms-update.spec.ts`.
 The **Effective** line under each title is `legalEffective()` of the
 engine's `LEGAL_VERSION` (`packages/engine/src/legal.ts`), the same
 version the sign-up form sends as `acceptTerms` and the account records

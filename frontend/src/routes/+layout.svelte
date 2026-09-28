@@ -70,9 +70,17 @@
 		}
 	});
 
+	// The re-acceptance step (docs/legal-status.md): signed in, but the terms
+	// and privacy notice changed since this account accepted them (or it
+	// accepted none): a full-page notice in place of any app page until it
+	// accepts (TermsUpdate, its own chunk). The public pages stay open, so the
+	// legal pages can be read from it.
+	const termsGate = $derived(session.user?.termsCurrent === false && !isPublicPath(page.url.pathname, base));
+
 	// Sign-in and emailed-link pages have their own full-screen layout (AuthCard),
-	// even when a signed-in user opens a reset or confirmation link.
-	const authScreen = $derived(isPublicPath(page.url.pathname, base) || landingRoot);
+	// even when a signed-in user opens a reset or confirmation link; so does the
+	// re-acceptance notice.
+	const authScreen = $derived(isPublicPath(page.url.pathname, base) || landingRoot || termsGate);
 	// The farmer view (/farm/…) has its own header and Menu (FarmShell): a farmer
 	// has no projects, teams or workspace to navigate to.
 	const farmScreen = $derived(/^\/farm(\/|$)/.test(page.url.pathname.slice(base.length)));
@@ -116,7 +124,7 @@
 	// switch updates session.user). The route renders once that language is
 	// set (i18nReady), so it never shows one language and then another.
 	const translated = $derived(
-		landingRoot || /^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share|welcome)(\/|$)/.test(page.url.pathname.slice(base.length))
+		landingRoot || termsGate || /^\/(login|register|forgot-password|reset-password|verify-email|farm|account|alerts|share|welcome)(\/|$)/.test(page.url.pathname.slice(base.length))
 	);
 	type I18n = typeof import('$lib/i18n/locale.svelte');
 	let i18nModule = $state.raw<I18n | null>(null);
@@ -189,6 +197,12 @@
 		<main class="page">
 			<ChunkFailed what="This page" />
 		</main>
+	{:else if shown && termsGate}
+		{#await import('$lib/components/auth-extras/TermsUpdate.svelte') then gate}
+			<div id="main" tabindex="-1"><gate.default /></div>
+		{:catch}
+			<main class="page"><ChunkFailed what="This page" /></main>
+		{/await}
 	{:else if shown && landingRoot}
 		{#await loadLanding() then landing}
 			<div id="main" tabindex="-1"><landing.default /></div>
@@ -202,7 +216,7 @@
 	{/if}
 {/snippet}
 
-{#if farmShell}
+{#if farmShell && !termsGate}
 	<!-- The farm frame's words wait for the language, like the page's. -->
 	{#if ready}
 		<!-- /account has its own language switch (Language and units); one is enough. -->

@@ -5,7 +5,7 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
-import { fillNewPassword } from '../support/signup.ts';
+import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
 	void owner;
@@ -189,6 +189,7 @@ test('an invited person signs up through the link and lands in the project', asy
 	await expect(v.getByLabel('Email')).not.toBeEditable();
 	await v.getByLabel('Display name').fill('Invited Hydrologist');
 	await fillNewPassword(v, PASSWORD);
+	await agreeToTerms(v);
 	await v.getByRole('button', { name: 'Create account and join' }).click();
 
 	// Signed up through the link: already a verified editor, no confirm banner.
@@ -240,6 +241,7 @@ test('someone signed in as another account opens an invitation: told whose it is
 	await expect(other.page.getByLabel('Email')).toHaveValue(email);
 	await other.page.getByLabel('Display name').fill('Forwarded Invitee');
 	await fillNewPassword(other.page, PASSWORD);
+	await agreeToTerms(other.page);
 	await other.page.getByRole('button', { name: 'Create account and join' }).click();
 	await expect(other.page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(other.page.getByRole('rowheader', { name: 'Forwarded catchment' })).toBeVisible();

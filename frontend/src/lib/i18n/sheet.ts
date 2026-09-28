@@ -16,6 +16,8 @@ export const SECTIONS: Record<string, string> = {
 	auth: 'The sign-in pages: the brand panel beside every sign-in form.',
 	login: 'The sign-in page.',
 	register: 'The create-an-account page, including an emailed invitation (from the WUA or a colleague).',
+	'terms-summary': 'The main points of the Terms of use, in a box above the create-account button and on the “Our terms have changed” page. Legal points: keep their exact force. The Terms themselves are in English only; this box is the one part a farmer reads in their own language. “§13” is section 13 of the Terms.',
+	'terms-update': 'The page a signed-in person sees after the Terms of use or Privacy notice changed, before anything else: what changed, and a button to accept the new terms (or sign out).',
 	forgot: 'The forgot-password page.',
 	reset: 'The choose-a-new-password page (opened from the reset email).',
 	verify: 'The confirm-your-email page (opened from the confirmation email).',

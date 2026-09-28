@@ -6,8 +6,9 @@
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { request as playwrightRequest, type APIRequestContext } from '@playwright/test';
+import { LEGAL_VERSION } from '../../packages/engine/src/legal.ts';
 import { acknowledgeFarmNotice } from './api.ts';
-import { withSetupLock } from './db.ts';
+import { setTermsVersion, withSetupLock } from './db.ts';
 import { API_URL, APP_E2E_URL } from './env.ts';
 
 // DEV-ONLY demo credentials, as printed by `pnpm seed:examples`.
@@ -15,6 +16,8 @@ export const DEMO = { email: 'demo@example.com', password: 'demo-password' };
 export const ANALYST = { email: 'analyst@example.com', password: 'demo-password' };
 export const FARMER1 = { email: 'farmer1@example.com', password: 'demo-password' };
 export const FARMER2 = { email: 'farmer2@example.com', password: 'demo-password' };
+/** Every demo account `seed:examples` makes. */
+const DEMO_EMAILS = [DEMO.email, ANALYST.email, FARMER1.email, FARMER2.email, 'applicant@example.com'];
 export const KLEINBERG = 'Example · Kleinberg (winter rainfall)';
 export const DROEVLEI = 'Example · Droëvlei (water-stressed)';
 export const SANDSPRUIT = 'Example · Sandspruit (summer rainfall, larger network)';
@@ -39,6 +42,8 @@ export async function seedExamplesOnce(request: APIRequestContext): Promise<void
 				stdio: 'pipe'
 			});
 		}
+		// The script's accounts accepted no terms; the specs aren't about the re-acceptance notice.
+		await setTermsVersion(DEMO_EMAILS, LEGAL_VERSION);
 		// Either way, the seed's farmers have pressed "I understand" on the farm view's
 		// notice, so the specs that use them meet their figures (each in its
 		// own context, leaving the caller's session alone).

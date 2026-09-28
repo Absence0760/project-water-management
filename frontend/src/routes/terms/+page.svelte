@@ -1,14 +1,19 @@
 <script lang="ts">
 	// The terms of use (issue #57's footer), in the estate's shape (the
 	// jaredhoward site's Terms: the same party, liability cap, one-way
-	// indemnity, Virginia law, informal-first disputes, no arbitration),
-	// adapted to a free modelling service. Draft before counsel review:
-	// docs/legal-status.md tracks what is open.
+	// indemnity, informal-first disputes, no arbitration), adapted to a free
+	// modelling service. Governing law is per user (§15): South African law and
+	// courts for anyone in South Africa, Virginia otherwise. Research-based
+	// wording the operator accepted without counsel: docs/legal-status.md
+	// tracks what is open. A material change bumps LEGAL_VERSION, which asks
+	// every account to accept again.
 	import { base } from '$app/paths';
 	import { legalEffective } from '@water-management/engine/legal';
 	import LegalPage from '$lib/components/legal/LegalPage.svelte';
+	import { SUMMARY_POINTS } from '$lib/components/legal/termsSummary';
 
 	const sections = [
+		{ id: 'short', label: 'The short version' },
 		{ id: 'agreement', label: '1. This agreement' },
 		{ id: 'service', label: '2. The service' },
 		{ id: 'results', label: '3. Model results are estimates' },
@@ -37,6 +42,13 @@
 	effective={legalEffective()}
 	{sections}
 >
+	<!-- The same points as the sign-up form's summary (termsSummary.ts), in English. -->
+	<h2 id="short">The short version</h2>
+	<ul>
+		{#each SUMMARY_POINTS as point (point)}<li>{point}</li>{/each}
+	</ul>
+	<p>The rest of this page is the full text, and it is the part that applies.</p>
+
 	<h2 id="agreement">1. This agreement</h2>
 	<p>
 		These terms are an agreement between <strong>Jared Howard</strong>, a sole proprietor based in Virginia, United States (“we”,
@@ -78,6 +90,10 @@
 		Reports the service produces carry their own disclaimer, which says the same thing for anyone a report is shared with,
 		including that a report is not an authorisation to use water: only the responsible authority decides that, under the
 		National Water Act, 1998 (sections 22, 27 and 41).
+	</p>
+	<p>
+		If you give a report, export or share link to anyone else, pass it on whole, with its disclaimer. Don’t present a run as
+		evidence for a water-use licence application unless a registered professional has signed it off.
 	</p>
 
 	<h2 id="accounts">4. Accounts</h2>
@@ -147,24 +163,24 @@
 	</p>
 
 	<h2 id="warranties">12. Disclaimer of warranties</h2>
-	<p class="caps">
+	<p>
 		<strong
-			>THE SERVICE IS PROVIDED “AS IS” AND “AS AVAILABLE”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. TO THE FULLEST EXTENT
-			PERMITTED BY LAW, WE DISCLAIM ALL IMPLIED WARRANTIES, INCLUDING OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND
-			NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE SERVICE OR ITS RESULTS WILL BE ACCURATE, COMPLETE, UNINTERRUPTED OR ERROR-FREE, OR
-			THAT DATA WILL NOT BE LOST.</strong
+			>The service is provided “as is” and “as available”, without warranty of any kind, express or implied. To the fullest extent
+			permitted by law, we disclaim all implied warranties, including of merchantability, fitness for a particular purpose, title and
+			non-infringement. We do not warrant that the service or its results will be accurate, complete, uninterrupted or error-free, or
+			that data will not be lost.</strong
 		>
 	</p>
 	<p>Some jurisdictions do not allow these exclusions, so some of them may not apply to you.</p>
 
 	<h2 id="liability">13. Limitation of liability</h2>
-	<p class="caps">
+	<p>
 		<strong
-			>TO THE FULLEST EXTENT PERMITTED BY LAW, OUR TOTAL LIABILITY ARISING OUT OF OR RELATING TO THESE TERMS OR THE SERVICE WILL NOT
-			EXCEED THE GREATER OF (A) THE FEES YOU PAID US IN THE TWELVE MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM, OR (B) ONE
-			HUNDRED US DOLLARS (US $100). WE WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL OR PUNITIVE DAMAGES,
-			OR FOR LOSS OF PROFITS, CROPS, WATER, REVENUE, DATA OR GOODWILL, INCLUDING FROM DECISIONS MADE IN RELIANCE ON MODEL RESULTS,
-			WHETHER OR NOT WE WERE TOLD THEY WERE POSSIBLE.</strong
+			>To the fullest extent permitted by law, our total liability arising out of or relating to these terms or the service will not
+			exceed the greater of (a) the fees you paid us in the twelve months before the event giving rise to the claim, or (b) one
+			hundred US dollars (US $100). We will not be liable for any indirect, incidental, special, consequential or punitive damages,
+			or for loss of profits, crops, water, revenue, data or goodwill, including from decisions made in reliance on model results,
+			whether or not we were told they were possible.</strong
 		>
 	</p>
 	<p>
@@ -183,16 +199,25 @@
 
 	<h2 id="law">15. Governing law and disputes</h2>
 	<p>
-		These terms are governed by the laws of the Commonwealth of Virginia, United States, without regard to its conflict-of-laws
-		rules. Before either of us starts legal proceedings, the one with a concern must write to the other describing it and proposing
-		a solution (to us at the address in section 19, to you at your account’s email address), and we will both try in good faith to
-		resolve it for at least 30 days. If that fails, the dispute must be brought in the state or federal courts in Virginia. There is
-		no arbitration and no class-action waiver. To the extent the law allows, a claim must be brought within one year after it
-		arises.
+		Which law applies depends on where you are. If you live in South Africa, or use the service for a farm, water user association,
+		business or other organisation based there, these terms are governed by the law of the Republic of South Africa. Either of us
+		may then bring proceedings in a South African court that has jurisdiction; those courts’ jurisdiction is not exclusive, and we
+		each consent to the jurisdiction of the magistrates’ courts for claims within their limits.
+	</p>
+	<p>
+		Otherwise, these terms are governed by the laws of the Commonwealth of Virginia, United States, without regard to its
+		conflict-of-laws rules, and disputes are brought in the state or federal courts in Virginia. If you are a consumer under the law
+		of the country you live in, you may also bring a claim in the courts where you live.
+	</p>
+	<p>
+		Either way, before either of us starts legal proceedings, the one with a concern must write to the other describing it and
+		proposing a solution (to us at the address in section 19, to you at your account’s email address), and we will both try in good
+		faith to resolve it for at least 30 days. There is no arbitration and no class-action waiver.
 	</p>
 	<p>
 		Nothing in these terms takes away rights you have under the mandatory law of the country you live in, such as consumer or
-		data-protection rights, or your right to complain to a regulator.
+		data-protection rights (in South Africa, including under the Consumer Protection Act, the Electronic Communications and
+		Transactions Act and the Protection of Personal Information Act), or your right to complain to a regulator.
 	</p>
 
 	<h2 id="changes">16. Changes to these terms</h2>

@@ -1,0 +1,113 @@
+<!-- i18n-section: terms-update -->
+<script lang="ts">
+	// The re-acceptance step (docs/legal-status.md): a signed-in account that
+	// accepted an older version of the terms and privacy notice (or none, made
+	// by a script) sees this in place of any app page until it accepts the
+	// version in force (termsCurrent on /auth/me, LEGAL_VERSION). The root
+	// layout shows it; the legal pages and the emailed-link pages stay open.
+	// Accept records the version (POST /auth/me/accept-terms) and the page
+	// the person asked for renders in its place.
+	import { tick } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { base } from '$app/paths';
+	import { api } from '$lib/api';
+	import { session } from '$lib/auth/session.svelte';
+	import { clearAllSaved } from '$lib/components/farm/savedCopy';
+	import AuthCard from '$lib/components/layout/AuthCard.svelte';
+	import TermsSummary from '$lib/components/legal/TermsSummary.svelte';
+	import { errorText } from '$lib/i18n/apiError';
+	import { msg, t } from '$lib/i18n/locale.svelte';
+
+	// What changed in this version. Rewrite it whenever LEGAL_VERSION changes.
+	const CHANGES = [
+		msg('If you live or are based in South Africa, South African law and courts now apply to the Terms.'),
+		msg('If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.'),
+		msg('The Terms now start with a short version of the main points.')
+	];
+
+	let busy = $state(false);
+	let signingOut = $state(false);
+	let error = $state<string | null>(null);
+
+	async function accept() {
+		busy = true;
+		error = null;
+		try {
+			session.user = await api.auth.acceptTerms();
+		} catch (err) {
+			error = errorText(err);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function signOut() {
+		signingOut = true;
+		try {
+			await api.auth.logout();
+		} catch {
+			// Drop the local session either way.
+		}
+		clearAllSaved();
+		session.user = null;
+		signingOut = false;
+		await tick();
+		await goto(`${base}/login`);
+	}
+</script>
+
+<svelte:head>
+	<title>{t('{page} · Water Management', { page: t('Our terms have changed') })}</title>
+</svelte:head>
+
+<AuthCard legal={false} title={t('Our terms have changed')}>
+	<p>{t('Read what changed, then accept the new Terms of use and Privacy notice to carry on.')}</p>
+	<h2 class="changed">{t('What changed')}</h2>
+	<ul class="changes">
+		{#each CHANGES as change (change)}<li>{t(change)}</li>{/each}
+	</ul>
+	<p class="links">
+		<a href="{base}/terms">{t('Terms of use')}</a>
+		<a href="{base}/privacy">{t('Privacy notice')}</a>
+	</p>
+	<TermsSummary id="terms-update-summary" />
+	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	<button type="button" class="btn btn-primary act" onclick={accept} disabled={busy || signingOut}>
+		{busy ? t('Saving…') : t('Accept the new terms')}
+	</button>
+	<button type="button" class="btn act" onclick={signOut} disabled={busy || signingOut}>
+		{signingOut ? t('Signing out…') : t('Sign out')}
+	</button>
+</AuthCard>
+
+<style>
+	.changed {
+		margin: 1rem 0 0.35rem;
+		font-size: 1rem;
+		font-weight: 600;
+	}
+	.changes {
+		margin: 0;
+		padding-left: 1.1rem;
+	}
+	.changes li + li {
+		margin-top: 0.3rem;
+	}
+	.links {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem 1.25rem;
+		margin: 0.75rem 0;
+	}
+	.links a {
+		display: inline-block;
+		min-height: 24px;
+	}
+	.act {
+		display: flex;
+		width: 100%;
+		justify-content: center;
+		min-height: 44px;
+		margin-top: 0.75rem;
+	}
+</style>
