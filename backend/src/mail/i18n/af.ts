@@ -110,6 +110,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.digest.heading': 'Jou waarskuwings vir {project}',
 	// Since the last summary:
 	'mail.alert.digest.intro': 'Sedert die vorige opsomming:',
+	// …and {more} more alert. Open the catchment to see it.
+	'mail.alert.digest.more.one': '…en nog {more} waarskuwing. Maak die opvanggebied oop om dit te sien.',
 	// …and {more} more alerts. Open the catchment to see them all.
 	'mail.alert.digest.more.other': '…en nog {more} waarskuwings. Maak die opvanggebied oop om hulle almal te sien.',
 	// You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day.
@@ -140,18 +142,26 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.ewr.body': 'Volgens die reënvoorspelling van {madeOn} verwag die model dat die rivier se ekologiese reserwe (EWR) by die uitloop op {days} van die {of} voorspelde dae ({from} tot {to}) nie gehaal sal word nie. Die waarskuwing is op {threshold} dae gestel. Voorspellings verander.',
 	// Data feed behind
 	'mail.alert.stale.what': 'Datavoer loop agter',
+	// These data feeds are more than {threshold} day later than usual:
+	'mail.alert.stale.body.one': 'Hierdie datavoere is meer as {threshold} dag later as gewoonlik:',
 	// These data feeds are more than {threshold} days later than usual:
 	'mail.alert.stale.body.other': 'Hierdie datavoere is meer as {threshold} dae later as gewoonlik:',
+	// {feed}: newest day {newest}, {overdue} day late
+	'mail.alert.stale.line.one': '{feed}: nuutste dag {newest}, {overdue} dag laat',
 	// {feed}: newest day {newest}, {overdue} days late
 	'mail.alert.stale.line.other': '{feed}: nuutste dag {newest}, {overdue} dae laat',
 	// Data feed failing
 	'mail.alert.failing.what': 'Datavoer misluk',
 	// These data feeds have failed {threshold} or more times in a row:
 	'mail.alert.failing.body': 'Hierdie datavoere het {threshold} of meer keer agtereenvolgens misluk:',
+	// {feed}: {failures} failure in a row
+	'mail.alert.failing.line.one': '{feed}: {failures} mislukking agtereenvolgens',
 	// {feed}: {failures} failures in a row
 	'mail.alert.failing.line.other': '{feed}: {failures} mislukkings agtereenvolgens',
 	// Background jobs failed
 	'mail.alert.jobs.what': 'Agtergrondtake het misluk',
+	// {count} background job failed for good in the last 24 hours. See the jobs list in the catchment.
+	'mail.alert.jobs.body.one': '{count} agtergrondtaak het die afgelope 24 uur finaal misluk. Kyk na die takelys in die opvanggebied.',
 	// {count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment.
 	'mail.alert.jobs.body.other': '{count} agtergrondtake het die afgelope 24 uur finaal misluk. Kyk na die takelys in die opvanggebied.',
 	// New restriction notice
@@ -160,6 +170,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.alert.restriction.liftedWhat': 'Beperking opgehef',
 	// The WUA published a notice for {project} on {date}: {level}.
 	'mail.alert.restriction.body': 'Die WGV het op {date} ’n kennisgewing vir {project} gepubliseer: {level}.',
+	// The WUA published a notice for {project} on {date}: {level}, a {pct} cut in registered water use.
+	'mail.alert.restriction.bodyPct': 'Die WGV het op {date} ’n kennisgewing vir {project} gepubliseer: {level}, ’n besnoeiing van {pct} op geregistreerde watergebruik.',
 	// The WUA lifted the restriction for {project} on {date}.
 	'mail.alert.restriction.lifted': 'Die WGV het die beperking vir {project} op {date} opgehef.',
 	// The WUA’s notice: “{notice}”
