@@ -99,6 +99,8 @@ client goes live. Not customer-facing.
 
 ### Go-live gates, in order
 
+Tracked in issue #103.
+
 - [ ] **Gate A: register the information officer** with the Information
   Regulator (POPIA s55) **before the first production sign-up**. Pack:
   [legal/information-officer.md](./legal/information-officer.md). The

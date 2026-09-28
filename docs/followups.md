@@ -7,7 +7,7 @@ Tick items off (or move them into an issue) as they are done.
 
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
-the history scrub #63, POPIA #48,
+the history scrub #63, the legal go-live gates #103, POPIA #48,
 the hydrologist's decisions #46, applicant decisions #50, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
@@ -75,7 +75,8 @@ The checklist for these is issue #62; the history scrub is #63.
       WUA, and each alert kind carries its own line. The record is
       [legal/disclaimer-review.md](./legal/disclaimer-review.md) (what
       changed, why, and § 6: what stays open for a lawyer, tracked in
-      [legal-status.md](./legal-status.md) under Counsel review).
+      [legal-status.md](./legal-status.md) under Counsel review; the go-live
+      gates and pre-fee items are issue #103).
 
 - [x] **Client data in git history (#63).** Decided 2026-09-28: the public
       repo starts from one commit of the cleaned tree, and the full history
