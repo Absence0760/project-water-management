@@ -77,6 +77,10 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	expect(await shared.evaluate(() => location.hash)).toBe('');
 	await expect(shared.getByRole('heading', { level: 1 })).toHaveText('Shared catchment');
 	await expect(shared.getByText(/^Published by Owner \d+ on /)).toBeVisible();
+	// Under the heading, where the reliance happens (docs/legal/disclaimer-review.md § 3).
+	await expect(shared.getByTestId('share-caveat')).toHaveText(
+		'A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.'
+	);
 	await expect(notice).toContainText('Irrigate at night and cut back where you can.');
 	await expect(reserve.getByText(/(Below|Kept) its reserve on .* the last 30\sdays\./)).toBeVisible();
 	await expect(shared.getByRole('region', { name: 'River flow each month, in m³ a day' })).toBeVisible();

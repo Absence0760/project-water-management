@@ -9,7 +9,7 @@ import { en } from './en.js';
 const PACK = readFileSync(new URL('../../../../docs/legal/disclaimer-review.md', import.meta.url), 'utf8');
 
 describe('alert email liability lines in the legal review pack', () => {
-	it.each(['mail.alert.model', 'mail.alert.restriction.wua'] as const)('quotes %s in English and Afrikaans', (key) => {
+	it.each(['mail.alert.model', 'mail.alert.model.dam.staff', 'mail.alert.model.staff', 'mail.alert.restriction.wua', 'mail.farmer.estimate'] as const)('quotes %s in English and Afrikaans', (key) => {
 		expect(PACK).toContain(`\`${key}\``);
 		expect(PACK).toContain(`> ${en[key]}\n`);
 		expect(af[key], key).toBeTruthy();

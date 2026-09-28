@@ -13,7 +13,7 @@
 // probe has a positive control (the forward move the API makes still works).
 import { beforeAll, describe, expect, it } from 'vitest';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
-import { withoutUser, withUser } from './tx.js';
+import { withUser } from './tx.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 

@@ -9,7 +9,17 @@
 // helpers load nothing else.
 
 /** The terms and privacy notice in force: the date they took effect, `YYYY-MM-DD`. */
-export const LEGAL_VERSION = '2026-09-27';
+export const LEGAL_VERSION = '2026-09-28';
+
+/**
+ * The farm view's "Before you look at your farm" notice and its estimate line
+ * (frontend `lib/components/farm/farmNotice.ts`, docs/legal/disclaimer-review.md
+ * § 3), the date those words took effect, `YYYY-MM-DD`. A farmer's "I
+ * understand" records it (app_user.farm_notice_version, 093); /auth/me answers
+ * `farmNoticeCurrent`, so bumping it shows every farmer the notice again.
+ * Bump it whenever those words change (farmNotice.test.ts fails until you do).
+ */
+export const FARMER_NOTICE_VERSION = '2026-09-28';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 

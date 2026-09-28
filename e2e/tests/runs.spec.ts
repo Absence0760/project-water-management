@@ -312,6 +312,46 @@ test('a run past the cap drops the oldest run from the list straight away', asyn
 	await expect(list.getByRole('button', { name: /^Old 02/ })).toBeVisible();
 });
 
+test('a runs list that answers after a new run never puts back the list from before it', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs late list');
+	await createRun(page.request, project.id, 'First');
+	// The page's first load shows the list; the Runs tab then asks again on its own. Hold that
+	// answer (fetched now, so it is the list from before the new run) until the new run is in.
+	const listUrl = `/projects/${project.id}/runs`;
+	let release!: () => void;
+	const released = new Promise<void>((resolve) => (release = resolve));
+	let lists = 0;
+	await page.route(
+		(url) => url.pathname.endsWith(listUrl),
+		async (route) => {
+			if (route.request().method() !== 'GET' || ++lists === 1) return route.continue();
+			const response = await route.fetch();
+			await released;
+			await route.fulfill({ response });
+		}
+	);
+	await page.goto(`/projects/${project.id}?tab=runs`);
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	await expect(list.getByRole('button', { name: /^First/ })).toBeVisible();
+	await expect.poll(() => lists).toBeGreaterThanOrEqual(2);
+
+	await page.getByLabel(/^Run label/).fill('Newest');
+	await page.getByRole('button', { name: 'Run model' }).click();
+	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
+
+	let answered = 0;
+	page.on('response', (r) => {
+		if (r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(listUrl)) answered++;
+	});
+	release();
+	// The late answer predates the run: the tab asks again rather than showing it, and shows the fresh answer.
+	await expect.poll(() => answered).toBeGreaterThanOrEqual(2);
+	expect(lists).toBeGreaterThanOrEqual(3);
+	await expect(list.getByRole('button', { name: /^Newest/ })).toHaveAttribute('aria-current', 'true');
+	await expect(list.getByRole('button', { name: /^First/ })).toBeVisible();
+});
+
 test('with a long runs list the runs rail and the whole results menu stay in view on a laptop screen', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs rail');
@@ -415,4 +455,43 @@ test('with a gauge covering the whole run there is no choice of days to make (po
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	await expect(page.locator('#res-fdc').getByRole('img', { name: /Flow-duration curve/ })).toBeVisible();
 	await expect(page.locator('#res-fdc').getByRole('group', { name: 'Days the curves rank' })).toHaveCount(0);
+});
+
+// Issue #77: the Runs tab reads its list as it opens. A run deleted before that
+// read answers stayed deleted only by luck: the older list, arriving last, put
+// the run back and opened it ("not found"). Here the read is taken before the
+// delete and held until after it, every time.
+test('a run deleted while the list is still loading stays deleted', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Runs delete race');
+	await createRun(page.request, project.id, 'Baseline');
+	// The workspace has loaded its shared lists (the tabs render behind that gate).
+	await page.goto(`/projects/${project.id}?tab=scenarios`);
+	await expect(page.getByTestId('scenarios-empty')).toBeVisible();
+
+	let release = () => {};
+	const gate = new Promise<void>((r) => (release = r));
+	let served = 0;
+	await page.route(
+		(url) => url.pathname === `/projects/${project.id}/runs`,
+		async (route) => {
+			if (route.request().method() !== 'GET') return route.fallback();
+			const res = await route.fetch();
+			await gate;
+			await route.fulfill({ response: res });
+			served++;
+		}
+	);
+	page.on('dialog', (d) => d.accept());
+	await page.getByRole('link', { name: 'Runs & results' }).click();
+	const list = page.getByRole('region', { name: 'Runs', exact: true });
+	await list.getByRole('listitem').filter({ hasText: /^Baseline/ }).getByRole('button', { name: /^Delete run Baseline/ }).click();
+	await expect(list.getByRole('listitem')).toHaveCount(0);
+
+	// The list read before the delete answers now: the tab sees it is stale and reads again.
+	release();
+	await expect.poll(() => served).toBe(2);
+	await expect(list.getByRole('listitem')).toHaveCount(0);
+	await expect(page.getByRole('alert').filter({ hasText: /not found|no longer exists/ })).toHaveCount(0);
+	await expect(page.getByText('No runs yet. Run the model to see results.')).toBeVisible();
 });

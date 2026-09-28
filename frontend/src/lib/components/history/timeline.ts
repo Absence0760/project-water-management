@@ -1,6 +1,7 @@
 // The History tab's pure logic (WP-2.4, docs/ui.md § History): what each
 // item says, grouping one request's items (a change set) into one entry, and
 // entries into the viewer's calendar days. No DOM, no fetch.
+import { registrationLine } from '@water-management/engine';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
 import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
@@ -194,8 +195,14 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return s.to ? `Moved the scenario “${str(s.name)}” from ${str(s.from)} to ${str(s.to)}` : `Changed the scenario “${str(s.name)}”`;
 		case 'scenario.deleted':
 			return s.application ? 'An applicant deleted an application' : `Deleted the scenario “${str(s.name)}”`;
-		case 'signoff.created':
-			return `Signed off a run as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
+		case 'signoff.created': {
+			// From signoff-3 the event names the category and field too (issue #47).
+			const opt = (v: unknown) => (v ? str(v) : null);
+			const line = registrationLine(str(s.registrationBody), opt(s.registrationCategory), opt(s.registrationField), str(s.registrationNo));
+			return line
+				? `Signed off a run as ${str(s.fullName)}, ${line}`
+				: `Signed off a run as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
+		}
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
 		case 'allocation.changed':

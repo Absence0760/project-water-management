@@ -35,7 +35,7 @@ const bulk = (u: User, query = '') => u.call('GET', `/projects/${projectId}/runs
 
 /**
  * The daily CSV's table lines (the header row may quote a header with a comma; value rows never do), after its
- * leading `#` provenance line, which the workbook carries on its Summary sheet instead.
+ * leading `#` lines (the disclaimer and the provenance), which the workbook carries on its Summary sheet instead.
  */
 async function dailyCsv(u: User, nodeId?: string) {
 	const res = await app.request(`/projects/${projectId}/runs/${runId}/export/daily.csv${nodeId ? `?nodeId=${nodeId}` : ''}`, {
@@ -44,8 +44,9 @@ async function dailyCsv(u: User, nodeId?: string) {
 	expect(res.status).toBe(200);
 	const text = new TextDecoder('utf-8', { ignoreBOM: true }).decode(await res.arrayBuffer());
 	const lines = text.replace('﻿', '').replace(/\r\n$/, '').split('\r\n');
-	expect(lines[0]).toMatch(/^# run=bulk; /);
-	return lines.slice(1);
+	expect(lines[0]).toMatch(/^# model estimates /); // the disclaimer line, then the provenance line
+	expect(lines[1]).toMatch(/^# run=bulk; /);
+	return lines.slice(2);
 }
 
 describe('GET …/runs/:runId/series/bulk', () => {

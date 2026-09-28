@@ -408,8 +408,12 @@ section it belongs to, with the example that taught it.
     quantity and span; the first and last x label under the ends; the peak
     (or, for storage, the low) marked by a dot with its value between them
     ("max 0.80", "low 15% · 19 Dec 2023"); pointing reads out the point
-    under the pointer ("Jul 0.40"); the accessible name is the item, the
-    caption and the numbers. A list of rows shows the caption once, as a
+    under the pointer ("Jul 0.40"), and so does the keyboard: a slider over
+    the line takes focus (Tab), starts at the mark and steps the read-out
+    and the dot with the arrows, Page Up/Down (a tenth) and Home/End, its
+    point in words as `aria-valuetext` (a sighted keyboard user otherwise
+    sees only the ends and the mark); a mouse press doesn't focus it. The
+    accessible name is the item, the caption and the numbers. A list of rows shows the caption once, as a
     column header over the sparklines (the Crops list), not in every row; a
     card shows its own (the Dams cards). The marked value is the same figure
     the page gives elsewhere: the dam card's low is the Dam levels table's

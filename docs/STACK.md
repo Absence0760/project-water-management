@@ -36,7 +36,7 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's).
+  query's and the RLS role check's).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
@@ -47,7 +47,7 @@ sides share.
   dev dependency the tests check both against (`writer.test.ts` fails if app
   code imports it), pinned as a URL dependency on its official CDN tarball
   (`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz`, integrity hash in
-  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand. Dev port `7777`. `frontend/.env.production` sets
+  `pnpm-lock.yaml`). Dependabot can't see a URL dependency, so bump it by hand. OSV can't read its version either, so `osv-scanner.toml` records the xlsx advisories 0.20.3 already fixes (with an expiry): update it with the pin. Dev port `7777`. `frontend/.env.production` sets
   `PUBLIC_API_URL=/api`.
 - **e2e/**: Playwright, fully local. It uses an isolated
   `water_e2e` database and its own servers on `:3101` (API) and `:7801` (site),
@@ -116,7 +116,7 @@ pnpm test:engine | test:frontend | test:backend   # test:backend includes the ro
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password

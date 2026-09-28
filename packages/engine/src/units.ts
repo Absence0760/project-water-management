@@ -44,8 +44,10 @@ function key(unit: string): string {
 	const megalitre = /^M[lL]/.test(unit.trim());
 	let k = unit
 		.trim()
-		.replace(/\s+per\s+/gi, '/')
-		.replace(/\s+/g, '')
+		// Whitespace runs collapsed first: `\s+per\s+` backtracks quadratically over a long run of spaces.
+		.replace(/\s+/g, ' ')
+		.replace(/ per /gi, '/')
+		.replace(/ /g, '')
 		.replace(/³|\^3/g, '3')
 		.toLowerCase()
 		.replace(/\/(day|days)$/, '/d')

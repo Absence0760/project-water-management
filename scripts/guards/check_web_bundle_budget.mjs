@@ -1132,6 +1132,15 @@
 //             (5.2 KB, its text, the departures and the generated known
 //             limitations), plus the trust strip's link and its Afrikaans
 //             word. No new dependency. Headroom ~5 KB.
+// 2026-09-28  total 1073 → 1083 KB (measured 1080, on Vite 8 with the
+//             methods page). Issue #47's liability work: the farm view's
+//             estimate callout and one-time acknowledgement, the Terms
+//             re-acceptance notice (its own chunk, loaded only for an account
+//             on old terms) and sign-up summary, the signer's registration
+//             selects (signoff-3), the report's "Read this first" box and
+//             footer text, the share-page line, the workbook's disclaimer
+//             sheet, and their Afrikaans words. No new dependency. Headroom
+//             ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1142,7 +1151,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1073,
+	totalCodeKb: 1083,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,

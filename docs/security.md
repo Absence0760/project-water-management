@@ -670,10 +670,15 @@ against its owner, and a farmer's mail naming a neighbour's farm.
   every alert mail (SESv2 `Simple` content's `Headers`; nodemailer's
   `headers`). `sendMail` makes every header value one line and refuses a
   header name that isn't a token, so no user text can inject a header.
-- **Liability.** Every alert says it is a model estimate from the WUA's
-  published figures, not a measurement or an instruction, and to check with
-  the WUA before acting; a forecast says forecasts change; a restriction
-  notice says it is the WUA's own words.
+- **Liability.** A dam alert says it is the model's estimate from the WUA's
+  published figures, not a measurement of the dam or an instruction, to
+  check the dam and ask the WUA, and that only a notice from the WUA or DWS
+  is a restriction (to the WUA's staff, the same in the third person); the staff-only EWR forecast alert says it comes from the
+  newest forecast run, which may not be published, and is an estimate, not
+  a restriction; a forecast says forecasts change; a restriction notice
+  says it is the WUA's own words and questions go to the WUA. The
+  operational alerts (feeds, jobs) carry no liability line
+  ([ui.md § Alerts](./ui.md#alerts)).
 - **A bounced or complaining address pauses its alerts.** SES drops mail
   to an address on its suppression list; the app learns of it through the
   configuration set's `BOUNCE` / `COMPLAINT` event destination → SNS
@@ -818,7 +823,13 @@ In short:
   `SECURITY DEFINER` or a pinned `search_path` can't be inlined and is planned
   again on every call, and a policy calls them once per row (writing a run's
   hundreds of series spent 0.8 ms a row on them). Keep new role helpers in PL/pgSQL
-  for the same reason.
+  for the same reason. And return before the query when there is no user
+  (`app_current_user_id()` NULL: an API key's session, the job queue's), as
+  `app_project_role` does since 094_role_check_no_user and `app_user_visible`
+  always has: with the user NULL every custom plan of the query folds to
+  "false" and looks cheaper than the generic plan, so PL/pgSQL's plan cache
+  plans it again on every call (~150 µs a row; the ingest key sweep over
+  every table timed out in CI). `role-check.db.perf.test.ts` guards it.
 - The backend connects as **`water_app`**: no superuser, no `BYPASSRLS`, owns
   no tables. Each request that touches project data runs in a transaction that
   sets `app.current_user_id` (transaction-local), and RLS policies on every
@@ -1563,14 +1574,17 @@ by the WUA; nobody is added to a project without an owner acting.
   signed up for, and for farmers the WUA's function of managing its members'
   water use (legitimate interest or a legal duty under its constitution)
   *(confirm)*. The **privacy notice** is at `/privacy` and the terms at
-  `/terms` (drafts before counsel review, [legal-status.md](./legal-status.md));
-  the sign-up form, invitations included, says that signing up accepts
-  both, and sends the version it showed: the account records it and when
+  `/terms` (research-based, not counsel-reviewed, [legal-status.md](./legal-status.md));
+  the sign-up form, invitations included, shows the Terms' main points and
+  a required checkbox accepting both, and sends the version it showed: the
+  account records it and when
   (`app_user.terms_version` / `terms_accepted_at`, 087; a missing or stale
   version is refused, `terms_not_accepted`). The time is the database's,
   and an account can't backdate or clear its own record
-  (`app_user_terms_stamp`). Asking again after a change is open in
-  legal-status.md.
+  (`app_user_terms_stamp`). After a change, an account on an older version
+  sees a notice before any app page until it accepts
+  (`POST /auth/me/accept-terms`, which refuses a stale version the same
+  way).
 - Notes, the audit log, publications and sign-offs: the project's record,
   kept for the regulator's audit trail (roadmap §7).
 - Alerts (WP-2.13): service messages the WUA switches on per catchment,
@@ -1806,14 +1820,31 @@ readable by anyone. The rules:
   alarm, so a model bug in production is paged, not just shown as a warning
   on the one run.
 
+
+### Accepted IaC findings
+
+CI's Trivy config scan (`terraform.yml`, Terraform and
+`backend/renderer.Dockerfile`, HIGH/CRITICAL to the Security tab) flags these
+on purpose-built resources. Each carries a `#trivy:ignore:<ID>` with its reason
+beside the resource; a new ignore needs a line here too.
+
+| Finding | Resources | Why it stays |
+| --- | --- | --- |
+| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
+
+Revisit AWS-0132 for `reports` if a client contract asks for customer-held
+keys or key-level audit of report reads.
+
 ## Liability
 
 Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 
 - **Disclaimer.** Every report ends with the disclaimer (engine
-  `DISCLAIMER`, versioned). It is **draft** wording until the client's legal
-  adviser agrees it (decision D10; an operator item in followups.md §
-  Blocking releases), and the report says so in bold beside it.
+  `DISCLAIMER`, versioned). Version `2026-09-28` is agreed: the operator
+  accepted it after a pre-counsel review, not an external legal adviser
+  (decision D10). A wording marked `draft` shows a bold draft line beside
+  it on every surface.
 - **Known limitations can't be left out quietly.** The report's validation
   statement lists every open engine-audit.md item, generated from the doc;
   a test fails when the committed list and the doc differ.
@@ -1821,11 +1852,17 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
   ([data-model.md § Sign-offs](./data-model.md#sign-offs-036_signoffsql)).
   - *Who:* editors and owners, as themselves only (RLS `user_id =
     app_current_user_id()`); viewers read; farmers see nothing.
-  - *What:* the server rebuilds the statement (the five confirmations, the
+  - *What:* the server rebuilds the statement (the ten confirmations of
+    `signoff-3`, the
     limitations, the notes, the disclaimer version, the run's id and engine
     version) and refuses a sign-off whose SHA-256 isn't that statement's, so
     a signature is bound to the words shown. Every confirmation must be
-    ticked; a legacy run (a stored run from before engine 1.0.0, which
+    ticked. The registration is fixed choices (engine
+    `liability/registration.ts`, 092): SACNASP or ECSA, a category and a
+    field or discipline. A candidate, certificated or specified category is
+    refused (400): they work under a professional's supervision (NSP Act
+    s 22(2); Engineering Profession Act s 18(4)), so the supervising
+    professional signs. An unusual category or field only warns. A legacy run (a stored run from before engine 1.0.0, which
     removed that model) can't be signed (audit H1), nor can a run whose
     server stamp is missing or no longer matches its rows
     ([§ Run stamps](#run-stamps)).
@@ -1841,8 +1878,11 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
     project still takes its sign-offs with it (cascade), unless it has an
     evidence nomination (035). Each sign-off is in the audit log.
   - *Limits, stated on the report and in the dialog:* the registration
-    number is **self-declared** (not checked against the SACNASP register);
-    dam safety classification (DW793) is for others; there is no MFA on
+    details are the **signer's own declaration** (not checked against the
+    ECSA or SACNASP register, and printed "self-declared"; the report prints
+    the chosen register's address beside each signature); dam
+    safety (NWA Chapter 12, DW793) isn't covered; the sign-off makes no
+    finding on lawfulness and doesn't verify the app's software; there is no MFA on
     signing yet (Step 4), so a sign-off is as strong as the signer's
     password. The typed name and registration are personal data: the
     data-subject export lists them (`signoffs`), and deletion keeps the row

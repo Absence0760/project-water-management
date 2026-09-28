@@ -42,7 +42,20 @@ const decode = (s: string) =>
 		.replace(/&amp;/g, '&');
 
 /** HTML comments removed: one that mentions <pre> must not be taken for the table. */
-export const stripHtmlComments = (raw: string) => raw.replace(/<!--[\s\S]*?-->/g, '');
+export function stripHtmlComments(raw: string): string {
+	// A scan, not /<!--[\s\S]*?-->/g: that retries from every unclosed "<!--", quadratic on a hostile page.
+	let out = '';
+	let at = 0;
+	for (;;) {
+		const open = raw.indexOf('<!--', at);
+		if (open < 0) return out + raw.slice(at);
+		out += raw.slice(at, open);
+		const close = raw.indexOf('-->', open + 4);
+		// An unclosed comment runs to the end, as the regex's non-match left it in place: keep that.
+		if (close < 0) return out + raw.slice(open);
+		at = close + 3;
+	}
+}
 
 /**
  * The table text of a page: the decoded <pre> of a saved HyData.aspx page, or
@@ -51,9 +64,29 @@ export const stripHtmlComments = (raw: string) => raw.replace(/<!--[\s\S]*?-->/g
  */
 export function dwsTableText(raw: string): string | null {
 	const page = stripHtmlComments(raw);
-	const pre = page.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-	if (pre) return decode(pre[1]!);
-	return /^\s*DATE\s/m.test(page) && !/<html/i.test(page) ? page : null;
+	const pre = preText(page);
+	if (pre !== null) return decode(pre);
+	// [ \t]*, not \s*: under /m, \s* re-read every run of blank lines from each line start (quadratic).
+	return /^[ \t]*DATE\s/m.test(page) && !/<html/i.test(page) ? page : null;
+}
+
+/**
+ * The text of the first <pre>…</pre>, or null. A scan, not
+ * /<pre[^>]*>([\s\S]*?)<\/pre>/i: that retried from every "<pre" on a page
+ * of them left open, quadratic on a hostile page (CodeQL js/polynomial-redos).
+ */
+function preText(page: string): string | null {
+	const lower = page.toLowerCase();
+	for (let at = lower.indexOf('<pre'); at >= 0; at = lower.indexOf('<pre', at + 4)) {
+		// "<pre" then ">" or attributes: not "<prefix>".
+		const next = lower[at + 4];
+		if (next !== '>' && next !== undefined && !/\s/.test(next)) continue;
+		const open = lower.indexOf('>', at + 4);
+		if (open < 0) return null;
+		const close = lower.indexOf('</pre>', open + 1);
+		return close < 0 ? null : page.slice(open + 1, close);
+	}
+	return null;
 }
 
 export interface DwsColumns {

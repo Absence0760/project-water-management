@@ -52,7 +52,16 @@ export const SAMPLE: Record<string, (c: LadderCtx) => Sample> = {
 	'POST /projects/:id/scenarios/:sid/members': (c) => ({ body: { userId: c.contributor.id } }),
 	'DELETE /projects/:id/scenarios/:sid/members/:userId': (c) => ({ params: { userId: c.contributor.id } }),
 	'POST /projects/:id/runs/:runId/signoffs': () => ({
-		body: { fullName: 'Ladder Signer', registrationBody: 'SACNASP', registrationNo: '1', scope: 'ladder', confirmed: [], statementSha256: '0'.repeat(64) }
+		body: {
+			fullName: 'Ladder Signer',
+			registrationBody: 'sacnasp',
+			registrationCategory: 'pr_sci_nat',
+			registrationField: 'water_resources',
+			registrationNo: '1',
+			scope: 'ladder',
+			confirmed: [],
+			statementSha256: '0'.repeat(64)
+		}
 	}),
 	'POST /projects/:id/jobs': () => ({ body: { kind: 'rerun', label: 'Ladder' } }),
 	'POST /projects/:id/yield': (c) => ({ body: { nodeId: c.farmId, runId: c.runId, kind: 'firm' } }),

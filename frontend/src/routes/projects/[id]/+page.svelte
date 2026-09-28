@@ -236,7 +236,7 @@
 		try {
 			const { run: r, removedRunIds } = await api.runs.create(projectId, label);
 			const { summary: _s, ...meta } = r;
-			runs = [meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))];
+			setRuns([meta, ...(runs ?? []).filter((x) => x.id !== r.id && !removedRunIds.includes(x.id))]);
 			banner = null;
 			await goto(`?tab=runs&run=${r.id}`, { noScroll: true });
 		} catch (e) {
@@ -281,7 +281,7 @@
 			project = p;
 			editor.load(m);
 			series = sl;
-			runs = rl;
+			setRuns(rl);
 		} catch (e) {
 			// A farmer gets 403 from the workspace's routes: their view of this
 			// project is the farm page (WP-2.6). An applicant's is the Applicant
@@ -313,9 +313,34 @@
 	}
 	/** Refresh the shared lists in place (keeps the current values on failure). */
 	async function loadLists() {
-		const [sl, rl] = await Promise.allSettled([api.series.list(projectId), api.runs.list(projectId)]);
-		if (sl.status === 'fulfilled') series = sl.value;
-		if (rl.status === 'fulfilled') runs = rl.value;
+		await Promise.all([
+			api.series.list(projectId).then(
+				(l) => (series = l),
+				() => {}
+			),
+			loadRuns()
+		]);
+	}
+	async function loadRuns() {
+		for (;;) {
+			const at = runsEdits;
+			const list = await api.runs.list(projectId).catch(() => null);
+			if (!list) return;
+			// A run made or removed meanwhile (here or in a tab): this list predates it, so ask again rather than drop the run.
+			if (runsEdits !== at) continue;
+			runs = list;
+			return;
+		}
+	}
+	/**
+	 * Bumped by every change to the runs list (setRuns: the first load, a run made here, and every change a tab
+	 * reports), so a list fetched before it is asked for again (loadRuns) rather than bring back a run just
+	 * deleted (issue #77) or drop one just made.
+	 */
+	let runsEdits = 0;
+	function setRuns(next: RunMeta[] | null) {
+		runs = next;
+		runsEdits++;
 	}
 
 	// Reload when the route param changes (e.g. navigating between projects).
@@ -704,7 +729,7 @@
 								{runs}
 								canRun={canEdit}
 								modelDirty={editor.dirty}
-								onRunsChange={(l) => (runs = l)}
+								onRunsChange={setRuns}
 								onInputsRestored={reloadInputs}
 							/>
 						{/snippet}
@@ -735,7 +760,7 @@
 					</Lazy>
 				{:else if tab === 'scenarios'}
 					<Lazy load={LOAD.scenarios}>
-						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={(l) => (runs = l)} />{/snippet}
+						{#snippet children(ScenariosTab)}<ScenariosTab {projectId} {runs} {canEdit} onRunsChange={setRuns} reloadRuns={loadRuns} />{/snippet}
 					</Lazy>
 				{:else if tab === 'allocations'}
 					<Lazy load={LOAD.allocations}>

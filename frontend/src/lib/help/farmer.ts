@@ -35,7 +35,7 @@ export const FARMER_HELP: HelpEntry[] = [
 		id: 'farm-pump-less',
 		term: 'Pump less (for the river)',
 		short: 'How much less you would have pumped on the days the river needed water, so it kept its reserve.',
-		long: 'Your farm page gives this per day the river needed it, not averaged over the whole season: cutting a little every day does little on the days that matter.\n\nIf your dam also held back water the river needed, the page says so separately. That part isn’t taken off your pumping; if your dam has an outlet or a bypass, letting that water through helps.\n\nThis is the model’s estimate. Only a notice from your WUA is a restriction.',
+		long: 'Your farm page gives this per day the river needed it, not averaged over the whole season: cutting a little every day does little on the days that matter.\n\nIf your dam also held back water the river needed, the page says so separately. That part isn’t taken off your pumping; if your dam has an outlet or a bypass, letting that water through helps.\n\nThis is the model’s estimate. Only a notice from your WUA or from DWS is a restriction.',
 		category: 'farmer',
 		aliases: ['pomp minder'],
 		related: ['farm-reserve', 'farm-model-band'],
@@ -72,7 +72,7 @@ export const FARMER_HELP: HelpEntry[] = [
 	{
 		id: 'farm-model-band',
 		term: 'Model: OK, watch or short',
-		short: 'The model’s own rating of your season so far. Not a restriction: only a notice from your WUA is one.',
+		short: 'The model’s own rating of your season so far. Not a restriction: only a notice from your WUA or from DWS is one.',
 		long: 'OK: you would have had at least 90 % of the water you needed after pumping less for the river. Watch: 70 to 90 %, or your dam held back water the river needed. Short: under 70 %.\n\nThese thresholds are a proposal the WUA may change.',
 		category: 'farmer',
 		related: ['farm-pump-less'],
@@ -85,5 +85,15 @@ export const FARMER_HELP: HelpEntry[] = [
 		long: 'It holds only your own farm’s figures, which you may see anyway. It is removed when you sign out, when someone else signs in on this phone, when you no longer have access to the farm, and when it hasn’t been opened for 30 days.\n\nOn a phone you share, choose "Don’t keep a copy on this phone" in the Menu.',
 		category: 'farmer',
 		source: 'docs/design/farmer-view.md §9'
+	},
+	{
+		id: 'farm-wua',
+		term: 'WUA (Water User Association)',
+		short: 'The body of water users that manages water use in your area. It publishes the figures on this page, and its own notices.',
+		long: 'A Water User Association (WUA) is a body of the water users in an area, set up under the National Water Act. It manages how water is shared among its members, and it issues the notices that tell farmers to use less water. Some areas still have an irrigation board instead, which does the same job until it becomes a WUA.\n\nThe figures on your farm page are the ones your WUA published. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction. Ask your WUA if anything on the page is unclear.',
+		category: 'farmer',
+		aliases: ['WGV', 'watergebruikersvereniging', 'irrigation board', 'besproeiingsraad'],
+		related: ['farm-modelled', 'farm-model-band'],
+		source: 'National Water Act (Act 36 of 1998) ch 8; s98 (irrigation boards)'
 	}
 ];

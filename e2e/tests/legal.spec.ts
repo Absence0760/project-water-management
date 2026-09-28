@@ -1,6 +1,6 @@
 // The legal pages (/privacy, /terms): prerendered static HTML like /welcome,
 // open to anyone signed in or out, linked from the landing page's footer, the
-// sign-in pages and the sign-up form (which says that signing up accepts
+// sign-in pages and the sign-up form (whose required checkbox accepts
 // them). docs/ui.md § Legal pages.
 import { expectNoViolations } from '../support/a11y.ts';
 import { LEGAL_VERSION } from '../support/api.ts';
@@ -10,8 +10,8 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 const PAGES = [
-	{ path: '/privacy', title: 'Privacy notice', must: ['Jared Howard', 'jared@jaredhoward.com', 'Information Regulator', 'POPIAComplaints@inforegulator.org.za', 'af-south-1'] },
-	{ path: '/terms', title: 'Terms of use', must: ['Jared Howard', 'jared@jaredhoward.com', 'Model results are estimates', 'Commonwealth of Virginia'] }
+	{ path: '/privacy', title: 'Privacy notice', must: ['Jared Howard', 'jared@jaredhoward.com', 'Information Regulator', 'POPIAComplaints@inforegulator.org.za', 'af-south-1', 'POPIA section 21'] },
+	{ path: '/terms', title: 'Terms of use', must: ['Jared Howard', 'jared@jaredhoward.com', 'Model results are estimates', 'The short version', 'the law of the Republic of South Africa', 'Commonwealth of Virginia'] }
 ];
 
 for (const p of PAGES) {
@@ -93,11 +93,20 @@ test('the landing footer, the sign-in pages and the sign-up form link both pages
 	await expect(page.getByRole('navigation', { name: 'Legal' }).getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
 
 	await page.goto('/register');
-	const agree = page.getByText('By creating an account, you agree to the');
-	await expect(agree).toHaveText('By creating an account, you agree to the Terms of use and Privacy notice.');
-	// Above the button that makes the account, so it is read before the click that accepts it.
+	// The main points first, then a required box, unticked, then the button:
+	// read before the click that accepts them.
+	const summary = page.getByRole('region', { name: 'The main things you agree to' });
+	await expect(summary.getByRole('listitem')).toHaveCount(4);
+	await expect(summary).toContainText('our total liability to you is limited to the fees you paid in the last 12 months or US $100');
+	await expect(summary).not.toContainText('this summary is in your language');
+	const box = page.getByRole('checkbox', { name: 'I have read the main points above and accept the Terms of use and Privacy notice.' });
+	await expect(box).not.toBeChecked();
+	await expect(box).toHaveAttribute('required', '');
+	const agree = page.locator('label[for="agree"]');
+	const summaryBox = (await summary.boundingBox())!;
 	const agreeBox = (await agree.boundingBox())!;
 	const button = (await page.getByRole('button', { name: 'Create account' }).boundingBox())!;
+	expect(summaryBox.y + summaryBox.height).toBeLessThanOrEqual(agreeBox.y);
 	expect(agreeBox.y + agreeBox.height).toBeLessThanOrEqual(button.y);
 	await expect(agree.getByRole('link', { name: 'Terms of use' })).toHaveAttribute('href', '/terms');
 	await expect(agree.getByRole('link', { name: 'Privacy notice' })).toHaveAttribute('href', '/privacy');

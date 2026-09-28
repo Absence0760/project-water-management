@@ -34,7 +34,8 @@
 		canEdit,
 		applicant = false,
 		publishedRunId = null,
-		onRunsChange
+		onRunsChange,
+		reloadRuns
 	}: {
 		projectId: string;
 		runs: RunMeta[] | null;
@@ -44,6 +45,11 @@
 		/** The current publication's run: an applicant's base. */
 		publishedRunId?: string | null;
 		onRunsChange: (runs: RunMeta[]) => void;
+		/**
+		 * Re-read the shared run list (the page's loadRuns): a list read before a later change, such as a
+		 * scenario run made here (onRunsChange bumps the page's count), is asked for again, never applied (issue #77).
+		 */
+		reloadRuns: () => Promise<void>;
 	} = $props();
 
 	const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -129,7 +135,7 @@
 		// An applicant has no run list (the workspace's routes refuse them).
 		if (applicant) return;
 		try {
-			onRunsChange(await api.runs.list(projectId));
+			await reloadRuns();
 		} catch {
 			// The lists stay as they were (see above).
 		}

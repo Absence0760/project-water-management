@@ -144,7 +144,9 @@ beforeAll(async () => {
 	const { statement, statementSha256 } = await call(subject, 'GET', signPath);
 	await call(subject, 'POST', signPath, {
 		fullName: TYPED_NAME,
-		registrationBody: 'SACNASP',
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationField: 'water_resources',
 		registrationNo: `R-${tag}`,
 		scope: 'water balance',
 		confirmed: statement.confirmations.map((k: { id: string }) => k.id),

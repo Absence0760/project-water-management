@@ -6,6 +6,7 @@ import type {
 	EnsembleHeader,
 	EnsembleRequest,
 	EnsembleSummary,
+	ForecastRainSource,
 	InputChange,
 	MemberResult,
 	NoticeText,
@@ -22,6 +23,7 @@ import type {
 	RunInputsSnapshot,
 	RunSeriesSnapshot,
 	SignoffStatement,
+	RegistrationBodyCode,
 	RunSummary,
 	ScenarioOp,
 	SeasonalOutlook,
@@ -69,6 +71,12 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/**
+	 * Acknowledged the farm view's notice now in force (app_user.farm_notice_version,
+	 * 093, against the engine's FARMER_NOTICE_VERSION). The farm pages show the
+	 * notice instead of the figures while this is false.
+	 */
+	farmNoticeCurrent?: boolean;
 }
 
 export interface UserPreferences {
@@ -680,6 +688,13 @@ export interface Run extends RunMeta {
 	 */
 	inputSeries?: Partial<Record<string, RunSeriesSnapshot>> | null;
 	/**
+	 * A forecast run's rain source (GET …/runs/:runId only): 'chirps_gefs'
+	 * when a CHIRPS-GEFS feed wrote every forecast day, 'other' otherwise; null
+	 * for any other run and a forecast run stored before it was recorded. The
+	 * report credits CHIRPS-GEFS only on 'chirps_gefs'.
+	 */
+	forecastRainSource?: ForecastRainSource | null;
+	/**
 	 * Its server stamp still matches its rows (GET …/runs/:runId only;
 	 * docs/security.md § Run stamps): false for a run written past the model
 	 * run, or changed since, which can't be signed off.
@@ -1218,7 +1233,11 @@ export interface Signoff {
 	id: string;
 	runId: string;
 	fullName: string;
+	/** 'sacnasp' or 'ecsa' from signoff-3 (engine liability/registration.ts); the signer's free text on older rows. */
 	registrationBody: string;
+	/** Category and field codes; null on a signoff-1 or -2 row (not recorded). */
+	registrationCategory: string | null;
+	registrationField: string | null;
 	registrationNo: string;
 	scope: string;
 	statementVersion: string;
@@ -1243,7 +1262,10 @@ export interface SignoffList {
 /** POST /projects/:id/runs/:runId/signoffs. */
 export interface SignoffRequest {
 	fullName: string;
-	registrationBody: string;
+	registrationBody: RegistrationBodyCode;
+	/** A category and a field (SACNASP) or discipline (ECSA) of that body; a blocked category is refused (400). */
+	registrationCategory: string;
+	registrationField: string;
 	registrationNo: string;
 	scope: string;
 	/** Every confirmation id of the statement. */

@@ -86,6 +86,18 @@ export async function termsAccepted(email: string): Promise<{ version: string | 
 	});
 }
 
+/**
+ * Record that these accounts accepted terms `version` (app_user.terms_version;
+ * the database stamps the time). The seeded demo accounts accepted nothing,
+ * so they would meet the re-acceptance notice (docs/legal-status.md) on every
+ * page; an older version sets one up for it.
+ */
+export async function setTermsVersion(emails: string[], version: string): Promise<void> {
+	await withDb(async (db) => {
+		await db.query('UPDATE app_user SET terms_version = $2 WHERE email = ANY($1) AND terms_version IS DISTINCT FROM $2', [emails, version]);
+	});
+}
+
 /** Re-key the pending invite(s) for `email` so the test knows the link token. */
 export async function plantInviteToken(email: string): Promise<string> {
 	const { token, hash } = newToken();
@@ -139,6 +151,49 @@ export async function plantLegacyRun(runId: string): Promise<void> {
 			[runId]
 		);
 		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
+ * A sign-off as it was recorded under statement signoff-2, before the
+ * registration category and field were (092_signoff_registration): a
+ * free-text body and NULL category and field. The route only makes current
+ * sign-offs, so the spec that shows how an older one prints plants one.
+ */
+export async function plantSignoff2(runId: string, fullName: string, registrationBody: string, registrationNo: string): Promise<void> {
+	await withDb(async (db) => {
+		const r = await db.query(
+			`INSERT INTO signoff (project_id, run_id, full_name, registration_body, registration_no, scope, statement_version, statement_sha256, disclaimer_version, signed_at)
+			 SELECT project_id, id, $2, $3, $4, 'an earlier review', 'signoff-2', repeat('e', 64), '2026-09-28', now() - interval '1 day'
+			 FROM model_run WHERE id = $1`,
+			[runId, fullName, registrationBody, registrationNo]
+		);
+		if (r.rowCount !== 1) throw new Error(`no run ${runId}`);
+	});
+}
+
+/**
+ * Make a project's forecast series look written by a CHIRPS-GEFS feed, every
+ * day of it, as the feed's ingest leaves it (time_series.feed_id + feed_days,
+ * 031_feed_days): a disabled feed with no acting user, which no worker tick
+ * (data-feeds.spec.ts) ever finds due, owns the series' days. A forecast run
+ * then records CHIRPS-GEFS as its rain source. The real ingest path is
+ * covered by backend/src/feeds/forecast.db.test.ts.
+ */
+export async function plantGefsForecastDays(projectId: string): Promise<void> {
+	await withDb(async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO data_feed (project_id, source, config, target_kind, target_name, enabled)
+			 SELECT $1, 'chirps_gefs', '{"cells":[{"lat":-20.1,"lon":25.1}]}'::jsonb, 'rain_forecast_mm', name, false
+			 FROM time_series WHERE project_id = $1 AND kind = 'rain_forecast_mm' RETURNING id`,
+			[projectId]
+		);
+		if (rows.length !== 1) throw new Error(`project ${projectId}: no single forecast series`);
+		await db.query(
+			`UPDATE time_series SET feed_id = $2, feed_days = datemultirange(daterange(start_date, start_date + cardinality("values")))
+			 WHERE project_id = $1 AND kind = 'rain_forecast_mm'`,
+			[projectId, rows[0]!.id]
+		);
 	});
 }
 

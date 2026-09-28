@@ -1393,7 +1393,6 @@ export function checkEwrAttribution(input: ModelInput, out: ModelOutput): string
 	// The EWR sites (engine ≥ 1.5.0: a gauge whose ewrSite flag is false isn't one).
 	// In the engine's order (outlet, then gauges by id): the stored binding site is an index into it.
 	const sites = [outlet, ...nodes.filter((n) => n.kind === 'gauge' && n !== outlet && n.ewrSite !== false).sort((a, b) => cmpStr(a.id, b.id))];
-	const byId = new Map(nodes.map((n) => [n.id, n]));
 	const ancestors = (site: string) => {
 		const set = new Set([site]);
 		for (let grew = true; grew; ) {

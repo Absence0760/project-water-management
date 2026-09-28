@@ -1,0 +1,17 @@
+# Advisories OSV (and so OpenSSF Scorecard's Vulnerabilities check) reports
+# that don't apply here. Each entry names why and expires, so it is re-checked.
+
+# SheetJS `xlsx` is pinned to 0.20.3 from its official CDN tarball
+# (frontend/package.json; docs/STACK.md), a dev dependency the spreadsheet
+# tests compare against. pnpm-lock.yaml records the version as that URL,
+# which OSV can't read as a version, so it reports every xlsx advisory.
+# 0.20.3 carries both fixes (0.19.3 and 0.20.2).
+[[IgnoredVulns]]
+id = "GHSA-4r6h-8v6p-xvw6"
+ignoreUntil = 2027-03-31
+reason = "Prototype pollution fixed in xlsx 0.19.3; the repo pins 0.20.3 by CDN URL, which OSV can't read as a version."
+
+[[IgnoredVulns]]
+id = "GHSA-5pgg-2g8v-p4x9"
+ignoreUntil = 2027-03-31
+reason = "ReDoS fixed in xlsx 0.20.2; the repo pins 0.20.3 by CDN URL, which OSV can't read as a version."

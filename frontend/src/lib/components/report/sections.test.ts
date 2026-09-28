@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Run } from '$lib/api/types';
-import { isReportReady, reportCharts, reportSections } from './sections';
+import { FORECAST_RAIN_NOTE, REPORT_NOT_EVIDENCE, REPORT_NOT_SIGNED } from '@water-management/engine';
+import { disclaimerSection, forecastNote, isReportReady, readFirst, reportCharts, reportSections } from './sections';
 
 type R = Pick<Run, 'summary' | 'model' | 'notes'>;
 const run = (over: { curtailment?: boolean; nodes?: number; notes?: string } = {}): R =>
@@ -74,5 +75,48 @@ describe('isReportReady', () => {
 
 	it('is ready at once when the data is in and there is nothing to draw', () => {
 		expect(isReportReady(true, [], {})).toBe(true);
+	});
+});
+
+describe('forecastNote', () => {
+	type F = Pick<Run, 'summary' | 'forecastRainSource'>;
+	const forecastRun = (source?: Run['forecastRainSource']): F =>
+		({ summary: { forecast: { from: '2022-01-29', to: '2022-02-11' } }, ...(source !== undefined ? { forecastRainSource: source } : {}) }) as unknown as F;
+
+	it('credits CHIRPS-GEFS on a forecast run whose forecast days a CHIRPS-GEFS feed wrote', () => {
+		expect(forecastNote(forecastRun('chirps_gefs'))).toBe(FORECAST_RAIN_NOTE('2022-01-29', 'chirps_gefs'));
+		expect(forecastNote(forecastRun('chirps_gefs'))).toMatch(/^From 2022-01-29, this run uses forecast rain \(CHIRPS-GEFS/);
+	});
+
+	it('gives any other forecast run (uploaded, or its source not recorded) the plain line', () => {
+		const plain = /^From 2022-01-29, this run uses forecast rain, not recorded rain\./;
+		expect(forecastNote(forecastRun('other'))).toMatch(plain);
+		expect(forecastNote(forecastRun(null))).toMatch(plain);
+		expect(forecastNote(forecastRun())).toMatch(plain);
+	});
+
+	it('gives a run with no forecast days none', () => {
+		expect(forecastNote({ summary: {} } as unknown as F)).toBeNull();
+	});
+});
+
+describe('readFirst (the cover box)', () => {
+	const sections = reportSections(run({ nodes: 3 }));
+	const signer = { fullName: 'A Person', registrationBody: 'ECSA', registrationNo: '123' };
+
+	it('points to the Disclaimer by its section number', () => {
+		expect(disclaimerSection(sections)).toBe(sections.length - 1);
+		expect(readFirst(sections, [], false).text).toContain(`(see the Disclaimer, section ${sections.length - 1})`);
+	});
+
+	it('says who signed, or that no one did', () => {
+		expect(readFirst(sections, [signer], false).status).toBe('Signed off by A Person (ECSA 123).');
+		expect(readFirst(sections, [], false).status).toBe(REPORT_NOT_SIGNED);
+	});
+
+	it('marks an unsigned run used as evidence as not for a licence application, and only that', () => {
+		expect(readFirst(sections, [], true).notEvidence).toBe(REPORT_NOT_EVIDENCE);
+		expect(readFirst(sections, [], false).notEvidence).toBeNull();
+		expect(readFirst(sections, [signer], true).notEvidence).toBeNull();
 	});
 });

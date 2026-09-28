@@ -30,18 +30,18 @@ const kalkoenkrans = node('Kalkoenkrans', outlet.id);
 const citrus = { id: crypto.randomUUID(), name: 'Citrus', cropFactor: monthly(0.7) };
 
 const P = () => `/projects/${projectId}`;
-const ALL = ['calibration', 'ewr', 'works', 'assurance', 'limitations'];
-
 /** Sign `runId` off as `u`, with the statement GET …/signoffs shows. */
 async function signOff(u: User, runId: string) {
 	const shown = await u.call('GET', `${P()}/runs/${runId}/signoffs`);
 	expect(shown.status).toBe(200);
 	return u.call('POST', `${P()}/runs/${runId}/signoffs`, {
 		fullName: 'Dr A. Assessor',
-		registrationBody: 'SACNASP',
+		registrationBody: 'sacnasp',
+		registrationCategory: 'pr_sci_nat',
+		registrationField: 'water_resources',
 		registrationNo: '400123/21',
 		scope: 'Hydrology of a synthetic application',
-		confirmed: ALL,
+		confirmed: shown.body.statement.confirmations.map((k: { id: string }) => k.id),
 		statementSha256: shown.body.statementSha256
 	});
 }

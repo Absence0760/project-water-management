@@ -26,13 +26,17 @@ on:
   workflow_dispatch:
 
 concurrency:
-  # Workflow-level grouping cancels both matrix legs together when a new
-  # commit lands on the same ref — that's the desired behaviour
-  # (no point analysing the stale SHA). `matrix.language` can't be
+  # Workflow-level grouping: on a PR, a new commit cancels both matrix legs
+  # together (no point analysing the stale SHA). `matrix.language` can't be
   # referenced at workflow level (job context only), and per-language
   # grouping isn't worth the complexity here.
   group: security-${{ github.ref }}
-  cancel-in-progress: true
+  # PRs only. On main a cancelled CodeQL job uploads a failed analysis, which
+  # the Security tab shows as "Code scanning configuration error: CodeQL is
+  # reporting errors" until the next full run (it did when several PRs merged
+  # minutes apart). On main a running scan finishes and a newer push waits;
+  # GitHub keeps only the newest waiting run, so skipped SHAs never start.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Workflow-level permission is the least-privilege baseline; the analyze
 # job below requests the additional scopes it actually needs. Per
@@ -100,6 +104,8 @@ jobs:
           # silently falls back to that when security-and-quality isn't
           # available — no per-language branching required.
           queries: security-and-quality
+          # Project-owned: what this repo keeps out of the scan, and why.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform analysis
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4

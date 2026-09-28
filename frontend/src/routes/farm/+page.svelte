@@ -11,6 +11,7 @@
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
+	import FarmNoticeGate from '$lib/components/farm/FarmNoticeGate.svelte';
 	import FarmSkeleton from '$lib/components/farm/FarmSkeleton.svelte';
 	import FarmStatus from '$lib/components/farm/FarmStatus.svelte';
 	import { farmSummaryLine, farmsPrivacy, levelWord } from '$lib/components/farm/cards';
@@ -93,12 +94,14 @@
 		<FarmStatus kind="error" offline={failed.offline} attempts={failed.attempts} retry={load} />
 	{:else if rows == null}
 		<FarmSkeleton />
-	{:else}
+	{:else if rows.length === 0}
 		<h1>{t('Your farms')}</h1>
-		{#if rows.length === 0}
-			<p>{t('No farm is linked to your account yet. Your WUA links your farm to your account.')}</p>
-			{#if hasOther}<a class="link" href="{base}/">{t('Your projects')}</a>{/if}
-		{:else}
+		<p>{t('No farm is linked to your account yet. Your WUA links your farm to your account.')}</p>
+		{#if hasOther}<a class="link" href="{base}/">{t('Your projects')}</a>{/if}
+	{:else}
+		<!-- "Before you look at your farm" first, until acknowledged: this list carries figures too. -->
+		<FarmNoticeGate>
+			<h1>{t('Your farms')}</h1>
 			<ul class="farms">
 				{#each rows as r (r.projectId + '/' + r.nodeId)}
 					<li>
@@ -114,7 +117,7 @@
 				{/each}
 			</ul>
 			<p class="fine">{farmsPrivacy()}</p>
-		{/if}
+		</FarmNoticeGate>
 	{/if}
 </FarmShell>
 

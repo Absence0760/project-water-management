@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WATER_YEAR_MONTHS } from '$lib/format/months';
-import { dotAt, extremeIndex, markText, nearestPoint, readout, sparkDescription, sparkPaths, sparkPoints, SPARK_H, SPARK_W } from './sparkline';
+import { dotAt, extremeIndex, keyStep, markText, nearestPoint, readout, sparkDescription, sparkPaths, sparkPoints, SPARK_H, SPARK_W } from './sparkline';
 
 const f2 = (v: number) => v.toFixed(2);
 const pc = (v: number) => `${Math.round(v)}%`;
@@ -75,5 +75,30 @@ describe('sparkDescription', () => {
 
 	it('says so when there is nothing to draw', () => {
 		expect(sparkDescription({ values: [null], labels: ['Oct'], format: f2, mark: 'max', markWord: 'max' }, ['Oct', 'Oct'])).toBe('no values');
+	});
+});
+
+describe('keyStep (the keyboard read-out)', () => {
+	const pts = sparkPoints(Array.from({ length: 25 }, (_, k) => k), 0, 24);
+
+	it('steps one point with the arrows, a tenth with Page Up/Down, to the ends with Home/End, and stops at the ends', () => {
+		expect(keyStep(pts, 5, 'ArrowRight')).toBe(6);
+		expect(keyStep(pts, 5, 'ArrowUp')).toBe(6);
+		expect(keyStep(pts, 5, 'ArrowLeft')).toBe(4);
+		expect(keyStep(pts, 5, 'ArrowDown')).toBe(4);
+		expect(keyStep(pts, 5, 'PageUp')).toBe(8); // round(25 / 10) = 3
+		expect(keyStep(pts, 5, 'PageDown')).toBe(2);
+		expect(keyStep(pts, 5, 'Home')).toBe(0);
+		expect(keyStep(pts, 5, 'End')).toBe(24);
+		expect(keyStep(pts, 24, 'ArrowRight')).toBe(24);
+		expect(keyStep(pts, 1, 'PageDown')).toBe(0);
+	});
+
+	it('pages by one point on a short line, and leaves other keys (Tab) alone and a line with no points inert', () => {
+		const twelve = sparkPoints(Array.from({ length: 12 }, () => 1), 0, 1);
+		expect(keyStep(twelve, 3, 'PageUp')).toBe(4);
+		expect(keyStep(pts, 5, 'Tab')).toBeUndefined();
+		expect(keyStep(pts, 5, 'Enter')).toBeUndefined();
+		expect(keyStep([], 0, 'ArrowRight')).toBeUndefined();
 	});
 });
