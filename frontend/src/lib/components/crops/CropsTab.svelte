@@ -716,8 +716,10 @@
 		}
 		.crop-row,
 		.list-cols {
-			/* The flag's column is always there, so every row's sparkline lines up under the caption. */
-			grid-template-columns: 0.75rem minmax(0, 1fr) 6rem 44px auto;
+			/* The flag's column is always there, so every row's sparkline lines up under the caption. The sparkline
+			   keeps the desktop's 7rem: its ticks ("Oct  max 1.10  Sep") need 84 px in Noto Sans but 95 px in DejaVu
+			   Sans (Ubuntu's and Debian's default sans), so 6rem (84 px) cut the mark to "max …" there. */
+			grid-template-columns: 0.75rem minmax(0, 1fr) 7rem 44px auto;
 			gap: 0.4rem;
 		}
 		.bars li {

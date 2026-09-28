@@ -47,4 +47,4 @@ Then two short cross-reference sections against the client/consumers:
 
 ## Guard rails
 
-Read-only / generator — no commits required beyond writing the one artifact. If you do commit it, path-scope the commit (`git commit -m "…" -- reviews/endpoint-inventory.md`). **Never `git push`.**
+Read-only / generator — no commits required beyond writing the one artifact. If you do commit it, path-scope the commit (`git commit -m "…" -- reviews/endpoint-inventory.md`). **Never push `main`**: push your branch and open a PR (CLAUDE.md).

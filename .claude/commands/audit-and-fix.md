@@ -1,5 +1,5 @@
 ---
-description: Pick one app area (random if none given), audit it for real bugs, fix at the root, and back the fix with as much unit/integration/e2e coverage as the change warrants. Commits scoped; never pushes.
+description: Pick one app area (random if none given), audit it for real bugs, fix at the root, and back the fix with as much unit/integration/e2e coverage as the change warrants. Commits scoped; lands through a PR, never pushes `main`.
 argument-hint: "[optional area — a path, glob, module, or feature, e.g. src/retention.ts or 'the payment-run execute path']"
 ---
 
@@ -15,7 +15,7 @@ Deep-audit a single area of the project, fix the real issues you find, and ship 
 - **Be honest when there's no bug.** If the area is sound, say so plainly and make the deliverable the *test coverage gap* you closed — do **not** invent a "fix" to justify the command. A no-bug-found result with new tests is a success.
 - **Respect the project's documented invariants.** Don't bypass tenancy/isolation, don't log PII or secrets, don't loosen an auth or authorization check. If the area is auth, tenancy, migrations, the money/payment path, webhook handlers, PII, or approval/RBAC, treat it as **load-bearing** (mandatory review pass in step 5).
 - **Docs-as-code.** If you change a behaviour, command, env var, port, or convention, update its docs in the same commit.
-- **Commit each logical unit, path-scoped; never push.** Fix and tests are separate commits. Use `git commit -m "…" -- <paths>` (the scope-guard hook blocks bare/whole-tree commits). No `Co-Authored-By` / AI-attribution trailer.
+- **Commit each logical unit, path-scoped; PRs only, never push `main`.** Fix and tests are separate commits. Use `git commit -m "…" -- <paths>` (the scope-guard hook blocks bare/whole-tree commits). No `Co-Authored-By` / AI-attribution trailer.
 
 ## Procedure
 
@@ -56,7 +56,7 @@ Pick the right layer per the repo's conventions — the project's test layers (u
 - Run the **nearby existing** tests that exercise the same path to prove no regression — report the pass/fail counts faithfully.
 - If the change is **load-bearing** (auth, tenancy, migrations, the money/payment path, webhook handlers, PII, approval/RBAC), run the `code-reviewer` agent on the diff — and `repo-security-auditor` for a security-sensitive area — and apply or push back on its findings before committing. For migration work, route through `/safe-migration` / the `migration-coordinator` agent.
 
-### 6. Commit (scoped) — never push
+### 6. Commit (scoped) — on a PR branch
 
 - Commit the **fix** and the **tests** as separate path-scoped commits (conventional-commit style, no AI/co-author trailer). If a behaviour/doc changed, the doc edit rides with the commit that caused it.
 - If you only added tests (no bug), one `test(...)` commit is fine.

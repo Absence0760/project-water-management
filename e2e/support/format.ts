@@ -1,9 +1,11 @@
 // Figures as the app shows them (D10, issue #76): digits grouped with a
 // narrow no-break space (U+202F), '.' decimal. For expected strings built from
 // a computed number; a literal expectation writes the separator as \u202f.
-// Except in a regex matched against an accessible name or getByText /
-// hasText: Playwright normalises whitespace there, U+202F included, so those
-// patterns use a plain space.
+// Except in a regex matched against an accessible name (getByRole's name):
+// Playwright normalises whitespace there, U+202F included, so those patterns
+// use a plain space. A regex given to getByText / hasText is tested against
+// the raw text (Playwright's `full` text, not normalised), so it writes
+//   too; a plain space there never matches.
 // (The engine's format.ts, which the e2e workspace doesn't depend on.)
 
 /** A whole number as the app shows it: 1096 → "1 096". */

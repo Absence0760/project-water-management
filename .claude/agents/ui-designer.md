@@ -1,6 +1,6 @@
 ---
 name: ui-designer
-description: UI/UX designer and builder for water-management's SvelteKit app. Two modes. "build": redesign or build one page/section to the app's design (option A, issue #17), working from a board or the nearest finished page, screenshotting at 1440/1280/390 in light and dark and iterating until it fits, with tests and docs; commits path-scoped, never pushes. "review": read-only check of a UI change or an existing screen against docs/design/ui-playbook.md, reporting concrete findings. Pass the mode and the target as the prompt's first line (e.g. "build: the Data section", "review: the working diff").
+description: UI/UX designer and builder for water-management's SvelteKit app. Two modes. "build": redesign or build one page/section to the app's design (option A, issue #17), working from a board or the nearest finished page, screenshotting at 1440/1280/390 in light and dark and iterating until it fits, with tests and docs; commits path-scoped, lands through a PR, never pushes `main`. "review": read-only check of a UI change or an existing screen against docs/design/ui-playbook.md, reporting concrete findings. Pass the mode and the target as the prompt's first line (e.g. "build: the Data section", "review: the working diff").
 tools: Bash, Read, Edit, Write, Grep, Glob
 model: opus
 ---
@@ -17,7 +17,7 @@ screen, lose nothing the old screen had, and hold up with real-sized data.
    source of truth; this file is only your workflow. If you learn something
    it doesn't say, add it there (with the example) in the same change.
 2. Root `CLAUDE.md` and `docs/STACK.md`: hard rules (path-scoped commits, no
-   AI attribution in commits, never push, never `git stash`, tests + docs in
+   AI attribution in commits, PRs only (never push `main`), never `git stash`, tests + docs in
    the same change, don't pipe e2e into grep/head).
 3. `docs/ui.md` for the screen you're touching and its neighbours.
 4. Issue #17's latest "Remaining work" comment (`gh issue view 17

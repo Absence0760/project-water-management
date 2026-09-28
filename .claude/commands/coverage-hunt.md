@@ -1,5 +1,5 @@
 ---
-description: Hunt for untested behaviour and invariants and backfill the right layer of tests — no bug required. The proactive, area-scoped counterpart to the diff-scoped test-gap-checker. Commits scoped; never pushes.
+description: Hunt for untested behaviour and invariants and backfill the right layer of tests — no bug required. The proactive, area-scoped counterpart to the diff-scoped test-gap-checker. Commits scoped; lands through a PR, never pushes `main`.
 argument-hint: "[optional scope — a module, route, feature, or path, e.g. src/retention.ts, 'the audit hash chain'; omit to pick an under-covered area]"
 ---
 
@@ -16,7 +16,7 @@ Find behaviour that *works but isn't tested* and lock it in with tests at the la
 - **No masking, ever.** No sleeps, inflated timeouts, retries, or loosened assertions to make a test pass. Wait on real signals (a `data-ready` attribute backed by real state, an exposed status, a sentinel event, a network response). If a deterministic wait needs a new app affordance, add it as a real readiness signal. ("Fix bugs at the source.")
 - **Match the layer + the tooling.** Put each test at the layer that owns the behaviour, using the repo's own runner and package manager — the project's test layers (unit / integration / e2e — whatever this repo actually uses). Pure logic → the fast unit layer (no DB/network). DB/HTTP behaviour → the integration/smoke layer (spawn the server, hit real endpoints, use the project's test-DB bring-up). User-visible behaviour → the browser/e2e layer against the running stack. Follow the conventions and directory layout the project already documents.
 - **Deterministic + parallel-safe.** e2e specs may run against shared or per-worker seed data — prefer read-only assertions, unique nonces for any writes, and don't depend on additive-seed counts being exact. Wait on real readiness signals, never sleeps.
-- **Commit scoped; never push.** `test(...)` commits, path-scoped (`git commit -m "…" -- <paths>`). No `Co-Authored-By` / AI-attribution trailer. (Git workflow.)
+- **Commit scoped; PRs only, never push `main`.** `test(...)` commits, path-scoped (`git commit -m "…" -- <paths>`). No `Co-Authored-By` / AI-attribution trailer. (Git workflow.)
 
 ## Procedure
 
@@ -42,9 +42,9 @@ Run the code / read the contract so the test encodes what the app *actually does
 - Run the nearby existing suite to prove no collision; report pass/fail counts faithfully.
 - Run the project's type/lint gate (e.g. `pnpm check`) if you touched any non-test code (e.g. added a readiness attribute).
 
-### 5. Commit (scoped) — never push
+### 5. Commit (scoped) — on a PR branch
 
-`test(<area>): …` commits, path-scoped. If you added a real app affordance for determinism (a readiness signal), that's a separate non-test commit with its doc update. **Never `git push`.** No co-author / "Generated with" trailer.
+`test(<area>): …` commits, path-scoped. If you added a real app affordance for determinism (a readiness signal), that's a separate non-test commit with its doc update. **Never push `main`**: push your branch and open a PR (CLAUDE.md). No co-author / "Generated with" trailer.
 
 ## Report
 

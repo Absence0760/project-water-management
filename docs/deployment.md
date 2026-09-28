@@ -350,8 +350,9 @@ no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 
 ### What runs on every push to `main` and every pull request
 
-The operator currently pushes straight to `main`, so the push run is the
-complete check. PRs (Dependabot's, or anyone's) get the same run.
+Every change reaches `main` through a pull request (`main` is protected: PRs
+only, admins included), so each PR gets the full run before it merges, and the
+push run on `main` checks the merged result. Dependabot's PRs get the same run.
 
 | Workflow / job | What it checks |
 | --- | --- |
@@ -674,7 +675,10 @@ plan-only until the first deploy):
 - **Renderer Lambda** (`backend/src/lambda-renderer.ts`, handler
   `lambda-renderer.handler`): a **container image** built from
   `backend/renderer.Dockerfile` (Playwright's image `v1.63.0-noble`, the
-  Chromium e2e uses, plus the Lambda runtime interface client), x86_64,
+  Chromium e2e uses, pinned by digest, plus the Lambda runtime interface
+  client and playwright-core, installed with `npm ci` from the lockfile in
+  `backend/renderer-deps/`; moving Playwright means the tag and digest there,
+  that package.json and backend's, and a refreshed lock), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,

@@ -12,7 +12,7 @@ const enc = new TextEncoder();
 const entry = (name: string, text: string) => ({ name, data: enc.encode(text), crc: crc32(enc.encode(text)) });
 
 /** A one-entry deflated zip whose header fields can then be tampered with. */
-function oneDeflated(data: Uint8Array, name = 'a.xml'): { bytes: Uint8Array; view: DataView; cd: number } {
+function oneDeflated(data: Uint8Array, name = 'a.xml'): { bytes: Uint8Array<ArrayBuffer>; view: DataView; cd: number } {
 	const packed = new Uint8Array(deflateRawSync(data));
 	const nm = enc.encode(name);
 	const local = 30 + nm.length;

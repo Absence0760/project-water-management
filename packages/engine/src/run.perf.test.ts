@@ -4,7 +4,7 @@
 // inside the default `pnpm test` run flakes under load — a busy laptop or
 // three workspaces' suites running in parallel can push any single run over
 // budget with no engine regression involved. This file is its own vitest
-// project (`perf`, see vitest.workspace.ts): excluded from `pnpm test`, run
+// project (`perf`, see vitest.config.ts): excluded from `pnpm test`, run
 // serially via `pnpm test:engine:perf` / the root `pnpm test:engine:perf`,
 // and takes the median of several runs so one slow sample doesn't decide it
 // (the same technique backend/src/model/examples.perf.test.ts uses).
