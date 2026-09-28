@@ -4819,8 +4819,14 @@ published.
   WUA or DWS notice is a restriction; the operator doesn't check the WUA's
   figures and accepts no responsibility, with a link to the Terms of use,
   section 13). The press goes to `POST /auth/me/farm-notice` (stored on the
-  account, 093) and the figures follow at once. A new version shows it
-  again. Not shown to WUA staff previewing a farm, nor while there is
+  account, 093) and the figures follow at once. Pressed without a signal
+  (issue #74), the press is kept on the phone for that user and version
+  (`farm/noticeAck.ts`, `wm.farm.notice-ack.v1`) and the figures (the saved
+  copy) show; the page sends it when the signal is back (the `online` event,
+  or the next load), and the account's time is the server's when it
+  arrives. A refusal (the notice changed meanwhile, 409) drops it and the
+  notice shows again; another account on the phone never inherits it. A
+  new version shows it again. Not shown to WUA staff previewing a farm, nor while there is
   nothing published (the no-publication state has no figures). The words
   are bound to the version (`farmNotice.test.ts`) and quoted in
   `docs/legal/disclaimer-review.md` § 3.
