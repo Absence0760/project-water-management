@@ -30,6 +30,12 @@
 	const description = $derived(
 		t('Model a catchment day by day, from rainfall to river: what each farm is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
 	);
+	// The contour texture, set inline on each element that shows it: a url() in
+	// an inline style resolves against the page, where one passed through a
+	// custom property resolved against the stylesheet using it, so the
+	// prerendered page's relative base ('./landing/…') asked for
+	// /_app/immutable/assets/landing/contours.svg and got a 404 until hydration.
+	const contours = `url(${base}/landing/contours.svg)`;
 </script>
 
 <svelte:head>
@@ -48,7 +54,7 @@
 	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 
-<div class="landing" style:--contours="url({base}/landing/contours.svg)">
+<div class="landing">
 	<header class="top">
 		<a class="lockup" href="{base}/" aria-label={t('Water Management, home')}>
 			<BrandMark size={32} />
@@ -61,7 +67,7 @@
 	</header>
 
 	<main class="page-body">
-		<div class="contours" aria-hidden="true"></div>
+		<div class="contours" aria-hidden="true" style:mask-image={contours} style:-webkit-mask-image={contours}></div>
 		<div class="wrap">
 			<Hero />
 			<RiverDivider />
@@ -87,7 +93,7 @@
 	</main>
 
 	<footer class="foot">
-		<div class="contours" aria-hidden="true"></div>
+		<div class="contours" aria-hidden="true" style:mask-image={contours} style:-webkit-mask-image={contours}></div>
 		<div class="wrap foot-row">
 			<span class="lockup small"><BrandMark size={24} /><span>Water Management</span></span>
 			<nav aria-label={t('Footer')}>
@@ -95,6 +101,7 @@
 				<a href="{base}/register">{t('Create an account')}</a>
 				<a href="{base}/privacy">{t('Privacy notice')}</a>
 				<a href="{base}/terms">{t('Terms of use')}</a>
+				<a href="{base}/methods">{t('How the model is checked')}</a>
 			</nav>
 		</div>
 	</footer>
@@ -160,8 +167,12 @@
 		inset: 0 0 auto;
 		height: min(100vh, 900px);
 		background: var(--text);
-		mask: var(--contours) center top / max(1500px, 100%) auto no-repeat;
-		-webkit-mask: var(--contours) center top / max(1500px, 100%) auto no-repeat;
+		mask-position: center top;
+		mask-size: max(1500px, 100%) auto;
+		mask-repeat: no-repeat;
+		-webkit-mask-position: center top;
+		-webkit-mask-size: max(1500px, 100%) auto;
+		-webkit-mask-repeat: no-repeat;
 		opacity: 0.05;
 		pointer-events: none;
 	}

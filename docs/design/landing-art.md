@@ -118,16 +118,22 @@ that contradicts itself.
   engine by `landing-data.ts` (`hero.calibrationNse`), never typed in. It
   replaced "35 runs behind the what-if above", a count of work done rather
   than a reason to trust the result.
-- **No link to the engine audit.** The brief asked for a link to a public
-  summary of the engine audit. None is given: the audit (`docs/engine-audit.md`)
-  lives in the source repository, which isn't guaranteed to be public (it has
-  been private), and there is no public page that summarises it. A link a
-  visitor may not be able to open is worse than none, so the page says it in
-  words ("every place it departs from the workbook is written down"). When the
-  site serves a public summary, link it from that statement in `Trust.svelte`.
+- **The engine audit's public summary, `/methods`** ("How the model is
+  checked"), is linked under the trust statements and from the footer. The site
+  serves it itself (prerendered, like the legal pages) rather than linking
+  straight to `docs/engine-audit.md`, which is written for the engine's
+  maintainers; the page links the full audit in the public source for anyone
+  who wants the evidence. Its known limitations and "pending" marks come from
+  the engine's generated list, so it can't drift from the audit
+  ([ui.md § Methods page](../ui.md#methods-page)).
 - **Texture**: the contours at 5 % behind the hero and the footer, drifting a
   pixel or two over 40 s; a meandering river line between sections instead of
-  rules.
+  rules. The mask image is set inline on each `.contours` element, not
+  through a custom property: a `url()` in a custom property resolved against
+  the stylesheet that used it, so the prerendered page's relative base asked
+  for `/_app/immutable/assets/landing/contours.svg` (a 404) until it hydrated.
+  landing.spec.ts checks that `/welcome` loads every asset it asks for, with
+  and without script.
 
 ## Motion principles
 
@@ -162,5 +168,21 @@ that contradicts itself.
   guarded by `scripts/guards/check_web_bundle_budget.mjs`.
 - [ ] Prototype and operator review: the operator chose to review the built
   page directly rather than a prototype first (2026-09-27).
-- [ ] Lighthouse ≥ 95, LCP < 2 s on throttled 4G: to measure against the
-  deployed site (plan.md Phase 6); not measurable on the local static server.
+- [ ] Lighthouse ≥ 95, LCP < 2 s on throttled 4G, CLS 0: the final check is
+  on the deployed site (plan.md Phase 6). **Local baseline, 2026-09-28**
+  (Lighthouse 12, mobile preset: simulated slow 4G and a 4× CPU slowdown,
+  against `frontend/build` served with gzip and the prerendered `.html`
+  mapping, as CloudFront does; the e2e static server doesn't compress, which
+  alone cost ~20 performance points): `/welcome` Performance 97,
+  Accessibility 97, Best Practices 100, SEO 100, CLS 0, FCP 1.5 s, total
+  weight 164 KB, **LCP 2.4–2.6 s**, the one miss. `/methods` scores 100 / 100 /
+  100 / 100 with LCP 1.5 s. The LCP element is the hero render (the 1200 px
+  AVIF, 31 KB, `fetchpriority="high"`); its time splits into server response,
+  load delay and render delay. Tried and dropped, as neither moved LCP: preloading
+  the render from the head (per colour scheme), and inlining the stylesheets
+  (`kit.inlineStyleThreshold`; the prerendered page kept its links). What
+  remains is ~0.7 s of render delay, main-thread time (followups.md §
+  Landing page). Accessibility's 97 is the hero's gauge tag caught mid-fade
+  by the scan: hidden for 70 % of its 14 s loop, it is fully legible whenever
+  it shows. That same pass found and fixed two defects: no `robots.txt` (the
+  SPA fallback served HTML there) and the contour texture's 404 below.

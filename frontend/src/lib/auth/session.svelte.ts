@@ -23,11 +23,12 @@ export const OPEN_PATHS = ['/reset-password', '/verify-email', '/share', '/alert
 export const LANDING_PATH = '/welcome';
 
 /**
- * The prerendered static pages: the landing page and the legal pages
- * (/privacy, /terms). Reachable either way, rendered at once (their HTML is
+ * The prerendered static pages: the landing page, the legal pages
+ * (/privacy, /terms) and the methods page (/methods, the engine audit's
+ * public summary). Reachable either way, rendered at once (their HTML is
  * written at build time), and served from their .html by CloudFront.
  */
-export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms'];
+export const STATIC_PATHS = [LANDING_PATH, '/privacy', '/terms', '/methods'];
 
 /** Routes reachable without signing in. */
 export const PUBLIC_PATHS = [...GUEST_PATHS, ...OPEN_PATHS, ...STATIC_PATHS];
