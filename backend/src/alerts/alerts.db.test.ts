@@ -227,7 +227,17 @@ describe('subscriptions: own rows only, a farmer only for their own farm', () =>
 			['dam_below', 'Farm One', 'daily_digest'],
 			['restriction_published', null, 'immediate']
 		]);
+		// No rule for the farm yet: no level (issue #51).
+		expect(f.choices.map((c: { threshold: number | null }) => c.threshold)).toEqual([null, null]);
+		expect((await rules(editor, [{ kind: 'dam_below', nodeId: one.id, threshold: 0.35, enabled: true }])).status).toBe(200);
+		const withRule = (await farmer.call('GET', '/me/alerts')).body.projects.find((p: { id: string }) => p.id === projectId);
+		expect(withRule.choices.map((c: { kind: string; ruleOn: boolean; threshold: number | null }) => [c.kind, c.ruleOn, c.threshold])).toEqual([
+			['dam_below', true, 0.35],
+			['restriction_published', false, null]
+		]);
 		const v = (await viewer.call('GET', '/me/alerts')).body.projects.find((p: { id: string }) => p.id === projectId);
+		// The WUA's kind-wide dam choice carries no level (it is per farm).
+		expect(v.choices.find((c: { kind: string }) => c.kind === 'dam_below').threshold).toBeNull();
 		expect(v.choices.map((c: { kind: string; mode: string }) => [c.kind, c.mode])).toEqual([
 			['dam_below', 'off'],
 			['ewr_forecast_fail', 'off'],

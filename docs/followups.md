@@ -3152,6 +3152,16 @@ Left, each with its trigger:
       click tracking on the configuration set (POPIA: say so in the privacy
       notice) or a "Was this useful?" link. Trigger: one season of alerts on
       production (#92).
+- [ ] **A farmer's own dam alert level** (issue #51, the farmer persona:
+      "40 %, chosen by me, before my planting decision"). The page now
+      shows the WUA's level for each farm (`AlertChoice.threshold`), but only
+      the WUA sets it (`alert_rule`, one per farm, editors). Letting a farmer
+      pick their own warning level (a per-subscription threshold on
+      `alert_subscription`, beside the WUA's) is a
+      decision for the WUA, not a build: an alert at a farmer's level is
+      still the model's estimate, and a level above the WUA's could read as
+      an earlier restriction. Trigger: the client decides whether farmers
+      may set their own level (plan.md §9 questions).
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.

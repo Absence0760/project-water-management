@@ -861,12 +861,14 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farm or feed of another project `404`. Once `data_stale` is on for any
   feed, a feed added later gets its own rule, on, at its source's default.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
-  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
+  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn, threshold }`:
   `mode` is what you get now (the database's own rule,
   `app_alert_my_mode`), `defaultMode` your role's default, `chosen` whether
   you set it, `ruleOn` whether the catchment has it switched on (off, you
   get nothing whatever you choose). A farmer has one `dam_below` choice per
-  own farm; everyone else one for every farm. `muted`: every alert email
+  own farm; everyone else one for every farm. `threshold` is a farm's dam
+  alert level, the WUA's rule for that farm as a fraction (0.3 = 30 %),
+  `null` for any other choice or a farm with no rule (issue #51). `muted`: every alert email
   for the catchment is off (a digest's one-click unsubscribe).
 - `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
   digest), `daily_digest` (in the 06:00 summary, 06:00 in the project's time zone), `off`.

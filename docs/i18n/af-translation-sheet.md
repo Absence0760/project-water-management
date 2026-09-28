@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-9 strings: 8 on the site, 1 in emails, 0 in the glossary.
+10 strings: 9 on the site, 1 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -57,6 +57,14 @@ Farm view: the “Why?” page, the model’s look back in three steps.
 | `791611d4` | much more than an even share (about {amount}) | Keep: {amount} |  |
 | `1fb9de6d` | less than an even share (about {amount}) | Keep: {amount} |  |
 | `f8c02205` | more than an even share (about {amount}) | Keep: {amount} |  |
+
+### alerts
+
+The alert emails page (from the account page): which alerts a person gets by email, per catchment, and how often.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `c81abae4` | Warns when the model puts your dam below {pct}. Your WUA sets this level. | {pct} is the dam level the alert email warns below, like “30 %” (of the dam’s capacity). Keep: {pct} |  |
 
 ## Emails
 

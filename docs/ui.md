@@ -5138,7 +5138,11 @@ the catalogue, [§ Language](#language)); both unit-tested.
   move the choice; the picked one tinted, bold and ticked; 32 px with a
   mouse, 44 px on touch and phones; in a narrow card the switch goes under
   the name at full width). A farmer sees a *Dam running low: <farm>* row per
-  own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  own farm and *Restriction notices from the WUA*, nothing else; a farm's
+  dam row the WUA has switched on says under the switch at what level it
+  warns, "Warns when the model puts your dam below 30 %. Your WUA sets this
+  level." (also the row's description; `thresholdLine` in
+  `alerts/words.ts`, issue #51); a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
   ("Saved." in the card's head); the switch stays usable while it saves

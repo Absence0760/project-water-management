@@ -106,6 +106,7 @@ export const NOTES: Record<string, string> = {
 	'{from} to {to}': 'Two dates: “1 Oct to 10 Jan”.',
 	'Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.': '{age} is a count of days: “3 days”.',
 	'Next update expected around {date}.': 'Added after the dates line.',
+	'Warns when the model puts your dam below {pct}. Your WUA sets this level.': '{pct} is the dam level the alert email warns below, like “30 %” (of the dam’s capacity).',
 	'Set by the WUA: a {pct} cut in registered water use.': 'The WUA’s cut, like “20 %”: water users are asked to use that much less than their registered water use (not allowed only that much). The alert email says it the same way.',
 	'The WUA wrote this notice in {language} only.': 'Under the WUA’s notice when it isn’t in the reader’s language. {language} is the name of the language it is in, in the reader’s language: “English” (Afrikaans: “Engels”).',
 	'{got} of {need} since {from}': '“324.2 ML of 376.5 ML since 1 Oct”.',
