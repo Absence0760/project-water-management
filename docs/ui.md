@@ -275,24 +275,45 @@ sizes in both themes, with axe scans at desktop and phone size;
 
 ## Project workspace
 
-**Terminology: Unit (issue #54 item 2a, client question Q6).** The modeller
-workspace calls a demand node of kind `farm` a **unit**: a farm,
+**Terminology: hydrological unit (issue #54 item 2a; client question Q6,
+decided in issue #90).** Everywhere a user reads the name of a demand node
+of kind `farm`, the app calls it a **hydrological unit**: a farm,
 sub-catchment or town with land of its own, a runoff share, an optional dam
 and demands (a town that only draws water from the river is an *other water
-user*). Only the labels changed: Network, Crops & demand, the results
-panels, History, scenario forms, the printable report, the xlsx notes, the
-download menu's labels and the workspace help (`lib/help`: tips, articles,
-guides, tour; the one definition is the glossary's **Unit** entry,
-`element-farm`, which also says a unit is not a unit of measurement). The
-code, database, API and CSV names (`kind: 'farm'`, `/farm`, `farms.csv`,
-`farm_scope`), URL params, test ids, engine and API messages (run warnings,
-save errors) and the summary CSV's block titles keep **farm**. So does
-everything farmer-facing: the farmer view (`/farm`), its i18n messages and
-Afrikaans, emails and the public `/share` page, plus workspace text about
-what a farmer sees (the publication panel's "farm views", "Preview as
-farmer", the farmers list and the invite CSV's `farm` column, "Shown to
-the farm" on notes). The importer's notes keep b023's own terms, and node
-names ("Upper farm") are data. A new node is still named `Farm N`.
+user*). "Hydrological unit(s)" in a sentence, capitalised at its start
+("Hydrological units", "Your hydrological unit"). That covers the
+modeller workspace (Network, Crops & demand, the results panels, History,
+scenario forms, the farmers and publication panels, the printable report,
+the xlsx notes, the download menu's labels, the landing and methods pages
+and the workspace help, `lib/help`: tips, articles, guides, tour; the one
+definition is the glossary's **Hydrological unit** entry, `element-farm`,
+which also says it is not a unit of measurement) and, since issue #90,
+everything farmer-facing too: the farmer view (`/farm`: "My hydrological
+unit", "Your hydrological unit on the river", "Who can see my hydrological
+unit"), its i18n messages and Afrikaans ("hidrologiese eenheid",
+[farmer-view.md §5.1](./design/farmer-view.md#51-words)), the farmer
+glossary (`lib/help/farmer.ts`), the farmer emails ("Your hydrological unit
+on …", "Open your hydrological unit") and the public `/share` page. The
+client chose it knowing it is more technical for farmers. Engine check
+labels are reworded on the way in (`runs/checks.ts` `checkLabel`).
+
+What keeps **farm**: the code, database, API and CSV names (`kind: 'farm'`,
+`/farm`, `farms.csv`, `farm_scope`, the invite CSV's `farm` column), URL
+params (`unit=`), test ids, engine and API messages (run warnings, save
+errors, the bulk invite's "no farm named …") and the summary CSV's block
+titles. So do words that mean the real thing rather than the node: a
+**farmer** (the person, "Preview as farmer", "farmer views" in the
+publication panel), a **farm dam** (the kind of dam), "a farm, sub-catchment
+or town" where the glossary says what a unit can stand for, the landing
+picture's "two farm dams", and "a farm" as a business in the Terms. Three
+farmer-facing texts keep "farm" on purpose, as legal wording that needs its
+own decision: the farm notice's title "Before you look at your farm"
+(bound to `FARMER_NOTICE_VERSION` and quoted in the legal review pack, so
+rewording it means a new version every farmer re-accepts), and the Terms
+and Privacy pages (`/terms`, `/privacy`, versioned by `LEGAL_VERSION`). The
+importer's notes keep b023's own terms (and match `extract_project.py`),
+and node names ("Upper farm") are data. A new node is still named
+`Farm N`.
 
 A project opens on `/projects/:id`. The page loads the project, its model,
 the input-series list and the runs list behind one loading gate, so no tab
@@ -307,7 +328,7 @@ the standard "Loading…" state in the meantime
 The tabs are grouped into three sections, in this order: **Build the
 model** (Network, Crops & demand, Transfers, Data, Settings & calibration),
 **Review** (Project, Applications, History) and, at the bottom,
-**Outcomes** (Summary, River & reserve, Units & supply, Runs & results, Dams,
+**Outcomes** (Summary, River & reserve, Hydrological units, Runs & results, Dams,
 Compare runs, Scenarios, Allocations). Issue #17's option A put Outcomes
 first; the operator moved it last on 2026-09-27. The Summary is still the
 tab a project opens on. The sections are
@@ -376,7 +397,7 @@ which setup-checklist steps are links:
 | Role | Tabs shown |
 | --- | --- |
 | owner, editor | every tab |
-| viewer | Summary, River & reserve, Units & supply, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
+| viewer | Summary, River & reserve, Hydrological units, Runs & results, Dams, Compare runs, Scenarios, Allocations, Data, Project; Network, Crops, Transfers, Settings & calibration and History behind a **Show model inputs** checkbox at the end of the sections list. Never Applications |
 | contributor, farmer, none | Summary only (a farmer is redirected to `/farm/:id`, an applicant gets the Applicant view, [§ Applications](#applications-wp-33)) |
 
 Each tab is one entry in `TAB_GROUP` (`core`: everyone; `inputs`: the model
@@ -474,7 +495,7 @@ role, freshness, Add data) and each tab's own header:
   line ("3 crops · 675 ha irrigated on 8 farms · …"); Settings & calibration
   where the runoff parameters came from; Runs & results its run count and
   when the newest ran; River & reserve the run it shows (label, badges,
-  period, engine, the EWR rule); Units & supply, Dams, Scenarios,
+  period, engine, the EWR rule); Hydrological units, Dams, Scenarios,
   Allocations, Project and Applications a summary of what they hold; History
   the latest change, by whom and when. The others count what they hold (`workspace/context.ts`):
   "2 runs" on Compare runs, "4 input series · 1 behind",
@@ -670,7 +691,7 @@ put the results first; its first screen follows board A1 of the redesign
   below `LOW_SUPPLY`, with a key; a farm with no demand says "no demand"
   and goes last). A farm's name opens its [farm drawer](#farm-drawer)
   (`farmDrawerHref`), unless it has left the model since the run. Beside its
-  heading, **More on Units & supply** opens [Units & supply](#units--supply)
+  heading, **More on Hydrological units** opens [Hydrological units](#hydrological-units)
   for that run (`supplyHref`, `supply/links.ts`). Under the heading, one line
   says what the bars measure ("Share of each unit's irrigation demand
   supplied, latest run"). Its own chunk (it waits for the run's record
@@ -750,7 +771,7 @@ put the results first; its first screen follows board A1 of the redesign
   is below `LOW_SUPPLY`, amber for a short farm above it, run warnings and
   stale data, grey for new rainfall and unplanted farms (the title always says
   what's wrong, so colour is never the only cue). Items: farms below `SUPPLY_TARGET` in the latest run (the
-  worst named, links to [Units & supply](#units--supply) for the run with the
+  worst named, links to [Hydrological units](#hydrological-units) for the run with the
   worst unit picked (`?tab=supply&run=<id>&unit=<nodeId>`), and, while it is still a farm in the model,
   a second link, **Its planted areas**, to the [farm drawer](#farm-drawer)),
   the latest run's warnings (the first one as the detail), rainfall the latest run hasn't used
@@ -894,6 +915,11 @@ it scrolls, and isn't fitted to the window.
   the portfolio's ages, the feeds' health, the farm page's "not recent"
   notice and forecast date, and the alerts (their "today" and the 06:00
   digest). A zone the server doesn't know is refused with its error.
+- **WUA name** (Project details, under Time zone; issue #74): the name of
+  the Water User Association the farm pages tell a farmer to contact
+  ("Questions? Contact Vaalbank WUA."), saved with **Save details**
+  (editors); empty keeps "your WUA". Not the team's name, which may be a
+  consultancy's.
 - **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
   on a phone), then Project details, the import record, recent notes and
   recent changes on the left; on the right, "who has access": Team above
@@ -918,7 +944,10 @@ it scrolls, and isn't fitted to the window.
   farms linked to them, by name. Owners change a farmer's farms and remove
   one, and **Invite farmers** (WP-2.2, `project/InviteFarmersDialog.svelte`, its own chunk, fetched on first open)
   opens a dialog with two modes: *One farmer* (email, a tick box per farm,
-  the email's language) and *Several, from a CSV* (`email,farm,language`,
+  **Joins as** *Farmer* or *Applicant*, and for a farmer the email's
+  language; an applicant is a licence applicant who holds those farms,
+  WP-3.3, invited with the ordinary English invite email and badged
+  "applicant" in the pending list) and *Several, from a CSV* (`email,farm,language`,
   one farm per row, pasted or uploaded, header optional; parsing in
   `project/farmers.ts`). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's
@@ -982,8 +1011,8 @@ and the list still works). The wording comes from the portfolio's helpers
 both pages. Columns: **Catchment** (the name, then owner/team for *Shared
 with me*, your role and the updated date, and the description on one
 line), **EWR, last 30 days** (the pill in words and colour, and *Published*
-or *Latest run* with the figures' last day), **Units short** ("2 of 8 units
-short this week", a link to that run's curtailment on Units & supply;
+or *Latest run* with the figures' last day), **Hydrological units short** ("2 of 8 units
+short this week", a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published), **Lowest dam**, **Data** (the
 rain freshness badge, *Newer rain not in the figures*, the feeds' health)
 and **Last run** (its age, then the date or when it was published). A
@@ -992,7 +1021,7 @@ to your role").
 
 **Needs attention** (`projects/NeedsAttention.svelte`, rules in
 `projects/outcomes.ts` `attention`): the catchments in view to look at
-first, most urgent first: a red EWR, units short this week, alerts firing,
+first, most urgent first: a red EWR, hydrological units short this week, alerts firing,
 an amber EWR, failing or stale feeds, newer rain than the figures, figures
 over 7 days old (the portfolio's *stale*). Up to four cards (two a row on a
 mid-width page, three stacked on a phone), each naming its reasons in words
@@ -1006,7 +1035,7 @@ that hasn't run is not flagged.
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *EWR status* (worst
-first), *Units short*, *Lowest dam*, *Last run* (newest first), *Name*,
+first), *Hydrological units short*, *Lowest dam*, *Last run* (newest first), *Name*,
 from the Sort select or a column heading (`aria-sort`); an outcome sort puts
 rows without figures last. Old links (`?owner=`, `?sort=name`, `?new=1`)
 still work. With *All projects* the list is grouped (Personal, each team
@@ -1245,8 +1274,8 @@ Portfolio](./api.md#portfolio)):
   "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
   run it again" (dashed outline). Under it, how old the figures are
   ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
-- **Units short**: "2 of 8 units short this week" (a link to the
-  Curtailment panel of that run on [Units & supply](#units--supply), over the
+- **Hydrological units short**: "2 of 8 hydrological units short this week" (a link to the
+  Curtailment panel of that run on [Hydrological units](#hydrological-units), over the
   last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
   scrolls there once the run's results render and moves focus to the table's
   heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
@@ -1303,7 +1332,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
 
 - **Map** (the A2 board), a page of its own:
   - **Header** (with no nodes yet too): "Network" and one line on what it is
-    ("2 units · 2 dams · 1 gauge · draining to Outflow gauge · 32.0 km²";
+    ("2 hydrological units · 2 dams · 1 gauge · into Outflow gauge · 32.0 km²";
     "No nodes yet"); on the right a **Grids** menu (a disclosure named "Open
     as a grid": *Node table*, *Crop factors*, *Planted areas*, *Transfers*,
     each in the [grid modal](#grid-modal); Escape or a click outside closes
@@ -1335,7 +1364,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
     nothing can scroll to it (Sandspruit's top row was cut off at 1440 × 960).
     The side column is `clamp(17rem, 24vw, 22rem)`.
   - **Legend line:** the shapes, the supply bands present, the run they come
-    from ("Units coloured by … in run “test”, ran today", read out) and the
+    from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
   - The **Grids** menu closes through its element (`details.open`), not its
     bound state: the `toggle` event that updates the state is async, so an
@@ -1418,7 +1447,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   ("Continues on the next page") and over the next ("Continued from the
   previous page"). A drawing that fits its page prints as one picture, as
   before, and the screen never bands.
-- **Colour units by** (the Catchment map card's header, offered once there is
+- **Colour hydrological units by** (the Catchment map card's header, offered once there is
   a farm; component state, not kept in the URL). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
   second label line, the legend entries and a caption sentence, so nothing is
@@ -1496,10 +1525,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
   reach above the scrolling form in the sheet's fixed sub-header.
 - **Irrigation** group (engine ≥ 0.16.0, [engine-audit N1](./engine-audit.md)):
   efficiency and the share of losses returning. The one-node form adds an
-  **Irrigation system** select that sets an indicative efficiency (drip 90 %,
-  micro-sprinkler 85 %, centre pivot 85 %, sprinkler 75 %, flood 65 %,
-  `IRRIGATION_SYSTEMS` in the engine), labelled indicative; "Other" keeps the
-  value as typed. New farms start at 80 % and 50 %.
+  **Irrigation system** select that sets the system's SABI 2021 efficiency
+  (drip 90 %, micro-sprinkler 82 %, centre pivot / linear move 85 %,
+  permanent sprinkler 80 %, movable sprinkler 75 %, surface 70 %,
+  `IRRIGATION_SYSTEMS` in the engine, the same table as [Load crop
+  factors](#load-crop-factors)), labelled indicative; "Other" keeps the value
+  as typed (and is what a farm saved with a value off the table, e.g. the old
+  flood 65 %, shows). New farms start on drip, 90 % and 50 % (the client's
+  default, issue #90).
 - **Dam** fields also hold the area when full (m², empty = unknown), the area
   exponent (default 0.7) and seepage (% of storage per day) for dam
   evaporation and seepage ([engine-audit N2](./engine-audit.md)). These three
@@ -1715,7 +1748,7 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   the formula, m³/day per month, the mean and Mm³/a per unit and for the
   catchment) in place. An alert says when A-pan isn't set (demand is then
   zero).
-- **Planted area by unit:** one stacked bar per unit with something planted,
+- **Planted area by hydrological unit:** one stacked bar per unit with something planted,
   largest total first, split by crop in the list's colours and order, scaled
   to the largest unit, with its total ha (`farmBars`). Each bar is an image
   named with its parts ("Lower farm: 20 ha, Orchard 12 ha and Vines 8 ha");
@@ -1986,9 +2019,9 @@ card.
 
 The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 (its rules in `common/sectionNav.ts`): **Settings & calibration**, **Runs &
-results**, **River & reserve**, **Units & supply** and **Data**. Each page
+results**, **River & reserve**, **Hydrological units** and **Data**. Each page
 gives it its sections in groups (a `nav` labelled "Settings sections",
-"Result sections", "River sections", "Units & supply sections", "Data
+"Result sections", "River sections", "Hydrological units sections", "Data
 sections"); each group is a list named for screen readers, set apart by a
 wider gap. The dashboards that fit the window (Summary, Network, Crops,
 Dams, Transfers, Scenarios) and the pages with at most two panels past their
@@ -2248,8 +2281,8 @@ The run downloads (in the results' Download menu) are where the numbers can be
 checked outside the app. A farm's **daily CSV** has every column in the
 workbook's FarmTemplate order, the letter in each header
 (`Irrigation supplied [G] (m³/day)`), the working columns between them and the
-balance check `[V]` next to outflow. **Fragmented flow — all units** and
-**Fragmented EWR — all units** (only when the run has farms) put one series
+balance check `[V]` next to outflow. **Fragmented flow — all hydrological units** and
+**Fragmented EWR — all hydrological units** (only when the run has farms) put one series
 of every farm side by side, a date column then a column per farm, like
 the workbook's `[Fragmented flow]` (I) and `[Fragmented EWR]` (Y) sheets.
 Every daily CSV starts with a `# run=…; engine=…; runoff_model=…; created=…;
@@ -2628,7 +2661,7 @@ which checks every catchment tab).
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
   inverted band) show next to the field and block Save; the save bar links
   to the WR2012 group.
-- **Flow share between units**.
+- **Flow share between hydrological units**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) a bar chart captioned "Pragmatic EWR by month,
   Oct–Sep, m³/day" (`MonthlyBars`' `caption`) and the annual volume, the
@@ -2721,22 +2754,23 @@ which checks every catchment tab).
   EWR* (lower risk up to 5 %, increasing risk up to 20 % of days). Unticked,
   the two cut-offs are editable in %, starting from the defaults; cut-offs
   out of order or outside 0–100 % block Save (the engine's
-  `validateOutcomeCutoffs`, as the API checks them). The defaults are
-  placeholders until the client answers O1 and O2 (plan.md §
-  Decision-support outputs). Viewers see the group read-only. Like
+  `validateOutcomeCutoffs`, as the API checks them). The cut-offs'
+  defaults are placeholders until the hydrologist confirms them (O1; the
+  client agreed, issue #90); the class method's default is confirmed (O2,
+  plan.md § Decision-support outputs). Viewers see the group read-only. Like
   automatic runs it changes no input: saving only this group doesn't mark
   the runs as out of date.
 - **Seasonal outlook** (`#set-outlook`, issue #53 R5, `settings.outlook`;
   `outlook/OutlookSettingsSection.svelte`, part of the form, like the
   outcome matrix's): how the Runs tab's
   [seasonal outlook](#seasonal-outlook) is set up. **Season**, with **Use
-  the default season (1 Oct – 30 Apr)** ticked by default and a **Default
-  pending the client** badge while it is (O3); unticked, the decision date
-  and the season end as a month and a day each (29 February and a one-day
-  season block Save). **Planning share**, with **Use the default planning
-  share (80 %)** and the same badge (O6); unticked, a % of analogue years
-  in (0, 100]. The defaults are the engine's (`DEFAULT_OUTLOOK_SEASON`,
-  `DEFAULT_PLANNING_SHARE`). Viewers see it read-only; saving only this
+  the default season (1 Oct – 30 Apr)** ticked by default (O3); unticked,
+  the decision date and the season end as a month and a day each
+  (29 February and a one-day season block Save). **Planning share**, with
+  **Use the default planning share (80 %)** (O6); unticked, a % of
+  analogue years in (0, 100]. The defaults are the engine's
+  (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`), confirmed by the
+  client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
 
 ### Data feeds
@@ -2886,7 +2920,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   that is gone) the newest run by `createdAt`, as the Summary shows
   (`pickRiverRun`). The run before it (by `createdAt`) is what the changes are
   against. The **Run** menu in the header (named for screen readers only,
-  `aria-label="Run"`, like Units & supply's picker, so on a phone the select fills a row of its own with
+  `aria-label="Run"`, like Hydrological units's picker, so on a phone the select fills a row of its own with
   no "Run" line above it) lists every run, newest first
   (`runOptionLabel`, the compare picker's labels); picking one is a new
   history entry (`?tab=river&run=<id>`), so Back returns to the run before and
@@ -2954,12 +2988,12 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
   editor can run it.
 
-## Units & supply
+## Hydrological units
 
 `?tab=supply` (aliases `?tab=units`, `?tab=farms`), under *Outcomes* after
 River & reserve (issue #17, option A: the outcome pages; the issue's
 *Farms & supply*, named for the workspace's word for a farm node since
-#54 2a, as its Summary card *Supply by unit* and the Runs group *Units &
+#54 2a, as its Summary card *Supply by hydrological unit* and the Runs group *Units &
 users*). How much of each unit's irrigation demand one run supplied: the
 Runs & results tab's former **Units & users** group and its unit results
 table, moved here unchanged, beside a card per unit and the picked unit's
@@ -2982,7 +3016,7 @@ read it before.
   unit count alone before a run.
 - **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
   Summary card's figure and its change from the previous run, from
-  `overview/latestRun.ts` `headlines`); *Units below 95 %* (N of M, every unit
+  `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
   under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
   deficit above float noise on any of the run's last 7 days, the reporting
   window's *Last 7 days* and the publication's own rule,
@@ -2991,7 +3025,7 @@ read it before.
   shortfall* (Mm³/a and mean m³/day of demand not supplied). The week needs
   each unit's `deficit` series: fetched four at a time through the Runs
   cache; "…" until they are in, with a Try again if one fails.
-- **Unit cards**, worst supplied first (`unitCards`; units without demand
+- **Hydrological unit cards**, worst supplied first (`unitCards`; units without demand
   last): the name (today's, or the run's for a unit removed since), % supplied
   with a bar, in the Summary's and the Network's supply bands
   (`network/supplyColour.ts`: accent at or above 95 %, amber from 70 %, red
@@ -3003,7 +3037,7 @@ read it before.
   planted areas (the farm drawer, `farm=`). The whole card picks the unit:
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
-- **Unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
+- **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
   panel of Runs & results, moved. Its demand, supply, share and dam size in a
   line, then one chart at a time: **Supply vs demand** (the days the unit was
   short shaded, from its `deficit` series) or, for a unit with a dam, **Dam
@@ -3016,15 +3050,15 @@ read it before.
   their column and the chart filling its panel, as on Dams. Narrower, one
   column; picking a card scrolls the chart into view.
 - **Below it**, under *Tables for this run*, the moved panels with their
-  ids: **Unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
+  ids: **Hydrological unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
   table that was in the run summary; the printable report still shows it
   there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`) and **Assurance of supply**
   (`#res-assurance`). Each is described under [§ Runs & results](#runs--results).
-- **On this page.** A **Units & supply sections** menu ([§ On this page
+- **On this page.** A **Hydrological units sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one
   row; the cards and the chart fit the window below it), and sticks down the
-  tables: **Unit detail** (`#res-farm`), **Unit results**, **Curtailment**
+  tables: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**, **Curtailment**
   and **Assurance of supply** (`supply/supply.ts`, `SUPPLY_NAV`). Until it,
   the three tables ran four screens under the cards with no way to them but
   scrolling. Not shown with no run or no units.
@@ -3033,8 +3067,8 @@ read it before.
   it there (`holdAnchor`), focus on its heading. An old link to one of them on
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
-  week", the Summary's *Supply by unit* and its short-units card, and the
-  run header's *Units & supply* link on Runs & results lead here.
+  week", the Summary's *Supply by hydrological unit* and its short-units card, and the
+  run header's *Hydrological units* link on Runs & results lead here.
 - **Empty states:** no run yet (editors get **Run the model (Runs &
   results)**; a viewer reads that an editor can run it); no units in the model
   (a link to the Network); a run with no units (added since: run again).
@@ -3061,13 +3095,13 @@ read it before.
   rail stacks above the results and the list scrolls inside its panel past
   20rem (about five rows), so the shown run starts near the top.
 - **Outcomes for this run.** The run header has one line, "For this run:
-  River & reserve → · Units & supply →" (a navigation landmark, *Outcomes
+  River & reserve → · Hydrological units →" (a navigation landmark, *Outcomes
   for this run*; the links are named "River & reserve for this run" and
-  "Units & supply for this run"), to the [River & reserve](#river--reserve)
-  and [Units & supply](#units--supply) pages for the shown run. It replaced
+  "Hydrological units for this run"), to the [River & reserve](#river--reserve)
+  and [Hydrological units](#hydrological-units) pages for the shown run. It replaced
   the two link rows (`#res-river`, `#res-units`) and their groups, which a
   link still reaching Runs & results with those anchors is sent to (the page
-  itself, same run, and the reporting window for Units & supply; the entry
+  itself, same run, and the reporting window for Hydrological units; the entry
   is replaced, so Back skips it; `movedHref` in `runs/sections.ts`).
 - **Forecast runs** (roadmap WP-2.12, [model.md §2.4f](./model.md#24f-forecast-mode-engine--0370-roadmap-wp-212)).
   When the project has a forecast series (`rain_forecast_mm`, uploaded or
@@ -3145,7 +3179,7 @@ read it before.
   EWR vs outflow, EWR by month, the uncertainty bands, the outcome matrix,
   the seasonal outlook, the water account) are on River & reserve and the
   units' (curtailment, assurance of supply, unit detail, the per-unit table)
-  on Units & supply (issue #17); a link to one of them here (`#res-reserve`,
+  on Hydrological units (issue #17); a link to one of them here (`#res-reserve`,
   `#res-curtailment`, …) is sent to its panel there. They are still
   described below. The bullets below describe each panel; the order above
   is the page's.
@@ -3222,7 +3256,7 @@ read it before.
   rules met in X % of months at the headline site when there is a rule table,
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every unit got at least 95 %"; left out when the run has no farms), then,
+  "Every hydrological unit got at least 95 %"; left out when the run has no farms), then,
   only when the run was scored against observed flow, the NSE and PBIAS with
   PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
   parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
@@ -3246,7 +3280,7 @@ read it before.
   …"). When the parameters came from Fit automatically, the fit's validation
   scores sit beside the fit's own score under **Where the parameters came
   from** (below). The per-unit table below them moved to
-  [Units & supply](#units--supply) (issue #17; the printable report keeps it
+  [Hydrological units](#hydrological-units) (issue #17; the printable report keeps it
   under the run summary): sortable, in network
   order by default, with farms under 95 % supplied flagged in text (a "below 95 %"
   badge and a tinted row). The **Supplied % of demand** column has a small bar
@@ -3312,7 +3346,7 @@ read it before.
   [model.md § Verification](./model.md#verification)). It has three
   parts. First, one line saying all checks passed, or how many failed (a failure
   is a model bug, so it asks to be reported). Then each check with ✓/✗ in text,
-  in the workspace's words (the engine's "farm" reads "unit", `checkLabel`),
+  in the workspace's words (the engine's "farm" reads "hydrological unit", `checkLabel`),
   the first problem (the node's name and date) under a failed one, which engine
   made the run and ran its checks, and the largest daily balance error of any
   unit (column V). Second, the **water balance by water year**: rain,
@@ -3385,7 +3419,7 @@ read it before.
   On the Runs tab the curtailment panel leads with a board under its
   *Curtailment targets* heading and period line, over the same reporting
   window (it follows the [picker](#report-window)); the per-farm table
-  follows under a *Per unit* heading. The printable report leaves the board
+  follows under a *Per hydrological unit* heading. The printable report leaves the board
   out (`CurtailmentTable`'s `board` prop). Three stages, side by side, each
   as a share of the group's own demand: **1. Today** (supplied ÷ demand),
   **2. Equitable share** (equitable share volume ÷ demand: the same % for
@@ -3393,7 +3427,7 @@ read it before.
   that SA restrictions are set per user category), **3. EWR met** (volume
   left ÷ demand: the equitable share less the farm's EWR supply cut). A row
   of three cards gives the farm totals per stage; the table has one row per
-  farm (a bar, the whole %, the m³/day), an **All units** total row, then
+  farm (a bar, the whole %, the m³/day), an **All hydrological units** total row, then
   **Other water users (outside the equitable share)**: each user its own
   row with a *senior, not curtailed* or *junior, curtailed* badge, *not in
   the share* at stage 2, and at stage 3 what it takes after its supply cut
@@ -3405,8 +3439,10 @@ read it before.
   what the % leaves out: a farm's *store less / pass inflow* charge, an EWR
   cut beyond its equitable share, a senior user's charge that stands, or a
   junior user's charge beyond what it takes. The middle stage is a
-  `ShareRule` (only `{ kind: 'equal' }` today); a per-category restriction
-  waits for client question O4 ([plan.md](./plan.md#decision-support-outputs-2026-09-26)).
+  `ShareRule` (`{ kind: 'equal' }`): every category is cut by the same %,
+  which the client confirmed (O4, issue #90,
+  [plan.md](./plan.md#decision-support-outputs-2026-09-26)). Still open to
+  the client: whether the town's uses count as domestic or irrigation.
   Tests: `shareThePain.test.ts` (bounding, zero demand, senior / junior, the
   equal share, and seeded engine runs whose totals match the engine's),
   `ShareThePainBoard.test.ts` (the markup, via Svelte's server renderer) and
@@ -3551,9 +3587,16 @@ read it before.
   instead** when another run is current; `POST …/evidence`). A legacy-model
   run (a stored run from before engine 1.0.0, which removed the model) and
   the current evidence run say why they can't be nominated instead.
+  While a run is nominated, editors also get **Withdraw the nomination…**,
+  which opens a required **Why the nomination is withdrawn** textarea and
+  **Withdraw the nomination** (`POST …/evidence/withdraw`, 098); afterwards
+  the section says "The project's nomination was withdrawn: no run is its
+  evidence now." and any run may be nominated again.
   Under it the **Nomination history**, newest first: "Nominated “A” on … by
-  …", then each "Replaced by “B” on … by …", each with the run's runoff model
-  and engine version and the reason, the current one badged. Nothing in the
+  …", then each "Replaced by “B” on … by …" or "Withdrawn on … by …" (a run
+  nominated after a withdrawal reads "Nominated" again), each nomination with
+  the run's runoff model and engine version, every row with its reason, the
+  current one badged. Nothing in the
   history can be edited or removed. In the runs list the current evidence run
   carries an **Evidence** badge and a replaced one **Former evidence**; neither
   has a delete button (the server refuses with `409`). The run header repeats
@@ -3653,7 +3696,7 @@ read it before.
   failing water years and check 4's Q90 ratio with *within* / *outside the
   factor of 2* (a failing gauge's row shaded), and a fifth line in the check
   list. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Unit detail (on Units & supply since issue #17; dam
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17; dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
@@ -3662,10 +3705,10 @@ read it before.
   and the day's CHIRPS factor (`chirps_factor`), which the catchment daily CSV
   puts in adjacent columns after rain used. The summary CSV lists the 12
   monthly factors.
-- **Assurance of supply** (`#res-assurance`, on Units & supply after the
+- **Assurance of supply** (`#res-assurance`, on Hydrological units after the
   curtailment table, under *Units & users* on the Runs tab until issue #17;
   `reliability/AssurancePanel.svelte`, helpers in
-  `reliability/reliability.ts`, in the Units & supply chunk; engine ≥ 0.32.0, WP-3.4,
+  `reliability/reliability.ts`, in the Hydrological units chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
   reporting window, the % of demand days fully met, the % of demand
   supplied, complete water years met against the annual threshold (Settings;
@@ -3812,16 +3855,14 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   demand level in every analogue year…* with a progress bar, a retry, or,
   for an outlook whose job died, why it couldn't run. The panel carries
   `data-state` (`loading`, `empty`, `pending`, `stuck`, `complete`).
-- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*) and
-  **Season pending the client** while it is the engine's default and the
-  project hasn't set one; the planning share (*80 % of analogue years*)
-  and **Planning share pending the client** while it is the default; the
+- **Badges**: the season (*1 Oct 2018 – 30 Apr 2019 (212 days)*); the
+  planning share (*80 % of analogue years*); the
   measure (days below the pragmatic EWR at the outlet, or Reserve months
   met with a rule table there); the number of analogue years. Then the
   farm dams' storage on the day before the decision date, which every year
   starts from.
 - **The table**: one row per demand level, in the order given: **dam
-  storage at season end**, **unit demand met** and **days below the EWR**
+  storage at season end**, **hydrological unit demand met** and **days below the EWR**
   (or **Reserve months met**), each the median in bold with its 10–90 %
   range under it, and **years met in full** ("EWR met on every day in 7 of
   12 years"). The planning figure's level carries a **Planning figure**
@@ -3919,7 +3960,7 @@ the project. Viewers read every scenario and its comparison; farmers never
 see the tab (the workspace sends them to the farm page, and the API refuses
 them scenarios).
 
-- **Layout** (issue #17, option A; the Dams and Units & supply pattern of a
+- **Layout** (issue #17, option A; the Dams and Hydrological units pattern of a
   list beside the picked item): the section header's context line counts
   the scenarios by status and how many have results ("5 scenarios · 4
   drafts · 1 submitted · 2 with results", `scenarios/summary.ts`), and its
@@ -4089,8 +4130,8 @@ the run covers no whole water year). The left edge is amber for above
 registered or unregistered use, green within the band, grey otherwise; the
 words say the same.
 
-**The picked unit** (`unit=`, else the first row) sits beside the list: its
-name with links to it **On the Network** and in **Units & supply**; a bar per
+**The picked hydrological unit** (`unit=`, else the first row) sits beside the list: its
+name with links to it **On the Network** and in **Hydrological units**; a bar per
 water year and source under the caption "Modelled use per water year
 (October–September), m³" (modelled use, amber above registered, green within
 the band, with the registered volume as a line across it, and its modelled
@@ -4115,7 +4156,7 @@ picker is how a row is matched by hand). Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
 
-**Every unit and water year**: the whole comparison as one table (one row
+**Every hydrological unit and water year**: the whole comparison as one table (one row
 per unit, source and water year, the run's order; a source with neither use
 nor a volume is left out) with the band note under it, scrolling inside its
 box.
@@ -4137,7 +4178,7 @@ source, purpose, volume, storage, valid from/to, registration number,
 property, the registered user (editors), reference; Save and Cancel pinned.
 
 **Phone and narrow windows**: one column (list, picked unit, volumes, every
-year); the list shows six rows until **Show all N units and sources** and the
+year); the list shows six rows until **Show all N hydrological units and sources** and the
 volumes eight until **Show all N registered volumes**; each volume and each
 year row is a card with its values two to a line under their labels
 (container queries); picking a unit scrolls its detail into view.
@@ -4250,7 +4291,7 @@ the viewer's day, with a request's change set folded into one entry.
   Add data and Run model.
 - **The card** "Changes, newest first": a line on what it holds (and for
   editors "Restoring a version saves it as a new change: nothing is ever
-  erased"), then the filters: **Unit** ("All units"), **Kind of change** and
+  erased"), then the filters: **Hydrological unit** ("All hydrological units"), **Kind of change** and
   **Parameter** (typed words). Unit and kind are the server's filters and
   live in the URL (`&unit=<nodeId>`, `&kind=revision|series|run|…`), pushed,
   so Back steps back through them and a link keeps them; an unknown kind, or
@@ -4372,9 +4413,9 @@ March") is kept against what it is about.
 - **Writing.** Every member can add a note; the author edits theirs (marked
   *edited*); the author or an editor deletes (a confirm, then a soft delete:
   hidden from everyone, kept for the audit trail). On a farm, *Also show to
-  this farm's farmers* makes a note farm-visible, marked *Shown to the farm*;
+  this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
-- **Farmer view.** *Notes about your farm* (`farm/FarmNotes.svelte`) lists
+- **Farmer view.** *Notes about your hydrological unit* (`farm/FarmNotes.svelte`) lists
   the farmer's own notes and the WUA's farm-visible ones on that farm, and
   adds a note, always shown to the farm. The WUA previewing the page sees the
   same farm-visible notes, read only. It is the same `NotesList`, given the
@@ -4452,7 +4493,7 @@ exists, says so with a link to Runs & results.
   chart ranks by default, `report/fdc.ts`, issue #45),
   **Shortfalls and curtailment**, **EWR compliance** (EWR vs outflow, Reserve
   compliance for every rule-table site with Month by month open, the EWR grid
-  for the outlet and every farm), **Units, warnings and checks** (the run
+  for the outlet and every farm), **Hydrological units, warnings and checks** (the run
   summary: warnings, headline cards, the farm table; the self-checks and the
   water balance by water year, without Trace a day) and **Notes** (the run's
   notes, when it has any). A section appears only when the run has its data;
@@ -4721,7 +4762,7 @@ published.
   (notice level, received %, dam %, or "Not published yet"), and goes
   straight to the only one. `/farm/[projectId]` is one farm (`?node=` and a
   switcher when the farmer has several there: a row of links above the name
-  for up to 4 farms; past that, folded under "Your farms in this catchment
+  for up to 4 farms; past that, folded under "Your hydrological units in this catchment
   (N farms)", so the name and the WUA's notice stay on the first screen,
   which matters for WUA staff previewing, who see every farm), with `/why` ("Why about
   83 %?", three numbered steps) and `/dam`. `/farm/words` shows the help
@@ -4731,13 +4772,13 @@ published.
   page sends a user whose every membership is `farmer` to `/farm`; the
   workspace (`/projects/[id]`) answers a farmer 403 and redirects them to
   `/farm/[id]`.
-- **Frame.** The farm pages have their own header ("My farm", the EN | AF
+- **Frame.** The farm pages have their own header ("My hydrological unit", the EN | AF
   language switch, Menu: your farms, the words, Account, the privacy notice, "Don't keep a copy
   on this phone", sign out); the app shell isn't shown ([§ Language](#language)).
   A user whose every membership is `farmer` gets the same frame on
   `/account` and `/account/alerts` (the farm view's "Choose your alert
-  emails" link lands there): the header's **Your farms** back link in
-  place of "My farm", and the page keeps its own `main` and styles (the
+  emails" link lands there): the header's **Your hydrological units** back link in
+  place of "My hydrological unit", and the page keeps its own `main` and styles (the
   farm pages' card styles apply only inside the farm pages' own `main`).
   The root layout decides (`lib/auth/frame.ts` `isFarmerOnly`, from the
   membership list, read once per signed-in user on the first account page
@@ -4775,9 +4816,9 @@ published.
   notice; the last 12 months (inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers"); last
   season; the farm on the river (counts, the outlet's last 30 days, the
-  privacy sentence and "Who can see my farm", which loads the people by name
+  privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
-  alone if that fails); "Notes about your farm" ([§ Notes](#notes)); the
+  alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
   CSV download. The CSV download fetches the file and puts the estimate
   line (`cards.ts` `disclaimer()`), in the page's language, as a leading
   `# ` line (`farm/csvNote.ts`); a failed download says why under the
@@ -4814,8 +4855,14 @@ published.
   WUA or DWS notice is a restriction; the operator doesn't check the WUA's
   figures and accepts no responsibility, with a link to the Terms of use,
   section 13). The press goes to `POST /auth/me/farm-notice` (stored on the
-  account, 093) and the figures follow at once. A new version shows it
-  again. Not shown to WUA staff previewing a farm, nor while there is
+  account, 093) and the figures follow at once. Pressed without a signal
+  (issue #74), the press is kept on the phone for that user and version
+  (`farm/noticeAck.ts`, `wm.farm.notice-ack.v1`) and the figures (the saved
+  copy) show; the page sends it when the signal is back (the `online` event,
+  or the next load), and the account's time is the server's when it
+  arrives. A refusal (the notice changed meanwhile, 409) drops it and the
+  notice shows again; another account on the phone never inherits it. A
+  new version shows it again. Not shown to WUA staff previewing a farm, nor while there is
   nothing published (the no-publication state has no figures). The words
   are bound to the version (`farmNotice.test.ts`) and quoted in
   `docs/legal/disclaimer-review.md` § 3.
@@ -4828,7 +4875,13 @@ published.
 - **States.** Skeleton cards with a hidden status and "Slow signal?" after
   3 s; no publication; an error with Try again (a contact line after the
   second failure, never raw error text); access removed (403/404), which
-  also clears the saved copy.
+  also clears the saved copy. The contact lines ("Questions? Contact …",
+  the removed and second-failure lines) name the WUA when the project has
+  its name (`wuaName`, set on the Project page's details), else say "your
+  WUA" (`contactText` in `farm/cards.ts`). "Compared with last season"
+  without a year of figures says "Not available: the model's data starts
+  on 1 Jun 2023." from the projection's `dataFrom` (a copy saved before it
+  says only that the data doesn't reach back).
 - **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
   user and farm in `localStorage`, shown at once with "Updating…". Without a
   signal it stays under a dark strip ("No signal. These are the figures
@@ -5005,15 +5058,18 @@ digest). The modeller workspace stays English.
   project's time zone, never UTC's (issue #51).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
-  entries. It was written by the `i18n-translator` agent and reviewed by the
+  entries (the ones that name a farm node re-translated 2026-09-28 for
+  "hydrological unit", issue #90 Q6). It was written by the `i18n-translator` agent and reviewed by the
   `i18n-checker` agent (`.claude/agents/i18n/`, language-parameterised since
   issue #58 — the target language is the first line of the prompt, with a
   per-language reference file for register, spelling authority and
   terminology, `.claude/agents/i18n/languages/<code>.md`: meaning,
   placeholders, bold, plural forms, register, and one term for one English
   word across the whole set, with §5.1 of `docs/design/farmer-view.md` as
-  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet
-  (docs/followups.md § Afrikaans). The wording goes to real farmers, so a
+  Afrikaans's word list); no native speaker has reviewed the Afrikaans yet.
+  The client's native-speaker translator will, before farmers are invited
+  in Afrikaans (confirmed by the client, issue #90; docs/followups.md
+  § Afrikaans). The wording goes to real farmers, so a
   new string in any language goes through the same two steps:
   `pnpm gen:i18n:export <lang> <dir>` writes what's still on that language's
   sheet as JSON batches, the translator agent fills them, the checker

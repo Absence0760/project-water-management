@@ -16,10 +16,10 @@
 	}
 
 	const water = $derived<Row[]>([
-		{ label: 'Irrigation supplied (all units)', unit: 'm³/day', m: comparison.totals.suppliedM3Day, spec: { format: 'volume', better: 'higher' } },
-		{ label: 'Irrigation deficit (all units)', unit: 'm³/day', m: comparison.totals.deficitM3Day, spec: { format: 'volume', better: 'lower' } },
+		{ label: 'Irrigation supplied (all hydrological units)', unit: 'm³/day', m: comparison.totals.suppliedM3Day, spec: { format: 'volume', better: 'higher' } },
+		{ label: 'Irrigation deficit (all hydrological units)', unit: 'm³/day', m: comparison.totals.deficitM3Day, spec: { format: 'volume', better: 'lower' } },
 		{ label: 'Share of demand supplied', unit: '', m: comparison.totals.fractionSupplied, spec: { format: 'fraction', better: 'higher' } },
-		{ label: `Units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, unit: 'units', m: comparison.totals.farmsBelowTarget, spec: { format: 'count', better: 'lower' } },
+		{ label: `Hydrological units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, unit: 'hydrological units', m: comparison.totals.farmsBelowTarget, spec: { format: 'count', better: 'lower' } },
 		{ label: 'Days EWR not met', unit: 'days', m: comparison.catchment.ewrDaysNotMet, spec: { format: 'days', better: 'lower' } },
 		{ label: 'Share of days EWR not met', unit: '', m: comparison.catchment.ewrFractionDaysNotMet, spec: { format: 'fraction', better: 'lower' } },
 		{ label: 'Mean simulated outflow', unit: 'm³/day', m: comparison.catchment.meanSimulatedOutflowM3Day, spec: { format: 'volume', better: 'neutral' } },

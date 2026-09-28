@@ -37,21 +37,21 @@
 	</header>
 	<div class="devices">
 		<div class="laptop">
-			<Shot name="laptop" {...screens.laptop} widths={[800, 1600]} sizes="(max-width: 760px) 100vw, 60vw" alt={t('A catchment’s Summary: the ecological reserve, supply to each farm and the dams today.')} />
+			<Shot name="laptop" {...screens.laptop} widths={[800, 1600]} sizes="(max-width: 760px) 100vw, 60vw" alt={t('A catchment’s Summary: the ecological reserve, supply to each hydrological unit and the dams today.')} />
 		</div>
 		<div class="phone">
-			<Shot name="phone" {...screens.phone} widths={[217, 434]} sizes="(max-width: 760px) 40vw, 16vw" alt={t('A farmer’s view of their own farm on a phone: their dam, their supply and any restriction.')} />
+			<Shot name="phone" {...screens.phone} widths={[217, 434]} sizes="(max-width: 760px) 40vw, 16vw" alt={t('A farmer’s view of their own hydrological unit on a phone: their dam, their supply and any restriction.')} />
 		</div>
 	</div>
 	<p class="caption">{t('The farmer sees their own share on their phone, in English or Afrikaans.')}</p>
 	<div class="cards">
 		<figure class="card">
-			<Shot name="network" {...screens.network} widths={[640, 1280]} sizes="(max-width: 760px) 100vw, 45vw" alt={t('The network: farms, dams and gauges on the river, upstream to downstream.')} />
-			<figcaption><strong>{t('The network')}</strong> {t('Farms, dams, transfers and gauges on the river, from the headwaters to the outlet.')}</figcaption>
+			<Shot name="network" {...screens.network} widths={[640, 1280]} sizes="(max-width: 760px) 100vw, 45vw" alt={t('The network: hydrological units, dams and gauges on the river, upstream to downstream.')} />
+			<figcaption><strong>{t('The network')}</strong> {t('Hydrological units, dams, transfers and gauges on the river, from the headwaters to the outlet.')}</figcaption>
 		</figure>
 		<figure class="card">
 			<Shot name="river" {...screens.river} widths={[640, 1280]} sizes="(max-width: 760px) 100vw, 45vw" alt={t('The river against its ecological reserve, day by day, with the days below it marked.')} />
-			<figcaption><strong>{t('River and reserve')}</strong> {t('Flow at every gauge against the reserve, and which farms’ use it falls short by.')}</figcaption>
+			<figcaption><strong>{t('River and reserve')}</strong> {t('Flow at every gauge against the reserve, and which hydrological units’ use it falls short by.')}</figcaption>
 		</figure>
 	</div>
 </section>

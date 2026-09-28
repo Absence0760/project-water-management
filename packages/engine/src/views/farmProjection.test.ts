@@ -271,6 +271,8 @@ describe('farmProjection', () => {
 		const p = farmProjection(short.run, 'dam');
 		expect(p.lastSeason).toBeNull();
 		expect(p.season.from).toBe('2023-10-01');
+		// What the farm page names instead: "the model's data starts on 1 Jun 2023".
+		expect(p.dataFrom).toBe('2023-06-01');
 	});
 
 	it('starts the season at the run when the run starts after 1 October', () => {

@@ -23,7 +23,7 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 
 	await page.goto(`/projects/${project.id}?tab=project`);
 	const panel = page.getByRole('region', { name: /^Farmers/ });
-	await expect(panel.getByText('No farmers yet: invite them to see their own farm.')).toBeVisible();
+	await expect(panel.getByText('No farmers yet: invite them to see their own hydrological unit.')).toBeVisible();
 	await panel.getByRole('button', { name: 'Invite farmers' }).click();
 	const dialog = page.getByRole('dialog', { name: 'Invite farmers' });
 	await expect(dialog.getByLabel('One farmer')).toBeChecked();
@@ -61,6 +61,51 @@ test('an owner invites a farmer by email, who signs up through the link and sees
 	await page.reload();
 	await expect(panel.getByRole('rowheader', { name: /Invited Farmer/ })).toBeVisible();
 	await expect(panel.getByRole('row').filter({ hasText: 'Invited Farmer' })).toContainText('Upper farm');
+	await expect(pending).toHaveCount(0);
+});
+
+// An applicant invited with the farm they hold (WP-3.3, 097_contributor_invite_farms, issue #73).
+test('an owner invites a licence applicant with their farm, who joins as an applicant linked to it', async ({ page, owner, browser }) => {
+	void owner;
+	const project = await createProject(page.request, 'Invite-an-applicant catchment');
+	await putModel(page.request, project.id, sampleModel());
+	const email = uniqueEmail('applicant-invitee');
+
+	await page.goto(`/projects/${project.id}?tab=project`);
+	const panel = page.getByRole('region', { name: /^Farmers/ });
+	await panel.getByRole('button', { name: 'Invite farmers' }).click();
+	const dialog = page.getByRole('dialog', { name: 'Invite farmers' });
+	await dialog.getByLabel('Email', { exact: true }).fill(email);
+	await dialog.getByLabel('Joins as').selectOption('contributor');
+	// The applicant's email is the ordinary invite, in English: no language to pick.
+	await expect(dialog.getByLabel('Email language')).toHaveCount(0);
+	await expectNoViolations(page, { include: 'dialog[open]' });
+	await dialog.getByRole('checkbox', { name: 'Upper farm' }).check();
+	await dialog.getByRole('button', { name: 'Invite applicant' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(panel.getByRole('status')).toHaveText(`Invitation sent to ${email} for Upper farm.`);
+	const pending = panel.getByRole('region', { name: /Pending farmer invitations/ });
+	await expect(pending.getByRole('listitem')).toHaveCount(1);
+	await expect(pending.getByRole('listitem')).toContainText('applicant');
+	await expect(pending.getByRole('listitem')).toContainText('Upper farm · invited by Owner');
+
+	const token = await plantInviteToken(email);
+	const context = await browser.newContext();
+	const v = await context.newPage();
+	await v.goto(`/register?invite=${token}`);
+	await expect(v.getByText('invited you to the project Invite-an-applicant catchment')).toBeVisible();
+	await v.getByLabel('Display name').fill('Invited Applicant');
+	await fillNewPassword(v, PASSWORD);
+	await agreeToTerms(v);
+	await v.getByRole('button', { name: 'Create account and join' }).click();
+	await expect(v).not.toHaveURL(/\/register/);
+	await context.close();
+
+	// The owner sees an applicant holding that farm, not an invite.
+	await page.reload();
+	const row = panel.getByRole('row').filter({ hasText: 'Invited Applicant' });
+	await expect(row).toContainText('applicant');
+	await expect(row).toContainText('Upper farm');
 	await expect(pending).toHaveCount(0);
 });
 

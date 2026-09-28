@@ -281,12 +281,19 @@ is not pinned to this repo's `production` environment (a postcondition in
 `oidc.tf`), or if a sops secret is malformed.
 
 Only `terraform apply` after the plan has been reviewed and the operator has
-said go. Then push the outputs to the GitHub `production` environment
-variables and secrets:
+said go. Then push the outputs to the repository's GitHub Actions variables
+and secrets:
 
 ```bash
 ~/github/templates/scripts/export-tf-vars.sh infra/
 ```
+
+They are **repository-level** values (`gh variable set` / `gh secret set`
+with no `--env`), not `production` environment values. The release
+preflight job runs without an environment, before the approval, and only
+sees repository-level values, so a value set only on the `production`
+environment leaves every release failing with "not configured". The
+environment's job is the required reviewer (§ 1), not storage.
 
 | GitHub variable | From |
 | --- | --- |
@@ -297,6 +304,8 @@ variables and secrets:
 | `MIGRATE_FUNCTION_NAME` | `migrate_function_name` |
 | `WORKER_FUNCTION_NAME` | `worker_function_name` (the release preflight requires it) |
 | `FETCHER_FUNCTION_NAME` | `fetcher_function_name` (data feeds; the release preflight requires it) |
+| `RENDERER_FUNCTION_NAME` | `renderer_function_name` (report renderer; always an output, even before the function exists, so the preflight requires it) |
+| `RENDERER_ECR_REPOSITORY` | `renderer_ecr_repository` (the renderer image's ECR repository; the release preflight requires it) |
 | `PUBLIC_SITE_URL` | `public_site_url` |
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
@@ -331,8 +340,8 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line (a saved run
   failing one of the engine's own invariant checks — docs/security.md §
-  Infrastructure), and the job queue's four (DLQ depth, worker errors,
-  backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
+  Infrastructure), and the job queue's five (DLQ depth, worker errors and
+  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
@@ -360,6 +369,7 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `ci.yml` `db-test` | `pnpm test:backend:db` against a Postgres 17 service container |
 | `ci.yml` `e2e-build`, `e2e`, `e2e-report` | Playwright (Chromium) in 14 shards: the site is built once and shared, each shard runs `--shard=N/14` against its own Postgres, and the shards' blob reports merge into one HTML `playwright-report` ([e2e/README.md § CI](../e2e/README.md#ci-14-shards)) |
 | `ci.yml` `workflow-lint` | actionlint v1.7.12, the workflow guard, and the unit tests of every guard (`pnpm test:guards`) |
+| `ci.yml` `renderer-image` | `bin/check-renderer-image.sh`: the release's own `docker buildx build` of the renderer image (one `linux/amd64` manifest, no attestations, which Lambda requires), then the Lambda smoke test, so a broken Dockerfile fails here and not at release |
 | `ci.yml` `env-isolation` | committed env files point only at the local stack (`pnpm check:env`) |
 | `ci.yml` `terraform` → `terraform.yml` | `bin/check-infra.sh` (fmt, validate, plan-only `terraform test` with mocked providers; no AWS credentials) + a Trivy config scan of Terraform and the renderer Dockerfile (advisory: HIGH/CRITICAL findings go to the Security tab, never fail the job; accepted ones in [security.md § Accepted IaC findings](./security.md#accepted-iac-findings)) |
 | `ci.yml` `gitleaks` → `gitleaks.yml` | secret scan; runs on docs-only diffs too |
@@ -368,19 +378,38 @@ push run on `main` checks the merged result. Dependabot's PRs get the same run.
 | `security.yml` | CodeQL (JS/TS + Actions) |
 | `scorecard.yml`, `pr-mergeable.yml`, `pr-title-lint.yml`, `labeler.yml` | OpenSSF Scorecard (push to `main` only); "CI never ran on this conflicted PR"; PR title and labels (PRs only) |
 
-Docs-only diffs (only `docs/`, `.claude/` or `*.md` files, decided by the
-`changes` job) skip the heavy jobs, but `CI gate` still reports. On `main`
-every commit keeps its own CI run and a later push does not cancel it,
-because a release needs `CI gate` green on the exact commit it ships. After
+Docs-only **pull requests** (only `docs/`, `.claude/` or `*.md` files,
+decided by the `changes` job) skip the heavy jobs, but `CI gate` still
+reports. A **push to `main`** always runs every job, whatever it changed: a
+release needs `CI gate` green on the exact commit it ships, and a docs-only
+commit on top of a failing code commit must not turn that gate green without
+the code having passed (the workflow guard's `push-full` rule holds the
+`changes` job to this). On `main` every commit keeps its own CI run and a
+later push does not cancel it. After
 the account exists, re-run `new-project-account.sh` so that `CI gate`
 becomes a required check on `main`.
 
-Scheduled: `audit.yml` (weekly `pnpm audit`, opens an issue),
+Scheduled: `audit.yml` (weekly `pnpm audit` against the lockfile, with no
+install and no cache; opens an issue),
 `gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
 issue when it fails), and weekly runs of `security.yml` and `scorecard.yml`.
-Also present: `claude.yml` (Claude Code on issue and PR comments) and the
-Dependabot helpers (`dependabot-auto-merge.yml` for minor/patch bumps,
+Also present: `claude.yml` (Claude Code on issue and PR comments, for the
+operator only; the model may edit files and read git and GitHub, but runs no
+`pnpm` command, so it can't execute code it wrote, and its checkout keeps no
+token) and the Dependabot helpers (`dependabot-auto-merge.yml`,
 `dependabot-lockfile.yml` to re-sync the pnpm lockfile).
+
+**Dependency updates wait a week and actions wait for a human.**
+`.github/dependabot.yml` gives every ecosystem a 7-day `cooldown`
+(security updates are exempt), and `pnpm-workspace.yaml` sets
+`minimumReleaseAge: 10080` (7 days, pnpm >= 10.16), so pnpm refuses to
+resolve a registry version younger than that. `dependabot-auto-merge.yml`
+approves and queues minor and patch bumps for npm, pip, docker-compose and
+Terraform only, gated on the PR's author being Dependabot. GitHub Actions
+bumps are never auto-merged: an action runs inside the deploy job while it
+holds the AWS session, so a person reads what the new SHA pin points at. A
+security fix that can't wait the week goes under
+`minimumReleaseAgeExclude` with a comment, removed once the week is up.
 
 There is **no credentialed `terraform plan` in CI**. The only role CI can
 assume is the deploy role, which trusts `environment:production` only and
@@ -403,9 +432,44 @@ the real plan stays an operator step
   published: the workflow updates and synchronously invokes the migrate
   Lambda, and stops if it fails. Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
-  release. The worker Lambda's code is updated right after the API's. Then
-  the job calls `/api/health` through CloudFront and fails unless it answers
-  `{"ok":true}`.
+  release. The worker Lambda's code is updated right after the API's, and
+  the fetcher's after the worker's. Then the renderer's image (built in the
+  `build` job, no AWS credentials) is pushed to ECR and the renderer Lambda
+  moved to it; until the operator has created the function (§ Reports) the
+  step pushes the image and says what to do, and any other `get-function`
+  error fails the deploy. Then the job calls `/api/health` through
+  CloudFront and fails unless it answers `{"ok":true}`.
+- **Release builds install cold**: no dependency cache is restored in either
+  deploy workflow (the workflow guard's `no-cache` rule), since a cache is
+  written by other runs and the build ships with deploy credentials.
+
+### Migration integrity
+
+The migrate Lambda refuses to apply anything, and the deploy stops before
+the new code ships, when `schema_migrations` disagrees with the migrations in
+the release ([data-model.md § Migrations](./data-model.md#migrations)). Its
+error names each file:
+
+- **"… was applied but its contents have changed"**: someone edited a
+  migration production already ran. The database is fine; the release is
+  wrong. Put the file back as it was on the tag that applied it
+  (`git show backend@X.Y.Z:backend/migrations/<file>`), move the change into
+  a new `NNN_*.sql`, and cut a new release. Never update the checksum in the
+  database to make the error go away: the change would never reach the
+  schema, and every environment would differ from the files.
+- **"… was applied but its file is missing"**: a migration was deleted or
+  renamed. Restore it under its original name.
+- **"… is pending but sorts before …"**: two branches took migration
+  numbers out of order, and the one merged later has the lower number.
+  Renumber it after the latest applied file and release again.
+
+Each migration also runs with `lock_timeout = 5s` and
+`statement_timeout = 240s`. A deploy failing with *lock timeout* means live
+traffic held a lock the migration needed: nothing was applied (the file's
+transaction rolled back), so re-run the deploy at a quieter time. A
+*statement timeout* means the migration is too slow for a deploy: split it,
+or give it a `-- migrate: statement_timeout = …` line and raise the migrate
+Lambda's `timeout` (`infra/lambda.tf`) to match.
 
 ### Lambda bundles
 
@@ -497,8 +561,10 @@ nothing. Step by step:
    the run and clicks **Review deployments → Approve and deploy**. Only then
    can the job get an OIDC token with the `environment:production` subject
    the deploy role trusts.
-8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`
-   and `-migrate.zip`, or `web-X.Y.Z-build.zip`).
+8. **attach** adds what shipped to the Release (`backend-X.Y.Z-lambda.zip`,
+   `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
+   `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
+   ECR, tagged with the version.
 
 ## Getting a catchment into production
 
@@ -538,19 +604,29 @@ plan-only until the first deploy):
   a job by at most one tick.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
-  concurrency 2, connecting as `water_app` (pool of 2) with verified TLS.
+  concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
+  SQS triggers' `maximum_concurrency`, 4 × 2, or throttled pollers burn
+  receive counts into the DLQs), connecting as `water_app` (pool of 2) with
+  verified TLS.
   Each invocation runs one tick within its remaining time (less a minute);
   jobs lease for 6 minutes, longer than the function can run.
 - **Network:** one SQS interface endpoint (private DNS, `sqs_endpoint_az_count`
   default 1) whose policy lets only the API role send to, and the worker role
   use, the `jobs` queue. No NAT.
 - **Retries and the DLQ:** a job's own failure is recorded in the table (with
-  backoff, then `dead`), not thrown, so it never redelivers a message. A tick
-  that itself fails (the database unreachable) fails the batch; SQS retries
-  it, and after 5 receives it lands in the `jobs-dlq` (14 days' retention).
+  backoff, then `dead`), not thrown, so it never redelivers a message. The
+  worker's SQS triggers report partial batch failures
+  (`ReportBatchItemFailures`): a record that throws while being queued (a
+  database error) is retried alone, and the rest of its batch is done with; a
+  record that can never succeed (an unknown message, a result for an unknown
+  fetch or report) is logged and dropped. When every record in a batch
+  throws, or the tick itself fails (the database unreachable), the whole
+  batch fails; SQS retries it, and after 5 receives it lands in the
+  `jobs-dlq` (14 days' retention).
   The jobs are still in the table and run on the next good tick; inspect the
   worker's logs, then redrive or purge the DLQ.
 - **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
+  worker throttles > 0 (it hit its reserved concurrency);
   the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job

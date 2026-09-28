@@ -84,16 +84,16 @@ describe('runSentence: the river', () => {
 
 describe('runSentence: the farms', () => {
 	it('says every farm got at least the target when all are fine', () => {
-		expect(runSentences(base())[1]).toBe('Every unit got at least 95% of its demand.');
+		expect(runSentences(base())[1]).toBe('Every hydrological unit got at least 95% of its demand.');
 		expect(runSentences(base({ farms: [farm('Ridge farm', 0.99)] }))[1]).toBe('Ridge farm got at least 95% of its demand.');
 	});
 
 	it('counts the short farms and names the lowest, at the table’s precision', () => {
 		const farms = [farm('Farm 1', 1), farm('Farm 2', 0.8), farm('Farm 7', 0.62), farm('Farm 9', 0.949)];
-		expect(runSentences(base({ farms }))[1]).toBe('3 of 4 units got less than 95% of their demand; the lowest was Farm 7 at 62.0%.');
-		expect(runSentences(base({ farms: [farm('A', 1), farm('B', 0.5)] }))[1]).toBe('1 of 2 units got less than 95% of its demand: B at 50.0%.');
+		expect(runSentences(base({ farms }))[1]).toBe('3 of 4 hydrological units got less than 95% of their demand; the lowest was Farm 7 at 62.0%.');
+		expect(runSentences(base({ farms: [farm('A', 1), farm('B', 0.5)] }))[1]).toBe('1 of 2 hydrological units got less than 95% of its demand: B at 50.0%.');
 		expect(runSentences(base({ farms: [farm('A', 0.5), farm('B', 0.7)] }))[1]).toBe(
-			'All 2 units got less than 95% of their demand; the lowest was A at 50.0%.'
+			'All 2 hydrological units got less than 95% of their demand; the lowest was A at 50.0%.'
 		);
 		expect(runSentences(base({ farms: [farm('Solo', 0.5)] }))[1]).toBe('Solo got 50.0% of its demand, less than 95%.');
 	});
@@ -140,7 +140,7 @@ describe('runSentence: calibration', () => {
 describe('runSentence', () => {
 	it('joins the sentences in order: river, farms, calibration', () => {
 		expect(runSentence(base({ farms: [farm('A', 1), farm('B', 0.5)], calibration: cal({ fitStatus: 'fitted' }) }))).toBe(
-			'Flow at the outflow gauge was below the EWR on 10.0% of days (73 days). 1 of 2 units got less than 95% of its demand: B at 50.0%. Calibration fit, in-sample over 730 observed days: NSE 0.72, PBIAS +3.1% (model under-estimates total flow).'
+			'Flow at the outflow gauge was below the EWR on 10.0% of days (73 days). 1 of 2 hydrological units got less than 95% of its demand: B at 50.0%. Calibration fit, in-sample over 730 observed days: NSE 0.72, PBIAS +3.1% (model under-estimates total flow).'
 		);
 	});
 });

@@ -10,7 +10,7 @@
 // function here reads the active language: call them where they render and
 // they follow a language switch. Fixed sentences are functions, not
 // constants, for the same reason.
-import { DEMAND_PCT_FLOOR_M3_DAY, type FarmProjection, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
+import { DEMAND_PCT_FLOOR_M3_DAY, IRRIGATION_SYSTEMS, type FarmProjection, type IrrigationSystemId, type FarmView, type ModelBand, type RestrictionLevel } from '@water-management/engine';
 import { STALE_DAYS } from '$lib/components/series/freshness';
 import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
@@ -80,23 +80,35 @@ export const noRestriction = () => t('No restriction from the WUA');
 
 // ---- Water you received this season (§3 Q1) ---------------------------------
 
-const SYSTEMS: [number, Msg][] = [
-	// i18n-section: farm.system
-	[0.9, msg('drip')],
-	[0.85, msg('micro or centre pivot')],
-	[0.75, msg('sprinklers')],
-	[0.65, msg('flood')]
-];
+// i18n-section: farm.system
+const DRIP = msg('drip');
+const MICRO_OR_PIVOT = msg('micro or centre pivot');
+const SPRINKLERS = msg('sprinklers');
+const FLOOD = msg('flood');
 
-/** The irrigation system nearest an efficiency (§3 Q1: drip 0.90, micro/pivot 0.85, sprinkler 0.75, flood 0.65). */
+/** A farmer's word for each of the engine's SABI 2021 systems (IRRIGATION_SYSTEMS). */
+const SYSTEM_WORDS: Record<IrrigationSystemId, Msg> = {
+	drip: DRIP,
+	micro: MICRO_OR_PIVOT,
+	pivot: MICRO_OR_PIVOT,
+	sprinkler: SPRINKLERS,
+	movable: SPRINKLERS,
+	surface: FLOOD
+};
+
+/**
+ * The irrigation system whose SABI 2021 efficiency (the engine's
+ * IRRIGATION_SYSTEMS, the table the node form sets) is nearest this one, in a
+ * farmer's words (§3 Q1). A tie goes to the system listed first.
+ */
 export function systemName(efficiency: number): string {
-	let best = SYSTEMS[0]!;
-	for (const s of SYSTEMS) if (Math.abs(s[0] - efficiency) < Math.abs(best[0] - efficiency)) best = s;
-	return t(best[1]);
+	let best: (typeof IRRIGATION_SYSTEMS)[number] = IRRIGATION_SYSTEMS[0];
+	for (const s of IRRIGATION_SYSTEMS) if (Math.abs(s.efficiency - efficiency) < Math.abs(best.efficiency - efficiency)) best = s;
+	return t(SYSTEM_WORDS[best.id]);
 }
 
 // i18n-section: farm.supply
-export const littleNeed = () => t('Your farm needed very little water this season.');
+export const littleNeed = () => t('Your hydrological unit needed very little water this season.');
 
 /** "Short on 16 days in Nov and Dec, all when your dam was down to its stop level." */
 export function shortLine(farm: FarmProjection): string {
@@ -286,7 +298,13 @@ export type CompareVm =
 export function compareCard(farm: FarmProjection): CompareVm {
 	const last = farm.lastSeason;
 	// i18n-section: farm.compare
-	if (!last) return { available: false, text: t('Not available: the model’s data doesn’t reach back to the same dates last season.') };
+	if (!last) {
+		// A copy saved on the phone before `dataFrom` existed has no date to name.
+		const text = farm.dataFrom
+			? t('Not available: the model’s data starts on {date}.', { date: fmtDay(farm.dataFrom) })
+			: t('Not available: the model’s data doesn’t reach back to the same dates last season.');
+		return { available: false, text };
+	}
 	const pct = (f: number | null) => (f == null ? t('very little needed') : fmtPct(f));
 	const rows = [{ label: t('Water received'), now: pct(farm.season.fraction), then: pct(last.fraction) }];
 	if (farm.dam && farm.damCapacityM3 > 0) {
@@ -310,14 +328,14 @@ export function compareCard(farm: FarmProjection): CompareVm {
 
 // i18n-section: farm.river
 /** The one privacy sentence, the same everywhere (§3 Q4, §11 F5). */
-export const privacy = () => t('Your farm’s figures are seen by you, anyone else linked to this farm, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.');
+export const privacy = () => t('Your hydrological unit’s figures are seen by you, anyone else linked to this hydrological unit, and the WUA’s staff and modeller. Other farmers can’t see them, and you can’t see theirs.');
 
 /** "1 farm is upstream of you and 2 are downstream, of 8 farms in the catchment. The same rules apply to every farm." */
 export function positionLine(view: FarmView): string {
 	const { farmsUpstream: up, farmsDownstream: down, farmCount: n } = view.context;
-	const upText = up === 0 ? t('No farm is') : up === 1 ? t('1 farm is') : t('{n} farms are', { n: up });
+	const upText = up === 0 ? t('No hydrological unit is') : up === 1 ? t('1 hydrological unit is') : t('{n} hydrological units are', { n: up });
 	const downText = down === 0 ? t('none is') : down === 1 ? t('1 is') : t('{n} are', { n: down });
-	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every farm.', { up: upText, down: downText, count: count(FARMS, n) });
+	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every hydrological unit.', { up: upText, down: downText, count: count(FARMS, n) });
 }
 
 /** "River at Sandspruit Outlet: below its reserve on all of the last 30 days." A count, never a flow volume. */
@@ -331,15 +349,15 @@ export function outletLine(view: FarmView): Rich {
 /** "Who can see my farm" (§10.2): the people, by name, from GET …/farm/:nodeId/access; the roles alone if that fails. */
 export const whoCanSee = () => ({
 	// i18n-section: farm.who
-	heading: t('Who can see my farm'),
-	people: [t('You'), t('Anyone else linked to this farm'), t('The WUA’s staff'), t('The WUA’s modeller')],
-	not: t('Other farmers can’t see your farm’s figures, and you can’t see theirs.'),
+	heading: t('Who can see my hydrological unit'),
+	people: [t('You'), t('Anyone else linked to this hydrological unit'), t('The WUA’s staff'), t('The WUA’s modeller')],
+	not: t('Other farmers can’t see your hydrological unit’s figures, and you can’t see theirs.'),
 	loading: t('Loading the names…'),
 	failed: t('Couldn’t load the names just now. Your WUA can tell you who these people are.')
 });
 
 const ACCESS_ROLES = {
-	farmer: msg('linked to this farm'),
+	farmer: msg('linked to this hydrological unit'),
 	viewer: msg('WUA, can read'),
 	editor: msg('WUA, can change the model'),
 	owner: msg('WUA, manages who has access'),
@@ -365,29 +383,44 @@ export function farmSummaryLine(farm: FarmProjection): string {
 	return `${got} · ${dam}`;
 }
 
-export const farmsPrivacy = () => t('Each farm’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.');
+export const farmsPrivacy = () => t('Each hydrological unit’s figures are seen by the people linked to it and the WUA’s staff and modeller. Other farmers can’t see them.');
 
 // ---- States (§6.5, boards 5 to 8) ---------------------------------------------
 
 const STATE_KEYS = {
 	// i18n-section: farm.state
-	loading: msg('Loading your farm…'),
+	loading: msg('Loading your hydrological unit…'),
 	slow: msg('Slow signal? This can take a moment.'),
-	errorTitle: msg('We couldn’t load your farm'),
+	errorTitle: msg('We couldn’t load your hydrological unit'),
 	errorText: msg('Check your signal and try again. Your figures are safe; nothing was changed.'),
 	noPublication: msg('Your WUA hasn’t published figures yet'),
 	noPublicationText: msg('When they do, you’ll see the water you received, how your dam is doing, and any restrictions, here.'),
 	contact: msg('Questions? Contact your WUA.'),
-	removed: msg('You no longer have access to this farm. Contact your WUA.'),
+	removed: msg('You no longer have access to this hydrological unit. Contact your WUA.'),
+	contactNamed: msg('Questions? Contact {wua}.'),
+	removedNamed: msg('You no longer have access to this hydrological unit. Contact {wua}.'),
 	needsConnection: msg('Charts, “Why?” and downloads need a connection.'),
 	updating: msg('Updating…')
 };
 
 /** One of the farm pages' state lines, in the active language. */
-export const stateText = (which: keyof typeof STATE_KEYS) => t(STATE_KEYS[which]);
+export const stateText = (which: Exclude<keyof typeof STATE_KEYS, 'contactNamed' | 'removedNamed'>) => t(STATE_KEYS[which]);
+
+/**
+ * A "Contact your WUA" line, naming the WUA when the project has its name
+ * (project.wuaName, 095_wua_name; design §6.5 "Contact [WUA]").
+ */
+export function contactText(which: 'contact' | 'removed', wuaName: string | null | undefined): string {
+	if (!wuaName) return t(STATE_KEYS[which]);
+	const named = which === 'contact' ? STATE_KEYS.contactNamed : STATE_KEYS.removedNamed;
+	return t(named, { wua: wuaName });
+}
 
 /** The contact line after a second failure in a row. */
-export function stillFailing(offline: boolean): string {
+export function stillFailing(offline: boolean, wuaName: string | null = null): string {
+	if (wuaName) {
+		return t(offline ? 'Still no connection. If this keeps happening, contact {wua}.' : 'Still not working. If this keeps happening, contact {wua}.', { wua: wuaName });
+	}
 	return t(offline ? 'Still no connection. If this keeps happening, contact your WUA.' : 'Still not working. If this keeps happening, contact your WUA.');
 }
 

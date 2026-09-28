@@ -16,7 +16,7 @@ const n = (count: number, one: string, many: string) => `${count} ${count === 1 
 /** The note on a farm's detail panel; null when no farmer is linked. */
 export function linkedNote(count: number): string | null {
 	if (!count) return null;
-	return `${n(count, 'farmer is', 'farmers are')} linked to this unit (Overview → Farmers). Deleting it, or making it a gauge or water user, unlinks them when you save.`;
+	return `${n(count, 'farmer is', 'farmers are')} linked to this hydrological unit (Overview → Farmers). Deleting it, or making it a gauge or water user, unlinks them when you save.`;
 }
 
 /**

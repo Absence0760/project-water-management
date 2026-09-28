@@ -23,7 +23,7 @@
 			<caption class="visually-hidden">{caption}</caption>
 			<thead>
 				<tr>
-					{#if showName}<th scope="col">Unit or user</th>{/if}
+					{#if showName}<th scope="col">Hydrological unit or user</th>{/if}
 					<th scope="col">Source</th>
 					<th scope="col">Water year</th>
 					<th scope="col" class="num">Registered (m³)</th>

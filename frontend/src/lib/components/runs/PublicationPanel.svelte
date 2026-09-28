@@ -78,7 +78,7 @@
 			});
 			const { history: h } = await api.publication.get(projectId);
 			dialogOpen = false;
-			done = `Published. ${farms === 1 ? '1 farm view' : `${farms} farm views`} updated.`;
+			done = `Published. ${farms === 1 ? '1 farmer view' : `${farms} farmer views`} updated.`;
 			onChange?.({ current: publication, history: h });
 		} catch (e) {
 			error = msg(e);
@@ -193,12 +193,12 @@
 <Dialog bind:open={dialogOpen} title="Publish this run?" wide>
 	<p>Publishing makes “{run.label || 'Untitled run'}” the run stakeholders see:</p>
 	<ul>
-		<li>each farmer sees this run’s figures for their own farm, from 1 October to {run.endDate}, and the notice below;</li>
+		<li>each farmer sees this run’s figures for their own hydrological unit, from 1 October to {run.endDate}, and the notice below;</li>
 		<li>{current ? 'it replaces the current published baseline, which stays in the history' : 'it becomes the first published baseline'}, and the run is kept while the history holds it.</li>
 	</ul>
 	{#if noStop}
 		<p class="alert alert-warning" role="status">
-			{noStop === 1 ? '1 farm dam has' : `${noStop} farm dams have`} no stop level (0 %), so their farmers are told the model assumes the pump can empty the dam. Set each dam’s stop level on the Network tab to show them the water they can still use.
+			{noStop === 1 ? '1 hydrological unit’s dam has' : `${noStop} hydrological units’ dams have`} no stop level (0 %), so their farmers are told the model assumes the pump can empty the dam. Set each dam’s stop level on the Network tab to show them the water they can still use.
 		</p>
 	{/if}
 	{@render noticeFields(`${uid}-pub`)}

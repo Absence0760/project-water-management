@@ -703,6 +703,25 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
       if it varies), what hands-off flow or EWR condition applies, what are
       its losses, and does it run full or draw only what is ordered?
 
+    **Answered by the client, 2026-09-28 (issue #90):**
+    - **Default irrigation system:** drip (0.90, SABI 2021). New farms start
+      on it; the engine keeps one SABI 2021 table (model.md § Irrigation
+      efficiency, migration 099).
+    - **Demand priority:** senior/junior is enough; a demand with both parts
+      is two demand objects (model.md §2.7f).
+    - **Demand sources:** meter records, else the reconciliation strategy's
+      AADD, else population × litres per person per day, recording which
+      (model.md §2.7f; a structured field is in followups.md).
+    - **GIS:** open data only (Copernicus 30 m DEM, WR2012, other openly
+      licensed layers), proposed by the app and confirmed by the modeller
+      (planned-work.md § Catchment map).
+    - **Restrictions and basic needs:** a 25 l/person/day domestic floor,
+      DWS % cuts, municipal levels as an optional display. Agreed, not built
+      (followups.md "Restrictions: the basic-needs floor").
+    - **Afrikaans:** the client's native-speaker translator reviews the
+      farmer text before farmers are invited in Afrikaans (followups.md
+      § Afrikaans).
+
 ### Product
 
 10. **Who uses it?** Only the hydrologist, or also farmers, catchment forums,
@@ -730,31 +749,39 @@ From the client's four sketched outputs; research and recommendations in
   met (or % of days below the EWR) counts as high risk, increasing risk,
   lower risk? *Built as project settings (`settings.outcomes`, Settings →
   Outcome matrix, issue #53 R4): the defaults (months met 90 % / 75 %, days
-  below the EWR 5 % / 20 %) are marked pending the hydrologist until
-  answered, and a project can already set its own.*
+  below the EWR 5 % / 20 %). The client agreed to them (2026-09-28, issue
+  #90); the hydrologist's confirmation is still open, so they stay marked
+  pending the hydrologist, and a project can already set its own.*
 - **O2. Year classes.** Split water years by the run's own natural-flow
   terciles (dry / normal / wet), or by fixed percentile years (25th, median,
   75th)? *Built as a project setting (`settings.outcomes.yearClassMethod`):
   automatic, terciles, quintiles once the record has 25 years, the default;
   terciles or quintiles can be fixed. Fixed percentile years would be a new
-  method.*
+  method.* **Answered 2026-09-28 (issue #90):** the client confirmed the
+  default (terciles, quintiles from 25 years).
 - **O3. Decision and review dates.** On what date does the WUA set the
   season's irrigation level, and when does it review? *The decision date is
   built as a project setting (`settings.outlook.season`, Settings →
   Seasonal outlook, issue #53 R5): the season as a month and day each end,
-  default 1 October – 30 April, marked pending the client until answered.
-  The review date waits on R6.*
+  default 1 October – 30 April; the review date's default (the engine's
+  `defaultReviewDate`, 1 January for that season) is part of R6.*
+  **Answered 2026-09-28 (issue #90):** the client confirmed the season
+  1 October – 30 April with a review on 1 January; the pending badges are
+  gone.
 - **O4. Restrictions per category.** Should the share-the-pain view cut
   domestic, industrial and irrigation users by different percentages (as DWS
   gazettes restrictions), and is a town's use domestic or irrigation?
+  **Answered in part 2026-09-28 (issue #90):** every category is cut by the
+  same %, the built rule (`ShareRule { kind: 'equal' }`). Still open to the
+  client: whether the town's uses count as domestic or irrigation.
 - **O5. Audience.** Is the seasonal outlook for the WUA only, or also for
   farmers on their phones (so in Afrikaans too)?
 - **O6. Planning share.** The outlook reports the highest demand level that
   meets the EWR in a set share of past years. What share: 80 %? The app
   reports the trade-off; the WUA publishes the decision (disclaimer, D10).
   *Built as a project setting (`settings.outlook.planningShare`): default
-  80 %, marked pending the client until answered; a project can already set
-  its own.*
+  80 %; a project can set its own.* **Answered 2026-09-28 (issue #90):** the
+  client confirmed 80 %; the pending badges are gone.
 
 ### Data, legal, hosting
 

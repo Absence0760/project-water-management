@@ -33,7 +33,7 @@ test('the page: one title, its context and Download in the header, the facts, de
 
 	// The model's facts, each counting from the page's lists.
 	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toBeVisible();
-	await expect(fact(page, 'Units')).toHaveText('2+ 1 gauge');
+	await expect(fact(page, 'Hydrological units')).toHaveText('2+ 1 gauge');
 	await expect(fact(page, 'Time series')).toHaveText('2');
 	await expect(fact(page, 'Model runs')).toHaveText('1');
 	await expect(fact(page, 'Outflow gauge')).toHaveText('Outflow gauge');
@@ -76,6 +76,13 @@ test('the Summary links here and Back returns; details save from here', async ({
 	await page.getByRole('button', { name: 'Save details' }).click();
 	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
 	await expect(page.getByTestId('project-name')).toHaveText('Project renamed');
+
+	// The WUA's name, which the farm pages' contact lines use (095_wua_name).
+	await page.getByLabel('WUA name').fill('Summary Valley WUA');
+	await page.getByRole('button', { name: 'Save details' }).click();
+	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
+	await page.reload();
+	await expect(page.getByLabel('WUA name')).toHaveValue('Summary Valley WUA');
 
 	await page.goBack();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
@@ -134,13 +141,13 @@ test('a fresh project: every fact at zero, and each fact opens the tab behind it
 	void owner;
 	const project = await createProject(page.request, 'Project facts');
 	await openProject(page, project.id);
-	await expect(fact(page, 'Units')).toHaveText('0+ 0 gauges');
+	await expect(fact(page, 'Hydrological units')).toHaveText('0+ 0 gauges');
 	await expect(fact(page, 'Time series')).toHaveText('0');
 	await expect(fact(page, 'Model runs')).toHaveText('0');
 	await expect(fact(page, 'Outflow gauge')).toHaveText('–');
 
 	const tabs: [string, string][] = [
-		['Units', 'Network'],
+		['Hydrological units', 'Network'],
 		['Irrigated area', 'Crops & demand'],
 		['Active transfers', 'Transfers'],
 		['Time series', 'Data'],

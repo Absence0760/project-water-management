@@ -377,7 +377,7 @@
 	{#if data.check?.renamed?.length}
 		<!-- The assessors only (the applicant never learns a hidden name): what the application's names displaced. -->
 		<p class="alert alert-info" role="status" data-testid="scenario-renamed">
-			The applicant gave a name already used by a unit or crop they can't see; in this application's runs
+			The applicant gave a name already used by a hydrological unit or crop they can't see; in this application's runs
 			{data.check.renamed.map((r) => `${r.name} is called “${r.as}”`).join(', ')}.
 		</p>
 	{/if}
@@ -512,7 +512,7 @@
 		<div class="field">
 			<label for="scenario-yield-node">Dam</label>
 			<select id="scenario-yield-node" bind:value={yieldNodeId}>
-				<option value="">Pick a unit or dam…</option>
+				<option value="">Pick a hydrological unit or dam…</option>
 				{#each yieldFarms as n (n.id)}
 					<option value={n.id}>{n.name || 'Unnamed'}{n.damCapacityM3 > 0 ? '' : ' (no dam)'}</option>
 				{/each}

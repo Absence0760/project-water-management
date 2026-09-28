@@ -116,7 +116,7 @@ test('imports the synthetic workbook with a first run, and the project opens wit
 	// The counts: 9 farms and 2 gauges, 5 crops on 11 planted areas, 6 transfers (two switched off), 4 series.
 	await expect(dialog.getByText('From synthetic_b023.xlsx')).toBeVisible();
 	const contents = dialog.getByRole('region', { name: 'In this workbook' });
-	await expect(contents.getByRole('definition').nth(0)).toHaveText('9 units, 2 gauges');
+	await expect(contents.getByRole('definition').nth(0)).toHaveText('9 hydrological units, 2 gauges');
 	await expect(contents.getByRole('definition').nth(1)).toHaveText('5 crops, 11 planted areas');
 	await expect(contents.getByRole('definition').nth(2)).toHaveText('6');
 	await expect(contents.getByRole('definition').nth(3)).toHaveText('4');

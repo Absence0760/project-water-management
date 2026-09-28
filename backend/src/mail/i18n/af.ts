@@ -56,16 +56,16 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.exists.ignore': 'As dit nie jy was nie, kan jy hierdie e-pos ignoreer — niks aan jou rekening het verander nie.',
 	// {inviter} has given you access to {farms} in {catchment}
 	'mail.farmer.subject': '{inviter} het jou toegang gegee tot {farms} in {catchment}',
-	// Your farm on {product}
-	'mail.farmer.heading': 'Jou plaas op {product}',
+	// Your hydrological unit on {product}
+	'mail.farmer.heading': 'Jou hidrologiese eenheid op {product}',
 	// {inviter} has given you access to {farms} in {catchment}.
 	'mail.farmer.body': '{inviter} het jou toegang gegee tot {farms} in {catchment}.',
-	// You will see your own farm's water, dam and any restriction notice, and nothing about your neighbours' farms.
-	'mail.farmer.privacy': 'Jy sal jou eie plaas se water, dam en enige beperkingskennisgewing sien, en niks oor jou bure se plase nie.',
+	// You will see your own hydrological unit's water, dam and any restriction notice, and nothing about your neighbours' hydrological units.
+	'mail.farmer.privacy': 'Jy sal jou eie hidrologiese eenheid se water, dam en enige beperkingskennisgewing sien, en niks oor jou bure se hidrologiese eenhede nie.',
 	// The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
 	'mail.farmer.estimate': 'Die syfers wat jy sal sien, is deur ’n rekenaarmodel van die opvanggebied bereken. Dit is skattings, nie metings of opdragte nie, en dit kan verkeerd wees. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking.',
-	// your farm
-	'mail.farmer.yourFarm': 'jou plaas',
+	// your hydrological unit
+	'mail.farmer.yourFarm': 'jou hidrologiese eenheid',
 	// and
 	'mail.farmer.and': 'en',
 	// Create your {product} account with this email address ({email}) to accept.
@@ -88,8 +88,8 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.invite.confirmTakeOver': 'As jy nooit ’n {product}-rekening geskep het nie, het iemand anders jou adres geregistreer: moenie dit bevestig nie — gebruik eerder “Wagwoord vergeet” op die intekenbladsy om die rekening oor te neem.',
 	// {what} — {project}
 	'mail.alert.subject': '{what} — {project}',
-	// Open your farm
-	'mail.alert.openFarm': 'Maak jou plaas oop',
+	// Open your hydrological unit
+	'mail.alert.openFarm': 'Maak jou hidrologiese eenheid oop',
 	// Open the catchment
 	'mail.alert.openProject': 'Maak die opvanggebied oop',
 	// This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.

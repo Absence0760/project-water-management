@@ -1,11 +1,17 @@
 version: 2
 
+# Every ecosystem waits 7 days after a release before proposing it
+# (`cooldown`; security updates are exempt and still arrive at once).
+# Most malicious package releases are found and pulled within days, and
+# pnpm-workspace.yaml's minimumReleaseAge holds installs to the same week.
 updates:
   # GitHub Actions used in workflows.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       actions:
@@ -17,6 +23,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       # backend's playwright-core and e2e's @playwright/test in one PR: the
@@ -52,6 +60,8 @@ updates:
     directory: "/backend/renderer-deps"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: "playwright-core"
@@ -65,6 +75,8 @@ updates:
       - "/scripts/wbt-import"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       minor-and-patch:
@@ -80,6 +92,8 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     ignore:
       - dependency-name: "postgres"
@@ -89,4 +103,6 @@ updates:
     directory: "/infra"
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5

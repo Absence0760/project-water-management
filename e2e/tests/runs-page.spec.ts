@@ -40,7 +40,7 @@ test('the run form sits in the section header, last, with its status one slim li
 	await expect(h.getByLabel(/^Run label/)).toHaveValue('');
 });
 
-test('the run header links to the river and unit pages for its run, and the old link rows go there, Back skipping them', async ({ page, owner }) => {
+test('the run header links to the river and hydrological unit pages for its run, and the old link rows go there, Back skipping them', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Runs outcomes');
 	const first = await createRun(page.request, project.id, 'First');
@@ -48,7 +48,7 @@ test('the run header links to the river and unit pages for its run, and the old 
 	await openRuns(page, project.id, `&run=${first}`);
 	const outcomes = page.getByRole('navigation', { name: 'Outcomes for this run' });
 	await expect(outcomes.getByRole('link', { name: 'River & reserve for this run' })).toHaveAttribute('href', `?tab=river&run=${first}`);
-	await expect(outcomes.getByRole('link', { name: 'Units & supply for this run' })).toHaveAttribute('href', `?tab=supply&run=${first}`);
+	await expect(outcomes.getByRole('link', { name: 'Hydrological units for this run' })).toHaveAttribute('href', `?tab=supply&run=${first}`);
 	// The groups are no longer on the page or in its menu.
 	await expect(page.locator('#res-river, #res-units')).toHaveCount(0);
 	await expect(page.getByRole('heading', { level: 2, name: 'River & Reserve' })).toHaveCount(0);

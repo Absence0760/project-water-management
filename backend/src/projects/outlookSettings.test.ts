@@ -47,7 +47,7 @@ describe('SettingsPatch.outlook', () => {
 });
 
 describe('resolveOutlook', () => {
-	it('fills the defaults (null: the engine’s, pending the client) and falls back field by field', () => {
+	it('fills the defaults (null: the engine’s, confirmed by the client) and falls back field by field', () => {
 		expect(resolveOutlook({})).toEqual(OUTLOOK_DEFAULTS);
 		expect(resolveOutlook(null)).toEqual({ season: null, planningShare: null });
 		expect(resolveOutlook({ outlook: 'x' })).toEqual(OUTLOOK_DEFAULTS);

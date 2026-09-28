@@ -251,7 +251,7 @@ resource "aws_lambda_function" "migrate" {
   handler       = "dist/lambda-migrate.handler"
   runtime       = "nodejs24.x"
   architectures = ["arm64"]
-  timeout       = 300
+  timeout       = 300 # migrate.ts DEFAULT_TIMEOUTS.statement_timeout (240s) stays under this
   memory_size   = 512
 
   reserved_concurrent_executions = var.migrate_reserved_concurrency

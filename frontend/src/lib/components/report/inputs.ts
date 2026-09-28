@@ -72,7 +72,7 @@ export function monthlyRows(s: RunSettings): { label: string; values: string[] }
 	];
 }
 
-const KIND: Record<string, string> = { farm: 'Unit', gauge: 'Gauge', user: 'Other water user' };
+const KIND: Record<string, string> = { farm: 'Hydrological unit', gauge: 'Gauge', user: 'Other water user' };
 
 /** Every node in network order: kind, what it drains into, area, dam and irrigation efficiency. */
 export function nodeRows(model: Partial<ProjectModel>): string[][] {

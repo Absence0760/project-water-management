@@ -3,7 +3,8 @@
 # from the bundle infra/scripts/package-lambdas.sh writes:
 #
 #   infra/scripts/package-lambdas.sh
-#   docker build -f backend/renderer.Dockerfile -t water-management-renderer backend
+#   docker buildx build --provenance=false --sbom=false --platform linux/amd64 --load \
+#     -f backend/renderer.Dockerfile -t water-management-renderer backend
 #
 # Playwright's own image carries the Chromium build and the system libraries
 # that playwright-core drives: the same browser build e2e and the local worker

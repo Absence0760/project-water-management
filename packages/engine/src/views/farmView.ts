@@ -104,13 +104,15 @@ export interface FarmProjection {
 	damCapacityM3: number;
 	damMinPct: number;
 	irrigationEfficiency: number;
+	/** The run's first day: where "compared with last season" can reach back to. */
+	dataFrom: string;
 	/** The last day with input data in the run. */
 	dataUntil: string;
 	season: SeasonTotals;
 	last30: WindowTotals;
 	/** null when the farm has no dam (damCapacityM3 = 0). */
 	dam: DamState | null;
-	/** The same season dates one year earlier, from the same run; null when the run doesn't reach back. */
+	/** The same season dates one year earlier, from the same run; null when the run doesn't reach back (it starts on dataFrom). */
 	lastSeason: { from: string; to: string; fraction: number | null; damPct: number | null } | null;
 	/** The 12 calendar months to dataUntil, oldest first. */
 	monthly: MonthTotals[];
@@ -150,10 +152,17 @@ export interface FarmContext {
 
 export type RestrictionLevel = 'none' | 'advisory' | 'restricted';
 
+/** The catchment as the farm pages name it: `wuaName` is the WUA the contact lines name (095_wua_name), null for "your WUA". */
+export interface FarmProject {
+	id: string;
+	name: string;
+	wuaName: string | null;
+}
+
 /** GET /projects/:id/farm/:nodeId (WP-2.6): everything the farm page renders, in one response. */
 export interface FarmView {
 	/** `timeZone`: the project's IANA zone (project.time_zone, 058), where "today" is counted. */
-	project: { id: string; name: string; timeZone: string };
+	project: FarmProject & { timeZone: string };
 	/** Today's date where the catchment is (the project's zone) when the response was built: the page's "today" if it can't work it out itself. */
 	today: string;
 	farm: FarmProjection;
@@ -187,9 +196,35 @@ export interface FarmView {
 
 /** GET /projects/:id/farm (WP-2.6): the farmer's farms in one project, and whether anything is published. */
 export interface FarmIndex {
-	project: { id: string; name: string };
+	project: FarmProject;
 	farms: { nodeId: string; name: string }[];
 	publication: { publishedAt: string; restriction: { level: RestrictionLevel } } | null;
+}
+
+/** GET /projects/:id/farm/:nodeId/series: one of the farm's own daily series (FARMER_SERIES_KEYS) from the published run. */
+export interface FarmSeries {
+	key: string;
+	label: string;
+	unit: string | null;
+	/** The day of values[0] (ISO). */
+	startDate: string;
+	/** One per day to the window's end, never past dataUntil; null where the run has no value. */
+	values: (number | null)[];
+}
+
+/** One publication in GET /projects/:id/farm/:nodeId/history: what it said about this farm, its own figures only. */
+export interface FarmHistoryEntry {
+	publishedAt: string;
+	/** Still the current publication. */
+	current: boolean;
+	dataUntil: string;
+	season: { from: string; to: string; demandM3: number; suppliedM3: number; fraction: number | null; shortDays: number };
+	/** The dam on dataUntil (0–1); null without a dam. */
+	damPct: number | null;
+	/** The model's E7 headline and band (design §6.2): they carry no neighbour's figure, so they show at any k. */
+	model: { headline: number | null; band: ModelBand | null };
+	/** What the WUA published with it. */
+	restriction: { level: RestrictionLevel; pct: number | null };
 }
 
 /** k in the aggregate rule (D2, pending the client): catchment aggregates need at least FARMER_K − 1 other holders. */

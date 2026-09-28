@@ -3,8 +3,9 @@
 	// how the Runs tab's outcome matrix splits water years into classes, and
 	// the risk cut-offs its cells are coloured by. Part of the Settings form
 	// (Save settings saves it), in the Settings tab's chunk. No model input: it changes how results are read, never a
-	// run. The defaults are placeholders pending the hydrologist (plan.md O1,
-	// O2), and the section says so while they are in use.
+	// run. The cut-offs' defaults are placeholders pending the hydrologist
+	// (plan.md O1; the client agreed, issue #90), and the section says so while
+	// they are in use. The year-class method's default is confirmed (O2).
 	import { DEFAULT_OUTCOME_RISK_CUTOFFS, YEAR_CLASS_QUINTILE_MIN_YEARS, type YearClassMethod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import type { OutcomeSettings } from '$lib/api/types';
@@ -56,7 +57,7 @@
 		</select>
 		<span class="hint" id="out-method-h">
 			The base run’s complete water years ranked by their natural flow. Automatic uses quintiles once the record has
-			{YEAR_CLASS_QUINTILE_MIN_YEARS} complete years; the choice waits on the client (O2).
+			{YEAR_CLASS_QUINTILE_MIN_YEARS} complete years.
 		</span>
 	</div>
 	{#each METRICS as m (m.id)}

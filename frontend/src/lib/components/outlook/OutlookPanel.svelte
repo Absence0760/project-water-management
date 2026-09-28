@@ -75,7 +75,7 @@
 	const shown = $derived(outlook ? outlookState(outlook) : null);
 	const view = $derived.by((): OutlookView | null => {
 		if (!outlook || shown?.kind !== 'complete' || !outlook.result) return null;
-		return buildOutlookView({ ...outlook, result: outlook.result }, settings);
+		return buildOutlookView({ ...outlook, result: outlook.result });
 	});
 	const dataState = $derived(loading ? 'loading' : !outlook ? 'empty' : (shown?.kind ?? 'loading'));
 
@@ -145,7 +145,7 @@
 	<h3 id="outlook-h">Seasonal outlook</h3>
 	<p class="muted small lead">
 		From this run’s state on the season’s decision date, the season run with the weather of each past water year, at a few demand levels: how
-		the dams, the units and the river fared in those years. Historical analogues, not a forecast; the choice of level is the WUA’s.
+		the dams, the hydrological units and the river fared in those years. Historical analogues, not a forecast; the choice of level is the WUA’s.
 	</p>
 
 	{#if !ordinary}
@@ -154,9 +154,9 @@
 		{#if canEdit}
 			<form class="start" onsubmit={start} novalidate>
 				<div class="field">
-					<label for="outlook-levels">Demand levels <span class="u">(% of today’s unit demand)</span></label>
+					<label for="outlook-levels">Demand levels <span class="u">(% of today’s hydrological unit demand)</span></label>
 					<input id="outlook-levels" type="text" bind:value={levelsText} disabled={busy} aria-describedby="outlook-levels-h" aria-invalid={!!parsed.error} />
-					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every unit’s irrigation demand from the decision date.</span>
+					<span class="hint" id="outlook-levels-h">Up to {OUTLOOK_LEVELS_MAX}, separated by commas. Each scales every hydrological unit’s irrigation demand from the decision date.</span>
 				</div>
 				<label class="check">
 					<input type="checkbox" bind:checked={withPlan} disabled={busy} />
@@ -164,7 +164,7 @@
 				</label>
 				{#if withPlan}
 					<fieldset class="plan">
-						<legend>Monthly plan <span class="u">(% of today’s unit demand, by month of the season)</span></legend>
+						<legend>Monthly plan <span class="u">(% of today’s hydrological unit demand, by month of the season)</span></legend>
 						<div class="field">
 							<label for="outlook-plan-label">Name</label>
 							<input id="outlook-plan-label" type="text" maxlength="100" bind:value={planLabel} disabled={busy} />
@@ -209,9 +209,7 @@
 			</p>
 			<div class="badges">
 				<span class="badge" data-testid="outlook-season">Season: {view.season}</span>
-				{#if view.seasonPending}<span class="badge badge-warn" data-testid="outlook-season-pending">Season pending the client</span>{/if}
 				<span class="badge" data-testid="outlook-share">Planning share: {view.share}</span>
-				{#if view.sharePending}<span class="badge badge-warn" data-testid="outlook-share-pending">Planning share pending the client</span>{/if}
 				<span class="badge" data-testid="outlook-metric">Measure: {view.metricLabel}</span>
 				<span class="badge" data-testid="outlook-years">{view.nYears} analogue {view.nYears === 1 ? 'year' : 'years'}</span>
 			</div>
@@ -225,7 +223,7 @@
 						<tr>
 							<th scope="col">Demand level</th>
 							<th scope="col">Dam storage at season end</th>
-							<th scope="col">Unit demand met</th>
+							<th scope="col">Hydrological unit demand met</th>
 							<th scope="col">{view.ewrHeading}</th>
 							<th scope="col">Years met in full</th>
 						</tr>

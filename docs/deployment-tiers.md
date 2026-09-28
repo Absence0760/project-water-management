@@ -170,8 +170,8 @@ current prices (us-east-1; free tiers apply first):
 
 The first thing to outgrow is the database instance class, not Lambda or
 bandwidth: watch the RDS CPU, memory and burst-credit alarms. The Lambda
-reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 2,
-fetcher 2, renderer 2) bound the worst case of an attack or a runaway job,
+reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 8,
+fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job,
 and the budget alarm pages at 50%, 100% and forecast 100%.
 
 ## Cheaper options, and why they aren't used

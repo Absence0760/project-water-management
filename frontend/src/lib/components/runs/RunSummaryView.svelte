@@ -108,7 +108,7 @@
 		<dt>Irrigation supplied <HelpTip key="summary.fractionSupplied" /></dt>
 		<dd>{totals.demand > 0 ? fmtPct(totals.supplied / totals.demand) : '–'}<small>of demand</small></dd>
 		<dd class="sub">
-			{shortCount ? `${shortCount} of ${farms.length} units below ${fmtPct(SUPPLY_TARGET, 0)}` : `all units ≥ ${fmtPct(SUPPLY_TARGET, 0)}`}
+			{shortCount ? `${shortCount} of ${farms.length} hydrological units below ${fmtPct(SUPPLY_TARGET, 0)}` : `all hydrological units ≥ ${fmtPct(SUPPLY_TARGET, 0)}`}
 		</dd>
 		<dd class="sub">over the whole record</dd>
 	</div>

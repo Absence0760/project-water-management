@@ -392,7 +392,7 @@ describe('what a farmer reads', () => {
 	it('lists a farmer’s own farms and the current publication', async () => {
 		const res = await farmer.call('GET', `/projects/${projectId}/farm`);
 		expect(res.body).toEqual({
-			project: { id: projectId, name: 'Publication' },
+			project: { id: projectId, name: 'Publication', wuaName: null },
 			farms: [{ nodeId: farms[0]!.id, name: 'Farm One' }],
 			publication: { publishedAt: expect.any(String), restriction: { level: 'restricted' } }
 		});

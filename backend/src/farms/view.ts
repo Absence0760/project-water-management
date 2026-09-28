@@ -5,7 +5,7 @@
 // the same as a node that doesn't exist. Everything comes from the project's
 // *current* publication; a response names no other node (no id, no name)
 // beyond the gauges, which are public infrastructure.
-import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmIndex, type FarmProjection, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
+import { FARMER_K, FARMER_SERIES_KEYS, fromEpochDay, toEpochDay, type FarmHistoryEntry, type FarmIndex, type FarmProjection, type FarmSeries, type FarmView, type NoticeText, type RestrictionLevel } from '@water-management/engine';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -26,6 +26,17 @@ const isoDate = z
 const CsvQuery = z
 	.object({ from: isoDate.optional(), to: isoDate.optional() })
 	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
+
+/** The chart series route's window by default: the year to dataUntil (roadmap WP-2.6; a whole run is too much for a phone). */
+export const FARM_SERIES_DEFAULT_DAYS = 365;
+/** The widest window one series request answers: ten years, about 40 kB of JSON. */
+export const FARM_SERIES_MAX_DAYS = 3653;
+const SeriesQuery = z
+	.object({ key: z.enum(FARMER_SERIES_KEYS), from: isoDate.optional(), to: isoDate.optional() })
+	.refine((q) => !q.from || !q.to || q.from <= q.to, { message: '`from` must not be after `to`', path: ['from'] });
+
+/** How many of the farm's publications its history lists, newest first. */
+export const FARM_HISTORY_LIMIT = 12;
 
 const notFound = () => new ApiError(404, 'not found');
 const notPublished = () => new ApiError(404, 'not published yet');
@@ -67,11 +78,18 @@ interface CurrentFarmRow {
 	view: FarmProjection | null;
 }
 
-/** The current publication, with this farm's projection (view null when the farm isn't in it). null without a publication. */
+/**
+ * The current publication, with this farm's projection (view null when the
+ * farm isn't in it). null without a publication. A projection stored before
+ * `dataFrom` existed gets it from the catchment view's `runStart` (the same
+ * run's first day), so every reader sees the field.
+ */
 export async function currentFor(db: Db, projectId: string, nodeId: string): Promise<CurrentFarmRow | null> {
 	const { rows } = await db.query<CurrentFarmRow>(
 		`SELECT p.run_id, p.published_at, u.display_name AS published_by_name, p.restriction_level, p.restriction_pct,
-			p.notice, p.next_expected_on, p.catchment_view, f.view
+			p.notice, p.next_expected_on, p.catchment_view,
+			CASE WHEN f.view IS NULL OR f.view ? 'dataFrom' THEN f.view
+				ELSE f.view || jsonb_build_object('dataFrom', p.catchment_view->'runStart') END AS view
 		 FROM run_publication p
 		 LEFT JOIN app_user u ON u.id = p.published_by
 		 LEFT JOIN publication_farm f ON f.publication_id = p.id AND f.node_id = $2
@@ -102,13 +120,13 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 		const id = c.req.param('id');
 		return withUser(c.get('userId'), async (db) => {
 			const role = await requireRole(db, id, 'farmer');
-			const { rows: p } = await db.query<{ name: string }>('SELECT name FROM project WHERE id = $1', [id]);
+			const { rows: p } = await db.query<{ name: string; wuaName: string | null }>('SELECT name, wua_name AS "wuaName" FROM project WHERE id = $1', [id]);
 			const { rows: pub } = await db.query<{ published_at: Date; restriction_level: RestrictionLevel }>(
 				'SELECT published_at, restriction_level FROM run_publication WHERE project_id = $1 AND superseded_at IS NULL',
 				[id]
 			);
 			const body: FarmIndex = {
-				project: { id, name: p[0]!.name },
+				project: { id, name: p[0]!.name, wuaName: p[0]!.wuaName },
 				farms: await reachableFarms(db, id, role),
 				publication: pub[0] ? { publishedAt: pub[0].published_at.toISOString(), restriction: { level: pub[0].restriction_level } } : null
 			};
@@ -122,7 +140,10 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			await requireFarm(db, id, nodeId);
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
-			const { rows: p } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
+			const { rows: p } = await db.query<{ name: string; timeZone: string; wuaName: string | null }>(
+				'SELECT name, time_zone AS "timeZone", wua_name AS "wuaName" FROM project WHERE id = $1',
+				[id]
+			);
 			const farm = await farmerProjection(db, id, nodeId, cur.view);
 			const { rows: ctx } = await db.query<{ farms_upstream: number; farms_downstream: number; farm_count: number }>(
 				'SELECT farms_upstream, farms_downstream, farm_count FROM app_farm_context($1, $2)',
@@ -133,7 +154,7 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			// Counted to today where the catchment is (project.time_zone, 058), not UTC's day or the phone's.
 			const today = localDate(new Date(), p[0]!.timeZone);
 			const body: FarmView = {
-				project: { id, name: p[0]!.name, timeZone: p[0]!.timeZone },
+				project: { id, name: p[0]!.name, wuaName: p[0]!.wuaName, timeZone: p[0]!.timeZone },
 				today,
 				farm,
 				context: { farmsUpstream: ctx[0]?.farms_upstream ?? 0, farmsDownstream: ctx[0]?.farms_downstream ?? 0, farmCount: ctx[0]?.farm_count ?? 0 },
@@ -166,6 +187,70 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 				[id, nodeId]
 			);
 			return c.json({ people: rows.map((r) => ({ displayName: r.display_name, role: r.role, you: r.is_you })) });
+		});
+	})
+	// One of the farm's own daily series from the published run, for a chart:
+	// the farm allowlist only (FARMER_SERIES_KEYS), the year to dataUntil by
+	// default, never past dataUntil (the forecast days are the projection's).
+	.get('/:id/farm/:nodeId/series', async (c) => {
+		const { id, nodeId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireFarm(db, id, nodeId);
+			// After the farm check: another farm answers 404 whatever the query.
+			const q = SeriesQuery.parse(c.req.query());
+			const cur = await currentFor(db, id, nodeId);
+			if (!cur?.view) throw notPublished();
+			const start = cur.catchment_view.runStart;
+			const until = cur.view.dataUntil;
+			const to = q.to && q.to < until ? q.to : until;
+			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_SERIES_DEFAULT_DAYS - 1));
+			const lo = Math.max(0, toEpochDay(from) - toEpochDay(start));
+			const hi = toEpochDay(to) - toEpochDay(start);
+			if (hi < lo) throw new ApiError(400, `the window is outside the published figures (${start} … ${until})`);
+			if (hi - lo + 1 > FARM_SERIES_MAX_DAYS) throw new ApiError(400, `at most ${FARM_SERIES_MAX_DAYS} days at a time; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD`);
+			// Postgres arrays are 1-based; the slice keeps a decades-long run on the server.
+			const { rows } = await db.query<{ label: string | null; unit: string | null; values: (number | null)[] }>(
+				`SELECT meta->>'label' AS label, meta->>'unit' AS unit, "values"[$4:$5] AS "values"
+				 FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = $3`,
+				[cur.run_id, nodeId, q.key, lo + 1, hi + 1]
+			);
+			const r = rows[0];
+			if (!r) throw notPublished();
+			const body: FarmSeries = { key: q.key, label: r.label ?? q.key, unit: r.unit, startDate: fromEpochDay(toEpochDay(start) + lo), values: r.values };
+			return c.json(body, 200, { 'Cache-Control': 'no-store' });
+		});
+	})
+	// The farm across the WUA's publications (roadmap WP-2.6): what each one
+	// said about this farm, newest first. Only the farm's own figures: never
+	// the even share, which is a catchment ratio (design §10.3).
+	.get('/:id/farm/:nodeId/history', async (c) => {
+		const { id, nodeId } = c.req.param();
+		return withUser(c.get('userId'), async (db) => {
+			await requireFarm(db, id, nodeId);
+			const { rows } = await db.query<{ published_at: Date; superseded_at: Date | null; restriction_level: RestrictionLevel; restriction_pct: string | null; view: FarmProjection }>(
+				`SELECT p.published_at, p.superseded_at, p.restriction_level, p.restriction_pct, f.view
+				 FROM publication_farm f JOIN run_publication p ON p.id = f.publication_id
+				 WHERE f.project_id = $1 AND f.node_id = $2
+				 ORDER BY p.published_at DESC LIMIT $3`,
+				[id, nodeId, FARM_HISTORY_LIMIT]
+			);
+			const publications: FarmHistoryEntry[] = rows.map((r) => ({
+				publishedAt: r.published_at.toISOString(),
+				current: r.superseded_at === null,
+				dataUntil: r.view.dataUntil,
+				season: {
+					from: r.view.season.from,
+					to: r.view.season.to,
+					demandM3: r.view.season.demandM3,
+					suppliedM3: r.view.season.suppliedM3,
+					fraction: r.view.season.fraction,
+					shortDays: r.view.season.shortDays
+				},
+				damPct: r.view.dam?.pct ?? null,
+				model: { headline: r.view.river.headline, band: r.view.river.band },
+				restriction: { level: r.restriction_level, pct: r.restriction_pct === null ? null : Number(r.restriction_pct) }
+			}));
+			return c.json({ publications });
 		});
 	})
 	// The farm's own daily figures from the published run: the farm allowlist

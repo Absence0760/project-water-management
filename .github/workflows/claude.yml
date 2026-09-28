@@ -33,11 +33,14 @@ jobs:
         (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.assignees.*.login, 'claude')))
       )
     runs-on: ubuntu-latest
+    # The three scopes claude-code-action documents (docs/security.md in the
+    # action's repo): contents to push its branch, pull-requests and issues
+    # to reply. No id-token: the token is passed as github_token below, so
+    # the action never mints an OIDC token for its app-token exchange.
     permissions:
       contents: write
       pull-requests: write
       issues: write
-      id-token: write
     steps:
       # Defense in depth — if the if: gate above is ever removed by mistake,
       # this hard-fail prevents the job from progressing past authorisation.
@@ -59,16 +62,24 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # The action backs git with its own token (it replaces checkout's
+          # credential); nothing else in this job should find one in .git.
+          persist-credentials: false
 
-      # Bash allowlist is deliberately tight. Broad patterns like
-      # `Bash(pnpm *)` would allow `pnpm exec <arbitrary-binary>`;
-      # `Bash(gh *)` would allow `gh release create` (triggers production
-      # deploys), `gh secret set`, `gh workflow run`, etc.; `Bash(git *)`
-      # would allow `git push --force`. Each command below is read-only or
-      # scoped to repo-local development tasks.
+      # The model reads third-party issue and PR text, so assume a prompt
+      # injection can steer it. It may write files (Write/Edit) but may not
+      # RUN repo code: no pnpm command at all. `pnpm test`/`check`/`build`
+      # execute files the model can have just written (a test, a config,
+      # svelte.config.js), and `pnpm install` runs lifecycle scripts, so any
+      # of them beside Write/Edit is arbitrary code execution with a write
+      # token, in the default branch's context where it could also seed the
+      # Actions cache. CI tests what it pushes. `Bash(gh *)` would allow
+      # `gh release create` (a production deploy), `gh secret set`, `gh
+      # workflow run`; `Bash(git *)` would allow `git push --force`. Every
+      # Bash command below only reads.
       - name: Run Claude Code
         uses: anthropics/claude-code-action@756cc22e19660d20e8cc9496b4f242475a7f7790 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--max-turns 40 --allowedTools 'Read,Write,Edit,Glob,Grep,Bash(pnpm test),Bash(pnpm test:watch),Bash(pnpm check),Bash(pnpm build),Bash(pnpm install --frozen-lockfile),Bash(pnpm frontend test),Bash(pnpm backend test),Bash(pnpm studio test),Bash(pnpm frontend check),Bash(pnpm backend check),Bash(pnpm studio check),Bash(pnpm frontend build),Bash(pnpm backend build),Bash(pnpm studio build),Bash(git log:*),Bash(git diff:*),Bash(git status),Bash(git show:*),Bash(git blame:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh run view:*),Bash(gh run list:*)'"
+          claude_args: "--max-turns 40 --allowedTools 'Read,Write,Edit,Glob,Grep,Bash(git log:*),Bash(git diff:*),Bash(git status),Bash(git show:*),Bash(git blame:*),Bash(gh pr view:*),Bash(gh pr list:*),Bash(gh pr diff:*),Bash(gh issue view:*),Bash(gh issue list:*),Bash(gh run view:*),Bash(gh run list:*)'"

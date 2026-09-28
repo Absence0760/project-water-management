@@ -58,6 +58,8 @@
 	let description = $state(untrack(() => project.description ?? ''));
 	// The project's time zone dates its downloads (issue #45); an older API sends none.
 	let timeZone = $state(untrack(() => project.timeZone ?? DEFAULT_TIME_ZONE));
+	// The WUA the farm pages' contact lines name (095_wua_name); empty = "your WUA".
+	let wuaName = $state(untrack(() => project.wuaName ?? ''));
 	const zones = (() => {
 		try {
 			return Intl.supportedValuesOf('timeZone');
@@ -70,7 +72,10 @@
 	let savedAt = $state<number | null>(null);
 
 	const detailsDirty = $derived(
-		name.trim() !== project.name || description.trim() !== (project.description ?? '') || timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE)
+		name.trim() !== project.name ||
+			description.trim() !== (project.description ?? '') ||
+			timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE) ||
+			wuaName.trim() !== (project.wuaName ?? '')
 	);
 
 	// The series and runs lists come from the page, which refreshes them after
@@ -145,12 +150,14 @@
 			const p = await api.projects.update(project.id, {
 				name: name.trim(),
 				description: description.trim(),
-				...(zoneChanged ? { timeZone: timeZone.trim() } : {})
+				...(zoneChanged ? { timeZone: timeZone.trim() } : {}),
+				...(wuaName.trim() !== (project.wuaName ?? '') ? { wuaName: wuaName.trim() || null } : {})
 			});
 			onProjectChange(p);
 			name = p.name;
 			description = p.description ?? '';
 			timeZone = p.timeZone ?? DEFAULT_TIME_ZONE;
+			wuaName = p.wuaName ?? '';
 			savedAt = Date.now();
 		} catch (err) {
 			error = err instanceof Error ? err.message : String(err);
@@ -168,7 +175,7 @@
 	<!-- Each fact links to the tab where it is edited or looked at; the link is
 	     stretched over the whole tile, so the tile is the click target. -->
 	<dl class="stats">
-		<div class="stat"><dt><a href="?tab=network">Units</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
+		<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
 		<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
 		<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
 		<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
@@ -199,6 +206,11 @@
 						<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={timeZone} aria-describedby="pd-tz-h" />
 						<datalist id="pd-tz-list">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
 						<span class="hint" id="pd-tz-h">An IANA name, like Africa/Johannesburg. Downloads are dated by the day here.</span>
+					</div>
+					<div class="field">
+						<label for="pd-wua">WUA name</label>
+						<input id="pd-wua" maxlength="200" autocomplete="off" readonly={!canEdit} bind:value={wuaName} placeholder="Vaalbank WUA" aria-describedby="pd-wua-h" />
+						<span class="hint" id="pd-wua-h">The farmer view's pages tell farmers to contact the WUA by this name. Left empty, they say “your WUA”.</span>
 					</div>
 					{#if canEdit}
 						<div class="form-row">

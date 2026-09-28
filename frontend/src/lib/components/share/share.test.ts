@@ -104,8 +104,8 @@ describe('the words', () => {
 	});
 
 	it('counts the farms without naming one', () => {
-		expect(sp(farmsLine(view().publication.catchmentView))).toBe('6 farms in the catchment.');
-		expect(sp(farmsLine({ ...view().publication.catchmentView, farmCount: 1 }))).toBe('1 farm in the catchment.');
+		expect(sp(farmsLine(view().publication.catchmentView))).toBe('6 hydrological units in the catchment.');
+		expect(sp(farmsLine({ ...view().publication.catchmentView, farmCount: 1 }))).toBe('1 hydrological unit in the catchment.');
 	});
 });
 

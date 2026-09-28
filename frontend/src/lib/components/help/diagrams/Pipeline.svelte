@@ -3,7 +3,7 @@
 <svg
 	viewBox="0 0 920 280"
 	role="img"
-	aria-label="Daily rain and A-pan evaporation drive the runoff model, GR4J, which makes the catchment's natural flow. Flow shares split the natural flow, and the EWR, between the units. Rain, A-pan evaporation and the crops and their areas give each unit's irrigation demand. The unit balance, run for each unit from upstream down, takes the unit runoff and the demand, and handles dam capture, diversion, transfers, irrigation, spill and return flow. What leaves the last element is the simulated outflow at the outflow gauge, which is checked against the EWR and scored against observed flow."
+	aria-label="Daily rain and A-pan evaporation drive the runoff model, GR4J, which makes the catchment's natural flow. Flow shares split the natural flow, and the EWR, between the hydrological units. Rain, A-pan evaporation and the crops and their areas give each hydrological unit's irrigation demand. The hydrological unit balance, run for each hydrological unit from upstream down, takes the hydrological unit runoff and the demand, and handles dam capture, diversion, transfers, irrigation, spill and return flow. What leaves the last element is the simulated outflow at the outflow gauge, which is checked against the EWR and scored against observed flow."
 >
 	<defs>
 		<marker id="pl-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
@@ -39,16 +39,17 @@
 
 	<rect class="box" x="400" y="20" width="150" height="56" rx="6" />
 	<text class="t" x="475" y="44" text-anchor="middle">Natural flow</text>
-	<text class="s" x="475" y="62" text-anchor="middle">no units, m³/day</text>
+	<text class="s" x="475" y="62" text-anchor="middle">before any use, m³/day</text>
 
 	<rect class="box" x="400" y="110" width="150" height="56" rx="6" />
 	<text class="t" x="475" y="134" text-anchor="middle">Flow shares</text>
-	<text class="s" x="475" y="152" text-anchor="middle">flow and EWR per unit</text>
+	<text class="s" x="475" y="152" text-anchor="middle">per hydrological unit</text>
 
 	<!-- network -->
 	<rect class="box key" x="580" y="20" width="150" height="236" rx="6" />
-	<text class="t" x="655" y="96" text-anchor="middle">Unit balance</text>
-	<text class="s" x="655" y="116" text-anchor="middle">each unit, upstream first</text>
+	<text class="t" x="655" y="86" text-anchor="middle">Hydrological unit</text>
+	<text class="t" x="655" y="104" text-anchor="middle">balance</text>
+	<text class="s" x="655" y="124" text-anchor="middle">each one, upstream first</text>
 	<text class="s" x="655" y="144" text-anchor="middle">dam capture, diversion</text>
 	<text class="s" x="655" y="162" text-anchor="middle">transfers</text>
 	<text class="s" x="655" y="180" text-anchor="middle">irrigation</text>

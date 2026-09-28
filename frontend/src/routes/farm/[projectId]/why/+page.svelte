@@ -24,9 +24,9 @@
 	const main = $derived(farmHref(base, projectId, farm.nodeId, !!asked));
 </script>
 
-<svelte:head><title>{t('{page} · My farm', { page: farm.view ? whyTitle(farm.view.farm) : t('Why?') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My hydrological unit', { page: farm.view ? whyTitle(farm.view.farm) : t('Why?') })}</title></svelte:head>
 
-<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My farm') }}>
+<FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My hydrological unit') }}>
 	{#snippet children(view)}
 		{@const s1 = step1(view.farm)}
 		{@const s2 = step2(view.farm)}

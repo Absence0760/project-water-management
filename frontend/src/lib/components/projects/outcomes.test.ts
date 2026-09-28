@@ -53,7 +53,7 @@ describe('attention', () => {
 		expect(attention(outcome('a', { source: null, sourceRunId: null, ewr: { status: 'unknown', daysNotMet30: null, days30: null, fraction30: null, reason: 'no-figures' } })).score).toBe(0);
 	});
 
-	it('says every reason in words, worst first, and links units short to the curtailment', () => {
+	it('says every reason in words, worst first, and links hydrological units short to the curtailment', () => {
 		const a = attention(
 			outcome('p1', {
 				ewr: { status: 'red', daysNotMet30: 9, days30: 30, fraction30: 0.3 },
@@ -68,7 +68,7 @@ describe('attention', () => {
 		);
 		expect(a.reasons).toEqual([
 			{ text: 'Red: EWR not met 9 of 30 days', tone: 'danger' },
-			{ text: '2 of 4 units short this week', tone: 'danger', href: '/base/projects/p1?tab=supply&run=run-1&window=last7#res-curtailment' },
+			{ text: '2 of 4 hydrological units short this week', tone: 'danger', href: '/base/projects/p1?tab=supply&run=run-1&window=last7#res-curtailment' },
 			{ text: '1 alert firing', tone: 'warn' },
 			{ text: '1 of 3 feeds failing or stale', tone: 'warn' },
 			{ text: 'Newer rain not in the figures', tone: 'warn' },
@@ -76,7 +76,7 @@ describe('attention', () => {
 		]);
 	});
 
-	it('ranks red above units short above alerts above amber above stale', () => {
+	it('ranks red above hydrological units short above alerts above amber above stale', () => {
 		const red = attention(outcome('r', { ewr: { status: 'red', daysNotMet30: 7, days30: 30, fraction30: 0.23 } })).score;
 		const short = attention(outcome('s', { farmsShort7: 1 })).score;
 		const alerts = attention(outcome('al', { alertsFiring: 3 })).score;
@@ -120,7 +120,7 @@ describe('sorting by an outcome', () => {
 	]);
 	const names = (rows: ProjectSummary[]) => rows.map((p) => p.name);
 
-	it('by EWR status, units short and lowest dam: worst first, the portfolio’s rule; rows without figures last', () => {
+	it('by EWR status, hydrological units short and lowest dam: worst first, the portfolio’s rule; rows without figures last', () => {
 		expect(names(sortByOutcome(projects, 'status', outcomes))).toEqual(['Bravo', 'Alpha', 'Delta', 'Charlie']);
 		expect(names(sortByOutcome(projects, 'farms', outcomes))).toEqual(['Delta', 'Alpha', 'Bravo', 'Charlie']);
 		// Delta has no dam figure: unknowns sort after the known ones, before a row with no figures at all.

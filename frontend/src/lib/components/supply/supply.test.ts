@@ -20,7 +20,7 @@ const summary = (farms: FarmSummary[], extra: Partial<RunSummary> = {}) => ({ fa
 const meta = (id: string, createdAt: string) => ({ id, createdAt, label: id }) as RunMeta;
 
 describe('links', () => {
-	it('builds the page link with the run, window, unit and anchor', () => {
+	it('builds the page link with the run, window, hydrological unit and anchor', () => {
 		expect(supplyHref(null)).toBe('?tab=supply');
 		expect(supplyHref('r/1')).toBe('?tab=supply&run=r%2F1');
 		expect(supplyHref('r1', { window: 'last7', hash: 'res-curtailment' })).toBe('?tab=supply&run=r1&window=last7#res-curtailment');
@@ -34,7 +34,7 @@ describe('links', () => {
 
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
 		expect(SUPPLY_NAV.flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
-		expect(SUPPLY_NAV.map((g) => g.label)).toEqual(['Each unit', 'Tables for this run']);
+		expect(SUPPLY_NAV.map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
 	});
 });
 
@@ -78,11 +78,11 @@ describe('unitCards', () => {
 	const ids = new Set(['ok', 'worst', 'mid', 'tie-b']);
 	const names = new Map([['worst', 'Worst farm (renamed)'], ['dry', 'Dry today']]);
 
-	it('orders worst supplied first, ties by name, units without demand last', () => {
+	it('orders worst supplied first, ties by name, hydrological units without demand last', () => {
 		expect(unitCards(summary(farms), ids, names, null).map((c) => c.nodeId)).toEqual(['worst', 'mid', 'tie-b', 'ok', 'dry']);
 	});
 
-	it('bands each unit as the Summary’s Supply by unit does, so the colours match', () => {
+	it('bands each hydrological unit as the Summary’s Supply by hydrological unit does, so the colours match', () => {
 		const cards = unitCards(summary(farms), ids, names, null);
 		const bars = new Map(supplyBars(farms, ids).map((b) => [b.nodeId, b.band]));
 		for (const c of cards) expect(c.band).toBe(bars.get(c.nodeId));
@@ -90,7 +90,7 @@ describe('unitCards', () => {
 		expect(cards.find((c) => c.nodeId === 'dry')).toMatchObject({ band: 'none', fraction: null });
 	});
 
-	it('names a unit still in the model by today’s name, a removed one by the run’s', () => {
+	it('names a hydrological unit still in the model by today’s name, a removed one by the run’s', () => {
 		const cards = unitCards(summary(farms), ids, names, null);
 		expect(cards.find((c) => c.nodeId === 'worst')).toMatchObject({ name: 'Worst farm (renamed)', inModel: true });
 		expect(cards.find((c) => c.nodeId === 'dry')).toMatchObject({ name: 'dry', inModel: false });
@@ -116,7 +116,7 @@ describe('unitCards', () => {
 
 describe('pickUnit', () => {
 	const cards = unitCards(summary([farm('a', 1), farm('b', 0.5)]), new Set(['a', 'b']), new Map(), null);
-	it('is the unit the URL names, else the worst supplied', () => {
+	it('is the hydrological unit the URL names, else the worst supplied', () => {
 		expect(pickUnit(cards, 'a')?.nodeId).toBe('a');
 		expect(pickUnit(cards, null)?.nodeId).toBe('b');
 		expect(pickUnit(cards, 'gone')?.nodeId).toBe('b');
@@ -127,7 +127,7 @@ describe('pickUnit', () => {
 describe('supplyTotals', () => {
 	const farms = [farm('a', 1), farm('b', 0.5), farm('c', SUPPLY_TARGET - 0.001)];
 	const s = summary(farms, { curtailment: { farms: [{ nodeId: 'b', totalChangeM3Day: -1 }] } as unknown as RunSummary['curtailment'] });
-	it('counts the units below the target (as the Summary), short this week and to cut, and adds up the shortfall', () => {
+	it('counts the hydrological units below the target (as the Summary), short this week and to cut, and adds up the shortfall', () => {
 		const cards = unitCards(s, new Set(), new Map(), new Map([['b', 2], ['a', 0]]));
 		const t = supplyTotals(s, cards, true);
 		expect(t).toMatchObject({ units: 3, below: 2, weekShort: 1, mustCut: 1 });
@@ -143,9 +143,9 @@ describe('supplyTotals', () => {
 
 describe('words', () => {
 	it('writes the header line from what is known', () => {
-		expect(supplySummary({ units: 14, weekShort: 3 }, 14, 'run “Baseline”, ran today')).toBe('14 units · 3 short this week · run “Baseline”, ran today');
-		expect(supplySummary({ units: 1, weekShort: null }, 1, null)).toBe('1 unit');
-		expect(supplySummary(null, 4, null)).toBe('4 units');
+		expect(supplySummary({ units: 14, weekShort: 3 }, 14, 'run “Baseline”, ran today')).toBe('14 hydrological units · 3 short this week · run “Baseline”, ran today');
+		expect(supplySummary({ units: 1, weekShort: null }, 1, null)).toBe('1 hydrological unit');
+		expect(supplySummary(null, 4, null)).toBe('4 hydrological units');
 	});
 	it('gives a card its lines, leaving out what the run can’t say', () => {
 		const base: UnitCard = { nodeId: 'a', name: 'A', band: 'low', fraction: 0.5, demandM3Day: 100, deficitM3Day: 50, daysShort: 10, demandDays: 30, cutM3Day: 12, weekShort: 2, inModel: true };

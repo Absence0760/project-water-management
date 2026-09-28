@@ -95,7 +95,7 @@ describe('words', () => {
 	it('pluralises through the catalogue (Intl.PluralRules)', () => {
 		expect(sp(count(DAYS, 1))).toBe('1 day');
 		expect(sp(count(DAYS, 16))).toBe('16 days');
-		expect(sp(count(FARMS, 0))).toBe('0 farms');
+		expect(sp(count(FARMS, 0))).toBe('0 hydrological units');
 		expect(count(WEEKS, 2)).toBe('2\u00a0weeks');
 		expect(sp(count(POINTS, 1))).toBe('1 point');
 	});

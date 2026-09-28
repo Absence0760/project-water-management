@@ -66,9 +66,9 @@
 	});
 </script>
 
-<svelte:head><title>{t('{page} · My farm', { page: t('What do these words mean?') })}</title></svelte:head>
+<svelte:head><title>{t('{page} · My hydrological unit', { page: t('What do these words mean?') })}</title></svelte:head>
 
-<FarmShell back={{ href: `${base}/farm`, label: t('My farm') }} busy={!ready}>
+<FarmShell back={{ href: `${base}/farm`, label: t('My hydrological unit') }} busy={!ready}>
 	<h1>{t('What do these words mean?')}</h1>
 	{#each ready ? entries : [] as e (e.id)}
 		<section class="card" id={e.id} aria-labelledby="{e.id}-h" lang={e.lang !== wordsLang() ? e.lang : undefined}>

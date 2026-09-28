@@ -21,7 +21,7 @@ export function whyTitle(farm: FarmProjection): string {
 
 /** "Looking back over 1 Oct 2023 to 10 Jan 2024, the model checks two things: …" */
 export function whyIntro(farm: FarmProjection): string {
-	return t('Looking back over {from} to {to}, the model checks two things: was water shared fairly between farms, and did the river keep enough water flowing?', { from: fmtDay(farm.season.from), to: fmtDay(farm.season.to) });
+	return t('Looking back over {from} to {to}, the model checks two things: was water shared fairly between hydrological units, and did the river keep enough water flowing?', { from: fmtDay(farm.season.from), to: fmtDay(farm.season.to) });
 }
 
 // ---- Step 1: was water shared fairly? ----------------------------------------
@@ -41,7 +41,7 @@ export type Step1 =
 			check: Rich;
 	  };
 
-export const kHidden = () => t('Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures.');
+export const kHidden = () => t('Not shown: with so few hydrological units in the catchment, it could reveal a neighbour’s figures.');
 
 /**
  * How the wording grows with the gap between the farm's supply and the even
@@ -75,20 +75,20 @@ export function step1(farm: FarmProjection): Step1 {
 	const pos = (f: number) => Math.round(Math.min(Math.max(f, 0), 1) * 100);
 	return {
 		shown: true,
-		catchment: tRich('Across the catchment, farms received **{share}** of what they needed. We call that the **even share**.', { share }),
+		catchment: tRich('Across the catchment, hydrological units received **{share}** of what they needed. We call that the **even share**.', { share }),
 		sharePct: pos(r.equitableFraction),
 		youPct: pos(you),
 		shareLabel: t('even share {pct}', { pct: share }),
 		youLabel: t('you {pct}', { pct: mine }),
 		you: tRich('You received **{pct}**: {comparison}.', { pct: mine, comparison: shareComparison(r.aboveBelowShareM3Day, (r.equitableFraction - you) * 100) }),
-		check: tRich('**This is a fairness check, not extra water for you.** Whether more water can reach your farm depends on where you are on the river and what is in your dam. {notPart}', { notPart })
+		check: tRich('**This is a fairness check, not extra water for you.** Whether more water can reach your hydrological unit depends on where you are on the river and what is in your dam. {notPart}', { notPart })
 	};
 }
 
 // ---- Step 2: did the river keep flowing? -------------------------------------
 
 export const reserveIntro = (): Rich => tRich('The law keeps some water in the river so it stays healthy for everyone downstream. This is the river’s **reserve**.');
-export const shareRule = () => t('Farms upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.');
+export const shareRule = () => t('Hydrological units upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.');
 export const cutBeyondShare = () => t('The river’s share of your water is more than an even share of the catchment’s supply. The WUA may need to look at this.');
 
 export interface Step2 {
@@ -115,7 +115,7 @@ export function step2(farm: FarmProjection): Step2 {
 	let sites: Rich;
 	let reason: string | null = null;
 	if (!met.length) {
-		sites = [t('The river kept its reserve every day this season, at every point below your farm.')];
+		sites = [t('The river kept its reserve every day this season, at every point below your hydrological unit.')];
 	} else {
 		const list: Rich = [];
 		met.forEach((s, i) => {

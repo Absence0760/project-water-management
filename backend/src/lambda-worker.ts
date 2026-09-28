@@ -16,14 +16,22 @@
 //     when it came from that queue (MAIL_EVENTS_QUEUE_ARN), and one from that
 //     queue is never read as a job message: each queue is trusted for its own
 //     kind of message only.
-// A tick that throws (the database unreachable) fails the SQS batch, so the
-// messages are retried and, after 5 receives, land in the DLQ, which alarms.
+// Each SQS record is handled on its own. One that throws (a database error
+// while queueing it) is reported back as a batch item failure
+// (ReportBatchItemFailures on every worker trigger, infra/), so SQS retries
+// that record alone and, after 5 receives, puts it in the DLQ, which alarms;
+// the rest of the batch is done with. A record that can never succeed (an
+// unknown message, a result for an unknown fetch or report) is logged and
+// dropped, never retried. When every record in the batch threw, the database
+// is almost certainly down: the handler throws the first error without running
+// the tick, and the whole batch is retried. A tick that throws fails the whole
+// batch the same way.
 //
 // After each tick it logs the oldest due job's age as a CloudWatch embedded
 // metric; infra/jobs.tf alarms when the queue backs up.
 //
 // Like lambda.ts, this must never import a module that loads dotenv.
-import type { Context, ScheduledEvent, SQSEvent, SQSRecord } from 'aws-lambda';
+import type { Context, ScheduledEvent, SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
 import { assertLambdaEnv } from './config/production.js';
 import { runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
@@ -70,37 +78,60 @@ const isSqs = (event: unknown): event is SQSEvent => Array.isArray((event as SQS
 /** Whether a record came from the mail-events queue (and so carries an SES event, and nothing else). */
 export const fromMailEventsQueue = (record: Pick<SQSRecord, 'eventSourceARN'>, arn = process.env.MAIL_EVENTS_QUEUE_ARN) => !!arn && record.eventSourceARN === arn;
 
-export const handler = async (event: SQSEvent | ScheduledEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>) => {
+/** Handle one SQS record. Throws only when it should be retried (a database error). */
+async function acceptRecord(record: SQSRecord): Promise<void> {
+	// An SES bounce or complaint (mail-events queue). Ids and counts in the
+	// log, never an address.
+	if (fromMailEventsQueue(record)) {
+		const outcome = await acceptMailEvent(record.body);
+		if (typeof outcome === 'string') console.warn(JSON.stringify({ event: 'mail_event_dropped', messageId: record.messageId, reason: outcome }));
+		else console.log(JSON.stringify({ event: 'mail_suppressed', messageId: record.messageId, reason: outcome.reason, people: outcome.suppressed }));
+		return;
+	}
+	const message = parseWorkerMessage(record.body);
+	// An unknown message is dropped (logged), never retried into the DLQ:
+	// it can't become valid on a retry.
+	if (!message) console.warn(JSON.stringify({ event: 'job_message_ignored', messageId: record.messageId }));
+	// A fetch result (ingest-results queue): becomes a feed_ingest job, which
+	// the tick runs.
+	else if (message.type === 'ingest') {
+		const outcome = await acceptIngestResult(message);
+		if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'feed_result_dropped', messageId: record.messageId, reason: outcome }));
+	}
+	// A render's outcome (render-results queue): becomes a report_render job.
+	else if (message.type === 'rendered') {
+		const outcome = await acceptRenderResult(message);
+		if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'render_result_dropped', messageId: record.messageId, reason: outcome }));
+	}
+	// A wake message needs nothing of its own: the tick below runs the job.
+}
+
+type TickSummary = { claimed: number; done: number; failed: number; dead: number };
+
+export async function handler(event: SQSEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse>;
+export async function handler(event: ScheduledEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<TickSummary>;
+export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<Context, 'getRemainingTimeInMillis'>): Promise<SQSBatchResponse | TickSummary> {
+	const failures: SQSBatchResponse['batchItemFailures'] = [];
 	if (isSqs(event)) {
+		let firstError: unknown;
 		for (const record of event.Records) {
-			// An SES bounce or complaint (mail-events queue). Ids and counts in
-			// the log, never an address. A database error throws, failing the batch.
-			if (fromMailEventsQueue(record)) {
-				const outcome = await acceptMailEvent(record.body);
-				if (typeof outcome === 'string') console.warn(JSON.stringify({ event: 'mail_event_dropped', messageId: record.messageId, reason: outcome }));
-				else console.log(JSON.stringify({ event: 'mail_suppressed', messageId: record.messageId, reason: outcome.reason, people: outcome.suppressed }));
-				continue;
-			}
-			const message = parseWorkerMessage(record.body);
-			// An unknown message is dropped (logged), never retried into the DLQ:
-			// it can't become valid on a retry.
-			if (!message) console.warn(JSON.stringify({ event: 'job_message_ignored', messageId: record.messageId }));
-			// A fetch result (ingest-results queue): becomes a feed_ingest job,
-			// which the tick below runs. A database error throws, failing the batch.
-			else if (message.type === 'ingest') {
-				const outcome = await acceptIngestResult(message);
-				if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'feed_result_dropped', messageId: record.messageId, reason: outcome }));
-			}
-			// A render's outcome (render-results queue): becomes a report_render job.
-			else if (message.type === 'rendered') {
-				const outcome = await acceptRenderResult(message);
-				if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'render_result_dropped', messageId: record.messageId, reason: outcome }));
+			try {
+				await acceptRecord(record);
+			} catch (err) {
+				firstError ??= err;
+				failures.push({ itemIdentifier: record.messageId });
+				console.error(JSON.stringify({ event: 'worker_record_failed', messageId: record.messageId, error: err instanceof Error ? err.message : String(err) }));
 			}
 		}
+		// Every record failed: the database is down, and so would the tick be.
+		// Fail the whole batch, as before partial failures were reported.
+		if (failures.length > 0 && failures.length === event.Records.length) throw firstError;
 	}
 	// Leave a minute for the job already running when the budget runs out.
 	const budgetMs = Math.max(10_000, (context?.getRemainingTimeInMillis() ?? 300_000) - 60_000);
 	const result = await runTick({ budgetMs });
 	console.log(metricLine(result));
+	// An SQS invocation answers with the records to retry (an empty list: none).
+	if (isSqs(event)) return { batchItemFailures: failures };
 	return { claimed: result.claimed, done: result.done, failed: result.failed, dead: result.dead };
-};
+}

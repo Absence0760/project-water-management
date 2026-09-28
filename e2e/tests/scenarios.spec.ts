@@ -234,9 +234,9 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 
 	// The base (dam first) has no river pump, so its pumping reads as 0 rather than being left out (issue #54):
 	// the farm row shows the scenario's mean pumped against the base's none…
-	const farmRow = compare.getByRole('region', { name: 'Units' }).getByRole('row', { name: /^Upper farm/ });
+	const farmRow = compare.getByRole('region', { name: 'Hydrological units' }).getByRole('row', { name: /^Upper farm/ });
 	await expect(farmRow.getByTestId('farm-feature-avgRiverAbstractionM3Day')).toContainText('A: none (0)');
-	await expect(compare.getByTestId('farm-feature-note')).toHaveText('Pumped from the river: a run with no river pump at a unit reads as 0 there (“none”).');
+	await expect(compare.getByTestId('farm-feature-note')).toHaveText('Pumped from the river: a run with no river pump at a hydrological unit reads as 0 there (“none”).');
 	// …and the daily overlay offers the farm's river pumping, the base drawn as zeros and said so.
 	const overlay = compare.getByRole('region', { name: 'Daily series' });
 	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });

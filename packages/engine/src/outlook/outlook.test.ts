@@ -328,7 +328,7 @@ describe('summariseOutlook', () => {
 		expect(o.levels[0]!.demandMet).toBeNull();
 	});
 
-	describe('the planning figure (share pending O6)', () => {
+	describe('the planning figure (share O6, confirmed by the client)', () => {
 		const three = (m100: number, m85: number, m70: number, n = 10) => [levelMeeting('100 %', n, m100, 300), levelMeeting('85 %', n, m85, 255), levelMeeting('70 %', n, m70, 210)];
 
 		it('is the highest demand level meeting the EWR in at least the share of years: at the cut it counts', () => {

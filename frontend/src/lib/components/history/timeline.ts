@@ -84,10 +84,13 @@ function trafficLights(v: unknown): string {
 }
 
 const UNLINK_CAUSES: Record<string, string> = {
-	model_saved: ' (the unit was removed, or is no longer a unit)',
+	model_saved: ' (the hydrological unit was removed, or is no longer a hydrological unit)',
 	member_removed: ' (they left, or were removed from the project)',
 	restore: ' (by a restore)'
 };
+
+/** "named the WUA “Vaalbank WUA”", or "cleared the WUA's name" (095_wua_name). */
+const wuaNamePart = (to: unknown) => (str(to) ? `named the WUA “${str(to)}”` : 'cleared the WUA’s name');
 
 /** One sentence for an audit event, without its actor or time. */
 export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
@@ -100,6 +103,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				fields.includes('name') ? `renamed the project from “${str(s.from)}” to “${str(s.to)}”` : '',
 				fields.includes('description') ? 'changed the description' : '',
 				fields.includes('time_zone') ? `set the time zone to ${str((s.timeZone as { to?: unknown } | undefined)?.to)}` : '',
+				fields.includes('wua_name') ? wuaNamePart((s.wuaName as { to?: unknown } | undefined)?.to) : '',
 				fields.includes('team') ? (s.team ? `moved the project into the team “${str(s.team)}”` : 'made the project personal') : ''
 			].filter(Boolean);
 			const text = parts.join(', ') || 'changed the project';
@@ -114,9 +118,9 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
 		case 'farmer.linked':
-			return `Linked ${who} to the unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
+			return `Linked ${who} to the hydrological unit ${str(s.nodeName)}${s.cause === 'invite' ? ' (from their invite)' : ''}`;
 		case 'farmer.unlinked':
-			return `Unlinked ${who} from the unit ${str(s.nodeName)}${UNLINK_CAUSES[str(s.cause)] ?? ''}`;
+			return `Unlinked ${who} from the hydrological unit ${str(s.nodeName)}${UNLINK_CAUSES[str(s.cause)] ?? ''}`;
 		case 'invite.sent':
 			return `Invited ${str(s.email)} as ${str(s.role)}`;
 		case 'invite.revoked':

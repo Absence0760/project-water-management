@@ -14,7 +14,7 @@ export const SORT_LABELS: Record<SortKey, string> = {
 	updated: 'Recently updated',
 	attention: 'Needs attention first',
 	status: 'EWR status (worst first)',
-	farms: 'Units short (most first)',
+	farms: 'Hydrological units short (most first)',
 	dam: 'Lowest dam (lowest first)',
 	run: 'Last run (newest first)',
 	name: 'Name (A–Z)'

@@ -46,44 +46,44 @@
 			This run was made before curtailment targets were added. Run the model again to see them.
 		</p>
 	{:else if c.farms.length === 0}
-		<p class="muted">This run has no units, so there is nothing to curtail.</p>
+		<p class="muted">This run has no hydrological units, so there is nothing to curtail.</p>
 	{:else}
 		<p class="muted small">
 			<span data-testid="curtailment-period">{#if period}<strong>{period}</strong>: daily averages{:else}Daily averages{/if} over {range} ({fmtNum(c.days)} day{c.days === 1 ? '' : 's'}).</span>
 			{#if c.equitableFraction === null}
-				No unit had irrigation demand in this window, so there is no supply to share.
+				No hydrological unit had irrigation demand in this window, so there is no supply to share.
 			{:else}
 				The catchment supplied {fmtPct(c.equitableFraction)} of total demand: the
-				<strong>equitable share of supply (fairness benchmark)</strong>. Each unit's equitable share volume is that same
+				<strong>equitable share of supply (fairness benchmark)</strong>. Each hydrological unit's equitable share volume is that same
 				share of its own demand.
 			{/if}
 		</p>
 		{#if board}
 			<ShareThePainBoard curtailment={c} names={farmNames} {period} />
-			<h4 id="curtailment-farms-heading">Per unit</h4>
+			<h4 id="curtailment-farms-heading">Per hydrological unit</h4>
 		{/if}
 		<p class="muted small">
 			<strong>Sign convention:</strong> <span class="neg">−</span> = reduce, <span class="pos">+</span> = below the equitable share.
 			<em>Above (−) / below (+) equitable share</em> compares the supply with the fairness benchmark (equitable
 			share volume − supplied). <em>Total change</em> also removes the
-			unit's {attributed ? 'EWR charge' : 'EWR shortfall'}. {attributed ? 'EWR charge, irrigate less and store less' : 'EWR shortfall'}
-			are volumes charged, shown without a sign, the same as in the Units table. 1 l/s = 86.4 m³/day.
+			hydrological unit's {attributed ? 'EWR charge' : 'EWR shortfall'}. {attributed ? 'EWR charge, irrigate less and store less' : 'EWR shortfall'}
+			are volumes charged, shown without a sign, the same as in the Hydrological units table. 1 l/s = 86.4 m³/day.
 			{#if cuts}
 				<span class="flag-key" aria-hidden="true"></span>
-				{cuts} of {rows.length} unit{rows.length === 1 ? '' : 's'} must cut (highlighted).
+				{cuts} of {rows.length} hydrological unit{rows.length === 1 ? '' : 's'} must cut (highlighted).
 			{:else}
-				No unit needs to cut.
+				No hydrological unit needs to cut.
 			{/if}
 		</p>
 		<div class="table-wrap">
 			<table class="data">
 				<caption class="visually-hidden">
-					Curtailment targets per unit, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative changes are
+					Curtailment targets per hydrological unit, {period ? `${period}, ` : ''}{c.reportStart} to {c.reportEnd}. Negative changes are
 					reductions, positive ones are below the equitable share; EWR charges are volumes charged.
 				</caption>
 				<thead>
 					<tr class="group">
-						<th scope="col" rowspan="2">Unit</th>
+						<th scope="col" rowspan="2">Hydrological unit</th>
 						<th scope="colgroup" colspan="3">Irrigation used</th>
 						<th scope="colgroup" colspan="3">Equitable share (fairness benchmark, ex EWR)</th>
 						<th scope="colgroup" colspan={attributed ? 10 : 5}>To balance and meet the EWR</th>
@@ -122,7 +122,7 @@
 									<span class="badge">{r.verdict}</span>
 								{/if}
 								{#if r.beyondShare}
-									<span class="badge badge-warn">EWR cut exceeds this unit's equitable share by {r.beyondShare} m³/day</span>
+									<span class="badge badge-warn">EWR cut exceeds this hydrological unit's equitable share by {r.beyondShare} m³/day</span>
 								{/if}
 							</th>
 							<td class="num">{r.demand}</td>
@@ -148,7 +148,7 @@
 				</tbody>
 				<tfoot>
 					<tr>
-						<th scope="row">All units</th>
+						<th scope="row">All hydrological units</th>
 						<td class="num">{fmtVol(c.totals.demandM3Day)}</td>
 						<td class="num">{fmtVol(c.totals.suppliedM3Day)}</td>
 						<td class="num">{fmtPct(c.equitableFraction)}</td>
@@ -172,18 +172,18 @@
 			</table>
 		</div>
 		<p class="muted small note">
-			<strong>{EQUITABLE_SHARE_FOOTNOTE}</strong> A positive value is not water the unit can get: a surplus downstream
-			can't reach a unit upstream. <em>Demand left</em> is volume left ÷ demand (the workbook labels
+			<strong>{EQUITABLE_SHARE_FOOTNOTE}</strong> A positive value is not water the hydrological unit can get: a surplus downstream
+			can't reach a hydrological unit upstream. <em>Demand left</em> is volume left ÷ demand (the workbook labels
 			this column “reduction of demand required”), as a whole %; “—” means demand under 1 m³/day, where a % is
 			not meaningful. {#if attributed}<em>Total change</em> and <em>volume left</em> count only the supply cut; the
-			volume left never goes below 0, and a unit whose EWR cut is larger than its equitable share is flagged.{/if}
+			volume left never goes below 0, and a hydrological unit whose EWR cut is larger than its equitable share is flagged.{/if}
 		</p>
 		{#if attributed}
 			<p class="muted small note">
 				<strong>EWR charge:</strong> the EWR is assessed at each EWR site (the outlet and every gauge). A site's
-				shortfall is charged to the units upstream of it in proportion to their net impact that day (inflow + runoff +
-				transfers − outflow); the part the units did not cause is natural. A unit above several sites carries the
-				largest of its charges. The charge splits by what the unit can change: irrigating less, or storing less and
+				shortfall is charged to the hydrological units upstream of it in proportion to their net impact that day (inflow + runoff +
+				transfers − outflow); the part the hydrological units did not cause is natural. A hydrological unit above several sites carries the
+				largest of its charges. The charge splits by what the hydrological unit can change: irrigating less, or storing less and
 				passing inflow.
 			</p>
 		{/if}
@@ -191,8 +191,8 @@
 			<h4 id="other-users-heading">Other water users</h4>
 			<p class="muted small">
 				Towns, industry and unlisted users are outside the irrigation equitable share. They are charged for the EWR by
-				their net impact (taken − returned) like units. A <strong>junior</strong> user is curtailed for its charge; a
-				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the farms). Daily averages over {range}.
+				their net impact (taken − returned) like hydrological units. A <strong>junior</strong> user is curtailed for its charge; a
+				<strong>senior</strong> one is not, and its charge stands (it is not moved onto the hydrological units). Daily averages over {range}.
 			</p>
 			<div class="table-wrap">
 				<table class="data" aria-labelledby="other-users-heading">
@@ -239,10 +239,10 @@
 					<thead>
 						<tr>
 							<th scope="col">Site</th>
-							<th scope="col" class="num">Units upstream</th>
+							<th scope="col" class="num">Hydrological units upstream</th>
 							<th scope="col" class="num">Days not met</th>
 							<th scope="col" class="num">Shortfall<br /><span class="u">m³/day</span></th>
-							<th scope="col" class="num">Charged to units<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Charged to hydrological units<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">Natural<br /><span class="u">m³/day</span></th>
 						</tr>
 					</thead>

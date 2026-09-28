@@ -51,7 +51,7 @@ test.describe('the printable report', () => {
 		});
 	}
 
-	test('a 30-unit catchment on a phone: no sideways scroll, and the unit names have room on screen', async ({ page, owner }) => {
+	test('a 30-unit catchment on a phone: no sideways scroll, and the hydrological unit names have room on screen', async ({ page, owner }) => {
 		void owner;
 		test.slow();
 		const project = await seedSupplyProject(page.request, 'Report thirty units', 28, 365 * 2);

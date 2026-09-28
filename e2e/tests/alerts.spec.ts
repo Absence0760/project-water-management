@@ -98,7 +98,7 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 		await expect(p.locator('.farm-header')).toBeVisible();
 		await expect(p.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
 		await expect(p.getByRole('link', { name: 'Projects' })).toHaveCount(0);
-		await expect(p.locator('.farm-header').getByRole('link', { name: 'Your farms' })).toHaveAttribute('href', /\/farm$/);
+		await expect(p.locator('.farm-header').getByRole('link', { name: 'Your hydrological units' })).toHaveAttribute('href', /\/farm$/);
 		await expect(p.getByRole('main')).toHaveCount(1);
 		await expect(p.locator('.farm-header').getByRole('group', { name: 'Language' })).toBeVisible();
 		await expectNoSidewaysScroll(p);
@@ -129,7 +129,7 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 	// Afrikaans: the frame's words turn with the page's.
 	// (<html lang="af"> in this frame is af-layout.spec.ts's check, on the seeded farmer.)
 	await p.getByRole('group', { name: 'Language' }).getByRole('button', { name: 'Afrikaans' }).click();
-	await expect(p.locator('.farm-header').getByRole('link', { name: af('Your farms') })).toBeVisible();
+	await expect(p.locator('.farm-header').getByRole('link', { name: af('Your hydrological units') })).toBeVisible();
 	await expect(p.getByRole('heading', { level: 1, name: af('Account') })).toBeVisible();
 	await p.getByRole('group', { name: af('Language') }).getByRole('button', { name: 'English' }).click();
 

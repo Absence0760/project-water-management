@@ -39,15 +39,15 @@
 	<h4 id="share-board-heading">Share the pain</h4>
 	<p class="muted small">
 		Each group's supply as a share of its own demand over the same days, in three steps: what it got, an equal share for
-		every unit, and what is left once the EWR is met too. The per-unit table below has the volumes behind it.
+		every hydrological unit, and what is left once the EWR is met too. The table per hydrological unit below has the volumes behind it.
 	</p>
 
-	<ol class="stages" aria-label="The three stages, all units">
+	<ol class="stages" aria-label="The three stages, all hydrological units">
 		<li>
 			<span class="step" aria-hidden="true">1</span>
 			<span class="stage-name">Today</span>
 			<span class="stage-big" data-testid="stage-today">{t.today.pct}</span>
-			<span class="muted small">of unit demand supplied ({t.today.volume} of {t.demand} m³/day)</span>
+			<span class="muted small">of hydrological unit demand supplied ({t.today.volume} of {t.demand} m³/day)</span>
 		</li>
 		<li>
 			<span class="step" aria-hidden="true">2</span>
@@ -55,9 +55,9 @@
 			<span class="stage-big" data-testid="stage-share">{t.share?.pct ?? '–'}</span>
 			<span class="muted small">
 				{#if board.shareFraction === null}
-					No unit had demand, so there is nothing to share.
+					No hydrological unit had demand, so there is nothing to share.
 				{:else}
-					of its demand for every unit: a fairness benchmark, not an allocation
+					of its demand for every hydrological unit: a fairness benchmark, not an allocation
 				{/if}
 			</span>
 		</li>
@@ -65,7 +65,7 @@
 			<span class="step" aria-hidden="true">3</span>
 			<span class="stage-name">EWR met</span>
 			<span class="stage-big" data-testid="stage-ewr">{t.ewr.pct}</span>
-			<span class="muted small">of unit demand left once each unit's EWR charge is met ({t.ewr.volume} m³/day)</span>
+			<span class="muted small">of hydrological unit demand left once each hydrological unit's EWR charge is met ({t.ewr.volume} m³/day)</span>
 		</li>
 	</ol>
 
@@ -98,7 +98,7 @@
 					</tr>
 				{/each}
 				<tr class="total">
-					<th scope="row">All units</th>
+					<th scope="row">All hydrological units</th>
 					<td class="num">{t.demand}</td>
 					<td>{@render cell(t.today)}</td>
 					<td>{#if t.share}{@render cell(t.share)}{/if}</td>
@@ -141,8 +141,8 @@
 		then domestic supply, irrigation among the first cut), not as one share for everyone.
 	</p>
 	<p class="muted small note">
-		<em>EWR met</em> starts from the equitable share and removes each unit's supply cut for its EWR charge; it never goes
-		below 0 % of demand. A unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
+		<em>EWR met</em> starts from the equitable share and removes each hydrological unit's supply cut for its EWR charge; it never goes
+		below 0 % of demand. A hydrological unit with no demand has nothing to cut: any charge it carries is to store less or pass inflow,
 		noted in its row. A junior user is cut for its charge; a senior one is not, and its charge stands.
 	</p>
 </section>

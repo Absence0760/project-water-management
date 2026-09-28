@@ -20,7 +20,7 @@ describe('the title and intro', () => {
 	it('match board 4', () => {
 		expect(sp(whyTitle(farm()))).toBe('Why about 83 %?');
 		expect(whyIntro(farm())).toBe(
-			'Looking back over 1 Oct 2023 to 10 Jan 2024, the model checks two things: was water shared fairly between farms, and did the river keep enough water flowing?'
+			'Looking back over 1 Oct 2023 to 10 Jan 2024, the model checks two things: was water shared fairly between hydrological units, and did the river keep enough water flowing?'
 		);
 		expect(whyTitle(farm((f) => (f.river.headline = null)))).toBe('What the model found');
 	});
@@ -30,19 +30,19 @@ describe('step 1: was water shared fairly?', () => {
 	it('matches board 4', () => {
 		const s = step1(farm());
 		if (!s.shown) throw new Error('hidden');
-		expect(txt(s.catchment)).toBe('Across the catchment, farms received 89 % of what they needed. We call that the even share.');
+		expect(txt(s.catchment)).toBe('Across the catchment, hydrological units received 89 % of what they needed. We call that the even share.');
 		expect(sp(s.shareLabel)).toBe('even share 89 %');
 		expect(sp(s.youLabel)).toBe('you 86 %');
 		expect([s.sharePct, s.youPct]).toEqual([89, 86]);
 		expect(txt(s.you)).toBe('You received 86 %: a little less than an even share (about 118 m³ a day).');
 		expect(txt(s.check)).toBe(
-			'This is a fairness check, not extra water for you. Whether more water can reach your farm depends on where you are on the river and what is in your dam. It isn’t part of the 83 %.'
+			'This is a fairness check, not extra water for you. Whether more water can reach your hydrological unit depends on where you are on the river and what is in your dam. It isn’t part of the 83 %.'
 		);
 	});
 
 	it('is hidden below k other holders, with the reason', () => {
 		expect(step1(farm((f) => ((f.river.equitableFraction = null), (f.river.aboveBelowShareM3Day = null))))).toEqual({ shown: false, text: kHidden() });
-		expect(kHidden()).toBe('Not shown: with so few farms in the catchment, it could reveal a neighbour’s figures.');
+		expect(kHidden()).toBe('Not shown: with so few hydrological units in the catchment, it could reveal a neighbour’s figures.');
 	});
 
 	it('never words the share as water to take', () => {
@@ -74,7 +74,7 @@ describe('step 2: did the river keep flowing?', () => {
 		expect(txt(s.sites)).toBe('The river was below its reserve at Sandspruit Outlet on 52 days and at Melkhout Gauge on 44 days.');
 		expect(s.reason).toBe('On every one of those days, water taken upstream was part of the reason, not only low rain.');
 		expect(s.rule).toBe(
-			'Farms upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.'
+			'Hydrological units upstream are asked to make that up in proportion to the water each one used up or stored. Water that flows back to the river doesn’t count against you.'
 		);
 		expect(sp(s.asked)).toBe('You were asked to help on 56 of the 102 days. On those days:');
 		expect(txt(s.pump)).toBe('Pump about 220 m³ a day less (2.6 l/s). Averaged over all 102 days that is 121 m³ a day.');
@@ -110,7 +110,7 @@ describe('step 2: did the river keep flowing?', () => {
 		expect(txt(s.dam)).toMatch(/^Your dam held back about 120 m³ a day the river needed\./);
 	});
 
-	it('says so when the farm was never asked, and when the reserve was always kept', () => {
+	it('says so when the hydrological unit was never asked, and when the reserve was always kept', () => {
 		const s = step2(
 			farm((f) => {
 				f.river.chargedDays = 0;
@@ -124,7 +124,7 @@ describe('step 2: did the river keep flowing?', () => {
 		expect(s.dam).toBeNull();
 		expect(s.rule).toBeNull();
 		expect(s.reason).toBeNull();
-		expect(txt(s.sites)).toBe('The river kept its reserve every day this season, at every point below your farm.');
+		expect(txt(s.sites)).toBe('The river kept its reserve every day this season, at every point below your hydrological unit.');
 	});
 
 	it('flags a river share beyond an even share only when it applies', () => {
