@@ -31,6 +31,7 @@ const scores = (kge: number): FitScores => ({
 	nse: kge,
 	nseSqrt: kge,
 	nseLog: kge,
+	kgeLowHigh: kge,
 	volumeErrorPct: 1,
 	fdcHighPct: 2,
 	fdcMidSlopePct: 3,

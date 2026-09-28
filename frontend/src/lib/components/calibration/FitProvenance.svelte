@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
 	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
-	import { fittedAtText, objectiveName, scoreColumns, waterYearsText } from '$lib/calibration/fit';
+	import { fittedAtText, objectiveName, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
@@ -47,7 +47,6 @@
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);
-	const score = (v: number | null | undefined) => (v === null || v === undefined ? '–' : fmtNum(v, 2));
 	const windowText = (r: FitRecord) =>
 		r.calibrationStart || r.calibrationEnd ? `${r.calibrationStart ?? 'start of record'} – ${r.calibrationEnd ?? 'end of record'}` : 'whole record';
 	// GR4J's PE input the fit ran under (engine ≥ 0.31.0, issue #39); a forcing without it ran on pan coefficient × A-pan.
@@ -169,7 +168,7 @@
 				<tbody>
 					<tr>
 						{#each columns as c (c.id)}
-							<td class="num" class:val={c.validation}>{score(c.scores[record.objective])}</td>
+							<td class="num" class:val={c.validation}>{scoreCellText(c, record.objective)}</td>
 						{/each}
 					</tr>
 				</tbody>

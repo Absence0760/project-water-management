@@ -35,6 +35,7 @@ import { chirpsFactorSets, type ChirpsFactorSet } from '../rain';
 import { dds } from './dds';
 import { CALIBRATION_PARAMS, MAX_STARTS, type CalibrationBounds, type ParamSet } from './params';
 import { excludedDayMask, exclusionRanges } from './provenance';
+import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIntervals } from './bootstrap';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
@@ -129,6 +130,15 @@ export interface ScoredPeriod {
 	/** Water years (by the calendar year they start in) with at least one scored day, ascending. */
 	waterYears: number[];
 	scores: FitScores;
+	/**
+	 * 90 % block-bootstrap intervals over water years of KGE′, NSE and the
+	 * low/high-flow KGE′ (engine ≥ 1.18.0, CR-5); null with fewer than
+	 * BOOTSTRAP_MIN_YEARS water years. Absent on a report or stored record
+	 * made before them.
+	 */
+	intervals?: ScoreIntervals | null;
+	/** The same scores for the mean-flow and day-of-year climatology benchmarks on these days (engine ≥ 1.18.0, CR-5); absent before. */
+	benchmarks?: ScoreBenchmarks | null;
 }
 
 export interface ValidationTest {
@@ -369,17 +379,29 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
 	return Int32Array.from(idx, (t) => waterYearOf(d0 + t));
 }
 
-/** Score a parameter set on the given days of a record (the calibration record by default). */
-function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<RecordProblem, 'observed' | 'simulate'> = pb): ScoredPeriod {
+/**
+ * Score a parameter set on the given days of a record (the calibration
+ * record by default), with the scores' bootstrap intervals and benchmarks
+ * unless `bare` (a start's score, where only the objective is read).
+ */
+function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<RecordProblem, 'observed' | 'simulate'> = pb, bare = false): ScoredPeriod {
 	const [o, s] = pair(rec.observed, rec.simulate(p), idx);
 	const d0 = toEpochDay(pb.startDate);
 	const years = yearsOf(pb, idx);
-	return {
+	const out: ScoredPeriod = {
 		start: fromEpochDay(d0 + idx[0]!),
 		end: fromEpochDay(d0 + idx[idx.length - 1]!),
 		waterYears: [...new Set(years)].sort((a, b) => a - b),
 		scores: fitScores(o, s, years)
 	};
+	if (bare) return out;
+	out.intervals = bootstrapIntervals(o, s, years);
+	out.benchmarks = scoreBenchmarks(
+		o,
+		Int32Array.from(idx, (t) => d0 + t),
+		years
+	);
+	return out;
 }
 
 interface FitResult {
@@ -600,7 +622,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	const startResults: StartResult[] = fulls.map((x) => ({
 		seed: x.seed,
 		params: x.r.params,
-		score: scored(pb, x.r.params, all).scores[objective],
+		score: scored(pb, x.r.params, all, pb, true).scores[objective],
 		best: x === kept
 	}));
 	const notes: string[] = [];

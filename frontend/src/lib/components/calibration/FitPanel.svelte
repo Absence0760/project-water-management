@@ -26,8 +26,12 @@
 	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
 	import { api } from '$lib/api';
 	import {
+		benchmarkColumns,
+		benchmarkRows,
 		BOUNDS_LABEL,
 		boundsHint,
+		climatologyWarning,
+		fmtScore,
 		fitInput,
 		fitParams,
 		fitRecordFor,
@@ -35,6 +39,7 @@
 		objectiveName,
 		progressFraction,
 		SCORE_ROWS,
+		scoreCellText,
 		scoreColumns,
 		SEED_MAX,
 		seedError,
@@ -117,6 +122,11 @@
 	const runs = $derived(totalRuns(budget ?? 0, validate, penalty, startsOk ? starts! : 1));
 	const canStart = $derived(hasObserved && free.length > 0 && budget !== null && budget >= 50 && !seedProblem && startsOk && status !== 'running' && status !== 'loading');
 	const columns = $derived(report ? scoreColumns(report) : []);
+	// Model vs the mean-flow and climatology benchmarks (engine ≥ 1.18.0, CR-5); none on an older report.
+	const benchCols = $derived(benchmarkColumns(columns));
+	const benchRows = $derived(report ? benchmarkRows(columns, report.objective) : []);
+	const climWarning = $derived(report ? climatologyWarning(columns, report.objective) : null);
+	const anyInterval = $derived(columns.some((c) => c.intervals));
 	const pct = $derived(progress ? Math.round(100 * progressFraction(progress, validate, penalty, runStarts)) : 0);
 	// A report for another model than the form now shows can't be applied.
 
@@ -165,7 +175,6 @@
 		if (report && ran) onApply(report, fitRecordFor(report, ran.settings, ran));
 	}
 
-	const fmtScore = (v: number | null, unit: '' | '%') => (v === null ? '–' : unit === '%' ? `${v > 0 ? '+' : ''}${fmtNum(v, 1)}%` : fmtNum(v, 2));
 	const fmtParam = (v: number | undefined) => (v === undefined ? '–' : fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3));
 	const paramLabel = (key: string) => params.find((p) => p.key === key)?.label ?? key;
 
@@ -310,7 +319,7 @@
 									<tr class:kept={r.best}>
 										<th scope="row">{i + 1}{#if r.best} (kept){/if}</th>
 										<td class="num">{r.seed}</td>
-										<td class="num">{fmtScore(r.score, '')}</td>
+										<td class="num">{fmtScore(r.score)}</td>
 										{#each report.free as k (k)}<td class="num">{fmtParam(r.params[k])}</td>{/each}
 									</tr>
 								{/each}
@@ -334,19 +343,49 @@
 								<tr>
 									<th scope="row">{r.label} <span class="muted">(ideal {r.ideal})</span></th>
 									{#each columns as c (c.id)}
-										<td class="num" class:val={c.validation}>{fmtScore(c.scores[r.key] as number | null, r.unit)}</td>
+										<td class="num" class:val={c.validation}>{scoreCellText(c, r.key, r.unit)}</td>
 									{/each}
 								</tr>
 							{/each}
 						</tbody>
 					</table>
 				</div>
+				{#if anyInterval}
+					<p class="muted small">
+						In brackets: the 90 % range of the score when whole water years are resampled (1 000 times). A short record gives a wide range; with
+						fewer than 3 water years there is none.
+					</p>
+				{/if}
+				{#if benchRows.length}
+					<div class="table-wrap">
+						<table class="data compact scores" data-testid="fit-benchmarks">
+							<caption>{objectiveName(report.objective)}: the model against two simple benchmarks on the same days</caption>
+							<thead>
+								<tr>
+									<th scope="col">Simulation</th>
+									{#each benchCols as c (c.id)}
+										<th scope="col" class="num" class:val={c.validation}>{c.label}<br /><span class="period">{c.period}</span></th>
+									{/each}
+								</tr>
+							</thead>
+							<tbody>
+								{#each benchRows as b (b.label)}
+									<tr>
+										<th scope="row">{b.label}</th>
+										{#each b.cells as v, i (i)}<td class="num" class:val={benchCols[i]?.validation}>{v}</td>{/each}
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if climWarning}<p class="alert alert-warning small" data-testid="fit-climatology-warning">{climWarning}</p>{/if}
+				{/if}
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
 				{/if}
 				<p class="muted small">
 					Judge the fit by the validation columns: they score days the parameters never saw. KGE of the mean flow is −0.41, so a
-					model should clearly beat that.
+					model should clearly beat that; in a strongly seasonal catchment it should also beat the day-of-year climatology.
 				</p>
 				{#if !readonly}
 					<div class="row">

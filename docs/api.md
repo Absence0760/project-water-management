@@ -493,7 +493,17 @@ alongside teams, e.g. to give an outside client `viewer` access.
   off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
   multi-start fit (absent on a record made before those, i.e. one start), and
-  no others. `bounds` is
+  no others. Each scored period (`fit`, `before`, a test's `calibration`
+  and `validation`, `marPenalty.unpenalised.fit`) is `{ start, end,
+  waterYears, scores, intervals?, benchmarks? }`, `scores` at most 30
+  numbers-or-null by name. From engine 1.18.0 (CR-5) `intervals` is `{ level,
+  resamples, seed, years, kgePrime, nse, kgeLowHigh }`, each score `{ lo, hi
+  }` or `null`, and `null` itself with fewer than 3 water years; `benchmarks`
+  is `{ meanFlow, climatology, halfWindowDays }`, two score sets like
+  `scores`. Both are optional (absent on a record made before them), and a
+  period with any other key is a `400` ([model.md
+  §2.10b](./model.md#210b-automatic-calibration-engine--050-issue-4-phase-4)).
+  `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
   (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
   chirpsBiasCorrection, zeroRainRuns, chirpsFitPeriod, chirpsFactors }`,

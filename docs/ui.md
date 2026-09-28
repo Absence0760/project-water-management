@@ -2615,7 +2615,20 @@ which checks every catchment tab).
     one was chosen; the validation columns are shaded. Each column header
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
-    variants, volume error and the FDC signatures.
+    variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.18.0; "–" on a report made
+    before it), volume error and the FDC signatures. From engine 1.18.0
+    (CR-5, model.md §2.10b) KGE′, NSE and the low/high-flow KGE′ show their
+    90 % bootstrap interval in brackets ("0.62 (0.48–0.71)", "to" when a
+    bound is negative), with a line saying what it is; a period of fewer than
+    3 water years shows the bare score. Below it, a **benchmarks** table
+    (`data-testid="fit-benchmarks"`) scores the model, the mean flow every
+    day and the day-of-year climatology (±7 days) on the fit's objective,
+    over the same columns, and a warning sentence
+    (`data-testid="fit-climatology-warning"`) names the fitted or validation
+    periods where the model scores no better than the climatology. A report
+    made before 1.18.0 has neither. The formatting lives in
+    `lib/calibration/fit.ts` (`scoreCellText`, `benchmarkRows`,
+    `climatologyWarning`).
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.

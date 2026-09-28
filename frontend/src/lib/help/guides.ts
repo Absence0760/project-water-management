@@ -606,7 +606,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'On **Settings & calibration → Calibration record**, set the calibration flow series, window and exclusions first. The fit uses the form as it stands.',
-							'Go to the **Fit automatically** panel and choose the **Objective**. KGE′ is the default; year-balanced KGE′ stops a few wet years dominating; NSE on log Q favours low flows.',
+							'Go to the **Fit automatically** panel and choose the **Objective**. KGE′ is the default; year-balanced KGE′ stops a few wet years dominating; NSE on log Q favours low flows; the mean of KGE′ on Q and on 1/Q weighs low and high flows together, the one to use when the fit feeds an EWR (low-flow) decision.',
 							'Choose **Bounds**: Wide, or Typical (Perrin et al.’s published range) when a short record can’t pin the parameters down.',
 							'Leave **Model runs per fit** (1 500) and **Starts** (5) at their defaults unless you have a reason. Each start is a separate search from its own seed and the best is kept; the notes say when starts reach nearly the same score with scattered parameters.',
 							'Keep **Validate** (split-sample and dry → wet) ticked. With both a gauge and a logger, you can also score the fit against the record it doesn’t use (**Also validate against**).',
@@ -1018,7 +1018,8 @@ export const GUIDES: Guide[] = [
 						items: [
 							'**KGE′** (default): correlation, bias and variability in one score, less peak-dominated than NSE.',
 							'**Year-balanced KGE′**: each water year counts once, so a few wet years can’t dominate a drought-heavy record.',
-							'**Non-parametric KGE**, **NSE on √Q** (medium flows) and **NSE on log Q** (low flows).'
+							'**Non-parametric KGE**, **NSE on √Q** (medium flows) and **NSE on log Q** (low flows).',
+							'**Mean of KGE′(Q) and KGE′(1/Q)**: half the score on the flows, half on their inverses, so recessions and low flows count as much as the peaks. Suggested when the fit feeds an EWR (low-flow) decision.'
 						]
 					}
 				]
