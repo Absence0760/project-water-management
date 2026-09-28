@@ -903,8 +903,8 @@ results for plausibility; and that they read its known limitations
   nothing. Each sign-off writes `audit_event` `signoff.created` in the same
   transaction.
 - **Not yet**: the WP's `target = 'pack'` (WP-3.14 adds it with packs), MFA
-  on signing (Step 4), sign-off in the data export (the POPIA export,
-  WP-1.13). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
+  on signing (Step 4). A signer's sign-offs are in their data export
+  (`app_subject_export`, 054; the registration columns since 092). Guards: `backend/src/signoffs/signoffs.db.test.ts` (positive
   controls), the catalogue tests and the route inventory.
 
 ### Allocations (038_allocations.sql)
