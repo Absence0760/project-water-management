@@ -353,7 +353,8 @@ screen-reader user can jump by heading.
   `aria-hidden` with a visually hidden summary sentence and a real table
   behind "Show the numbers". The dam summary's latest level is "on 10 January
   2024" when the data stops mid-month and "at the end of December 2023" when
-  the last month is complete (issue #51). Bars and gauges are decorative; the number
+  the last month is complete (issue #51). The 12-month chart's axis is in
+  ML; its table follows the unit chosen on the supply card (m³ or ML). Bars and gauges are decorative; the number
   beside them is the content.
 - **Reflow:** no horizontal scroll at 320 px (the existing reflow pattern).
   Chips and buttons wrap; nothing has a fixed width.

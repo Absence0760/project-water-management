@@ -4,15 +4,18 @@
 	// received as a fill, drawn as inline SVG at the card's rendered width so
 	// the 13 px labels stay 13 px. The chart is aria-hidden; a visually hidden
 	// sentence sums it up and "Show the numbers" is a real table of all 12
-	// months with their years.
+	// months with their years, in the unit the reader chose on the supply
+	// card (the chart's axis stays in ML).
 	import type { FarmProjection } from '@water-management/engine';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { barChart, CHART_BASE, CHART_FONT_PX, LABEL_Y, rangeCaption, supplyRows, supplySummary } from './chart';
 
-	let { farm }: { farm: FarmProjection } = $props();
+	import type { VolumeUnit } from './format';
+
+	let { farm, unit }: { farm: FarmProjection; unit: VolumeUnit } = $props();
 	let width = $state(0);
 	const chart = $derived(width > 0 ? barChart(farm.monthly, farm.dataUntil, width) : null);
-	const rows = $derived(supplyRows(farm.monthly, farm.dataUntil));
+	const rows = $derived(supplyRows(farm.monthly, farm.dataUntil, unit));
 </script>
 
 <section class="card" aria-labelledby="chart-h">

@@ -144,7 +144,7 @@
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, today)}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
-			<MonthlyChart farm={view.farm} />
+			<MonthlyChart farm={view.farm} {unit} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
 			<FarmNotes {projectId} nodeId={view.farm.nodeId} farmName={view.farm.name} preview={farm.preview} />

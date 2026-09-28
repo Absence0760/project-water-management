@@ -53,11 +53,20 @@ describe('the needed/received bars', () => {
 		expect(supplySummary(farm.monthly, farm.dataUntil)).toBe(
 			'Water you needed and received each month, February 2023 to 10 January 2024. You were short in February, March, November and December. The numbers are in the table below.'
 		);
-		const rows = supplyRows(farm.monthly, farm.dataUntil);
+		const rows = supplyRows(farm.monthly, farm.dataUntil, 'ML');
 		expect(rows).toHaveLength(12);
 		expect(rows.map((r) => [r.label, sp(r.need), sp(r.got)])[0]).toEqual(['Feb 2023', '104.4 ML', '83.1 ML']);
 		expect(rows.map((r) => [r.label, sp(r.need), sp(r.got)])[10]).toEqual(['Dec 2023', '110 ML', '96.3 ML']);
 		expect(rows[11]!.label).toBe('1–10 Jan 2024');
+	});
+
+	// Issue #51: the table ignored the unit chosen on the supply card.
+	it('writes the rows in the unit the reader chose', () => {
+		const rows = supplyRows(farm.monthly, farm.dataUntil, 'm3');
+		// 104.4 ML and 83.1 ML in the ML table, to the cubic metre here.
+		expect(sp(rows[0]!.need)).toMatch(/^104 \d{3} m³$/);
+		expect(sp(rows[0]!.got)).toMatch(/^83 \d{3} m³$/);
+		expect(rows.every((r) => r.need.endsWith('m³') && r.got.endsWith('m³'))).toBe(true);
 	});
 });
 
