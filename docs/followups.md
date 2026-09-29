@@ -3134,17 +3134,16 @@ Applicant view and the Applications tab. Left:
 
 - [ ] **Performance budgets on the deployed site.** Lighthouse ≥ 95 in all
       four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
-      quality bar). A local baseline (2026-09-28, the build served with gzip
-      like CloudFront; [design/landing-art.md § Quality
-      bar](./design/landing-art.md#quality-bar)) passes everything but LCP:
-      97 / 97 / 100 / 100, CLS 0, **LCP 2.4–2.6 s** on Lighthouse's mobile
-      preset. Tried locally with no effect: preloading the hero from the head,
-      and inlining the stylesheets. What is left is ~0.7 s of render delay,
-      main-thread time, so if the deployed site also misses 2.0 s the levers
-      are: less script and CSS before the landing's first paint (the root
-      layout's app-wide code), then giving phones the 800 px render (`sizes`
-      asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
-      6), tracked on #92; measure there, then close #57.
+      quality bar). Met locally (2026-09-28, the build served over HTTP/2
+      with gzip like CloudFront; [design/landing-art.md § Quality
+      bar](./design/landing-art.md#quality-bar)): 100 / 100 / 96 / 100, LCP
+      1.6 s, CLS 0 on the mobile preset. The earlier 2.4–2.6 s miss was the
+      measuring server's HTTP/1.1 and a background texture standing in as
+      the LCP element (now vector, and landing.spec.ts checks the LCP
+      element is the hero render). If the deployed site still misses 2.0 s,
+      the lever left is the ~0.5 s render delay: less script before the
+      landing's first paint (the root layout's app-wide code). Trigger: the
+      first deploy (Phase 6), tracked on #92; measure there, then close #57.
 - [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
       international persona). The page is prerendered once, in English, and
       `app.html` says `<html lang="en">`; an Afrikaans visitor's words and

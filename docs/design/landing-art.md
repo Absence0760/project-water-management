@@ -134,12 +134,18 @@ that contradicts itself.
   ([ui.md § Methods page](../ui.md#methods-page)).
 - **Texture**: the contours at 5 % behind the hero and the footer, drifting a
   pixel or two over 40 s; a meandering river line between sections instead of
-  rules. The mask image is set inline on each `.contours` element, not
-  through a custom property: a `url()` in a custom property resolved against
-  the stylesheet that used it, so the prerendered page's relative base asked
-  for `/_app/immutable/assets/landing/contours.svg` (a 404) until it hydrated.
+  rules. The texture is vector, drawn through `<use href="…/contours.svg#contours">`
+  (the file's line group, `contours.py`) in an `<svg>` of its shape
+  (`ART.contours`), in `var(--text)` at 5 %. It used to be a CSS mask over a
+  filled box, and a masked box counts as an image: the page-sized texture was
+  the page's Largest Contentful Paint, requested only once the styles had
+  resolved; drawn as vector it isn't a candidate, and the hero render is.
+  landing.spec.ts checks the LCP element (phone and desktop). The `href`
+  resolves against the page, so the prerendered page's relative base (`./`)
+  finds the file before hydration (a `url()` through a custom property once
+  asked for `/_app/immutable/assets/landing/contours.svg`, a 404);
   landing.spec.ts checks that `/welcome` loads every asset it asks for, with
-  and without script.
+  and without script, and that the texture draws.
 
 ## Motion principles
 
@@ -177,20 +183,28 @@ that contradicts itself.
   guarded by `scripts/guards/check_web_bundle_budget.mjs`.
 - [ ] Prototype and operator review: the operator chose to review the built
   page directly rather than a prototype first (2026-09-27).
-- [ ] Lighthouse ≥ 95, LCP < 2 s on throttled 4G, CLS 0: the final check is
-  on the deployed site (plan.md Phase 6). **Local baseline, 2026-09-28**
-  (Lighthouse 12, mobile preset: simulated slow 4G and a 4× CPU slowdown,
-  against `frontend/build` served with gzip and the prerendered `.html`
-  mapping, as CloudFront does; the e2e static server doesn't compress, which
-  alone cost ~20 performance points): `/welcome` Performance 97,
-  Accessibility 97, Best Practices 100, SEO 100, CLS 0, FCP 1.5 s, total
-  weight 164 KB, **LCP 2.4–2.6 s**, the one miss. `/methods` scores 100 / 100 /
-  100 / 100 with LCP 1.5 s. The LCP element is the hero render (the 1200 px
-  AVIF, 31 KB, `fetchpriority="high"`); its time splits into server response,
-  load delay and render delay. Tried and dropped, as neither moved LCP: preloading
-  the render from the head (per colour scheme), and inlining the stylesheets
-  (`kit.inlineStyleThreshold`; the prerendered page kept its links). What
-  remains is ~0.7 s of render delay, main-thread time (followups.md §
-  Landing page). Accessibility's 97 was the hero's gauge tag caught mid-fade
-  by the scan; the tag no longer animates (issue #51). That same pass found and fixed two defects: no `robots.txt` (the
-  SPA fallback served HTML there) and the contour texture's 404 below.
+- [ ] Lighthouse ≥ 95, LCP < 2 s on throttled 4G, CLS 0: **met locally**; the
+  final check is on the deployed site (plan.md Phase 6, #92). **Local
+  measurement, 2026-09-28** (Lighthouse 12.8, mobile preset: simulated slow 4G
+  and a 4× CPU slowdown, against `frontend/build` served **over HTTP/2 with
+  gzip** and the prerendered `.html` mapping, as CloudFront does,
+  `http_version = "http2and3"`, `compress = true`): `/welcome` Performance
+  100, Accessibility 100, Best Practices 96, SEO 100, **LCP 1.6 s**, FCP 1.1 s,
+  CLS 0, total weight 161 KB; desktop preset 100 / 100 / 96 / 100, LCP 0.4 s.
+  `/methods` 100 / 100 / 100 / 100, LCP 0.9 s. The LCP element is the hero
+  render (load delay 0; the ~0.5 s render delay is the app's scripts booting).
+  - **Serve over HTTP/2 when measuring.** The page asks for ~40 small
+    modules and 9 stylesheets; over HTTP/1.1 Lighthouse models six
+    connections to the origin, which queues them and alone put LCP at
+    2.4–2.7 s (the first baseline's figure, and Performance 95–97). A
+    self-signed certificate and Chrome's `--ignore-certificate-errors` are
+    enough locally.
+  - **Best Practices 96** is the root layout's session check: a signed-out
+    `GET /api/auth/me` answers 401, which Chrome logs as a console error.
+    The 401 is the API's contract, so it stays; a stub that answers 200 for
+    `/api/*` scores 100 but doesn't measure the real site.
+  - Fixed on the way: the LCP element was the 5 % contour texture (a CSS
+    mask, above), not the render, which is why preloading the render and
+    inlining the stylesheets moved nothing. The first pass also found and
+    fixed no `robots.txt` (the SPA fallback served HTML there) and the
+    contour texture's 404 above.

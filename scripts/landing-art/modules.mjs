@@ -10,6 +10,8 @@
 // divider as plain SVG (Inkscape's --export-plain-svg with every object
 // turned into a path). The page draws the icons from their path data, so they
 // can draw themselves on (stroke-dashoffset) and follow the theme's colours.
+// It also records the contour texture's size (contours.py's viewBox, read from
+// frontend/static/landing/contours.svg), which the page's <svg> needs to draw it.
 // Dependency-free: the SVGs are Inkscape's plain output, read with a few
 // regular expressions rather than a parser. It also refuses a hero whose edges
 // hold anything (assertUnclipped): the block ran off the camera's frame.
@@ -83,6 +85,13 @@ function assertUnclipped(png) {
 }
 for (const mode of ['day', 'dusk']) assertUnclipped(join(work, `hero-${mode}.png`));
 
+/** The contour texture's viewBox size: the page draws it through <use>, in an <svg> of the same shape. */
+function contoursSize() {
+	const svg = readFileSync(new URL('../../frontend/static/landing/contours.svg', import.meta.url), 'utf8');
+	const [, , width, height] = /viewBox="([^"]+)"/.exec(svg)[1].split(/\s+/).map(Number);
+	return { width, height };
+}
+
 const ICONS = ['hydrologist', 'association', 'licensing', 'farmer'];
 const hero = json('hero.json');
 const art = {
@@ -93,7 +102,8 @@ const art = {
 	overlay: json('overlay.json'),
 	screens: existsSync(join(work, 'screens.json')) ? json('screens.json') : {},
 	icons: Object.fromEntries(ICONS.map((name) => [name, paths(`icon-${name}.svg`)])),
-	river: paths('river-divider.svg')[0].d
+	river: paths('river-divider.svg')[0].d,
+	contours: contoursSize()
 };
 
 writeFileSync(
@@ -102,7 +112,8 @@ writeFileSync(
 // Don't edit by hand: change the sources in scripts/landing-art/ and rerun it.
 // The hero render's size and blurred placeholders, where the scene's rivers,
 // dams, clouds and gauge fall in it (% of the picture), each framed app
-// screen's size, and the icons' and river divider's path data.
+// screen's size, the icons' and river divider's path data, and the contour
+// texture's size.
 /* eslint-disable */
 export const ART = ${JSON.stringify(art, null, '\t')};
 `
