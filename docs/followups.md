@@ -2150,19 +2150,19 @@ role and not before it.
 
 ## Features left half-way
 
-- [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
-      K1, found building WP-2.12, 2026-09-26). The land-cover Q75, EWR rule
-      tables read against the record's flow-duration curve, and GR4J's
-      warm-up on a record shorter than it are record-wide, so days added at
-      the end move values at the start (about 1e-8 relative on long records).
-      Forecast mode works round it with a second run for the history, so the
-      join between history and forecast is continuous only up to that noise.
-      Durable fix: fit those statistics on a fixed window (the calibration
-      window, or the record to the last observed day), then prefix stability
-      holds for `runModel` itself and `runForecastChecked` can splice
-      nothing. An engine behaviour change, so the engine owner's call and an
-      `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
-      or a user asking why a forecast run's first forecast day steps.
+- [x] **Make the model causal, then run forecast mode once** (engine-audit.md
+      K1, found building WP-2.12, 2026-09-26; done in engine 1.28.0, issue
+      #67). Every record-wide figure (GR4J's cycled warm-up, the land-cover
+      Q75, the Reserve's natural curves and the months it assesses, a full
+      allocation's yearly factor) reads only the days before a forecast tail
+      (`forecastTail.ts`), so a run with the tail has the same series as the run without it on every shared day, to the bit, and `runForecastChecked` takes
+      every series from it with no splice (model.md §2.4f). It still runs the
+      history twice: the summaries cover their whole run and the self-checks
+      recompute them from the series, so windowing them to the history would
+      touch every summary and every check, for no change in a figure. A
+      snapshot at `forecastFrom` would make the second run cover the tail
+      only (same series, less time); trigger: forecast runs' time showing up
+      in the job queue's budget.
 - [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
       [architecture.md § Background work](./architecture.md)). A forecast
       feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with

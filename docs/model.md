@@ -787,7 +787,9 @@ construction.
 **Warm-up.** The stores start half full (S = ½·X1, R = ½·X3) with empty queues.
 The model then runs `warmupDays` days that cycle the run's own forcing from its
 first day. Day k of the warm-up uses day k mod n, so a warm-up longer than the
-run repeats it. Warm-up days are never output or scored. Day 1 starts from the
+run repeats it. n is the run's historical days (engine ≥ 1.28.0): a forecast
+tail is never cycled into the warm-up, so it can't change the state day 1
+starts from (§2.4f). Warm-up days are never output or scored. Day 1 starts from the
 warm-up's end state.
 
 **Outputs.** GR4J adds these catchment series:
@@ -1487,9 +1489,10 @@ forecast rain. Left to `runModel`, a forecast tail flows into every summary
 (the curtailment window, the EWR days not met, the farm averages,
 calibration, the compliance grid), so yesterday's forecast would change the
 figures farmers and regulators rely on. Forecast mode
-(`packages/engine/src/forecast.ts`) keeps the two apart. It adds no step to
-`runModel`, whose output is unchanged: the version moved to 0.37.0 for the
-new output fields (`forecastFrom`, `summary.forecast`) forecast runs carry.
+(`packages/engine/src/forecast.ts`) keeps the two apart. The version moved
+to 0.37.0 for the new output fields (`forecastFrom`, `summary.forecast`)
+forecast runs carry, and to 1.28.0 when `runModel` became causal across a
+forecast tail (below).
 
 **Where the forecast starts.** `forecastSplit` reads the rain exactly as the
 run does (`prepareRun`: zero runs set aside, accumulations spread, rain-source
@@ -1520,10 +1523,10 @@ tail and with it. Its output is
 - every summary (farms, curtailment, EWR days, calibration, compliance,
   assurance, water balance, self-checks, warnings) of the run **without**
   the tail;
-- every daily series of the run without the tail up to `forecastFrom − 1`,
-  and of the run with it from `forecastFrom` on, except `rain_source`, taken
-  whole from the full input (before `forecastFrom` it equals the run without
-  the tail's), so charts and exports can mark the days;
+- every daily series of the run with the tail, whose days before
+  `forecastFrom` equal the run without it, to the bit (the model is causal
+  across the tail, below), `rain_source` included, so charts and exports can
+  mark the days;
 - `ModelOutput.forecastFrom` and `summary.forecast`: over the tail days, per
   farm the lowest dam level (storage ÷ capacity, and the first day at it),
   the days with a deficit, demand, supply and supplied ÷ demand, and at the
@@ -1552,30 +1555,47 @@ back in:
   saved run does after the project's, so the fit and its "before" scores see
   the record only and agree with an ordinary run's.
 
-**Why two runs: the model is not causal.** The plan assumed a run with a
-tail and one without agree on every shared day because the simulation is
-causal. It isn't quite: a few figures are record-wide statistics, so a day at
-the end of the record moves values at its start. The land-cover low-flow
-threshold is the natural flow's Q75 over the record (§2.5a); EWR rule tables
-are read against the record's flow-duration curve (§2.9c); GR4J's warm-up
-cycles the forcing when the record is shorter than the warm-up (§2.4a).
-(The Reserve's base flow, `settings.lowFlowMeasure: 'baseflow'`, was a
-fourth from engine 1.3.0; from engine 1.6.0 each month is filtered on a
-window that ends on its last day, so a later day no longer moves it, §2.9d.) A
-14-day tail on a 900-day random network moved historical values by about
-1e-8 relative; on a short record, by more. Taking the history from the run
-without the tail makes it an ordinary run's **to the bit**, by construction.
-The forecast days carry on from the run with the tail, so the join between
-the two is continuous only up to that noise: the water balance of each run
-closes (both are self-checked), the spliced series across the join to within
-it. Making those statistics causal (fitting them on a fixed window) would let
-one run do; that is an engine decision, not forecast mode's. Model-state
-snapshots (§2.16, engine 1.1.0) are that mechanism: the run without the
-tail could capture its state at `forecastFrom` and the tail run from it,
-reading the history's pinned statistics, so the join would be exact and the
-second run would cover the tail's days only. Forecast mode doesn't use them
-yet (its output would change on a record with land cover, a rule table or a
-short GR4J warm-up, which is a decision of its own).
+**The model is causal across a forecast tail (engine ≥ 1.28.0, engine-audit.md
+K1).** The plan assumed a run with a tail and one without agree on every
+shared day because the simulation is causal. Until 1.28.0 it wasn't quite:
+a few figures are record-wide statistics, so a day at the end of the record
+moved values at its start (a 14-day tail on a 900-day random network, by
+about 1e-8 relative; on a short record, by more), and forecast mode spliced
+the history of one run onto the tail of the other. From 1.28.0 each of them
+reads only the run's **historical days**, those before its forecast tail
+(`forecastTail.ts`, the same `forecastFrom` as above; every day when there is
+no tail):
+- GR4J's warm-up cycles the historical days only when the record is shorter
+  than the warm-up (§2.4a);
+- the land-cover low-flow threshold is the natural flow's Q75 over them
+  (§2.5a);
+- a Reserve rule table's natural duration curves rank the complete months
+  within them, and a month the history ends inside isn't assessed (§2.9c);
+- a full allocation fits the factor of the water year the tail starts in on
+  that year's historical days, and its tail days keep it (§2.12a; a year
+  with no demand before the tail takes nothing on its tail days either).
+
+A run with a tail says where its history ends in `summary.historyDays` (the
+self-checks read it); a run without one has no such field. The calibration
+problem and firm yield build their networks the same way, so they agree
+with `runModel` on an input with a tail too (the app strips the tail before
+either). One consequence to know: the calendar month the forecast starts in
+isn't assessed against a rule table (the history doesn't complete it), so
+with `settings.ewrChargeSource: 'ruleTable'` its forecast days are charged on
+the pragmatic EWR, as any day outside a complete month is (§2.9c), and the
+outlook's older path doesn't assess a decision month that starts mid-month.
+(The Reserve's base flow, `settings.lowFlowMeasure: 'baseflow'`, was another
+from engine 1.3.0; from engine 1.6.0 each month is filtered on a window that
+ends on its last day, §2.9d.) A run without a forecast tail is unchanged. So
+the run with the tail has the same series as the run without it on every shared day,
+to the bit, and the join into the forecast days is exact. The second run is
+still made for the summaries: every one of them covers its whole run, and
+the self-checks recompute them from the series, so windowing each summary to
+the history instead would touch every one and every check. (Model-state
+snapshots, §2.16, could make the second run cover the tail's days only: the
+run without the tail captures its state at `forecastFrom` and the tail runs
+from it. With the model causal that gives the same series; it would save
+time, not change a figure.)
 
 **The invariant.** `checkForecastPrefix` (`testing/forecastInvariants.ts`)
 asserts, on random networks with a synthetic tail (after the record, overlapping
@@ -1775,7 +1795,8 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 
 **Each day**, per farm with land cover (network/landcover.ts), with I0 = its
 natural runoff (natural flow × share) and q = share × the catchment's natural
-flow exceeded on 75 % of the run's days (its low-flow threshold):
+flow exceeded on 75 % of the run's days (its low-flow threshold; from engine
+1.28.0 of its historical days, so a forecast tail doesn't move it, §2.4f):
 
 ```
 MAR_u  = Σ_p f_p × mar_p          LOW_u = Σ_p f_p × lowFlow_p
@@ -3253,7 +3274,9 @@ a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 
 - `run` (default): the month's natural flow ranked among the same calendar
-  month in every complete year of the run. The natural curve at the points is
+  month in every complete year of the run (from engine 1.28.0, of its
+  historical days: a month in a forecast tail is ranked on the history's
+  curve, and a month the history ends inside isn't assessed, §2.4f). The natural curve at the points is
   the run's own, at Weibull plotting positions i / (n + 1), linear between
   and held at the ends. It needs no gazetted natural curve, and a model that
   is wet or dry overall doesn't shift every month into wetter or drier
@@ -6013,7 +6036,8 @@ bits whatever order they came in).
   ```
 
   over the run's days *D(y)* of the year (a part year asks for the prorated
-  volume), so it asks for exactly its registered volume and keeps its own
+  volume; the year a forecast tail starts in, over its historical days, the
+  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f), so it asks for exactly its registered volume and keeps its own
   seasonal shape; the crop requirement F and every demand object scale by the
   same *k*, and the soil-water store and effective rain are untouched (they
   set the shape). A senior water user is scaled before its demand is passed
@@ -6454,7 +6478,8 @@ Reserve's natural duration curves §2.9c, the CHIRPS and rain-source factors
 a member's record. The older path, kept as `warmStart: false` and
 `outlookMemberInput`, re-ran the history in every member as forecast mode
 does (§2.4f) and refitted those statistics on each member's record
-(history + analogue season), so a member's history was the base run's only
+(history + analogue season; from engine 1.28.0 on the history before the
+decision date only, since the season is the member's forecast tail), so a member's history was the base run's only
 to float noise; §2.16 records what moving to the pinned statistics changes
 (nothing on the invented test catchment, which has neither land cover nor a
 rule table; up to 3 of 12 years met on a variant with both). Cost: one run
@@ -6875,7 +6900,10 @@ invasive trees on one farm and a Reserve rule table at the outlet
 storage moves by less than 0.06 % and the share of demand met by less
 than 2e-5 (the low-flow threshold), and 9 of the 336 level × year ×
 month Reserve assessments change (the natural curves), which moves the
-years met in full from 7, 7, 7, 6 to 4, 5, 5, 4 of 12 (100, 85, 70, 55 %);
+years met in full from 7, 7, 7, 6 to 4, 5, 5, 4 of 12 (100, 85, 70, 55 %)
+(engine ≥ 1.28.0: the older path's curves rank the history before the
+decision date only, the season being its forecast tail, so 16 of 336
+change, from 10, 8, 8, 8);
 with the record ending the day before the decision date, 10 of 336 and
 7, 8, 7, 6 → 9, 8, 8, 7. A single month decides a Reserve year, so a
 catchment read against a rule table should expect its outlook to move by
