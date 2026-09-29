@@ -2296,7 +2296,8 @@ farmer view E3, migration 104).
   date, on or before the season end; `400` when the body's own season
   shows it isn't, else `422`): absent, the project's
   `settings.outlook.review` (month and day, the first after the decision
-  date; `422` when it isn't inside the season), else the engine's
+  date; when a season given in the request doesn't hold it, that season's
+  default; `422` when the project's own season doesn't), else the engine's
   `defaultReviewDate` (1 January for the default season, O3); `null`: no
   trigger table. A catchment with no farm dam gets none (the bands are dam
   storage): an explicit review date is then `422`, an absent one is null.

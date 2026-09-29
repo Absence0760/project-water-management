@@ -486,6 +486,12 @@ describe('review triggers (issue #53 R6)', () => {
 		// With the season in the body, the schema says so.
 		const inBody = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { decisionDate: '2012-10-01', seasonEnd: '2013-04-30', reviewDate: '2013-06-01' }));
 		expect(inBody.status).toBe(400);
+		// A season in the request that the setting's day doesn't fall in: the engine's default for that season (its middle day, 31 March), not a refusal.
+		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { outlook: { review: { month: 1, day: 1 } } } })).status).toBe(200);
+		const spring = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId, { decisionDate: '2013-03-01', seasonEnd: '2013-04-30' }));
+		expect(spring.status, JSON.stringify(spring.body)).toBe(202);
+		expect(spring.body.outlook.reviewDate).toBe('2013-03-31');
+		await tick();
 		// The project's setting outside the default season: said so, not a dead job.
 		expect((await owner.call('PATCH', `/projects/${c.projectId}`, { settings: { outlook: { review: { month: 7, day: 1 } } } })).status).toBe(200);
 		const setting = await owner.call('POST', `/projects/${c.projectId}/outlooks`, outlookOf(c.runId));

@@ -164,9 +164,11 @@ export async function createOutlook(db: Db, projectId: string, body: CreateOutlo
 		}
 		reviewDate = body.reviewDate;
 	} else if (body.reviewDate === undefined && dams) {
+		// A season from the request that the setting's month and day don't fall in takes the engine's default for it; the project's own season must fit its setting.
 		const r = reviewDateFor(setting.review, season);
-		if ('error' in r) throw new ApiError(422, `the project's review date setting doesn't fit this season: ${r.error}`);
-		reviewDate = r.date;
+		const fallback = 'error' in r && body.decisionDate !== undefined ? reviewDateFor(null, season) : r;
+		if ('error' in fallback) throw new ApiError(422, `the project's review date setting doesn't fit this season: ${fallback.error}`);
+		reviewDate = fallback.date;
 	}
 	const levels: StoredLevel[] = body.levels.map((l, i) => ({ id: String(i), label: l.label, ops: l.ops }));
 	const outlookId = randomUUID();
@@ -395,6 +397,11 @@ export async function computeOutlook(db: Db, projectId: string, outlookId: strin
 				for (const { level, problems } of levels) {
 					if (problems.length) {
 						bandLevels.push({ id: level.id, label: level.label, problems, members: [] });
+						// A level refused in every year of the outlook was counted in `total`: count its members here too, so progress reaches 100.
+						if (running.some((p) => p.level.id === level.id)) {
+							done += table.analogues.length;
+							if (!(await progress((100 * done) / total))) throw new LeaseLostError();
+						}
 						continue;
 					}
 					const got: OutlookMember[] = [];
@@ -488,7 +495,14 @@ function planTriggerTable(base: ModelInput, baseRun: OutlookBaseRun, reviewDate:
 	if (at <= r0) return { problem: `the base run (${baseRun.startDate} to ${fromEpochDay(r1)}) holds no ${md} with a day before it, so the trigger table has no state to start from` };
 	const end = dayOf(endMd >= md ? y : y + 1, endMd);
 	const tableSeason: OutlookSeason = { decisionDate: fromEpochDay(at), seasonEnd: fromEpochDay(end) };
-	const { baseRun: tBase, snapshot } = outlookBaseAndSnapshot(base, tableSeason.decisionDate);
+	let tBase: OutlookBaseRun;
+	let snapshot: ModelStateSnapshot | null;
+	try {
+		({ baseRun: tBase, snapshot } = outlookBaseAndSnapshot(base, tableSeason.decisionDate));
+	} catch (err) {
+		// The engine's words; the outlook itself still completes, without a table.
+		return { problem: `the model's state on ${tableSeason.decisionDate} couldn't be captured: ${(err as Error).message}` };
+	}
 	if (!snapshot) return { problem: `the model's state on ${tableSeason.decisionDate} couldn't be captured, so the trigger table can't be drawn` };
 	let plan: ReviewTriggerBandPlan;
 	try {
@@ -498,7 +512,12 @@ function planTriggerTable(base: ModelInput, baseRun: OutlookBaseRun, reviewDate:
 		return { problem: (err as Error).message };
 	}
 	if (plan.bands.length > TRIGGER_BANDS_MAX) throw new JobError(`a trigger table of ${plan.bands.length} bands is over the limit of ${TRIGGER_BANDS_MAX}`, { retry: false });
-	const picked = outlookAnalogues(tBase, tableSeason, analogueYears ?? undefined);
+	let picked: ReturnType<typeof outlookAnalogues>;
+	try {
+		picked = outlookAnalogues(tBase, tableSeason, analogueYears ?? undefined);
+	} catch (err) {
+		return { problem: (err as Error).message };
+	}
 	const byYear = [...picked.analogues].sort((a, b) => b.waterYear - a.waterYear);
 	const keep = new Set(byYear.slice(0, OUTLOOK_YEARS_MAX).map((a) => a.waterYear));
 	const excluded: StoredExcluded[] = [...picked.excluded, ...byYear.slice(OUTLOOK_YEARS_MAX).map((a) => ({ waterYear: a.waterYear, reason: 'overLimit' as const }))];

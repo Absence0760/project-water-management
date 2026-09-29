@@ -6,7 +6,7 @@
 // #90); the app never picks one for a farmer.
 //
 // Pure: no I/O. Built by the backend when an outlook is published (one per
-// linked farm, outlook_farm_publication) and read back unchanged.
+// linked farm, outlook_publication_farm) and read back unchanged.
 import type { OutlookStat, SeasonalOutlook } from '../outlook/outlook';
 
 /** One farm's view of a published outlook. Shares are fractions 0–1. */
