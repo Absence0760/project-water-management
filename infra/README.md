@@ -8,8 +8,9 @@ here has been applied yet; see [Operator steps](#operator-steps) for the order.
 
 ```
 browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-management.jaredhoward.com
-                    ├─ /*      → CF Function spa_rewrite → S3 (private, OAC)        SPA build
-                    └─ /api/*  → CF Function strips /api → Lambda Function URL      Hono API
+                    ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
+                    ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
+                    └─ /api/*     → CF Function strips /api → Lambda Function URL   Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
                                                           SES API (VPC endpoint) ◄────┤ SendEmail as no-reply@
@@ -27,7 +28,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
    worker ──SendMessage (endpoint)──► SQS render-requests ──► renderer Lambda (container image, Chromium;
    worker ◄── SQS render-results ◄──SendMessage (public)──────┘   NO VPC, no DB; reports.tf)
                                                                   ├──HTTPS──► the site via CloudFront (render session)
-                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── API pre-signs GETs
+                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── CloudFront /reports/* (OAC, signed URLs the API mints)
                      (each queue: a DLQ after 5 receives; alarms)
 ```
 
@@ -159,7 +160,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
-| `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
+| `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the generated signing key pair, its public key and key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
@@ -538,6 +539,12 @@ at its source and apply instead.
 - **CloudFront shared secret:**
   `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).
+- **Report-download signing key** (the API only): only if it may have
+  leaked (it is in state and the API's runtime secret):
+  `terraform apply -var-file=… -replace=tls_private_key.report_downloads`.
+  The new CloudFront public key is created before the old one goes
+  (`create_before_destroy`); links minted in the seconds before the API
+  cold-starts onto the new key get a 403, and clicking again works.
 - **Alert unsubscribe-token secret** (WP-2.13, the worker only): only if it
   leaked, since every unsubscribe link in alert emails already sent stops
   working ("Manage your alerts" still does):
