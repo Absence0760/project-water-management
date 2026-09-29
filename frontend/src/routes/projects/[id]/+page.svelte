@@ -65,7 +65,7 @@
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
+	import { GRID_TAB, isGridId, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -200,6 +200,15 @@
 		addMounted = true;
 		addOpen = true;
 	}
+	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
+	// editor, and the param goes so Back or a reload doesn't reopen it.
+	$effect(() => {
+		if (page.url.searchParams.get('add') !== 'data' || !project) return;
+		untrack(() => {
+			if (canEdit) openAddData();
+			void goto(withoutParam(page.url, 'add'), { replaceState: true, noScroll: true, keepFocus: true });
+		});
+	});
 	const hasFiles = (e: DragEvent) => canEdit && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
@@ -228,6 +237,8 @@
 		// The merge or replace says when the automatic re-run it queued is due (absent from an older API).
 		if (project && r.meta.rerunQueuedFor !== undefined) project = { ...project, rerunQueuedFor: r.meta.rerunQueuedFor };
 		await loadLists();
+		// On the Data tab the upload is charted, as picking its row would (`series=`).
+		if (tab === 'series') void goto(withParam(page.url, 'series', r.meta.id), { replaceState: true, noScroll: true, keepFocus: true });
 		const what = r.meta.name || kindLabel(r.meta.kind);
 		banner = {
 			text: r.added || r.changed ? `${r.message.replace(/\.$/, '')}.` : `No new days for “${what}”: the file matched what is stored.`,
@@ -742,6 +753,7 @@
 								settings={project!.settings}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								onSeriesChange={(l) => (series = l)}
+								onadddata={() => openAddData()}
 							/>
 						{/snippet}
 					</Lazy>

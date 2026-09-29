@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { DATA_ANCHORS, dataAnchor, dataNavGroups } from './sections';
+import { DATA_ANCHORS, dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 
 const ids = (p: Parameters<typeof dataNavGroups>[0]) => dataNavGroups(p).flatMap((g) => g.sections.map((s) => s.id));
-const ALL = { chart: true, agreement: true, doubleMass: true, checks: true, upload: true };
+const ALL = { chart: true, agreement: true, doubleMass: true, checks: true };
 
 describe('dataNavGroups', () => {
 	it('links every panel, in page order, when the page draws them all', () => {
@@ -11,15 +11,21 @@ describe('dataNavGroups', () => {
 	});
 
 	it('leaves out the panels the page does not draw, and a group with none left', () => {
-		// A viewer on a new catchment: no chart yet, no checks, no upload form.
-		const none = { chart: false, agreement: false, doubleMass: false, checks: false, upload: false };
+		// A new catchment: no chart yet, no checks.
+		const none = { chart: false, agreement: false, doubleMass: false, checks: false };
 		expect(ids(none)).toEqual(['data-series', 'data-uses']);
 		expect(dataNavGroups(none).map((g) => g.label)).toEqual(['Series', 'Adding data']);
-		expect(ids({ ...ALL, agreement: false, upload: false })).toEqual(['data-series', 'data-chart', 'data-double-mass', 'data-checks', 'data-uses']);
+		expect(ids({ ...ALL, agreement: false })).toEqual(['data-series', 'data-chart', 'data-double-mass', 'data-checks', 'data-uses']);
 	});
 
-	it('knows its own anchors, the older #upload-csv among them, and no others', () => {
+	it('knows its own anchors and no others; the retired #upload-csv is not one', () => {
 		for (const id of DATA_ANCHORS) expect(dataAnchor(id)).toBe(true);
-		for (const id of ['res-summary', 'set-ewr', 'data', '']) expect(dataAnchor(id)).toBe(false);
+		for (const id of ['res-summary', 'set-ewr', 'data', 'upload-csv', '']) expect(dataAnchor(id)).toBe(false);
+	});
+
+	it('sends the retired #upload-csv to the series list, and nothing else anywhere', () => {
+		expect(retiredDataAnchor('upload-csv')).toBe('data-series');
+		expect(dataAnchor(retiredDataAnchor('upload-csv')!)).toBe(true);
+		for (const id of [...DATA_ANCHORS, 'up-h', '']) expect(retiredDataAnchor(id)).toBeNull();
 	});
 });

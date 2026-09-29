@@ -1,5 +1,6 @@
 import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { openAddData, uploadedNote } from '../support/addData.ts';
 
 // Issue #66: a series' source and given unit (107_series_source.sql), and gap
 // filling of the observed flow records (engine ≥ 1.23.0, docs/model.md
@@ -9,14 +10,14 @@ test('a flow record uploaded in l/s says so, and an editor records where it came
 	void owner;
 	const project = await createProject(page.request, 'Series source');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
 	await form.getByLabel('Unit').selectOption('l/s');
 	await form.getByLabel('Source').fill('DWS X1H001');
 	const rows = ['date,flow', ...Array.from({ length: 10 }, (_, i) => `2021-10-${String(i + 1).padStart(2, '0')},${1000 + i * 10}`)];
 	await form.getByLabel('CSV file').setInputFiles({ name: 'weir.csv', mimeType: 'text/csv', buffer: Buffer.from(rows.join('\n')) });
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toContainText('Uploaded 10 days');
+	await expect(uploadedNote(page)).toContainText('Uploaded 10 days');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Flow — observed gauge' });
 	await expect(row.getByTestId('series-source')).toHaveText('DWS X1H001 · given in l/s (× 0.001 to m³/s)');

@@ -11,8 +11,10 @@
 	// row charts it (`series=<id>`, so Back returns to the one before). On a
 	// big enough window the table and the chart are exactly the height left
 	// (the Dams page's measure): the table scrolls inside its box and the
-	// chart fills the rest. The checks, the upload form and the reference
-	// follow below.
+	// chart fills the rest. The checks and the reference follow below.
+	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
+	// page charts what it uploaded (`series=`), and the empty state's button
+	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -59,14 +61,12 @@
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
-	import UploadForm from './UploadForm.svelte';
-	import type { UploadResult } from './upload';
 	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
 	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
-	import { dataAnchor, dataNavGroups } from './sections';
+	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 
@@ -77,7 +77,8 @@
 		runs = null,
 		settings = null,
 		gauges = [],
-		onSeriesChange
+		onSeriesChange,
+		onadddata
 	}: {
 		projectId: string;
 		readonly: boolean;
@@ -89,6 +90,8 @@
 		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.4.0). */
 		gauges?: readonly { id: string; name: string }[];
 		onSeriesChange?: (list: SeriesMeta[]) => void;
+		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
+		onadddata?: () => void;
 	} = $props();
 
 	/** Gauge-vs-logger thresholds; null = the engine defaults. */
@@ -367,18 +370,31 @@
 		}
 	}
 
-	async function uploaded(r: UploadResult) {
-		values = Object.fromEntries(Object.entries(values).filter(([id]) => id !== r.meta.id));
-		await load();
-		choose(r.meta.id, true);
-	}
-
 	const typical = (s: SeriesMeta) => {
 		const st = stats[s.id];
 		if (!st) return '…';
 		if (isRain(s.kind)) return st.meanAnnualMm === null ? '–' : `${fmtNum(st.meanAnnualMm)} mm/a`;
 		return st.meanDaily === null ? '–' : `${fmtNum(st.meanDaily, st.meanDaily < 1 ? 3 : 2)} ${s.unit}`;
 	};
+
+	// The empty state's Upload a CSV opens the header's Add data dialog. An upload takes the empty state,
+	// and the button, away, so the dialog has nothing to give focus back to: once no dialog is open
+	// (the discard question closing doesn't count), the series panel's heading takes it.
+	function addFromEmpty() {
+		onadddata?.();
+		const back = () => {
+			if (document.querySelector('dialog[open]')) return;
+			document.removeEventListener('close', back, true);
+			requestAnimationFrame(() => {
+				if (document.activeElement && document.activeElement !== document.body) return;
+				const h = document.getElementById('ser-h');
+				if (!h) return;
+				h.tabIndex = -1;
+				h.focus();
+			});
+		};
+		document.addEventListener('close', back, true);
+	}
 
 	// --- freshness first: the badge's "behind" (freshness.ts), the rows in that order ---
 	const fresh = $derived(freshness(list, today));
@@ -435,13 +451,24 @@
 	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
 	const navGroups = $derived(
-		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks, upload: !readonly })
+		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
 	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
 	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
 	// settles (as Settings, Runs and River & reserve do), with focus on its heading.
 	onMount(() => {
-		const hash = page.url.hash.slice(1);
+		let hash = page.url.hash.slice(1);
+		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
+		// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
+		const moved = retiredDataAnchor(hash);
+		if (moved) {
+			if (!readonly && onadddata) {
+				history.replaceState(history.state, '', `${page.url.pathname}${page.url.search}`);
+				onadddata();
+				return;
+			}
+			hash = moved;
+		}
 		if (!dataAnchor(hash)) return;
 		let release = () => {};
 		const land = () => {
@@ -511,8 +538,14 @@
 		empty={list.length === 0}
 		emptyText={readonly
 			? 'No time series yet. An editor can upload daily rainfall and observed flow as CSV files.'
-			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with Add data or the Upload CSV form below.'}
+			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with Add data.'}
 	>
+		{#snippet emptyAction()}
+			{#if !readonly && onadddata}
+				<!-- Secondary: the header's Add data is the page's primary action; this is the same dialog, where the eye lands. -->
+				<button type="button" class="btn" onclick={addFromEmpty}>Upload a CSV</button>
+			{/if}
+		{/snippet}
 		<!-- Below 640px each row is a card (CSS grid), so the row's numbers, coverage and
 		     buttons all fit a phone without scrolling the table sideways. The explicit
 		     table roles keep the table semantics that some browsers (Safari) drop once
@@ -738,34 +771,23 @@
 	</section>
 {/if}
 
-<div class="lower" class:with-upload={!readonly}>
-	<!-- Upload comes first in reading order so on a phone it sits right under the
-	     series table, not below the whole reference list; wide screens still show it
-	     on the right (grid areas). -->
-	{#if !readonly}
-		<section class="panel upload" id="upload-csv" aria-labelledby="up-h">
-			<div class="panel-head"><h2 id="up-h">Upload CSV</h2></div>
-			<UploadForm {projectId} {list} onuploaded={uploaded} />
-		</section>
-	{/if}
-	<section class="panel uses" id="data-uses" aria-labelledby="use-h">
-		<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
-		<dl class="roles">
-			{#each KIND_OPTIONS as o (o.value)}
-				{@const r = KIND_ROLES[o.value]}
-				{@const have = list.some((s) => s.kind === o.value)}
-				<div>
-					<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
-					<dd>{r?.help}</dd>
-				</div>
-			{/each}
-		</dl>
-		<p class="muted small">
-			A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
-			With several series of one kind, the first by name is used.
-		</p>
-	</section>
-</div>
+<section class="panel uses" id="data-uses" aria-labelledby="use-h">
+	<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
+	<dl class="roles">
+		{#each KIND_OPTIONS as o (o.value)}
+			{@const r = KIND_ROLES[o.value]}
+			{@const have = list.some((s) => s.kind === o.value)}
+			<div>
+				<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
+				<dd>{r?.help}</dd>
+			</div>
+		{/each}
+	</dl>
+	<p class="muted small">
+		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
+		With several series of one kind, the first by name is used.
+	</p>
+</section>
 
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
@@ -1016,24 +1038,6 @@
 		text-transform: none;
 		margin-right: 0.25rem;
 	}
-	.lower {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 1rem;
-		align-items: start;
-	}
-	@media (min-width: 1001px) {
-		.lower.with-upload {
-			grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
-			grid-template-areas: 'uses upload';
-		}
-		.lower.with-upload .uses {
-			grid-area: uses;
-		}
-		.lower.with-upload .upload {
-			grid-area: upload;
-		}
-	}
 	/* Phone: each series row becomes a card, so nothing hides behind a sideways scroll. */
 	@media (max-width: 640px) {
 		.series,
@@ -1091,10 +1095,16 @@
 			justify-content: flex-start;
 		}
 	}
+	/* The reference spans the page: the kinds in columns at a readable measure each, one column on a phone. */
 	.roles {
-		margin: 0 0 0.5rem;
+		margin: 0 0 0.75rem;
 		display: grid;
-		gap: 0.5rem;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+		gap: 0.6rem 1.75rem;
+	}
+	.uses > p {
+		max-width: 44rem;
+		margin: 0;
 	}
 	.roles dt {
 		font-weight: 600;

@@ -131,6 +131,51 @@ test('a file added through the header’s Add data shows in the table at once', 
 	await expect(seriesRows(page)).toHaveCount(2);
 	await expect(dialog).toBeHidden();
 	await expect(seriesRow(page, 'Flow — observed gauge')).toBeVisible();
+	// …and charts it, as picking its row would (series=<id>), where the retired Upload CSV panel did the same.
+	const ids = await seriesIds(page.request, project.id);
+	const flowId = Object.entries(ids).find(([name]) => name !== 'Gauge R1')![1];
+	await expect(page).toHaveURL(new RegExp(`[?&]series=${flowId}`));
+	await chartReady(page);
+	await expect(seriesChart(page).getByRole('figure')).toContainText('Flow — observed gauge');
+	await expect(seriesRow(page, 'Flow — observed gauge').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
+	// Uploading is Add data only: the page has no form of its own.
+	await expect(page.getByLabel('CSV file')).toHaveCount(0);
+});
+
+test('the retired #upload-csv link opens Add data for an editor and lands a viewer on the series; ?add=data opens it too', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Data old upload link');
+	await putEnding(page.request, project.id, { kind: 'rain_catchment_mm', name: 'Gauge R1', endAgo: 1 });
+	const dialog = page.getByRole('dialog', { name: 'Add data' });
+
+	await page.goto(`/projects/${project.id}?tab=series#upload-csv`);
+	await expect(dialog).toBeVisible();
+	// The fragment goes, so a reload doesn't open it again.
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=series$`));
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+	await page.reload();
+	await expect(seriesRows(page)).toHaveCount(1);
+	await expect(dialog).toBeHidden();
+
+	// The project list's Add data link: the dialog opens once, and the param goes.
+	await page.goto(`/projects/${project.id}?add=data`);
+	await expect(dialog).toBeVisible();
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+
+	// A viewer can't upload: the old link lands on the series, and ?add=data opens nothing.
+	const viewer = await signIn('Data old link viewer');
+	await addMember(page.request, project.id, viewer.user.email, 'viewer');
+	const v = viewer.page;
+	await v.goto(`/projects/${project.id}?tab=series#upload-csv`);
+	await expect(v.getByRole('heading', { level: 2, name: 'Input time series' })).toBeFocused();
+	await expect(v.getByRole('dialog', { name: 'Add data' })).toHaveCount(0);
+	await v.goto(`/projects/${project.id}?add=data`);
+	await expect(v.getByRole('heading', { level: 1 })).toBeVisible();
+	await expect(v).toHaveURL(new RegExp(`/projects/${project.id}$`));
+	await expect(v.getByRole('dialog', { name: 'Add data' })).toHaveCount(0);
 });
 
 test('a viewer sees the same freshness, Preview all data, and no Add data or Delete; desktop and phone have no violations', async ({ page, owner, signIn }) => {
@@ -148,7 +193,7 @@ test('a viewer sees the same freshness, Preview all data, and no Add data or Del
 	await expect(v.getByRole('button', { name: 'Preview all data' })).toBeVisible();
 	await expect(v.getByRole('button', { name: 'Add data' })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
-	await expect(v.getByRole('region', { name: 'Upload CSV' })).toHaveCount(0);
+	await expect(v.getByLabel('CSV file')).toHaveCount(0);
 	await expectNoViolations(v);
 
 	await v.setViewportSize({ width: 390, height: 844 });
@@ -156,13 +201,32 @@ test('a viewer sees the same freshness, Preview all data, and no Add data or Del
 	await expectNoViolations(v);
 });
 
-test('with no series the header offers only Add data and the empty state points at it', async ({ page, owner }) => {
+test('with no series the header offers only Add data, the empty state points at it, and an upload from there is listed and charted', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Data empty');
 	await openData(page, project.id);
-	await expect(page.getByText('No time series yet.')).toContainText('with Add data or the Upload CSV form below');
+	await expect(page.getByText('No time series yet.')).toContainText('as CSV files with Add data.');
+	await expect(page.getByLabel('CSV file')).toHaveCount(0);
+	// The empty state's own button opens the same dialog as the header's; Escape gives focus back to it.
+	const fromEmpty = page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Upload a CSV' });
+	const dialog = page.getByRole('dialog', { name: 'Add data' });
+	await fromEmpty.click();
+	await expect(dialog).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(dialog).toBeHidden();
+	await expect(fromEmpty).toBeFocused();
 	await expect(page.getByTestId('section-context')).toHaveText('No input series yet');
 	await expect(page.getByRole('button', { name: 'Preview all data' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Add data' })).toBeVisible();
 	await expect(page.locator('.first.fit')).toHaveCount(0);
+	// An upload takes the empty state (and the button) away: the new series is listed and charted, and focus
+	// lands on the series panel's heading rather than falling to the page.
+	await fromEmpty.click();
+	await dialog.getByLabel('CSV file').setInputFiles(fixture('rainfall-daily.csv'));
+	await dialog.getByRole('button', { name: 'Upload' }).click();
+	await expect(dialog).toBeHidden();
+	await expect(seriesRows(page)).toHaveCount(1);
+	await chartReady(page);
+	await expect(page).toHaveURL(/[?&]series=/);
+	await expect(page.getByRole('heading', { level: 2, name: 'Input time series' })).toBeFocused();
 });
