@@ -99,7 +99,8 @@ test.describe('1440×960', () => {
 			);
 		await page.goto('/help');
 		await expect(page.getByRole('navigation', { name: 'Help' })).toBeVisible();
-		const help = await look('nav.help-nav .group');
+		// Each group's title is the button inside its heading (it opens and shuts the group): that carries the style.
+		const help = await look('nav.help-nav .group button');
 		expect(help.length).toBeGreaterThan(1);
 		expect(new Set(help).size).toBe(1);
 
