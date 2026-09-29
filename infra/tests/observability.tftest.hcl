@@ -19,7 +19,8 @@ mock_provider "aws" {
   }
   mock_data "aws_availability_zones" {
     defaults = {
-      names = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      names    = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      zone_ids = ["afs1-az1", "afs1-az2", "afs1-az3"]
     }
   }
   mock_data "aws_caller_identity" {

@@ -1,5 +1,6 @@
 // The edge controls in app.ts (docs/security.md § Infrastructure): the
 // CloudFront shared secret, the CORS allowlist and the cross-origin write check.
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.js';
 
@@ -8,6 +9,15 @@ const ORIGIN = 'http://localhost:7777';
 afterEach(() => vi.unstubAllEnvs());
 
 describe('CloudFront shared secret', () => {
+	it('checks the header CloudFront sends on the API origin (infra/s3_cloudfront.tf)', () => {
+		const tf = readFileSync(new URL('../../infra/s3_cloudfront.tf', import.meta.url), 'utf8');
+		const header = /name\s*=\s*"(X-CloudFront-Shared-Secret)"\s*\n\s*value\s*=\s*random_password\.cloudfront_shared_secret\.result/.exec(tf)?.[1];
+		expect(header).toBe('X-CloudFront-Shared-Secret');
+		const app = readFileSync(new URL('./app.ts', import.meta.url), 'utf8');
+		expect(app).toContain(`c.req.header('${header!.toLowerCase()}')`);
+		expect(app).toContain('process.env.CLOUDFRONT_SHARED_SECRET');
+	});
+
 	it('refuses a request without the header, or with a wrong one, and passes the right one (positive control)', async () => {
 		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', 'a-long-test-secret-value');
 		const app = createApp();

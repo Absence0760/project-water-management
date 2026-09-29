@@ -30,7 +30,8 @@ mock_provider "aws" {
   }
   mock_data "aws_availability_zones" {
     defaults = {
-      names = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      names    = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      zone_ids = ["afs1-az1", "afs1-az2", "afs1-az3"]
     }
   }
   mock_data "aws_caller_identity" {
@@ -957,11 +958,12 @@ run "alert_topic_policies" {
   assert {
     condition = (
       aws_sns_topic_policy.alerts.arn == aws_sns_topic.alerts.arn &&
-      one(data.aws_iam_policy_document.alerts_publish.statement).actions == toset(["sns:Publish"]) &&
-      one(data.aws_iam_policy_document.alerts_publish.statement).resources == toset([aws_sns_topic.alerts.arn]) &&
-      one(one(data.aws_iam_policy_document.alerts_publish.statement).principals).type == "Service"
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 2 &&
+      alltrue([for s in data.aws_iam_policy_document.alerts_publish.statement :
+        s.actions == toset(["sns:Publish"]) && s.resources == toset([aws_sns_topic.alerts.arn]) && one(s.principals).type == "Service" && s.effect != "Deny"
+      ])
     )
-    error_message = "The regional topic's policy is on that topic: Publish on it, by a service principal."
+    error_message = "The regional topic's policy is on that topic: Publish on it, by service principals only (CloudWatch alarms and RDS events)."
   }
   assert {
     condition = (
@@ -981,7 +983,7 @@ run "alert_topic_policies" {
     error_message = "Every publish statement on the alert topics carries aws:SourceAccount = this account."
   }
   assert {
-    condition     = toset([for s in concat(data.aws_iam_policy_document.alerts_publish.statement, data.aws_iam_policy_document.alerts_us_east_1_publish.statement) : one(one(s.principals).identifiers)]) == toset(["cloudwatch.amazonaws.com", "budgets.amazonaws.com", "costalerts.amazonaws.com"])
-    error_message = "Only CloudWatch, Budgets and Cost Anomaly Detection may publish to the alert topics."
+    condition     = toset([for s in concat(data.aws_iam_policy_document.alerts_publish.statement, data.aws_iam_policy_document.alerts_us_east_1_publish.statement) : one(one(s.principals).identifiers)]) == toset(["cloudwatch.amazonaws.com", "events.rds.amazonaws.com", "budgets.amazonaws.com", "costalerts.amazonaws.com"])
+    error_message = "Only CloudWatch, RDS events, Budgets and Cost Anomaly Detection may publish to the alert topics."
   }
 }

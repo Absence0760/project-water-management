@@ -692,11 +692,9 @@ run "edge_behaviours" {
       length(o.custom_header) == 1 &&
       one(o.custom_header).name == "X-CloudFront-Shared-Secret" &&
       one(o.custom_header).value == random_password.cloudfront_shared_secret.result &&
-      one(o.custom_header).value == local.runtime_secrets.api.CLOUDFRONT_SHARED_SECRET &&
-      strcontains(file("../backend/src/app.ts"), "c.req.header('${lower(one(o.custom_header).name)}')") &&
-      strcontains(file("../backend/src/app.ts"), "process.env.CLOUDFRONT_SHARED_SECRET")
+      one(o.custom_header).value == local.runtime_secrets.api.CLOUDFRONT_SHARED_SECRET
     ) if o.origin_id == "lambda-api"])
-    error_message = "The API origin must send X-CloudFront-Shared-Secret with exactly the value the API's runtime secret carries (CLOUDFRONT_SHARED_SECRET, secrets.tf), and the app must read that header and compare it with CLOUDFRONT_SHARED_SECRET (backend/src/app.ts), or every API request gets 403."
+    error_message = "The API origin must send X-CloudFront-Shared-Secret with exactly the value the API's runtime secret carries (CLOUDFRONT_SHARED_SECRET, secrets.tf), or every API request gets 403. That the app reads this header is pinned from the other side, in backend/src/app.security.test.ts (check:infra runs on a copy of infra/ alone, so file() can't reach backend/)."
   }
   assert {
     condition     = alltrue([for o in aws_cloudfront_distribution.frontend.origin : length(o.custom_header) == 0 if o.origin_id != "lambda-api"])
@@ -781,10 +779,9 @@ run "direct_function_url_traffic_alarm" {
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.origin_secret_rejected.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.origin_secret_rejected.pattern == "{ $.message.event = \"origin_secret_rejected\" }" &&
-      strcontains(file("../backend/src/app.ts"), "event: 'origin_secret_rejected'")
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected.pattern == "{ $.message.event = \"origin_secret_rejected\" }"
     )
-    error_message = "origin_secret_rejected must be counted from the API's log group, by the exact event name backend/src/app.ts logs."
+    error_message = "origin_secret_rejected must be counted from the API's log group, by the exact event name backend/src/app.ts logs (app.security.test.ts pins the line)."
   }
   assert {
     condition = (

@@ -26,7 +26,7 @@ locals {
   log_group_arn_prefix = "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:"
 
   # Every Lambda: its role and its own (Terraform-managed) log group.
-  lambda_logging = {
+  lambda_log_targets = {
     api      = { role = aws_iam_role.lambda, log_group = aws_cloudwatch_log_group.lambda.name }
     migrate  = { role = aws_iam_role.migrate_lambda, log_group = aws_cloudwatch_log_group.migrate.name }
     worker   = { role = aws_iam_role.worker_lambda, log_group = aws_cloudwatch_log_group.worker.name }
@@ -53,7 +53,7 @@ locals {
 }
 
 data "aws_iam_policy_document" "lambda_logs" {
-  for_each = local.lambda_logging
+  for_each = local.lambda_log_targets
 
   statement {
     sid       = "WriteOwnLogGroup"
@@ -63,7 +63,7 @@ data "aws_iam_policy_document" "lambda_logs" {
 }
 
 resource "aws_iam_role_policy" "lambda_logs" {
-  for_each = local.lambda_logging
+  for_each = local.lambda_log_targets
 
   name   = "own-log-group"
   role   = each.value.role.id
