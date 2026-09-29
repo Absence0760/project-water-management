@@ -5433,9 +5433,15 @@ published.
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
-  CSV download. The CSV download fetches the file and puts the estimate
-  line (`cards.ts` `disclaimer()`), in the page's language, as a leading
-  `# ` line (`farm/csvNote.ts`); a failed download says why under the
+  CSV download. The CSV download fetches the file (the farm's last 365
+  days to `dataUntil`, in whole m³, headed by the series keys; api.md
+  § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the
+  page's language, as a leading `# ` line, names the columns in plain words
+  with their unit in the page's language ("Water you received (m³/day)",
+  `FARM_CSV_COLUMNS`, sheet section `farm.csv`), and, for a language whose
+  decimal mark is a comma (Afrikaans), writes `;` between cells and a
+  decimal comma, so Excel in af-ZA opens it in columns (`farm/csvNote.ts`
+  `farmCsvForReader`, issue #124); a failed download says why under the
   links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge
