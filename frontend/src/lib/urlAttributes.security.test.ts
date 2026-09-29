@@ -53,7 +53,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
 	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/scenarios/ApplicantView.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamLevels.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
-	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/overview/LatestRun.svelte', 'lib/components/runs/RunsTab.svelte'] },
+	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/runs/RunsTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
 	farmDrawerHref: { why: 'BUILDER: "?…farm=" overlay link', in: ['lib/components/overview/SupplyByFarm.svelte'] },
