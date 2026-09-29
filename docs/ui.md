@@ -3359,10 +3359,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   count, and how many in an average year; the change compares the per-year
   figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
   % of natural, the Summary's line until it was dropped there, same
-  figure as `overview/latestRun.ts`); *Worst month* (the month of the water
-  year with the largest share of days below the EWR over the run, from the
-  EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
-  EWR was met every day; its change is that same month in the previous run).
+  figure as `overview/latestRun.ts`). A fourth tile, *Worst month*, was
+  removed on 2026-09-29 (issue #175): it restated the largest figure of the
+  EWR by month grid's "All years" row. Three tiles sit in one row, and on a
+  narrow screen two over the outflow.
 - **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve

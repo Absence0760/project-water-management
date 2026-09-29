@@ -1,7 +1,7 @@
 <script lang="ts">
 	// River & reserve (issue #17, option A · Outcomes): one run's river, for
 	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
-	// The page header and run picker, four KPI tiles (river.ts riverKpis), then
+	// The page header and run picker, three KPI tiles (river.ts riverKpis), then
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
 	// 30 days / 1 year / All switch and the days below the reserve shaded; the
 	// Summary shows the days below by month and links here, issue #162) beside
@@ -348,15 +348,18 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
-	/* Four tiles: one row, then 2 × 2 on narrow screens (the Summary's KPI row). */
+	/* Three tiles: one row, then two over one on narrow screens (the outflow across the row). */
 	.kpis {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		margin-bottom: 0.4rem;
 	}
 	@media (max-width: 760px) {
 		.kpis {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
+		}
+		.kpis > :last-child {
+			grid-column: 1 / -1;
 		}
 	}
 	.stat dt {

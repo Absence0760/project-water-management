@@ -41,13 +41,14 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	const res = await page.request.get(`${API_URL}/projects/${id}/runs/${second}`);
 	const c = ((await res.json()) as { run: { summary: { catchment: Catchment } } }).run.summary.catchment;
 	// EWR not met, worded as the Summary's card is (issue #162: this tile said "Reserve met" for the same figure).
-	await expect(riverTiles(page).locator('dt')).toContainText(['EWR not met', 'Days below the reserve', 'Mean simulated outflow', 'Worst month']);
+	// The Worst month tile is gone (issue #175): it restated the largest share in the EWR by month grid's All years row.
+	await expect(riverTiles(page).locator('dt')).toContainText(['EWR not met', 'Days below the reserve', 'Mean simulated outflow']);
 	await expect(riverTile(page, 'ewr')).toContainText(`${(c.ewrFractionDaysNotMet * 100).toFixed(1)}%of days`);
 	await expect(riverTile(page, 'ewr')).toContainText(`${grouped(c.ewrDaysNotMet)} of 1\u202f096 days at the outflow gauge`);
 	await expect(riverTile(page, 'below').locator('dd.value')).toHaveText(`${grouped(c.ewrDaysNotMet)}days`);
 	await expect(riverTile(page, 'below')).toContainText(/\d+(\.\d)? in an average year/);
 	await expect(riverTile(page, 'outflow')).toContainText(`${Math.round((100 * c.meanSimulatedOutflowM3Day) / c.meanNaturalFlowM3Day)}% of natural`);
-	await expect(riverTile(page, 'worst').locator('dd.value')).toHaveText(/^(October|November|December|January|February|March|April|May|June|July|August|September|None)$/);
+	await expect(page.locator('[data-kpi="worst"]')).toHaveCount(0);
 	// Same inputs twice, so every change is zero, against the run before.
 	await expect(riverTile(page, 'ewr')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(riverTile(page, 'below')).toContainText(/0\s*no change\s*a year vs previous run/);
@@ -243,16 +244,15 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	await expect(heading).toBeInViewport();
 });
 
-test('the Summary links here: its reserve strip and the outflow under its tiles', async ({ page, owner }) => {
+test('the Summary links here: its reserve strip', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River from summary');
 	const run = await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
-	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
-	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${run}`);
+	// (The Summary's mean outflow line, which linked here too, was dropped in #171; the outflow is this page's tile.)
 	await page.getByRole('region', { name: 'Days below the reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
-	await expect(riverTiles(page)).toHaveCount(4);
+	await expect(riverTiles(page)).toHaveCount(3);
 });
 
 test('before the first run: the frame, and a way to run the model', async ({ page, owner }) => {
@@ -280,7 +280,7 @@ test('a viewer reads it too, with no run button', async ({ page, owner, signIn }
 	await createRun(page.request, id, 'Baseline');
 	await viewer.page.goto(`/projects/${id}`);
 	await viewer.page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'River & reserve', exact: true }).click();
-	await expect(riverTiles(viewer.page)).toHaveCount(4);
+	await expect(riverTiles(viewer.page)).toHaveCount(3);
 	await expect(viewer.page.getByTestId('river-context')).toContainText('Baseline');
 	await expect(viewer.page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
 });
