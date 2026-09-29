@@ -201,6 +201,10 @@ export interface ProjectFileSeries {
 	/** What the values are (032_series_provenance.sql), e.g. CHIRPS / 2.0; absent or null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;
+	/** Where the values came from, and the unit first given (107_series_source.sql); absent = not recorded. */
+	source?: string;
+	sourceUnit?: string;
+	sourceUnitFactor?: number;
 }
 
 /** POST /projects/import. `runId` / `runError` only when a run was asked for. */

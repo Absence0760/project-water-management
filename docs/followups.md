@@ -151,6 +151,17 @@ collected as a checklist in issue #46; tick it there as they answer.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Flow gap filling defaults to confirm** (engine 1.23.0, issue #66,
+      [model.md §2.10i](./model.md)). Built off by default on these
+      engineering defaults; put each to the hydrologist as "confirm or
+      change": the 5-day interpolation limit (seasonal?); one whole-record
+      donor ratio (or per month / per flow class); the donor refusal
+      thresholds (r < 0.5, fewer than 365 shared days); clamping a donor day
+      to the record's own maximum (or the weir's rated maximum); and never
+      scoring filled days by default (`qualityFlags.infilled` 'exclude').
+      The hand-off to CR-18/19 is done: the flags read the fill's code as
+      *infilled*, and the quality flags' infilled treatment replaced the
+      branch's own `useFilledDays` switch (never deployed).
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -298,13 +309,21 @@ collected as a checklist in issue #46; tick it there as they answer.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
-- [ ] **Client regression suite is thinner since N1.** Client farms with
-      return flow, which the new efficiency model can't reproduce, have
-      their balance columns skipped by the replay and everything
-      downstream (listed under N1). It now checks the network mainly through
-      runoff, EWR and crop requirement. Durable fix: replay the workbook's
-      own G and T per farm into the network (as `[Shortfalls]` already is)
-      so the downstream columns are tested again.
+- [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
+      issue #68). The suite now compares the N1 columns against an **N1
+      replay**: each farm with e < 1 runs with a demand factor of e, so it
+      abstracts the workbook's F and returns r·G (β = 1), and the network
+      downstream is the workbook's again (engine-audit.md § regression suite,
+      N1). That restored about half the network comparisons N1 had skipped on
+      the client catchment. The rest are N4: the one transfer's destination is
+      near full, so the room cap moves less than the workbook's rule does, and
+      no input can replay a transfer's volume. Both ends and anything below
+      only one end stay skipped; below the join, outflow and inflow are
+      compared again and only the day-dependent columns are skipped. Also
+      found on the way: the suites read `data/client-catchment` only, while
+      `pnpm seed:demo` writes `data/client-<name>-app/`, so on a machine set
+      up by the seed they skipped. `WBT_CLIENT_CATCHMENT_DIR` now points them
+      at an extract (run-locally.md).
 - [x] **Validation scores are saved with a run** (issue #4). Apply stores the
       fit record (seed, objective, window, exclusions, the in-sample and
       validation scores) with the parameters, each run snapshots it, and the
@@ -938,12 +957,36 @@ the suggested order (the IDs carry the detail):
       run's complete water years of rain, the mean against the long-term
       mean, and notes when the record can't test wet or dry years or has
       fewer than 5), shown in Fit automatically (model.md §2.10b).
-- [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
+- [x] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #2) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
-      the rain slice that CR-18 then generalises.
+      the rain slice that CR-18 then generalises. **Done (engine 1.22.0,
+      issue #66, model.md §2.10h):** CR-18 flags each day (`calibrate/dayFlags.ts`:
+      in range, above / below the gauged range entered per record, suspect by
+      the Data checks, infilled, missing; human use defined, not derived; rain
+      observed / infilled / missing), CR-19 censors days above the highest
+      gauging and leaves below-rating, suspect and infilled days out of the
+      fit by default, with the fit on all days beside it and the settings in
+      the fit record, and CR-22 is the Fit panel's data-quality panel. The
+      recession segments (CR-13) leave flagged days out. **Infilled hook:
+      done (engine 1.23.0, issue #66, model.md §2.10i):** `observedInfillMask`
+      reads the gap fill's per-day code, so filled flow days are flagged
+      *infilled* in the fit, the panel and the recession mask, and
+      `qualityFlags.infilled` is the one control for scoring them (the run's
+      statistics, the EWR test and the plausibility checks follow it). The
+      defaults are open questions on issue #66.
+- [ ] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
+      The flags exist per day in the engine (`flowDayFlags`) and drive the
+      fit and its panel, but a run doesn't store them, so the hydrograph and
+      the Data tab can't shade the days above the gauged range or those the
+      fit left out. Durable fix: a run column (`observed_flow_quality`,
+      codes as `FLOW_DAY_FLAGS`, added only when a day is flagged, like
+      `rain_catchment_missing`) registered in `verify/columns.ts`, shaded on
+      the hydrograph with a legend. Trigger: the hydrologist asks to see
+      which days were flagged, or gap filling of observed flow lands and its
+      infilled days need showing.
 - [x] **Fit-settings sweep (headless).** **Done (2026-09-28, issue #65):**
       `pnpm fit-sweep <project.json> --grid <grid.json>`
       (`backend/scripts/fit-sweep.ts`, model.md §2.10b) fits every cell of
@@ -1031,8 +1074,10 @@ the suggested order (the IDs carry the detail):
       Background jobs. **Needs the hydrologist to sign off** the default
       rules (flag thresholds, selection score, filters) before any automated
       fit is used as evidence; the question is in issue #90. Trigger: once
-      the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Still
-      waiting on CR-18.
+      the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Both
+      have (CR-18/19 in engine 1.22.0): the rule set can now read
+      `dayQuality` and the per-day flags; it still waits on the hydrologist
+      signing off the default rules.
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
       dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
@@ -1041,7 +1086,7 @@ the suggested order (the IDs carry the detail):
       GR4J's simulated outflow on the same days, power-law fits compared at
       the median flow (indicative warnings with 8 or more segments, "Not
       judged" below), in the Plausibility checks panel and the summary CSV
-      (model.md §2.10d). CR-18's flags plug into its day mask when built.
+      (model.md §2.10d). CR-18's flags joined its day mask in engine 1.22.0.
 - [x] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which MAR estimate to trust (CR-7). CR-18 is
@@ -1370,7 +1415,15 @@ the suggested order (the IDs carry the detail):
       annual borehole caps off, since more demand uses a cap up earlier and
       moves the lagged stream depletion in time (the cap working, present
       on main before #16; `checkGroundwater` still checks the caps).
-      **Owed for engines 1.1.0 and 1.2.0** (2026-09-27): no 20 000-case soak
+      **20 000-case soak on engine 1.20.0 (2026-09-28, issue #68,
+      `FUZZ_MAX_FAILURES=100`, seeds 1–20 000, 13.5 min): failed on 5 seeds**,
+      tracked in issue #164: the doubled-crop-area law on 4536, 10028 and 11421
+      (rises up to 0.29 → 0.49, too large to be noise) and ulp-scale noise on
+      10306 (a depletion infeed of 1e-6 with nothing pumped) and 15467
+      (supplied 1 ulp above demand). No soak since 1.0.0 had scanned
+      seeds above 2 000, so any engine from 1.1.0 to 1.20.0 may have introduced them.
+      **Owed for engines 1.1.0 and 1.2.0** (2026-09-27, superseded by the
+      1.20.0 soak above): no 20 000-case soak
       is recorded since 1.0.0. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
       **Engine 1.3.0 (issue #64, 2026-09-27): a 2 000-case soak** (the new

@@ -195,6 +195,41 @@ pentads with different daily timing (issue #40 part c).
   free product and version (e.g. `SASSCAL AWS` `1`, `ERA5` `1`), optional
   (engine 0.30.0, issue #40 (b)).
 
+### Series source and unit (107_series_source.sql)
+
+Issue #66. For any series, what 032's product and version can't say:
+
+- **`time_series.source`**: where the values came from, free text of 1–200
+  characters on one line: a DWS station id (`DWS X1H001`), an agency, a file,
+  or the data feed that wrote them. `NULL` = not recorded.
+- **`time_series.source_unit` / `source_unit_factor`**: the unit the values
+  were given in (`l/s`, `ML/day`, `cm` …) before the series routes converted
+  them to the kind's canonical unit (engine `units.ts`), and the factor applied
+  (`1` = none). Both or neither (`time_series_source_unit`); `NULL` = not
+  recorded, as on every series stored before 107. Written by the routes from
+  the upload itself, never by hand: the conversion is a fact of the upload, and
+  a `PATCH` naming it is refused.
+- **Set by** an upload (a replace records exactly what it was, so one without
+  a source clears it), a merge into a new or empty series, a data feed on the
+  series it creates or replaces (`"CHIRPS daily rainfall data feed"`, `"DWS
+  gauge flow data feed, station A2H012"`), an import (the file's `source`,
+  `sourceUnit`, `sourceUnitFactor`, and nothing when the file has none, so a
+  project round-trips exactly), a
+  copy, a restore (`series_revision` keeps all three with the values), and
+  `PATCH /projects/:id/series/:seriesId` with `source` (logged as
+  `series.labelled` with `origin: { from, to }`).
+- **Kept** by a merge into a series holding values: its earlier days didn't
+  come from the new file, so the series keeps its own record (each merged
+  file is still converted on the way in).
+- **Read by** runs: the input snapshot records each series' as
+  `inputs.series[kind].origin = { source, unit, factor }` (absent on runs
+  before 107), so the run comparison says when a series now comes from
+  somewhere else or was given in another unit, and a fit records its
+  calibration record's (`fitRecord.observedOrigin`), so the fit is flagged
+  when it changes. The model never reads it.
+- RLS and grants: columns on `time_series` and `series_revision`, covered by
+  their existing policies and `water_app`'s table grants; no foreign key.
+
 ### Series day boundary (033_series_day_boundary.sql)
 
 `time_series.day_boundary` says how a series' days were built from
@@ -501,10 +536,19 @@ Un-cherry-pickable by privilege (the licensing assessor's concern, issue #15):
 - **RLS:** viewers read; editors insert and complete (`run_uncertainty_select`,
   `_insert`, `_update`).
 
+**Flow gap filling lives in `project.settings`** too (`settings.flowGapFill`,
+engine ≥ 1.23.0, issue #66; no table or migration): a spec per observed record
+and the switch that lets statistics read filled days ([model.md §2.10i](./model.md)).
+Filled values are derived in each run and never written to `time_series`, so
+turning it off undoes it; the run's own columns carry the filled days.
+
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
-with a required reason. `settings.fitRecord` is the record of the automatic fit
+with a required reason. `settings.qualityFlags` (engine ≥ 1.22.0, CR-18/19)
+holds each calibration record's gauged range (highest and lowest field
+gauging with a source) and how automatic calibration treats extrapolated,
+suspect and infilled days; still no migration (model.md §2.10h). `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
 in-sample and validation scores, notes, engine version and time, and the pan
 coefficient / A-pan evaporation and (engine ≥ 0.31.0) GR4J's PE input,

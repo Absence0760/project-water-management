@@ -25,6 +25,7 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type RunoffModelId,
+	type SeriesOrigin,
 	type SeriesProvenance,
 	type ApanDailyFingerprint
 } from '@water-management/engine';
@@ -176,7 +177,7 @@ export interface ScoreColumn {
 }
 
 /** What a score table is built from: a fresh report, or a stored fit record (same shape). */
-export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample' | 'differential' | 'independentRecord'>;
+export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample' | 'differential' | 'independentRecord' | 'fitAllDays'>;
 
 /** The report's periods as table columns: before, fitted, then each test's calibration and validation part. */
 export function scoreColumns(r: ScoredFit): ScoreColumn[] {
@@ -191,6 +192,8 @@ export function scoreColumns(r: ScoredFit): ScoreColumn[] {
 		benchmarks: x.benchmarks ?? null
 	});
 	const cols: ScoreColumn[] = [col('before', 'Current parameters', p(r.before), r.before, false), col('fit', 'Fitted', p(r.fit), r.fit, false)];
+	// The fit on every observed day, flagged ones included and nothing censored (CR-19, engine ≥ 1.22.0): only when the flags changed the days.
+	if (r.fitAllDays) cols.push(col('fit-all', 'Fitted, all days (flags ignored)', p(r.fitAllDays), r.fitAllDays, false));
 	if (r.splitSample) {
 		cols.push(
 			col('split-cal', 'Split: fitted half', p(r.splitSample.calibration), r.splitSample.calibration, false),
@@ -304,8 +307,16 @@ export function seedError(seed: number | null): string | null {
  */
 export function fitRecordFor(
 	r: CalibrationReport,
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> & Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'dataQuality'>>,
-	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null }
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> &
+		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'flowGapFill' | 'dataQuality' | 'qualityFlags'>>,
+	opts: {
+		validate: boolean;
+		validationRecord: CalibrationFlowKind | null;
+		now?: Date;
+		chirpsSource?: SeriesProvenance | null;
+		apanDaily?: ApanDailyFingerprint | null;
+		observedOrigin?: SeriesOrigin | null;
+	}
 ): FitRecord {
 	return fitRecordFromReport(r, {
 		settings,
@@ -316,7 +327,9 @@ export function fitRecordFor(
 		// The CHIRPS series' product and version the fit ran on (issue #40c), when known.
 		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {}),
 		// The daily A-pan series it ran on (issue #45), when known.
-		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {})
+		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {}),
+		// The fitted record's source and given unit (107_series_source.sql), when known.
+		...(opts.observedOrigin !== undefined ? { observedOrigin: opts.observedOrigin } : {})
 	});
 }
 

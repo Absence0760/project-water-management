@@ -1,4 +1,4 @@
-import { DAY_BOUNDARIES, provenanceError, provenanceLabel, sameProvenance, scaleValues, SERIES_KINDS, seriesUnit, type SeriesProvenance } from '@water-management/engine';
+import { DAY_BOUNDARIES, provenanceError, provenanceLabel, sameOrigin, sameProvenance, scaleValues, seriesOrigin, SERIES_KINDS, seriesUnit, sourceError, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import { z } from 'zod';
 import type { Db } from '../db/tx.js';
@@ -78,6 +78,22 @@ export const bodyProvenance = (b: { product?: string | null; productVersion?: st
 export const rowProvenance = (r: { product: string | null; productVersion: string | null }): SeriesProvenance | null =>
 	r.product !== null && r.productVersion !== null ? { product: r.product, version: r.productVersion } : null;
 
+/**
+ * Where the values came from (107_series_source.sql): a station id, agency,
+ * file or feed; null = not recorded, absent = not said. Checked with the
+ * engine's rules (the same as the database CHECK), trimmed.
+ */
+export const SourceField = z
+	.string()
+	.nullable()
+	.optional()
+	.superRefine((v, ctx) => {
+		if (typeof v !== 'string') return;
+		const err = sourceError(v);
+		if (err) ctx.addIssue({ code: 'custom', message: err });
+	})
+	.transform((v) => (typeof v === 'string' ? v.trim() : v));
+
 /** A whole series, or the days to merge into one (PUT and POST …/series/merge, and the data feeds). */
 export const SeriesBody = z
 	.object({
@@ -87,6 +103,7 @@ export const SeriesBody = z
 		startDate: SeriesStartDate,
 		values: z.array(z.number().finite().nullable()).min(1).max(MAX_SERIES_VALUES),
 		...ProvenanceFields,
+		source: SourceField,
 		// How sub-daily readings were added up into these days (033_series_day_boundary.sql); null = daily values, absent = not said.
 		dayBoundary: z.enum(DAY_BOUNDARIES).nullable().optional()
 	})
@@ -100,7 +117,10 @@ export const SeriesBody = z
  * doesn't know is refused (engine units.ts). Shared by every route that
  * writes a series: upload, merge, the data feeds and the project import.
  */
-export function toCanonicalUnit<T extends { kind: string; unit: string; values: (number | null)[] }>(b: T, ctx: z.RefinementCtx): T {
+export function toCanonicalUnit<T extends { kind: string; unit: string; values: (number | null)[] }>(
+	b: T,
+	ctx: z.RefinementCtx
+): T & { givenUnit: string; unitFactor: number } {
 	const u = seriesUnit(b.kind, b.unit);
 	if (!u.ok) {
 		ctx.addIssue({ code: 'custom', path: ['unit'], message: u.error });
@@ -114,8 +134,20 @@ export function toCanonicalUnit<T extends { kind: string; unit: string; values: 
 		ctx.addIssue({ code: 'custom', path: ['values', bad], message: `a value must be smaller than ${MAX_SERIES_ABS_VALUE.toExponential()} ${u.unit} (after converting to ${u.unit})` });
 		return z.NEVER;
 	}
-	return { ...b, unit: u.unit, values };
+	// The unit as given and the factor applied (107_series_source.sql): what a new series records of its conversion.
+	return { ...b, unit: u.unit, values, givenUnit: b.unit, unitFactor: u.factor };
 }
+
+/**
+ * What a checked body says about its origin (107_series_source.sql): its
+ * source (null when it doesn't say one) and the unit it was given in. For a
+ * replace, which records exactly what the upload was.
+ */
+export const bodyOrigin = (b: { source?: string | null; givenUnit?: string; unitFactor?: number }): SeriesOrigin | null =>
+	seriesOrigin({ source: b.source ?? null, sourceUnit: b.givenUnit ?? null, sourceUnitFactor: b.unitFactor ?? null });
+
+/** A series row's origin columns as the engine's type (null: none recorded). */
+export const rowOrigin = (r: { source?: string | null; sourceUnit?: string | null; sourceUnitFactor?: number | null }): SeriesOrigin | null => seriesOrigin(r);
 export type SeriesBody = z.output<typeof SeriesBody>;
 
 // updatedAt: when the values last changed (upload, merge) — lets the UI tell
@@ -128,6 +160,7 @@ export type SeriesBody = z.output<typeof SeriesBody>;
 export const SERIES_META = `id, kind, name, unit, start_date AS "startDate", cardinality("values") AS length, updated_at AS "updatedAt",
 	to_char(${lastValueDaySql('time_series')}, 'YYYY-MM-DD') AS "lastValueDate",
 	product, product_version AS "productVersion", day_boundary AS "dayBoundary", site_node_id AS "siteNodeId",
+	source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 	EXISTS (SELECT 1 FROM feed_stage st JOIN data_feed sf ON sf.id = st.feed_id
 		WHERE sf.project_id = time_series.project_id AND sf.target_kind = time_series.kind AND sf.target_name = time_series.name) AS rebuilding`;
 
@@ -141,6 +174,13 @@ export interface MergeOptions {
 	 * in the record. Into an empty or new series, it labels the series.
 	 */
 	provenance?: SeriesProvenance | null;
+	/**
+	 * Where the incoming days came from and the unit they were given in
+	 * (107_series_source.sql; undefined = not said). Only a new or empty
+	 * series takes it: a series holding values keeps its own, since its
+	 * earlier days didn't come from here.
+	 */
+	origin?: SeriesOrigin | null;
 }
 
 export interface Daily {
@@ -290,6 +330,10 @@ export interface SeriesMetaRow {
 	dayBoundary: string | null;
 	/** The gauge node a flow record was measured at (084_gauge_records); null = the outlet. */
 	siteNodeId: string | null;
+	/** Where the values came from, and the unit they were given in (107_series_source.sql); null = not recorded. */
+	source: string | null;
+	sourceUnit: string | null;
+	sourceUnitFactor: number | null;
 	rebuilding: boolean;
 }
 
@@ -310,7 +354,17 @@ export const versionMismatch = (holds: SeriesProvenance | null, incoming: Series
  */
 export interface MergeResult {
 	meta: SeriesMetaRow;
-	before: { id: string; unit: string; startDate: string; values: (number | null)[]; product: string | null; productVersion: string | null } | null;
+	before: {
+		id: string;
+		unit: string;
+		startDate: string;
+		values: (number | null)[];
+		product: string | null;
+		productVersion: string | null;
+		source: string | null;
+		sourceUnit: string | null;
+		sourceUnitFactor: number | null;
+	} | null;
 	after: Daily;
 	written: number;
 	kept: number;
@@ -340,7 +394,7 @@ export async function mergeSeries(
 	db: Db,
 	projectId: string,
 	body: SeriesBody,
-	{ keepOnNull = false, feedId, provenance, byKey = false }: MergeOptions & { feedId?: string; byKey?: boolean } = {}
+	{ keepOnNull = false, feedId, provenance, origin, byKey = false }: MergeOptions & { feedId?: string; byKey?: boolean } = {}
 ): Promise<MergeResult> {
 	// Lock the row so two concurrent batches can't lose each other's days.
 	const { rows: cur } = await db.query<{
@@ -352,8 +406,12 @@ export async function mergeSeries(
 		feed_days: DayRuns;
 		product: string | null;
 		productVersion: string | null;
+		source: string | null;
+		sourceUnit: string | null;
+		sourceUnitFactor: number | null;
 	}>(
 		`SELECT id, start_date, unit, "values", feed_id, product, product_version AS "productVersion",
+			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor",
 			(SELECT coalesce(json_agg(json_build_array(lower(r) - DATE '1970-01-01', upper(r) - DATE '1970-01-01') ORDER BY r), '[]')
 			 FROM unnest(feed_days) r) AS feed_days
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
@@ -379,6 +437,9 @@ export async function mergeSeries(
 	const filled = !!existing && hasValues(existing.values);
 	if (provenance !== undefined && filled && !sameProvenance(held, provenance)) throw versionMismatch(held, provenance);
 	const label = provenance !== undefined && !filled ? provenance : held;
+	// The origin (107): a new or empty series takes the incoming days'; one holding values keeps its own.
+	const heldOrigin = row ? rowOrigin(row) : null;
+	const whence = origin !== undefined && !filled ? origin : heldOrigin;
 	let incoming: Daily = { startDate: body.startDate, values: body.values };
 	let owner = row?.feed_id ?? null;
 	let owned: DayRuns = row?.feed_days ?? [];
@@ -401,12 +462,22 @@ export async function mergeSeries(
 		if (byKey) await assertKeyMayCreate(db, projectId, body.kind);
 	}
 	const before = row
-		? { id: row.id, unit: row.unit, startDate: row.start_date, values: row.values, product: row.product, productVersion: row.productVersion }
+		? {
+				id: row.id,
+				unit: row.unit,
+				startDate: row.start_date,
+				values: row.values,
+				product: row.product,
+				productVersion: row.productVersion,
+				source: row.source,
+				sourceUnit: row.sourceUnit,
+				sourceUnitFactor: row.sourceUnitFactor
+			}
 		: null;
 	const sameOwner = !!row && row.feed_id === owner && JSON.stringify(row.feed_days) === JSON.stringify(owned);
 	// Nothing changed (a re-sent batch, a feed re-reading its revision window):
 	// leave the values, so updated_at still says when the values last changed.
-	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label)) {
+	if (row && row.unit === body.unit && sameDaily(existing!, merged) && sameProvenance(held, label) && sameOrigin(heldOrigin, whence)) {
 		const { rows } = sameOwner
 			? await db.query<SeriesMetaRow>(`SELECT ${SERIES_META} FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3`, [
 					projectId,
@@ -423,12 +494,14 @@ export async function mergeSeries(
 		return { meta: rows[0]!, before, after: merged, kept, written, keyDays };
 	}
 	const { rows } = await db.query<SeriesMetaRow>(
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11)
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", feed_id, feed_days, product, product_version,
+			source, source_unit, source_unit_factor)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, ${feedDaysSql(8, 9)}, $10, $11, $12, $13, $14)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", updated_at = now(),
 			feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
-			product = EXCLUDED.product, product_version = EXCLUDED.product_version
+			product = EXCLUDED.product, product_version = EXCLUDED.product_version,
+			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor
 		 RETURNING ${SERIES_META}`,
 		[
 			projectId,
@@ -441,7 +514,10 @@ export async function mergeSeries(
 			owned.map((r) => r[0]),
 			owned.map((r) => r[1]),
 			label?.product ?? null,
-			label?.version ?? null
+			label?.version ?? null,
+			whence?.source ?? null,
+			whence?.unit ?? null,
+			whence?.factor ?? null
 		]
 	);
 	await trackKeyDays(db, projectId, rows[0]!.id, existing, incoming, { keepOnNull, byKey });
@@ -562,7 +638,12 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			`the series holds ${boundaryText(was.dayBoundary ?? null)} and these days are ${boundaryText(body.dayBoundary)}: merging them would put two day boundaries in one record. Replace the series whole, or use a series of another name`
 		);
 	}
-	const r0 = await mergeSeries(db, projectId, body, { provenance: bodyProvenance(body), byKey: opts.via === 'api_key', keepOnNull: opts.keepOnNull });
+	const r0 = await mergeSeries(db, projectId, body, {
+		provenance: bodyProvenance(body),
+		origin: bodyOrigin(body),
+		byKey: opts.via === 'api_key',
+		keepOnNull: opts.keepOnNull
+	});
 	const r = body.dayBoundary !== undefined && !was?.filled ? { ...r0, meta: await setDayBoundary(db, projectId, r0.meta, body.dayBoundary) } : r0;
 	const subject = seriesSubject(r.meta, r.before, r.after, opts.audit);
 	const daysChanged = subject.daysChanged as number;

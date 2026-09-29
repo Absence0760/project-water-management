@@ -877,6 +877,20 @@ describe('diffInputs', () => {
 		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 
+	it('describes the quality-flag settings (CR-18/19); a run saved before engine 1.22.0 reads as the defaults', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.qualityFlags = {
+			...defaultProjectSettings().qualityFlags,
+			suspect: 'include',
+			ratings: { flow_observed_m3s: { gaugedMaxM3s: 12, gaugedMinM3s: null, source: 'DWS gaugings' } }
+		};
+		expect(texts(a, b)).toEqual(['Gauged range (gauge record): none → up to 12 m³/s', 'Suspect days in the fit: left out → scored as recorded']);
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).qualityFlags;
+		expect(diffInputs(old, a)).toEqual([]);
+	});
+
 	it('describes the multi-day accumulation settings (B4); a run saved before 0.20.0 ran them as recorded', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
@@ -1107,6 +1121,29 @@ describe('diffInputs', () => {
 		const rain = (provenance: { product: string; version: string } | null) =>
 			snapshot({ series: { rain_catchment_mm: { startDate: '2000-01-01', length: 366, valuesSha256: 'aa', provenance } } });
 		expect(texts(rain(null), rain(v3))).toEqual(['Rainfall (catchment) is now CHIRPS v3.0 (was an unrecorded version)']);
+	});
+
+	it('notes a change of a series’ source or given unit (issue #66), only when both runs recorded it', () => {
+		const s = (origin?: { source: string | null; unit: string | null; factor: number | null } | null) =>
+			snapshot({ series: { flow_observed_m3s: { startDate: '2000-01-01', length: 366, valuesSha256: 'aa', ...(origin !== undefined ? { origin } : {}) } } });
+		const dws = { source: 'DWS X1H001', unit: 'm³/s', factor: 1 };
+		expect(texts(s(dws), s({ ...dws, unit: 'l/s', factor: 0.001 }))).toEqual([
+			'Observed flow now comes from DWS X1H001 · given in l/s (× 0.001) (was DWS X1H001 · given in m³/s)'
+		]);
+		expect(texts(s(null), s(dws))).toEqual(['Observed flow now comes from DWS X1H001 · given in m³/s (was source not recorded)']);
+		expect(texts(s(dws), s({ ...dws }))).toEqual([]);
+		// A run from before the source was recorded: nothing to compare.
+		expect(texts(s(), s(dws))).toEqual([]);
+	});
+
+	it('notes a change of the flow gap filling, and nothing between a run from before it and one with it off (issue #66)', () => {
+		const spec = { interpolateMaxDays: 5, donor: 'flow_logger_m3s', donorMaxDays: 60, donorMinOverlapDays: 365 };
+		const fill = (f: unknown) => snapshot({ settings: { ...snapshot().settings, flowGapFill: f } as never });
+		const off = { flow_observed_m3s: null, flow_logger_m3s: null };
+		expect(texts(snapshot(), fill(off))).toEqual([]);
+		expect(texts(fill(off), fill({ ...off, flow_observed_m3s: spec }))).toEqual([
+			'Gap filling of the observed gauge flow: not filled → interpolate gaps up to 5 days, fill gaps up to 60 days from the logger flow (365 shared days at least)'
+		]);
 	});
 
 	it('compares the days both runs cover from their stored values, so an edit cannot hide behind a date change', () => {

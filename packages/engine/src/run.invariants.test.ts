@@ -11,6 +11,7 @@ import { upgradeLegacyModel, type ModelInput } from './project';
 import { randomInput } from './testing/fuzz';
 import { hasMonthlyRates, transferRatesM3s, withMonthlyRates } from './network/transferRates';
 import { checkAll, checkDoubledCropAreas, droughtBoreholesAsSupplemental, checkEwrAttribution, checkInvariants, checkOrderInvariance, checkReliability, checkTransferLimits, checkWaterAccount, checkWorkings } from './testing/invariants';
+import { clientCatchmentDirs } from './testing/client-catchment-fixture';
 
 describe('engine invariants on random networks', () => {
 	// The random soak itself (checkAll on FUZZ_CASES seeds, GR4J) is
@@ -370,10 +371,7 @@ describe('the invariants reject broken results', () => {
 type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
 const fsSpecifier = 'node:fs';
 const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
-const cwd = (globalThis as { process?: { cwd(): string } }).process?.cwd() ?? '.';
-const dataDir = ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment']
-	.map((p) => `${cwd}/${p}`)
-	.find((p) => fs.existsSync(`${p}/project.json`));
+const dataDir = clientCatchmentDirs().find((p) => fs.existsSync(`${p}/project.json`));
 
 describe.skipIf(!dataDir)('engine invariants on the client catchment (needs data/client-catchment)', () => {
 	it('holds every invariant, including order invariance and the crop-area property', () => {

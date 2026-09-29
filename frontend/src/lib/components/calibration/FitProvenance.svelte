@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, gapFillRecordLabel, originLabel, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -15,6 +15,7 @@
 	import { peText } from '$lib/components/settings/peInput';
 	import { fmtNum } from '$lib/format/number';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+	import { dayQualityGist, ratingLine } from './dayQuality';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
@@ -26,7 +27,8 @@
 		context = 'run',
 		chirpsSource,
 		apanDaily,
-		chirpsFactors
+		chirpsFactors,
+		observedOrigin
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -41,13 +43,24 @@
 		apanDaily?: ApanDailyFingerprint | null;
 		/** The CHIRPS factor sets the run applied (runChirpsFactors, issue #51); undefined when not known (the form). */
 		chirpsFactors?: ChirpsFactorSet[] | null;
+		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
+		observedOrigin?: SeriesOrigin | null;
 	} = $props();
+	// The fitted record's gap filling (engine ≥ 1.23.0), in words.
+	const fillText = (f: FitRecord['flowGapFill']) => {
+		if (!f?.spec) return 'none';
+		const parts: string[] = [];
+		if (f.spec.interpolateMaxDays) parts.push(`interpolated up to ${f.spec.interpolateMaxDays} days`);
+		if (f.spec.donor) parts.push(`from the ${gapFillRecordLabel(f.spec.donor)} up to ${f.spec.donorMaxDays} days`);
+		// Whether the fit scored the filled days is the quality-flag row's infilled treatment.
+		return parts.join(', ') || 'none';
+	};
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
-	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);
+	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.id === 'fit-all' || c.validation)) : []);
 	const windowText = (r: FitRecord) =>
 		r.calibrationStart || r.calibrationEnd ? `${r.calibrationStart ?? 'start of record'} – ${r.calibrationEnd ?? 'end of record'}` : 'whole record';
 	// GR4J's PE input the fit ran under (engine ≥ 0.31.0, issue #39); a forcing without it ran on pan coefficient × A-pan.
@@ -67,6 +80,7 @@
 			<strong>{fitModelLabel(record.model)} fit of {fittedAtText(record.fittedAt)}</strong>
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
 			{#if status && status.forcingChanged}<span class="badge badge-warn">Forcing changed since fit</span>{/if}
+			{#if status && status.qualityFlagsChanged}<span class="badge badge-warn">Quality flags changed since fit</span>{/if}
 		</p>
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
@@ -107,6 +121,19 @@
 					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
 					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
+				<!-- Issue #66: the fitted record's source and given unit, and its gap filling (engine ≥ 1.23.0). -->
+				{#if record.observedOrigin !== undefined}
+					<div data-testid="fit-observed-source">
+						<dt>Calibration record source</dt>
+						<dd>{originLabel(record.observedOrigin)}{#if status?.observedOriginChanged}{' '}(now {originLabel(observedOrigin)}){/if}</dd>
+					</div>
+				{/if}
+				{#if record.flowGapFill}
+					<div data-testid="fit-gap-fill">
+						<dt>Gaps in the calibration record <HelpTip key="settings.flowGapFill" /></dt>
+						<dd>{fillText(record.flowGapFill)}</dd>
+					</div>
+				{/if}
 				<!-- Issue #40c: the CHIRPS product and version the fit ran on, and the series' now when it differs. -->
 				<div data-testid="fit-chirps-source">
 					<dt>CHIRPS series</dt>
@@ -157,6 +184,13 @@
 					</dd>
 				</div>
 			{/if}
+			{#if record.dayQuality}
+				<!-- Engine ≥ 1.22.0 (CR-18/19): which days the quality flags let the fit score. -->
+				<div data-testid="fit-quality-flags">
+					<dt>Quality flags <HelpTip key="settings.qualityFlags" /></dt>
+					<dd>{dayQualityGist(record.dayQuality)}. {ratingLine(record.dayQuality)}</dd>
+				</div>
+			{/if}
 			<div><dt>Parameters fitted</dt><dd>{record.free.map((k) => `${paramLabel(record.model, k)} ${fmtNum(record.params[k], 3)}`).join(', ')}</dd></div>
 		</dl>
 		<div class="table-wrap">
@@ -166,7 +200,7 @@
 					<tr>
 						{#each columns as c (c.id)}
 							<th scope="col" class="num" class:val={c.validation}>
-								{c.id === 'fit' ? 'Calibration period (in-sample)' : c.label}<br /><span class="period">{c.period}</span>
+								{c.id === 'fit' ? 'Calibration period (in-sample)' : c.id === 'fit-all' ? 'All days (flags ignored)' : c.label}<br /><span class="period">{c.period}</span>
 							</th>
 						{/each}
 					</tr>

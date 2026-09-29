@@ -3,7 +3,7 @@
 // ~15 chunks, several under 0.5 KB, and every page loads more (numbers in
 // scripts/guards/check_web_bundle_budget.mjs's change log).
 import { describe, expect, it } from 'vitest';
-import config, { svelteRuntimeChunk } from '../../vite.config';
+import config, { helpArticlesChunk, svelteRuntimeChunk } from '../../vite.config';
 
 const SVELTE = '/repo/node_modules/.pnpm/svelte@5.56.10/node_modules/svelte/src';
 
@@ -20,9 +20,17 @@ describe('the Svelte runtime chunk', () => {
 		}
 	});
 
-	it('is the page build’s one code-splitting group (Rolldown’s manualChunks)', () => {
+	it('is the page build’s first code-splitting group (Rolldown’s manualChunks), the help glossary’s data articles the second', () => {
 		const output = (config as { build: { rolldownOptions: { output: { codeSplitting: { groups: { name: unknown }[] } } } } }).build.rolldownOptions.output;
-		expect(output.codeSplitting.groups).toHaveLength(1);
+		expect(output.codeSplitting.groups).toHaveLength(2);
 		expect(output.codeSplitting.groups[0]!.name).toBe(svelteRuntimeChunk);
+		expect(output.codeSplitting.groups[1]!.name).toBe(helpArticlesChunk);
+	});
+
+	it('puts only the help glossary’s "Input data" articles in their own chunk (issue #66)', () => {
+		expect(helpArticlesChunk('/repo/frontend/src/lib/help/articles-data.ts')).toBe('help-articles-data');
+		for (const id of ['/repo/frontend/src/lib/help/articles.ts', '/repo/frontend/src/lib/help/content.ts', '/repo/frontend/src/lib/help/tips.ts']) {
+			expect(helpArticlesChunk(id), id).toBeUndefined();
+		}
 	});
 });

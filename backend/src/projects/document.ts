@@ -16,7 +16,7 @@ import type { Db } from '../db/tx.js';
 import { ModelBody } from '../model/validate.js';
 import { loadModel } from '../model/store.js';
 import { MAX_SERIES_VALUES, SeriesStartDate } from '../series/routes.js';
-import { checkProvenance, ProvenanceFields, SERIES_PER_PROJECT_MAX, toCanonicalUnit } from '../series/merge.js';
+import { checkProvenance, ProvenanceFields, SERIES_PER_PROJECT_MAX, SourceField, toCanonicalUnit } from '../series/merge.js';
 import { targetOf } from '../notes/routes.js';
 import { mergeSettings, SettingsPatch } from './settings.js';
 import { DEFAULT_TIME_ZONE, TimeZone } from './timeZone.js';
@@ -49,9 +49,17 @@ export const ProjectFile = z.object({
 				// How sub-daily readings were added up into days (033_series_day_boundary.sql); absent = daily values.
 				dayBoundary: z.enum(DAY_BOUNDARIES).optional(),
 				// A flow record's gauge node in the document's model (084_gauge_records); absent = the outlet.
-				siteNodeId: z.string().uuid().optional()
+				siteNodeId: z.string().uuid().optional(),
+				// Where the values came from, and the unit they were first given in (107_series_source.sql); absent = not recorded.
+				source: SourceField,
+				sourceUnit: z.string().trim().min(1).max(20).optional(),
+				sourceUnitFactor: z.number().finite().positive().optional()
 			})
 			.superRefine(checkProvenance)
+			.refine((s) => (s.sourceUnit === undefined) === (s.sourceUnitFactor === undefined), {
+				path: ['sourceUnitFactor'],
+				message: 'give sourceUnit and sourceUnitFactor together'
+			})
 			// Stored in the kind's canonical unit, as PUT …/series stores it (series/merge.ts).
 			.transform(toCanonicalUnit)
 		)
@@ -74,7 +82,21 @@ export interface ProjectDocument {
 	settings: Record<string, unknown>;
 	model: ProjectModel;
 	/** product / productVersion only on a series that records them (032_series_provenance.sql). */
-	series: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; product?: string; productVersion?: string; dayBoundary?: DayBoundary; siteNodeId?: string }[];
+	series: {
+		kind: string;
+		name: string;
+		unit: string;
+		startDate: string;
+		values: (number | null)[];
+		product?: string;
+		productVersion?: string;
+		dayBoundary?: DayBoundary;
+		siteNodeId?: string;
+		/** Only on a series that records them (107_series_source.sql). */
+		source?: string;
+		sourceUnit?: string;
+		sourceUnitFactor?: number;
+	}[];
 	/** The notes the exporter can see, oldest first; informational, the importer ignores them. */
 	notes: ProjectDocumentNote[];
 }
@@ -155,25 +177,30 @@ export async function loadProjectDocument(db: Db, projectId: string, now = new D
 	if (!p) return null;
 	const model = await loadModel(db, projectId);
 	const { rows: stored } = await db.query<
-		Omit<ProjectDocument['series'][number], 'dayBoundary' | 'siteNodeId'> & {
+		Omit<ProjectDocument['series'][number], 'dayBoundary' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'> & {
 			product: string | null;
 			productVersion: string | null;
 			dayBoundary: DayBoundary | null;
 			siteNodeId: string | null;
+			source: string | null;
+			sourceUnit: string | null;
+			sourceUnitFactor: number | null;
 		}
 	>(
 		`SELECT kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
-			site_node_id AS "siteNodeId"
+			site_node_id AS "siteNodeId", source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor"
 		 FROM time_series WHERE project_id = $1 ORDER BY kind, name`,
 		[projectId]
 	);
 	// A site whose node has left the model (084: the record keeps it, the run warns) has nothing to point at in the file.
 	const nodeIds = new Set(model.nodes.map((n) => n.id));
-	const series = stored.map(({ product, productVersion, dayBoundary, siteNodeId, ...s }) => ({
+	const series = stored.map(({ product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, ...s }) => ({
 		...s,
 		...(product !== null && productVersion !== null ? { product, productVersion } : {}),
 		...(dayBoundary !== null ? { dayBoundary } : {}),
-		...(siteNodeId !== null && nodeIds.has(siteNodeId) ? { siteNodeId } : {})
+		...(siteNodeId !== null && nodeIds.has(siteNodeId) ? { siteNodeId } : {}),
+		...(source !== null ? { source } : {}),
+		...(sourceUnit !== null && sourceUnitFactor !== null ? { sourceUnit, sourceUnitFactor } : {})
 	}));
 	return {
 		format: PROJECT_DOCUMENT_FORMAT,

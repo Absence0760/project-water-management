@@ -689,6 +689,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.calibrationExclusions', 'stats.exclusions', 'stats.excludedDays']
 	},
 	{
+		id: 'quality-flags',
+		term: 'Quality flags (per-day)',
+		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
+		category: 'fit',
+		fields: ['settings.qualityFlags']
+	},
+	{
 		id: 'fit-record',
 		term: 'Fit record',
 		short: 'What “Apply to form” stores with fitted parameters: how the fit was made and how it scored on days it never saw.',
@@ -962,6 +969,19 @@ export const TIPS: HelpTipText[] = [
 		short: 'Long wet-season runs of zero catchment rain count as missing, so bias-corrected CHIRPS fills them instead of running them dry.',
 		category: 'data',
 		fields: ['settings.zeroRainRuns', 'run.rain_catchment_missing']
+	},
+	{
+		id: 'flow-gap-filling',
+		term: 'Gap filling of observed flow',
+		short: 'Short gaps in a gauge or logger record interpolated, longer ones filled from another record × a fitted ratio; in a run only.',
+		category: 'data',
+		fields: ['settings.flowGapFill', 'run.observed_flow_fill', 'run.observed_flow_filled', 'run.observed_flow_other_fill', 'run.observed_flow_other_filled']
+	},
+	{
+		id: 'series-source',
+		term: 'Series source and unit',
+		short: 'Where a series\' values came from (a station, agency, file or feed) and the unit they were given in before the app converted them.',
+		category: 'data'
 	},
 	{
 		id: 'rain-accumulations',

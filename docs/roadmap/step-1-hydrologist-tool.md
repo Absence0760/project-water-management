@@ -1680,6 +1680,15 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.32 Gap filling for input series
 
+> **Built for the observed flow records 2026-09-28 (engine 1.23.0, issue
+> #66), off by default.** Two decisions differ from the plan below: the fill
+> is a project setting per record (`settings.flowGapFill`, so a run's
+> snapshot reproduces it), not a `time_series.fill` column, and the donor is
+> named by kind (the other observed record or the reference gauge), not by
+> series id. Rain gaps stay with CR-20's CHIRPS infill (§2.4c).
+> Filled days are left out of every statistic unless the setting says
+> otherwise. [model.md §2.10i](../model.md).
+
 - **Goal:** fill missing days in a rain or flow series in a way the
   hydrologist chooses and can see, instead of the engine treating gaps as
   zero rain or falling back silently.

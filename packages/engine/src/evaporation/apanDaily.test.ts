@@ -43,7 +43,7 @@ function catchment(settings: ModelInput['settings'] = {}, evap?: DailySeries): M
 		},
 		series: {
 			rain_catchment_mm: { startDate: START, values: rain },
-			flow_observed_m3s: { startDate: START, values: new Array(DAYS).fill(0.05) },
+			flow_observed_m3s: { startDate: START, values: Array.from({ length: DAYS }, (_, t) => 0.05 + 0.001 * (t % 7)) },
 			...(evap ? { evap_apan_mm: evap } : {})
 		}
 	};

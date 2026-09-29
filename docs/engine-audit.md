@@ -53,6 +53,7 @@ engine 0.4.0.
 | **F1** | Medium (projects with a forecast series past the record) | `forecast.ts` (new; roadmap WP-2.12) | **Forecast rain reached every summary.** `runModel` falls back to forecast rain after the record and extends the run to the forecast's last day, and the reporting window with it, so a 14-day forecast entered the farm averages, curtailment, EWR days not met and the compliance grid: yesterday's forecast changed the figures farmers and regulators rely on. Engine 0.28.0 only warned. | `forecast.test.ts` (no forecast; overlap with the record; forecast rain filling a gap; dry days before the tail; no observed rain; simulation end before the forecast); `forecast.invariants.test.ts` and `backend/scripts/examples/catchments.test.ts` › prefix stability; `backend/src/runs/forecast.db.test.ts` | **Fixed without changing `runModel`.** Forecast mode (model.md §2.4f): `forecastFrom` is the first forecast-sourced day after the last observed rain; an ordinary saved run uses `withoutForecastTail` (the forecast cut there, and `simulationEnd` the day before), and a forecast run (`runForecastChecked`) takes every summary and every historical series from that run and only the tail days from the run with the forecast, with `summary.forecast` over them. `runModel`'s own output is unchanged, so the regression and invariant suites are untouched; the new output fields (`forecastFrom`, `summary.forecast`) appear only on forecast runs. `ENGINE_VERSION` 0.35.0 → **0.37.0** for those fields. |
 | **K1** | Low (short records; float noise on long ones) | `network/landcover.ts` (Q75), `reserve/rules.ts` (rule tables on the record's flow-duration curve), `runoff/simulate.ts` (warm-up cycling a record shorter than the warm-up) | **The model is not causal.** A few figures are record-wide statistics, so adding days at the end of the record moves values at its start. A 14-day tail on 900-day random networks moved historical series by about 1e-8 relative in most of 240 cases; on records shorter than GR4J's 365-day warm-up, by more, since the warm-up then cycles the new days in. The roadmap's prefix-stability argument ("the simulation is causal") doesn't hold as stated. The Reserve's base flow (`settings.lowFlowMeasure: 'baseflow'`, engine 1.3.0–1.5.x: a three-pass filter over the whole run) was another such figure, of the monthly report rather than a series; engine ≥ 1.6.0 filters each month on a window ending on its last day, so it is causal and exact across a resume ([model.md §2.9d](./model.md)). | The causality probe behind forecast.ts's head comment (a run with a tail vs without, series compared bit for bit) | **Contained, not changed.** Forecast mode takes the history from the run without the tail, so its historical figures are bit-identical by construction, and the invariant asserts that. **Durable fix (an engine decision, the engine owner's):** fit the record-wide statistics on a fixed window (the calibration window, or the record up to the last observed day) so a run with a tail and one without agree on every shared day; then forecast mode can be one run. Tracked in [followups.md](./followups.md). |
 | **D1** | High (projects whose rain record is shorter than a flow record it was imported beside) | `prepare.ts` `prepareRun` (engine 0.45.0, issue #54) | **The default run window ran over rain padded with blanks.** With `simulationStart` / `End` unset, the run covered the whole span of the rain series, blanks included. A b023 import writes every `[Flow data]` column over the flow record's dates, so a workbook whose flow record starts long before its rain ran those years on 0 mm, and every whole-run figure was distorted. | A hydrology check of an imported workbook; `prepare.window.test.ts` | **Fixed.** An unset end follows the first / last day with rain the model can use (catchment, a rain-source series, corrected CHIRPS or the forecast; a set-aside recorded zero counts), and a run warns whenever a default end leaves out flow or A-pan days. An explicit window still wins. A project whose rain has a value on its span's first and last days runs as before (the examples). The importers also set the window from `[Home]` (issue #54). |
+| **C2** | Medium (fits on records with suspect days, or a gauged range entered) | `calibrate/dayFlags.ts`, `calibrate/calibrate.ts` `prepareCalibration`, `run.ts` `runPlausibility` (engine 1.22.0, issue #66) | **Automatic calibration scored every observed day as recorded.** Days the Data checks call suspect (a flat stretch, an outlier) and flood days read off a rating curve extended past its highest gauging (±5 % inside the gauged range on SA weirs, over 40 % beyond it: Wessels & Rooseboom 2009) weighed in the objective like any other, so a fit could chase a stuck logger or an extrapolation (calibration research CR-18/19; Beven & Westerberg 2011). The recession diagnostics (CR-13) read them too. | `calibrate/dayFlags.test.ts`; `calibrate.test.ts` › "calibrate reads the per-day quality flags" (suspect days left out, censoring invariance with a positive control, the recession mask); `provenance.test.ts`, `compare.test.ts` | **Fixed, engine 1.22.0 (pending the hydrologist, issue #66).** Each day of a calibration record is flagged (model.md §2.10h); by default the fit censors days above the highest gauging (the model only has to reach it) and leaves below-rating, suspect and infilled days out, each configurable in `settings.qualityFlags`; the report shows the fit on all days beside it and a data-quality panel, and the fit record keeps the settings. The recession segments leave flagged days out. The run's calibration statistics, and every run result column, are unchanged, so the regression suite's deviation list doesn't move. |
 | T1 | Low (tests) | `run.test.ts` | The skipped client catchment suite read its absent fixtures while vitest collected tests, which crashed `pnpm test` on any clone without `data/`. | `pnpm test` on main | **Fixed** (it now reports one skipped test). |
 
 ## Workbook quirks (model.md §3): decisions
@@ -173,6 +174,15 @@ new warning. A workbook whose rain starts well after its flow record,
 extracted before its importer set `simulationStart`, now runs from its first
 rain, and warns about the flow days it leaves out.
 
+**C2 (quality flags, engine 1.22.0).** No run result column moves: the
+flags change automatic calibration and, where a record has flagged days, the
+recession diagnostics in the plausibility checks. With no gauged range
+entered, fits change only on records with suspect days (outliers or flat
+stretches). Measured on the three example catchments (2026-09-28): none has
+a suspect or flagged day (Kleinberg 4 912, Droëvlei 5 281, Sandspruit 3 512
+days all scored), so their fits are unchanged. A project whose parameters came from an earlier
+fit keeps them until it is refitted.
+
 ## Regression suite: deviation list
 
 `packages/engine/src/run.test.ts` compares with the workbook column by
@@ -263,14 +273,18 @@ end-to-end comparison of natural flow from rain is retired (below).
   column differs.
 - **N1 (engine ≥ 0.16.0):** the workbook's return flow % r runs as
   efficiency 1 − r with every loss returning (migration 006). Workbook F is
-  compared with `crop_requirement` (the daily R1 bound). On every farm with
-  r > 0, every node downstream of one, and both ends of a transfer touching
-  one (`n1Affected`), supplied, deficit, inflow_upstream, transfer,
-  dam_storage, spill, outflow, ewr_shortfall and ewr_shortfall_incremental
-  are skipped, and so are the catchment outflow and EWR-not-met series when
-  the outlet is among them. Where that covers most of the network, the suite
-  checks the routing mainly through the runoff, EWR and crop-requirement
-  columns and the invariants.
+  compared with `crop_requirement` (the daily R1 bound). The network columns
+  N1 moves (supplied, deficit, inflow_upstream, transfer, dam_storage, spill,
+  outflow, ewr_shortfall, ewr_shortfall_incremental, and the catchment
+  outflow and EWR-not-met) are compared against a second run, the **N1
+  replay** (issue #68): each farm with e < 1 gets a demand factor of e, so it
+  abstracts e·F ÷ e = F, the workbook's demand, and returns β(1 − e)·G = r·G
+  with β = 1, the workbook's return. Its supplied, return flow and everything
+  downstream are then the workbook's again (the "N1 replay" test checks D = F
+  and T = r·G per farm and fails on an N1 farm with β ≠ 1). Up to #68 these
+  columns were skipped on every N1 farm and everything below one, which on
+  the client catchment was most of the network; what is still skipped is N4
+  (below).
 - **N2 (engine ≥ 0.16.0):** the replay gives every dam an area of 0 m² and no
   seepage, which is the workbook's dam bit for bit, so no column is listed
   for it. A separate test runs the estimated areas on the client catchment:
@@ -278,12 +292,18 @@ end-to-end comparison of natural flow from rain is retired (below).
   dam storage is lower.
 - **N4 / Q18 (engine ≥ 0.16.0):** a transfer is capped at the destination's
   room, and rules run by priority. The replay runs the workbook's rules at
-  priority 0; where their sources and destinations are already in
-  `n1Affected` (N1), no further column is listed. Where the room binds,
-  the transfer, both dams' storage and spill, and everything downstream would
-  differ from the workbook. From 0.19.0 the room also counts the
-  destination dam's rain, evaporation and seepage; the replay's dams have
-  none (N2 above), so nothing changes.
+  priority 0. Where the room binds (on the client catchment the destination
+  is near full on almost every day the engine moves less), the workbook pours
+  into a full dam that spills, and the engine leaves the water in the source,
+  which spills it there instead. No input sets a transfer's volume, so the
+  replay can't undo it: on both ends of every enabled rule, and below only
+  one end, the N1 columns are skipped (`n4Ends`, `n4OneEnd`); below the node
+  where the ends' flows join (`n4Joined`), outflow and inflow_upstream are
+  still compared (the volume is the same, mean rule) and only the columns
+  that depend on the day (supplied, deficit, transfer, dam_storage, spill and
+  the two EWR shortfalls; the catchment's EWR-not-met) are skipped. From
+  0.19.0 the room also counts the destination dam's rain, evaporation and
+  seepage; the replay's dams have none (N2 above), so nothing changes.
 - **Q17 (engine ≥ 0.17.0):** the farm's EWR charge at the EWR sites replaces
   AB as what drives curtailment, and the workbook has no charge. AB itself
   (`ewr_shortfall_incremental`, now the diagnostic reach shortfall) is still

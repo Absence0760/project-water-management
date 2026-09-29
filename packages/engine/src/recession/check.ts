@@ -68,7 +68,7 @@ export interface RecessionCheckInput {
 	simulatedM3Day: ArrayLike<number>;
 	/** The run's final catchment rain, mm (null = none). */
 	rainMm: ArrayLike<number | null>;
-	/** 1 on days the calibration exclusions (and, later, CR-18's flow quality flags) leave out. */
+	/** 1 on days the calibration exclusions and CR-18's flow quality flags (engine ≥ 1.22.0) leave out. */
 	excluded: ArrayLike<number>;
 	options?: Partial<RecessionOptions>;
 }

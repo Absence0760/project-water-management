@@ -100,6 +100,12 @@ describe('what an item says', () => {
 		expect(
 			eventLine(ev('series.replaced', { kind: 'rain_chirps_mm', name: '', daysChanged: 3, feedId: 'f', source: 'chirps', provenance: { from: 'CHIRPS v2.0', to: 'CHIRPS sat v3.0' } }))
 		).toBe('The CHIRPS feed replaced the Rainfall — CHIRPS series: 3 days changed; now CHIRPS sat v3.0, was CHIRPS v2.0');
+		expect(eventLine(ev('series.labelled', { kind: 'flow_observed_m3s', name: '', origin: { from: 'source not recorded', to: 'DWS X1H001' } }))).toMatch(
+			/^Recorded the source of .*: DWS X1H001 \(was source not recorded\)$/
+		);
+		expect(
+			eventLine(ev('series.replaced', { kind: 'flow_observed_m3s', name: '', daysChanged: 3, origin: { from: 'a · given in m³/s', to: 'b · given in l/s (× 0.001)' } }))
+		).toMatch(/; source now b · given in l\/s \(× 0\.001\), was a · given in m³\/s$/);
 		expect(eventLine(ev('series.labelled', { kind: 'rain_chirps_mm', name: '', provenance: { from: 'an unrecorded version', to: 'CHIRPS v2.0' } }))).toBe(
 			'Marked the Rainfall — CHIRPS series as CHIRPS v2.0 (was an unrecorded version)'
 		);

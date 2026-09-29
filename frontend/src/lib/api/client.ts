@@ -484,18 +484,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** `product` + `productVersion`: what the values are (CHIRPS 2.0 …); a replace without them stores them as not recorded. `dayBoundary`: how a sub-daily file was added up into days (033). */
 			put: (
 				id: string,
-				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null; dayBoundary?: DayBoundary | null }
+				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null; dayBoundary?: DayBoundary | null; source?: string | null }
 			) => request<SeriesWriteResult>('PUT', `${p(id)}/series`, body),
 			/** Merge days into a series by date (incoming wins on overlap); creates it if missing. Days of another version than the series' are a 409. */
 			merge: (
 				id: string,
-				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null; dayBoundary?: DayBoundary | null }
+				body: { kind: string; name?: string; unit: string; startDate: string; values: (number | null)[]; product?: string | null; productVersion?: string | null; dayBoundary?: DayBoundary | null; source?: string | null }
 			) => request<SeriesWriteResult>('POST', `${p(id)}/series/merge`, body),
 			/** Say which product and version a series holds (both null: not recorded); its values are untouched. */
 			label: (id: string, seriesId: string, product: string | null, productVersion: string | null) =>
 				request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { product, productVersion }),
 			/** Where a flow record was measured: a gauge node inside the network, or null for the outlet (084_gauge_records). */
 			site: (id: string, seriesId: string, siteNodeId: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { siteNodeId }),
+			/** Where the values came from: a station, agency, file or feed; null clears it (107_series_source.sql). */
+			source: (id: string, seriesId: string, source: string | null) => request<SeriesMeta>('PATCH', `${p(id)}/series/${enc(seriesId)}`, { source }),
 			remove: (id: string, seriesId: string) =>
 				request<void>('DELETE', `${p(id)}/series/${enc(seriesId)}`)
 		},

@@ -19,6 +19,7 @@
 		type ObjectiveId,
 		type ProjectModel,
 		type ProjectSettings,
+		type SeriesOrigin,
 		type SeriesProvenance,
 		type ApanDailyFingerprint
 	} from '@water-management/engine';
@@ -50,6 +51,7 @@
 	} from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
+	import DataQualityPanel from './DataQualityPanel.svelte';
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '$lib/calibration/wr2012Fit';
@@ -111,7 +113,14 @@
 	let error = $state<string | null>(null);
 	let handle: FitHandle | null = null;
 	// What the shown report was run on, for its fit record.
-	let ran: { settings: ProjectSettings; validate: boolean; validationRecord: CalibrationFlowKind | null; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null } | null = null;
+	let ran: {
+		settings: ProjectSettings;
+		validate: boolean;
+		validationRecord: CalibrationFlowKind | null;
+		chirpsSource?: SeriesProvenance | null;
+		apanDaily?: ApanDailyFingerprint | null;
+		observedOrigin?: SeriesOrigin | null;
+	} | null = null;
 
 	const params = $derived(fitParams(x2Open));
 	// Keep the user's ticks; a parameter new to the list (another model, or X2
@@ -157,7 +166,9 @@
 			runStarts = starts;
 			handle = startFit({ input, model: 'gr4j', objective, bounds, budget, free, validate, seed, starts, validationRecord: chosenRecord ?? undefined }, (p) => (progress = p));
 			report = await handle.result;
-			ran = context;
+			// The fitted record's source and given unit as the server loaded it (107_series_source.sql); undefined when it didn't say.
+			const fitted = server.series[report.flowKind as CalibrationFlowKind];
+			ran = { ...context, ...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin } : {}) };
 			status = 'done';
 		} catch (e) {
 			if (e instanceof FitCancelled) {
@@ -390,6 +401,10 @@
 				<Wr2012FitTable periods={wr2012FitPeriods(report)} />
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
+				{/if}
+				{#if report.dayQuality}
+					<!-- Calibration research CR-22: the per-day quality flags of the fitted record and its rain. -->
+					<DataQualityPanel quality={report.dayQuality} representativeness={report.representativeness ?? null} />
 				{/if}
 				{#if report.representativeness}
 					{@const rep = report.representativeness}

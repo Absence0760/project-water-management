@@ -3836,7 +3836,8 @@ one of the two records `observedAgreement` compares, and it plays no part in the
 EWR results, including the EWR agreement with the observed record (§2.9b). A project with a logger and a reference gauge therefore
 calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
-name. It can be charted on the Time series tab, where it serves as a regional
+name, and, only when `settings.flowGapFill` names it as a donor (engine ≥
+1.23.0, §2.10i), scale it into the gaps of the gauge or logger record. It can be charted on the Time series tab, where it serves as a regional
 wet/dry index. From engine 1.19.0 automatic calibration's dry → wet test
 ranks its water years by it (§2.10b) — its only use in the engine, and never
 as something scored.
@@ -3873,7 +3874,10 @@ Invalid stored entries are dropped with a run warning; the API rejects them on
 save. `calibrate/provenance.ts` holds the helpers.
 
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
-have an observation and are not excluded, in m³/s:
+have an observation and are not excluded, in m³/s. It scores every such day,
+whatever its quality flag: automatic calibration leaves flagged days out or
+censors them (engine ≥ 1.22.0, §2.10h), the run's statistics describe the
+record as it is.
 
 | Metric | Formula | Reads as |
 | --- | --- | --- |
@@ -4942,9 +4946,9 @@ segment is [p + `nStart`, e]: at least 6 days with the defaults. A missing
 flow or rain day, a wet day, a zero or a rise ends a run. The rain rule means
 the first step after a storm day can't count (rain the day before), so the
 peak is the day after the storm and the segment starts two days after it.
-The day mask is the run's calibration exclusions; per-day flow quality flags
-(extrapolated, infilled, suspect: CR-18, not built yet) will join the same
-mask. Two departures from TOSSH, both about where a run ends: a run cut off
+The day mask is the run's calibration exclusions and, from engine 1.22.0,
+every day the calibration record's quality flags mark extrapolated, infilled
+or suspect (CR-18, §2.10h). Two departures from TOSSH, both about where a run ends: a run cut off
 by the end of the record is kept like one cut off by a gap (TOSSH drops an
 unpaired last run), and there is no Lyne–Hollick start (the rain rule and
 `nStart` keep the quickflow out).
@@ -5250,6 +5254,250 @@ budgets 2 s).
 **For the hydrologist:** the ranges (especially abstraction ±30 % and the
 dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
 not findings.
+
+### 2.10h Per-day quality flags and the flag-aware objective (engine ≥ 1.22.0, calibration research CR-18/19/22)
+
+A gauge measures water level; its rating curve turns level into flow, and the
+curve is only checked against field gaugings over the range they cover. South
+African weirs are within about ±5 % inside that range and can be out by 40 %
+or more beyond it (Wessels & Rooseboom 2009). A fit that chases peaks read
+off the extrapolated curve fits the extrapolation, not the catchment, and a
+day the Data checks call suspect (a stuck logger, a typing error) is
+disinformative data for any objective (Beven & Westerberg 2011). From engine
+1.22.0 every day of a calibration record carries one quality flag, and
+automatic calibration's objective reads it (`packages/engine/src/calibrate/dayFlags.ts`).
+
+**The flags (CR-18).** Each day of a flow record gets the strongest class that
+applies, in this order:
+
+| Flag | When | Default in the fit |
+| --- | --- | --- |
+| missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
+| infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
+| suspect | an outlier or inside a flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a) | left out |
+| aboveRating | above the record's highest field gauging | censored |
+| belowRating | above zero but below its lowest gauging | left out |
+| humanUse | human use dominates the flow | scored |
+| inRange | none of the above (with no gauged range recorded: simply not flagged) | scored |
+
+- **The gauged range** is per record, in `settings.qualityFlags.ratings`
+  (`flow_observed_m3s`, `flow_logger_m3s`): the highest and lowest field
+  gauging in m³/s (either may be unknown, `null`) and a source, required
+  once a bound is set. Settings JSON only, no migration. With no range
+  recorded no day is flagged as extrapolated, and the data-quality panel
+  says so. Zero flow is never "below the lowest gauging": a dry weir reads
+  zero reliably.
+- **Infilled** is a day `settings.flowGapFill` filled (engine ≥ 1.23.0,
+  §2.10i): `observedInfillMask` reads the fill's per-day code
+  (`PreparedRun.flowFill`), and a filled day has no stored reading, so the
+  mask marks it whatever the stored record holds. Its treatment is the one
+  exception to "the run's own statistics score every observed day": a filled
+  day is not a reading, so `'exclude'` (the default) leaves it out of the
+  run's calibration statistics, the EWR test on the observed record and the
+  plausibility checks too, and `'include'` scores it everywhere.
+- **Human use dominant** is defined and never set. Deriving it from the run
+  would need the modelled abstraction, which depends on the parameters being
+  fitted, so the flag would move during the fit; the durable form is a
+  user-entered period list or the human-use flag of CR-25.
+- **Rain** gets one of three classes per day (`rainDayFlags`): *observed*
+  where the catchment gauge's own reading drives the day, *infilled* where
+  bias-corrected CHIRPS, forecast or a rain-source period's series stands in
+  (including a zero-rain run set aside as missing, §2.4c, which generalises
+  CR-20's `rain_catchment_missing` flag), and *missing* where nothing does.
+  Rain flags only feed the panel; the objective never drops a day for its
+  rain.
+
+**The objective (CR-19).** `settings.qualityFlags` also says how each flagged
+class is treated: `aboveRating` `'censor'` (default) | `'exclude'` |
+`'include'`; `belowRating`, `suspect` and `infilled` `'exclude'` (default) |
+`'include'`. Missing days are never scored; human-use days always are.
+- **Left out** days are dropped from the scored days (`prepareCalibration`'s
+  `scoredDays`), so every score of the fit, its starts, the split-sample and
+  dry → wet tests, the bootstrap intervals and benchmarks, the WR2012 table,
+  the WR2012 MAR penalty's window and the behavioural ensemble's acceptance
+  (§2.10e) read only the other days. An independent record (§2.10b) is
+  flagged under its own gauged range.
+- **Censored** days stay in, but the observation only says the flow was at
+  least the highest gauging Q_g: on those days the objective reads
+  o′ = s when the simulation s ≥ Q_g (no error), else o′ = Q_g, the least
+  the observation says. How far the record reads above Q_g therefore never
+  changes the fit (`calibrate.test.ts` pins that two records differing only
+  above Q_g give the same parameters). The observed mean and spread that
+  KGE′ and NSE use are those of o′, so they move with the simulation on
+  censored days; that is the price of keeping the days in, and it is small
+  while censored days are a small share.
+- **The fit on all days** is reported beside it: `report.fitAllDays`, the
+  fitted parameters scored on every observed day in the window outside the
+  exclusion periods, flagged days included and nothing censored (`null` when
+  the flags changed nothing). The Fit panel shows it as the column "Fitted,
+  all days (flags ignored)".
+- **Fewer than 30 days left** after the flags is an error naming them, like
+  the calibration window's.
+- **The run's calibration statistics** (§2.10) still score every observed
+  day: they describe the record as it is, and a run doesn't fit anything.
+  The exception is an infilled day (engine ≥ 1.23.0, §2.10i): it is not a
+  reading, so it counts only when the infilled treatment scores it.
+  So a run's in-sample scores (`fitStatus` `fitted`) include the days the
+  fit left out; the fit panel's "all days" column is the comparable figure.
+- **The recession diagnostics** (§2.10d, CR-13) leave out every day flagged
+  extrapolated, suspect or infilled, whatever the fit's settings
+  (`flaggedDayMask`), on top of the exclusion periods: those days say
+  nothing reliable about the shape of a recession. A run's plausibility
+  checks can therefore change from engine 1.22.0 when a gauged range is
+  recorded or the record has suspect days.
+
+**Why this default, and what it changes.** Before 1.22.0 every observed day
+was scored as recorded. With no gauged range recorded (every project until
+one is entered) the only days the default leaves out are the suspect ones,
+so fits change only on records with outliers or flat stretches, and those
+are exactly the days the run warnings already call "a stuck logger or a
+filled-in gap?". Censoring rather than dropping flood days keeps the
+information that the flow was high (Beven & Westerberg 2011; Kiang et al.
+2018); dropping below-rating days keeps an extrapolated low-flow tail from
+steering the low-flow parameters. One caution: a river that really stops
+trips the flat-stretch check after 90 days of zero flow
+(`settings.dataQuality.flatlineFlowMaxDays`, 90 by default), and leaving those days out hides the dry spell
+from the fit. The panel counts suspect zero-flow days and says to score
+suspect days as recorded if the river really stops. The defaults are the
+hydrologist's to confirm (issue #66 questions).
+
+**Provenance.** The fit record stores `qualityFlags` (the settings at the
+time), `dayQuality` and `fitAllDays`. `fitRecordStatus.qualityFlagsChanged`
+is true when the gauged ranges or a treatment differ from the fit's
+(compared after `resolveQualityFlags`, so a stored default is no change;
+false on a record made before 1.22.0); the record then shows "Quality flags
+changed since fit" with a caveat, and `calibrationFitStatus` calls the
+scores `otherPeriod`, as for changed exclusions. Run comparison lists a
+changed gauged range or treatment ("Gauged range (gauge record): none → up
+to 12 m³/s", "Suspect days in the fit: left out → scored as recorded"); a
+run saved before 1.22.0 reads as the defaults.
+
+**The data-quality panel (CR-22).** Every fit report carries `dayQuality`
+(`DayQuality`): the record and its gauged range, the treatments, the window's
+days by flow class, days scored, left out and censored, suspect zero-flow
+days, the scored days' rain by class with the days inside a zero-rain run set
+aside, and notes on what the record can't support:
+- no gauged range recorded, so flood days count as readings;
+- how many days were censored or left out above the highest gauging (the fit
+  doesn't constrain flood peaks or volumes), and below the lowest (check EWR
+  low flows against the record itself);
+- suspect days left out, and the zero-flow warning above;
+- the flags leaving out more than `LEFT_OUT_NOTE_SHARE` (25 %) of the
+  observed days;
+- rain filled on more than `RAIN_INFILL_NOTE_SHARE` (20 %) of the scored
+  days (the fit partly tests the fill, and the parameters absorb its bias);
+- scored days inside zero-rain runs set aside as missing.
+With the record-representativeness statement (§2.10b, CR-34), which the
+panel quotes, this is how wet the calibration period is against the
+long-term record. The 20 % and 25 % note thresholds are judgement.
+
+Tested by `calibrate/dayFlags.test.ts` (each class, precedence, alignment,
+the settings resolver and rating rules, censoring, the rain classes, the
+summary's counts and notes, run-comparison lines), `calibrate.test.ts`
+(suspect days left out and scored on all days, censoring invariance with a
+positive control, exclude, too few days, an independent record's own range,
+the recession mask on a run with a positive control),
+`provenance.test.ts` and `compare.test.ts`.
+### 2.10i Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66)
+
+Not in the workbook. `settings.flowGapFill` (`packages/engine/src/flowGapFill.ts`)
+fills gaps in the observed gauge (`flow_observed_m3s`) and logger
+(`flow_logger_m3s`) records **in a run only**: the stored series is never
+changed, and turning it off undoes it. **Off by default** (every record
+`null`), so a project that never sets it runs exactly as before, to the bit.
+Settings → Calibration record → *Flow gaps*.
+
+Only **interior** gaps are filled: a run of missing days (blank, non-finite or
+negative, as a run reads a flow) with a reading on both sides. A record's
+lead-in and tail are never filled; nothing bounds them. Per record:
+
+1. **Log-linear interpolation** of a gap of at most `interpolateMaxDays`
+   (default **5**, 0–30): the day a fraction f of the way across the gap gets
+   Q = a·(b/a)^f between the readings a before and b after, linearly where
+   either is 0. A recession is exponential, Q(t) = Q0·k^t, so the log-linear
+   line follows one exactly where a straight line overstates its volume. A
+   longer gap is never interpolated: nothing inside it is known, and a flood
+   there would be missed entirely. Five days is short enough that a gap
+   rarely hides a whole event in the dry season and long enough for a
+   logger's missed weekly download or a weekend without readings. *A draft,
+   pending the hydrologist.*
+2. **From a donor record** for a longer gap up to `donorMaxDays` (default
+   **60**, 1–366): the other observed record on the same reach (the logger
+   for the gauge, or the reverse) or the reference gauge on a neighbouring
+   river (`flow_reference_m3s`, otherwise never read by a run), × the ratio
+   Σ record / Σ donor over every day both have a reading in the whole stored
+   records. The donor is **refused**, and the summary and warning say why,
+   when the two share fewer than `donorMinOverlapDays` (default **365**, so
+   the ratio spans the seasons) or their daily flows correlate below
+   `DONOR_MIN_CORRELATION` = **0.5** (Pearson r on the shared days: the donor
+   doesn't rise and fall with the river). A filled day is **clamped** to the
+   record's own highest reading: a donor's flood scaled past anything the
+   gauge measured lies outside its rating. A gap day the donor has no
+   reading for stays open. One ratio over the whole record, not per month
+   or per flow class: see the questions below.
+
+Interpolation runs first, on the gaps short enough for it; the donor then
+fills only the longer ones. Everything is fitted and counted over the whole
+stored record, so the Data tab shows exactly what a run would fill. (A run
+resumed from a model-state snapshot, §2.16, fills from the records it is
+given: without the history before the snapshot's day, a gap across that day
+has no reading before it and stays open. The model's state never depends on
+an observed record, so only the fill columns and, with infilled days scored,
+the scores can differ.)
+
+**What reads a filled day: one control, the quality flags' infilled
+treatment** (`settings.qualityFlags.infilled`, §2.10h). Every filled day is
+flagged *infilled* (`observedInfillMask` reads the fill's per-day code), in the
+fit, the data-quality panel and the recession mask. With `'exclude'` (the
+default) the calibration statistics, the EWR test on the observed record,
+automatic calibration (the fit) and the plausibility checks read the
+**measured days only**, as before, so scoring never silently counts an
+estimate; the filled days are shown and exported. With `'include'` every one
+of them reads the filled record (`PreparedRun.aligned`), the calibration
+exclusions still applying. This is the one place the infilled treatment
+reaches past the fit: a filled day is not a reading, so the run's own
+statistics leave it out unless the treatment scores it. (A `useFilledDays`
+switch in `settings.flowGapFill` did this on the branch before the quality
+flags; it never deployed, a patch naming it is refused, and a stored one is
+ignored with a run warning.) The gauge-vs-logger agreement (§2.10a) and the series checks
+always read the stored records: filling one record from the other would make
+them agree by construction. A gauge node's own record (§2.10d) is never
+filled.
+
+**Outputs.** Each filled record gets two run series beside it:
+`observed_flow_fill` / `observed_flow_other_fill` (per day 0 = measured or
+still missing, 1 = interpolated, 2 = from the donor: `FLOW_FILL_CODE`) and
+`observed_flow_filled` / `observed_flow_other_filled` (the filled values,
+m³/day, only on filled days). `RunSummary.flowGapFill` gives per record the
+spec, the days interpolated and from the donor (counted over the run), the
+donor's ratio, shared days and r (over the record), clamped days, why a donor
+was refused, and the gaps left open; a run warning says the same and whether
+infilled days are scored. The daily CSV has the two columns beside
+the record, and the summary CSV a *Gaps filled in the observed flow records*
+block (`flowGapFillLines` in `backend/src/export/run-tables.ts`), only on a run
+that filled a record. The per-day code is also on the
+prepared run (`PreparedRun.flowFill[kind].code`), which is what the per-day
+quality flags (§2.10h, `observedInfillMask`) read as *infilled*.
+
+**Fit provenance.** A fit records the fitted record's spec
+(`fitRecord.flowGapFill`) beside its quality flags. A change of the infilled
+treatment is `qualityFlagsChanged` (§2.10h); a change of the spec flags the
+fit (`flowFillChanged`, and the run's `fitStatus` becomes `otherPeriod`: the
+scores are on other days) only while infilled days are scored both at the fit
+and now, since otherwise the fit scored no filled day. One change, one flag. It also records where that record came from and the unit it was
+given in (`fitRecord.observedOrigin`, data-model.md § Series source and unit),
+flagged when either changes (`observedOriginChanged`).
+
+**Questions for the hydrologist** (the defaults above stand until answered):
+whether 5 days is the right interpolation limit for these rivers, or whether
+it should depend on season (a wet-season gap of three days can hide a flood);
+whether one whole-record donor ratio is good enough, or it should be fitted
+per month or per flow class (a neighbouring gauge's ratio usually differs
+between base flow and floods); whether the 0.5 correlation floor and the
+365-day minimum overlap are the right refusal thresholds; whether a filled
+day should be clamped to the record's maximum or to the weir's rated
+maximum, when known; and whether a filled record should ever be scored by
+default (it isn't).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

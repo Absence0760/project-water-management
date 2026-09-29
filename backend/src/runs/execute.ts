@@ -16,6 +16,8 @@ import {
 	type RunVerification,
 	type ScenarioOp,
 	type SeriesKind,
+	seriesOrigin,
+	type SeriesOrigin,
 	type SeriesProvenance,
 	withoutForecastTail
 } from '@water-management/engine';
@@ -56,11 +58,15 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		product: string | null;
 		product_version: string | null;
 		site_node_id: string | null;
+		source: string | null;
+		source_unit: string | null;
+		source_unit_factor: number | null;
 	}>(
 		// The outlet's: the first of each kind among the series with no site. A gauge node's own
 		// flow records (084_gauge_records): the first of each kind per site, keyed `<kind>@<node id>`
 		// (engine gaugeSeriesKey), which only the plausibility checks read.
-		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id
+		`SELECT DISTINCT ON (site_node_id, kind) id, kind, start_date, "values", product, product_version, site_node_id,
+			source, source_unit, source_unit_factor
 		 FROM time_series WHERE project_id = $1 ORDER BY site_node_id NULLS FIRST, kind, name`,
 		[projectId]
 	);
@@ -71,7 +77,9 @@ async function loadLiveInput(db: Db, projectId: string): Promise<{ input: ModelI
 		seriesIds[key] = r.id;
 		// The product and version (032_series_provenance.sql) ride along for the run's snapshot; the model ignores them.
 		const provenance = r.product !== null && r.product_version !== null ? { product: r.product, version: r.product_version } : null;
-		series[key] = { startDate: r.start_date, values: r.values, provenance };
+		// So do where the values came from and the unit they were given in (107_series_source.sql).
+		const origin = seriesOrigin({ source: r.source, sourceUnit: r.source_unit, sourceUnitFactor: r.source_unit_factor });
+		series[key] = { startDate: r.start_date, values: r.values, provenance, origin };
 	}
 	// settings.autoRun (runs/autoRun.ts) says when the project runs, not how, settings.outcomes
 	// (projects/outcomeSettings.ts) how its results are read, and settings.outlook
@@ -277,6 +285,8 @@ interface SnapshotSeries {
 	valuesSha256?: string;
 	/** The series' product and version (032_series_provenance.sql), null = not recorded; absent on runs saved before it. */
 	provenance?: SeriesProvenance | null;
+	/** Where the values came from and the unit they were given in (107_series_source.sql), null = not recorded; absent on runs saved before it. */
+	origin?: SeriesOrigin | null;
 }
 
 /**
@@ -505,7 +515,8 @@ export async function storeRun(db: Db, plan: RunPlan, output: ModelOutput): Prom
 					length: v.values.length,
 					valuesSha256: hashes[k]!,
 					// Absent when the input didn't know it (a scenario rerun of a run from before 032).
-					...(v.provenance !== undefined ? { provenance: v.provenance } : {})
+					...(v.provenance !== undefined ? { provenance: v.provenance } : {}),
+					...(v.origin !== undefined ? { origin: v.origin } : {})
 				} satisfies SnapshotSeries
 			])
 		),
@@ -700,7 +711,12 @@ function rebuildRunInput(r: StoredRun, refs: StoredRef[]): ModelInput {
 		if (got.start_date !== want.startDate) throw bad(`starts on ${got.start_date}, not ${want.startDate} as the run recorded`);
 		if (got.values.length !== want.length) throw bad(`has ${got.values.length} days, not ${want.length} as the run recorded`);
 		if (got.sha256 !== want.valuesSha256 || seriesHash(got.values) !== got.sha256) throw bad('fails its SHA-256 check');
-		series[kind as SeriesKind] = { startDate: got.start_date, values: got.values, ...(want.provenance !== undefined ? { provenance: want.provenance } : {}) };
+		series[kind as SeriesKind] = {
+			startDate: got.start_date,
+			values: got.values,
+			...(want.provenance !== undefined ? { provenance: want.provenance } : {}),
+			...(want.origin !== undefined ? { origin: want.origin } : {})
+		};
 	}
 	const extra = refs.find((x) => !(x.kind in snap));
 	if (extra) throw new RunInputError('inconsistent', `the run stored a ${extra.kind} series its snapshot doesn't list`);
