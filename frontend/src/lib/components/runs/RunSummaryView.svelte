@@ -38,9 +38,7 @@
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
-		supplied: farms.reduce((s, f) => s + f.avgSuppliedM3Day, 0),
-		deficit: farms.reduce((s, f) => s + f.avgDeficitM3Day, 0),
-		ewr: farms.reduce((s, f) => s + f.avgEwrShortfallM3Day, 0)
+		supplied: farms.reduce((s, f) => s + f.avgSuppliedM3Day, 0)
 	});
 	const cal = $derived(summary.calibration);
 	// "in-sample" only when the parameters were fitted on the days scored (issue #45).

@@ -284,11 +284,20 @@ export function lookingBack(farm: FarmProjection): LookingBackVm {
 	const heading = t('Looking back: {span}', { span: seasonSpan(farm) });
 	if (r.headline == null) return { heading, chip: null, text: [littleNeed()], link: t('Why? What can I do?') };
 	const pct = fmtPct(r.headline);
-	const text = tRich(pumpLessAsked(farm) ? 'If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed.' : 'The river didn\'t need you to pump less this season. You had about **{pct}** of the water you needed.', { pct });
+	// Only drawn when the river asked for a cut (lookingBackFolds): with none, the model's % is the Supply card's.
+	const text = tRich('If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed.', { pct });
 	return { heading, chip: r.band ? bandChip(r.band) : null, text, link: t('Why {pct}? What can I do?', { pct }) };
 }
 
-/** The one link line that replaces the model card under a `restricted` notice. */
+/**
+ * The model card folds to its link line (lookingBackShort) under a `restricted`
+ * notice, so only the WUA's percentage competes for attention, and when the
+ * river asked this farm for no cut: its "you had about X %" then only repeats
+ * the Supply card one card up (issue #177).
+ */
+export const lookingBackFolds = (farm: FarmProjection, level: RestrictionLevel) => level === 'restricted' || !pumpLessAsked(farm);
+
+/** The one link line that replaces the model card when it folds (lookingBackFolds). */
 export const lookingBackShort = () => t('The model’s look back and what you can do');
 
 // ---- Compared with last season (§3 Q1, E4) -----------------------------------

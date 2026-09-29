@@ -26,7 +26,7 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, disclaimer, levelWord, lookingBackFolds, noRestriction, noticeCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
 	import { farmCsvForReader } from '$lib/components/farm/csvNote';
@@ -143,7 +143,7 @@
 			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
 			<SupplyCard farm={view.farm} bind:unit staleEnd={staleUntil(view, farmToday(view))} />
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
-			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />
+			<LookingBack farm={view.farm} href={href('why')} collapsed={lookingBackFolds(view.farm, view.publication.restriction.level)} />
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}

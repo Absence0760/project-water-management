@@ -10,6 +10,7 @@ import {
 	farmSummaryLine,
 	lastsFor,
 	lookingBack,
+	lookingBackFolds,
 	noticeCard,
 	outletLine,
 	positionLine,
@@ -285,9 +286,18 @@ describe('Looking back (the model card)', () => {
 		expect(txt(l.text)).toBe('Your hydrological unit needed very little water this season.');
 	});
 
-	it('doesn’t ask to pump less when the river never did', () => {
-		const l = lookingBack(withFarm((f) => ((f.river.chargedDays = 0), (f.river.supplyCutM3Day = 0), (f.river.headline = 0.86), (f.river.band = 'watch'))).farm);
-		expect(txt(l.text)).toBe("The river didn't need you to pump less this season. You had about 86 % of the water you needed.");
+	it('folds to its link line under a restriction, and when the river asked for no cut (issue #177)', () => {
+		const asked = vaalbankFixture().farm;
+		// Positive control: the river asked Vaalbank to pump less, so the card shows under no notice or an advisory.
+		expect(lookingBackFolds(asked, 'none')).toBe(false);
+		expect(lookingBackFolds(asked, 'advisory')).toBe(false);
+		expect(lookingBackFolds(asked, 'restricted')).toBe(true);
+		// No cut: its % would only repeat the Supply card's.
+		const noCut = withFarm((f) => ((f.river.chargedDays = 0), (f.river.supplyCutM3Day = 0), (f.river.headline = 0.86), (f.river.band = 'watch'))).farm;
+		expect(lookingBackFolds(noCut, 'none')).toBe(true);
+		// A cut under the 1 m³/day floor asks nothing either.
+		const tiny = withFarm((f) => ((f.river.chargedDays = 3), (f.river.supplyCutM3Day = 0.5))).farm;
+		expect(lookingBackFolds(tiny, 'advisory')).toBe(true);
 	});
 });
 
