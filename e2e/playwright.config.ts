@@ -5,7 +5,7 @@
 // worktrees at once don't collide. See e2e/README.md.
 import { existsSync, readFileSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
-import { API_URL_STAMP, E2E_BUILD_DIR } from './support/build-site.ts';
+import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { API_PORT, API_URL, APP_E2E_URL, WEB_PORT, WEB_URL } from './support/env.ts';
 
 // The site under test is `vite build` output with the e2e API URL baked in
@@ -86,7 +86,7 @@ export default defineConfig({
 					url: WEB_URL,
 					reuseExistingServer: false,
 					timeout: 120_000,
-					env: { PUBLIC_API_URL: API_URL }
+					env: { PUBLIC_API_URL: API_URL, ...E2E_CAPTCHA }
 				}
 			: {
 					command: [

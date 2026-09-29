@@ -236,6 +236,48 @@ variable "cloudfront_requests_alarm_per_5min" {
   }
 }
 
+# --- Sign-in CAPTCHA (waf.tf SignInCaptchaPerIP) ------------------------------
+
+variable "waf_signin_captcha_per_5min" {
+  description = "Sign-in POSTs (POST /api/auth/login) from one IP in 5 minutes above which the WAF answers with a CAPTCHA instead of passing the request on. Default 20: a person signing in makes 1-5, an office behind one NAT a handful more; a guesser past it must solve a puzzle every captcha immunity period. Must stay below the auth block rule's 100, or the CAPTCHA never shows before the block."
+  type        = number
+  default     = 20
+  validation {
+    condition     = var.waf_signin_captcha_per_5min >= 10 && var.waf_signin_captcha_per_5min <= 99
+    error_message = "Between 10 (AWS's minimum for a rate-based rule) and 99 (below RateLimitAuthPerIP's 100, which blocks outright)."
+  }
+}
+
+variable "waf_signin_captcha_action" {
+  description = "What the sign-in CAPTCHA rule does past its threshold: CAPTCHA (the puzzle), or COUNT (only counts, in the WAF metrics and sampled requests: the switch-off if the puzzle misfires; docs/deployment.md § Runbooks)."
+  type        = string
+  default     = "CAPTCHA"
+  validation {
+    condition     = contains(["CAPTCHA", "COUNT"], var.waf_signin_captcha_action)
+    error_message = "CAPTCHA or COUNT."
+  }
+}
+
+variable "waf_captcha_integration_url" {
+  description = "This account's AWS WAF CAPTCHA integration URL for CloudFront scope (https://<id>.edge.captcha-sdk.awswaf.com/<id>/). Not a secret: read it once with `aws wafv2 list-api-keys --scope CLOUDFRONT --region us-east-1 --query ApplicationIntegrationURL --output text`. The site's CSP allows exactly its origin and its challenge script's (<id>.edge.sdk.awswaf.com), and the frontend loads jsapi.js from it. Empty (the default): the CSP allows no WAF origin and the sign-in page says to wait instead of showing the puzzle."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.waf_captcha_integration_url == "" || can(regex("^https://[a-z0-9]+\\.[a-z0-9-]+\\.captcha-sdk\\.awswaf\\.com/[a-z0-9]+/$", var.waf_captcha_integration_url))
+    error_message = "Empty, or https://<id>.<edge|region>.captcha-sdk.awswaf.com/<id>/ exactly as list-api-keys prints it (with the trailing slash)."
+  }
+}
+
+variable "login_failed_alarm_per_15min" {
+  description = "Alarm when more than this many credential checks fail in 15 minutes across all accounts (the login-failed alarm: one password sprayed over many accounts, which each address's own lockout can't see). Default 30: a person locking themselves out logs 5-10, so 30 is several at once for a handful of users. Runbook: docs/deployment.md § Runbooks, Credential stuffing."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.login_failed_alarm_per_15min >= 10 && var.login_failed_alarm_per_15min <= 300
+    error_message = "Between 10 (one person locking themselves out would page) and 300 (one IP at the WAF's auth limit, 100 per 5 minutes, would stay unseen)."
+  }
+}
+
 variable "budget_monthly_usd" {
   description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 80 sits above af-south-1's ~$58–63 idle (infra/README.md § Cost), so ACTUAL 80% ($64) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number

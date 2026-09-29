@@ -171,8 +171,13 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
+<<<<<<< HEAD
 | `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
+=======
+| `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
+| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
+>>>>>>> worktree-agent-a2856149dae8a8875
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
@@ -335,8 +340,22 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
   the meta policy is missing, so the header's `'unsafe-inline'` can never be
   the effective policy. `style-src` keeps `'unsafe-inline'`: Svelte templates
   and uPlot set inline `style` attributes, which nothing narrower allows (an
-  accepted risk; CSS can't run script). No third-party origin is allowed
-  anywhere.
+  accepted risk; CSS can't run script). One third-party origin pair only:
+  once `waf_captcha_integration_url` is set, `script-src` and `connect-src`
+  (header and meta) add the account's CAPTCHA SDK origin and its challenge
+  script's, and `media-src` allows `data:` for the puzzle's audio (the
+  sign-in CAPTCHA below; docs/security.md § Sign-in CAPTCHA).
+- **Sign-in CAPTCHA** (`waf.tf` `SignInCaptchaPerIP`, priority 1 between the
+  auth block and the site-wide limit): a rate-based rule on `POST
+  /api/auth/login` (decoded, normalised, lower-cased path) whose action is
+  `CAPTCHA` past `waf_signin_captcha_per_5min` (default 20, 10–99) per IP in
+  5 minutes, immunity 300 s; `waf_signin_captcha_action = "COUNT"` is the
+  switch-off. `aws_wafv2_api_key.captcha` (us-east-1, CloudFront scope,
+  token domain `var.domain_name`) is the CAPTCHA JavaScript API key; outputs
+  `waf_captcha_script_url` and `waf_captcha_api_key` (sensitive) feed the
+  frontend build. The integration URL isn't a Terraform attribute (the ACL's
+  `application_integration_url` is only filled for the ATP/ACFP rule groups),
+  so it is a variable, read once with `aws wafv2 list-api-keys`.
 - **PriceClass_All**: AWS's price-class table ([CloudFront pay-as-you-go pricing](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/)) puts South Africa, Kenya, Nigeria, Egypt and the Middle East only in PriceClass_All, so
   100 or 200 would serve SA users from Europe or Asia. At this traffic the
   difference in price is cents.
@@ -364,13 +383,17 @@ Idle to light use, on-demand, us-east-1:
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
+<<<<<<< HEAD
 | WAF: ACL + 3 rules (+ $0.60 / 1M requests) | 8.00 |
+=======
+| WAF: ACL + 3 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 8.00 |
+>>>>>>> worktree-agent-a2856149dae8a8875
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
+| CloudWatch: 35 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $51** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20) |
+| **Total** | **≈ $52** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20, the sign-in CAPTCHA rule $1.00) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -714,7 +737,10 @@ wired to SNS, including the `self_check_failed` log metric filters (pattern
 and metric name, on both the API and worker log groups) and its alarm, and
 the `mail_send_failed` filters (both log groups) and alarm, and the
 `unhandled_error` filter (the API's log group, the API's unhandled 500s the
-Lambda `Errors` metric can't see) and alarm; the us-east-1 alarms
+Lambda `Errors` metric can't see) and alarm, and the `login_failed` filter
+(the API's log group: failed credential checks across all accounts, which the
+per-address lockout can't sum) and its alarm (more than 30 in one 15-minute
+period by default); the us-east-1 alarms
 (`cloudfront-5xx`, `cloudfront-requests`, `waf-blocked-requests`) wired to the
 us-east-1 topic, with the request-flood alarm's metric, dimensions and 5,000
 threshold and the WAF alarm's `BlockedRequests` on the ACL's metric name with
@@ -740,7 +766,9 @@ immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
 below two ticks does; two more refuse a `cloudfront_requests_alarm_per_5min`
-outside 1,000–20,000. Another six refuse an alert mailbox nobody reads:
+outside 1,000–20,000, and two a `login_failed_alarm_per_15min` outside
+10–300 (below 10 one person locking themselves out pages; above 300 one IP at
+the WAF's auth limit stays unseen). Another six refuse an alert mailbox nobody reads:
 `budget_alert_email` is required, and an empty, malformed or reserved
 address fails the plan (example.com/.org/.net and their subdomains, and the
 `.example`, `.test`, `.invalid` and `.localhost` TLDs of RFC 2606 / RFC 6761,
@@ -753,10 +781,26 @@ Lambda and a worker cap below the sum of its SQS triggers'
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so
+<<<<<<< HEAD
 `/api/%61uth/login` can't slip past it); `waf_rate_rules_scope` pins the API
 rule to `/api/` (same transformations), the unscoped site-wide backstop, the
 three limits and their order, and `rejects_site_rate_limit_below_the_api_limit`
 the variables' ordering. The `network` run pins the
+=======
+`/api/%61uth/login` can't slip past it). `signin_captcha` pins the sign-in
+CAPTCHA: the rule order (auth block, CAPTCHA, site-wide), its `CAPTCHA`
+action, the 300 s immunity, the 20-per-5-minute per-IP limit below the
+block's, the scope (`POST` and exactly `/api/auth/login`, same three
+transformations), the API key's CloudFront scope and site-only token domain,
+and a CSP with no WAF origin (but `media-src 'self' data:`) and an empty
+script URL until the integration URL is set;
+`signin_captcha_with_integration_url` checks that `script-src` and
+`connect-src` then add exactly the two SDK origins (no wildcard,
+`unsafe-eval` or `blob:`) and the script URL is its `jsapi.js`;
+`signin_captcha_count_mode` checks the COUNT switch-off; and four more refuse
+a limit of 100 or 9, an action other than CAPTCHA/COUNT and a wildcard
+integration URL. The `network` run pins the
+>>>>>>> worktree-agent-a2856149dae8a8875
 private-only VPC: no internet, egress-only or NAT gateway, Elastic IP,
 `aws_route`, VPN, peering or transit attachment anywhere in the module, no
 `0.0.0.0/0` or `::/0` string, no inline route on the private route table

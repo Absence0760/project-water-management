@@ -12,7 +12,7 @@
 // Time is moved in the database (locked_until, last_attempt_at, created_at),
 // never by sleeping. Every "cannot" has a positive control.
 import { LEGAL_VERSION } from '@water-management/engine/legal';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
 import { DEVICE_COOKIE, deviceCookieValue } from './device.js';
 
@@ -267,5 +267,88 @@ describe('lock boundaries', () => {
 		await age('70 seconds');
 		expect((await anon('POST', '/auth/forgot-password', { email: u.email })).status).toBe(202);
 		expect(mailCount(u.email)).toBe(before + 2);
+	});
+});
+
+// The login_failed line (auth/loginFailed.ts), which the login-failed alarm
+// counts across every account (infra/alarms.tf; issue #126: one password
+// sprayed over many addresses gets past each address's lockout). The reason
+// tells the operator an unknown address from a wrong password; the client
+// must never be able to.
+describe('failed credential checks log login_failed, and nothing else', () => {
+	/** Run `fn`, returning the login_failed lines logged meanwhile (raw text). */
+	async function failures(fn: () => Promise<void>): Promise<string[]> {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			await fn();
+			return warn.mock.calls.map((c) => c[0]).filter((l): l is string => typeof l === 'string' && l.includes('"login_failed"'));
+		} finally {
+			warn.mockRestore();
+		}
+	}
+	const parsed = (lines: string[]) => lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+
+	it('an unknown address and a wrong password answer identically; only the log line tells them apart', async () => {
+		const u = await signUp('Spray');
+		const unknownEmail = `nobody-${crypto.randomUUID()}@example.com`;
+		let unknown!: Awaited<ReturnType<typeof login>>;
+		let wrong!: Awaited<ReturnType<typeof login>>;
+		const lines = await failures(async () => {
+			unknown = await login(unknownEmail, 'Summer2026!');
+			wrong = await login(u.email, 'Summer2026!');
+		});
+		expect(unknown.status).toBe(401);
+		expect(wrong.status).toBe(401);
+		expect(wrong.body).toEqual(unknown.body);
+		expect(wrong.headers.getSetCookie()).toEqual(unknown.headers.getSetCookie());
+		expect(wrong.headers.get('retry-after')).toBe(unknown.headers.get('retry-after'));
+
+		expect(parsed(lines)).toEqual([
+			{ event: 'login_failed', route: '/auth/login', reason: 'unknown_account' },
+			{ event: 'login_failed', route: '/auth/login', reason: 'bad_password' }
+		]);
+		// No address (whole or local part), account id or password in any line.
+		for (const l of lines) {
+			for (const secret of [unknownEmail, unknownEmail.split('@')[0]!, u.email, u.email.split('@')[0]!, u.id, 'Summer2026']) {
+				expect(l).not.toContain(secret);
+			}
+		}
+	});
+
+	it('a lock logs locked; a correct password logs nothing (positive control)', async () => {
+		const u = await signUp('Locked');
+		const ok = await failures(async () => {
+			expect((await login(u.email, 'correct horse')).status).toBe(200);
+		});
+		expect(ok).toEqual([]);
+		const lines = await failures(() => strangerLocks(u.email));
+		expect(parsed(lines).map((l) => l.reason)).toEqual(['bad_password', 'bad_password', 'bad_password', 'bad_password', 'bad_password', 'locked']);
+	});
+
+	it('change-password’s wrong current password, and a bad reset or verification link, log their own route', async () => {
+		const u = await signUp('Change');
+		const lines = await failures(async () => {
+			expect((await anon('POST', '/auth/change-password', { currentPassword: 'not it', newPassword: 'new password' }, u.cookie)).status).toBe(403);
+			// A malformed token counts as well as an unknown one.
+			expect((await anon('POST', '/auth/reset-password', { token: 'garbage', password: 'new password' })).status).toBe(400);
+			expect((await anon('POST', '/auth/verify-email', { token: 'garbage' })).status).toBe(400);
+		});
+		expect(parsed(lines)).toEqual([
+			{ event: 'login_failed', route: '/auth/change-password', reason: 'bad_password' },
+			{ event: 'login_failed', route: '/auth/reset-password', reason: 'invalid_link' },
+			{ event: 'login_failed', route: '/auth/verify-email', reason: 'invalid_link' }
+		]);
+		// Positive control: a real link logs nothing.
+		await anon('POST', '/auth/forgot-password', { email: u.email });
+		const token = tokenIn(lastMailTo(u.email));
+		const used = await failures(async () => {
+			expect((await anon('POST', '/auth/reset-password', { token, password: 'fresh password' })).status).toBe(204);
+		});
+		expect(used).toEqual([]);
+		// The same (well-formed) link again is used up: invalid_link.
+		const again = await failures(async () => {
+			expect((await anon('POST', '/auth/reset-password', { token, password: 'fresh password' })).status).toBe(400);
+		});
+		expect(parsed(again)).toEqual([{ event: 'login_failed', route: '/auth/reset-password', reason: 'invalid_link' }]);
 	});
 });

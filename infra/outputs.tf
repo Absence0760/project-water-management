@@ -101,3 +101,19 @@ output "aws_deploy_role_arn" {
   value       = data.aws_iam_role.github_deploy.arn
   sensitive   = true
 }
+
+# The sign-in CAPTCHA (waf.tf). deploy-frontend.yml bakes both into the build
+# as PUBLIC_WAF_CAPTCHA_SCRIPT_URL / PUBLIC_WAF_CAPTCHA_API_KEY; empty script
+# URL = no puzzle (the page says to wait). The key ships in the site's
+# JavaScript by design, but the provider marks it sensitive, so it goes to a
+# GitHub secret rather than a variable.
+output "waf_captcha_script_url" {
+  description = "The CAPTCHA JavaScript API script (jsapi.js) for this account, or empty until waf_captcha_integration_url is set."
+  value       = var.waf_captcha_integration_url == "" ? "" : "${var.waf_captcha_integration_url}jsapi.js"
+}
+
+output "waf_captcha_api_key" {
+  description = "The CAPTCHA JavaScript API key for the site's domain (aws_wafv2_api_key.captcha)."
+  value       = aws_wafv2_api_key.captcha.api_key
+  sensitive   = true
+}

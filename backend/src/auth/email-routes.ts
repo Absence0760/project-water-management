@@ -16,12 +16,19 @@ import { clearSession } from './session.js';
 import { issueDevice, trustedDevice } from './device.js';
 import { ACCOUNT_MAIL_CAP, ACCOUNT_MAIL_WINDOW, newToken, parseToken, RESEND_COOLDOWN, TOKEN_TTL } from './tokens.js';
 import { readJson } from '../http/body.js';
+import { logLoginFailed, type LoginFailureRoute } from './loginFailed.js';
 
 const email = z.string().trim().toLowerCase().email().max(254);
 const token = z.string().max(200);
 const password = z.string().min(8).max(200);
 
 const INVALID_LINK = 'this link is invalid or has expired — request a new one';
+
+/** Refuse a reset or verification token, logging the failure (auth/loginFailed.ts). */
+function invalidLink(route: LoginFailureRoute): ApiError {
+	logLoginFailed(route, 'invalid_link');
+	return ApiError.coded(400, 'link_invalid', INVALID_LINK);
+}
 
 /** Why no token was issued: inside the cooldown, or the address's daily cap (078) is used up. */
 export type EmailTokenRefusal = 'cooldown' | 'capped';
@@ -114,7 +121,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/reset-password', async (c) => {
 		const body = z.object({ token, password }).parse(await readJson(c));
 		const hash = parseToken(body.token);
-		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!hash) throw invalidLink('/auth/reset-password');
 		const newHash = await hashPassword(body.password);
 		const watermark = new Date();
 		const email = await withoutUser(async (db) => {
@@ -139,7 +146,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			await markVerified(db, userId);
 			return updated[0]?.email ?? null;
 		});
-		if (!email) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!email) throw invalidLink('/auth/reset-password');
 		clearSession(c);
 		// The link proved the inbox: this browser signs in on its own lockout
 		// record from now on (auth/device.ts), so whoever keeps the address's
@@ -150,7 +157,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 	.post('/verify-email', async (c) => {
 		const body = z.object({ token }).parse(await readJson(c));
 		const hash = parseToken(body.token);
-		if (!hash) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!hash) throw invalidLink('/auth/verify-email');
 		const account = await withoutUser(async (db) => {
 			const { rows } = await db.query<{ user_id: string | null }>(
 				"SELECT app_consume_email_token($1, 'verify') AS user_id",
@@ -166,7 +173,7 @@ export const emailAuthRoutes = new Hono<AuthEnv>()
 			);
 			return me[0] ?? null;
 		});
-		if (!account) throw ApiError.coded(400, 'link_invalid', INVALID_LINK);
+		if (!account) throw invalidLink('/auth/verify-email');
 		// The link proved the inbox: this browser signs in on its own lockout
 		// record (auth/device.ts), as after a password reset, so whoever keeps
 		// the address's shared record locked can't keep a new account out.
