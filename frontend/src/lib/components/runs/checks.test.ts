@@ -304,13 +304,19 @@ describe('catchmentTraceRows', () => {
 		expect(rows.find((r) => r.key === 'aet')!.formula).toContain('MIN(P, E)');
 	});
 
-	it('shows the exchange as 0 when X2 = 0 left no series, and each store as unknown on the first day', () => {
+	it('shows the exchange as 0 when X2 = 0 left no series, and each store as unknown on the first day of a run from before engine 1.20.0', () => {
 		const day = gr4jDay({ previousStores: { production_store: null, routing_store: null, uh_store: null } });
 		day.columns = day.columns.filter((c) => c.key !== 'exchange');
 		const rows = catchmentTraceRows(day);
 		expect(rows.find((r) => r.key === 'exchange')!.value).toBe(0);
-		expect(rows.find((r) => r.key === 'previous_routing_store')!.value).toBeNull();
+		expect(rows.find((r) => r.key === 'previous_routing_store')).toMatchObject({ value: null, formula: expect.stringMatching(/^not recorded: a run from before engine 1\.20\.0/) });
 		expect(rows[0]).toMatchObject({ key: 'previous_storage', value: 100 });
+	});
+
+	it('starts a run’s first day from each store after the warm-up (engine 1.20.0), and closes on them', () => {
+		const day = gr4jDay({ previousStores: { production_store: 80, routing_store: 15, uh_store: 5 } });
+		const rows = catchmentTraceRows(day);
+		expect(rows.find((r) => r.key === 'previous_uh_store')).toMatchObject({ value: 5, formula: 'the store at the end of the day before (on the run’s first day, after the warm-up)' });
 	});
 
 	it('lists the [Flow data] columns of a legacy run, with no stores', () => {

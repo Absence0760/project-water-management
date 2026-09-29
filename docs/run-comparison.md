@@ -533,7 +533,10 @@ Settings are compared after merging over the defaults, so an old snapshot that
 stored only some fields doesn't show false differences. Every setting the
 Settings tab edits has a readable line, including the curtailment reporting
 window, the calibration window and flow series, and the gauge-vs-logger
-thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*), and the
+thresholds (*"Data quality gauge/logger lowest ratio: 66.67% → 80%"*) and the
+other data-check limits (engine ≥ 1.20.0: *"Data quality zero-rain run CHIRPS
+check: off → on"*; a snapshot from before them compares as their defaults,
+which it ran), and the
 soil-water store (*"Soil-water store (effective rain carry-over): 25 mm → 0
 mm"*). Runs store their settings merged over the defaults, so a snapshot
 without a store size predates it (engine < 0.14.0) and compares as 0 mm, which

@@ -595,7 +595,7 @@ export function* rainSourceCsvLines(r: RunSummary['rainSource']): Generator<stri
 	}
 	yield csvRow(['Factor per month', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
 	for (const p of r.periods) yield csvRow([`${p.start} to ${p.end}`, ...WY_CALENDAR_MONTHS.map((m) => p.factors[m - 1] ?? '')]);
-	// The daily-intensity check and the quantile map (engine ≥ 1.20.0, issue #66): absent on older runs.
+	// The daily-intensity check and the quantile map (engine ≥ 1.21.0, issue #66): absent on older runs.
 	const withIntensity = r.periods.filter((p) => p.intensity);
 	if (!withIntensity.length) return;
 	yield csvRow([

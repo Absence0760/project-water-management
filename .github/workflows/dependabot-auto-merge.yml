@@ -62,6 +62,8 @@ jobs:
       # An allowlist, so it fails closed: fetch-metadata reads the ecosystem
       # from the branch name (dependabot/<ecosystem>/..., `github_actions`
       # for actions), and a name it doesn't list is left for a human.
+      # `docker` (the renderer image, .github/dependabot.yml) stays off it
+      # too; scripts/guards/check_workflows.mjs (auto-merge) refuses either.
       - name: Approve + auto-merge minor / patch
         if: >-
           contains(fromJSON('["npm_and_yarn", "pip", "docker_compose", "terraform"]'), steps.meta.outputs.package-ecosystem) &&

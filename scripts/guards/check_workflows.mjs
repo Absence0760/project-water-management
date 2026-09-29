@@ -38,6 +38,9 @@
 //              `LogResult` it returns, in any workflow. Actions logs are
 //              public (the repo is), and a function's log tail can quote an
 //              error's SQL or data; the detail belongs in CloudWatch.
+//   auto-merge dependabot-auto-merge.yml has an ecosystem allowlist, and it
+//              leaves out github_actions and docker (the renderer image:
+//              .github/dependabot.yml's docker entry). Those PRs stay manual.
 //
 // Line-based on purpose (no YAML dependency at the root): the workflows are
 // ours and 2-space indented, and the tests pin the shapes it reads.
@@ -140,6 +143,33 @@ export function pushFullProblem(jobLines) {
 	return null;
 }
 
+/** Ecosystems whose Dependabot PRs a human always merges (the auto-merge rule). */
+export const MANUAL_ECOSYSTEMS = ['github_actions', 'docker'];
+
+/**
+ * The auto-merge rule for dependabot-auto-merge.yml: its ecosystem allowlist
+ * (the `fromJSON('[...]')` compared with package-ecosystem) must exist and
+ * must leave out every MANUAL_ECOSYSTEMS entry.
+ * @param {string} text
+ * @returns {{ line?: number, message: string } | null}
+ */
+export function autoMergeProblem(text) {
+	const lines = text.split('\n');
+	const at = lines.findIndex((l) => !/^\s*#/.test(l) && /fromJSON\('\[.*\]'\).*package-ecosystem/.test(l));
+	if (at < 0) return { message: 'no ecosystem allowlist (fromJSON([...]) against package-ecosystem) found; the auto-merge step must fail closed on an allowlist' };
+	let listed;
+	try {
+		listed = JSON.parse(lines[at].match(/fromJSON\('(\[.*?\])'\)/)[1]);
+	} catch {
+		return { line: at + 1, message: 'the ecosystem allowlist is not a JSON array this guard can read' };
+	}
+	const manual = MANUAL_ECOSYSTEMS.filter((e) => listed.includes(e));
+	if (manual.length) {
+		return { line: at + 1, message: `the auto-merge allowlist includes ${manual.join(', ')}; those bumps stay manual (actions run with the repo's token; the renderer image's tag and digest move with its other Playwright pins)` };
+	}
+	return null;
+}
+
 /**
  * @param {string} file e.g. `.github/workflows/ci.yml`
  * @param {string} text
@@ -199,6 +229,11 @@ export function checkWorkflow(file, text) {
 				out.push({ file, line: i + 1, rule: 'no-cache', message: 'a deploy workflow restores a dependency cache; release builds install cold so a poisoned cache cannot reach production' });
 			}
 		});
+	}
+
+	if (file.endsWith('/dependabot-auto-merge.yml')) {
+		const problem = autoMergeProblem(text);
+		if (problem) out.push({ file, line: problem.line, rule: 'auto-merge', message: problem.message });
 	}
 
 	if (file.endsWith('/ci.yml')) {

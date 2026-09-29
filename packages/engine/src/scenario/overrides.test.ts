@@ -128,6 +128,55 @@ describe('applyScenario: each op', () => {
 		expect(nodeOf(c, 'A')!.damCurve).toHaveLength(3);
 	});
 
+	it('node.set sets a dam survey curve, so a raise can carry the enlarged dam’s own survey (engine 1.20.0)', () => {
+		const set = (id: string, field: string, value: unknown) => ({ op: 'node.set', nodeId: id, field, value }) as ScenarioOp;
+		const surveyed = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 4, areaM2: 45_000, volumeM3: 150_000 },
+			{ levelM: 9, areaM2: 80_000, volumeM3: 400_000 }
+		];
+		const c = base();
+		nodeOf(c, 'A')!.damCurve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 7, areaM2: 60_000, volumeM3: 200_000 }
+		];
+		deepFreeze(c);
+		// The raise's own survey, before or after the capacity op: kept as entered either way, not resized.
+		for (const ops of [
+			[set('A', 'damCapacityM3', 400_000), set('A', 'damCurve', surveyed)],
+			[set('A', 'damCurve', surveyed), set('A', 'damCapacityM3', 400_000)]
+		]) {
+			const r = applyScenario(c, ops);
+			expect(r.problems).toEqual([]);
+			expect(nodeOf(r.input, 'A')!.damCurve).toEqual(surveyed);
+			expect(nodeOf(r.input, 'A')!.damCapacityM3).toBe(400_000);
+		}
+		expect(applyScenario(c, [set('A', 'damCurve', surveyed), set('A', 'damCapacityM3', 400_000)]).applied[1]!.notes[0]).toMatch(/survey curve left as it is: its top is within 1 % of the new capacity/);
+		// So is the base's own curve for a change within 1 % (before 1.20.0 it was stretched by the 0.75 %).
+		const small = applyScenario(c, [set('A', 'damCapacityM3', 201_500)]);
+		expect(nodeOf(small.input, 'A')!.damCurve).toEqual(nodeOf(c, 'A')!.damCurve);
+		expect(small.applied[0]!.notes[0]).toMatch(/left as it is/);
+		// A curve set before the capacity op that fits the old capacity described the old dam, so it is resized with it (as an earlier area op is).
+		const redrawn = surveyed.map((r) => ({ ...r, volumeM3: r.volumeM3 / 2 }));
+		expect(nodeOf(applyScenario(c, [set('A', 'damCurve', redrawn), set('A', 'damCapacityM3', 100_000)]).input, 'A')!.damCurve!.at(-1)!.volumeM3).toBe(100_000);
+		// null goes back to the power law; the op is copied, so a later edit of it can't reach the scenario's input.
+		expect(nodeOf(applyScenario(c, [set('A', 'damCurve', null)]).input, 'A')!.damCurve).toBeNull();
+		const op = set('A', 'damCurve', structuredClone(surveyed));
+		const r = applyScenario(c, [op]);
+		((op as { value: { areaM2: number }[] }).value[1]!).areaM2 = 1;
+		expect(nodeOf(r.input, 'A')!.damCurve![1]!.areaM2).toBe(45_000);
+		// Rows that aren't three numbers are refused by the op check; a curve that isn't usable by the model rules.
+		expect(one(set('A', 'damCurve', [{ levelM: 0, areaM2: -1, volumeM3: 0 }])).problems[0]).toMatch(/damCurve must be up to 200 rows/);
+		expect(one(set('A', 'damCurve', [{ levelM: 0, areaM2: 1, volumeM3: 0, note: 'x' }])).problems[0]).toMatch(/damCurve must be/);
+		expect(one(set('A', 'damCurve', [surveyed[1]])).problems[0]).toMatch(/dam survey curve: a survey curve needs at least two rows/);
+		expect(one(set('B', 'damCurve', surveyed)).problems).toEqual([]);
+		expect(one(set('G', 'damCurve', surveyed)).problems[0]).toMatch(/can't be set on a gauge/);
+		// It runs: the scenario's dam fills along the survey it carries.
+		const raised = applyScenario(c, [set('A', 'damCapacityM3', 400_000), set('A', 'damCurve', surveyed)]).input;
+		expect(checkAll(raised)).toBeNull();
+		expect(runModel(raised).summary.warnings.join(' ')).not.toMatch(/survey/);
+	});
+
 	it('node.set rejects a missing node, a field the kind lacks and an out-of-range value', () => {
 		expect(one({ op: 'node.set', nodeId: 'nope', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/op 1 \(node\.set\): node nope not found/);
 		expect(one({ op: 'node.set', nodeId: 'G', field: 'damCapacityM3', value: 1 }).problems[0]).toMatch(/can't be set on a gauge/);

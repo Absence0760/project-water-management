@@ -29,7 +29,7 @@
 // settings.chirpsFitPeriod (engine ≥ 0.29.0, ./rain.ts); the run warning then
 // names the range whose factors filled each gap.
 import { toEpochDay, waterYearLabel, waterYearOf } from './calendar';
-import { defaultZeroRainSettings, type DailySeries, type SeriesKind, type ZeroRainSettings } from './project';
+import { defaultZeroRainSettings, type DailySeries, type DataQualitySettings, type SeriesKind, type ZeroRainSettings } from './project';
 import type { SeriesCheck } from './quality';
 import type { ChirpsFitRange } from './project';
 import { chirpsFitSegmentFor, fitSegmentFillText, fitSegmentName, suspectRainDays, type ChirpsCorrection, type ChirpsFitPeriodInfo } from './rain';
@@ -124,18 +124,20 @@ export function pettittP(xs: readonly number[]): number {
 /**
  * The double-mass curve of catchment rain against CHIRPS, with its breaks.
  * Shared days leave out suspect catchment rain as a run treats it
- * (suspectRainDays: listed missing periods, flagged zero runs not kept dry).
+ * (suspectRainDays: listed missing periods, flagged zero runs not kept dry,
+ * under settings.dataQuality `dq`, engine ≥ 1.20.0).
  * null without both series, or with fewer than DOUBLE_MASS_MIN_YEARS judged
  * water years.
  */
 export function doubleMass(
 	series: Partial<Record<SeriesKind, DailySeries>>,
-	zeroRain: ZeroRainSettings = defaultZeroRainSettings()
+	zeroRain: ZeroRainSettings = defaultZeroRainSettings(),
+	dq?: DataQualitySettings
 ): DoubleMass | null {
 	const sa = series.rain_catchment_mm;
 	const sb = series.rain_chirps_mm;
 	if (!sa || !sb) return null;
-	const suspect = suspectRainDays(sa, zeroRain);
+	const suspect = suspectRainDays(sa, zeroRain, [], [], { dq, chirps: sb });
 	const a0 = toEpochDay(sa.startDate);
 	const b0 = toEpochDay(sb.startDate);
 	const from = Math.max(a0, b0);

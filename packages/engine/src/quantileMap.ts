@@ -1,4 +1,4 @@
-// Empirical quantile mapping of wet-day rain (engine ≥ 1.20.0, issue #66,
+// Empirical quantile mapping of wet-day rain (engine ≥ 1.21.0, issue #66,
 // docs/model.md §2.4e *Daily intensity*, calibration-research.md §4 and
 // CR-23).
 //

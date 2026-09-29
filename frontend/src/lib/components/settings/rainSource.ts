@@ -51,7 +51,7 @@ export function withFallback(p: RainSourcePeriod, fallback: 'chirps' | 'rain_rea
 }
 
 /**
- * Turn a period's quantile map on or off (engine ≥ 1.20.0, model.md §2.4e
+ * Turn a period's quantile map on or off (engine ≥ 1.21.0, model.md §2.4e
  * *Daily intensity*). On, it maps onto the catchment series over the fit's
  * reference era (or the ten water years before the period) at the default
  * wet-day threshold.

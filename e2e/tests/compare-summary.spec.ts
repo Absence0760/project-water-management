@@ -167,6 +167,8 @@ test("Export impact report opens each what-if's report with its impact against t
 	await expect(table.getByRole('rowheader', { name: /^Dam storage, end of run/ })).toBeVisible();
 	await expect(impact.getByTestId('impact-takeaways')).toContainText(/“More orchard and a bigger dam” costs the reserve \d+ more days a year\./);
 	await expect(impact.getByText('Upper farm: dam capacity 150\u202f000 m³ → 300\u202f000 m³')).toBeVisible();
+	// The licence-impact board opens the section; two complete water years are too few for any class (impact-board.spec.ts has a long record).
+	for (const id of ['dry', 'normal', 'wet']) await expect(impact.getByTestId(`board-verdict-${id}`)).toHaveAttribute('data-verdict', 'notEnoughYears');
 	// The server PDF prints this impact report too (server-report.spec.ts renders one).
 	await expect(page.getByRole('button', { name: 'Generate PDF' })).toBeEnabled();
 	await expect(page.getByRole('button', { name: 'Email me the PDF' })).toBeEnabled();

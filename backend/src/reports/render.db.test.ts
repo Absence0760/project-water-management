@@ -54,16 +54,20 @@ const stubPage = (apiBase: string) => `<!doctype html>
 	const r = q.get('run');
 	const against = q.get('against');
 	const get = (path) => fetch(api + path, { credentials: 'include' }).then((x) => x.status);
-	const [me, run, list, cmp] = await Promise.all([
+	const baseline = against ? '/projects/' + against.split(':')[0] + '/runs/' + against.split(':')[1] : null;
+	const [me, run, list, cmp, natural, other] = await Promise.all([
 		get('/auth/me'),
 		get('/projects/' + p + '/runs/' + r),
 		get('/projects'),
-		// An impact report's one extra read: the comparison with its baseline.
-		against ? get('/compare/runs?' + new URLSearchParams({ a: against, b: p + ':' + r })) : 200
+		// An impact report's extra reads: the comparison with its baseline, and the licence-impact board's baseline series
+		// (natural_flow, ewr_shortfall), by key only: any other baseline series is refused.
+		against ? get('/compare/runs?' + new URLSearchParams({ a: against, b: p + ':' + r })) : 200,
+		baseline ? get(baseline + '/series?key=natural_flow') : 200,
+		baseline ? get(baseline + '/series?key=simulated_outflow') : 403
 	]);
 	const main = document.querySelector('main');
-	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list + ', compare ' + cmp;
-	if (me === 200 && run === 200 && list === 403 && cmp === 200) main.setAttribute('data-report-ready', 'true');
+	document.getElementById('s').textContent = 'me ' + me + ', run ' + run + ', project list ' + list + ', compare ' + cmp + ', baseline natural ' + natural + ', baseline other ' + other;
+	if (me === 200 && run === 200 && list === 403 && cmp === 200 && natural === 200 && other === 403) main.setAttribute('data-report-ready', 'true');
 	else { const a = document.createElement('div'); a.setAttribute('role', 'alert'); a.textContent = 'stub: ' + document.getElementById('s').textContent; main.prepend(a); }
 })();
 </script></body></html>`;
@@ -159,7 +163,12 @@ describe.skipIf(!minioUp)('report_render with local Chromium and MinIO', () => {
 		const status = await u.call('GET', `/projects/${projectId}/reports/${jobId}`);
 		expect(status.body.report).toMatchObject({ status: 'done', error: null, emailed: 1 });
 		expect(status.body.report.pages).toBeGreaterThanOrEqual(2);
-		const pdf = Buffer.from(await (await fetch(status.body.url)).arrayBuffer());
+		// The download route redirects to a one-minute pre-signed GET on MinIO.
+		const dl = await fetch(`${apiUrl}/projects/${projectId}/reports/${jobId}/pdf`, { headers: { cookie: u.cookie }, redirect: 'manual' });
+		expect(dl.status).toBe(302);
+		const got = await fetch(dl.headers.get('location')!);
+		expect(got.headers.get('content-disposition')).toMatch(/^attachment; filename="rendered-catchment-report-\d{4}-\d{2}-\d{2}\.pdf"$/);
+		const pdf = Buffer.from(await got.arrayBuffer());
 		expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
 		expect(pdf.toString('latin1').match(/\/Type\s*\/Page\b(?!s)/g)?.length).toBe(status.body.report.pages);
 		// The render token was used up.

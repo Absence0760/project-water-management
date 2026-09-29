@@ -1,4 +1,4 @@
-// The pure quantile mapper (./quantileMap.ts, engine ≥ 1.20.0, issue #66).
+// The pure quantile mapper (./quantileMap.ts, engine ≥ 1.21.0, issue #66).
 import { describe, expect, it } from 'vitest';
 import { heavyDayShare, mapWetDay, QUANTILE_POINTS, quantileMapValue, quantileTable, rescaleToTotal } from './quantileMap';
 

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { pinProblems, readPins } from './check_playwright_pins.mjs';
+import { imageProblems, pinProblems, readPins } from './check_playwright_pins.mjs';
 
 const DIGEST = '@sha256:' + 'a'.repeat(64);
 
@@ -63,4 +63,53 @@ test('the repo itself passes', () => {
 	const pins = readPins((path) => readFileSync(join(root, path), 'utf8'));
 	assert.equal(pins.length, 6);
 	assert.deepEqual(pinProblems(pins), []);
+});
+
+const PINNED_IMAGE = `FROM mcr.microsoft.com/playwright:v1.63.0-noble${DIGEST} AS deps
+# apt-get install -y unpinned-in-a-comment
+ARG APT_SNAPSHOT=20260928T000000Z
+RUN apt-get update --snapshot "$APT_SNAPSHOT" \\
+	&& apt-get install --snapshot "$APT_SNAPSHOT" -y --no-install-recommends \\
+		g++=4:13.2.0-7ubuntu1 \\
+		xz-utils=5.6.1+really5.4.5-1ubuntu0.3 \\
+	&& rm -rf /var/lib/apt/lists/*
+FROM mcr.microsoft.com/playwright:v1.63.0-noble${DIGEST}
+USER pwuser
+`;
+
+test('a digest-pinned base and snapshot-pinned apt packages pass (positive control)', () => {
+	assert.deepEqual(imageProblems(PINNED_IMAGE), []);
+});
+
+test('a literal snapshot id passes as well as the build arg', () => {
+	assert.deepEqual(imageProblems(PINNED_IMAGE.replaceAll('"$APT_SNAPSHOT"', '20260928T000000Z')), []);
+	assert.deepEqual(imageProblems(PINNED_IMAGE.replaceAll('"$APT_SNAPSHOT"', '${APT_SNAPSHOT}')), []);
+});
+
+test('a FROM without a digest is refused', () => {
+	const problems = imageProblems(PINNED_IMAGE.replace(`noble${DIGEST}\nUSER`, 'noble\nUSER'));
+	assert.deepEqual(problems, ['backend/renderer.Dockerfile:9: FROM without an @sha256 digest (keep the tag beside it: image:tag@sha256:…)']);
+});
+
+test('an unpinned apt package is refused, each one named', () => {
+	const problems = imageProblems(
+		PINNED_IMAGE.replace('g++=4:13.2.0-7ubuntu1', 'g++').replace('xz-utils=5.6.1+really5.4.5-1ubuntu0.3', 'xz-utils')
+	);
+	assert.deepEqual(problems, [
+		'backend/renderer.Dockerfile:4: apt package g++ is not pinned to an exact version (pkg=version)',
+		'backend/renderer.Dockerfile:4: apt package xz-utils is not pinned to an exact version (pkg=version)'
+	]);
+});
+
+test('apt-get update or install from the live archive is refused', () => {
+	const refused = (text, verb) => assert.match(imageProblems(text).join('\n'), new RegExp(`apt-get ${verb} without --snapshot`));
+	refused(PINNED_IMAGE.replace('apt-get update --snapshot "$APT_SNAPSHOT"', 'apt-get update'), 'update');
+	refused(PINNED_IMAGE.replace('apt-get install --snapshot "$APT_SNAPSHOT"', 'apt-get install'), 'install');
+	refused(PINNED_IMAGE.replace('ARG APT_SNAPSHOT=20260928T000000Z', 'ARG APT_SNAPSHOT=latest'), 'update');
+	refused(PINNED_IMAGE.replace('ARG APT_SNAPSHOT=20260928T000000Z\n', ''), 'install');
+});
+
+test('the renderer Dockerfile in the repo passes', () => {
+	const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+	assert.deepEqual(imageProblems(readFileSync(join(root, 'backend/renderer.Dockerfile'), 'utf8')), []);
 });

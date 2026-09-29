@@ -41,11 +41,12 @@ import {
 	type ChirpsFitPeriod,
 	type ChirpsFitRange,
 	type DailySeries,
+	type DataQualitySettings,
 	type SeriesKind,
 	type ZeroRainMode,
 	type ZeroRainSettings
 } from './project';
-import { rainVsChirps, usualAnnualRainMm, zeroRainRuns } from './quality';
+import { rainVsChirps, usualAnnualRainMm, zeroRainRuns, type ZeroRunOptions } from './quality';
 
 /** A calendar month's own factor needs this many days where both series have a reading … */
 export const CHIRPS_FACTOR_MIN_DAYS = 90;
@@ -226,15 +227,18 @@ export interface SuspectRainDays {
  * confirmed reading. A day of an accumulation window in `accumulations` is
  * 'accumulation', unless it is listed missing. A day of a rain-source period
  * (`replaced`, engine ≥ 0.30.0) is 'replaced' before anything else.
+ * `checks` (engine ≥ 1.20.0): settings.dataQuality and the CHIRPS series,
+ * which decide which zero runs are flagged.
  */
 export function suspectRainDays(
 	catchment: DailySeries | undefined,
 	zr: ZeroRainSettings,
 	accumulations: AccumulationSpans = [],
-	replaced: AccumulationSpans = []
+	replaced: AccumulationSpans = [],
+	checks: ZeroRunOptions = {}
 ): SuspectRainDays {
 	const runs = catchment
-		? zeroRainRuns(catchment).runs.map((r) => ({ start: r.startDate, end: r.endDate, from: toEpochDay(r.startDate), to: toEpochDay(r.endDate) }))
+		? zeroRainRuns(catchment, checks).runs.map((r) => ({ start: r.startDate, end: r.endDate, from: toEpochDay(r.startDate), to: toEpochDay(r.endDate) }))
 		: [];
 	const span = (r: ExclusionRange) => [toEpochDay(r.start), toEpochDay(r.end)] as const;
 	const missing = exclusionRanges(zr.missing).map(span);
@@ -316,6 +320,12 @@ export interface ChirpsFitOptions {
 	 * every fit, like a missing period's.
 	 */
 	replaced?: AccumulationSpans;
+	/**
+	 * settings.dataQuality (engine ≥ 1.20.0): the zero-run and low-vs-CHIRPS
+	 * limits decide which days and years the fit leaves out. The defaults
+	 * without it.
+	 */
+	dq?: DataQualitySettings;
 }
 
 type SegmentPlan = Pick<ChirpsFitSegment, 'fromWaterYear' | 'toWaterYear' | 'reason' | 'fillFrom' | 'fillTo'>;
@@ -380,8 +390,8 @@ export function chirpsBiasFactors(
 	if (!sb) return null;
 	const sa = series.rain_catchment_mm;
 	// The low-vs-CHIRPS years are judged without the replaced days (engine ≥ 0.30.0): a replaced era far below CHIRPS mustn't take the rest of its water years out too.
-	const lowYears = sa ? (rainVsChirps(withoutReplaced(series, opts.replaced))?.flaggedYears ?? []) : [];
-	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced);
+	const lowYears = sa ? (rainVsChirps(withoutReplaced(series, opts.replaced), opts.dq)?.flaggedYears ?? []) : [];
+	const suspect = suspectRainDays(sa, zeroRain, accumulations, opts.replaced, { dq: opts.dq, chirps: sb });
 	const b0 = toEpochDay(sb.startDate);
 
 	// Shared days (both a reading) outside the low-vs-CHIRPS years, with their
@@ -853,7 +863,9 @@ export interface ZeroRainMask {
  * as part of a flagged run: the window's own total covers it. A day
  * `replaced(day)` says is in a rain-source period (engine ≥ 0.30.0,
  * ./rainSourcePeriods.ts) is set aside by neither a flagged run nor a listed
- * missing period: the period's own series gives its rain.
+ * missing period: the period's own series gives its rain. `checks` is
+ * settings.dataQuality and the CHIRPS series (engine ≥ 1.20.0), which decide
+ * which zero runs are flagged (quality.ts zeroRainRuns).
  */
 export function zeroRainMask(
 	catchment: DailySeries | undefined,
@@ -861,7 +873,8 @@ export function zeroRainMask(
 	start: number,
 	days: number,
 	claimed: (day: number) => boolean = () => false,
-	replaced: (day: number) => boolean = () => false
+	replaced: (day: number) => boolean = () => false,
+	checks: ZeroRunOptions = {}
 ): ZeroRainMask | null {
 	if (!catchment) return null;
 	const c0 = toEpochDay(catchment.startDate);
@@ -893,7 +906,7 @@ export function zeroRainMask(
 		if (period.days > 0) periods.push(period);
 	};
 
-	for (const run of zeroRainRuns(catchment).runs) {
+	for (const run of zeroRainRuns(catchment, checks).runs) {
 		const span = inRun(toEpochDay(run.startDate), toEpochDay(run.endDate));
 		if (!span) continue;
 		if (zr.mode === 'asRecorded') {
