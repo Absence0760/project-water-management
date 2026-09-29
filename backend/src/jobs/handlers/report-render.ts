@@ -34,6 +34,7 @@ import { JobError } from '../errors.js';
 import { enqueueJob } from '../queue.js';
 import { defineHandler } from '../registry.js';
 import { type RenderRequestMessage, RenderResult, reportRenderer, sendToQueue } from '../transport.js';
+import { logEvent } from '../../logging/logEvent.js';
 
 /**
  * Production's retry of a render the renderer Lambda answered with a
@@ -125,9 +126,7 @@ export const reportRenderHandler = defineHandler({
 			console.error(`report ${report.id}: storing the PDF failed:`, (err as Error).message);
 			throw new JobError('the PDF could not be stored (is object storage running? `pnpm dev:s3:up`)');
 		}
-		console.log(
-			JSON.stringify({ event: 'report_rendered', reportId: report.id, projectId: job.projectId, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms })
-		);
+		logEvent('info', { event: 'report_rendered', reportId: report.id, projectId: job.projectId, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms });
 		await finishReport(db, report, { pages: rendered.pages, bytes: rendered.pdf.length });
 	}
 });

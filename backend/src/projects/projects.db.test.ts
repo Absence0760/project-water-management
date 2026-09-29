@@ -2,6 +2,7 @@ import { defaultDataQualitySettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { localDate } from './timeZone.js';
 
 async function projectWithModel(owner: Awaited<ReturnType<typeof signUp>>, name = 'Catchment A') {
 	const { body } = await owner.call('POST', '/projects', { name });
@@ -82,6 +83,25 @@ describe('projects', () => {
 		// Positive control: a value after the blanks moves it.
 		expect((await u.call('POST', `/projects/${projectId}/series/merge`, { kind: 'rain_chirps_mm', unit: 'mm', startDate: '2020-10-14', values: [0] })).status).toBe(200);
 		expect((await find()).dataUntil).toBe('2020-10-14');
+	});
+
+	it('lists each project with its own calendar day, in its time zone, for the list to count data age to (issue #137)', async () => {
+		const u = await signUp('Zones');
+		const ahead = (await u.call('POST', '/projects', { name: 'Ahead' })).body.project.id as string;
+		const behind = (await u.call('POST', '/projects', { name: 'Behind' })).body.project.id as string;
+		// UTC+14 and UTC−11: 25 hours apart, so their calendar days always differ.
+		expect((await u.call('PATCH', `/projects/${ahead}`, { timeZone: 'Pacific/Kiritimati' })).status).toBe(200);
+		expect((await u.call('PATCH', `/projects/${behind}`, { timeZone: 'Pacific/Pago_Pago' })).status).toBe(200);
+		const before = new Date();
+		const list = (await u.call('GET', '/projects')).body.projects as { id: string; today: string }[];
+		const after = new Date();
+		const today = (id: string) => list.find((p) => p.id === id)!.today;
+		// Positive control: each row carries a date, and it is that project's, not the server's.
+		expect([localDate(before, 'Pacific/Kiritimati'), localDate(after, 'Pacific/Kiritimati')]).toContain(today(ahead));
+		expect([localDate(before, 'Pacific/Pago_Pago'), localDate(after, 'Pacific/Pago_Pago')]).toContain(today(behind));
+		expect(today(ahead)).not.toBe(today(behind));
+		// The single-project endpoint carries it too.
+		expect([localDate(before, 'Pacific/Kiritimati'), localDate(new Date(), 'Pacific/Kiritimati')]).toContain((await u.call('GET', `/projects/${ahead}`)).body.project.today);
 	});
 
 	it('merges settings patches over defaults and drops keys the schema does not name', async () => {

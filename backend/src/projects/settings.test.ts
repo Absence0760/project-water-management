@@ -1221,28 +1221,14 @@ describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
 		const storedRules = { ...rules, revision: 2 };
 		const stored = { ...base, calibrationRules: storedRules };
 
-		it('stores an automated fit that ran under the saved rules', () => {
-			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(storedRules) })).toBeNull();
+		it('refuses any new automated fit a client sends: the server writes those itself, however good the record looks', () => {
+			for (const rec of [fit(storedRules), fit(rules), fit(storedRules, { ...params, x1: 900 })]) {
+				expect(autoFitRecordError(stored, { ...stored, fitRecord: rec })).toBe(
+					'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly'
+				);
+			}
 			// A fit a person chose is never refused.
 			expect(autoFitRecordError(stored, { ...stored, fitRecord: { ...fit(storedRules)!, auto: undefined } })).toBeNull();
-		});
-
-		it('refuses one that ran under another revision, and a rule change saved with the fit', () => {
-			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(rules) })).toBe(
-				'this automated fit ran under calibration rules revision 1, but the saved rules are revision 2: run it again under the saved rules'
-			);
-			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit({ ...storedRules, selection: { test: 'split', score: 'kgePrime' } }) })).toBe(
-				'this automated fit ran under other calibration rules than the saved revision 2 (their content or sign-off differs): run it again under the saved rules'
-			);
-			expect(
-				autoFitRecordError(stored, { ...stored, calibrationRules: { ...storedRules, revision: 3, exclusions: { maxFlaggedShare: 0.5 } }, fitRecord: fit(storedRules) })
-			).toContain('save the calibration rule change first');
-		});
-
-		it('refuses a record whose parameters aren’t the kept case’s', () => {
-			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(storedRules, { ...params, x1: 900 }) })).toBe(
-				'the fit record’s parameters are not those of the case the calibration rules kept'
-			);
 		});
 
 		it('checks an imported automated fit against the file’s own rules', () => {
@@ -1254,9 +1240,12 @@ describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
 			expect(importedAutoFitError({ fitRecord: null })).toBeNull();
 		});
 
-		it('never refuses a stored fit a save leaves as it was, even after the rules moved on', () => {
+		it('never refuses a stored fit a save carries back as it was, even with its keys in another order or the rules moved on', () => {
 			const old = { ...stored, calibrationRules: { ...rules, revision: 3 }, fitRecord: fit(storedRules) };
 			expect(autoFitRecordError(old, { ...old })).toBeNull();
+			const auto = old.fitRecord!.auto!;
+			const reordered = { ...old.fitRecord!, auto: Object.fromEntries(Object.entries(auto).reverse()) as typeof auto };
+			expect(autoFitRecordError(old, { ...old, fitRecord: reordered })).toBeNull();
 		});
 	});
 });

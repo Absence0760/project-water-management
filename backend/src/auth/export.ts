@@ -95,6 +95,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'scenario.owner_user_id': { excluded: 'the project’s scenario; scenario.created is in auditEvents' },
 	'scenario_member.added_by': { excluded: 'people the person added to a scenario; its maker only' },
 	'scenario_sweep.created_by': { excluded: 'the project’s scenario sweep; its maker only' },
+	'auto_calibration.created_by': { excluded: 'the project’s run of its calibration rules; who asked only' },
+	'auto_calibration.applied_by': { excluded: 'the project’s run of its calibration rules; who applied its fit only' },
 	'seasonal_outlook.created_by': { excluded: 'the project’s seasonal outlook; its maker only' },
 	'series_revision.created_by': { excluded: 'the project’s series history; its maker only' },
 	'share_link.created_by': { excluded: 'the project’s share link; share_link.created is in auditEvents; never the token' },

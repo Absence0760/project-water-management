@@ -41,10 +41,15 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await page.getByLabel(/^Run label/).fill('Pumping');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Pumping' })).toBeVisible();
-	await expect(page.getByRole('heading', { level: 3, name: 'Groundwater' })).toBeVisible();
+	// The run warns about the calibration record measured while they pumped.
+	await expect(page.getByText(/boreholes that deplete the river/).first()).toBeAttached();
+	// The table is on Units & supply's Other uses (issue #137), linked from the Summary.
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	const uses = page.getByRole('region', { name: 'Other uses of water' });
+	await expect(uses.getByRole('heading', { level: 3, name: 'Groundwater' })).toBeVisible();
 	// One table (issue #175): the daily-mean one's share of supplied and stream depletion are columns of the annual table.
-	await expect(page.locator('table.groundwater')).toHaveCount(0);
-	const table = page.locator('table.groundwater-annual');
+	await expect(uses.locator('table.groundwater')).toHaveCount(0);
+	const table = uses.locator('table.groundwater-annual');
 	await expect(table.getByRole('columnheader')).toContainText(['Hydrological unit or user', 'Mean pumped', 'Share of supplied', 'Stream depletion', 'Most in a year']);
 	const row = table.getByRole('row', { name: /^Upper farm/ });
 	await expect(row).toBeVisible();
@@ -56,8 +61,6 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	const depleted = ungroup(await row.getByRole('cell').nth(2).innerText());
 	expect(depleted).toBeGreaterThan(0);
 	expect(depleted).toBeLessThanOrEqual(pumped);
-	// The run warns about the calibration record measured while they pumped.
-	await expect(page.getByText(/boreholes that deplete the river/).first()).toBeAttached();
 });
 
 test('add an individual borehole with an annual cap, run, and read its use per water year against the cap (WP-3.9)', async ({ page, owner }) => {
@@ -102,9 +105,11 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await page.getByLabel(/^Run label/).fill('Capped');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Capped' })).toBeVisible();
-	await expect(page.getByRole('heading', { level: 4, name: 'Groundwater by water year' })).toBeVisible();
-	await expect(page.getByTestId('gw-annual-note')).toContainText('never decides whether a use is lawful');
-	const row = page.locator('table.groundwater-annual').getByRole('row', { name: /^Upper farm/ });
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	const uses = page.getByRole('region', { name: 'Other uses of water' });
+	await expect(uses.getByRole('heading', { level: 4, name: 'Groundwater by water year' })).toBeVisible();
+	await expect(uses.getByTestId('gw-annual-note')).toContainText('never decides whether a use is lawful');
+	const row = uses.locator('table.groundwater-annual').getByRole('row', { name: /^Upper farm/ });
 	await expect(row).toBeVisible();
 	// The cap column shows the borehole's 20 000 m³/a; no year pumps more than it. (Share of supplied and stream
 	// depletion come first, after the mean: the daily-mean table's columns, merged in, issue #175.)

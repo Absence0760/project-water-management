@@ -33,7 +33,7 @@ const record = (messageId: string, body: unknown) => ({ messageId, body: typeof 
 describe('renderer Lambda', () => {
 	it('renders, stores under the derived key, and answers with the outcome only (never the token)', async () => {
 		vi.stubEnv('RENDER_RESULTS_QUEUE_URL', 'https://sqs.example/render-results');
-		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		const log = vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF-1.7 x'), pages: 9, ms: 4200 });
 		const res = await handler({ Records: [record('m1', request)] } as never);
 		expect(res).toEqual({ batchItemFailures: [] });
@@ -46,7 +46,7 @@ describe('renderer Lambda', () => {
 	});
 
 	it('answers a failed render as a failure (its token is spent: no SQS retry)', async () => {
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockRejectedValueOnce(new RenderError('the render took longer than 90 s'));
 		const res = await handler({ Records: [record('m1', request)] } as never);
 		expect(res).toEqual({ batchItemFailures: [] });
@@ -55,7 +55,7 @@ describe('renderer Lambda', () => {
 	});
 
 	it('says only "could not be stored" when storage fails', async () => {
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
 		putPdf.mockRejectedValueOnce(new Error('AccessDenied: arn:aws:s3:::bucket/key'));
@@ -64,10 +64,43 @@ describe('renderer Lambda', () => {
 		expect(err).toHaveBeenCalled();
 	});
 
+	it('logs a failed render as report_render_failed: ids, reason and retry, never the error text (infra/reports.tf alarms on it)', async () => {
+		vi.stubEnv('RENDER_RESULTS_QUEUE_URL', 'https://sqs.example/render-results');
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		renderReportPdf.mockRejectedValueOnce(new RenderError('the render token was refused (used, expired, or the requester lost access)', { retry: false }));
+		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
+		await handler({ Records: [record('m1', request), record('m2', request)] } as never);
+		expect(warn.mock.calls).toEqual([[JSON.stringify({ event: 'report_render_failed', reportId: ids.reportId, projectId: ids.projectId, reason: 'render', retry: false })]]);
+		expect(JSON.stringify(warn.mock.calls)).not.toContain(TOKEN);
+	});
+
+	it('logs a storage failure as reason "store", and the store error by its name only', async () => {
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
+		putPdf.mockRejectedValueOnce(Object.assign(new Error('AccessDenied: arn:aws:s3:::bucket/key'), { name: 'AccessDenied' }));
+		await handler({ Records: [record('m1', request)] } as never);
+		expect(warn).toHaveBeenCalledWith(JSON.stringify({ event: 'report_render_failed', reportId: ids.reportId, projectId: ids.projectId, reason: 'store', retry: true }));
+		expect(err).toHaveBeenCalledWith(JSON.stringify({ event: 'report_store_failed', reportId: ids.reportId, error: 'AccessDenied' }));
+		expect(JSON.stringify(err.mock.calls)).not.toContain('arn:aws');
+	});
+
+	it('logs no report_render_failed line while the answer is still being retried', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		renderReportPdf.mockRejectedValueOnce(new RenderError('the render took longer than 90 s'));
+		sendToQueue.mockRejectedValueOnce(new Error('RENDER_RESULTS_QUEUE_URL is not set'));
+		const res = await handler({ Records: [record('m1', request)] } as never);
+		expect(res).toEqual({ batchItemFailures: [{ itemIdentifier: 'm1' }] });
+		expect(warn).not.toHaveBeenCalled();
+	});
+
 	it('drops a request it cannot parse, and retries only a failed answer', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		vi.spyOn(console, 'error').mockImplementation(() => {});
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValue({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
 		sendToQueue.mockRejectedValueOnce(new Error('RENDER_RESULTS_QUEUE_URL is not set'));
 		const res = await handler({ Records: [record('m0', 'garbage'), record('m1', { ...request, token: 'short' }), record('m2', request), record('m3', request)] } as never);

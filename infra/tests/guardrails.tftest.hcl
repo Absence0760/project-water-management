@@ -25,7 +25,8 @@ mock_provider "aws" {
   }
   mock_data "aws_availability_zones" {
     defaults = {
-      names = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      names    = ["af-south-1a", "af-south-1b", "af-south-1c"]
+      zone_ids = ["afs1-az1", "afs1-az2", "afs1-az3"]
     }
   }
   mock_data "aws_caller_identity" {
@@ -1441,8 +1442,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "80" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "An $80 monthly budget exists by default (above af-south-1's ~$58–63 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "90" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $90 monthly budget exists by default (above af-south-1's ~$59–64 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1457,9 +1458,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "6"
+      aws_budgets_budget.daily[0].limit_amount == "7"
     )
-    error_message = "A $6/day budget (ceil(80 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $7/day budget (ceil(90 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1481,14 +1482,19 @@ run "alarms" {
   }
   assert {
     condition = (
-      length(data.aws_iam_policy_document.alerts_publish.statement) == 1 &&
+      # Three statements: CloudWatch alarms (here), RDS events (AllowRdsEvents,
+      # pinned in data.tftest.hcl's db_events run) and the database KMS key
+      # alarm's EventBridge rule (AllowEventBridgeKmsKeyAlarm, pinned in
+      # kms.tftest.hcl; only with rds_customer_managed_key, the default).
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 3 &&
+      data.aws_iam_policy_document.alerts_publish.statement[1].sid == "AllowRdsEvents" &&
       one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
       toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
         "StringEquals|aws:SourceAccount|000000000000",
         "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
       ])
     )
-    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn); Budgets no longer publish there."
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn), this instance's RDS events and the KMS key alarm's rule; Budgets no longer publish there."
   }
   assert {
     condition = {
@@ -1529,7 +1535,7 @@ run "alarms" {
     error_message = "Self-check failures must be counted from both log groups: the API's (user runs) and the worker's (automatic re-runs, forecast runs)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.event = \"self_check_failed\" }"
+    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.message.event = \"self_check_failed\" }"
     error_message = "The filter must match executeRun's structured event name exactly."
   }
   assert {
@@ -1570,7 +1576,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "90"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1647,7 +1653,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 80
+    budget_daily_usd = 90
   }
   expect_failures = [var.budget_daily_usd]
 }
@@ -1730,11 +1736,13 @@ run "background_jobs" {
   assert {
     condition = (
       startswith(local.runtime_secrets.worker.DATABASE_URL, "postgresql://water_app:") &&
-      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full") &&
-      aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
+      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full")
     )
-    error_message = "The worker connects as the RLS-bound water_app over verified TLS, with the sqs transport."
+    error_message = "The worker connects as the RLS-bound water_app over verified TLS."
+  }
+  assert {
+    condition     = length(setintersection(keys(aws_lambda_function.worker.environment[0].variables), ["JOB_TRANSPORT", "JOBS_QUEUE_URL"])) == 0
+    error_message = "The worker never wakes itself (it may not send to the jobs queue): only the API gets JOB_TRANSPORT and JOBS_QUEUE_URL."
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.worker.environment[0].variables), "MASTER_SECRET_ARN")
@@ -1807,8 +1815,8 @@ run "background_jobs" {
 
   # --- Alarms -----------------------------------------------------------------------
   assert {
-    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && aws_cloudwatch_metric_alarm.jobs_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.jobs_dlq.name
-    error_message = "DLQ depth > 0 must alarm."
+    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && one([for m in aws_cloudwatch_metric_alarm.jobs_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.jobs_dlq.name
+    error_message = "A new message in the jobs DLQ must alarm (the arrival expression: observability.tftest.hcl)."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
@@ -1838,7 +1846,7 @@ run "background_jobs" {
     error_message = "EventBridge failing to deliver the worker tick must alarm (FailedInvocations > 0 on the worker-tick rule)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
+    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.message.event = \"job_dead\" }"
     error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
   }
 
@@ -1972,11 +1980,11 @@ run "mail_suppression" {
   # --- Alarm ------------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.mail_events_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.mail_events_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.mail_events_dlq.name &&
       aws_cloudwatch_metric_alarm.mail_events_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.mail_events_dlq_depth.alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
-    error_message = "The mail-events DLQ must alarm on depth > 0."
+    error_message = "A new message in the mail-events DLQ must alarm."
   }
 }
 
@@ -2041,8 +2049,8 @@ run "data_feeds" {
     error_message = "The fetcher's role reaches the two feed queues only: receive fetch-requests, send ingest-results."
   }
   assert {
-    condition     = aws_iam_role_policy_attachment.fetcher_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-    error_message = "The fetcher gets basic logging only (no VPC or other managed policy)."
+    condition     = aws_iam_role_policy.lambda_logs["fetcher"].role == aws_iam_role.fetcher_lambda.id && !contains(keys(aws_iam_role_policy.lambda_vpc_eni), "fetcher")
+    error_message = "The fetcher logs to its own log group only, with no VPC ENI policy (iam.tf; run lambda_logs_scoped in iam.tftest.hcl pins the statement)."
   }
   assert {
     condition = (
@@ -2086,12 +2094,12 @@ run "data_feeds" {
   # --- Alarms -----------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.fetch_requests_dlq.name &&
-      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.ingest_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.threshold == 0
     )
-    error_message = "Each feed DLQ must alarm on depth > 0."
+    error_message = "A new message in either feed DLQ must alarm."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.fetcher_errors.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name
@@ -2331,8 +2339,8 @@ run "reports" {
     error_message = "The renderer may receive render-requests, send render-results and put PDFs: never read, list or delete them, nor anything else."
   }
   assert {
-    condition     = aws_iam_role_policy_attachment.renderer_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-    error_message = "The renderer gets basic logging only (no VPC, no other managed policy)."
+    condition     = aws_iam_role_policy.lambda_logs["renderer"].role == aws_iam_role.renderer_lambda.id && !contains(keys(aws_iam_role_policy.lambda_vpc_eni), "renderer")
+    error_message = "The renderer logs to its own log group only, with no VPC ENI policy (iam.tf; run lambda_logs_scoped in iam.tftest.hcl pins the statement)."
   }
   assert {
     condition = (
@@ -2372,12 +2380,12 @@ run "reports" {
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.render_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_requests_dlq.name &&
-      aws_cloudwatch_metric_alarm.render_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.render_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.render_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_results_dlq.name &&
       aws_cloudwatch_metric_alarm.render_requests_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.render_results_dlq_depth.threshold == 0
     )
-    error_message = "Each render DLQ must alarm on depth > 0."
+    error_message = "A new message in either render DLQ must alarm."
   }
 }
 
@@ -2605,13 +2613,13 @@ run "reports_renderer_created_from_its_image" {
   command = plan
 
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {
     condition = (
       aws_lambda_function.renderer[0].package_type == "Image" &&
-      aws_lambda_function.renderer[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer:0.4.0" &&
+      aws_lambda_function.renderer[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer:0.4.0-0123456789ab" &&
       aws_lambda_function.renderer[0].memory_size == 2048 &&
       aws_lambda_function.renderer[0].timeout == 120 &&
       aws_lambda_function.renderer[0].reserved_concurrent_executions == 2
@@ -2679,7 +2687,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       toset([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.log_group_name]) == toset([aws_cloudwatch_log_group.lambda.name, aws_cloudwatch_log_group.worker.name]) &&
-      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.event = \"mail_send_failed\" }"])
+      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.message.event = \"mail_send_failed\" }"])
     )
     error_message = "mail_send_failed must be counted from both the API's and the worker's log group, by the exact event name trySendMail logs."
   }
@@ -2704,7 +2712,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.event = \"unhandled_error\" }"
+      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.message.event = \"unhandled_error\" }"
     )
     error_message = "unhandled_error must be counted from the API's log group, by the exact event name handleError logs."
   }
@@ -2731,7 +2739,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.event = \"login_failed\" }"
+      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.message.event = \"login_failed\" }"
     )
     error_message = "login_failed must be counted from the API's log group, by the exact event name logLoginFailed logs (backend/src/auth/loginFailed.ts)."
   }
@@ -2841,7 +2849,7 @@ run "worker_sqs_triggers" {
 
   # Enables the renderer too, so every SQS trigger in the stack is planned.
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {

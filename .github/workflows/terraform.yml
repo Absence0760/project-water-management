@@ -2,10 +2,11 @@ name: Terraform
 
 # Guards infra/ (estate standard: threkir's and feohledger's terraform.yml):
 #   1. `terraform fmt -check -recursive`, so the diff is the real change.
-#   2. `terraform validate` (init -backend=false, a local-backend override),
+#   2. `terraform validate` (init -backend=false, a local-backend override in
+#      a private copy of infra/, never infra/ itself),
 #      credential-free.
 #   3. `terraform test`: plan-only runs against mocked providers
-#      (infra/tests/guardrails.tftest.hcl), also credential-free. This is the
+#      (infra/tests/*.tftest.hcl), also credential-free. This is the
 #      plan CI can run: it pins IAM, the OIDC trust postcondition, RDS privacy,
 #      the CloudFront wiring, WAF, SES, alarms and the budget.
 #   4. Trivy config scan (Terraform and the renderer Dockerfile) for

@@ -6,7 +6,8 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
+	import { projectToday } from '$lib/components/projects/freshness';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -202,7 +203,8 @@
 	const runFarms = $derived(shown?.summary.farms ?? []);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 
-	const today = localIsoDate();
+	// The project's calendar date, as in the header and on the project list (issue #137).
+	const today = $derived(projectToday(project.timeZone));
 	const attentionItems = $derived(
 		attention({
 			model: editor.model,

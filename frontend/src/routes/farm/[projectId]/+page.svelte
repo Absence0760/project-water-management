@@ -16,7 +16,7 @@
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import { outlookCard } from '$lib/components/farm/outlookCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
-	import { farmToday } from '$lib/components/farm/numbers';
+	import { decimalMark, farmToday } from '$lib/components/farm/numbers';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
 	import FarmAlerts from '$lib/components/farm/FarmAlerts.svelte';
 	import FarmNotes from '$lib/components/farm/FarmNotes.svelte';
@@ -29,7 +29,7 @@
 	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
-	import { withNoteLine } from '$lib/components/farm/csvNote';
+	import { farmCsvForReader } from '$lib/components/farm/csvNote';
 	import { farmHref } from '$lib/components/farm/load';
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { errorText } from '$lib/i18n/apiError';
@@ -69,14 +69,16 @@
 	});
 	const href = (sub: string) => farmHref(base, projectId, farm.nodeId, several || !!asked, sub);
 
-	// The CSV goes through fetch so the farm disclaimer, in the reader's language, leads the file (csvNote.ts).
+	// The CSV goes through fetch so the farm disclaimer and the column names come in the reader's language,
+	// laid out for their spreadsheet (csvNote.ts, issue #124).
 	let csvError = $state('');
 	async function downloadCsv(e: MouseEvent, url: string) {
 		e.preventDefault();
 		csvError = '';
 		try {
 			const { blob, filename } = await fetchDownload(url);
-			saveBlob(new Blob([withNoteLine(await blob.text(), disclaimer())], { type: 'text/csv;charset=utf-8' }), filename);
+			const text = farmCsvForReader(await blob.text(), { note: disclaimer(), column: (words) => t(words), decimalMark: decimalMark() });
+			saveBlob(new Blob([text], { type: 'text/csv;charset=utf-8' }), filename);
 		} catch (err) {
 			csvError = errorText(err);
 		}

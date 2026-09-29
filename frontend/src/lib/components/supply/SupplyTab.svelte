@@ -40,8 +40,10 @@
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
-	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
+	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { hasHumanImpacts, loadHumanImpacts, usersTableOnSupply } from '$lib/components/runs/humanImpacts';
 
 	let {
 		projectId,
@@ -164,6 +166,10 @@
 
 	// --- the cards, the tiles and the header line ---
 	const summary = $derived(run?.summary ?? null);
+	// The run's other uses of water (issue #137): land cover, boreholes, demand objects, and other
+	// users unless the curtailment table lists them already (one copy on the page).
+	const otherUsers = $derived(summary ? usersTableOnSupply(summary) : false);
+	const otherUses = $derived(summary ? hasHumanImpacts(summary, otherUsers) : false);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 	const names = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.name] as [string, string])));
 	const nodeOrder = $derived(new Map(editor.model.nodes.map((n, i) => [n.id, i] as [string, number])));
@@ -310,7 +316,7 @@
 				{:else}
 					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
 					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={SUPPLY_NAV} label="Hydrological units sections" groupNames />
+					<SectionNav groups={supplyNav(otherUses)} label="Hydrological units sections" groupNames />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
@@ -407,6 +413,16 @@
 					<section class="panel" id="res-assurance">
 						<AssurancePanel assurance={summary.supplyAssurance} engineVersion={run.engineVersion} />
 					</section>
+					{#if otherUses}
+						<!-- Land cover, groundwater, demand objects and other users: once under the run Summary with no menu entry (issue #137). -->
+						<section class="panel" id="res-other-uses" aria-label="Other uses of water">
+							<Lazy load={loadHumanImpacts}>
+								{#snippet children(HumanImpactTables)}
+									<HumanImpactTables {summary} users={otherUsers} />
+								{/snippet}
+							</Lazy>
+						</section>
+					{/if}
 				{/if}
 			{/if}
 		</LoadState>
