@@ -112,7 +112,7 @@ export function releaseToday(r: PlanRelease, calendarMonth: number, inflow: numb
 
 /**
  * A fixed release's floor before the day's inflow and transfers are known
- * (engine ≥ 1.28.0): releaseToday with `held` (the dam after the day's
+ * (engine ≥ 1.29.0): releaseToday with `held` (the dam after the day's
  * rain, evaporation and seepage, less what it has sent so far) as all it
  * has; a transfer's room into the dam counts it. For a dam that only
  * receives, the day's release is at least this (inflow and water

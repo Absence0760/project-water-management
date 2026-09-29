@@ -2189,7 +2189,7 @@ role and not before it.
         and override mode records a table edit of the curve, after the
         capacity op when the dam is raised with it (scenarios.md § Dam
         capacity).
-      - ~~*Transfer room ignores today's release*~~: done (engine 1.28.0,
+      - ~~*Transfer room ignores today's release*~~: done (engine 1.29.0,
         issue #67): the room counts a fixed release's floor, the release
         with no inflow and nothing transferred in (`fixedReleaseFloor`,
         model.md §2.6). A pass-inflow release stays uncounted: it is at most
