@@ -28,6 +28,8 @@ export interface NotesWords {
 	delete: string;
 	/** Visually hidden after Edit / Delete: " note from 2026-09-26 14:05". */
 	noteFrom: (date: string) => string;
+	/** The delete question's heading (the app's confirm dialog); confirmDelete is its detail. */
+	deleteTitle: string;
 	confirmDelete: (n: Pick<Note, 'mine' | 'author'>) => string;
 	add: string;
 	plainText: string;
@@ -56,6 +58,7 @@ export const NOTES_EN: NotesWords = {
 	edit: 'Edit',
 	delete: 'Delete',
 	noteFrom: (date) => ` note from ${date}`,
+	deleteTitle: 'Delete this note?',
 	confirmDelete: (n) => `Delete ${n.mine ? 'your note' : `${n.author ?? 'this person'}’s note`}? It is hidden from everyone; editors keep it in the audit trail.`,
 	add: 'Add a note',
 	plainText: 'Plain text.',

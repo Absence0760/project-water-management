@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -252,7 +253,13 @@
 	}
 
 	async function remove(p: ProjectSummary) {
-		if (!confirm(`Delete project "${p.name}"? Its model, time series and runs are removed permanently.`)) return;
+		const ok = await confirmDialog({
+			title: `Delete project “${p.name}”?`,
+			message: 'Its model, time series and runs are removed permanently.',
+			confirmLabel: 'Delete project',
+			danger: true
+		});
+		if (!ok) return;
 		actionError = null;
 		try {
 			await api.projects.remove(p.id);

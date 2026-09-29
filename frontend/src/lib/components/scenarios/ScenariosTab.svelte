@@ -25,6 +25,8 @@
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate } from '$lib/format/number';
 	import { withParam, withoutParam } from '$lib/workspace/overlays';
+	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { leavesScenariosTab } from './leaves';
 	import ScenarioEditor from './ScenarioEditor.svelte';
 	import { scenariosSummary } from './summary';
 
@@ -216,6 +218,12 @@
 		if (want && untrack(() => bases).some((r) => r.id === want)) newBase = want;
 		createError = null;
 		void tick().then(() => document.getElementById('new-scenario-name')?.focus());
+	});
+	// A name typed into the open dialog is unsaved work: leaving the tab asks first (lib/nav/leaveGuard.ts).
+	guardUnsaved({
+		dirty: () => createOpen && !!newName.trim(),
+		what: () => (applicant ? 'a new application not yet created' : 'a new scenario not yet created'),
+		leaves: leavesScenariosTab
 	});
 	const newHref = $derived(withParam(page.url, 'new', '1'));
 	const newLabel = $derived(applicant ? 'New application' : 'New scenario');

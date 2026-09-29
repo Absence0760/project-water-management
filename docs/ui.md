@@ -456,8 +456,49 @@ while open (`stripTabs`), and the Summary's checklist still links to it (it
 gets the role's tabs, not yours).
 
 The model tabs (Network, Crops, Transfers) edit one in-memory model
-(`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.
-Settings has its own save button, which sits above that bar.
+(`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom
+(`model/SaveBar.svelte`). The Project page's details (name, description,
+time zone, WUA name; issue #162 item 12) go through the same bar: the page
+holds them (`project/detailsDraft.svelte.ts`), so they survive a tab change,
+and **Save changes** saves whatever is unsaved (the details, then the
+model), **Discard** puts both back. The bar says what is unsaved ("Unsaved
+changes to the project details", "… to the model and the project
+details"; its region is named *Unsaved project details* while only the
+details are), and an empty name or time zone blocks it with the reason. The
+optional reason field shows only with model edits (it goes into History with
+them). Every other card on the Project page acts at once. Settings has its
+own save button, which sits above that bar.
+
+**Leaving with unsaved changes** (issue #162 items 11 and 13;
+`lib/nav/unsaved.ts`, `lib/nav/leaveGuard.ts`). Unsaved work registers
+itself while it is on screen (`guardUnsaved`): the model's edits and the
+project details (the workspace page), override mode's unrecorded edits, a
+half-filled **Add a change** form or a typed but unsaved scenario rename,
+and a name typed into the **New scenario** dialog. A navigation that would
+drop any of it (another page for the page-level work; another tab or
+scenario for a scenario's) is cancelled and the app's own dialog asks,
+naming what is unsaved and where the link goes: "You have unsaved changes
+(model edits). Leave and go to All projects? They will be lost."
+(`lib/nav/destination.ts` names the sidebar's pages, a section as "the
+Network page", another scenario or project). **Stay** (focused first, and
+Esc) keeps everything; **Leave without saving** makes the navigation again,
+let through once; Back and Forward are retaken the same way. A tab change
+within the project keeps the page's own edits and doesn't ask. Only closing
+the tab or reloading shows the browser's own "Leave site?" box, which no
+page can restyle.
+
+**Confirmation questions.** Every question the app asks (delete a run,
+revoke a link, submit an application, remove a farmer, discard a file…)
+is the app's own dialog, never the browser's `confirm()` box
+(`common/confirm.svelte.ts`: `await confirmDialog({ title, message,
+confirmLabel, cancelLabel, danger })` answers true or false). One host,
+`common/ConfirmHost.svelte`, sits in the root layout and shows the questions
+one at a time: an `alertdialog` with the question as its title, the detail
+under it, **Cancel** first (it takes the focus, so Enter keeps what a
+destructive question would remove) and a confirm button named for the action
+(red when it destroys something). Esc answers Cancel; focus returns to what
+asked. The farm view's note delete passes its words translated.
+`lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
 
 **A part that fails to download.** Every tab but Overview, the Add data
 dialog and several panels download on first use. If one can't (a network
@@ -481,10 +522,11 @@ account menu, the "Rain up to" dropdown, the download menu and the dialogs.
 Help tips, the account menu and the "Rain up to" dropdown also close on a
 click outside. The one exception guards
 unsaved input: while **Add data** holds a file that is read but not uploaded
-(or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
+(or is uploading), Escape and ✕ ask before discarding it (the confirmation
+dialog above; Dialog's `beforeclose` may answer later). Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
-Every `Dialog.svelte` dialog also has a **✕** in its top-right corner
+Every `Dialog.svelte` dialog but the confirmation question also has a **✕** in its top-right corner
 (`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
 Escape closes it. It is last in the DOM, so opening a dialog still focuses its
 first field (New project, New team).
@@ -503,7 +545,7 @@ drawn by the page above the open tab, in place of the old project row (name,
 role, freshness, Add data) and each tab's own header:
 
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
-  **Unsaved changes** shows beside it while the model has edits (editors).
+  **Unsaved changes** shows beside it while the model or the project details have edits (editors).
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -596,7 +638,7 @@ role, freshness, Add data) and each tab's own header:
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
   `form` attribute). With a file read but not uploaded, **Cancel**, the close
-  button and Esc ask "Discard the file you haven't uploaded yet?" first
+  button and Esc ask "Discard the file?" first (the confirmation dialog)
   (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
   question). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
@@ -937,7 +979,7 @@ it scrolls, and isn't fitted to the window.
   came from the file and renders as text only.
 - **Time zone** (Project details, under Description; issue #45): the
   project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
-  from the browser's list of zones, saved with **Save details** (editors;
+  from the browser's list of zones, saved with the page's **Save changes** bar (editors;
   read-only for viewers). Every download of the project (CSV, JSON, the
   .xlsx workbook, the server report PDF) is dated by the calendar day there,
   so an export made just after local midnight carries today's date, not
@@ -947,8 +989,8 @@ it scrolls, and isn't fitted to the window.
   digest). A zone the server doesn't know is refused with its error.
 - **WUA name** (Project details, under Time zone; issue #74): the name of
   the Water User Association the farm pages tell a farmer to contact
-  ("Questions? Contact Vaalbank WUA."), saved with **Save details**
-  (editors); empty keeps "your WUA". Not the team's name, which may be a
+  ("Questions? Contact Vaalbank WUA."), saved with the page's **Save
+  changes** bar (editors); empty keeps "your WUA". Not the team's name, which may be a
   consultancy's.
 - **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
   on a phone), then Project details, the import record, recent notes and
@@ -4372,7 +4414,8 @@ them scenarios).
   the map's Grids menu and farm links open the page's grid modal and farm
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
-  about unrecorded edits; leaving it does. **Edits to record**
+  about unrecorded edits; leaving it does (the leave guard, above), and
+  **Close override mode** with edits asks "Close override mode?" first. **Edits to record**
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no

@@ -12,6 +12,7 @@
 	// with its source file, the imported files, and every unit's water years.
 	// Viewers see volumes but no holder names (decision D3; the API leaves them
 	// out, RLS enforces it). Farmers never reach the workspace.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -216,7 +217,13 @@
 	const openSheet = (name: string, value: string) => goto(withParam(url, name, value), { noScroll: true, keepFocus: true });
 
 	async function remove(a: Allocation) {
-		if (!confirm(`Delete the registered volume ${a.registrationNo || ''} (${fmtNum(a.volumeM3PerYear)} m³/a)?`)) return;
+		const ok = await confirmDialog({
+			title: 'Delete this registered volume?',
+			message: `Delete the registered volume ${a.registrationNo || ''} (${fmtNum(a.volumeM3PerYear)} m³/a)?`,
+			confirmLabel: 'Delete',
+			danger: true
+		});
+		if (!ok) return;
 		try {
 			await api.allocations.remove(projectId, a.id);
 			await changed();
@@ -226,7 +233,13 @@
 	}
 
 	async function undoImport(id: string, fileName: string, n: number) {
-		if (!confirm(`Remove the import of ${fileName} and its ${n} registered volume${n === 1 ? '' : 's'}?`)) return;
+		const ok = await confirmDialog({
+			title: 'Remove this import?',
+			message: `Remove the import of ${fileName} and its ${n} registered volume${n === 1 ? '' : 's'}?`,
+			confirmLabel: 'Remove import',
+			danger: true
+		});
+		if (!ok) return;
 		try {
 			await api.allocations.removeSource(projectId, id);
 			await changed(`Removed the import of ${fileName}.`);

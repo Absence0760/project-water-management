@@ -4,6 +4,7 @@
 	// kept, so it can't be shown again), sees when each was last used, and
 	// revokes one. Owners only: SettingsTab renders this for an owner, and the
 	// API answers anyone else 403.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { PUBLIC_API_URL } from '$env/static/public';
 	import { api, API_KEY_NAME_MAX, type ApiKey, type ApiKeySeries } from '$lib/api';
@@ -86,7 +87,7 @@
 	}
 
 	async function revoke(id: string, keyName: string) {
-		if (!confirm(revokeKeyQuestion(keyName))) return;
+		if (!(await confirmDialog({ title: 'Revoke this API key?', message: revokeKeyQuestion(keyName), confirmLabel: 'Revoke key', danger: true }))) return;
 		busy = id;
 		error = null;
 		try {

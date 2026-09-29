@@ -4,6 +4,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
@@ -126,8 +127,8 @@ test('clicking anywhere on a series row shows it in the chart; its buttons keep 
 	await expect(flowRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'false');
 
 	// A row's own control doesn't also select the row.
-	page.once('dialog', (d) => void d.dismiss());
 	await flowRow.getByRole('button', { name: /^Delete/ }).click();
+	await answerConfirm(page, false);
 	await expect(rainRow.getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 

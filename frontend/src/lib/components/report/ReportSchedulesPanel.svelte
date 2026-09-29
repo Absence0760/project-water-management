@@ -6,6 +6,7 @@
 	./serverPdf.ts.
 -->
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Member } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
@@ -85,7 +86,16 @@
 	}
 
 	async function act(s: ReportSchedule, what: 'toggle' | 'remove') {
-		if (what === 'remove' && !confirm(`Remove the schedule “${describeSchedule(s)}”? Reports already sent stay available for 7 days.`)) return;
+		if (
+			what === 'remove' &&
+			!(await confirmDialog({
+				title: 'Remove this schedule?',
+				message: `Remove the schedule “${describeSchedule(s)}”? Reports already sent stay available for 7 days.`,
+				confirmLabel: 'Remove schedule',
+				danger: true
+			}))
+		)
+			return;
 		busy = s.id;
 		message = error = null;
 		try {

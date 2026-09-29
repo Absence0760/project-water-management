@@ -21,7 +21,12 @@
 		// pointer barely moves (workspace/SectionsMenu.svelte). Centred on a phone.
 		anchor,
 		// Asked before Escape or the close button closes it; false keeps it open (Add data's "discard the file?").
+		// May answer later (a promise), when it asks in the app's own confirm dialog.
 		beforeclose,
+		// The ✕ in the corner. A question (ConfirmDialog) leaves it out: its Cancel button is the way out.
+		closeButton = true,
+		// A question that needs an answer (ConfirmDialog): role alertdialog, described by its body.
+		alert = false,
 		children,
 		actions
 	}: {
@@ -33,7 +38,9 @@
 		keepInputs?: boolean;
 		subhead?: Snippet;
 		anchor?: HTMLElement;
-		beforeclose?: () => boolean;
+		beforeclose?: () => boolean | Promise<boolean>;
+		closeButton?: boolean;
+		alert?: boolean;
 		children: Snippet;
 		actions: Snippet;
 	} = $props();
@@ -41,6 +48,7 @@
 	let el: HTMLDialogElement | undefined = $state();
 	let anchored = $state(false);
 	const titleId = `dlg-${Math.random().toString(36).slice(2, 9)}`;
+	const bodyId = `${titleId}-body`;
 
 	$effect(() => {
 		if (!el) return;
@@ -73,8 +81,20 @@
 	}
 
 	/** Close unless `beforeclose` says no. */
-	function requestClose() {
-		if (!beforeclose || beforeclose()) open = false;
+	let asking = false;
+	async function requestClose() {
+		if (!beforeclose) {
+			open = false;
+			return;
+		}
+		// One question at a time: a second Escape while it is up does nothing.
+		if (asking) return;
+		asking = true;
+		try {
+			if (await beforeclose()) open = false;
+		} finally {
+			asking = false;
+		}
 	}
 
 	// With a `beforeclose`, Escape is handled here rather than through `cancel`:
@@ -95,19 +115,23 @@
 	class:anchored
 	class:keep-inputs={keepInputs}
 	aria-labelledby={titleId}
+	role={alert ? 'alertdialog' : undefined}
+	aria-describedby={alert ? bodyId : undefined}
 	{oncancel}
 	{onkeydown}
 	onclose={() => (open = false)}
 >
 	<h2 id={titleId}>{title}</h2>
 	{#if subhead}<div class="subhead">{@render subhead()}</div>{/if}
-	<div class="body">{@render children()}</div>
+	<div class="body" id={bodyId}>{@render children()}</div>
 	<div class="actions">{@render actions()}</div>
 	<!-- A visible way out for people who don't know Esc closes it. Last in the DOM so
 	     showModal() still focuses the dialog's first real control; drawn top right. -->
-	<button type="button" class="x" aria-label="Close dialog" title="Close (Esc)" onclick={requestClose}>
-		<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
-	</button>
+	{#if closeButton}
+		<button type="button" class="x" aria-label="Close dialog" title="Close (Esc)" onclick={requestClose}>
+			<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg>
+		</button>
+	{/if}
 </dialog>
 
 <style>
@@ -182,7 +206,7 @@
 		padding: 0 1.25rem;
 	}
 	/* Room for the close button so a long title never runs under it. */
-	h2 {
+	dialog:has(.x) h2 {
 		padding-right: 2.25rem;
 	}
 	.x {

@@ -3,6 +3,7 @@ import { plantEmailToken, termsAccepted } from '../support/db.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 async function signInThroughForm(page: import('@playwright/test').Page, email: string, password: string) {
 	await page.getByLabel('Email').fill(email);
@@ -87,8 +88,8 @@ test('"Sign out everywhere" from the account menu also signs out another device'
 
 	await page.goto('/');
 	await page.getByRole('button', { name: /^Account menu for / }).click();
-	page.once('dialog', (d) => void d.accept());
 	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
+	await answerConfirm(page, true, 'Sign out of every device?');
 	await expect(page).toHaveURL('/login');
 
 	// The other device's session is really revoked: its next request is rejected.
@@ -102,8 +103,8 @@ test('cancelling "Sign out everywhere" leaves the session signed in', async ({ p
 	void owner;
 	await page.goto('/');
 	await page.getByRole('button', { name: /^Account menu for / }).click();
-	page.once('dialog', (d) => void d.dismiss());
 	await page.getByRole('button', { name: 'Sign out everywhere' }).click();
+	await answerConfirm(page, false, 'Sign out of every device?');
 
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 	await expect(page).toHaveURL('/');

@@ -3,6 +3,7 @@
 	// § Invites), under a project's or a team's member list. Owners/admins only:
 	// the list endpoint is theirs alone. The parent's add form puts new invites
 	// in via `bind:invites`; this lists, re-sends and revokes them.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import type { Invite } from '$lib/api/types';
 	import { fmtDate } from '$lib/format/number';
@@ -67,7 +68,7 @@
 	}
 
 	async function doRevoke(inv: Invite) {
-		if (!confirm(`Revoke the invitation to ${inv.email}? The link in their email stops working.`)) return;
+		if (!(await confirmDialog({ title: 'Revoke this invitation?', message: `Revoke the invitation to ${inv.email}? The link in their email stops working.`, confirmLabel: 'Revoke invitation', danger: true }))) return;
 		busy = inv.id;
 		message = error = null;
 		try {

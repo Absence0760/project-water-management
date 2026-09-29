@@ -4,6 +4,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -62,9 +63,9 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).
-	page.once('dialog', (d) => void d.accept());
 	await openRowMenu(page, 'Example Valley — drought');
 	await row(page, 'Example Valley — drought').getByRole('button', { name: 'Delete Example Valley — drought' }).click();
+	await answerConfirm(page, true, 'Delete project “Example Valley — drought”?');
 	await expect(row(page, 'Example Valley — drought')).toHaveCount(0);
 	await expect(page.getByRole('row')).toHaveCount(4);
 
@@ -103,9 +104,9 @@ test('cancelling the delete confirmation keeps the project', async ({ page, owne
 	void owner;
 	await createProject(page.request, 'Keep me');
 	await page.goto('/');
-	page.once('dialog', (d) => void d.dismiss());
 	await openRowMenu(page, 'Keep me');
 	await row(page, 'Keep me').getByRole('button', { name: 'Delete Keep me' }).click();
+	await answerConfirm(page, false, 'Delete project “Keep me”?');
 	await page.reload();
 	await expect(row(page, 'Keep me')).toBeVisible();
 });
@@ -119,9 +120,9 @@ test('deleting a project with a nominated evidence run is refused, and the dialo
 	await nominateRun(page.request, project.id, runId, 'Calibrated against the logger record.');
 	await page.goto('/');
 
-	page.once('dialog', (d) => void d.accept());
 	await openRowMenu(page, 'Licence evidence');
 	await row(page, 'Licence evidence').getByRole('button', { name: 'Delete Licence evidence' }).click();
+	await answerConfirm(page, true);
 	const dialog = page.getByRole('dialog', { name: "This project can't be deleted" });
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByTestId('evidence-kept')).toHaveText(

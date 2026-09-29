@@ -6,6 +6,7 @@
 	// members beside them. The name, the thresholds and leave/delete sit in the
 	// settings sheet (`?settings=1`, lib/components/teams/TeamSettings.svelte),
 	// out of the reading path.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -188,10 +189,22 @@
 				: 'A team must keep at least one admin.';
 			return;
 		}
-		const q = self
-			? `Leave ${team?.name}? You lose access to its projects unless they're also shared with you directly.`
-			: `Remove ${m.displayName} (${m.email}) from the team? They lose access to its projects unless shared directly.`;
-		if (!confirm(q)) return;
+		const ok = await confirmDialog(
+			self
+				? {
+						title: `Leave ${team?.name}?`,
+						message: "You lose access to its projects unless they're also shared with you directly.",
+						confirmLabel: 'Leave team',
+						danger: true
+					}
+				: {
+						title: 'Remove this member?',
+						message: `Remove ${m.displayName} (${m.email}) from the team? They lose access to its projects unless shared directly.`,
+						confirmLabel: 'Remove member',
+						danger: true
+					}
+		);
+		if (!ok) return;
 		busy = m.userId;
 		error = null;
 		try {

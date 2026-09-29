@@ -1,60 +1,80 @@
 <script lang="ts">
-	// Sticky footer shared by the Network, Crops and Transfers tabs: unsaved
-	// indicator, validation summary, the optional reason for the change (kept
-	// with it in the History tab), Save / Discard.
+	// The workspace's one sticky footer for unsaved edits: the model's (the
+	// Network, Crops and Transfers tabs, the farm drawer, a grid) and the
+	// project details (the Project page, issue #162 item 12). Unsaved
+	// indicator, validation summary, the optional reason for a model change
+	// (kept with it in the History tab), Save / Discard for everything unsaved.
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import type { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
 
 	let {
 		editor,
+		details = null,
 		onsave,
 		readonly,
 		height = $bindable(0),
 		reason = $bindable('')
 	}: {
 		editor: ModelEditor;
+		/** The project details being edited, saved and discarded with the model's edits. */
+		details?: ProjectDetailsDraft | null;
+		/** Save everything unsaved. */
 		onsave: () => void;
 		readonly: boolean;
 		/** Rendered height (0 when hidden), so the page can keep content clear of it. */
 		height?: number;
-		/** The optional "why" sent with the save (at most 500 characters). */
+		/** The optional "why" sent with a model save (at most 500 characters). */
 		reason?: string;
 	} = $props();
 
-	const shown = $derived(!readonly && (editor.dirty || !!editor.saveError));
+	const detailsDirty = $derived(!!details?.dirty);
+	const dirty = $derived(editor.dirty || detailsDirty);
+	const saving = $derived(editor.saving || !!details?.saving);
+	const saveError = $derived(editor.saveError ?? details?.saveError ?? null);
+	const shown = $derived(!readonly && (dirty || !!saveError));
 	let measured = $state(0);
 	$effect(() => {
 		height = shown ? measured : 0;
 	});
 
-	const blocking = $derived(editor.issues.length);
+	const detailProblems = $derived(detailsDirty ? (details?.problems ?? []) : []);
+	const blocking = $derived((editor.dirty ? editor.issues.length : 0) + detailProblems.length);
+	/** What the unsaved edits are to. */
+	const what = $derived(editor.dirty && detailsDirty ? 'the model and the project details' : detailsDirty ? 'the project details' : 'the model');
+	function discard() {
+		editor.revert();
+		details?.revert();
+		reason = '';
+	}
 </script>
 
 {#if shown}
-	<div class="savebar" role="region" aria-label="Unsaved model changes" bind:offsetHeight={measured}>
+	<div class="savebar" role="region" aria-label={editor.dirty || !detailsDirty ? 'Unsaved model changes' : 'Unsaved project details'} bind:offsetHeight={measured}>
 		<div class="inner">
 			<span class="dot" aria-hidden="true"></span>
 			<span class="status" aria-live="polite">
-				{#if editor.saving}
+				{#if saving}
 					Saving…
-				{:else if editor.saveError}
-					<span class="err">Save failed: {editor.saveError}</span>
+				{:else if saveError}
+					<span class="err">Save failed: {saveError}</span>
+				{:else if detailProblems.length === 1 && blocking === 1}
+					Unsaved changes · <span class="err">{detailProblems[0]}</span>
 				{:else if blocking}
 					Unsaved changes · <span class="err">{blocking} problem{blocking === 1 ? '' : 's'} to fix before saving</span>
 				{:else}
-					Unsaved changes to the model <span class="muted where">(network, crops and transfers)</span>
+					Unsaved changes to {what}{#if editor.dirty && !detailsDirty}{' '}<span class="muted where">(network, crops and transfers)</span>{/if}
 				{/if}
 			</span>
 			<div class="spacer"></div>
-			<label class="reason">
-				<span class="visually-hidden">Reason for this change (optional)</span>
-				<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={editor.saving} />
-			</label>
-			<button type="button" class="btn" onclick={() => { editor.revert(); reason = ''; }} disabled={editor.saving || !editor.dirty}>
-				Discard
-			</button>
-			<button type="button" class="btn btn-primary" onclick={onsave} disabled={editor.saving || blocking > 0 || !editor.dirty}>
-				Save changes
-			</button>
+			<!-- The reason goes with the model's save (the History tab keeps it). -->
+			{#if editor.dirty}
+				<label class="reason">
+					<span class="visually-hidden">Reason for this change (optional)</span>
+					<input type="text" maxlength="500" placeholder="Reason for this change (optional)" bind:value={reason} disabled={saving} />
+				</label>
+			{/if}
+			<button type="button" class="btn" onclick={discard} disabled={saving || !dirty}>Discard</button>
+			<button type="button" class="btn btn-primary" onclick={onsave} disabled={saving || blocking > 0 || !dirty}>Save changes</button>
 		</div>
 	</div>
 {/if}

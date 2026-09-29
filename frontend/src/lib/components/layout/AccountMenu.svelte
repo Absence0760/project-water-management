@@ -5,6 +5,7 @@
 	// sidebar's foot it opens upward (`up`); in the phone bar, downward, and
 	// `compact` shows the initials only.
 
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -84,13 +85,13 @@
 
 	async function signOutEverywhere() {
 		closeMenu();
-		if (
-			!confirm(
-				'Sign out of every device? Any other browser or device signed in to this account — including this one — will need to sign in again.'
-			)
-		) {
-			return;
-		}
+		const ok = await confirmDialog({
+			title: 'Sign out of every device?',
+			message: 'Any other browser or device signed in to this account — including this one — will need to sign in again.',
+			confirmLabel: 'Sign out everywhere',
+			danger: true
+		});
+		if (!ok) return;
 		signingOut = true;
 		try {
 			await api.auth.logoutEverywhere();

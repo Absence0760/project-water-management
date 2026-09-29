@@ -8,6 +8,7 @@ import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeTeamSettings, openTeamSettings } from '../support/teams.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	void owner;
@@ -90,8 +91,8 @@ test('a team admin invites an address with no account and revokes it', async ({ 
 	const pending = page.getByRole('region', { name: /Pending invitations/ });
 	await expect(pending.getByRole('listitem').filter({ hasText: email })).toContainText('member');
 
-	page.once('dialog', (d) => void d.accept());
 	await pending.getByRole('button', { name: `Revoke invitation to ${email}` }).click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
 	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
 	await expect(pending).toHaveCount(0);
 });
@@ -294,8 +295,8 @@ test('an admin renames and deletes the team from the settings sheet; a member le
 	const theirs = await openTeamSettings(colleague.page);
 	await expect(theirs.getByRole('button', { name: 'Rename' })).toHaveCount(0);
 	await expect(theirs.getByRole('button', { name: 'Delete team' })).toHaveCount(0);
-	colleague.page.once('dialog', (d) => void d.accept());
 	await theirs.getByRole('button', { name: 'Leave team' }).click();
+	await answerConfirm(colleague.page, true);
 	await expect(colleague.page).toHaveURL(/\/teams$/);
 	await expect(colleague.page.getByText("You're not in any team yet.")).toBeVisible();
 
