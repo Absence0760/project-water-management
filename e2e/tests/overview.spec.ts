@@ -24,16 +24,73 @@ test('a fresh project: nothing loaded, every step to do', async ({ page, owner }
 	await expect(page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ })).toHaveAttribute('href', '?tab=project');
 });
 
-test('a project with data and a run: setup complete', async ({ page, owner }) => {
+test('setup complete: the checklist leaves the page for a header pill whose popover lists the steps over the page', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Overview ready');
 	await createRun(page.request, project.id, 'Baseline');
-	await page.goto(`/projects/${project.id}`);
-	const done = setup(page);
-	await expect(done.getByRole('heading', { name: 'Setup complete' })).toBeVisible();
-	await done.getByText('All 5 steps done. Show checklist').click();
-	await expect(done).toContainText('Rainfall and observed flow loaded.');
-	await expect(done).toContainText(/1 run, latest \d{4}-\d{2}-\d{2}\./);
+	for (const viewport of [
+		{ width: 1440, height: 960 },
+		{ width: 1280, height: 800 },
+		{ width: 390, height: 844 }
+	]) {
+		await page.setViewportSize(viewport);
+		await page.goto(`/projects/${project.id}`);
+		await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
+		// No checklist panel on the page; the pill sits in the section header's status, before the rain pill.
+		await expect(setup(page)).toHaveCount(0);
+		const status = page.getByTestId('header-status');
+		const pill = status.getByRole('button', { name: 'Setup complete' });
+		await expect(pill).toHaveAttribute('aria-expanded', 'false');
+		expect((await pill.boundingBox())!.height).toBeGreaterThanOrEqual(24);
+		const height = () => page.evaluate(() => document.documentElement.scrollHeight);
+		const before = await height();
+
+		// Keyboard: focus it and open it; the five steps, each a link to its tab, over the page.
+		await pill.focus();
+		await page.keyboard.press('Enter');
+		await expect(pill).toHaveAttribute('aria-expanded', 'true');
+		const pop = page.locator(`#${await pill.getAttribute('aria-controls')}`);
+		await expect(pop).toBeVisible();
+		await expect(pop).toContainText('all 5 steps done');
+		await expect(pop.getByRole('listitem')).toHaveCount(5);
+		await expect(pop.getByRole('link')).toHaveText(['River network', 'Crops & irrigated areas', 'Rainfall & flow data', 'Evaporation, calibration & EWR', 'Run the model']);
+		await expect(pop).toContainText('Rainfall and observed flow loaded.');
+		await expect(pop).toContainText(/1 run, latest \d{4}-\d{2}-\d{2}\./);
+		// Opening it never makes the page taller, and it stays inside the window.
+		expect(await height()).toBe(before);
+		const box = (await pop.boundingBox())!;
+		expect(box.x, `${viewport.width}`).toBeGreaterThanOrEqual(0);
+		expect(box.x + box.width, `${viewport.width}`).toBeLessThanOrEqual(viewport.width);
+
+		// Escape closes it and gives focus back to the pill.
+		await page.keyboard.press('Escape');
+		await expect(pop).toBeHidden();
+		await expect(pill).toHaveAttribute('aria-expanded', 'false');
+		await expect(pill).toBeFocused();
+
+		// Opened again it lands where it did the first time (the nudge that keeps it inside the
+		// window is measured from its own spot, not from wherever the last open left it).
+		await page.keyboard.press('Enter');
+		await expect(pop).toBeVisible();
+		const again = (await pop.boundingBox())!;
+		expect(again.x, `${viewport.width} reopened`).toBe(box.x);
+		await page.keyboard.press('Escape');
+		await expect(pop).toBeHidden();
+	}
+
+	// A click outside closes it; a step's link opens its tab.
+	const pill = page.getByRole('button', { name: 'Setup complete' });
+	await pill.click();
+	const pop = page.locator(`#${await pill.getAttribute('aria-controls')}`);
+	await expect(pop).toBeVisible();
+	await expectNoViolations(page);
+	await page.getByRole('heading', { level: 1, name: 'Summary' }).click();
+	await expect(pop).toBeHidden();
+	await pill.click();
+	await pop.getByRole('link', { name: 'Rainfall & flow data' }).click();
+	await expect(page).toHaveURL(/\?tab=series$/);
+	// The pill is the Summary's alone.
+	await expect(page.getByRole('button', { name: 'Setup complete' })).toHaveCount(0);
 });
 
 test('the latest run: its headline figures, the change from the run before, and a link to it', async ({ page, owner }) => {
@@ -105,7 +162,8 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	// The reserve by month, not the flow chart: that is River & reserve's alone (issue #162).
 	await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
-	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Setup complete' })).toBeVisible();
+	await expect(setup(page)).toHaveCount(0);
 	// Each dam's level lives on the Dams page's cards; the Summary links there.
 	const damsLink = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(damsLink).toBeVisible();
@@ -137,18 +195,20 @@ test('the Summary leads with the results once there is a run, the setup checklis
 		expect(sh, name).toBeLessThanOrEqual(ch);
 	}
 
-	// Below it, compact (issue #17): the published baseline, then one line of links (the Dams page, the Project
-	// page), then the one-line setup. Nothing else: the rest is on the Project page.
+	// Under Supply by unit, in its column (usually the shorter): the published baseline, then the links (the Dams
+	// page, the Project page). Nothing else: the rest is on the Project page, and a complete setup is the header's pill.
+	await expect(page.getByRole('region', { name: 'Published baseline' })).toHaveAttribute('aria-busy', 'false');
 	const baseline = await box('Published baseline');
-	expect(baseline.y).toBeGreaterThan(Math.max(alerts.y + alerts.height, supply.y + supply.height));
-	expect(Math.abs(baseline.width - kpis.width)).toBeLessThan(2);
+	expect(baseline.y).toBeGreaterThan(supply.y + supply.height - 1);
+	expect(Math.round(baseline.x)).toBe(Math.round(supply.x));
+	expect(Math.abs(baseline.width - supply.width)).toBeLessThan(2);
 	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
 	const links = (await damsLink.boundingBox())!;
 	expect(links.y).toBeGreaterThan(baseline.y + baseline.height);
-	expect(Math.round((await projectLink.boundingBox())!.y)).toBe(Math.round(links.y));
-	const setupBox = await box(/^Set(up| up this catchment)/);
-	expect(setupBox.y).toBeGreaterThan(links.y);
-	expect(setupBox.height).toBeLessThan(80);
+	expect(Math.round(links.x)).toBe(Math.round(supply.x));
+	expect((await projectLink.boundingBox())!.y).toBeGreaterThanOrEqual(links.y);
+	// So the whole Summary fits a 1440 × 960 window: no page scroll.
+	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(960);
 	await expect(page.getByRole('heading', { level: 2, name: 'The model' })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Members' })).toHaveCount(0);
 
@@ -311,10 +371,11 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(link).toHaveAttribute('href', '?tab=dams');
-	// Below the reserve strip, above the setup checklist.
+	// Below the reserve strip, under the published baseline.
 	const strip = (await page.getByRole('region', { name: 'Days below the reserve' }).boundingBox())!;
 	expect((await link.boundingBox())!.y).toBeGreaterThan(strip.y);
-	expect((await link.boundingBox())!.y).toBeLessThan((await setup(page).boundingBox())!.y);
+	const baseline = (await page.getByRole('region', { name: 'Published baseline' }).boundingBox())!;
+	expect((await link.boundingBox())!.y).toBeGreaterThan(baseline.y + baseline.height);
 	await link.click();
 	await expect(page).toHaveURL(/\?tab=dams$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();

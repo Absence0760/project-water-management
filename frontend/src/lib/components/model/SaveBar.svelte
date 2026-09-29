@@ -82,7 +82,8 @@
 <style>
 	.savebar {
 		position: fixed;
-		left: 0;
+		/* Beside the app sidebar, not over its foot (the account menu); 0 on a phone (AppShell's --sidebar-w). */
+		left: var(--sidebar-w, 0px);
 		right: 0;
 		bottom: 0;
 		z-index: 30;

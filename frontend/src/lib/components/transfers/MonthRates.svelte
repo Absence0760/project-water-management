@@ -15,7 +15,7 @@
 
 	const rates = $derived(transferRatesM3s(rule));
 	const top = $derived(Math.max(0, ...rates));
-	const summary = $derived(rule.months.length ? `${describeMonths(rule.months)}, up to ${fmtNum(top, 3, true)} m³/s` : 'Off every month');
+	const summary = $derived(rule.months.length ? `${describeMonths(rule.months)}, up to ${fmtNum(top, 4, true)} m³/s` : 'Off every month');
 
 	function set(k: number, v: number | null) {
 		const next = transferRatesM3s(rule);
@@ -47,7 +47,7 @@
 		<span class="summary muted">{summary}</span>
 		{#if !disabled && top > 0 && rates.some((r) => r !== top)}
 			<button type="button" class="btn btn-sm btn-ghost all" onclick={() => Object.assign(rule, withMonthlyRates(new Array(12).fill(top)))}>
-				{fmtNum(top, 3, true)} in every month
+				{fmtNum(top, 4, true)} in every month
 			</button>
 		{/if}
 	</div>
@@ -64,9 +64,16 @@
 	.cells {
 		display: grid;
 		grid-template-columns: repeat(6, minmax(0, 1fr));
-		gap: 2px;
+		gap: 0.3rem 0.25rem;
 	}
-	@container rates (min-width: 40rem) {
+	/* A phone's card: four to a row, so 0.0129 and 12.345 show whole. */
+	@container rates (max-width: 26rem) {
+		.cells {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+	/* All twelve in one row only where each field still holds 12.345 or 0.0129 whole (~4.5rem each). */
+	@container rates (min-width: 58rem) {
 		.cells {
 			grid-template-columns: repeat(12, minmax(0, 1fr));
 		}
@@ -78,7 +85,7 @@
 		min-width: 0;
 	}
 	.m {
-		font-size: 0.7rem;
+		font-size: 0.72rem;
 		color: var(--text-muted);
 		text-align: center;
 	}
@@ -86,12 +93,12 @@
 		color: var(--text-2);
 		font-weight: 600;
 	}
-	/* Above the data table's 4.5rem floor for number fields (app.css), so six fit a phone's card. */
+	/* Six fit a phone's card; tabular figures so the rates line up down the columns. */
 	.rates .cells .cell :global(input[type='number']) {
 		box-sizing: border-box;
 		width: 100%;
 		min-width: 0;
-		padding-inline: 0.25rem;
+		padding-inline: 0.3rem;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 		/* No spin buttons: they took the room a rate like 0.005 needs, and the arrow keys still step it. */
@@ -108,11 +115,11 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
-		margin-top: 0.15rem;
+		margin-top: 0.3rem;
 		min-height: 24px;
 	}
 	.summary {
-		font-size: 0.72rem;
+		font-size: 0.78rem;
 		overflow-wrap: anywhere;
 	}
 	.all {

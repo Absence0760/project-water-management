@@ -95,8 +95,9 @@
 </section>
 
 <style>
+	/* No margin of its own: the Summary's grids space it (OverviewTab). */
 	.baseline {
-		margin: 0 0 1rem;
+		margin: 0;
 	}
 	.facts {
 		display: grid;

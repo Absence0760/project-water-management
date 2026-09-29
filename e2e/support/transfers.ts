@@ -6,16 +6,18 @@ import { createProject, putModel, sampleModel, type Model } from './api.ts';
 
 export const rulesCard = (page: Page) => page.getByRole('region', { name: 'Transfer rules' });
 
+/** One rule's card (a list item named by its heading, "Transfer N", with "off" when switched off). */
+export const ruleCard = (page: Page, n: number) => page.getByTestId('transfer-rule').filter({ has: page.getByRole('heading', { level: 3, name: new RegExp(`^Transfer ${n}( off)?$`) }) });
+
+/** The list of rule cards: its scroll size against its visible size, both ways. */
+export const rulesListBox = (page: Page) =>
+	page.getByTestId('transfer-rules').evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth }));
+
 /**
  * Opens the Transfers page and waits for the tab itself, not just the page's title: the section header (and
  * its rule count) render as soon as the model loads, while the rules come from a code-split
  * chunk that arrives after. The rules card is drawn in every state (rules, none yet, too few units).
  */
-/** The rules card's table box: its scroll size against its visible size, both ways. */
-export const rulesWrapBox = (page: Page) =>
-	rulesCard(page)
-		.locator('.table-wrap')
-		.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth }));
 
 export async function openTransfers(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=transfers`);

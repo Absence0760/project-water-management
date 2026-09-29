@@ -5,12 +5,12 @@ import { fillHeader, headerSlot } from './headerSlot.svelte';
 const snippet = () => (() => {}) as unknown as Snippet;
 
 describe('fillHeader', () => {
-	it('puts the context, actions and main action in the header, and clears them when the tab goes', () => {
-		const [context, actions, main] = [snippet(), snippet(), snippet()];
-		const clear = fillHeader({ context, actions, main });
-		expect(headerSlot).toEqual({ context, actions, main });
+	it('puts the context, status, actions and main action in the header, and clears them when the tab goes', () => {
+		const [context, status, actions, main] = [snippet(), snippet(), snippet(), snippet()];
+		const clear = fillHeader({ context, status, actions, main });
+		expect(headerSlot).toEqual({ context, status, actions, main });
 		clear?.();
-		expect(headerSlot).toEqual({ context: null, actions: null, main: null });
+		expect(headerSlot).toEqual({ context: null, status: null, actions: null, main: null });
 	});
 
 	it('leaves the parts a later tab filled when an earlier one clears', () => {

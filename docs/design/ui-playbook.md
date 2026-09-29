@@ -66,7 +66,9 @@ section it belongs to, with the example that taught it.
   the `h1`, a one-line context, and on the right the rain pill, the
   section's own actions, **Add data** and **Run model**. A tab adds its
   context and actions with `$effect(() => fillHeader({ context, actions }))`
-  (`workspace/headerSlot.svelte.ts`); it never draws its own title (Dams
+  (`workspace/headerSlot.svelte.ts`), and a status pill of its own beside
+  the rain pill as `status` (the Summary's **Setup complete**); it never
+  draws its own title (Dams
   briefly had two). A view that is also a standalone page draws its title
   only there: Compare runs showed "Compare runs" twice in the workspace
   (the header's `h1` and its own `h2`, 65 px) until it filled the header
@@ -122,13 +124,24 @@ section it belongs to, with the example that taught it.
   (`overview.spec.ts` checks no Summary card scrolls and the alerts' heading is
   inside 1440×960 with thirty units). The Dams page had copied the same fit
   (cards scrolling in their column, Dam levels under the fold) and flows now
-  too: three cards beside a fixed 420 px chart, **Show all N dams** under
-  them, and the chart panel `position: sticky` so it stays beside an opened
-  list as the window scrolls (`dams-page.spec.ts` checks no element on the
-  page scrolls vertically inside itself, collapsed and opened, wide and
-  phone). Two disclosures on one page need different names: while the Dams
+  too: every dam's card beside a fixed 420 px chart, the chart panel
+  `position: sticky` so it stays beside the list as the window scrolls
+  (`dams-page.spec.ts` checks no element on the page scrolls vertically
+  inside itself, wide and phone). The Dams page first folded to three cards under **Show all
+  N dams**, which at 1440×960 left the lower third of the window empty
+  beside the chart; the sticky chart already keeps a long list readable, so
+  every card shows (2026-09-29). Two disclosures on one page need different names: while the Dams
   page had a Dam levels table under its cards (until issue #175 merged it
   into them), the table's button was **Show all N rows**.
+- **Finished work leaves the page; its detail opens over it.** The Summary's
+  setup checklist, once every step was done, was a one-line `<details>` at
+  the page's foot that grew the page by 125 px when opened, on a page that
+  otherwise fitted 1440 × 960. It is now a **Setup complete** pill in the
+  section header whose popover lists the steps (`overview/SetupPill.svelte`,
+  the rain pill's pattern: a button with `aria-expanded`, Escape returns
+  focus, a click outside closes, nudged to stay inside the window), so
+  opening it never changes the page's height; while a step still needs
+  work, the checklist stays on the page, where it has to be seen.
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
@@ -178,12 +191,12 @@ section it belongs to, with the example that taught it.
   list (20rem, scrolling inside) so twenty runs don't push the results
   a screen down.
 - **Cards or list on one side, the picked item's detail on the other.**
-  Dams and Hydrological units: the worst few cards (three), **Show all N**
-  opening the rest in place, a sticky chart beside them, the pick in the URL
-  so Back works; a folded list keeps the picked item's card in view
+  Dams and Hydrological units: a sticky chart beside the cards, the pick in
+  the URL so Back works. Dams shows every card, worst first; Hydrological
+  units shows the worst few (three), **Show all N** opening the rest in
+  place, and its folded list keeps the picked item's card in view
   (`common/fold.ts` `foldList`, which Data, Hydrological units and
-  Allocations share), so a shared
-  `dam=` or `unit=` link shows its card. Both were fitted to the window with
+  Allocations share), so a shared `unit=` link shows its card. Both were fitted to the window with
   the cards scrolling in their column until 2026-09-29; with 40 units the
   column scrolled 8,000 px inside a 690 px box. **Under an "On this page"
   menu, stick below it:** the menu is itself sticky, so a chart at
@@ -258,6 +271,17 @@ section it belongs to, with the example that taught it.
   the group header row is gone ("Dam capacity", not "Capacity"). Let the
   cards scroll with the modal: `.table-wrap`'s 70vh cap made the node cards
   a scroll box inside a scroll box, with Add node out of reach below it.
+- **A row that holds a form of its own is a card, not a table row.**
+  Transfers stayed a table after that fix, and its Takes from cell grew a
+  river off-take's six fields in one column: that row stood ~330 px tall with
+  every other cell floating in its middle, Daily cap and Priority were wide
+  columns holding one short field each, and the six-to-a-row month fields
+  clipped 0.0129 to "0.012". Each rule became a card (2026-09-29): a head
+  line (number, From → To, an On/Off switch with its state in words, a
+  labelled Remove) over top-aligned groups (rates, limits, source), the
+  conditional fields two to a row, the groups side by side by the card's
+  width (`@container rule`). Size number fields for real values (0.0129,
+  12.345) and check them with `scrollWidth <= clientWidth` in e2e.
 - **Put a panel's columns side by side by the panel's width, not the
   window's.** Runs & results' runoff panel set its table beside the stores
   chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
@@ -291,8 +315,14 @@ section it belongs to, with the example that taught it.
   gaps to 0.75rem and the role badge onto the "Catchment" line (73 px spare;
   the Project entry then took one row, leaving room for one more). Below that height the slot scrolls on its own
   (`flex: 0 1 auto` with an 8rem floor, `overflow-y: auto`) so the account block
-  never leaves the screen; `app-sidebar.spec.ts` pins both. A new sidebar
-  entry re-runs that spec.
+  never leaves the screen; `app-sidebar.spec.ts` pins both. The slot also
+  sets `overflow-x: hidden`, since `overflow-y: auto` alone makes x auto too:
+  the hidden-sections count badge, 6 px past its button, once gave it a
+  2 px sideways scrollbar (the spec checks there is none, with sections
+  hidden). Anything fixed to the window's bottom edge starts at
+  `left: var(--sidebar-w, 0px)` (the shell's sidebar width, 0 on a phone),
+  so it never covers the sidebar's foot and the account menu, as the save
+  bar did. A new sidebar entry re-runs that spec.
 - **A frame outside the app shell owns `--header-h`.** The farmer view
   (`farm/FarmShell.svelte`) has its own sticky 56 px header at every width,
   but the app shell set `--header-h` to 0 from 900 px, so `html`'s
@@ -361,7 +391,8 @@ section it belongs to, with the example that taught it.
 - **Don't fade a row to mean "off".** Transfers dimmed a disabled rule
   with `opacity: 0.6` and axe failed its text on contrast (no scan had a
   disabled rule until the page got one). Tint the row and say **off** in
-  words beside its number.
+  words beside its number. A switch says its state too ("On" / "Off" beside the
+  track, part of its target), so the state never rests on the knob's side.
 - **Categorical colour: the Crops & demand pattern.** Use it for anything
   shown as one colour per item (crops, units, runs, scenarios, sources):
   - **The palette** is the ordered token set `--series-1`, `-2`, `-3`, `-5`,

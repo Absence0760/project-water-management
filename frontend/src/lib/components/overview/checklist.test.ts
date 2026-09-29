@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { defaultProjectSettings, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
-import { checklist, nextStep, progress } from './checklist';
+import { checklist, checklistMode, nextStep, progress, type ChecklistStep } from './checklist';
 
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
 	id: 'n',
@@ -155,5 +155,39 @@ describe('checklist', () => {
 		});
 		expect(progress(steps)).toEqual({ done: 4, total: 5, complete: false });
 		expect(nextStep(steps)?.id).toBe('runs');
+	});
+
+	describe('checklistMode: how the Summary shows it', () => {
+		const step = (id: ChecklistStep['id'], status: ChecklistStep['status'], optional = false): ChecklistStep => ({
+			id,
+			tab: id,
+			title: id,
+			status,
+			detail: '',
+			optional
+		});
+		const known = [step('network', 'done'), step('crops', 'partial', true), step('settings', 'done')];
+
+		it('every step done (an optional one left partial counts): complete, the header pill', () => {
+			expect(checklistMode([...known, step('series', 'done'), step('runs', 'done')])).toBe('complete');
+		});
+		it('still loading with nothing known to do: a one-line checking bar, not the open list', () => {
+			expect(checklistMode([...known, step('series', 'unknown'), step('runs', 'unknown')])).toBe('checking');
+		});
+		it('a known gap opens the list at once, even while the rest loads', () => {
+			expect(checklistMode([step('network', 'todo'), step('series', 'unknown'), step('runs', 'unknown')])).toBe('open');
+			expect(checklistMode([...known, step('series', 'partial'), step('runs', 'done')])).toBe('open');
+		});
+		it('matches a real brand-new catchment and a real finished one', () => {
+			expect(checklistMode(checklist({ model: empty, settings: defaultProjectSettings(), series: [], runs: [] }))).toBe('open');
+			const done = checklist({
+				model: full,
+				settings: settled(),
+				series: [series('rain_catchment_mm', 3653), series('flow_observed_m3s')],
+				runs: [run('2026-02-01T00:00:00Z')],
+				updatedAt: '2026-01-15T00:00:00Z'
+			});
+			expect(checklistMode(done)).toBe('complete');
+		});
 	});
 });

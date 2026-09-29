@@ -135,7 +135,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; **Days below the reserve** in each of the run’s last twelve months, where **More on River & reserve** opens the flow chart; **Needs attention** cards (hydrological units short of water, run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed), with the **Active alerts** under them; and **Supply by hydrological unit**, the eight least supplied first (**Show all** lists the rest), where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Once the run’s last day is more than a week old, the card says so by its date (**Dams on 31 Dec 2024**), and “this week” and “last 30 days” elsewhere give way to the date the figures end on in the same way. Below them sit the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; **Days below the reserve** in each of the run’s last twelve months, where **More on River & reserve** opens the flow chart; **Needs attention** cards (hydrological units short of water, run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed), with the **Active alerts** under them; and **Supply by hydrological unit**, the eight least supplied first (**Show all** lists the rest), where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Once the run’s last day is more than a week old, the card says so by its date (**Dams on 31 Dec 2024**), and “this week” and “last 30 days” elsewhere give way to the date the figures end on in the same way. The published baseline and links to **Dams** and **Project** sit under the supply list. Once every setup step is done, the checklist leaves the page: a **Setup complete** button at the top, beside the rain date, opens the steps over the page.'
 					}
 				]
 			},
@@ -463,11 +463,12 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'steps',
 						items: [
-							'On **Transfers**, press **+ Add transfer** in the section header and pick its source (**From**) and destination (**To**) hydrological units.',
-							'Enter its [[transfer-rate|maximum rate]] in m³/s for each [[transfer-months|month]] it runs in, Oct … Sep; leave a month blank to keep it off. **… in every month** copies the largest rate to all twelve.',
-							'Enter a daily cap in m³ if there is one.',
-							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
-							'With several transfers, set each one’s [[transfer-priority|priority]]: lower moves first.',
+							'On **Transfers**, press **+ Add transfer** in the section header. Each rule is a card: along its top, pick its source (**From**) and destination (**To**) hydrological units.',
+							'Under **Max rate by month**, enter its [[transfer-rate|maximum rate]] in m³/s for each [[transfer-months|month]] it runs in, Oct … Sep; leave a month blank to keep it off. **… in every month** copies the largest rate to all twelve.',
+							'Under **Limits**, enter a daily cap in m³ if there is one.',
+							'Under **Source**, keep **Takes from** on the source’s dam and set the [[transfer-min-storage|minimum storage]] it keeps, or pick the river for an [[transfer-offtake|off-take]] and fill in its fields.',
+							'With several transfers, set each one’s [[transfer-priority|priority]] under **Limits**: lower moves first.',
+							'The **On** switch at the top right of the card leaves a rule in the model but stops it running (the card turns grey and says **off**); **Remove** deletes it, asking first once it has a rate.',
 							'Save, then run.'
 						]
 					}
@@ -766,7 +767,7 @@ export const GUIDES: Guide[] = [
 						type: 'steps',
 						items: [
 							'Run a baseline.',
-							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if. On **Compare runs**, **+ New what-if** starts a scenario on the baseline for you: give it a name, add its changes on **Scenarios** and run it.',
+							'Change one thing (raise a dam, add crops, add a transfer, refit the parameters) in the same project or in a copy, and run again. That run is a what-if. A scenario’s run, made and run on **Scenarios**, is a what-if too.',
 							'Open **Compare runs** (under **Outcomes**, or the link at the top of the runs list on Runs & results). It starts on the latest run (**What-if 1**) against the published run (**Baseline**), or against the run before it when nothing is published. Each run card has its own project and run picker, so any run from any project you can see can take any place.',
 							'To weigh two changes against each other, press **+ Add a second what-if**. It picks the newest run that isn’t already on the page; **Remove** takes it off again.',
 							'Read the cards (each what-if’s main change), then **What changes**: each outcome for the baseline and every what-if, with the change from the baseline under each what-if’s value (dam storage at the end of the run too, as a share of each run’s own dam capacity), and the takeaways in plain words under it. **Days below the reserve, each year** shows the same test year by year (October to September).',

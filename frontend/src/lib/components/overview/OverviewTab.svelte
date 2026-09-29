@@ -14,7 +14,7 @@
 	import { attention, runHref } from './attention';
 	import { riverHref } from '$lib/components/river/links';
 	import { supplyHref } from '$lib/components/supply/links';
-	import { checklist } from './checklist';
+	import { checklist, checklistMode } from './checklist';
 	import LatestRun from './LatestRun.svelte';
 	import { DAMS_HREF, historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
@@ -23,6 +23,7 @@
 	import PublishedBaseline from './PublishedBaseline.svelte';
 	import ReserveStrip from './ReserveStrip.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
+	import SetupPill from './SetupPill.svelte';
 
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
 	const loadSupply = () => import('./SupplyByFarm.svelte');
@@ -62,6 +63,10 @@
 	const steps = $derived(
 		checklist({ model: editor.model, settings: project.settings, series, runs, updatedAt: project.updatedAt })
 	);
+	// Once every step is done the checklist leaves the page for a "Setup complete" pill in the
+	// section header, whose popover lists the steps over the page (SetupPill): opening it never
+	// makes the page taller. While there's work to do (or it's still checking) it stays on the page.
+	const setupDone = $derived(checklistMode(steps) === 'complete');
 
 	// --- latest run: its headline figures and what needs attention ----------
 	// The run list is the page's; the full records (summaries) are fetched here
@@ -215,8 +220,9 @@
 		})
 	);
 
-	// The section header's context line: which run the Summary shows (issue #17 A1).
-	$effect(() => fillHeader({ context: runContext }, !!pick));
+	// The section header's context line: which run the Summary shows (issue #17 A1); beside the rain
+	// pill, "Setup complete" once it is.
+	$effect(() => fillHeader({ context: runContext, status: setupDone ? setupPill : undefined }, !!pick));
 	const LEGACY_TITLE =
 		'Legacy runoff model (b023 workbook, removed in engine 1.0.0): does not conserve water at the event scale (audit H1). Workbook comparison only, not evidence; it can’t be re-run.';
 </script>
@@ -234,11 +240,34 @@
 	{/if}
 {/snippet}
 
+{#snippet setupPill()}<SetupPill {steps} tabs={visibleTabs} />{/snippet}
+
 <!-- Summary (issue #17, option A, board A1): the results first. Before the
      first run there are none, so the setup checklist leads instead. -->
+{#snippet moreLinks()}
+	<!-- Each dam's level lives on the Dams page; the model's facts, the project's details, notes and
+	     who has access on the Project page (issue #17). -->
+	<ul class="more" aria-label="More about this project">
+		{#if shown && damsTotal}
+			<li><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></li>
+		{/if}
+		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
+	</ul>
+{/snippet}
+
 {#if !pick}
 	<SetupChecklist {steps} tabs={visibleTabs} />
 	{#if attentionItems.length}<div class="pre-run"><NeedsAttention items={attentionItems} /></div>{/if}
+	<!-- Below it, before the first run: the alerts beside the published baseline, then the links. -->
+	<div class="below">
+		<div class="pair">
+			<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
+			<AlertsPanel projectId={project.id} {canEdit} />
+			<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
+			<PublishedBaseline projectId={project.id} {runs} {canEdit} />
+		</div>
+		{@render moreLinks()}
+	</div>
 {:else}
 	<div class="first">
 		<LatestRun
@@ -260,47 +289,31 @@
 				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
 			/>
 		{/if}
-		<!-- What to act on (Needs attention, then the alerts firing now) beside Supply by farm; one
-		     column alone takes the width. -->
-		<div class="cols" class:solo={!runFarms.length}>
+		<!-- What to act on (Needs attention, then the alerts firing now) beside Supply by farm, with
+		     the published baseline and the links under it: that column is usually the shorter, so
+		     the whole Summary fits a 1440 × 960 window with the example catchments. -->
+		<div class="cols">
 			<div class="act">
 				<NeedsAttention items={attentionItems} />
 				<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
 				<AlertsPanel projectId={project.id} {canEdit} />
 			</div>
-			{#if runFarms.length}
-				<Lazy load={loadSupply}>
-					{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
-				</Lazy>
-			{/if}
+			<div class="side">
+				{#if runFarms.length}
+					<Lazy load={loadSupply}>
+						{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
+					</Lazy>
+				{/if}
+				<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
+				<PublishedBaseline projectId={project.id} {runs} {canEdit} />
+				{@render moreLinks()}
+			</div>
 		</div>
 	</div>
+	<!-- Setup that isn't finished (a step undone since the run) stays on the page; once complete it
+	     is the header's pill. -->
+	{#if !setupDone}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
 {/if}
-
-<!-- Below the first screen, compact (issue #17): what stakeholders and farmers see, then where the
-     rest lives, then the setup line. Before the first run there is no first screen, so the alerts
-     sit here beside the published baseline. -->
-<div class="below">
-	<div class="pair" class:solo={!!pick}>
-		{#if !pick}
-			<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
-			<AlertsPanel projectId={project.id} {canEdit} />
-		{/if}
-		<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
-		<PublishedBaseline projectId={project.id} {runs} {canEdit} />
-	</div>
-
-	<!-- Each dam's level lives on the Dams page; the model's facts, the project's details, notes and
-	     who has access on the Project page (issue #17). -->
-	<ul class="more" aria-label="More about this project">
-		{#if shown && damsTotal}
-			<li><a href={DAMS_HREF}>Dam levels for each dam <span aria-hidden="true">→</span> Dams</a></li>
-		{/if}
-		<li><a href={projectHref()}>Model facts, details, team and sharing <span aria-hidden="true">→</span> Project</a></li>
-	</ul>
-
-	{#if pick}<SetupChecklist {steps} tabs={visibleTabs} />{/if}
-</div>
 
 <style>
 	.run-lbl {
@@ -314,29 +327,25 @@
 	.pre-run {
 		margin-bottom: 1rem;
 	}
-	/* Needs attention and the alerts beside Supply by farm, each half the width; one alone takes it
-	   all. Each card is as tall as its content (no card scrolls inside itself), so the columns may
-	   end at different heights. */
+	/* Needs attention and the alerts beside Supply by farm, the published baseline and the links, each
+	   column half the width. Each card is as tall as its content (no card scrolls inside itself), so
+	   the columns may end at different heights. */
 	.cols {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
-	.cols.solo {
-		grid-template-columns: minmax(0, 1fr);
-	}
-	.cols > :global(.panel) {
-		margin: 0;
-		min-width: 0;
-	}
-	.act {
+	.act,
+	.side {
 		display: grid;
 		gap: 1rem;
 		min-width: 0;
 	}
-	.act > :global(.panel) {
+	.act > :global(.panel),
+	.side > :global(.panel) {
 		margin: 0;
+		min-width: 0;
 	}
 	@media (max-width: 899px) {
 		.cols {
@@ -344,8 +353,7 @@
 		}
 	}
 	/* Before the first run, the alerts beside the published baseline once the tab is wide enough
-	   for two (a container query: the sidebar takes 240 px), each unchanged; stacked below that.
-	   With a run the alerts are in the first screen and the baseline has the row to itself. */
+	   for two (a container query: the sidebar takes 240 px), each unchanged; stacked below that. */
 	.below {
 		container: summary-below / inline-size;
 	}
@@ -360,7 +368,7 @@
 		margin: 0;
 	}
 	@container summary-below (min-width: 56rem) {
-		.pair:not(.solo) {
+		.pair {
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 			align-items: stretch;
 		}
@@ -369,7 +377,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.25rem 1.5rem;
-		margin: 0 0 1rem;
+		margin: 0;
 		padding: 0;
 		list-style: none;
 	}

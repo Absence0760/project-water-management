@@ -111,9 +111,16 @@
 	.skip:focus {
 		top: 8px;
 	}
+	/* --sidebar-w: the sidebar's width (0 on a phone), the one source for its
+	   grid column and for anything fixed to the window that must clear it (the
+	   model save bar, model/SaveBar.svelte). */
+	.shell {
+		--sidebar-w: 0px;
+	}
 	.shell.wide {
+		--sidebar-w: 15rem;
 		display: grid;
-		grid-template-columns: 15rem minmax(0, 1fr);
+		grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
 		min-height: 100vh;
 	}
 	.shell-main {
@@ -190,6 +197,10 @@
 	.slot {
 		flex: 0 1 auto;
 		min-height: 8rem;
+		/* Down only: overflow-y alone makes x compute to auto too, so a pixel
+		   of sideways overflow showed a horizontal scrollbar. Nothing here
+		   should overflow sideways (app-sidebar.spec.ts checks); clipped if it does. */
+		overflow-x: hidden;
 		overflow-y: auto;
 		/* The open section scrolled into view (or focused) clears the edges. */
 		scroll-padding-block: 1.5rem;
@@ -261,6 +272,7 @@
 			display: none !important;
 		}
 		.shell.wide {
+			--sidebar-w: 0px;
 			display: block;
 		}
 	}
