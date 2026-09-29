@@ -586,14 +586,11 @@ resource "aws_cloudwatch_metric_alarm" "job_dead" {
 
 # --- Alert emails (WP-2.13, backend/src/alerts/) --------------------------------
 
-# Signs the one-click unsubscribe links in alert emails (alerts/tokens.ts).
-# Only the worker holds it. Replacing it
-# (`terraform apply -replace=random_password.alerts_token_secret`) breaks the
-# unsubscribe link in every alert already sent; "Manage your alerts" still works.
-resource "random_password" "alerts_token_secret" {
-  length  = 48
-  special = false
-}
+# ALERTS_TOKEN_SECRET signs the one-click unsubscribe links in alert emails
+# (alerts/tokens.ts). Only the worker holds it, in its runtime secret; the value
+# is the sops key alerts_token_secret (var.alerts_token_secret, secrets.tf), so
+# it stays out of state. Rotating it breaks the unsubscribe link in every alert
+# already sent; "Manage your alerts" still works.
 
 # An alert storm: far more alert mail in 5 minutes than normal operation sends
 # (each person gets at most ALERTS_DAILY_CAP immediate mails a day, so a burst

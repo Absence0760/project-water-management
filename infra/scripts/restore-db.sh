@@ -48,6 +48,9 @@
 #      its identifier, so a refresh would find the *old* instance under its
 #      new name and plan to rename it back. So: `terraform state rm` and
 #      `terraform import` by identifier, then `terraform plan` (never apply).
+#      Import and plan evaluate the configuration, so they run through
+#      tf.sh (the runtime secrets from sops, as ephemeral variables); the
+#      preflight checks that sops and the secrets file are there.
 #      The plan must show in-place changes only (the migrate Lambda's
 #      MASTER_SECRET_ARN, the Secrets Manager endpoint policy and some
 #      Terraform-only arguments); a replace or destroy stops the script.
@@ -65,7 +68,8 @@
 # RESTORE_DB_POLL_SECONDS / RESTORE_DB_TIMEOUT_SECONDS set the waits.
 set -euo pipefail
 
-INFRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
+INFRA_DIR="$(cd "$SCRIPTS_DIR/.." && pwd)"
 REGION=""
 PROFILE=""
 VAR_FILE=""
@@ -125,9 +129,14 @@ fi
 for tool in aws terraform jq; do
 	command -v "$tool" > /dev/null || die "$tool not found on PATH."
 done
+# Checked now, not at step 6: by then production has been swapped.
+"$SCRIPTS_DIR/tf.sh" --preflight || die "step 6 (terraform import + plan) needs the runtime secrets from sops (tf.sh)."
 
 AWS=(aws --region "$REGION" --profile "$PROFILE" --output json)
+# output and state rm read state only; import and plan evaluate the
+# configuration, which needs the sops-fed ephemeral variables (tf.sh).
 TF=(env "AWS_PROFILE=$PROFILE" terraform "-chdir=$INFRA_DIR")
+TFS=(env "AWS_PROFILE=$PROFILE" "$SCRIPTS_DIR/tf.sh" "-chdir=$INFRA_DIR")
 
 # --- Printing and running -----------------------------------------------------------------
 STAGE="preflight"
@@ -349,7 +358,7 @@ on_exit() {
 		swap-old) echo "restore-db: stopped while renaming $ID. If $OLD exists and $ID doesn't, production is down: finish with the rename of $TARGET → $ID below, or put it back with: aws rds modify-db-instance --db-instance-identifier $OLD --new-db-instance-identifier $ID --apply-immediately --region $REGION --profile $PROFILE" >&2 ;;
 		swap-new) echo "restore-db: stopped while renaming $TARGET → $ID. Finish with: aws rds modify-db-instance --db-instance-identifier $TARGET --new-db-instance-identifier $ID --apply-immediately --region $REGION --profile $PROFILE (then rerun the steps printed after it by a dry run)" >&2 ;;
 		logs) echo "restore-db: the swap is done; turning on the log export failed. Rerun: aws rds modify-db-instance --db-instance-identifier $ID --cloudwatch-logs-export-configuration '{\"EnableLogTypes\":[\"postgresql\"]}' --apply-immediately --region $REGION --profile $PROFILE, then the terraform steps" >&2 ;;
-		terraform) echo "restore-db: the swap is done; the Terraform step failed. If aws_db_instance.main is out of state, rerun: AWS_PROFILE=$PROFILE terraform -chdir=$INFRA_DIR import -var-file=$VAR_FILE aws_db_instance.main $ID" >&2 ;;
+		terraform) echo "restore-db: the swap is done; the Terraform step failed. If aws_db_instance.main is out of state, rerun: AWS_PROFILE=$PROFILE $SCRIPTS_DIR/tf.sh -chdir=$INFRA_DIR import -var-file=$VAR_FILE aws_db_instance.main $ID" >&2 ;;
 	esac
 }
 trap on_exit EXIT
@@ -382,11 +391,11 @@ fi
 STAGE="terraform"
 note "Terraform tracks aws_db_instance by DbiResourceId: move its state to the restored instance"
 act "${TF[@]}" state rm aws_db_instance.main
-act "${TF[@]}" import -input=false "-var-file=$VAR_FILE" aws_db_instance.main "$ID"
-note "plan (no -out: a plan file holds the decrypted secrets). Expect in-place changes only."
-show "${TF[@]}" plan -input=false -no-color "-var-file=$VAR_FILE"
+act "${TFS[@]}" import -input=false "-var-file=$VAR_FILE" aws_db_instance.main "$ID"
+note "plan (no -out: a plan file holds a copy of state, CloudFront header included). Expect in-place changes only."
+show "${TFS[@]}" plan -input=false -no-color "-var-file=$VAR_FILE"
 if [ "$EXECUTE" = 1 ]; then
-	plan=$("${TF[@]}" plan -input=false -no-color "-var-file=$VAR_FILE")
+	plan=$("${TFS[@]}" plan -input=false -no-color "-var-file=$VAR_FILE")
 	printf '%s\n' "$plan"
 	if grep -Eq 'must be replaced|will be destroyed' <<< "$plan"; then
 		echo "restore-db: the plan replaces or destroys something. Do NOT apply it; work out why first (docs/deployment.md § Restoring the database)." >&2
@@ -399,7 +408,7 @@ cat << EOF
 
 Next, by hand, in this order:
   1. Review the plan above, then apply it (repoints the migrate Lambda and the Secrets Manager endpoint at the new master secret):
-     cd $INFRA_DIR && AWS_PROFILE=$PROFILE terraform apply -var-file=$VAR_FILE
+     AWS_PROFILE=$PROFILE $SCRIPTS_DIR/tf.sh -chdir=$INFRA_DIR apply -var-file=$VAR_FILE
   2. Run the migrate Lambda (applies migrations newer than the restore point, resets water_app's password):
      aws lambda invoke --function-name $MIGRATE_FN --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region $REGION --profile $PROFILE /dev/stdout
   3. Check the site, and that the data is as of the restore point.

@@ -1,7 +1,8 @@
 terraform {
-  # use_lockfile needs 1.10+, ephemeral-safe sops reads and the provider
-  # features below need 1.11+. The exact version is pinned for tfenv in
-  # infra/.terraform-version.
+  # use_lockfile needs 1.10+; ephemeral variables and write-only arguments
+  # (the runtime secrets, secrets.tf) need 1.11+, and aws_secretsmanager_
+  # secret_version's secret_string_wo needs the AWS provider's 6.x line below.
+  # The exact version is pinned for tfenv in infra/.terraform-version.
   required_version = ">= 1.11"
 
   # Partial backend config — the bucket name embeds the account ID, which
@@ -36,19 +37,10 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
-    # The key pair that signs report downloads (reports.tf), generated like
-    # the random_password secrets: its private half lives in state and in the
-    # API's runtime secret (secrets.tf).
+    # The key pair that signs report downloads (reports.tf).
     tls = {
       source  = "hashicorp/tls"
       version = "~> 4.0"
-    }
-    # carlpett/sops — decrypts infra-secrets/water-management/prod.sops.yaml
-    # in memory at plan/apply (secrets.tf). Community provider: pinned and
-    # hash-locked in .terraform.lock.hcl.
-    sops = {
-      source  = "carlpett/sops"
-      version = "~> 1.2"
     }
   }
 }

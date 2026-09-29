@@ -58,10 +58,61 @@ variable "bootstrap_slug" {
   default     = "water-management"
 }
 
-variable "secrets_file" {
-  description = "Path to the sops-encrypted prod secrets. Defaults to the private estate repo cloned as a sibling of this one (~/github/infra-secrets). Override with TF_VAR_secrets_file if your clone lives elsewhere."
+# --- Runtime secrets (secrets.tf) --------------------------------------------
+#
+# Ephemeral: Terraform keeps them out of state and out of a saved plan. They
+# come from infra-secrets/water-management/prod.sops.yaml through
+# infra/scripts/tf.sh (sops exec-env → TF_VAR_*), never from a tfvars file,
+# and reach only the runtime secrets' write-only values. Each validation
+# names the sops key, never the value.
+
+variable "auth_jwt_secret" {
+  description = "Signs the wm_session JWT (HS256). sops key auth_jwt_secret; generate with openssl rand -hex 32."
   type        = string
-  default     = ""
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = length(var.auth_jwt_secret) >= 32
+    error_message = "auth_jwt_secret in prod.sops.yaml must be at least 32 characters (the backend refuses shorter). Generate with: openssl rand -hex 32"
+  }
+  validation {
+    # The committed dev/test values (backend/.env.development, src/__tests__/setup.ts)
+    # are public; the API Lambda refuses them at init too (config/production.ts).
+    condition     = !can(regex("^(dev|test)-only-", var.auth_jwt_secret))
+    error_message = "auth_jwt_secret in prod.sops.yaml is a committed dev/test placeholder. Generate a real one with: openssl rand -hex 32"
+  }
+}
+
+variable "db_app_password" {
+  description = "Password of the RLS-bound runtime role water_app. sops key db_app_password; generate with openssl rand -hex 24."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{24,}$", var.db_app_password))
+    error_message = "db_app_password in prod.sops.yaml must be 24+ alphanumeric characters (it is embedded in DATABASE_URL and role DDL). Generate with: openssl rand -hex 24"
+  }
+}
+
+variable "alerts_token_secret" {
+  description = "Signs the one-click unsubscribe links in alert emails (the worker only). sops key alerts_token_secret; generate with openssl rand -hex 32."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{32,}$", var.alerts_token_secret))
+    error_message = "alerts_token_secret in prod.sops.yaml must be 32+ alphanumeric characters (the worker refuses shorter). Generate with: openssl rand -hex 32"
+  }
+}
+
+variable "runtime_secret_version" {
+  description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed: raise this after editing prod.sops.yaml. Every runtime secret is then written again, and the API, worker and migrate Lambdas cold-start onto it (docs/deployment.md § Rotating a secret)."
+  type        = number
+  default     = 1
+  validation {
+    condition     = var.runtime_secret_version >= 1 && floor(var.runtime_secret_version) == var.runtime_secret_version
+    error_message = "runtime_secret_version is a whole number, 1 or more. Only ever raise it."
+  }
 }
 
 # --- Network -----------------------------------------------------------------

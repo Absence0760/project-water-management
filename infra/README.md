@@ -154,7 +154,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
-| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`); the API, worker and migrate Lambdas' runtime secrets in Secrets Manager, each role's read of its own |
+| `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
+| `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
@@ -170,7 +171,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
-| `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
+| `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
@@ -213,10 +214,10 @@ scale. An alarm fires at 60 connections.
 | Secret | Source | In Terraform state? |
 | --- | --- | --- |
 | RDS master (`water`, schema owner) | `manage_master_user_password`: RDS generates it, stores it in Secrets Manager and rotates it (every 7 days by default) | **No.** Only the migrate Lambda reads it, at run time |
-| `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | Yes |
-| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | Yes |
-| CloudFront shared secret | `random_password` → the API's runtime secret, and CloudFront's origin header | Yes |
-| Alert unsubscribe-token secret | `random_password` → the worker's runtime secret | Yes |
+| `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | **No.** Ephemeral variable → write-only value |
+| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | **No.** Ephemeral variable → write-only value |
+| Alert unsubscribe-token secret | sops `alerts_token_secret` → the worker's runtime secret | **No.** Ephemeral variable → write-only value |
+| CloudFront shared secret | `random_password` → the API's runtime secret (write-only), and CloudFront's origin header | **Yes**, in `random_password.cloudfront_shared_secret` and the distribution: `custom_header` isn't a write-only argument |
 
 **No secret sits in a Lambda's environment** (issue #126). Environment
 variables come back in plain text from `lambda:GetFunctionConfiguration`,
@@ -235,17 +236,41 @@ CloudFront secret in the distribution's origin header, readable with
 `cloudfront:GetDistributionConfig`; it only lets a caller past the WAF to the
 Function URL, where the app's own auth still applies.
 
+**No sops value sits in Terraform state or a saved plan** (issue #126).
+`scripts/tf.sh` runs Terraform under `sops exec-env`, which hands each key
+over as an ephemeral variable (`TF_VAR_<key>`; Terraform never persists an
+ephemeral value), and those variables reach only `secret_string_wo`, the
+write-only argument of each runtime secret's version (Terraform sends it to
+AWS and keeps no copy; the tftest checks the plan holds no `secret_string`
+and that the values are ephemeral). Because nothing is stored,
+Terraform can't see a changed sops value: `runtime_secret_version`
+(`secret_string_wo_version`) is the signal to write again
+([§ Rotating secrets](#rotating-secrets)). Needs Terraform 1.11+ and the AWS
+provider's 6.x line, both pinned in `main.tf`.
+
+Why variables rather than the carlpett/sops provider's `ephemeral
+"sops_file"`: Terraform's test mocks can't open an ephemeral resource before
+1.17 (hashicorp/terraform#38928), and the whole mocked suite runs through
+`secrets.tf`. Once `.terraform-version` is 1.17+, an ephemeral `sops_file`
+(mocked with `mock_ephemeral`) could replace `tf.sh`.
+
+**What stays in state:** the CloudFront shared secret, twice (the
+`random_password` and the distribution's origin header). The header argument
+isn't write-only, so no ephemeral source could reach it. A reader of state
+could call the Function URL directly, past the WAF, where the app's own auth
+still applies; it can't forge a session. The state bucket is SSE-encrypted,
+private to this account, and versioned, and **old state versions written
+before this change still hold the earlier plaintext** (the sops values, the
+old alert-token secret): the stack isn't deployed yet, so there are none;
+if it had been, rotating each sops value once after this change would retire
+them.
+
 This follows the estate. project-flakey uses the same RDS-managed master plus
-app secrets from sops. The state bucket is SSE-encrypted, private to this
-account, and versioned. As `project-mgmt/docs/secrets-management.md` says,
-sops protects secrets in git, not in state. The master is kept out of state
-because it is the one credential that bypasses RLS. The cost of that choice is
-the Secrets Manager VPC endpoint (~$7.30/month). The alternative, a
-sops-supplied master password in the migrate Lambda's env, would save that but
-put the owner credential in state and in the Lambda config. The runtime
-secrets now share that endpoint. To go further, the secret versions could be
-written write-only (`secret_string_wo` from an `ephemeral "sops_file"`), which
-would take the sops values out of state too.
+app secrets from sops. The master is kept out of state because it is the one
+credential that bypasses RLS. The cost of that choice is the Secrets Manager
+VPC endpoint (~$7.30/month). The alternative, a sops-supplied master password
+in the migrate Lambda's env, would save that but put the owner credential in
+the Lambda config. The runtime secrets now share that endpoint.
 
 The migrate Lambda sets `water_app`'s password as a **SCRAM-SHA-256
 verifier** computed in the Lambda, so the plaintext never reaches Postgres or
@@ -433,7 +458,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    some new accounts, and an account may hold only one):
    `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorDimension,MonitorArn]'`.
    If it lists a `SERVICE` monitor, either import it before the apply
-   (`terraform import 'aws_ce_anomaly_monitor.services[0]' <arn>`, after
+   (`./scripts/tf.sh import -var-file=… 'aws_ce_anomaly_monitor.services[0]' <arn>`, after
    `init` in step 8) or keep `cost_anomaly_threshold_usd = 0`; otherwise
    the apply fails on the monitor.
 4a. **SES endpoint service check** (read-only, before the first plan): confirm
@@ -442,8 +467,8 @@ Claude does not run any of these, and none of them print a secret. Replace
    An empty result means the apply would fail on `aws_vpc_endpoint.ses`.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
-   with `openssl rand -hex 32` (JWT) and `openssl rand -hex 24` (db password)
-   inside the editor.
+   with `openssl rand -hex 32` (JWT, alert-token secret) and
+   `openssl rand -hex 24` (db password) inside the editor.
    - `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`
      (the KMS key lives in the bootstrap region)
    - `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`
@@ -456,12 +481,15 @@ Claude does not run any of these, and none of them print a secret. Replace
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
-   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
 
-   A saved plan holds every variable and secret it read (the decrypted sops
-   values, the database passwords) in plain form, so it is written outside
-   the repo and deleted once applied. If you don't apply it, delete it
+   `tf.sh` decrypts `prod.sops.yaml` in memory and passes the runtime secrets
+   as ephemeral variables; the apply needs them again (a saved plan doesn't
+   keep them), which is why it goes through `tf.sh` too. A saved plan no
+   longer holds the sops values, but it still holds a copy of state, and so
+   the CloudFront shared secret, so it is still written outside the repo and
+   deleted once applied. If you don't apply it, delete it
    yourself: `rm -f ~/.cache/water-management/prod.tfplan`. `.gitignore`
    also ignores `*.tfplan` as a backstop.
 
@@ -525,32 +553,35 @@ Claude does not run any of these, and none of them print a secret. Replace
 ### Rotating secrets
 
 Every secret below reaches its Lambdas through their runtime secrets
-(`secrets.tf`). An apply that changes one writes a new secret version, which
-changes `RUNTIME_SECRET_VERSION` in each affected Lambda's configuration, so
-every running instance is replaced by a cold start that reads the new value:
-there is no separate restart step. A value changed by hand in the console is
+(`secrets.tf`), written write-only: Terraform keeps no copy, so **it can't
+tell that a sops value changed**. A sops rotation is always three steps: edit
+the value with sops, raise `runtime_secret_version` by one in `prod.tfvars`,
+and apply through `tf.sh`. Without the bump the plan shows no change and
+nothing is written. The bump replaces every runtime secret's version, which
+changes `RUNTIME_SECRET_VERSION` in each Lambda's configuration, so every
+running instance is replaced by a cold start that reads the new value: there
+is no separate restart step. A value changed by hand in the console is
 **not** picked up (each Lambda reads the version Terraform pinned); change it
 at its source and apply instead.
 
-- **`db_app_password`:** edit it with sops, apply, and invoke the migrate
-  Lambda straight away. The API fails DB logins until you do:
+The apply, for any of the sops keys:
+`cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`
+
+- **`db_app_password`:** edit it with sops, raise `runtime_secret_version`,
+  apply, and invoke the migrate Lambda straight away. The API fails DB logins
+  until you do:
   `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
-- **`auth_jwt_secret`:** edit it with sops and apply. Everyone is signed out.
-- **CloudFront shared secret:**
-  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
+- **`auth_jwt_secret`:** edit it with sops, raise `runtime_secret_version`,
+  apply. Everyone is signed out.
+- **`alerts_token_secret`** (WP-2.13, the worker only): only if it leaked,
+  since every unsubscribe link in alert emails already sent stops working
+  ("Manage your alerts" still does). Edit it with sops, raise
+  `runtime_secret_version`, apply. The alert kill switch is
+  `alerts_enabled = false` (docs/deployment.md § Runbooks, alert storm).
+- **CloudFront shared secret** (no bump: replacing it rewrites the runtime
+  secrets in the same apply, `replace_triggered_by` in `secrets.tf`):
+  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).
-- **Report-download signing key** (the API only): only if it may have
-  leaked (it is in state and the API's runtime secret):
-  `terraform apply -var-file=… -replace=tls_private_key.report_downloads`.
-  The new CloudFront public key is created before the old one goes
-  (`create_before_destroy`); links minted in the seconds before the API
-  cold-starts onto the new key get a 403, and clicking again works.
-- **Alert unsubscribe-token secret** (WP-2.13, the worker only): only if it
-  leaked, since every unsubscribe link in alert emails already sent stops
-  working ("Manage your alerts" still does):
-  `terraform apply -var-file=… -replace=random_password.alerts_token_secret`.
-  The alert kill switch is `alerts_enabled = false` (docs/deployment.md §
-  Runbooks, alert storm).
 - **RDS master:** RDS rotates it automatically. Nothing reads it except the
   migrate Lambda, which fetches it on every run.
 

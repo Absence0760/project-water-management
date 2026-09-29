@@ -1,8 +1,9 @@
 # Copy to terraform.tfvars (gitignored) — or, per the estate pattern, keep the
 # canonical copy in the private repo as infra-secrets/water-management/prod.tfvars
 # and pass it with -var-file (infra/README.md § First apply). Nothing here is
-# secret; secrets come from infra-secrets/water-management/prod.sops.yaml via
-# the sops provider (secrets.tf), never from tfvars.
+# secret; secrets come from infra-secrets/water-management/prod.sops.yaml
+# through infra/scripts/tf.sh (ephemeral variables, secrets.tf), never from
+# tfvars.
 
 # Primary region for VPC/RDS/Lambda/S3. af-south-1 (Cape Town) for POPIA +
 # latency — enable it on the account first (Account → AWS Regions) — or
@@ -21,8 +22,11 @@ github_repo = "Absence0760/project-water-management"
 # MUST match the slug new-project-account.sh was run with (role <slug>-deploy).
 bootstrap_slug = "water-management"
 
-# Default: ../../infra-secrets/water-management/prod.sops.yaml (sibling clone).
-# secrets_file = ""
+# Raise by one after editing prod.sops.yaml: Terraform writes the runtime
+# secrets write-only and can't see a changed value otherwise (secrets.tf,
+# docs/deployment.md § Rotating a secret). The sops file's own path is
+# scripts/tf.sh's WM_SECRETS_FILE (default: the infra-secrets sibling clone).
+runtime_secret_version = 1
 
 # Budget + alarm notifications. Budgets need IAM billing access enabled on the
 # member account (one-time root toggle) — set budget_monthly_usd and

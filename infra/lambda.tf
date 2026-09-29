@@ -24,7 +24,9 @@
 locals {
   rds_ca_path = "/var/task/rds-global-bundle.pem"
 
-  # water_app password is alphanumeric (enforced below) but urlencode anyway.
+  # water_app password is alphanumeric (var.db_app_password's validation) but
+  # urlencode anyway. Ephemeral, like the password: it only reaches the runtime
+  # secrets' write-only values (secrets.tf).
   database_url = format(
     "postgresql://water_app:%s@%s:%d/%s?sslmode=verify-full",
     urlencode(local.db_app_password),
@@ -167,21 +169,7 @@ resource "aws_lambda_function" "backend" {
       filename,
       source_code_hash,
     ]
-
-    precondition {
-      condition     = length(local.auth_jwt_secret) >= 32
-      error_message = "auth_jwt_secret in prod.sops.yaml must be at least 32 characters (the backend refuses shorter). Generate with: openssl rand -hex 32"
-    }
-    precondition {
-      # The committed dev/test values (backend/.env.development, src/__tests__/setup.ts)
-      # are public; the API Lambda refuses them at init too (config/production.ts).
-      condition     = !can(regex("^(dev|test)-only-", local.auth_jwt_secret))
-      error_message = "auth_jwt_secret in prod.sops.yaml is a committed dev/test placeholder. Generate a real one with: openssl rand -hex 32"
-    }
-    precondition {
-      condition     = can(regex("^[A-Za-z0-9]{24,}$", local.db_app_password))
-      error_message = "db_app_password in prod.sops.yaml must be 24+ alphanumeric characters (it is embedded in DATABASE_URL and role DDL). Generate with: openssl rand -hex 24"
-    }
+    # The secrets' shape checks are validations on their variables (variables.tf).
   }
 }
 
