@@ -168,7 +168,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Nothing you edit takes you off the page. **Grids** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors, planted areas and irrigation demand. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
+						text: 'Nothing you edit takes you off the page. **Grids** opens a full table over the page: the Network’s has the **Node table**, **Crop factors**, **Planted areas** and **Transfers**, Crops & demand’s the crop factors and planted areas. **+ Add node**, or **Edit** on the selected node’s card beside the map, opens the node’s form in a sheet beside the page; **+ Add crop**, or **Edit** on a crop’s row, opens the crop’s. Each grid and sheet has its own **Save changes**, **Discard** and **Done**, which brings you back where you were.'
 					},
 					{
 						type: 'note',
@@ -375,7 +375,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas, Irrigation demand): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
+						text: 'The full tables are under **Grids** in the section header (Crop factors, Planted areas): they open over the page, and **Done** brings you back. The Crop factors grid also has **Load crop factors…**, to fill them from the reference library or a b023 workbook. To change just one hydrological unit, click its name beside its bar, or select it on the **Network** and follow **Irrigated** on its card: its crops and hectares open beside the page, with its demand, and save with the rest of the model.'
 					},
 					{
 						type: 'note',

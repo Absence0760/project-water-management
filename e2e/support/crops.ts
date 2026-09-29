@@ -5,13 +5,12 @@
 // closeModal from ./network.ts.
 import type { Page } from '@playwright/test';
 
-export type CropGrid = 'crop-factors' | 'planted-areas' | 'demand';
+export type CropGrid = 'crop-factors' | 'planted-areas';
 const TITLE: Record<CropGrid, string> = {
 	'crop-factors': 'Crop factors',
-	'planted-areas': 'Planted areas',
-	demand: 'Irrigation demand preview'
+	'planted-areas': 'Planted areas'
 };
-const MENU: Record<CropGrid, string> = { 'crop-factors': 'Crop factors', 'planted-areas': 'Planted areas', demand: 'Irrigation demand' };
+const MENU: Record<CropGrid, string> = { 'crop-factors': 'Crop factors', 'planted-areas': 'Planted areas' };
 
 /** Opens one of the crop grids from the Crops page's Grids menu and returns the grid's dialog. */
 export async function openCropGrid(page: Page, grid: CropGrid) {

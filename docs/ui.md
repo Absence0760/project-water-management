@@ -1927,8 +1927,8 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
 
 - **Header:** "Crops & demand", one line ("4 crops · 312.5 ha irrigated on 6
   farms · water year October to September", `cropsSummary`), and on the right
-  a **Grids** menu (Crop factors, Planted areas, Irrigation demand → the
-  [grid modal](#grid-modal), `grid=crop-factors|planted-areas|demand`; Escape
+  a **Grids** menu (Crop factors, Planted areas → the
+  [grid modal](#grid-modal), `grid=crop-factors|planted-areas`; Escape
   or a click outside closes it) and **+ Add crop** for editors. The header
   shows with no crops too, over an "Add crop" prompt.
 - **Crop list** ("Crops", *Largest planted area first*): one compact row per
@@ -1957,13 +1957,16 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   Other" instead of the group's grey.
 - **Irrigation demand by month:** the catchment's gross demand per
   water-year month, stacked by crop in the list's order, largest at the
-  bottom, "Other" on top (`MonthlyBars` in stacked mode, drawn at the card's
+  bottom, "Other" on top (`MonthlyBars`, drawn at the card's
   measured size so its text isn't scaled; its legend's height is measured
   after each render and taken off the plot). Hovering a segment names the
   month, crop and value. The annual volume, mean m³/s and peak month sit
   under it. **Show table** opens the demand table (`crops/DemandTable.svelte`:
   the formula, m³/day per month, the mean and Mm³/a per unit and for the
-  catchment) in place. An alert says when A-pan isn't set (demand is then
+  catchment) in place; `#crop-demand-table` opens it from a link. The
+  Irrigation demand grid (`grid=demand`), a modal with the same chart and
+  table, was removed (issue #174): an old link goes to `?tab=crops#crop-demand-table`
+  (`movedGridHref`). An alert says when A-pan isn't set (demand is then
   zero).
 - **Planted area by hydrological unit:** one stacked bar per unit with something planted,
   largest total first, split by crop in the list's colours and order, scaled
@@ -2038,7 +2041,7 @@ above 1.0: `highCropFactors`, a hint, never a block on saving), planted areas
 in **ha** (stored as m²; farm rows in network order, reorderable; the
 no-planted-area note) and the demand preview (chart and `DemandTable`).
 `CropsTab` with a `sections` prop renders it: the grid modal passes one
-section, scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
+section (crop factors or planted areas), scenario override mode (`scenarios/OverrideEditor.svelte`) all three,
 inline, on the scenario's model, so neither the crop sheet nor the page's
 overlays ever edit the catchment from there.
 
@@ -2138,7 +2141,7 @@ click away). It opens while the workspace URL has `grid=<id>`
 (`lib/workspace/overlays.ts`): `nodes` (the Network's node table, `NetworkTab`
 with `only="table"`: every column, reordering, Add node / other user, Sort by
 flow path, the other water users and the field guide; with no nodes, **Add
-outflow gauge**), `crop-factors`, `planted-areas` and `demand` (the
+outflow gauge**), `crop-factors` and `planted-areas` (the
 [crop grids](#crop-grids), through `CropsTab`'s `sections` prop) and
 `transfers` (the Transfers tab). Done, Esc, the ✕ or Back close it; closing drops `grid` from
 the URL in place (`withoutParam`). It isn't opened over the grid's own tab

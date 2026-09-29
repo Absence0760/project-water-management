@@ -41,7 +41,7 @@
 		runs?: RunMeta[] | null;
 	} = $props();
 
-	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas', demand: 'demand' } as const;
+	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas' } as const;
 	const area = $derived(grid === 'nodes' ? 'network' : grid === 'transfers' ? 'transfers' : 'crops');
 </script>
 
