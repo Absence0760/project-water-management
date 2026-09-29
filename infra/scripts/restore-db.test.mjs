@@ -93,7 +93,8 @@ function setup({ outputs = OUTPUTS, state = fixture() } = {}) {
 		outputs: join(dir, 'outputs.json'),
 		secrets: join(dir, 'prod.sops.yaml'),
 	};
-	writeFileSync(files.secrets, 'synthetic: not read by the fake sops\n');
+	// Only its plaintext sops.lastmodified is read (tf.sh's rotation counter).
+	writeFileSync(files.secrets, 'synthetic: ENC[AES256_GCM,data:eA==,type:str]\nsops:\n    lastmodified: "2026-09-28T08:15:00Z"\n');
 	writeFileSync(files.state, JSON.stringify(state));
 	writeFileSync(files.outputs, JSON.stringify(outputs));
 	writeFileSync(files.awsLog, '');
@@ -244,7 +245,7 @@ test('--execute restores, verifies, swaps, moves Terraform state and stops short
 	assert.ok(r.tf.every((c) => c.profile === 'water-management'), 'Terraform runs under the given profile');
 	// Import and plan evaluate the configuration, so they get the runtime
 	// secrets (tf.sh, sops → ephemeral TF_VAR_*); reading state needs none.
-	const RUNTIME = ['TF_VAR_alerts_token_secret', 'TF_VAR_auth_jwt_secret', 'TF_VAR_db_app_password'];
+	const RUNTIME = ['TF_VAR_alerts_token_secret', 'TF_VAR_auth_jwt_secret', 'TF_VAR_db_app_password', 'TF_VAR_runtime_secret_version'];
 	assert.deepEqual(
 		r.tf.map((c) => [c.args[0], c.tfvars]),
 		r.tf.map((c) => [c.args[0], ['import', 'plan'].includes(c.args[0]) ? RUNTIME : []]),

@@ -64,15 +64,18 @@ locals {
 # Each value is written write-only (secret_string_wo): Terraform sends it to
 # Secrets Manager and keeps no copy, so it cannot tell when a sops value
 # changes. var.runtime_secret_version (secret_string_wo_version) is the
-# signal. Rotation:
-#   - a sops value: edit prod.sops.yaml, raise runtime_secret_version, apply;
+# signal, and it is automatic: scripts/tf.sh sets it from prod.sops.yaml's
+# plaintext sops.lastmodified (YYYYMMDDhhmmss), which sops rewrites on every
+# edit, and refuses a var file that would pin it. Rotation:
+#   - a sops value: edit prod.sops.yaml, apply through tf.sh;
 #   - the CloudFront header: `-replace=random_password.cloudfront_shared_secret`
-#     (replace_triggered_by below rewrites the secrets in the same apply).
-# Either replaces every secret version (the AWS provider forces a new version
+#     (replace_triggered_by below rewrites the secrets in the same apply);
+#   - unchanged values, forced: `-var runtime_secret_version=<any other number>`.
+# Each replaces every secret version (the AWS provider forces a new version
 # when secret_string_wo_version changes), so each version_id changes, and with
 # it RUNTIME_SECRET_VERSION: the function configuration updates and every
 # instance cold-starts onto the new values (docs/deployment.md § Rotating a
-# secret). A sops edit without the bump reaches nothing.
+# secret).
 #
 # Encrypted with the AWS-managed aws/secretsmanager key, like the RDS
 # master secret, so a role needs only secretsmanager:GetSecretValue on its ARN.
@@ -135,7 +138,7 @@ resource "aws_secretsmanager_secret_version" "runtime" {
 
   lifecycle {
     # A new CloudFront header must reach the API's secret in the same apply,
-    # or every API request gets 403 until the next bump. All three are
+    # or every API request gets 403 until the next sops edit. All three are
     # rewritten (for_each can't narrow it); the other two just cold-start.
     replace_triggered_by = [random_password.cloudfront_shared_secret]
   }

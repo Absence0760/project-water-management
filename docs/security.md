@@ -1986,7 +1986,9 @@ key there would let any read-only principal forge any user's session.
   key. The `runtime_secrets` tftest checks that no version uses
   `secret_string` and that the values are ephemeral (`ephemeralasnull`, with
   the CloudFront secret as the positive control). The price: Terraform can't
-  see a changed sops value, so a rotation raises `runtime_secret_version`
+  see a changed sops value by itself; `infra/scripts/tf.sh` sets
+  `runtime_secret_version` from the sops file's plaintext `sops.lastmodified`,
+  so every sops edit rewrites the secrets
   ([deployment.md § Rotating a secret](./deployment.md#rotating-a-secret)).
 - **What remains.** The CloudFront shared secret is still in Terraform state
   (the `random_password` and the distribution), because CloudFront's origin
@@ -2202,10 +2204,10 @@ notice to data subjects).
 1. **Suspected secret leak:** rotate the secret at its source.
    `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored
    run unverified until re-run ([§ Run stamps](#run-stamps)). DB passwords: `ALTER ROLE`
-   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml`,
-   raise `runtime_secret_version` in `prod.tfvars` and apply through
-   `infra/scripts/tf.sh` (without the bump nothing is written). The operator
-   runs these steps by hand.
+   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml`
+   and apply through `infra/scripts/tf.sh` (the edit moves
+   `sops.lastmodified`, which rotates the runtime secrets). The operator runs
+   these steps by hand.
 2. **Suspected cross-project data exposure:** check the RLS policies and the
    `water_app` role flags (`\du`, `pg_policies`). Add a failing DB test that
    reproduces it before fixing.

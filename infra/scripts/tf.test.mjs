@@ -2,7 +2,10 @@
 // fake `terraform` that reports what it was given: the sops keys arrive as
 // TF_VAR_* and nowhere else, the arguments pass through intact (spaces,
 // quotes), a missing or empty key is refused by name without running
-// Terraform, and --preflight decrypts nothing. Needs bash and node. No AWS.
+// Terraform, and --preflight decrypts nothing. The rotation counter comes from
+// the file's plaintext sops.lastmodified (an explicit TF_VAR_ wins, a var file
+// that pins it is refused, missing metadata is a clear error). Needs bash and
+// node. No AWS.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -23,12 +26,26 @@ const VALUES = {
 	cloudfront_private_key: 'synthetic line one\nline two',
 };
 
-function setup({ withSops = true } = {}) {
+// The shape of a sops-encrypted YAML file: ENC[…] values, then the plaintext
+// `sops:` block. Synthetic ciphertext; the fake sops never reads the file.
+const SOPS_FILE = (lastmodified = '    lastmodified: "2026-09-28T08:15:00Z"\n') =>
+	'auth_jwt_secret: ENC[AES256_GCM,data:c3ludGhldGlj,iv:aXY=,tag:dGFn,type:str]\n' +
+	'lastmodified: ENC[AES256_GCM,data:bm90LW1ldGFkYXRh,iv:aXY=,tag:dGFn,type:str]\n' +
+	'sops:\n' +
+	'    kms:\n' +
+	'        - arn: arn:aws:kms:us-east-1:000000000000:alias/water-management-sops\n' +
+	'          created_at: "2026-01-01T00:00:00Z"\n' +
+	'          enc: c3ludGhldGlj\n' +
+	lastmodified +
+	'    mac: ENC[AES256_GCM,data:bWFj,iv:aXY=,tag:dGFn,type:str]\n' +
+	'    version: 3.12.2\n';
+
+function setup({ withSops = true, secretsFile = SOPS_FILE() } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'tf-sh-'));
 	// Only what tf.sh and the fakes use, so a real sops elsewhere on PATH can't answer.
 	const bin = join(dir, 'bin');
 	mkdirSync(bin);
-	for (const tool of ['dirname', 'printenv', 'node', 'sh']) symlinkSync(which(tool), join(bin, tool));
+	for (const tool of ['dirname', 'printenv', 'node', 'sh', 'awk', 'grep']) symlinkSync(which(tool), join(bin, tool));
 	if (withSops) {
 		writeFileSync(join(bin, 'sops'), `#!/bin/sh\nexec node ${join(here, 'tf-stubs', 'sops.mjs')} "$@"\n`);
 		chmodSync(join(bin, 'sops'), 0o755);
@@ -43,12 +60,13 @@ appendFileSync(process.env.FAKE_TF_LOG, JSON.stringify({
 	args: process.argv.slice(2),
 	tfvars: Object.fromEntries(keys.filter((k) => ('TF_VAR_' + k) in process.env).map((k) => [k, process.env['TF_VAR_' + k]])),
 	bare: keys.filter((k) => k in process.env),
+	version: process.env.TF_VAR_runtime_secret_version,
 }) + '\\n');
 `,
 	);
 	chmodSync(join(bin, 'terraform'), 0o755);
 	const secrets = join(dir, 'prod.sops.yaml');
-	writeFileSync(secrets, 'synthetic: not read by the fake sops\n');
+	writeFileSync(secrets, secretsFile);
 	const files = { tfLog: join(dir, 'tf.log'), sopsLog: join(dir, 'sops.log') };
 	writeFileSync(files.tfLog, '');
 	writeFileSync(files.sopsLog, '');
@@ -141,4 +159,83 @@ test('refuses to run with no Terraform arguments', () => {
 	assert.notEqual(r.status, 0);
 	assert.match(r.stderr, /usage: tf\.sh/);
 	assert.deepEqual(r.sops, []);
+});
+
+// --- The rotation counter -----------------------------------------------------
+
+test('runtime_secret_version comes from sops.lastmodified, as YYYYMMDDhhmmss', () => {
+	const ctx = setup();
+	const r = run(ctx, ['plan']);
+	assert.equal(r.status, 0, r.stderr);
+	// The same number the tftest's rotation run passes through the variable's validation.
+	assert.equal(r.tf[0].version, '20260928081500');
+	assert.equal(r.stderr, '');
+});
+
+test('the counter reads only the sops: block (a data key named lastmodified is ignored)', () => {
+	// SOPS_FILE's top-level `lastmodified: ENC[…]` sits outside the sops: block.
+	const ctx = setup({ secretsFile: SOPS_FILE('').replace('    version:', '    lastmodified: "2027-01-02T03:04:05Z"\n    version:') });
+	const r = run(ctx, ['plan']);
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(r.tf[0].version, '20270102030405');
+});
+
+test('an explicit TF_VAR_runtime_secret_version wins over lastmodified', () => {
+	const ctx = setup();
+	const r = run(ctx, ['apply'], { TF_VAR_runtime_secret_version: '20991231235959' });
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(r.tf[0].version, '20991231235959');
+	assert.match(r.stderr, /from the environment/);
+	// A -var passes through untouched; Terraform ranks it above TF_VAR_, so it
+	// wins there.
+	const v = run(setup(), ['apply', '-var', 'runtime_secret_version=7']);
+	assert.equal(v.status, 0, v.stderr);
+	assert.deepEqual(v.tf[0].args, ['apply', '-var', 'runtime_secret_version=7']);
+});
+
+test('missing or malformed sops metadata is a clear error, before decrypting', () => {
+	for (const [file, want] of [
+		[SOPS_FILE(''), /no sops\.lastmodified in .*prod\.sops\.yaml/],
+		['plain: yaml\n', /no sops\.lastmodified/],
+		[SOPS_FILE('    lastmodified: "2026-09-28T08:15:00+02:00"\n'), /not a UTC RFC 3339 time/],
+	]) {
+		const ctx = setup({ secretsFile: file });
+		const r = run(ctx, ['plan']);
+		assert.notEqual(r.status, 0);
+		assert.match(r.stderr, want);
+		assert.deepEqual(r.sops, [], 'nothing decrypted');
+		assert.deepEqual(r.tf, []);
+		assert.notEqual(run(ctx, ['--preflight']).status, 0, '--preflight checks the metadata too');
+	}
+	// With the counter given explicitly, the metadata isn't needed.
+	const ctx = setup({ secretsFile: SOPS_FILE('') });
+	const r = run(ctx, ['plan'], { TF_VAR_runtime_secret_version: '5' });
+	assert.equal(r.status, 0, r.stderr);
+	assert.equal(r.tf[0].version, '5');
+});
+
+test('refuses a var file that would pin the counter', () => {
+	for (const [name, body, args] of [
+		['prod.tfvars', 'aws_region = "af-south-1"\nruntime_secret_version = 1\n', ['plan', '-var-file=prod.tfvars']],
+		['prod.tfvars', '  runtime_secret_version=3\n', ['plan', '-var-file', 'prod.tfvars']],
+		['terraform.tfvars', 'runtime_secret_version = 1\n', ['plan']],
+		['x.auto.tfvars.json', '{ "runtime_secret_version": 1 }\n', ['plan']],
+	]) {
+		const ctx = setup();
+		writeFileSync(join(ctx.dir, name), body);
+		const r = run(ctx, args);
+		assert.notEqual(r.status, 0, name);
+		assert.match(r.stderr, /sets runtime_secret_version, which would pin the rotation counter/, name);
+		assert.deepEqual(r.sops, [], name);
+	}
+	// -chdir: the var files Terraform would load from that directory.
+	const ctx = setup();
+	mkdirSync(join(ctx.dir, 'infra'));
+	writeFileSync(join(ctx.dir, 'infra', 'terraform.tfvars'), 'runtime_secret_version = 1\n');
+	assert.notEqual(run(ctx, ['-chdir=infra', 'plan']).status, 0);
+	// A var file that doesn't set it is fine.
+	const ok = setup();
+	writeFileSync(join(ok.dir, 'prod.tfvars'), 'aws_region = "af-south-1"\n');
+	const r = run(ok, ['plan', '-var-file=prod.tfvars']);
+	assert.equal(r.status, 0, r.stderr);
 });

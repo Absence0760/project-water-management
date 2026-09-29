@@ -7,10 +7,11 @@
 # Create / edit (authenticated to the water-management account):
 #   cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml
 #
-# After ANY edit, raise runtime_secret_version in prod.tfvars, then plan and
-# apply through tf.sh: the runtime secrets are written write-only, so
-# Terraform can't see a changed value and writes nothing new without the bump
-# (docs/deployment.md § Rotating a secret).
+# After ANY edit, plan and apply through tf.sh. The runtime secrets are
+# written write-only, so Terraform can't see a changed value by itself; tf.sh
+# sets runtime_secret_version from this file's sops.lastmodified (plaintext
+# metadata sops rewrites on every edit), so the edit alone triggers the
+# rewrite (docs/deployment.md § Rotating a secret).
 #
 # The RDS master (schema-owner) password is NOT here: RDS manages and rotates
 # it in Secrets Manager (infra/rds.tf). The CloudFront shared secret is
@@ -22,9 +23,8 @@ auth_jwt_secret: "REPLACE_ME"
 # Password for the RLS-bound runtime role water_app. 24+ ALPHANUMERIC chars
 # only (it is embedded in DATABASE_URL). `openssl rand -hex 24`
 # The migrate Lambda sets it on the role on every invocation. Rotating is:
-# edit here -> raise runtime_secret_version -> apply -> immediately invoke the
-# migrate Lambda (infra/README.md § Rotating secrets); the API fails DB logins
-# in between.
+# edit here -> apply through tf.sh -> immediately invoke the migrate Lambda
+# (infra/README.md § Rotating secrets); the API fails DB logins in between.
 db_app_password: "REPLACE_ME"
 
 # Signs the one-click unsubscribe links in alert emails (the worker only).

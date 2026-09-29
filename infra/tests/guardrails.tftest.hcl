@@ -986,20 +986,33 @@ run "rejects_zero_runtime_secret_version" {
   expect_failures = [var.runtime_secret_version]
 }
 
-# Rotation: a raised counter reaches every runtime secret version (the AWS
-# provider replaces a version whose secret_string_wo_version changed, so its
-# version_id, and each Lambda's RUNTIME_SECRET_VERSION with it, changes; the
-# mocks can't show the replacement itself, runtime_secrets checks the wiring).
-run "rotation_counter_reaches_every_secret" {
+run "rejects_runtime_secret_version_past_16_digits" {
   command = plan
 
   variables {
-    runtime_secret_version = 2
+    runtime_secret_version = 10000000000000000
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+# Rotation: scripts/tf.sh sets the counter from sops.lastmodified as
+# YYYYMMDDhhmmss (14 digits: past 2^32, well inside the provider's 64-bit
+# secret_string_wo_version). It must pass the variable's validation and reach
+# every runtime secret version unchanged (the AWS provider replaces a version
+# whose secret_string_wo_version changed, so its version_id, and each Lambda's
+# RUNTIME_SECRET_VERSION with it, changes; the mocks can't show the
+# replacement itself, runtime_secrets checks the wiring).
+run "rotation_counter_from_sops_lastmodified" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 20260928081500
   }
 
   assert {
-    condition     = alltrue([for k, v in aws_secretsmanager_secret_version.runtime : v.secret_string_wo_version == 2])
-    error_message = "A raised runtime_secret_version must reach every runtime secret version."
+    condition     = alltrue([for k, v in aws_secretsmanager_secret_version.runtime : v.secret_string_wo_version == 20260928081500])
+    error_message = "A lastmodified-derived runtime_secret_version (YYYYMMDDhhmmss) must pass validation and reach every runtime secret version unchanged."
   }
 }
 
