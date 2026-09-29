@@ -1495,11 +1495,11 @@ the suggested order (the IDs carry the detail):
       flow, and the store balance with its residual; legacy runs list the
       [Flow data] columns). Column catalogues `GR4J_COLUMNS` /
       `LEGACY_RUNOFF_COLUMNS` in `verify/columns.ts` (ui.md, api.md).
-- [ ] **Per-store starting values on a run's first day.** Only the total
-      storage after the warm-up is saved, so day one's catchment trace
-      shows each store's "before" as "–" and balances on the total. Saving
-      each store at the end of the warm-up is an engine change (bump
-      `ENGINE_VERSION`). Trigger: the hydrologist asks for day-one detail.
+- [x] **Per-store starting values on a run's first day** (engine 1.20.0,
+      issue #67): the run's summary records each store after the warm-up
+      (`summary.runoff.storesStartMm`, summing to `storageStartMm`, checked
+      by the runoff self-check), and day one's catchment trace starts from
+      them store by store. A run from before keeps the "–" and the total.
 - [x] **Alert on a failed self-check in production** (2026-09-24):
       `executeRun` logs `{ event: "self_check_failed", projectId, runId,
       checks }` (check ids only), and `infra/alarms.tf` has a metric filter
@@ -2000,12 +2000,12 @@ role and not before it.
         rate × years since a survey date. Needs a survey year per dam, so a
         field and a migration. Trigger: a licence run over more than ~20
         years, or the hydrologist asks.
-      - *The survey curve as a scenario op*: a scenario can add a dam with a
-        curve (`node.add`) but has no `node.set` for `damCurve` (the
-        override form has no table value spec). Durable fix: a `table`
-        ValueSpec in `scenarios/fields.ts` reusing `parseDamCurve`, and
-        `damCurve` in `NODE_SET_FIELDS.farm`. Trigger: an applicant's
-        scenario that raises a dam (WP-3.6 storage–yield will want it).
+      - ~~*The survey curve as a scenario op*~~: done (engine 1.20.0, issue
+        #67): `damCurve` is in `NODE_SET_FIELDS.farm`, the "Add a change"
+        form takes pasted rows (`curve` ValueSpec reusing `parseDamCurve`),
+        and override mode records a table edit of the curve, after the
+        capacity op when the dam is raised with it (scenarios.md § Dam
+        capacity).
       - *Transfer room ignores today's release*: a transfer into a dam with
         a release rule is sized as if the dam kept what it releases, so it
         can move less than it could (never more). Same conservative choice
@@ -3062,9 +3062,10 @@ from the WP:
       model.md §2.13, scenarios.md § Dam capacity) instead of scaling the
       area with capacity. Drafted from the hydrologist persona's review of
       issue #46 (item 11), not the real hydrologist. Initial and minimum
-      levels still keep their fractions. Left: a `node.set` for a survey
-      curve, so a scenario can carry the enlarged dam's own surveyed curve
-      (today only a `node.add` can), the durable answer for the larger side.
+      levels still keep their fractions. The `node.set` for a survey curve,
+      so a scenario can carry the enlarged dam's own surveyed curve (the
+      durable answer for the larger side), is built (engine 1.20.0, issue
+      #67). Left: the hydrologist's confirmation of the resize (#90).
       Trigger: the hydrologist's review, or a licence application for a dam
       raise.
 

@@ -3492,9 +3492,9 @@ read it before.
   (shown as 0 when X2 = 0 stored none), natural flow Q in m³/day and as mm
   over the catchment, each with its formula from `GR4J_COLUMNS`; then the
   store balance, stores before + P + F − AET − Q − stores after, with its
-  residual in mm. On a run's first day each store's starting value is shown
-  as – (only their total after the warm-up is recorded) and the balance uses
-  the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
+  residual in mm. On a run's first day each store starts from its value after
+  the warm-up (engine ≥ 1.20.0); a run from before kept only their total there,
+  so each store shows – and the balance uses the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
   and says it keeps no stores, so there is no store balance to close.
   A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
@@ -4221,7 +4221,15 @@ them scenarios).
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules
   (`settings/peInput.ts`), and a new monthly row starts from the PE GR4J
-  runs on now. Targets come from the model as
+  runs on now. A farm's dam survey curve (`damCurve`, engine ≥ 1.20.0) is
+  a paste box that reads rows as the Network tab's survey box does (level,
+  area, volume, one per line; `network/damCurve.ts` `parseDamCurve`) and
+  refuses a curve the engine couldn't use; empty is none (the power law),
+  and the change reads "none (power law) → 3 survey rows, 180 000 m³ at the
+  top". Its hint says to add it after a capacity change, so a raised dam
+  uses its own survey ([scenarios.md § Dam capacity](./scenarios.md)); in
+  override mode a curve pasted in the table is recorded that way too.
+  Targets come from the model as
   the listed ops leave it, so a node the scenario adds can be changed next.
   A field starts at its current value with "Now: …" under it; percentages
   are typed as %, areas in ha. The op is built and checked with the engine's

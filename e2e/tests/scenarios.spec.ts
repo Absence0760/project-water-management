@@ -253,6 +253,46 @@ test('a licence what-if: the proposer\'s farm pumps from the river first at 1,20
 	await expect(changed).toContainText('Upper farm: river pump capacity no limit → 1\u202f200 m³/day');
 });
 
+test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Network tab reads it (engine 1.20.0)', async ({ page, owner }) => {
+	void owner;
+	const { project, scenarioId } = await seedScenario(page, 'Scenario surveyed raise');
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	await expect(changes(page).getByRole('listitem')).toContainText(RAISE);
+
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
+	await expect(form.getByTestId('op-current')).toHaveText('Now: none (power law)');
+	const rows = form.getByLabel('Dam survey curve');
+	// Rows the engine couldn't use are refused in the form, before anything is saved.
+	await rows.fill('level, area, volume\n0, 0, 0');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(form.getByRole('alert')).toHaveText('Dam survey curve: a survey curve needs at least two rows');
+	await expect(changes(page).getByRole('listitem')).toHaveCount(1);
+	// The raised dam's survey (a header line and tabs, as pasted from a spreadsheet), topping out at the new 180 000 m³.
+	await rows.fill('level\tarea\tvolume\n0\t0\t0\n3\t35000\t60000\n6.5\t52000\t180000');
+	await form.getByRole('button', { name: 'Add change' }).click();
+	await expect(changes(page).getByRole('listitem')).toHaveCount(2);
+	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Upper farm: Dam survey curve none (power law) → 3 survey rows, 180\u202f000 m³ at the top');
+	// The form with the paste box open (the next change starts from the curve now set) passes axe, and fits a phone.
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
+	await expect(rows).toHaveValue('0, 0, 0\n3, 35000, 60000\n6.5, 52000, 180000');
+	await expect(rows).toHaveAccessibleDescription(/^Level \(m\), area \(m²\), volume \(m³\), one row per line/);
+	await expectNoViolations(page);
+	await page.setViewportSize({ width: 390, height: 844 });
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await page.setViewportSize({ width: 1280, height: 720 });
+
+	// It runs on the curve as entered: the comparison's input diff names it.
+	await page.getByRole('button', { name: 'Run scenario' }).click();
+	const compare = page.getByRole('region', { name: 'Scenario against its base' });
+	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
+	await page.getByRole('link', { name: 'Open the full comparison' }).click();
+	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('dam survey curve none (power law) → 3 rows');
+});
+
 test('a trigger farm goes straight to run of river, one change at a time: the half-made edit says why, the finished one applies (docs/scenarios.md § Edit groups)', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Scenario edit group');

@@ -174,6 +174,11 @@
 					<option value="" disabled>Pick a hydrological unit</option>
 					{#each farms as n (n.id)}<option value={n.id}>{n.name}</option>{/each}
 				</select>
+			{:else if s.t === 'curve'}
+				<textarea id="op-value" rows="6" spellcheck="false" aria-describedby="op-curve-h" placeholder={'100, 0, 0\n101, 8000, 4000\n102, 14000, 15000'} bind:value={d.value}></textarea>
+				<span class="hint" id="op-curve-h"
+					>Level (m), area (m²), volume (m³), one row per line, pasted from a spreadsheet or the DW789 form: commas, semicolons, tabs or spaces between values; a header line is skipped. No thousands separators. Empty for none (the power law). When the dam is raised, add this after the capacity change so the curve is used as entered; its top row should match the new capacity.</span
+				>
 			{:else}
 				<input
 					id="op-value"
