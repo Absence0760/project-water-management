@@ -309,7 +309,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       Runs page and run comparison show the validation scores beside the
       in-sample ones (model.md §2.10b). Calibration exclusions are stored too,
       and `runModel` passes them to the EWR agreement (model.md §2.9b).
-- [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
+- [x] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
       10× for flow; flat-lines are 5 days for rain and, for flow, 14 to 90 days
       by the record's resolution and the flow (engine 1.12.0, a draft pending
       the hydrologist; model.md §2.10a). The
@@ -343,6 +343,30 @@ collected as a checklist in issue #46; tick it there as they answer.
       fallback bias correction lands, because it uses these flags. Once
       CR-20 lands (below) a flagged zero run changes results, not just
       warnings, so a false alarm is no longer free: item 2 matters more.
+
+      **Done (engine 1.20.0, issue #66):** the limits are
+      `settings.dataQuality` (Settings → Data quality): the outlier factors,
+      the flat-line lengths (rain, A-pan, the flow floor and cap), the
+      minimum wet-season zero-rain days (1) and the low-vs-CHIRPS ratio
+      cutoff (1), defaults unchanged; the sample-size floors stay constants.
+      Recommendations 2–5 are built as settings, **off by default**:
+      `zeroRunChirpsCheck` (2), `zeroRunRule: 'usualRain'` with
+      `zeroRunUsualShare` 25 % and `zeroRunMinDays` 60 (3),
+      `lowVsChirpsBaseline: 'moving'` (±5 years) (4) and
+      `lowVsChirpsMinimum: 'scaled'` (5). Every rain consumer (zero-run mask,
+      CHIRPS and rain-source factor fits, double mass, the Data tab) reads
+      them, and a fit records them (`forcing.rainChecks`)
+      ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+- [ ] **Data-quality alternatives as defaults.** The four alternatives above
+      stay off until they are run on a semi-arid gauge record with a known
+      drought (e.g. 2015–19; none is in the repo) and the hydrologist agrees.
+      Trigger: such a record, or the hydrologist's answer. Then decide per
+      alternative whether it becomes the default; a default change bumps
+      ENGINE_VERSION with an engine-audit.md entry and the regression
+      deviation list. Also for the hydrologist: the CHIRPS share that clears
+      a zero run (50 %, `ZERO_RUN_CHIRPS_SHARE`) and the coverage it needs
+      (50 % of the run's days) are constants; the ±5-year window and the 25 %
+      scaled-minimum share are too.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the

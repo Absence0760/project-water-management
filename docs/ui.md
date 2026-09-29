@@ -2831,11 +2831,29 @@ which checks every catchment tab).
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
-- **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
-  in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
-  thirds), 150 %, 90 days). Out-of-range
-  values block Save with a message. They only change which water years are
-  flagged, never the results.
+- **Data quality** (`DataQualitySection.svelte`): three groups.
+  *Gauge vs logger*: the lowest and highest ratio in %, shown to one
+  decimal, and the minimum shared days (defaults 66.7 % (two thirds),
+  150 %, 90 days). *Outliers and flat stretches* (engine ≥ 1.20.0): the rain
+  and flow outlier factors (× the 99th percentile, defaults 5 and 10), the
+  rain and A-pan flat stretches (5 and 7 days) and the shortest and longest
+  flow flat stretch (14 and 90 days). These only change what is flagged,
+  never the results. *Catchment rain recorded as zero* (engine ≥ 1.20.0,
+  issue #66): **Judge a zero-rain run by** *Days in the wet season* (the
+  default, with its days, 60) or *Share of the usual annual rain* (its share,
+  25 %, and shortest run, 60 days, replace the days field); **Check each
+  zero-rain run against CHIRPS** (off); and low vs CHIRPS: **flag below** a
+  share of the usual ratio (50 %), the **Usual ratio** (whole-record median
+  or a moving median over ±5 years) and the **CHIRPS rain a year needs**
+  (50 mm, or scaled to the catchment). The group's note says these change
+  results and that the alternatives are still to be tested on a semi-arid
+  record. Every field has its field-history line. Out-of-range values, or a
+  longest flow flat stretch shorter than the shortest, block Save with a
+  message. The Data tab's checks, zero-rain shading and daily preview flags
+  follow the saved limits, as runs do
+  ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+  A fit's provenance lists the rain limits it ran under (*Rain data-quality
+  limits*).
 - **Automatic runs** (WP-2.11, `settings.autoRun`): **Re-run the model after
   new data** (off by default); **Wait after the latest new data** (minutes,
   0–120, default 15; more data within the wait pushes the run back, never
