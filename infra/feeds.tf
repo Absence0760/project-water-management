@@ -87,11 +87,7 @@ resource "aws_iam_role" "fetcher_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs only: no VPC access, nothing else managed.
-resource "aws_iam_role_policy_attachment" "fetcher_lambda_logs" {
-  role       = aws_iam_role.fetcher_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
+# Logs (its own log group only) are in iam.tf; no VPC access, no managed policy.
 
 data "aws_iam_policy_document" "fetcher_lambda" {
   statement {
@@ -159,7 +155,7 @@ resource "aws_lambda_function" "fetcher" {
 
   depends_on = [
     aws_cloudwatch_log_group.fetcher,
-    aws_iam_role_policy_attachment.fetcher_lambda_logs,
+    aws_iam_role_policy.lambda_logs["fetcher"],
     aws_iam_role_policy.fetcher_lambda,
   ]
 

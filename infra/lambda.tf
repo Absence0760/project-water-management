@@ -84,16 +84,12 @@ resource "aws_iam_role" "lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs + the EC2 ENI permissions a VPC Lambda needs. The API reads its config
-# from environment variables and its secrets from its own runtime secret
-# (GetSecretValue on that one ARN, secrets.tf, through the endpoint in
-# network.tf); its other AWS calls are SES SendEmail, granted separately and
-# scoped to one identity + From address (ses.tf), and SQS SendMessage to the
-# jobs queue (jobs.tf).
-resource "aws_iam_role_policy_attachment" "lambda_vpc" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs (its own log group) + the EC2 ENI permissions a VPC Lambda needs are
+# in iam.tf. The API reads its config from environment variables and its
+# secrets from its own runtime secret (GetSecretValue on that one ARN,
+# secrets.tf, through the endpoint in network.tf); its other AWS calls are SES
+# SendEmail, granted separately and scoped to one identity + From address
+# (ses.tf), and SQS SendMessage to the jobs queue (jobs.tf).
 
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.project}-backend"
@@ -158,7 +154,8 @@ resource "aws_lambda_function" "backend" {
 
   depends_on = [
     aws_cloudwatch_log_group.lambda,
-    aws_iam_role_policy_attachment.lambda_vpc,
+    aws_iam_role_policy.lambda_logs["api"],
+    aws_iam_role_policy.lambda_vpc_eni["api"],
     aws_iam_role_policy.lambda_ses,
     aws_iam_role_policy.lambda_jobs_send,
     aws_iam_role_policy.runtime_secret,
@@ -216,10 +213,7 @@ resource "aws_iam_role" "migrate_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "migrate_lambda_vpc" {
-  role       = aws_iam_role.migrate_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs and VPC ENIs: iam.tf.
 
 # Read the RDS-managed master secret. The secret is encrypted with the
 # AWS-managed aws/secretsmanager key, which needs no explicit kms:Decrypt
@@ -281,7 +275,8 @@ resource "aws_lambda_function" "migrate" {
 
   depends_on = [
     aws_cloudwatch_log_group.migrate,
-    aws_iam_role_policy_attachment.migrate_lambda_vpc,
+    aws_iam_role_policy.lambda_logs["migrate"],
+    aws_iam_role_policy.lambda_vpc_eni["migrate"],
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.secretsmanager,
   ]
