@@ -331,16 +331,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   project document moves the site to the copy's gauge. Like
   `autoRun` it is no model input: runs don't record it, and a `PATCH` that
   changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
-  `settings.outlook = { season, planningShare }` (issue #53 R5,
+  `settings.outlook = { season, planningShare, review }` (issue #53 R5, R6,
   `projects/outlookSettings.ts`, [ui.md § Seasonal outlook](./ui.md#seasonal-outlook))
-  is always present too, defaults `{ season: null, planningShare: null }`:
-  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April, O3)
-  and `DEFAULT_PLANNING_SHARE` (0.8, O6), both confirmed by the client
-  (issue #90).
+  is always present too, defaults `{ season: null, planningShare: null, review: null }`:
+  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April, O3),
+  `DEFAULT_PLANNING_SHARE` (0.8, O6) and `defaultReviewDate` (1 January for
+  that season, O3), all confirmed by the client (issue #90).
   `PATCH` takes either field: `season` null or `{ startMonth, startDay,
   endMonth, endDay }` (the decision date and the season end as a month and
   day; whole, each a real day of a common year, so not 29 February, and
-  not the same day; `400`), `planningShare` null or a number in (0, 1]. It
+  not the same day; `400`), `planningShare` null or a number in (0, 1],
+  `review` null or `{ month, day }` (a real day of a common year; whether it
+  falls inside the season is checked when an outlook is asked for, `422`). It
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
@@ -2030,7 +2032,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2061,6 +2063,13 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
+- `outlook`: the seasonal outlook the WUA published, this farm's own
+  figures only (issue #53 R5, E3; [§ Seasonal outlooks](#seasonal-outlooks)):
+  `{ decisionDate, seasonEnd, reviewDate, level: { id, label }, nYears,
+  demandYears, demandMet, dam: { capacityM3, seasonEndShare } | null,
+  publishedAt }`, the shares as `{ p10, p50, p90 }` fractions or null.
+  `null` with none published, once withdrawn, or once its season has ended
+  where the catchment is.
 - `project.wuaName` is the WUA's name for the contact lines (`null` =
   "your WUA"); `farm.dataFrom` is the published run's first day, which
   "compared with last season" names when `lastSeason` is `null` (a
@@ -2225,12 +2234,19 @@ every demand level × every analogue water year of the record as one member
 `outlookMember`), stores each member, then the engine's `summariseOutlook`
 as the result. Not a [sweep](#sweeps): a sweep member is a whole-record
 run; an outlook member is one level in one year, measured over the season.
+The same job then draws the **review triggers** for the season's review
+date (issue #53 R6, [model.md §2.15a](./model.md#215a-review-triggers-from-the-outlook-issue-53-r6)),
+and an editor can **publish** one level to the project's farmers (R5, the
+farmer view E3, migration 103).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
-| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` | viewer |
-| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` (null while pending). `404` for one that isn't this project's | viewer |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` or `triggers` | viewer |
+| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` and `triggers` (null while pending). `404` for one that isn't this project's | viewer |
+| POST | `/projects/:id/outlooks/:outlookId/publish` | `{ levelId }` | `201 { publication: OutlookPublication }`: that level published to farmers, ending the current publication. Audit `outlook.published` | editor |
+| GET | `/projects/:id/outlook-publication` | – | `{ publication: OutlookPublication \| null }`: the current one | viewer |
+| DELETE | `/projects/:id/outlook-publication` | – | `200 { publication }`, now ended (withdrawn); `404` when none is current. Audit `outlook.unpublished` | editor |
 
 - Body (strict): `name` 1–200 characters; `baseRunId` a saved run of this
   project; `levels` **1–6** (`OUTLOOK_LEVELS_MAX`), each `{ label, ops }`
@@ -2245,7 +2261,15 @@ run; an outlook member is one level in one year, measured over the season.
   decision date (that month and day) whose day before the run holds, and
   the season end the first of its month and day after it. `planningShare`
   (0, 1]: absent, the project's setting, else null (the engine's default,
-  `shareIsDefault` in the result). `analogueYears` (1–200 distinct water
+  `shareIsDefault` in the result). `reviewDate` (ISO, after the decision
+  date, on or before the season end; `400` when the body's own season
+  shows it isn't, else `422`): absent, the project's
+  `settings.outlook.review` (month and day, the first after the decision
+  date; `422` when it isn't inside the season), else the engine's
+  `defaultReviewDate` (1 January for the default season, O3); `null`: no
+  trigger table. A catchment with no farm dam gets none (the bands are dam
+  storage): an explicit review date is then `422`, an absent one is null.
+  `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
 - Checked before anything is queued: the base run as for a sweep (`404`,
   `409` for a scenario or forecast run), and the season: the decision date
@@ -2261,9 +2285,9 @@ run; an outlook member is one level in one year, measured over the season.
   history, then the season), in the job's one transaction: that has to fit
   the worker Lambda's 300 s. No cancel.
 - `Outlook = { id, name, baseRunId, baseRun: { id, label, createdAt },
-  decisionDate, seasonEnd, planningShare, levels: [{ id, label, ops }],
+  decisionDate, seasonEnd, reviewDate, planningShare, levels: [{ id, label, ops }],
   analogueYears, status, engineVersion, job, createdBy, createdAt,
-  completedAt, result? }`. `levels[].id` is its place, `"0"` …; `status`
+  completedAt, result?, triggers? }`. `levels[].id` is its place, `"0"` …; `status`
   `pending` until the job stores the result, then `complete`; `job` as a
   sweep's (a `pending` outlook behind a `dead` job says why in `job.error`).
 - `result`: the engine's `SeasonalOutlook` (model.md §2.15): `decisionDate`,
@@ -2272,7 +2296,9 @@ run; an outlook member is one level in one year, measured over the season.
   `nYears`, `enoughYears` (≥ `OUTLOOK_MIN_YEARS` = 10), `levels` (per level:
   `problems`, `nYears`, `meanDemandM3`, `seasonEndStorageM3`, `demandMet`,
   `userDemandMet`, `ewr` as `{ p10, p50, p90 }` or null, `yearsEwrMet`,
-  `storageByDam`, and every year's values), `planning` (`share`,
+  `storageByDam`, `demandMetByFarm` (engine ≥ 1.18.0: each farm's own share
+  of demand met, `{ nodeId, name, nYears, stat }`), and every year's values,
+  each with its `farms` (node id → season demand and supply)), `planning` (`share`,
   `shareIsDefault`, `reason` `met` / `noLevelMeets` / `notEnoughYears` /
   `noLevels`, the level, `yearsMet`, `ranked`) and `warnings`; plus
   `excluded` (each `{ waterYear, reason }`: the engine's `outsideRecord`,
@@ -2282,7 +2308,38 @@ run; an outlook member is one level in one year, measured over the season.
   `problems` and no years; a level refused in every year likewise; a year
   a running level was refused in is left out of every level (`memberFailed`)
   so the levels compare the same years. One member never fails the outlook.
-- Progress: 0–100 after each member (`job.progress`).
+- `triggers` (null without a review date): `{ reviewDate, table, problem,
+  excluded, failures }`. `reviewDate` is the season's: the day the WUA reads
+  its dams. The outlook's season usually starts after the base run ends
+  (from its newest state), so the base run has no state on that day; the
+  **table** is drawn on the latest day with the review date's month and
+  day that the run's record holds (its `reviewDate`), to the season end's
+  month and day after it, as a rule by storage band for that day of the
+  year: the engine's `ReviewTriggers` (bands, per band the level picked or
+  none, years met, every level's count and percentiles, `monotone`,
+  `notes`, `warnings`) without each band's whole outlook. Every level that
+  ran in the outlook runs in every band; a level refused in one year of a
+  band isn't judged in that band (`failures`, with the band's lower edge).
+  `table` is null, with `problem` in words, when the record holds no such
+  day or the catchment has no farm dam. At most 3 bands (the terciles)
+  × 6 levels × 40 years more members, in the same job.
+- Progress: 0–100 after each member (`job.progress`), the table's members
+  counted after the outlook's.
+- **Publishing to farmers** (the client confirmed farmers see the outlook,
+  O5, issue #90). `OutlookPublication = { id, outlookId, level: { id,
+  label }, decisionDate, seasonEnd, reviewDate, engineVersion, publishedBy,
+  publishedAt, endedAt, farms }`. Publishing stores, for every farm of the
+  project, that farm's own figures at the level (the engine's
+  `farmOutlookProjection`: the level, the season and review date, `nYears`,
+  `demandYears`, `demandMet` and the dam's season-end share of capacity as
+  `{ p10, p50, p90 }` or null), and the farm page reads them back
+  ([§ Farm](#farm), `FarmView.outlook`) until the season ends
+  where the catchment is (project time zone). One current per project; the
+  newest 12 are kept. Refused: an outlook still running (`409`), a level it
+  doesn't have (`422`) or that didn't run (`409`), one computed before
+  per-farm figures (engine < 1.18.0: run it again, `409`), and a season
+  already over (`409`). The app never picks the level: the editor publishes
+  the one the WUA decided.
 
 ## Data feeds
 

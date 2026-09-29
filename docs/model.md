@@ -5436,7 +5436,22 @@ isn't whole in floating point), ranking by demand, the metric choice and
 fallback, too few years, levels that aren't demand.scale, a monthly plan,
 the wording; `run.demandFactorFrom.test.ts` for the engine setting.
 
-### 2.15a Review triggers from the outlook (issue #53 R6, engine half)
+**Each farm's own figures** (engine ≥ 1.18.0, for the farmer view E3). A
+member also carries `farms`: every farm with demand in the season, its
+season demand and supply (Σ over farms = the member's `demandM3` and
+`suppliedM3`). Each level then has `demandMetByFarm`: a farm's own
+supplied ÷ demand across the years it had demand in, as the same
+percentiles (null below `OUTLOOK_MIN_YEARS` of them). `farmOutlookProjection`
+(`views/farmOutlook.ts`) picks one farm's figures at one level, its own
+only: the level, the season, `demandMet` and its dam's season-end storage
+as a share of its capacity. The WUA publishes a level and each farm page
+shows those (api.md § Seasonal outlooks). Tests: `outlook.test.ts` (the
+farms add up to the member; each farm's statistic is its own; a farm
+without demand has no row), `views/farmOutlook.test.ts` (no other farm's id
+or name; shares in 0–1; why there is no projection, an outlook from before
+1.18.0 included).
+
+### 2.15a Review triggers from the outlook (issue #53 R6)
 
 "Above x m³ on the review date → 100 %, between → 85 %, below → 70 %"
 (the client's sketch S3) **computed**, not asserted
@@ -5448,8 +5463,25 @@ planning figure. Pure, in `packages/engine/src/outlook/triggers.ts`
 (`runReviewTriggers`, and its parts `reviewStorageHistory`,
 `tercileEdges`, `storageBands`, `bandStartStorage`, `reviewTriggerTable`
 for a job that runs the members one by one, `describeTriggerRow`; per band
-`withDamStorage` on the review date's snapshot, §2.16). The
-backend job and the screen are not built yet (design §3.6).
+`withDamStorage` on the review date's snapshot, §2.16). `reviewTriggerBands`
+(engine 1.18.0) is runReviewTriggers' first half, the bands and each one's
+start storage before any member runs, so a job can run the members one by
+one and hand them to `reviewTriggerTable`; a test pins that path to
+`runReviewTriggers` to the bit.
+
+**The backend** (api.md § Seasonal outlooks). The `outlook` job draws the
+table after the outlook, for the season's review date (the project's
+`settings.outlook.review`, else `defaultReviewDate`). The outlook's season
+usually starts the day after the base run ends, so the run holds no state
+on its review date. The table therefore runs on the latest day with the
+review date's month and day that the record holds, to the season end's
+month and day after it: a rule by storage band **for that day of the
+year**, the non-dam state (soil, runoff stores, the Reserve's statistics)
+from that year of the record. The bands are the record's storage on that
+day in every year anyway, so only the non-dam state is one year's.
+**Judgement, pending the hydrologist**: the alternative, running from the
+outlook's own members' state on the review date, would tie the table to one
+analogue's first half.
 
 **Starting from a storage.** By default (engine ≥ 1.1.0) the base run's
 snapshot at the review date (§2.16) is copied per band with the band's
