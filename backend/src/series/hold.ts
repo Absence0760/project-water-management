@@ -45,6 +45,10 @@
 // or accepted it.
 // A person's own merge from the UI is never held, and a data feed's values
 // are checked by its parser instead (feeds/ingest.ts).
+// The factor is the engine's default (outlierFactorOf without settings), not
+// the project's settings.dataQuality.outlierFactorRain/Flow (engine ≥ 1.20.0):
+// this is an abuse guard on a key's pushes, which a project setting must not
+// loosen (docs/model.md §2.10a).
 import { OUTLIER_MIN_POSITIVE, outlierFactorOf, type SeriesKind } from '@water-management/engine';
 import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
