@@ -5,8 +5,9 @@
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
 	// 30 days / 1 year / All switch and the days below the reserve shaded; the
 	// Summary shows the days below by month and links here, issue #162) beside
-	// the days below the reserve per water year; on a wide, tall enough window
-	// that first screen is the height left below its top (measured). Below it, the panels that were Runs & results' River & Reserve group,
+	// the days below the reserve per water year. The page flows in the window's
+	// one scroll (nothing is sized to the window, and no card or table scrolls
+	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
 	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
 	// the uncertainty bands (with the sensitivity runs under them), the outcome
 	// matrix, the seasonal outlook and the water account.
@@ -172,27 +173,9 @@
 		stopWaiting();
 	});
 
-	// --- the first screen fits the window (issue #17 playbook): the height left below its top, less the save bar.
-	const FIT_QUERY = '(min-width: 1100px) and (min-height: 620px)';
-	let fit = $state(false);
-	$effect(() => {
-		const mq = matchMedia(FIT_QUERY);
-		const on = () => (fit = mq.matches);
-		on();
-		mq.addEventListener('change', on);
-		return () => mq.removeEventListener('change', on);
-	});
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
+	// --- the chart's fixed height: generous where the page is wide (it is the page's main content), less on a phone.
+	let firstW = $state(0);
+	const flowH = $derived(firstW >= 640 ? 420 : 280);
 
 	// The section header (workspace/SectionHeader) carries the title; the page gives it the run line,
 	// the run picker and Open in Runs & results.
@@ -240,10 +223,10 @@
 	</section>
 {:else}
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
-	     under its first screen. Above the first screen, which fits the window below it. Its group
-	     names show on the bar (issue #162), so the gaps between the groups read as groups. -->
+	     under its first screen. Its group names show on the bar (issue #162), so the gaps between
+	     the groups read as groups. -->
 	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" />{/if}
-	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+	<div class="first" bind:clientWidth={firstW}>
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>
 			<dl class="stats kpis" aria-label="River and reserve figures">
@@ -272,7 +255,7 @@
 				<div class="flow-cell" id="res-ewr">
 					<Lazy load={loadFlowVsReserve}>
 						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} fill={fit} units pannable />
+							<FlowVsReserve projectId={projectId} runId={shown!.run.id} refs={shown!.series} forecastFrom={shown!.run.summary.forecast?.from ?? null} height={flowH} units pannable />
 						{/snippet}
 					</Lazy>
 				</div>
@@ -282,7 +265,7 @@
 						{#snippet children(ReserveYearsChart)}
 							<ReserveYearsChart
 								runs={[{ name: name(shown!.run), projectId, runId: shown!.run.id, colour: 'var(--series-2)', forecastFrom: shown!.run.summary.forecast?.from ?? null }]}
-								minHeight={200}
+								minHeight={240}
 							/>
 						{/snippet}
 					</Lazy>
@@ -423,35 +406,37 @@
 		display: flex;
 		flex-direction: column;
 		min-width: 0;
-		min-height: 20rem;
 		margin: 0;
 	}
 	.years h2 {
 		margin: 0 0 0.4rem;
 		font-size: 1.05rem;
 	}
+	/* The page is the one scroll: the water-year table (Show as a table) grows with its rows instead of
+	   scrolling in its 18rem box. */
+	.years :global(div.table-wrap) {
+		max-height: none;
+	}
+	/* Wide: the bars beside the chart, as tall as it (the grid row stretches them; their plot takes what
+	   is left). Opening their table makes the row taller; the chart keeps its height at the row's top. */
 	@media (min-width: 1100px) {
 		.cols {
 			grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 400px);
+			align-items: stretch;
 		}
-	}
-	/* Wide and tall enough: the first screen is the height left in the window below its top (less the
-	   save bar when it shows); the chart and the water-year bars take what the tiles leave. */
-	.first.fit {
-		height: max(560px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		grid-template-rows: auto minmax(0, 1fr);
-	}
-	.fit .cols {
-		min-height: 0;
-		align-items: stretch;
-	}
-	.fit .flow-cell,
-	.fit .years {
-		min-height: 0;
+		.flow-cell {
+			align-self: start;
+		}
 	}
 	/* The panels moved from Runs & results, full width: Reserve compliance's tables and the EWR grid need it. */
 	.panels > .panel {
 		min-width: 0;
+	}
+	/* Nor do the panels' tables scroll in a box of their own (the app's 70vh cap, the EWR grid's): they
+	   grow with the page and scroll only sideways when they are wide. Long ones fold instead
+	   (Reserve compliance's month by month shows its first rows, then Show all). */
+	.panels :global(div.table-wrap) {
+		max-height: none;
 	}
 	.run-pick {
 		max-width: min(34rem, 60vw);

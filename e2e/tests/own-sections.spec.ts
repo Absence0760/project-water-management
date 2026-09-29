@@ -57,6 +57,14 @@ test.describe('1440×960', () => {
 		const shorter = EVERY.filter((t) => t !== 'Crops & demand' && t !== 'History');
 		await expect.poll(() => sectionNames(page)).toEqual(shorter);
 		await expect(menuButton(page)).toHaveAccessibleName('Choose sections: Hidden (2)');
+		// The sidebar shows the icon and a count, and the button stays on the head's line beside the role
+		// badge ("Hidden (2)" in words wrapped it onto a line of its own).
+		await expect(menuButton(page).locator('.count')).toHaveText('2');
+		await expect(menuButton(page).getByText('Hidden (2)')).toHaveClass(/visually-hidden/);
+		const badge = (await page.getByTestId('project-role').boundingBox())!;
+		const btn = (await menuButton(page).boundingBox())!;
+		expect(Math.abs(btn.y + btn.height / 2 - (badge.y + badge.height / 2))).toBeLessThan(4);
+		expect(btn.width).toBeCloseTo(24, 0);
 		// Escape closes the dialog, back on its button.
 		await page.keyboard.press('Escape');
 		await expect(panel(page)).toBeHidden();

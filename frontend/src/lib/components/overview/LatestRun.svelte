@@ -3,8 +3,7 @@
 	// supplied, Dams today and the calibration NSE, each with its change from
 	// the run before (Dams: over the run's last 30 days, and the card opens the
 	// Dams page); overview/latestRun.ts has the rules. The mean simulated outflow
-	// is the line under the cards, a short mention: its change and the rest of the
-	// river are on River & reserve.
+	// isn't here: it is a tile on River & reserve, with its change.
 	// Only this section waits for the run's summary; the rest of the tab
 	// renders at once. Which run it is (label, period, engine, age, a link to
 	// it) is the section header's context line (OverviewTab, RunContext).
@@ -13,7 +12,6 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from './attention';
-	import { riverHref } from '$lib/components/river/links';
 	import { dataEndOf } from '$lib/format/age';
 	import { localIsoDate } from '$lib/format/number';
 	import { damsEnd, damsHeadline, headlines, historyDays, ranAgo, type DamsState } from './latestRun';
@@ -49,9 +47,8 @@
 	} = $props();
 
 	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null) : []);
-	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the dams' last day is stale) · NSE; the outflow goes under them.
+	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the dams' last day is stale) · NSE; the outflow is River & reserve's.
 	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams, dataEndOf(damsEnd(dams, meta), localIsoDate())), ...all.filter((h) => h.id === 'nse')] : []);
-	const outflow = $derived(all.find((h) => h.id === 'outflow') ?? null);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
 </script>
 
@@ -80,21 +77,16 @@
 				</div>
 			{/each}
 		</dl>
-		<p class="muted small after">
-			{#if outflow}
-				<span data-headline="outflow"
-					>Mean simulated outflow <strong class="v">{outflow.value} {outflow.unit}</strong>{#if outflow.sub.length}{' '}({outflow.sub.join(', ')}){/if}: its change and the reserve in detail are on <a href={riverHref(meta.id)}>River &amp; reserve</a>.</span
-				>
-			{/if}
-			{#if previousMeta}
+		{#if previousMeta}
+			<p class="muted small after">
 				{#if previousError}
 					The previous run couldn’t be loaded ({previousError}), so no changes are shown.
 				{:else}
 					Changes are against the previous run, <a href={runHref(previousMeta.id)}>{name(previousMeta)}</a>{#if previousMeta.legacy}
 						(workbook comparison){/if}.
 				{/if}
-			{/if}
-		</p>
+			</p>
+		{/if}
 	</LoadState>
 </section>
 
@@ -167,10 +159,5 @@
 	}
 	.after {
 		margin: 0;
-	}
-	.after .v {
-		color: var(--text);
-		font-weight: 600;
-		font-variant-numeric: tabular-nums;
 	}
 </style>

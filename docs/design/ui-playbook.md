@@ -77,8 +77,8 @@ section it belongs to, with the example that taught it.
   that pushed the results 110 px down, its status one slim line under the
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
-- **Dashboards fit the window; reading pages scroll.** A dashboard (Summary,
-  Network, Crops, Dams, River & reserve, Hydrological units, the portfolio) is
+- **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
+  Crops, the portfolio) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -92,6 +92,35 @@ section it belongs to, with the example that taught it.
   itself as right: shrunk on a phone, the map kept that height at 1440
   (`diagram-labels.spec.ts` resizes 390 → 1440 and checks it refills).
   Subtract the gutter and `--dock-h`, which are known.
+- **Don't chart what restates the inputs.** The Transfers page's "When water
+  moves" strip summed each enabled rule's month rate × 86 400 across unrelated
+  routes: the same numbers as the rate fields one card up, added into a total
+  that describes nothing physical, and an upper bound that looked like a
+  result. It was removed (2026-09-29). Before drawing a chart, name the user
+  and the decision it serves, and check it shows something the inputs beside
+  it don't.
+- **Don't fit a first screen that has more below it.** The Summary was a
+  fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
+  unit) with the alerts, published baseline, links and setup checklist
+  underneath. At 1440×960 the fitted block ended at the window's foot, the
+  two cards scrolled inside themselves, and it looked like the whole page:
+  users missed everything below it, with no cue it existed (2026-09-29).
+  A fitted block whose cards scroll inside themselves reads as the end of
+  the page, so a page whose main content continues below should not fit:
+  let it flow with the window's one scroll, bound a long list by showing the worst few with a
+  **Show all N** button (`aria-expanded`) that opens the rest in place (the
+  Summary's Supply by unit and the Dams page's Dam levels show eight), and
+  let the next card's top edge show inside the window
+  (`overview.spec.ts` checks no Summary card scrolls and the alerts' heading is
+  inside 1440×960 with thirty units). The Dams page had copied the same fit
+  (cards scrolling in their column, Dam levels under the fold) and flows now
+  too: three cards beside a fixed 420 px chart, **Show all N dams** under
+  them, the chart panel `position: sticky` so it stays beside an opened list
+  as the window scrolls, and the table's `.table-wrap` uncapped
+  (`max-height: none`) so it doesn't scroll in its box either. Two
+  disclosures on one page need different names: the table's became
+  **Show all N rows** (`dams-page.spec.ts` checks no element on the page
+  scrolls vertically inside itself, collapsed and opened, wide and phone).
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
@@ -140,9 +169,24 @@ section it belongs to, with the example that taught it.
   grid's bottom edge; test the fit mid-page. Stacked on a phone, cap the
   list (20rem, scrolling inside) so twenty runs don't push the results
   a screen down.
-- **Cards or list on one side, the picked item's detail on the other.** Dams
-  and Hydrological units: a scrolling column of items (worst first), the picked
-  item's chart filling the rest, the pick in the URL so Back works. When
+- **Cards or list on one side, the picked item's detail on the other.**
+  Dams and Hydrological units: the worst few cards (three), **Show all N**
+  opening the rest in place, a sticky chart beside them, the pick in the URL
+  so Back works; a folded list keeps the picked item's card in view
+  (`common/fold.ts` `foldList`, which Data, Hydrological units and
+  Allocations share), so a shared
+  `dam=` or `unit=` link shows its card. Both were fitted to the window with
+  the cards scrolling in their column until 2026-09-29; with 40 units the
+  column scrolled 8,000 px inside a 690 px box. **Under an "On this page"
+  menu, stick below it:** the menu is itself sticky, so a chart at
+  `top: 0.75rem` slid under it and lost its heading. Hydrological units
+  measures the menu (`--nav-h`, a `ResizeObserver` on `nav.sections`, rerun
+  once the menu renders) and sticks at `--header-h + --nav-h`. **A sticky
+  table header needs a box that doesn't scroll:** `.table-wrap` is
+  `overflow: auto` in both axes, so once uncapped its `thead` sticks to
+  nothing; where the table fits the column (Hydrological unit results from
+  64rem) set the wrap `overflow: visible` and the head's `top` under the menu,
+  and leave the sideways scroll below that (`supply-page.spec.ts`). When
   the items are genuinely tabular (Data: last date, period, % missing,
   coverage, per-row actions), keep the table and stack it over the chart
   instead: the table capped at a share of the fitted height (55 %) with its
@@ -486,8 +530,9 @@ picker in the header, moved panels, anchor redirects),
 `compare/CompareView.svelte` (several runs side by side),
 `network/NetworkTab.svelte` (map page, Grids menu, node sheet),
 `routes/teams/[id]/portfolio/+page.svelte` (a table that fills the window
-with a sticky header), `series/SeriesTab.svelte` (a table over a chart,
-window fit, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
+with a sticky header), `series/SeriesTab.svelte` (a table over a chart in
+the window's one scroll, the long table folded under "Show all N series"
+with the picked row kept, the pick in the URL), `scenarios/ApplicationsTab.svelte` (a
 queue: counts in the header, a status filter in the URL, rows that turn into
 cards in a narrow column), `history/HistoryTab.svelte` (a timeline: rows
 beside the picked entry with Newer/Older, filters in the URL, whole entries
@@ -589,6 +634,12 @@ Interaction details that bit:
   first panel after the form; the Data page's `.data-page` wrapper ends
   under the chart. Put a page's sticky menu at the tab's top level and check
   it is still in view on the last section.
+- **"Last section at the end of the page" overrides a link.** A scroll-spy
+  that marks the last section once the page can't scroll further also does
+  so after a jump to one of the last few sections of a short page: shortening
+  one glossary entry made Goodness of fit mark the wrong term. Keep a
+  just-linked section marked while its heading is on screen
+  (`lib/help/spy.ts` `currentSection`'s `linked`).
 - **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
   flex row of groups, each a wrapping flex row of links: a long group took
   full rows of its own, so Runs & results' menu was three rows at 1280 px
@@ -609,14 +660,29 @@ Interaction details that bit:
   the field, with the words half a field away. Scope such rules with
   `input:not([type='checkbox'])`.
 - **Bring a linked item into view inside its list, after the fit is measured.**
-  Allocations' `unit=` link names a row far down a list that scrolls in its
+  Allocations' `unit=` link named a row far down a list that scrolled in its
   card. `scrollIntoView({ block: 'nearest' })` on mount did nothing: the
   block's height still used top 0 (the whole window), so the row was already
   "in view" and the list shrank under it once the top was measured; with
   `block: 'center'` it scrolled the page as well. Wait until the block fits
   at its measured top, then set the list's own `scrollTop` from the two
-  bounding boxes; the spec asserts the row is in the viewport and
-  `window.scrollY` is 0.
+  bounding boxes. Better still, don't fit: Allocations flows now (2026-09-29)
+  and its folded list keeps the linked unit's rows after the first five
+  (`foldList`), so the row is on the first screen with no scrolling at all
+  (`allocations-page.spec.ts` asserts it is in the viewport and
+  `window.scrollY` is 0).
+- **Fold every long list on a flowing page, each with its own button name.**
+  Allocations had four things that grew without limit: the unit list, the
+  picked unit's water years (a 30-year run is 60 rows with groundwater),
+  the registered volumes and every unit's years (108 rows with thirty
+  units). The two tables had scrolled inside the global `.table-wrap` 70vh
+  cap all along, even with the fit. Each now shows its first few, ordered so
+  the rows that matter come first (the full table follows the list's order,
+  `rowsInListOrder`), with **Show all N …** and a fold-back button whose
+  names differ on the page ("… hydrological units and sources", "… water
+  years", "… registered volumes", "… rows"), and `.table-wrap` is uncapped
+  (`max-height: none`). Picking an item far down an opened list scrolls the
+  page back to the detail beside it.
 - **A dialog's buttons go in its action row, even a form's.** Add data was
   its own `<dialog>` with a font ✕ (a plain "X" in some fonts) and Upload at
   the bottom left of the form, unlike every other dialog. On the shared
@@ -655,6 +721,12 @@ Interaction details that bit:
   (`e2e/support/a11y.ts`), and a helper module in `e2e/support/<section>.ts`
   (see `network.ts`, `crops.ts`, `river.ts`, `supply.ts`, `teams.ts`, `data.ts`,
   `scenarios.ts`, `allocations.ts`).
+- **A closed `<details>` still lays out its content in Chromium.** Its
+  children keep a `scrollHeight` (the panel is hidden with
+  `content-visibility`), so a check for "nothing scrolls inside itself"
+  counted River & reserve's closed *Show as a table* and *Values for* boxes.
+  Filter on `el.checkVisibility()` first (`river-page.spec.ts`
+  `innerScrollers`).
 - **Pin screen use in e2e:** no page scroll, the layout reaches the window's
   bottom within a few px, the key content is inside the viewport at
   1440×960, lists scroll inside their card; a new tab or page joins the

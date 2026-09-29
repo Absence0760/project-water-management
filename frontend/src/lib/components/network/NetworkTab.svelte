@@ -7,7 +7,7 @@
 	import { flowShares, type NodeKind, type ProjectSettings, type RunSummary } from '@water-management/engine';
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
-	import { damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
+	import { damEndPctFromSummary, damInRun, type DamEnd, damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
 	import { historyEnd } from '$lib/components/overview/latestRun';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
@@ -385,31 +385,38 @@
 		].join(' · ')
 	);
 
-	// The picked farm's dam at the end of the latest run (the Dam now tile):
-	// from the run summary, or its dam_storage series through the Runs cache (overview/damLevels.ts).
-	let damNow = $state<{ nodeId: string; pct: number } | null>(null);
+	// The picked farm's dam at the end of the latest run (the "Dam at end of run" tile), as a % of the
+	// run's own capacity, as the map's colour by dam level reads it (damInRun, issue #173): from the run
+	// summary, or its dam_storage series through the Runs cache (overview/damLevels.ts). As on the map, a
+	// farm with no dam now is "No dam" and one whose dam the run didn't model is "not in this run"
+	// (damEndTile). pct null: loading, or the series had no value.
+	let damEnd = $state<DamEnd | null>(null);
 	$effect(() => {
 		const id = view === 'map' && picked?.kind === 'farm' && picked.damCapacityM3 >= 1 ? picked.id : null;
 		const run = latestRun?.id ?? null;
-		const cap = picked?.damCapacityM3 ?? 0;
-		const refs = run ? (detailCache.get(run)?.series ?? []) : [];
-		if (!id || !run || !refs.some((r) => r.key === 'dam_storage' && r.nodeId === id)) {
-			damNow = null;
+		// The run's details are cached before its summary lands (loadSupply): reading supplyRun re-runs this then.
+		const loaded = run !== null && supplyRun?.id === run;
+		const detail = run ? detailCache.get(run) : undefined;
+		if (!id || !run || !loaded || !detail) {
+			damEnd = null;
+			return;
+		}
+		const dam = damInRun(detail.run.model?.nodes, nodes, detail.series ?? [], id);
+		if (!dam) {
+			damEnd = { nodeId: id, inRun: false, pct: null, capacityM3: 0 };
 			return;
 		}
 		// From the run summary when it has the figure (engine ≥ 1.2.0, issue #55), else the series.
-		const end = supplyRun?.id === run ? supplyRun.summary.farms.find((f) => f.nodeId === id)?.damEndM3 : undefined;
-		if (end !== undefined) {
-			damNow = { nodeId: id, pct: (end / cap) * 100 };
-			return;
-		}
+		const pct = damEndPctFromSummary(dam, supplyRun!.summary.farms);
+		damEnd = { nodeId: id, inRun: true, pct: pct ?? null, capacityM3: dam.capacityM3 };
+		if (pct !== undefined) return;
 		cachedSeries(run, 'dam_storage', id, () => api.runs.series(projectId, run, 'dam_storage', id))
 			.then((s) => {
-				const l = damLevel({ nodeId: id, name: '', capacityM3: cap, minPct: 0 }, s, latestRun?.forecastFrom ?? null);
-				if (picked?.id === id) damNow = l ? { nodeId: id, pct: l.endPct } : null;
+				const l = damLevel(dam, s, latestRun?.forecastFrom ?? null);
+				if (picked?.id === id) damEnd = { nodeId: id, inRun: true, pct: l ? l.endPct : null, capacityM3: dam.capacityM3 };
 			})
 			.catch(() => {
-				if (picked?.id === id) damNow = null;
+				if (picked?.id === id) damEnd = null;
 			});
 	});
 	const totalArea = $derived(nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0));
@@ -696,7 +703,7 @@
 						{nodes}
 						share={shareOf(nodes.indexOf(picked))}
 						supply={picked.kind === 'farm' ? (latestSupply?.get(picked.id) ?? null) : null}
-						damNowPct={picked.kind === 'farm' && damNow?.nodeId === picked.id ? damNow.pct : null}
+						damEnd={picked.kind === 'farm' && damEnd?.nodeId === picked.id ? damEnd : null}
 						planting={picked.kind === 'farm' ? farmPlanting(editor.model, picked.id) : null}
 						runName={latestName}
 						{projectId}
