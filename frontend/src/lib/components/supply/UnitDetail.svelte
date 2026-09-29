@@ -1,10 +1,12 @@
 <script lang="ts">
 	// Units & supply → the picked unit (issue #17): its supply against its
-	// abstraction demand, day by day, with the days it was short shaded, and
-	// its dam's storage. The unit detail panel of Runs & results, moved here:
-	// the same series (fetched once each, through the Runs cache) and the same
-	// words, one chart at a time behind a switch, with the 30 days / 1 year /
-	// All windows, at the plot height the page gives it.
+	// abstraction demand, day by day, with the days it was short shaded. The
+	// unit detail panel of Runs & results, moved here: the same series
+	// (fetched once each, through the Runs cache) and the same words, with the
+	// 30 days / 1 year / All windows, at the plot height the page gives it. A
+	// unit with a dam links to its storage on the Dams page (`?tab=dams&dam=`),
+	// whose chart has the capacity and minimum lines this panel's own "Dam
+	// storage" view lacked (removed 2026-09-29, issue #175).
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -12,7 +14,6 @@
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries } from '$lib/components/runs/cache';
-	import { storagePct } from '$lib/components/runs/results';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { shortRanges } from './supply';
 
@@ -47,7 +48,7 @@
 	const has = (key: string, nodeId: string) => refs.some((r) => r.key === key && r.nodeId === nodeId);
 	const get = (key: string, nodeId: string): Promise<DailySeries> => cachedSeries(runId, key, nodeId, () => api.runs.series(projectId, runId, key, nodeId));
 
-	let data = $state.raw<{ storage?: DailySeries; demand?: DailySeries; supplied?: DailySeries }>({});
+	let data = $state.raw<{ demand?: DailySeries; supplied?: DailySeries }>({});
 	let loading = $state(false);
 	let error = $state<string | null>(null);
 	let attempt = $state(0);
@@ -59,12 +60,11 @@
 		error = null;
 		data = {};
 		Promise.all([
-			has('dam_storage', id) ? get('dam_storage', id) : Promise.resolve(undefined),
 			has('demand', id) ? get('demand', id) : Promise.resolve(undefined),
 			has('supplied', id) ? get('supplied', id) : Promise.resolve(undefined)
 		])
-			.then(([storage, demand, supplied]) => {
-				if (id === farm.nodeId && run === runId) data = { storage, demand, supplied };
+			.then(([demand, supplied]) => {
+				if (id === farm.nodeId && run === runId) data = { demand, supplied };
 			})
 			.catch((e) => {
 				if (id === farm.nodeId && run === runId) error = e instanceof Error ? e.message : String(e);
@@ -75,19 +75,12 @@
 	});
 
 	const hasDam = $derived(capacity >= 1);
-	let view = $state<'supply' | 'storage'>('supply');
-	const shown = $derived(hasDam ? view : 'supply');
 	const supplySeries = $derived.by<ChartSeries[]>(() => {
 		const out: ChartSeries[] = [];
 		const { demand, supplied } = data;
 		if (demand) out.push({ label: 'Abstraction demand', startDate: demand.startDate, values: demand.values, color: '--series-2', style: 'dashed', width: 1.25 });
 		if (supplied) out.push({ label: 'Supplied', startDate: supplied.startDate, values: supplied.values, color: '--series-1', width: 1.25 });
 		return out;
-	});
-	const storageSeries = $derived.by<ChartSeries[]>(() => {
-		const s = data.storage;
-		const pct = s ? storagePct(s.values, capacity) : null;
-		return s && pct ? [{ label: 'Dam storage', startDate: s.startDate, values: pct, color: '--series-1' }] : [];
 	});
 	const shade = $derived(deficit ? shortRanges(deficit) : []);
 </script>
@@ -96,10 +89,7 @@
 	<div class="panel-head">
 		<h2 id="farm-h"><span class="visually-hidden">Hydrological unit detail:</span> {name}</h2>
 		{#if hasDam}
-			<span class="seg" role="group" aria-label="Chart">
-				<button type="button" class="btn btn-sm" aria-pressed={shown === 'supply'} onclick={() => (view = 'supply')}>Supply vs demand</button>
-				<button type="button" class="btn btn-sm" aria-pressed={shown === 'storage'} onclick={() => (view = 'storage')}>Dam storage</button>
-			</span>
+			<a class="dam-link" href="?tab=dams&dam={encodeURIComponent(farm.nodeId)}">Dam storage on the Dams page</a>
 		{/if}
 	</div>
 	<p class="muted small facts" data-testid="unit-facts">
@@ -110,30 +100,20 @@
 		<div class="alert alert-error" role="alert">
 			{error} <button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
 		</div>
+	{:else if supplySeries.length}
+		<LineChart
+			title="Supply vs demand"
+			unit="m³/day"
+			{height}
+			series={supplySeries}
+			recentDays={FLOW_OPEN_DAYS}
+			windows={FLOW_WINDOWS}
+			{shade}
+			{band}
+			caption={shade.length ? 'Shaded: the days the hydrological unit got less than its demand.' : undefined}
+		/>
 	{:else}
-		{#if shown === 'supply'}
-			{#if supplySeries.length}
-				<LineChart
-					title="Supply vs demand"
-					unit="m³/day"
-					{height}
-					series={supplySeries}
-					recentDays={FLOW_OPEN_DAYS}
-					windows={FLOW_WINDOWS}
-					{shade}
-					{band}
-					caption={shade.length ? 'Shaded: the days the hydrological unit got less than its demand.' : undefined}
-				/>
-			{:else}
-				<div class="chart-ph" style:height="{height}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
-			{/if}
-		{:else if storageSeries.length}
-			<LineChart title="Dam storage, % of capacity" unit="%" {height} series={storageSeries} recentDays={FLOW_OPEN_DAYS} windows={FLOW_WINDOWS} {band} />
-		{:else if loading}
-			<div class="chart-ph" style:height="{height}px" role="status">Loading…</div>
-		{:else}
-			<p class="muted nodam">This hydrological unit has no dam storage in the run.</p>
-		{/if}
+		<div class="chart-ph" style:height="{height}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
 	{/if}
 </section>
 
@@ -149,10 +129,11 @@
 		margin: 0;
 		overflow-wrap: anywhere;
 	}
-	.seg {
+	.dam-link {
 		display: inline-flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
+		align-items: center;
+		min-height: 24px;
+		font-size: 0.9rem;
 	}
 	.facts {
 		margin: 0 0 0.5rem;
@@ -164,9 +145,5 @@
 		color: var(--text-muted);
 		background: var(--surface-2);
 		border-radius: var(--radius-sm);
-	}
-	.nodam {
-		padding: 2rem 0;
-		text-align: center;
 	}
 </style>

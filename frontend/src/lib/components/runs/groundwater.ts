@@ -12,6 +12,8 @@ export interface GroundwaterNode {
 	years: GroundwaterAnnualUse[];
 	/** Pumped per year on average: Σ pumped ÷ Σ days × 365.25 (m³/a), so partial first and last years count by their length. */
 	meanM3Year: number;
+	/** The stream depletion that pumping caused, per year on average, weighed the same way (m³/a). */
+	depletionM3Year: number;
 	/** The year it pumped most, and how much. */
 	maxYear: GroundwaterAnnualUse;
 	/** The GN 538 volume the run gave it, m³/a (the same every year). */
@@ -35,6 +37,7 @@ export function groundwaterByNode(rows: readonly GroundwaterAnnualUse[] | undefi
 	for (const r of rows ?? []) by.set(r.nodeId, [...(by.get(r.nodeId) ?? []), r]);
 	return [...by].map(([nodeId, years]) => {
 		const pumped = years.reduce((s, y) => s + y.abstractionM3, 0);
+		const depleted = years.reduce((s, y) => s + y.streamDepletionM3, 0);
 		const days = years.reduce((s, y) => s + y.days, 0);
 		const rolling = years.map((y) => y.rolling12MaxM3).filter((v): v is number => typeof v === 'number');
 		return {
@@ -42,6 +45,7 @@ export function groundwaterByNode(rows: readonly GroundwaterAnnualUse[] | undefi
 			name: years[0]!.name,
 			years,
 			meanM3Year: days > 0 ? (pumped / days) * 365.25 : 0,
+			depletionM3Year: days > 0 ? (depleted / days) * 365.25 : 0,
 			maxYear: years.reduce((m, y) => (y.abstractionM3 > m.abstractionM3 ? y : m)),
 			gaLimitM3: years[0]!.gaLimitM3,
 			gaBasis: years[0]!.gaBasis ?? 'ceiling',

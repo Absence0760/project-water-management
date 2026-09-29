@@ -85,6 +85,14 @@ export const af: Catalogue = {
 	'c184a764': 'Volgens die reënvoorspelling kan jou dam onder die waarskuwingsvlak van {threshold} daal: ongeveer {pct} rondom {date}.',
 	// Your dam is below the alert level of {threshold}: about {pct} on {date}.
 	'321b2d7f': 'Jou dam is onder die waarskuwingsvlak van {threshold}: ongeveer {pct} op {date}.',
+	// {n} invitation / {n} invitations
+	'7f92402c': { one: '{n} uitnodiging', other: '{n} uitnodigings' },
+	// Invitations
+	'6c0a8e37': 'Uitnodigings',
+	// You have {invitations} waiting.
+	'f67a39af': 'Jy het {invitations} wat wag.',
+	// See invitations
+	'3b8cee9c': 'Bekyk uitnodigings',
 	// Check that you’re a person
 	'1f452b01': 'Bevestig dat jy ’n mens is',
 	// There were many sign-in attempts from your network, so we need to check this one is a person. Solve the puzzle and you’ll be signed in. The audio button in the puzzle plays a spoken version.
@@ -1143,6 +1151,8 @@ export const af: Catalogue = {
 	'd01ae81a': 'Waarskuwings-e-posse is weer aan.',
 	// Choose which alerts you get by email, and how often.
 	'8c942903': 'Kies watter waarskuwings jy per e-pos kry, en hoe gereeld.',
+	// Your invitations
+	'327fdffa': 'Jou uitnodigings',
 	// Your data
 	'0819f3fe': 'Jou data',
 	// Download a copy of what we keep about you: your account, the projects and hydrological units you’re linked to, your hydrological units’ figures and registered volumes, notes you wrote, and the history of what you did and what was done about you. It’s a JSON file.
@@ -1167,6 +1177,44 @@ export const af: Catalogue = {
 	'b99a108a': 'Alle waarskuwings-e-posse vir hierdie opvanggebied is af.',
 	// Not switched on for this catchment yet: you get nothing until the WUA turns it on.
 	'2e3ec238': 'Nog nie vir hierdie opvanggebied aangeskakel nie: jy kry niks totdat die WGV dit aanskakel nie.',
+	// a farmer
+	'86398ddf': '’n boer',
+	// an applicant
+	'ff6c21ec': '’n aansoeker',
+	// a viewer
+	'2fd53cce': '’n kyker',
+	// an editor
+	'3107d483': '’n redigeerder',
+	// an owner
+	'e28d69ad': '’n eienaar',
+	// You joined {name}.
+	'0ecbe8a0': 'Jy het by {name} aangesluit.',
+	// Open your hydrological unit
+	'541a5d41': 'Maak jou hidrologiese eenheid oop',
+	// Open it
+	'0e0c8616': 'Maak dit oop',
+	// You declined the invitation to {name}.
+	'4fffb260': 'Jy het die uitnodiging na {name} afgewys.',
+	// Invitations (page title)
+	'691bf45c': 'Uitnodigings',
+	// Nobody joins a catchment or team for you: you join when you accept, and whoever invited you sees only that the invitation was declined.
+	'a535b7ea': 'Niemand sluit namens jou by ’n opvanggebied of span aan nie: jy sluit aan wanneer jy aanvaar, en wie jou ook al uitgenooi het, sien net dat die uitnodiging afgewys is.',
+	// You have no invitations waiting.
+	'e22459b8': 'Jy het geen uitnodigings wat wag nie.',
+	// {inviter} invited you to the team as {role}.
+	'75524109': '{inviter} het jou as {role} na die span uitgenooi.',
+	// {inviter} invited you to this catchment as {role}.
+	'24b755bc': '{inviter} het jou as {role} na hierdie opvanggebied uitgenooi.',
+	// Your hydrological units: {farms}
+	'b5937e3b': 'Jou hidrologiese eenhede: {farms}',
+	// Open until {date}.
+	'764fa9bb': 'Geldig tot {date}.',
+	// Joining…
+	'909a2733': 'Sluit tans aan…',
+	// Accept
+	'50b26149': 'Aanvaar',
+	// Decline
+	'58eaef39': 'Wys af',
 	// Stop alert emails
 	'ac585d38': 'Stop waarskuwings-e-posse',
 	// Stop getting these alert emails? You can turn them back on from your account at any time.
@@ -1295,12 +1343,14 @@ export const af: Catalogue = {
 	'606b0a25': 'Kontroleer tans die uitnodiging…',
 	// **{inviter}** invited this address to **{target}**.
 	'15014a63': '**{inviter}** het hierdie adres na **{target}** uitgenooi.',
-	// Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask {inviter} to add you again.
-	'183e62a9': 'Jou adres is bevestig, so jy behoort reeds toegang te hê. As {target} nie by jou projekte is nie, vra {inviter} om jou weer by te voeg.',
+	// Accept or decline it on your invitations page.
+	'1d6d4152': 'Aanvaar of wys dit af op jou uitnodigingsbladsy.',
 	// You’ll join as soon as you confirm your email address: use the link we sent to {email}.
 	'adf70fb7': 'Jy sluit aan sodra jy jou e-posadres bevestig: gebruik die skakel wat ons na {email} gestuur het.',
 	// Resend confirmation email
 	'8417462b': 'Stuur bevestigings-e-pos weer',
+	// See your invitations
+	'd9a0583b': 'Bekyk jou uitnodigings',
 	// Go to your projects
 	'd3b436ab': 'Gaan na jou projekte',
 	// This invitation to **{target}** is for **{email}**, not the account you’re signed in with.

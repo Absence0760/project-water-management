@@ -299,10 +299,8 @@ export interface InvitedFarmer {
 /** A row of GET /projects/:id/farmers: a farmer, or (owners only) a pending farmer invite. */
 export type FarmerEntry = Farmer | InvitedFarmer;
 
-/** POST /projects/:id/farmers: a verified account is added, any other address invited. */
-export type AddFarmerResult =
-	| { farmer: Farmer; invited?: undefined; invite?: undefined }
-	| { invited: true; invite: InvitedFarmer; farmer?: undefined };
+/** POST /projects/:id/farmers: always an invite, whether or not the address has an account (issue #136). */
+export type AddFarmerResult = { invited: true; invite: InvitedFarmer };
 
 /** One row of POST /projects/:id/farmers/bulk (a CSV line: email,farm,language). */
 export interface BulkFarmerRow {
@@ -524,10 +522,27 @@ export interface InviteInfo {
 	invitedBy: string;
 }
 
-/** POST …/members answers with a member (existing account) or an invite (no account yet). */
-export type AddMemberResult<M> =
-	| { member: M; invited?: undefined; invite?: undefined }
-	| { invited: true; invite: Invite; member?: undefined };
+/**
+ * POST …/members: always an invite, the same answer whether or not the address has an account
+ * (issue #136). A verified account joins when its holder accepts it (GET /me/invites).
+ */
+export type AddMemberResult = { invited: true; invite: Invite };
+
+/** One of your own pending invitations (GET /me/invites, issue #136): where to, as what, from whom. */
+export interface MyInvite {
+	id: string;
+	kind: 'project' | 'team';
+	targetId: string;
+	/** The project's or team's name. */
+	name: string;
+	/** The project role (viewer, editor, owner, farmer, contributor) or team role (viewer, member, admin) it gives. */
+	role: string;
+	invitedBy: string;
+	/** A farmer or applicant invite's farms, by name. */
+	farms: string[];
+	createdAt: string;
+	expiresAt: string;
+}
 
 export interface RunMeta {
 	id: string;

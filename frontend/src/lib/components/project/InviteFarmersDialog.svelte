@@ -35,7 +35,6 @@
 	let picked = $state<string[]>([]);
 	let locale = $state<InviteLocale>('en');
 	let role = $state<FarmRole>('farmer');
-	const roleWord = $derived(role === 'contributor' ? 'an applicant' : 'a farmer');
 
 	// CSV mode.
 	let csv = $state('');
@@ -74,11 +73,7 @@
 		error = null;
 		try {
 			const r = await api.farmers.add(projectId, email.trim(), picked, locale, role);
-			if (r.invited) {
-				ondone(`Invitation sent to ${r.invite.email} for ${farmNames(r.invite, farms).join(', ')}.`, r.invite);
-			} else {
-				ondone(`${r.farmer.displayName} added as ${roleWord} on ${farmNames(r.farmer, farms).join(', ')}.`, r.farmer);
-			}
+			ondone(`Invitation sent to ${r.invite.email} for ${farmNames(r.invite, farms).join(', ')}.`, r.invite);
 			email = '';
 			picked = [];
 			locale = 'en';

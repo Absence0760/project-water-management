@@ -54,12 +54,12 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.exists.action': 'Kies ’n nuwe wagwoord',
 	// If it wasn't you, you can ignore this email — nothing has changed on your account.
 	'mail.exists.ignore': 'As dit nie jy was nie, kan jy hierdie e-pos ignoreer — niks aan jou rekening het verander nie.',
-	// {inviter} has given you access to {farms} in {catchment}
-	'mail.farmer.subject': '{inviter} het jou toegang gegee tot {farms} in {catchment}',
+	// {inviter} invited you to see {farms} in {catchment}
+	'mail.farmer.subject': '{inviter} het jou uitgenooi om {farms} in {catchment} te sien',
 	// Your hydrological unit on {product}
 	'mail.farmer.heading': 'Jou hidrologiese eenheid op {product}',
-	// {inviter} has given you access to {farms} in {catchment}.
-	'mail.farmer.body': '{inviter} het jou toegang gegee tot {farms} in {catchment}.',
+	// {inviter} invited you to see {farms} in {catchment}.
+	'mail.farmer.body': '{inviter} het jou uitgenooi om {farms} in {catchment} te sien.',
 	// You will see your own hydrological unit's water, dam and any restriction notice, and nothing about your neighbours' hydrological units.
 	'mail.farmer.privacy': 'Jy sal jou eie hidrologiese eenheid se water, dam en enige beperkingskennisgewing sien, en niks oor jou bure se hidrologiese eenhede nie.',
 	// The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.
@@ -84,6 +84,10 @@ export const af: Partial<Record<MailKey, string>> = {
 	'mail.invite.confirmAction': 'Bevestig e-pos en aanvaar',
 	// This link expires in 48 hours.
 	'mail.invite.confirmExpires': 'Hierdie skakel verval oor 48 uur.',
+	// Sign in to {product} as {email} to accept or decline. You won't join until you accept.
+	'mail.invite.accept': 'Teken as {email} by {product} in om te aanvaar of af te wys. Jy sluit eers aan wanneer jy aanvaar.',
+	// See the invitation
+	'mail.invite.acceptAction': 'Bekyk die uitnodiging',
 	// If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.
 	'mail.invite.confirmTakeOver': 'As jy nooit ’n {product}-rekening geskep het nie, het iemand anders jou adres geregistreer: moenie dit bevestig nie — gebruik eerder “Wagwoord vergeet” op die intekenbladsy om die rekening oor te neem.',
 	// {what} — {project}

@@ -67,7 +67,7 @@ describe('mail transport', () => {
 			throw rejected;
 		});
 		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const invite = { ...mail, kind: 'farmer_invite' as const, subject: 'Ann Smith has given you access to Rietfontein in Twee' };
+		const invite = { ...mail, kind: 'farmer_invite' as const, subject: 'Ann Smith invited you to see Rietfontein in Twee' };
 		expect(await trySendMail(invite)).toBe(false);
 		expect(error).toHaveBeenCalledTimes(1);
 		expect(error.mock.calls[0]).toHaveLength(1);

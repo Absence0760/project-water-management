@@ -1,14 +1,22 @@
-// Invitations for addresses without a *verified* account (migrations/004_email.sql).
+// Invitations (migrations/004_email.sql, 109_invite_accept.sql).
 //
-// POST /projects/:id/members and POST /teams/:id/members fall through to
-// `inviteByEmail` unless a verified account has the address: a pending invite
-// is stored (token hash only) and an email goes out — a sign-up link when no
-// account exists, a confirm-your-email link when an unverified account does
-// (someone may have registered a colleague's address to be added in their
-// place). The invite turns into a membership once that address is verified —
-// by the verify-email link, a password-reset link, or signing up through the
-// invite link itself (app_accept_invites). Owners (projects) / admins (teams)
-// list and revoke pending invites; RLS enforces the same.
+// Every add by email — POST /projects/:id/members, /farmers, /farmers/bulk
+// and POST /teams/:id/members — is an invite (issue #136): a pending invite
+// is stored (token hash only), the route answers the same `{ invited: true,
+// invite }` whether or not the address has an account, and an email goes out:
+//   - no account: a sign-up link (`/register?invite=…`);
+//   - an unverified account: a confirm-your-email link (someone may have
+//     registered a colleague's address to be added in their place);
+//   - a verified account: a link to the invitations page (/account/invitations).
+// The first two join once the address is verified — by the verify-email link,
+// a password-reset link, or signing up through the invite link itself
+// (app_accept_invites, from markVerified, only when that call is the one that
+// verifies the address). A verified account joins only when its holder
+// accepts on the invitations page (myInviteRoutes below, app_accept_invite),
+// so adding someone never tells the adder whether the address has an account,
+// nor shows them its name, and never makes a stranger a member unasked.
+// Owners (projects) / admins (teams) list and revoke pending invites; RLS
+// enforces the same.
 import { Hono, type Context } from 'hono';
 import type { AuthEnv } from '../auth/middleware.js';
 import { issueEmailToken } from '../auth/email-routes.js';
@@ -17,7 +25,7 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { maskEmail, recordAudit } from '../history/record.js';
 import { ApiError } from '../http/errors.js';
-import { farmerInviteMail, inviteMail, siteLink, type Locale } from '../mail/templates.js';
+import { farmerInviteMail, inviteMail, siteLink, sitePage, type InviteMode, type Locale } from '../mail/templates.js';
 import { trySendMail } from '../mail/transport.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { requireTeamRole } from '../teams/access.js';
@@ -104,17 +112,22 @@ const selectInvites = (kind: InviteKind) => `
 /** A prepared invite email; send it after the transaction has committed. */
 export type PendingMail = Parameters<typeof trySendMail>[0] | null;
 
+/** The account that already has the invited address, if any (app_user_by_email). */
+export type ExistingAccount = { id: string; verified: boolean } | undefined;
+
 /**
  * Create or refresh the pending invite for `email` on a project/team, inside
  * the caller's transaction (which has already checked owner/admin). Re-inviting
  * the same address updates the role and, outside the re-send cooldown, issues
  * a fresh link (the old one stops working) and returns the email to send.
  *
- * `unverifiedUserId`: the address already has an account that hasn't been
- * verified. It can't sign up again, so the email carries a verify-email link
- * for that account instead of a sign-up link; verifying accepts the invite.
- * No email when a verification link went out within its own cooldown (the
- * link already in their inbox accepts the invite too).
+ * `account`: the account that already has the address, if any. An
+ * unverified one can't sign up again, so the email carries a verify-email
+ * link for that account instead of a sign-up link; verifying accepts the
+ * invite. No email when a verification link went out within its own cooldown
+ * (the link already in their inbox accepts the invite too). A verified one
+ * gets a link to the invitations page, where its holder accepts or declines
+ * (issue #136). What the caller answers never depends on which it was.
  *
  * `farmer`: a farmer invite (WP-2.2, 034_farmer_invites). Its farms' names go
  * into the farmer variant of the email, in `locale`; the caller writes the
@@ -129,7 +142,7 @@ export async function inviteByEmail(
 	targetId: string,
 	email: string,
 	role: string,
-	unverifiedUserId?: string,
+	account: ExistingAccount,
 	farmer?: { farms: string[]; locale: Locale }
 ): Promise<{ invite: ReturnType<typeof toInvite>; mail: PendingMail }> {
 	const { target, role: roleCol } = COLS[kind];
@@ -170,14 +183,19 @@ export async function inviteByEmail(
 	const row = rows[0]!;
 	if (!send) return { invite: toInvite(row), mail: null };
 	let link = siteLink('/register', token, 'invite');
-	if (unverifiedUserId) {
+	let mode: InviteMode = 'sign-up';
+	if (account?.verified) {
+		// Signed in as the address, its holder accepts or declines there (app_my_invites).
+		link = sitePage('/account/invitations');
+		mode = 'accept';
+	} else if (account) {
 		// On the address's shared count (078): the inviter's browser is no device of theirs.
-		const verify = await issueEmailToken(db, unverifiedUserId, 'verify');
+		const verify = await issueEmailToken(db, account.id, 'verify');
 		if (!('token' in verify)) return { invite: toInvite(row), mail: null };
 		link = siteLink('/verify-email', verify.token);
+		mode = 'confirm';
 	}
 	const { rows: named } = await db.query<{ name: string }>(COLS[kind].nameSql, [targetId]);
-	const mode = unverifiedUserId ? 'confirm' : 'sign-up';
 	if (farmer) {
 		const mail = farmerInviteMail(email, link, row.invited_by_name, { catchment: named[0]?.name ?? '', farms: farmer.farms }, mode, locale);
 		return { invite: toInvite(row), mail };
@@ -192,10 +210,76 @@ export async function inviteByEmail(
 	return { invite: toInvite(row), mail };
 }
 
-/** A direct add supersedes any pending invite for the same address. */
-export async function dropInvite(db: Db, kind: InviteKind, targetId: string, email: string) {
-	await db.query(`DELETE FROM invite WHERE ${COLS[kind].target} = $1 AND email = $2`, [targetId, email]);
+/**
+ * The account that has `email`, whoever it is: RLS (068) shows only people
+ * you work with, so the by-address lookup. Its name never leaves the route
+ * (issue #136); only whether it exists and is verified, for the invite email.
+ */
+export async function accountByEmail(db: Db, email: string): Promise<ExistingAccount> {
+	const { rows } = await db.query<{ id: string; verified: boolean }>('SELECT id, verified FROM app_user_by_email(ARRAY[$1::citext])', [email]);
+	return rows[0];
 }
+
+type MyInviteRow = {
+	id: string;
+	project_id: string | null;
+	team_id: string | null;
+	target_name: string;
+	role: string;
+	invited_by_name: string;
+	created_at: Date;
+	expires_at: Date;
+	farms: string[];
+};
+
+/**
+ * Your own pending invitations (109_invite_accept.sql), for an account whose
+ * address is verified: GET /me/invites lists the live ones, POST
+ * /me/invites/:inviteId/accept joins (the membership, a farm invite's links,
+ * the history events), DELETE /me/invites/:inviteId declines. Someone else's
+ * invite, an expired one or none at all is the same 404.
+ */
+export const myInviteRoutes = new Hono<AuthEnv>()
+	.get('/invites', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const { rows } = await db.query<MyInviteRow>('SELECT * FROM app_my_invites()');
+			return c.json({
+				invites: rows.map((r) => ({
+					id: r.id,
+					kind: r.project_id ? 'project' : 'team',
+					targetId: r.project_id ?? r.team_id,
+					name: r.target_name,
+					role: r.role,
+					invitedBy: r.invited_by_name,
+					farms: r.farms,
+					createdAt: r.created_at.toISOString(),
+					expiresAt: r.expires_at.toISOString()
+				}))
+			});
+		})
+	)
+	.post('/invites/:inviteId/accept', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const inviteId = c.req.param('inviteId');
+			if (!UUID.test(inviteId)) throw new ApiError(404, 'not found');
+			const { rows } = await db.query<{ joined_project: string | null; joined_team: string | null }>(
+				'SELECT joined_project, joined_team FROM app_accept_invite($1)',
+				[inviteId]
+			);
+			const r = rows[0];
+			if (!r) throw new ApiError(404, 'not found');
+			return c.json({ joined: r.joined_project ? { kind: 'project', id: r.joined_project } : { kind: 'team', id: r.joined_team } });
+		})
+	)
+	.delete('/invites/:inviteId', async (c) =>
+		withUser(c.get('userId'), async (db) => {
+			const inviteId = c.req.param('inviteId');
+			if (!UUID.test(inviteId)) throw new ApiError(404, 'not found');
+			const { rows } = await db.query<{ ok: boolean }>('SELECT app_decline_invite($1) AS ok', [inviteId]);
+			if (!rows[0]?.ok) throw new ApiError(404, 'not found');
+			return c.body(null, 204);
+		})
+	);
 
 function inviteRoutes(kind: InviteKind, authorize: (db: Db, id: string) => Promise<unknown>) {
 	return new Hono<AuthEnv>()

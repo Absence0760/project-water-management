@@ -1,15 +1,17 @@
 <script lang="ts">
-	// Headline numbers for both runs with the change B − A. `fit` adds the
-	// calibration and WR2012 tables: the Compare page shows them, but a
-	// scenario's run is scored against the *real* gauge, so its NSE is not an
-	// outcome of the what-if (ScenarioCompare passes `fit={false}`, issue #177).
+	// Headline numbers for both runs with the change B − A, in two optional
+	// halves. `water={false}`: Compare runs, whose What changes table carries
+	// the water balance rows (compare/summary.ts outcomeRows, issue #175).
+	// `fit={false}`: a scenario against its base, whose run is scored against
+	// the *real* gauge, so its NSE is not an outcome of the what-if
+	// (ScenarioCompare, issue #177).
 	import { SUPPLY_TARGET, type MetricDelta, type RunComparison } from '@water-management/engine';
 	import { fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
 	import { calibrationSample } from '$lib/components/calibration/sample';
 
-	let { comparison, fit = true }: { comparison: RunComparison; fit?: boolean } = $props();
+	let { comparison, water: showWater = true, fit = true }: { comparison: RunComparison; water?: boolean; fit?: boolean } = $props();
 
 	interface Row {
 		label: string;
@@ -90,11 +92,13 @@
 	</div>
 {/snippet}
 
-<div class="cols" class:single={!fit}>
-	<div>
-		<h3>Water balance</h3>
-		{@render table(water, 'Headline water balance for both runs')}
-	</div>
+<div class="cols" class:one={!showWater || !fit}>
+	{#if showWater}
+		<div>
+			<h3>Water balance</h3>
+			{@render table(water, 'Headline water balance for both runs')}
+		</div>
+	{/if}
 	{#if fit}
 		<div>
 			<h3>Calibration against observed flow</h3>
@@ -123,7 +127,7 @@
 		gap: 1rem;
 		align-items: start;
 	}
-	.cols.single {
+	.cols.one {
 		grid-template-columns: minmax(0, 1fr);
 	}
 	@media (max-width: 900px) {

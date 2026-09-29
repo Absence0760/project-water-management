@@ -490,7 +490,7 @@ describe('schema catalogue', () => {
 			 FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef AND p.prorettype <> 'trigger'::regtype`
 		);
 		// The guard above must have something to look at: the auth, invite and farm-scope helpers at least.
-		expect(rows.map((r) => r.fn)).toEqual(expect.arrayContaining(['app_has_role(uuid,project_role)', 'app_accept_invites(uuid)', 'app_farm_nodes(uuid)']));
+		expect(rows.map((r) => r.fn)).toEqual(expect.arrayContaining(['app_has_role(uuid,project_role)', 'app_accept_invites(uuid,uuid)', 'app_farm_nodes(uuid)']));
 		expect(rows.filter((r) => !r.ok).map((r) => r.fn)).toEqual([]);
 		// And water_app really can call one (RLS policies call app_has_role as water_app).
 		const app = new pg.Client({ connectionString: APP_URL });

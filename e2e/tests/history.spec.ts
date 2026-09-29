@@ -105,7 +105,7 @@ test('a run shows the changes since it, and restores its inputs', async ({ page,
 	await expect(await openCapacity(page, project.id)).toHaveValue('150\u202f000');
 });
 
-test('the compare page and the Project page say who changed an input between two runs, and when (issue #42)', async ({ page, owner, signIn }) => {
+test('the compare page says who changed an input between two runs, and when (issue #42)', async ({ page, owner, signIn }) => {
 	const project = await seedRunnableProject(page.request, 'History attribution');
 	const baseline = await createRun(page.request, project.id, 'Baseline');
 	// Another member raises the dam, with a reason.
@@ -121,12 +121,6 @@ test('the compare page and the Project page say who changed an input between two
 	const line = changes.getByRole('listitem').filter({ hasText: 'Upper farm: dam capacity 150\u202f000 m³ → 180\u202f000 m³' });
 	await expect(line).toContainText(/Changed by Dam editor on \d{4}-\d{2}-\d{2} \d{2}:\d{2} · “Licence application”/);
 	await expectNoViolations(page);
-
-	await page.goto(`/projects/${project.id}?tab=project`);
-	const recent = page.getByRole('region', { name: 'Recent changes' });
-	await expect(recent.getByRole('listitem').first()).toContainText('Model changed: Upper farm: dam capacity 150\u202f000 m³ → 180\u202f000 m³');
-	await expect(recent.getByRole('listitem').first()).toContainText('Dam editor ·');
-	await expect(recent.getByRole('listitem').first()).toContainText('“Licence application”');
 	void owner;
 });
 

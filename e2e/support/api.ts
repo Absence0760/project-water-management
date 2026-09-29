@@ -2,8 +2,8 @@
 // (users, projects, model, series), so each spec only drives the UI it is
 // actually about. Every test creates its own users, so tests are independent
 // and can run in parallel against the one e2e database.
-import { expect, type APIRequestContext, type BrowserContext } from '@playwright/test';
-import { plantEmailToken, userIdByEmail } from './db.ts';
+import { expect, request as apiRequest, type APIRequestContext, type BrowserContext } from '@playwright/test';
+import { plantEmailToken, userIdByEmail, verifiedUserIdByEmail } from './db.ts';
 import { sessionToken } from './session.ts';
 import { API_URL } from './env.ts';
 // The terms version the sign-up form sends (acceptTerms): the engine's, by
@@ -91,9 +91,36 @@ export async function createProject(request: APIRequestContext, name: string, de
 	return (await json<{ project: { id: string } }>(res, 201)).project;
 }
 
+/**
+ * Adds `email` to a project as `role`. Every add by email is an invite (issue #136), and a verified
+ * account joins only when its holder accepts, so this accepts it as them (acceptInvites): setup for the
+ * specs about something else. invitations.spec.ts tests the invitation itself.
+ */
 export async function addMember(request: APIRequestContext, projectId: string, email: string, role: Role): Promise<void> {
 	const res = await request.post(`${API_URL}/projects/${projectId}/members`, { data: { email, role } });
 	await json(res, 201);
+	await acceptInvites(email, projectId);
+}
+
+/**
+ * The holder of `email` pressing Accept on each of their pending invites to `targetId` (a project or a
+ * team), through the API as themselves: a session minted for them (session.ts), since the spec's own
+ * request context is the inviter's. No account, or one that never confirmed its address: nothing to do
+ * (such an address joins once it's confirmed). Returns how many invites it accepted.
+ */
+export async function acceptInvites(email: string, targetId: string): Promise<number> {
+	const id = await verifiedUserIdByEmail(email);
+	if (!id) return 0;
+	const as = await apiRequest.newContext({ extraHTTPHeaders: { cookie: `wm_session=${sessionToken(id)}` } });
+	try {
+		const { invites } = await json<{ invites: { id: string; targetId: string }[] }>(await as.get(`${API_URL}/me/invites`), 200);
+		const mine = invites.filter((i) => i.targetId === targetId);
+		// A JSON body: without one the CSRF guard (app.ts) reads the POST as a form post from nowhere.
+		for (const inv of mine) await json(await as.post(`${API_URL}/me/invites/${inv.id}/accept`, { data: {} }), 200);
+		return mine.length;
+	} finally {
+		await as.dispose();
+	}
 }
 
 export async function updateSettings(request: APIRequestContext, projectId: string, settings: Record<string, unknown>): Promise<void> {

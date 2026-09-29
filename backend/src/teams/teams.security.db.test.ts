@@ -59,7 +59,7 @@ async function teamProject(admin: User, teamId: string, name = `Team catchment $
 async function addToTeam(admin: User, teamId: string, u: User, role: string) {
 	const r = await admin.call('POST', `/teams/${teamId}/members`, { email: u.email, role });
 	expect(r.status, JSON.stringify(r.body)).toBe(201);
-	expect(r.body.member.role).toBe(role);
+	expect(r.body.invite.role).toBe(role);
 }
 
 /** The effective role and every app_has_role answer, as `u` through RLS. */

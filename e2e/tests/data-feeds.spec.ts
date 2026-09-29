@@ -92,7 +92,8 @@ test('an owner attaches a forecast feed on fixtures, runs it, and the status pan
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const inputs = page.getByRole('region', { name: 'Input time series' });
 	await expect(inputs.getByRole('rowheader', { name: /^Rainfall — forecast/ })).toBeVisible();
-	await expect(inputs).toContainText('1 series');
+	// The count is the section header's since the list's own summary line went (issue #174).
+	await expect(page.getByTestId('section-context')).toHaveText('1 daily input series');
 });
 
 test('a feed that fails shows as failing, with the warning above the list', async ({ page, owner }) => {

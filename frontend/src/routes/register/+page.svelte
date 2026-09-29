@@ -170,7 +170,8 @@
 			<div class="invite" role="status">
 				<p><Rich text={tRich('**{inviter}** invited this address to **{target}**.', { inviter: invite.invitedBy, target })} /></p>
 				{#if signedInAs.emailVerified}
-					<p class="muted">{t('Your address is confirmed, so you should have access already. If {target} isn’t in your projects, ask {inviter} to add you again.', { target, inviter: invite.invitedBy })}</p>
+					<!-- An account that exists joins only when it accepts (issue #136). -->
+					<p class="muted">{t('Accept or decline it on your invitations page.')}</p>
 				{:else}
 					<p class="muted">{t('You’ll join as soon as you confirm your email address: use the link we sent to {email}.', { email: signedInAs.email })}</p>
 				{/if}
@@ -181,7 +182,11 @@
 				</button>
 				<p class="status" role="status" aria-live="polite">{resendMsg ?? ''}</p>
 			{/if}
-			<a class="btn btn-primary act" href="{base}/">{t('Go to your projects')}</a>
+			{#if signedInAs.emailVerified}
+				<a class="btn btn-primary act" href="{base}/account/invitations">{t('See your invitations')}</a>
+			{:else}
+				<a class="btn btn-primary act" href="{base}/">{t('Go to your projects')}</a>
+			{/if}
 		{:else if inviteState === 'ok' && invite}
 			<div class="alert alert-warning" role="alert">
 				<Rich text={tRich('This invitation to **{target}** is for **{email}**, not the account you’re signed in with.', { target, email: invite.email })} />

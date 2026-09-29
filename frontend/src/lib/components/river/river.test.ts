@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EwrAssuranceSite, EwrCompliance, RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 import { RIVER_ANCHORS, riverAnchor, riverHref } from './links';
-import { ewrRuleText, perYear, pickRiverRun, riverKpis, riverNavGroups, worstMonth, type RiverKpi } from './river';
+import { ewrRuleText, perYear, pickRiverRun, riverKpis, riverNavGroups, type RiverKpi } from './river';
 
 const meta = (id: string, createdAt: string): RunMeta => ({
 	id,
@@ -86,41 +86,24 @@ describe('pickRiverRun', () => {
 	});
 });
 
-describe('worstMonth', () => {
-	it('is null for a run made before the monthly grid', () => {
-		expect(worstMonth(summary())).toBeNull();
-	});
-	it('is the month of the water year with the largest share of days not met, the first on a tie', () => {
-		const notMet = Array(12).fill(0);
-		notMet[10] = 15; // August: half its days
-		notMet[11] = 15; // September, tied: August wins
-		notMet[0] = 3;
-		expect(worstMonth(summary({}, { ewrCompliance: grid(notMet) }))).toEqual({ month: 10, pct: 50 });
-	});
-	it('says 0 when the EWR was met every day', () => {
-		expect(worstMonth(summary({}, { ewrCompliance: grid(Array(12).fill(0)) }))).toEqual({ month: 0, pct: 0 });
-	});
-});
-
 describe('riverKpis', () => {
 	const days = 730;
-	it('gives EWR not met, days below (and per year), the mean outflow and the worst month', () => {
+	it('gives EWR not met, days below (and per year) and the mean outflow; no worst month (issue #175)', () => {
 		const notMet = Array(12).fill(0);
 		notMet[10] = 12;
 		const ks = riverKpis(summary({}, { ewrCompliance: grid(notMet) }), days, null);
-		expect(ks.map((k) => k.id)).toEqual(['ewr', 'below', 'outflow', 'worst']);
+		expect(ks.map((k) => k.id)).toEqual(['ewr', 'below', 'outflow']);
 		// Framed as the Summary's card is (issue #162): the share not met, and the days not met of the record.
 		expect(tile(ks, 'ewr')).toMatchObject({ term: 'EWR not met', value: '10.0%', unit: 'of days', flagged: true, delta: null });
 		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge']);
 		expect(tile(ks, 'below')).toMatchObject({ value: '73', unit: 'days', sub: ['37 in an average year'] });
 		expect(tile(ks, 'outflow')).toMatchObject({ value: '0.500', unit: 'm³/s', sub: ['50% of natural'] });
-		expect(tile(ks, 'worst')).toMatchObject({ value: 'August', sub: ['EWR not met on 40% of its days'], flagged: true, delta: null });
 	});
 	it('adds the rule-table months to the reserve tile when the project has one', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null);
 		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', 'Reserve rules: 91.7% of months']);
 	});
-	it('compares with the previous run: the share not met, days below per year (runs differ in length), outflow, and the same month', () => {
+	it('compares with the previous run: the share not met, days below per year (runs differ in length) and outflow', () => {
 		const cur = Array(12).fill(0);
 		cur[10] = 12;
 		const prev = Array(12).fill(0);
@@ -136,15 +119,6 @@ describe('riverKpis', () => {
 		expect(tile(ks, 'ewr').spec.better).toBe('lower');
 		expect(tile(ks, 'below').delta?.delta).toBeCloseTo(73 * 365.25 / 730 - 73);
 		expect(tile(ks, 'outflow').delta?.delta).toBeCloseTo(-0.5);
-		expect(tile(ks, 'worst').delta?.delta).toBeCloseTo(0.2);
-	});
-	it('says so when the EWR was met every day, and when the run has no grid', () => {
-		expect(tile(riverKpis(summary({ ewrDaysNotMet: 0, ewrFractionDaysNotMet: 0 }, { ewrCompliance: grid(Array(12).fill(0)) }), days, null), 'worst')).toMatchObject({
-			value: 'None',
-			sub: ['the EWR was met in every month'],
-			flagged: false
-		});
-		expect(tile(riverKpis(summary(), days, null), 'worst')).toMatchObject({ value: '–', sub: ['run made before the monthly EWR grid'] });
 	});
 });
 

@@ -1,5 +1,5 @@
-// The Project page (?tab=project, issue #17 option A, docs/ui.md § Project): the model's headline facts, the
-// project's details, import record and notes, and who can open it (team, members, farmers, share links), moved
+// The Project page (?tab=project, issue #17 option A, docs/ui.md § Project): the project's details, import
+// record and notes, the model's headline facts, and who can open it (team, members, farmers, share links), moved
 // unchanged from below the Summary's first screen. The Summary links here, and its old `#…-h` links land here.
 // Synthetic data only.
 import type { Page } from '@playwright/test';
@@ -49,6 +49,8 @@ test('the page: one title, its context and Download in the header, the facts, de
 	for (const name of ['Project details', 'Recent notes', 'Team', 'Members', 'Share links']) await expect(region(page, name)).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Farmers/ })).toBeVisible();
 	await expect(region(page, 'Import record')).toHaveCount(0);
+	// No Recent changes (issue #177): History is in the sidebar, and its header names the latest change.
+	await expect(region(page, 'Recent changes')).toHaveCount(0);
 
 	// Details on the left, who has access on the right: Team above Members, level with the details.
 	const details = (await region(page, 'Project details').boundingBox())!;
@@ -58,9 +60,18 @@ test('the page: one title, its context and Download in the header, the facts, de
 	expect(team.x).toBeGreaterThan(details.x + details.width);
 	expect(team.y + team.height).toBeLessThanOrEqual(members.y);
 	expect(Math.round(team.y)).toBe(Math.round(details.y));
-	// The first screen answers "what is this project and who has it": facts, details and the team are in the window.
-	for (const el of [page.locator('dl.stats'), region(page, 'Project details'), region(page, 'Team')]) await expect(el).toBeInViewport({ ratio: 1 });
+	// The first screen answers "what is this project and who has it": details and the team are in the window.
+	for (const el of [region(page, 'Project details'), region(page, 'Team')]) await expect(el).toBeInViewport({ ratio: 1 });
 	await expect(region(page, 'Members')).toBeInViewport();
+	// The model's facts repeat each tab's header line, so they sit at the left column's foot, not in the first row (issue #176).
+	const facts = (await region(page, 'The model').boundingBox())!;
+	const notes = (await region(page, 'Recent notes').boundingBox())!;
+	expect(Math.round(facts.x)).toBe(Math.round(details.x));
+	expect(facts.y).toBeGreaterThanOrEqual(notes.y + notes.height);
+	// Two tiles a row in the column: 2 × 4.
+	const tiles = page.locator('dl.stats > div');
+	const tops = new Set(await tiles.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top))));
+	expect(tops.size).toBe(4);
 
 	// The Summary keeps none of it.
 	await strip(page).getByRole('link', { name: 'Summary', exact: true }).click();
@@ -125,6 +136,13 @@ test('old links: a Summary #…-h fragment lands on its panel here, focused, and
 	await page.goto(`/projects/${project.id}#members-h`);
 	await expect(page).toHaveURL(/\?tab=project#members-h$/);
 	await expect(page.getByRole('heading', { level: 2, name: 'Members' })).toBeFocused();
+
+	// The facts' old fragment lands on them at the left column's foot (issue #176).
+	await page.goto(`/projects/${project.id}#model-h`);
+	await expect(page).toHaveURL(/\?tab=project#model-h$/);
+	const model = page.getByRole('heading', { level: 2, name: 'The model' });
+	await expect(model).toBeFocused();
+	await expect(model).toBeInViewport();
 
 	// A fragment that isn't one of the moved panels stays on the Summary.
 	await page.goto(`/projects/${project.id}#setup-h`);
@@ -253,7 +271,7 @@ test.describe('no accessibility violations', () => {
 test.describe('on a phone', () => {
 	test.use({ viewport: { width: 360, height: 740 } });
 
-	test('the page stacks facts, details, team, members, and a long description shows in full', async ({ page, owner }) => {
+	test('the page stacks details, facts, team, members, and a long description shows in full', async ({ page, owner }) => {
 		void owner;
 		const project = await createProject(page.request, 'Project phone stack');
 		await openProject(page, project.id);
@@ -262,8 +280,8 @@ test.describe('on a phone', () => {
 		// It grows to fit rather than hiding the text behind an inner scrollbar.
 		expect(await desc.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
 
-		const ys = [(await page.locator('dl.stats').boundingBox())!.y];
-		for (const name of ['Project details', 'Team', 'Members']) ys.push((await region(page, name).boundingBox())!.y);
+		const ys: number[] = [];
+		for (const name of ['Project details', 'The model', 'Team', 'Members']) ys.push((await region(page, name).boundingBox())!.y);
 		expect(ys).toEqual([...ys].sort((a, b) => a - b));
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
 	});

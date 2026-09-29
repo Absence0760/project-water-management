@@ -135,7 +135,7 @@ test('a 22-node network with four transfers: labels clear on the map, the report
 	for (const size of SIZES) {
 		await page.setViewportSize(size);
 		// Each colouring changes the figure under every name (the width of the labels).
-		for (const colourBy of ['supply', 'dam', 'area', 'none']) {
+		for (const colourBy of ['supply', 'dam', 'none']) {
 			await page.getByLabel('Colour hydrological units by').selectOption(colourBy);
 			await waitForMapFit(page);
 			await expectCleanSchematic(page, `map at ${size.width}, coloured by ${colourBy}`);

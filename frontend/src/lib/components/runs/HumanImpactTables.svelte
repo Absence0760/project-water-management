@@ -23,6 +23,10 @@
 	// Their use per water year against the caps and the GN 538 volume (engine ≥ 0.36.0, WP-3.9; the property's own from 1.12.0).
 	const annual = $derived(groundwaterByNode(summary.groundwaterAnnualUse));
 	const anyCeiling = $derived(annual.some((g) => g.gaBasis === 'ceiling'));
+	// Each node's pumping as a share of what it was supplied (the daily-mean table's column, merged into the annual one, issue #175).
+	const supplyShare = $derived(
+		new Map(pumping.map((g) => [g.nodeId, g.avgSuppliedM3Day > 0 ? (g.avgGroundwaterM3Day ?? 0) / g.avgSuppliedM3Day : null] as [string, number | null]))
+	);
 	const m3 = (v: number | null) => (v === null ? '–' : fmtNum(v, 0));
 	// Each unit's demand objects (engine ≥ 1.7.0), unit by unit.
 	const objects = $derived((summary.farms ?? []).flatMap((f) => (f.demandObjects ?? []).map((o) => ({ unit: f.name, o }))));
@@ -104,35 +108,39 @@
 
 {#if pumping.length}
 	<h3>Groundwater</h3>
-	<p class="muted small">
-		Boreholes: groundwater pumped (part of supplied) and the stream depletion it causes in the river below (daily averages over the run).
-	</p>
-	<div class="table-wrap">
-		<table class="data groundwater">
-			<thead>
-				<tr>
-					<th scope="col">Hydrological unit or user</th>
-					<th scope="col" class="num">Pumped<br /><span class="u">m³/day</span></th>
-					<th scope="col" class="num">Share of supplied<br /><span class="u">%</span></th>
-					<th scope="col" class="num">Stream depletion<br /><span class="u">m³/day</span></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each pumping as g (g.nodeId)}
+	{#if !annual.length}
+		<!-- A run before engine 0.36.0 has no annual figures: the daily means only. -->
+		<p class="muted small">
+			Boreholes: groundwater pumped (part of supplied) and the stream depletion it causes in the river below (daily averages over the run).
+		</p>
+		<div class="table-wrap">
+			<table class="data groundwater">
+				<thead>
 					<tr>
-						<th scope="row">{g.name}</th>
-						<td class="num">{fmtNum(g.avgGroundwaterM3Day ?? 0)}</td>
-						<td class="num">{g.avgSuppliedM3Day > 0 ? fmtPct((g.avgGroundwaterM3Day ?? 0) / g.avgSuppliedM3Day) : '–'}</td>
-						<td class="num">{fmtNum(g.avgBaseflowDepletionM3Day ?? 0)}</td>
+						<th scope="col">Hydrological unit or user</th>
+						<th scope="col" class="num">Pumped<br /><span class="u">m³/day</span></th>
+						<th scope="col" class="num">Share of supplied<br /><span class="u">%</span></th>
+						<th scope="col" class="num">Stream depletion<br /><span class="u">m³/day</span></th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
-	</div>
+				</thead>
+				<tbody>
+					{#each pumping as g (g.nodeId)}
+						<tr>
+							<th scope="row">{g.name}</th>
+							<td class="num">{fmtNum(g.avgGroundwaterM3Day ?? 0)}</td>
+							<td class="num">{g.avgSuppliedM3Day > 0 ? fmtPct((g.avgGroundwaterM3Day ?? 0) / g.avgSuppliedM3Day) : '–'}</td>
+							<td class="num">{fmtNum(g.avgBaseflowDepletionM3Day ?? 0)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 	{#if annual.length}
 		<h4>Groundwater by water year</h4>
 		<p class="muted small" data-testid="gw-annual-note">
-			Modelled use per water year (October to September) against the boreholes' annual caps. For context, the GN 538 general
+			Boreholes: groundwater pumped (part of supplied, with its share of what was supplied), the stream depletion it causes
+			in the river below, and the modelled use per water year (October to September) against the boreholes' annual caps. For context, the GN 538 general
 			authorisation allows a property its size × the Table 2 rate of its quaternary catchment, at most 40 000 m³/a, in any 12
 			consecutive months: the app shows modelled use against that volume and never decides whether a use is lawful.
 			{#if anyCeiling}Where the property's area or rate isn't entered, the table shows the 40 000 m³/a ceiling only.{/if}
@@ -147,6 +155,8 @@
 					<tr>
 						<th scope="col">Hydrological unit or user</th>
 						<th scope="col" class="num">Mean pumped<br /><span class="u">m³/a</span></th>
+						<th scope="col" class="num">Share of supplied<br /><span class="u">%</span></th>
+						<th scope="col" class="num">Stream depletion<br /><span class="u">m³/a</span></th>
 						<th scope="col" class="num">Most in a year<br /><span class="u">m³</span></th>
 						<th scope="col" class="num">Annual caps<br /><span class="u">m³/a</span></th>
 						<th scope="col" class="num">GN 538 volume<br /><span class="u">m³/a</span></th>
@@ -160,6 +170,8 @@
 						<tr class:flag={g.yearsAboveGa > 0}>
 							<th scope="row">{g.name}</th>
 							<td class="num">{fmtNum(g.meanM3Year, 0)}</td>
+							<td class="num">{fmtPct(supplyShare.get(g.nodeId) ?? null)}</td>
+							<td class="num">{fmtNum(g.depletionM3Year, 0)}</td>
 							<td class="num">{fmtNum(g.maxYear.abstractionM3, 0)} <span class="muted">({g.maxYear.label})</span></td>
 							<td class="num">{m3(g.years[0]!.annualCapM3)}</td>
 							<td class="num">{fmtNum(g.gaLimitM3, 0)}{#if g.gaBasis === 'ceiling'} <span class="muted">(ceiling only)</span>{/if}</td>

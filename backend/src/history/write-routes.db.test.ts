@@ -110,8 +110,9 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	// --- members, farmers, invites -------------------------------------------------
 	{
+		// An invite (issue #136); ctx.member accepts at once (helpers.ts signUp), which records member.added as them.
 		route: `POST ${P}/members`,
-		records: ['member.added'],
+		records: ['invite.sent'],
 		call: (c) => c.owner.call('POST', `${at(c)}/members`, { email: c.member.email, role: 'viewer' })
 	},
 	{
@@ -125,8 +126,9 @@ const WRITE_ROUTES: Entry[] = [
 		call: (c) => c.owner.call('DELETE', `${at(c)}/members/${c.member.id}`)
 	},
 	{
+		// An invite with its farm (issue #136); ctx.farmer accepts at once, as for POST /members.
 		route: `POST ${P}/farmers`,
-		records: ['member.added', 'farmer.linked'],
+		records: ['invite.sent'],
 		call: (c) => c.owner.call('POST', `${at(c)}/farmers`, { email: c.farmer.email, nodeIds: [c.farmId] })
 	},
 	{
@@ -136,16 +138,18 @@ const WRITE_ROUTES: Entry[] = [
 	},
 	{
 		route: `POST ${P}/farmers/bulk`,
-		records: ['member.added', 'farmer.linked', 'invite.sent'],
+		records: ['farmer.linked', 'invite.sent'],
 		call: async (c) => {
-			// One verified account (added and linked) and one address with none (invited).
-			const added = await signUp('Guardbulk');
+			// A farmer already here gains a farm (linked at once: PUT above left them on Farm B only);
+			// anyone else, account or not, is invited (issue #136).
+			const known = await signUp('Guardbulk', { acceptInvites: false });
 			const rows = [
-				{ email: added.email, farm: 'Farm A' },
+				{ email: c.farmer.email, farm: 'Farm A' },
+				{ email: known.email, farm: 'Farm A' },
 				{ email: `guard-bulk-${crypto.randomUUID()}@example.com`, farm: 'Farm A' }
 			];
 			const res = await c.owner.call('POST', `${at(c)}/farmers/bulk`, { rows });
-			expect(res.body.results.map((r: { status: string }) => r.status)).toEqual(['added', 'invited']);
+			expect(res.body.results.map((r: { status: string }) => r.status)).toEqual(['added', 'invited', 'invited']);
 			return res;
 		}
 	},
@@ -580,11 +584,27 @@ const inTeam = (c: TeamCtx) => c.teamProjects;
 
 const OTHER_WRITE_ROUTES: OtherEntry[] = [
 	// --- teams: who reaches the team's projects ------------------------------------------
+	{ route: `POST ${T}/members`, exempt: 'an invite (issue #136) grants nothing and teams keep no history; accepting it records team_member.added (below)' },
 	{
-		route: `POST ${T}/members`,
+		route: 'POST /me/invites/:inviteId/accept',
 		records: ['team_member.added'],
-		call: (c) => c.admin.call('POST', `${team(c)}/members`, { email: c.mate.email, role: 'member' }),
+		call: async (c) => {
+			expect((await c.admin.call('POST', `${team(c)}/members`, { email: c.mate.email, role: 'member' })).status).toBe(201);
+			const [inv] = (await c.mate.call('GET', '/me/invites')).body.invites;
+			return c.mate.call('POST', `/me/invites/${inv.id}/accept`);
+		},
 		projectsOf: inTeam
+	},
+	{
+		route: 'DELETE /me/invites/:inviteId',
+		records: ['invite.declined'],
+		call: async (c) => {
+			const other = await signUp('Tdecliner', { acceptInvites: false });
+			expect((await c.admin.call('POST', `/projects/${c.teamProjects[0]}/members`, { email: other.email, role: 'viewer' })).status).toBe(201);
+			const [inv] = (await other.call('GET', '/me/invites')).body.invites;
+			return other.call('DELETE', `/me/invites/${inv.id}`);
+		},
+		projectsOf: (c) => [c.teamProjects[0]!]
 	},
 	{
 		route: `PATCH ${T}/members/:userId`,
@@ -689,13 +709,14 @@ describe('the other write routes', () => {
 	const ctx = {} as TeamCtx;
 
 	beforeAll(async () => {
-		const [admin, mate] = await Promise.all(['Tadmin', 'Tmate'].map((n) => signUp(n)));
-		ctx.admin = admin!;
-		ctx.mate = mate!;
-		ctx.teamId = (await admin!.call('POST', '/teams', { name: 'Guard WUA' })).body.team.id;
+		// The mate accepts their team invite through POST /me/invites/:inviteId/accept, an entry of its own.
+		const [admin, mate] = await Promise.all([signUp('Tadmin'), signUp('Tmate', { acceptInvites: false })]);
+		ctx.admin = admin;
+		ctx.mate = mate;
+		ctx.teamId = (await admin.call('POST', '/teams', { name: 'Guard WUA' })).body.team.id;
 		ctx.teamProjects = [];
 		for (const name of ['Upper', 'Lower']) {
-			const r = await admin!.call('POST', '/projects', { name, teamId: ctx.teamId });
+			const r = await admin.call('POST', '/projects', { name, teamId: ctx.teamId });
 			expect(r.status).toBe(201);
 			ctx.teamProjects.push(r.body.project.id);
 		}
@@ -741,9 +762,10 @@ describe('a team change in the history', () => {
 		const mate = await signUp('Tjoiner');
 		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: mate.email, role: 'viewer' })).status).toBe(201);
 		const [e] = await teamEvents('team_member.added');
+		// An invite (issue #136), accepted at once by the helper (helpers.ts signUp): recorded as the person joining.
 		expect(e).toMatchObject({
-			actor_user_id: admin.id,
-			subject: { teamId, team: 'History WUA', userId: mate.id, displayName: 'Tjoiner', teamRole: 'viewer', role: 'viewer' }
+			actor_user_id: mate.id,
+			subject: { teamId, team: 'History WUA', userId: mate.id, displayName: 'Tjoiner', teamRole: 'viewer', role: 'viewer', via: 'invite' }
 		});
 		// Positive control: the owner (the team admin) reads it through the API.
 		const items = (await admin.call('GET', `/projects/${projectId}/history?kind=team_member`)).body.items;
@@ -772,7 +794,7 @@ describe('a team change in the history', () => {
 		expect(reg.status).toBe(202);
 		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
 		const { id } = ((await asOwner('SELECT id FROM app_user WHERE email = $1', [email])) as { id: string }[])[0]!;
-		const joined = (await teamEvents('team_member.added')).filter((e) => e.subject.via === 'invite');
+		const joined = (await teamEvents('team_member.added')).filter((e) => e.subject.via === 'invite' && e.subject.userId === id);
 		expect(joined).toHaveLength(1);
 		expect(joined[0]).toMatchObject({
 			actor_user_id: id,

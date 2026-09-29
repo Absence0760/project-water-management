@@ -20,12 +20,12 @@ export async function seedRiverProject(request: APIRequestContext, name: string,
 /** Opens River & reserve (for `runId`, else the newest run) and waits for the tiles and the drawn flow chart. */
 export async function openRiver(page: Page, projectId: string, runId?: string) {
 	await page.goto(`/projects/${projectId}?tab=river${runId ? `&run=${runId}` : ''}`);
-	await expect(riverTiles(page)).toHaveCount(4);
+	await expect(riverTiles(page)).toHaveCount(3);
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 }
 
-/** The page's four KPI tiles. */
+/** The page's three KPI tiles. */
 export const riverTiles = (page: Page) => page.locator('dl.kpis > [data-kpi]');
 
-/** One tile by its data-kpi id (met, below, outflow, worst). */
-export const riverTile = (page: Page, id: 'ewr' | 'below' | 'outflow' | 'worst') => page.locator(`[data-kpi="${id}"]`);
+/** One tile by its data-kpi id (EWR not met, days below, outflow). */
+export const riverTile = (page: Page, id: 'ewr' | 'below' | 'outflow') => page.locator(`[data-kpi="${id}"]`);

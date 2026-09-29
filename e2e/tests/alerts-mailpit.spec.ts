@@ -10,7 +10,7 @@
 // Needs Mailpit (`pnpm dev:mail:up`; CI starts it). Locally, without it the
 // spec is skipped and says why; in CI it never skips (server-report.spec.ts's
 // rule).
-import { putSeries, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, putSeries, seedRunnableProject } from '../support/api.ts';
 import { mail as mailFn, words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
@@ -104,6 +104,7 @@ for (const L of LANGUAGES) {
 		const lower = project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string;
 		const farmer = await signIn('Mailpit farmer');
 		expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [lower] } })).status()).toBe(201);
+		await acceptInvites(farmer.user.email, project.id);
 		if (L.locale) expect((await farmer.page.request.patch(`${API_URL}/auth/me`, { data: { locale: L.locale } })).status()).toBe(200);
 
 		// The fixture forecast: 14 dry days past the record, run as a forecast and published.

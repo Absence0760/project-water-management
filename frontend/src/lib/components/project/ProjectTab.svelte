@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The Project page (`?tab=project`, issue #17 option A): what the project
-	// is and who can open it. The model's headline facts, the project's
-	// details, its import record and notes on the left; the team, members,
-	// farmers and share links on the right. Everything here sat below the
+	// is and who can open it. The project's details, its import record, notes
+	// and the model's headline facts on the left; the team, members, farmers
+	// and share links on the right. Everything here sat below the
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
 	// links here, and its old `#…-h` links are sent here (links.ts). A
 	// reading page: it scrolls, it isn't fitted to the window.
@@ -21,9 +21,9 @@
 	import FarmersPanel from './FarmersPanel.svelte';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { projectAnchor } from './links';
+	import { modelFacts, otherNodesLine } from './modelFacts';
 	import MembersPanel from './MembersPanel.svelte';
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
-	import RecentChanges from './RecentChanges.svelte';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 
@@ -35,7 +35,6 @@
 		runs,
 		canEdit,
 		isOwner,
-		canSeeHistory,
 		currentUserId,
 		onProjectChange,
 		onLeftProject
@@ -53,8 +52,6 @@
 		runs: RunMeta[] | null;
 		canEdit: boolean;
 		isOwner: boolean;
-		/** The member has the History tab (farmers never do): Recent changes shows only then. */
-		canSeeHistory: boolean;
 		currentUserId: string;
 		onProjectChange: (p: Project) => void;
 		onLeftProject: () => void;
@@ -74,23 +71,8 @@
 	const seriesCount = $derived(series?.length ?? null);
 	const runCount = $derived(runs?.length ?? null);
 
-	const stats = $derived.by(() => {
-		const m = editor.model;
-		const farms = m.nodes.filter((n) => n.kind === 'farm');
-		const outlet = m.nodes.find((n) => n.downstreamNodeId === null);
-		return {
-			farms: farms.length,
-			gauges: m.nodes.length - farms.length,
-			areaKm2: m.nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0),
-			// Only a farm has a dam in the engine; a capacity on a gauge is inert (as the Dams page counts them).
-			damM3: farms.reduce((s, n) => s + (n.damCapacityM3 || 0), 0),
-			dams: farms.filter((n) => n.damCapacityM3 > 0).length,
-			crops: m.crops.length,
-			irrigatedHa: m.cropAreas.reduce((s, a) => s + (a.areaM2 || 0), 0) / 10_000,
-			transfers: m.transfers.filter((t) => t.enabled).length,
-			outlet: outlet?.name ?? null
-		};
-	});
+	// Counted as the Network and Dams pages count them (modelFacts.ts, issue #177).
+	const stats = $derived(modelFacts(editor.model));
 
 	// Anyone who can open the project can take a copy of it (viewers included).
 	const projectDownloads = $derived([
@@ -137,20 +119,6 @@
 {#snippet headerActions()}<DownloadMenu items={projectDownloads} />{/snippet}
 
 <div class="project-page" bind:this={body}>
-	<h2 class="model-h" id="model-h">The model</h2>
-	<!-- Each fact links to the tab where it is edited or looked at; the link is
-	     stretched over the whole tile, so the tile is the click target. -->
-	<dl class="stats">
-		<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
-		<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
-		<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
-		<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
-		<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
-		<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
-		<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
-		<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
-	</dl>
-
 	<div class="grid">
 		<div class="col">
 			<section class="panel" aria-labelledby="details-h">
@@ -189,8 +157,25 @@
 			<ImportReportPanel projectId={project.id} />
 			<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
 			<RecentNotes projectId={project.id} />
-			<!-- Who changed the model or settings last, and when (issue #42); the History tab has the rest. -->
-			{#if canSeeHistory}<RecentChanges projectId={project.id} updatedAt={project.updatedAt} saving={editor.saving} />{/if}
+			<!-- The model's headline facts, at the column's foot (issue #176): each repeats the context line of the
+			     tab it links to, so they are reference, not the page's first row. -->
+			<section class="panel" aria-labelledby="model-h">
+				<div class="panel-head">
+					<h2 id="model-h">The model</h2>
+				</div>
+				<!-- Each fact links to the tab where it is edited or looked at; the link is
+				     stretched over the whole tile, so the tile is the click target. -->
+				<dl class="stats">
+					<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>{otherNodesLine(stats)}</small></dd></div>
+					<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
+					<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
+					<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
+					<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
+					<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
+					<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
+					<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
+				</dl>
+			</section>
 		</div>
 
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
@@ -213,21 +198,18 @@
 	.project-page {
 		container: project-page / inline-size;
 	}
-	.model-h {
-		margin: 0 0 0.5rem;
-		font-size: 1.05rem;
-	}
 	.grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
 		gap: 1rem;
 		align-items: start;
 	}
-	/* Eight facts: one row on wide pages, then 4 × 2, then 2 × 4. */
+	/* Eight facts: 2 × 4 in the left column and on a phone, 4 × 2 across a one-column page. */
 	dl.stats {
-		grid-template-columns: repeat(8, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin: 0;
 	}
-	@container project-page (max-width: 1100px) {
+	@container project-page (min-width: 521px) and (max-width: 760px) {
 		dl.stats {
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}

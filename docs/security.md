@@ -141,16 +141,27 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   person and per project or team, across the member, farmer, bulk-farmer
   and team-member routes, each address counted before it is looked up and
   a bulk dry run counted too. Any registered user can own a project, and
-  those routes add a verified account at once but invite any other
-  address, so they tell the adder which addresses have verified accounts
-  (and their display names) and mail the project's name to an address the
-  adder chose; the cap bounds both. `app_invite_attempt` (SECURITY
-  DEFINER) counts only for the project's owner or the team's admin, so
-  nobody can use up another project's allowance; the table is deny-all.
-  **Open:** the add itself still differs (and the members list shows the
-  account at once) until a verified account must accept an invite too
-  ([followups.md § Roles and what each member sees](./followups.md#roles-and-what-each-member-sees)).
-  Tests: `invites/invites.db.test.ts` "the daily cap on adding by email".
+  every add mails the project's name to an address the adder chose; the
+  cap bounds it. `app_invite_attempt` (SECURITY DEFINER) counts only for
+  the project's owner or the team's admin, so nobody can use up another
+  project's allowance; the table is deny-all. Tests:
+  `invites/invites.db.test.ts` "the daily cap on adding by email".
+- **Adding someone never tells the adder whether the address has an
+  account, and never makes anyone a member unasked** (issue #136,
+  `109_invite_accept.sql`). Every add by email is an invite with the same
+  answer (`{ invited: true, invite }`, bulk `'invited'`) and the same row
+  in the owner's invite list, for no account, an unconfirmed one and a
+  verified one alike; only the email differs (a sign-up link, a
+  confirm-your-address link, or a link to the invitations page), and the
+  adder never sees it. A verified account joins only when its holder
+  accepts (`app_accept_invite`, SECURITY DEFINER, which checks the invite
+  is for the caller's own verified address). `app_my_invites` shows the
+  caller their own live invites and nothing about anyone else's. A decline
+  (`app_decline_invite`) logs `invite.declined` with the masked address
+  and no actor, so the owner learns an invite was declined, never by whom.
+  Tests: `auth/account-tokens.security.db.test.ts` "adding someone by
+  email doesn't reveal whether the address has an account",
+  `invites/invites.db.test.ts`.
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -237,7 +248,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   gets nothing. Signing up through the invite link counts as verified only when
   the link's invite is for the exact address being registered.
 - **Invites** are visible and revocable only by project owners / team admins
-  (RLS on `invite`); invitees have no access until they have an account.
+  (RLS on `invite`); invitees have no access until they have an account and
+  accept (a verified account, on `/account/invitations`), or confirm the
+  address the invite was sent to (no account yet, or an unconfirmed one).
   Accepting goes through a `SECURITY DEFINER` function that re-checks
   verification.
 - **Adding an existing but unverified account** doesn't make it a member:
