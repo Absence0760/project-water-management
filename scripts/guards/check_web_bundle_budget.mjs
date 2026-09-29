@@ -1249,18 +1249,14 @@
 //             api chunk and its puzzle section in the sign-in route chunk take
 //             ~2 KB of that headroom; AWS's script is loaded on demand, never
 //             bundled. Headroom ~1 KB.
-// 2026-09-29  total 1166 → 1188 KB, calibration worker 36 → 44 KB (issue
-//             #153, automated calibration with pre-declared rules; measured
-//             1185 / 43 against main @ 12cde4a's 1162 / 36). The worker runs
-//             the engine's autoCalibrate: its orchestration, the filters and
-//             selection and the rule-set resolver are ~5 KB gzipped on their
-//             own (auto.ts 2.1, rulesSettings.ts 2.0, rules.ts 1.0); the rest
-//             of the worker's growth is chunk boundaries. Outside the worker:
-//             the Automated calibration panel (4.4 KB) and the Calibration
-//             rules fields (2.8 KB), each its own lazy chunk that loads only
-//             with Settings → Fit automatically; the glossary article; and the
-//             rule helpers run comparison and the fit record read. Headroom
-//             ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1166 → 1176 KB (issue #153, automated calibration with
+//             pre-declared rules; measured 1174 against main @ 12cde4a's 1162).
+//             The server runs the rules, so the calibration worker stays at
+//             36 KB. The page gains the Calibration rules fields and the
+//             Automated calibration panel (each its own lazy chunk, loaded
+//             only with Settings → Fit automatically), the glossary article,
+//             and the rule helpers run comparison and the fit record read.
+//             Headroom ~2 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1271,10 +1267,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1188,
+	totalCodeKb: 1176,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 44,
+	largestWorkerKb: 36,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

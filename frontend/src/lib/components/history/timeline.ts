@@ -222,6 +222,10 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 				? `Signed off a run as ${str(s.fullName)}, ${line}`
 				: `Signed off a run as ${str(s.fullName)} (${str(s.registrationBody)} ${str(s.registrationNo)})`;
 		}
+		case 'calibration_rules.signed_off':
+			return `Signed off the calibration rules (revision ${num(s.revision) ?? '?'}) as ${str(s.fullName)}`;
+		case 'calibration_rules.sign_off_withdrawn':
+			return `Withdrew the sign-off of the calibration rules (revision ${num(s.revision) ?? '?'})`;
 		case 'allocation.created':
 			return `Added a registered volume${str(s.registrationNo) ? ` (${str(s.registrationNo)})` : ''}`;
 		case 'allocation.changed':

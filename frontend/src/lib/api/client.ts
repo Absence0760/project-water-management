@@ -106,7 +106,8 @@ import type {
 	OutlookRequest,
 	YieldJob,
 	YieldRequest,
-	YieldResult
+	YieldResult,
+	AutoCalibration
 } from './types';
 
 /** GET /projects/:id/import-report's 404 message when the project has no report (projects/routes.ts). */
@@ -747,6 +748,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One sweep, each member with its summary; `series: true` adds each done member's outcome series. */
 			get: (id: string, sweepId: string, q: { series?: boolean } = {}) =>
 				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
+		},
+		/**
+		 * Automated calibration run by the server (docs/api.md § Automated
+		 * calibration, issue #153): a run of the saved calibration rules, one
+		 * background job per fit. Follow a running one with get(); apply() writes
+		 * the kept fit into the settings (with its record), makes a run with it
+		 * and, when the rules say so, queues the ensemble around it.
+		 */
+		autoCalibrations: {
+			start: (id: string) => request<{ calibration: AutoCalibration; jobId: string; job: JobMeta }>('POST', `${p(id)}/auto-calibrations`, {}),
+			list: (id: string) => request<{ calibrations: AutoCalibration[] }>('GET', `${p(id)}/auto-calibrations`).then((r) => r.calibrations),
+			get: (id: string, calibrationId: string) => request<{ calibration: AutoCalibration }>('GET', `${p(id)}/auto-calibrations/${enc(calibrationId)}`).then((r) => r.calibration),
+			apply: (id: string, calibrationId: string) =>
+				request<{ calibration: AutoCalibration; runId: string | null; uncertaintyId: string | null; runError: string | null }>('POST', `${p(id)}/auto-calibrations/${enc(calibrationId)}/apply`, {})
 		},
 		/**
 		 * Seasonal outlooks (docs/api.md § Seasonal outlooks, issue #53 R5): a base

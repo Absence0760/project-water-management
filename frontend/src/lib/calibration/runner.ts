@@ -1,9 +1,8 @@
-// Starts a fit, an automated calibration, an uncertainty ensemble or the sensitivity runs in a Web Worker. cancel()
+// Starts a fit, an uncertainty ensemble or the sensitivity runs in a Web Worker. cancel()
 // terminates it at once (the engine loop is synchronous, so the worker can't
 // be asked to stop; nothing it found is kept, and the worker itself never
 // saves anything).
-import type { AutoCalibrationProgress, AutoCalibrationReport, CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult, SensitivityResult } from '@water-management/engine';
-import type { AutoFitRequest, AutoWorkerMessage } from './autoFit';
+import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult, SensitivityResult } from '@water-management/engine';
 import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
 import type { SensitivityJob, SensitivityWorkerMessage } from './sensitivity';
@@ -82,13 +81,5 @@ export function startSensitivity(job: SensitivityJob, onProgress: (p: { done: nu
 	return startWorker<SensitivityResult, SensitivityWorkerMessage>(job, (m, done) => {
 		if (m.type === 'sensitivity-progress') onProgress(m.progress);
 		else if (m.type === 'sensitivity-done') done(m.result);
-	});
-}
-
-/** Run automated calibration under the saved rules (issue #153) in the calibration worker. */
-export function startAutoFit(job: AutoFitRequest, onProgress: (p: AutoCalibrationProgress) => void): EnsembleHandle<AutoCalibrationReport> {
-	return startWorker<AutoCalibrationReport, AutoWorkerMessage>(job, (m, done) => {
-		if (m.type === 'auto-progress') onProgress(m.progress);
-		else if (m.type === 'auto-done') done(m.report);
 	});
 }

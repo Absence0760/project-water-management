@@ -42,7 +42,7 @@
 		type SeriesMeta
 	} from '@water-management/engine';
 	import { apanDailyOfValues } from '$lib/series/provenance';
-	import { applyReport } from '$lib/calibration/fit';
+	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -244,12 +244,20 @@
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
-	// The rules as saved: automated calibration runs only on these (issue #153).
+	// The rules as saved: the server runs automated calibration only on these (issue #153).
 	const savedRules = $derived((JSON.parse(saved) as ProjectSettings).calibrationRules);
 
-	/** A fit into the form with its record, and (automated calibration) the pan coefficient it was fitted under. */
-	function applyFit(report: CalibrationReport, record: FitRecord, pan: { values: number[]; source: string } | null = null) {
-		s = { ...applyReport(s, report), fitRecord: record, ...(pan ? { panCoefficient: [...pan.values], panCoefficientSource: pan.source } : {}) };
+	/** The server saved an automated fit (issue #153): take the project's settings as they now are. */
+	async function reloadAfterApply() {
+		const p = await api.projects.get(project.id);
+		onProjectChange(p);
+		s = clone(p.settings);
+		saved = JSON.stringify(clone(p.settings));
+		x2Open = s.gr4j.x2 !== 0;
+	}
+
+	function applyFit(report: CalibrationReport, record: FitRecord) {
+		s = { ...applyReport(s, report), fitRecord: record };
 		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
 	}
 
@@ -874,13 +882,13 @@
 				{#snippet children(AutoFitPanel)}
 					<AutoFitPanel
 						projectId={project.id}
-						settings={() => $state.snapshot(s) as unknown as ProjectSettings}
 						{savedRules}
 						formRules={s.calibrationRules}
-						model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+						formDirty={dirty}
+						penalty={marPenaltyOn(s as unknown as ProjectSettings)}
 						hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
 						{readonly}
-						onApply={applyFit}
+						onApplied={reloadAfterApply}
 					/>
 				{/snippet}
 			</Lazy>

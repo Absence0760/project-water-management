@@ -9,6 +9,8 @@
 <script lang="ts">
 	import {
 		CALIBRATION_BOUNDS,
+		ON_NEW_DATA,
+		ON_NEW_DATA_LABEL,
 		OBJECTIVE_LABELS,
 		MAX_STARTS,
 		OBJECTIVES,
@@ -16,11 +18,11 @@
 		RULE_BUDGET_MIN,
 		RULE_CASES_MAX,
 		RULE_SEED_MAX,
+		SIGNED_OFF_BY_MAX,
 		ruleCaseCount,
 		rulePanOptions,
 		SELECTION_TEST_LABEL,
 		SELECTION_TESTS,
-		SIGNED_OFF_BY_MAX,
 		type CalibrationBounds,
 		type CalibrationRules,
 		type ObjectiveId
@@ -49,7 +51,6 @@
 	});
 	const name = (o: ObjectiveId) => OBJECTIVE_LABELS[o];
 	let signBy = $state('');
-	let signOn = $state(new Date().toISOString().slice(0, 10));
 </script>
 
 <fieldset class="plain rules" aria-describedby="{uid}-hint" data-testid="calibration-rules">
@@ -168,6 +169,18 @@
 			<NumberInput id="{uid}-seed" min={0} max={RULE_SEED_MAX} step={1} disabled={readonly} bind:value={() => value.run.seed, (v) => (value.run = { ...value.run, seed: v ?? 0 })} />
 		</div>
 	</div>
+	<div class="grid" data-testid="rules-after">
+		<div class="field">
+			<label for="{uid}-new-data">When new observed or rain data arrives</label>
+			<select id="{uid}-new-data" bind:value={value.after.onNewData} disabled={readonly}>
+				{#each ON_NEW_DATA as o (o)}<option value={o}>{ON_NEW_DATA_LABEL[o]}</option>{/each}
+			</select>
+		</div>
+		<label class="check">
+			<input type="checkbox" disabled={readonly} bind:checked={value.after.ensemble} />
+			After a kept fit is applied, run the model and the uncertainty ensemble around it
+		</label>
+	</div>
 	<p class="hint" data-testid="rules-fits">{fits} fit{fits === 1 ? '' : 's'}, each with the split-sample and dry → wet tests (at most {RULE_CASES_MAX}). The seed, starts and model runs are rules too: trying another seed after a result is a rule change, with its own revision.</p>
 
 	{#if !readonly}
@@ -176,18 +189,15 @@
 				<button type="button" class="btn btn-sm" onclick={() => (value.signedOff = null)}>Withdraw the sign-off</button>
 			{:else}
 				<div class="field">
-					<label for="{uid}-by">Signed off by</label>
-					<input id="{uid}-by" type="text" maxlength={SIGNED_OFF_BY_MAX} bind:value={signBy} placeholder="the hydrologist’s name" />
+					<label for="{uid}-by">Your name, as a signature</label>
+					<input id="{uid}-by" type="text" maxlength={SIGNED_OFF_BY_MAX} bind:value={signBy} placeholder="e.g. Dr A. Hydrologist" />
 				</div>
-				<div class="field">
-					<label for="{uid}-on">On</label>
-					<input id="{uid}-on" type="date" bind:value={signOn} />
-				</div>
-				<button type="button" class="btn btn-sm" disabled={!signBy.trim() || !signOn} onclick={() => (value.signedOff = { by: signBy.trim(), on: signOn })}>
-					Record the sign-off
+				<!-- The server dates it and records your account in the project's history, whatever date is sent. -->
+				<button type="button" class="btn btn-sm" disabled={!signBy.trim()} onclick={() => (value.signedOff = { by: signBy.trim(), on: new Date().toISOString().slice(0, 10) })}>
+					Sign off these rules
 				</button>
 			{/if}
-			<span class="hint">Record it once the hydrologist has agreed these rules. Changing a rule later withdraws it.</span>
+			<span class="hint">Sign off once you (the hydrologist) have agreed these rules. Saving records it with your account and today’s date; changing a rule later withdraws it.</span>
 		</div>
 	{/if}
 	{#if error}<p class="err" role="alert">{error}</p>{/if}
