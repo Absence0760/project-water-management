@@ -207,7 +207,7 @@ beforeAll(async () => {
 				[projectId, runId]
 			)
 		).rows;
-		// Completed and published to farmers, then withdrawn, by them (103): published_by and ended_by.
+		// Completed and published to farmers, then withdrawn, by them (104): published_by and ended_by.
 		await tx.query(`UPDATE seasonal_outlook SET status = 'complete', result = '{}', engine_version = 'x' WHERE id = $1`, [o.id]);
 		await tx.query(`INSERT INTO outlook_publication (project_id, outlook_id, level_id, level_label, decision_date, season_end, engine_version) VALUES ($1, $2, '0', 'x', '2023-01-01', '2023-06-30', 'x')`, [projectId, o.id]);
 		await tx.query(`UPDATE outlook_publication SET ended_at = now() WHERE project_id = $1`, [projectId]);

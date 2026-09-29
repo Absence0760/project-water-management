@@ -1,5 +1,5 @@
 // A seasonal outlook published to farmers (issue #53 R5, farmer-view ask E3;
-// 103_outlook_triggers_publication.sql, docs/api.md § Seasonal outlooks).
+// 104_outlook_triggers_publication.sql, docs/api.md § Seasonal outlooks).
 // The WUA chooses one level of a complete outlook and publishes it; every
 // farm of the project gets its own figures at that level (the engine's
 // farmOutlookProjection), stored with the publication, which the farm page
@@ -53,7 +53,7 @@ async function projectToday(db: Db, projectId: string): Promise<string> {
  * outlook), and each farm's projection. Refused: an outlook that isn't this
  * project's (404) or isn't complete (409), a level it doesn't have (422) or
  * that didn't run (409), one computed before per-farm figures (engine <
- * 1.18.0: run it again, 409), and a season already over (409).
+ * 1.19.0: run it again, 409), and a season already over (409).
  */
 export async function publishOutlook(db: Db, projectId: string, outlookId: string, levelId: string): Promise<OutlookPublicationRow> {
 	const { rows } = await db.query<{ status: string; result: SeasonalOutlook | null; reviewDate: string | null; seasonEnd: string }>(

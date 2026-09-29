@@ -56,7 +56,7 @@ interface World {
 	applicationId: string;
 	sweepId: string;
 	outlookId: string;
-	/** A complete outlook with one level, "0", and its current publication to farmers (103). */
+	/** A complete outlook with one level, "0", and its current publication to farmers (104). */
 	completeOutlookId: string;
 	outlookPublicationId: string;
 	ruleId: string;

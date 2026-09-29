@@ -34,7 +34,7 @@ export type FarmOutlookProblem = 'noSuchLevel' | 'levelNotRun' | 'noFarmFigures'
 /**
  * One farm's projection of an outlook result at the published level, or why
  * there is none: the level isn't in the outlook, it didn't run, or the
- * outlook predates per-farm figures (engine < 1.18.0, so re-run it). A farm
+ * outlook predates per-farm figures (engine < 1.19.0, so re-run it). A farm
  * without demand in any year gets a projection with `demandMet` null and
  * `demandYears` 0; a farm without a dam gets `dam` null.
  */

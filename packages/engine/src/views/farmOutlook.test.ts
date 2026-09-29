@@ -46,7 +46,7 @@ describe('farmOutlookProjection', () => {
 		expect(farmOutlookProjection(outlook, '9', 'a', null)).toEqual({ projection: null, problem: 'noSuchLevel' });
 		const notRun = { ...outlook, levels: [{ ...outlook.levels[0]!, problems: ['op 1 (demand.scale): no such node'] }] };
 		expect(farmOutlookProjection(notRun, '0', 'a', null).problem).toBe('levelNotRun');
-		// An outlook stored before engine 1.18.0 has no per-farm figures: re-run it.
+		// An outlook stored before engine 1.19.0 has no per-farm figures: re-run it.
 		const old = { ...outlook, levels: outlook.levels.map(({ demandMetByFarm: _, ...l }) => l) } as unknown as typeof outlook;
 		expect(farmOutlookProjection(old, '0', 'a', null).problem).toBe('noFarmFigures');
 	});

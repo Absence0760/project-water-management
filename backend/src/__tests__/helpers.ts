@@ -178,7 +178,7 @@ export async function plantCompleteOutlook(
 		problems: [],
 		nYears: 12,
 		storageByDam: farms.map((f) => ({ nodeId: f.nodeId, name: 'Farm', capacityM3: 100_000, stat: stat(50_000, 100_000) })),
-		// perFarm false: an outlook from before engine 1.18.0, without per-farm figures.
+		// perFarm false: an outlook from before engine 1.19.0, without per-farm figures.
 		...(opts.perFarm === false ? {} : { demandMetByFarm: farms.map((f) => ({ nodeId: f.nodeId, name: 'Farm', nYears: 12, stat: stat(f.p50 ?? 0.8) })) })
 	};
 	const result = { decisionDate: from, seasonEnd: to, nYears: 12, levels: [level] };

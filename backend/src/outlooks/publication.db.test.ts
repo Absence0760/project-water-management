@@ -1,5 +1,5 @@
 // A seasonal outlook published to farmers (issue #53 R5, farmer-view ask E3;
-// 103_outlook_triggers_publication.sql): an editor publishes one level, each
+// 104_outlook_triggers_publication.sql): an editor publishes one level, each
 // farm gets its own figures, a farmer sees only their own farm's (positive
 // control: they do see theirs), a new publication ends the last, the WUA can
 // withdraw it, and what was published never changes. The outlooks are

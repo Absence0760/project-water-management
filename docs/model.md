@@ -5543,7 +5543,7 @@ isn't whole in floating point), ranking by demand, the metric choice and
 fallback, too few years, levels that aren't demand.scale, a monthly plan,
 the wording; `run.demandFactorFrom.test.ts` for the engine setting.
 
-**Each farm's own figures** (engine ≥ 1.18.0, for the farmer view E3). A
+**Each farm's own figures** (engine ≥ 1.19.0, for the farmer view E3). A
 member also carries `farms`: every farm with demand in the season, its
 season demand and supply (Σ over farms = the member's `demandM3` and
 `suppliedM3`). Each level then has `demandMetByFarm`: a farm's own
@@ -5556,7 +5556,7 @@ shows those (api.md § Seasonal outlooks). Tests: `outlook.test.ts` (the
 farms add up to the member; each farm's statistic is its own; a farm
 without demand has no row), `views/farmOutlook.test.ts` (no other farm's id
 or name; shares in 0–1; why there is no projection, an outlook from before
-1.18.0 included).
+1.19.0 included).
 
 ### 2.15a Review triggers from the outlook (issue #53 R6)
 
@@ -5571,7 +5571,7 @@ planning figure. Pure, in `packages/engine/src/outlook/triggers.ts`
 `tercileEdges`, `storageBands`, `bandStartStorage`, `reviewTriggerTable`
 for a job that runs the members one by one, `describeTriggerRow`; per band
 `withDamStorage` on the review date's snapshot, §2.16). `reviewTriggerBands`
-(engine 1.18.0) is runReviewTriggers' first half, the bands and each one's
+(engine 1.19.0) is runReviewTriggers' first half, the bands and each one's
 start storage before any member runs, so a job can run the members one by
 one and hand them to `reviewTriggerTable`; a test pins that path to
 `runReviewTriggers` to the bit.

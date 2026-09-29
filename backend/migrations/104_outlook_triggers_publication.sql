@@ -1,4 +1,4 @@
--- 103_outlook_triggers_publication — the seasonal outlook's review triggers
+-- 104_outlook_triggers_publication — the seasonal outlook's review triggers
 -- and its publication to farmers (issue #53 R6 and R5's farmer view E3;
 -- docs/model.md §2.15a, docs/data-model.md § Seasonal outlooks, docs/api.md
 -- § Seasonal outlooks, docs/design/planning-outputs.md §3.5–3.6).
@@ -96,7 +96,7 @@ CREATE TABLE outlook_publication (
 	CHECK (season_end >= decision_date)
 );
 COMMENT ON TABLE outlook_publication IS
-	'One level of a seasonal outlook published to the project''s farmers (103, issue #53 R5 E3). One current (ended_at IS NULL) per project; the newest 12 kept.';
+	'One level of a seasonal outlook published to the project''s farmers (104, issue #53 R5 E3). One current (ended_at IS NULL) per project; the newest 12 kept.';
 
 CREATE UNIQUE INDEX outlook_publication_current_idx ON outlook_publication (project_id) WHERE ended_at IS NULL;
 CREATE INDEX outlook_publication_project_idx ON outlook_publication (project_id, published_at DESC);
@@ -219,7 +219,7 @@ CREATE TABLE outlook_publication_farm (
 	PRIMARY KEY (publication_id, node_id)
 );
 COMMENT ON TABLE outlook_publication_farm IS
-	'One farm''s own figures in an outlook publication (103, issue #53 R5 E3). Append-only: what the farm''s farmers were shown.';
+	'One farm''s own figures in an outlook publication (104, issue #53 R5 E3). Append-only: what the farm''s farmers were shown.';
 CREATE INDEX outlook_publication_farm_node_idx ON outlook_publication_farm (node_id);
 CREATE INDEX outlook_publication_farm_project_idx ON outlook_publication_farm (project_id);
 

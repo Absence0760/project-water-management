@@ -312,7 +312,7 @@ export interface OutlookMember {
 	demandM3: number;
 	/**
 	 * The same per farm (node id → demand and supply over the season), every
-	 * farm node with any demand in the season (engine ≥ 1.18.0): the farmer
+	 * farm node with any demand in the season (engine ≥ 1.19.0): the farmer
 	 * view's own-farm figures (issue #53 R5, E3).
 	 */
 	farms: Record<string, { demandM3: number; suppliedM3: number }>;
@@ -459,7 +459,7 @@ export interface OutlookLevelResult {
 	/**
 	 * Each farm's share of its own demand met (supplied ÷ demand over the
 	 * season; a year with no demand on the farm left out), for every farm with
-	 * demand in any analogue year (engine ≥ 1.18.0; issue #53 R5, the farmer
+	 * demand in any analogue year (engine ≥ 1.19.0; issue #53 R5, the farmer
 	 * view E3). `nYears` counts the years it had demand in; the statistic is
 	 * null below OUTLOOK_MIN_YEARS of them.
 	 */

@@ -248,7 +248,7 @@ describe('runSeasonalOutlook on the invented catchment', () => {
 	});
 });
 
-describe('each farm’s own demand met (engine 1.18.0, the farmer view E3)', () => {
+describe('each farm’s own demand met (engine 1.19.0, the farmer view E3)', () => {
 	const o = runSeasonalOutlook(input, { ...SEASON, levels: levels([1, 0.5]) });
 
 	it('a member’s farms add up to its catchment demand and supply', () => {

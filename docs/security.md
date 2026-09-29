@@ -996,7 +996,7 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
-- **Seasonal outlooks to farmers (issue #53 R5, 103).** A farmer never
+- **Seasonal outlooks to farmers (issue #53 R5, 104).** A farmer never
   reads a seasonal outlook (`seasonal_outlook` stays viewer-only): an
   editor publishes one level, and the farmer reads that publication's row
   for their own linked farms only (`outlook_publication_farm_select`:
