@@ -3186,7 +3186,7 @@ Applicant view and the Applications tab. Left:
       that day were `runs.spec.ts` (the run-cap list test), not the portfolio
       spec. Tracked in #108.
 
-## Landing page (issue #57)
+## Landing page (issue #57, closed)
 
 - [ ] **Performance budgets on the deployed site.** Lighthouse ≥ 95 in all
       four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
@@ -3199,7 +3199,7 @@ Applicant view and the Applications tab. Left:
       element is the hero render). If the deployed site still misses 2.0 s,
       the lever left is the ~0.5 s render delay: less script before the
       landing's first paint (the root layout's app-wide code). Trigger: the
-      first deploy (Phase 6), tracked on #92; measure there, then close #57.
+      first deploy (Phase 6), tracked on #92 (moved there when #57 closed).
 - [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
       international persona). The page is prerendered once, in English, and
       `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
