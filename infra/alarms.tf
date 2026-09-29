@@ -687,7 +687,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
 # (var.cloudfront_requests_alarm_per_5min), is 20x that, and five people each
 # at the WAF's per-IP limit (1,000).
 #   Unseen: a flood just under it is 16.7 req/s = 1.44M/day
-#     = $2.30-4.03/day, 4-7% of the $60 monthly budget per day.
+#     = $2.30-4.03/day, 3-5% of the $80 monthly budget per day.
 #   Seen: the infra audit's 1,000 req/s flood is 300,000 per 5 minutes, 60x
 #     the threshold, so the first period fires, ~$0.48-0.84 in.
 # The budget's ACTUAL notifications lag 8-24 h; this is the prompt signal.

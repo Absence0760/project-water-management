@@ -477,22 +477,6 @@ override_resource {
 }
 
 override_resource {
-  target          = aws_security_group.api_lambda
-  override_during = plan
-  values = {
-    id = "sg-00000000000000api"
-  }
-}
-
-override_resource {
-  target          = aws_security_group.vpce
-  override_during = plan
-  values = {
-    id = "sg-000000000000vpce"
-  }
-}
-
-override_resource {
   target          = aws_secretsmanager_secret.runtime["api"]
   override_during = plan
   values = {
@@ -2475,7 +2459,9 @@ run "network" {
       "rds <- api_lambda tcp/5432-5432",
       "rds <- migrate_lambda tcp/5432-5432",
       "rds <- worker_lambda tcp/5432-5432",
+      "vpce <- api_lambda tcp/443-443",
       "vpce <- migrate_lambda tcp/443-443",
+      "vpce <- worker_lambda tcp/443-443",
       "vpce_sqs <- api_lambda tcp/443-443",
       "vpce_sqs <- worker_lambda tcp/443-443",
       "vpce_ses <- api_lambda tcp/443-443",
@@ -2499,11 +2485,13 @@ run "network" {
       "api_lambda -> rds tcp/5432-5432",
       "api_lambda -> vpce_sqs tcp/443-443",
       "api_lambda -> vpce_ses tcp/443-443",
+      "api_lambda -> vpce tcp/443-443",
       "migrate_lambda -> rds tcp/5432-5432",
       "migrate_lambda -> vpce tcp/443-443",
       "worker_lambda -> rds tcp/5432-5432",
       "worker_lambda -> vpce_sqs tcp/443-443",
       "worker_lambda -> vpce_ses tcp/443-443",
+      "worker_lambda -> vpce tcp/443-443",
     ])
     error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
   }
@@ -2564,11 +2552,11 @@ run "network" {
       vpce_sqs       = aws_security_group.vpce_sqs.description
       vpce_ses       = aws_security_group.vpce_ses.description
       } == {
-      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
+      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
       migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
-      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
+      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
       rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
-      vpce           = "Secrets Manager interface endpoint: 443 from the migrate Lambda only."
+      vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
       vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
       vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
     }

@@ -140,8 +140,8 @@ variable "waf_rate_limit_per_ip" {
 # just under it goes unseen, so the ceiling is set by what that costs: every
 # allowed request is billed by WAF ($0.60/M) and CloudFront ($1.00/M at
 # US/EU edges, ~$2.20/M at Africa's), $1.60–2.80/M in all. At the 20,000
-# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 15–27%
-# of the $60 budget a day; above it the alarm stops being a cost control.
+# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 12–20%
+# of the $80 budget a day; above it the alarm stops being a cost control.
 # The 1,000 floor is one person at the WAF's per-IP limit, which must not
 # page. The default's arithmetic is at the alarm in alarms.tf.
 variable "cloudfront_requests_alarm_per_5min" {

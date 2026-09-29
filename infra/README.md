@@ -172,7 +172,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (40 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -348,7 +348,7 @@ CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
 for a handful of users: ~250 requests). A flood just under it is 16.7 req/s =
-1.44M a day = $2.30–4.03 a day unseen, 4–7% of the $60 budget; a 1,000 req/s
+1.44M a day = $2.30–4.03 a day unseen, 3–5% of the $80 budget; a 1,000 req/s
 flood is 60× the threshold and fires in the first period. The variable is held
 to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
 `waf-blocked-requests` fires on more than 100 blocks in each of three
