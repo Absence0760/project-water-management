@@ -28,6 +28,7 @@ import { assertLambdaEnv } from './config/production.js';
 import { type RenderResult, type RenderResultMessage, parseRenderRequest, sendToQueue } from './jobs/transport.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from './reports/render.js';
 import { putPdf, reportKey } from './reports/storage.js';
+import { safeError } from './logging/safeError.js';
 
 // Refuse to start with a local default (config/production.ts).
 assertLambdaEnv('renderer');
@@ -41,22 +42,33 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 			continue;
 		}
 		let result: RenderResult;
+		let reason: 'render' | 'store' = 'render';
 		try {
 			const rendered = await renderReportPdf({ projectId: req.projectId, runId: req.runId, against: req.against, token: req.token }, renderOptionsFromEnv());
 			await putPdf(reportKey(req.projectId, req.reportId), rendered.pdf);
 			result = { ok: true, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms };
 		} catch (err) {
 			const e = err instanceof RenderError ? err : new RenderError('the PDF could not be stored');
-			if (!(err instanceof RenderError)) console.error(JSON.stringify({ event: 'report_store_failed', reportId: req.reportId, error: (err as Error).message }));
+			if (!(err instanceof RenderError)) {
+				reason = 'store';
+				console.error(JSON.stringify({ event: 'report_store_failed', reportId: req.reportId, ...safeError(err) }));
+			}
 			result = { ok: false, error: e.message.slice(0, 300), retry: e.retry };
 		}
 		const message: RenderResultMessage = { v: 1, type: 'rendered', reportId: req.reportId, result };
 		try {
 			await sendToQueue(process.env.RENDER_RESULTS_QUEUE_URL, 'RENDER_RESULTS_QUEUE_URL', message);
 		} catch (err) {
-			console.error(JSON.stringify({ event: 'render_result_send_failed', messageId: record.messageId, error: (err as Error).message }));
+			console.error(JSON.stringify({ event: 'render_result_send_failed', messageId: record.messageId, ...safeError(err) }));
 			failures.push({ itemIdentifier: record.messageId });
 			continue;
+		}
+		// The answer went back, but it says the render failed: the Lambda
+		// itself succeeded, so its Errors metric never sees this. One line per
+		// failed answer, metric and alarm in infra/reports.tf. Ids, whether
+		// the worker will ask again, and a reason code: never the error text.
+		if (!result.ok) {
+			console.warn(JSON.stringify({ event: 'report_render_failed', reportId: req.reportId, projectId: req.projectId, reason, retry: result.retry }));
 		}
 		// Ids and the outcome only: never the token, a URL or page text.
 		console.log(

@@ -222,7 +222,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   also names the route's pattern, never the concrete path, since a path can
   carry a token). A failed sign-in or bad account link logs `login_failed`
   with the route's pattern and a reason code only, never the address tried
-  (§ Throttles that don't depend on the WAF). Never an error's message or a pg `detail`, which
+  (§ Throttles that don't depend on the WAF). The fetcher and renderer
+  Lambdas log a failed answer as `feed_fetch_failed` (the feed's id, its
+  source and a reason code: never the stored message, which can name a grid
+  cell or a station) and `report_render_failed` (the report and project ids,
+  `render`/`store` and `retry`: never the error text or the render token), and
+  a failed queue send or PDF store by `safeError` too. Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.

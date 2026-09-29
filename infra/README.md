@@ -381,10 +381,10 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 35 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
+| CloudWatch: 41 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration), logs, RDS log export | ~4.10 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $53** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
+| **Total** | **≈ $54** (the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -704,7 +704,12 @@ afterwards. If you create one by hand, delete it before any real
 `terraform init -backend-config=backend.config`, or the override silently
 wins and state goes to a local file.
 
-The test suite (`tests/guardrails.tftest.hcl`) plans against mocked providers
+The test suite (`tests/guardrails.tftest.hcl`, plus `tests/observability.tftest.hcl`
+for the failures that don't fail a Lambda: every DLQ's new-arrival alarm, the
+`feed_fetch_failed` and `report_render_failed` log metric filters on the
+fetcher's and renderer's log groups and their alarms, the fetch-requests and
+render-requests message-age alarms (the latter present before the renderer
+exists) and the fetcher and renderer throttle alarms) plans against mocked providers
 and pins: Lambda runtime/memory/timeout/concurrency and env; RDS durability
 and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
 (public-access block, OAC-only policy, ACLs off); TLS minimums; both
