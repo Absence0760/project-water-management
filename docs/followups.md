@@ -1171,7 +1171,7 @@ the suggested order (the IDs carry the detail):
       imported module" against the Vite dev server (:7801). Done 2026-09-24:
       e2e now runs against a production build of the frontend
       (`vite build` into `frontend/build-e2e/` with the e2e API URL baked in,
-      served with the SPA fallback by `e2e/support/static-server.mjs`), which
+      served with the SPA fallback by `e2e/support/static-server.ts`), which
       also matches production. Measured with `tests/repeated-loads.spec.ts`
       (six `page.goto(…?tab=settings)` in a row, `--workers=1
       --repeat-each`): dev server 3 of 3 failed at the fourth load; built site
