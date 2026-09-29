@@ -77,7 +77,7 @@ test('the impact report opens with the board: a column per year class, the water
 	}
 	// Existing use is the baseline's, said so, with what "authorised" would need.
 	await expect(b.getByText(/^Existing use is the use in the baseline “Baseline” as that run modelled it/)).toBeVisible();
-	await expect(b.getByText(/Existing authorised use needs a baseline run at every holder’s full registered volume/)).toBeVisible();
+	await expect(b.getByText(/For existing authorised use, compare with a baseline run at every holder’s full registered volume/)).toBeVisible();
 	await expect(b.getByText('Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.')).toBeVisible();
 	await expectNoViolations(page, { include: '[data-testid="licence-impact-board"]' });
 });
