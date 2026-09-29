@@ -12,13 +12,14 @@
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
-	import { loadHumanImpacts } from './humanImpacts';
+	import { hasCatchmentImpacts, hasUnitImpacts, loadHumanImpacts, type ImpactParts } from './humanImpacts';
 	import { calibrationSample } from '$lib/components/calibration/sample';
 
 	let {
 		summary,
 		days,
 		units,
+		impacts = 'all',
 		reserveHref = '#res-reserve'
 	}: {
 		summary: RunSummary;
@@ -26,13 +27,13 @@
 		days: number;
 		/** Drawn after the catchment cards: the printable report's unit table. */
 		units?: Snippet;
+		/** Which human-impact tables: the Runs tab passes 'catchment' (the units' are on Hydrological units, issue #175). */
+		impacts?: ImpactParts;
 		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
 		reserveHref?: string;
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
-	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
-	const pumping = $derived([...farms, ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
@@ -136,10 +137,10 @@
 
 {#if units}{@render units()}{/if}
 
-{#if summary.landCover || summary.users?.length || pumping.length || farms.some((f) => f.demandObjects?.length)}
+{#if (impacts !== 'units' && hasCatchmentImpacts(summary)) || (impacts !== 'catchment' && hasUnitImpacts(summary))}
 	<Lazy load={loadHumanImpacts}>
 		{#snippet children(HumanImpactTables)}
-			<HumanImpactTables {summary} />
+			<HumanImpactTables {summary} parts={impacts} />
 		{/snippet}
 	</Lazy>
 {/if}

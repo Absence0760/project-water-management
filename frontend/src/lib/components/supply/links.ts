@@ -12,9 +12,11 @@ export const UNIT_PARAM = 'unit';
  * (runs/sections.ts), and keep their anchors here, so an old
  * `?tab=runs…#res-curtailment` link (a bookmarked "units short this week")
  * lands on the same panel. `res-farms` is the unit results table, which was
- * in the run summary, and `res-farm` the unit detail.
+ * in the run summary, `res-farm` the unit detail, and `res-users` the demand
+ * objects and other water users (in the run summary until issue #175; they
+ * had no anchor on Runs & results).
  */
-export const SUPPLY_ANCHORS = ['res-farm', 'res-farms', 'res-curtailment', 'res-assurance'] as const;
+export const SUPPLY_ANCHORS = ['res-farm', 'res-farms', 'res-users', 'res-curtailment', 'res-assurance'] as const;
 
 /** True for a `#res-…` fragment that now lives on Units & supply (without the `#`). */
 export function supplyAnchor(hash: string): boolean {

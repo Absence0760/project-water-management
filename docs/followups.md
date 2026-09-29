@@ -1986,7 +1986,12 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       Summary. A layout move, so per the UI playbook it needs an e2e spec
       pinning the rendered tables before the move and the ui.md page-order
       update. **Trigger:** the next Units & supply or Summary layout change
-      (UI batch #76).
+      (UI batch #76). **Done in part (issue #175, 2026-09-29):** demand
+      objects and other water users moved to Hydrological units' *Other
+      water uses* panel (`#res-users`, with a menu entry); land cover and
+      groundwater stay under the run summary. Still open: the users table
+      and the curtailment panel's *Other water users* table on the same page
+      (whole-run means vs the reporting window's cut).
 - [ ] **The water balance by water year is reachable only under Dig deeper ›
       Self-checks** (hydrologist persona, issue #51, 2026-09-28; remainder of
       F13). It is the first table a hydrologist hands a client, and

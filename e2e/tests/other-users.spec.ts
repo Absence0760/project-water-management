@@ -2,6 +2,7 @@
 // Network tab, give it a monthly demand, a return share and a priority, save,
 // reload, run, and read its results and its curtailment row.
 import type { Page } from '@playwright/test';
+import { expectNoViolations } from '../support/a11y.ts';
 import { seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openNodeTable, saveModelChanges } from '../support/network.ts';
@@ -42,13 +43,18 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await page.getByLabel(/^Run label/).fill('With town');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With town' })).toBeVisible();
-	const usersTable = page.locator('table.users');
+	// The users' table moved from the run summary to Hydrological units (issue #175), under "Other water uses".
+	await expect(page.getByRole('heading', { level: 3, name: 'Other water users' })).toHaveCount(0);
+	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
+	const uses = page.getByRole('region', { name: 'Other water uses' });
+	await expect(page.getByRole('navigation', { name: 'Hydrological units sections' }).getByRole('link', { name: 'Other water uses' })).toHaveAttribute('href', '#res-users');
+	const usersTable = uses.locator('table.users');
 	const row = usersTable.getByRole('row', { name: /^Town/ });
 	await expect(row).toBeVisible();
 	await expect(row.getByRole('cell').first()).toHaveText('senior');
 	await expect(row.getByRole('cell').nth(1)).toHaveText('800');
 	// The curtailment report, on Units & supply since issue #17, lists it apart from the units, not curtailed (senior).
-	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
 	const other = page.getByRole('table', { name: 'Other water users' });
 	await expect(other.getByRole('row', { name: /^Town/ })).toContainText('senior (not curtailed)');
+	await expectNoViolations(page);
 });

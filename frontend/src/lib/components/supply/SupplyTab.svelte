@@ -31,6 +31,8 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { hasUnitImpacts, loadHumanImpacts } from '$lib/components/runs/humanImpacts';
 	import { runDamCapacity } from '$lib/components/runs/results';
 	import { runYears } from '$lib/components/runs/runList';
 	import { dataEndOf } from '$lib/format/age';
@@ -40,7 +42,7 @@
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
-	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
+	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	let {
@@ -310,7 +312,7 @@
 				{:else}
 					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
 					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={SUPPLY_NAV} label="Hydrological units sections" groupNames />
+					<SectionNav groups={supplyNav(hasUnitImpacts(summary))} label="Hydrological units sections" groupNames />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
@@ -400,6 +402,18 @@
 					<section class="panel" id="res-farms" aria-labelledby="res-farms-h">
 						<UnitResultsTable farms={summary.farms} days={historyDays(run)} {nodeOrder} startDate={run.startDate} endDate={historyEnd(run)} title="Hydrological unit results" headingId="res-farms-h" />
 					</section>
+					{#if hasUnitImpacts(summary)}
+						<!-- Demand objects and other water users, moved from the Runs tab's run summary (issue #175), in the
+						     chunk the Runs tab and the report share (runs/HumanImpactTables.svelte). -->
+						<section class="panel" id="res-users" aria-labelledby="res-users-h">
+							<h2 id="res-users-h">Other water uses</h2>
+							<Lazy load={loadHumanImpacts}>
+								{#snippet children(HumanImpactTables)}
+									<HumanImpactTables {summary} parts="units" />
+								{/snippet}
+							</Lazy>
+						</section>
+					{/if}
 					<section class="panel" id="res-curtailment">
 						<!-- The reporting-window picker (issue #44): the table over another window, worked out from the run's series. -->
 						<ReportWindowPanel {projectId} {run} {refs} network={editor.model} {farmNames} />

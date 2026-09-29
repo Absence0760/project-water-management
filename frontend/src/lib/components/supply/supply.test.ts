@@ -4,7 +4,7 @@ import type { RunMeta } from '$lib/api/types';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
-import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
+import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
 
 const farm = (nodeId: string, fraction: number, demand = 100): FarmSummary => ({
 	nodeId,
@@ -33,8 +33,10 @@ describe('links', () => {
 	});
 
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
-		expect(SUPPLY_NAV.flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
-		expect(SUPPLY_NAV.map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
+		expect(supplyNav(true).flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
+		expect(supplyNav(true).map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
+		// Other water uses only when the run has demand objects or other water users (the page shows the panel only then).
+		expect(supplyNav(false).flatMap((g) => g.sections.map((s) => s.id))).toEqual(SUPPLY_ANCHORS.filter((a) => a !== 'res-users'));
 	});
 });
 

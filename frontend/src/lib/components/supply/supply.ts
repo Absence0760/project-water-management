@@ -209,16 +209,21 @@ export function cardFacts(c: UnitCard, weekDays: number, weekEnd: DataEnd | null
 /**
  * The page's "On this page" menu (common/SectionNav): the unit detail beside
  * the cards, then the tables for the run, each by its `#res-…` id
- * (links.ts SUPPLY_ANCHORS), in page order.
+ * (links.ts SUPPLY_ANCHORS), in page order. Demand objects and other water
+ * users (`res-users`, moved from Runs & results in issue #175) only when the
+ * run has them, as the page shows the panel only then.
  */
-export const SUPPLY_NAV: NavGroup[] = [
-	{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
-	{
-		label: 'Tables for this run',
-		sections: [
-			{ id: 'res-farms', label: 'Hydrological unit results' },
-			{ id: 'res-curtailment', label: 'Curtailment' },
-			{ id: 'res-assurance', label: 'Assurance of supply' }
-		]
-	}
-];
+export function supplyNav(hasOtherUses: boolean): NavGroup[] {
+	return [
+		{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
+		{
+			label: 'Tables for this run',
+			sections: [
+				{ id: 'res-farms', label: 'Hydrological unit results' },
+				...(hasOtherUses ? [{ id: 'res-users', label: 'Other water uses' }] : []),
+				{ id: 'res-curtailment', label: 'Curtailment' },
+				{ id: 'res-assurance', label: 'Assurance of supply' }
+			]
+		}
+	];
+}
