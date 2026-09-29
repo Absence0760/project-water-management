@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hashId } from '$lib/help/anchor';
 	// The glossary's index: one page per topic (glossary/[topic], issue #162),
 	// each listed here with its terms, so a reader can scan for a word; search
 	// (the box at the head of every help page) is the other way to find one.
@@ -16,7 +17,7 @@
 		.filter((t) => t.entries.length);
 
 	$effect(() => {
-		const e = helpFor(decodeURIComponent(page.url.hash.slice(1)));
+		const e = helpFor(hashId(page.url.hash));
 		if (e) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
 	});
 </script>

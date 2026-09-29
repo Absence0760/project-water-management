@@ -9,6 +9,19 @@
 // until the reader does anything that scrolls themselves (wheel, touch, key,
 // pointer), or the caller releases it (another hash, leaving the page).
 
+/**
+ * The id a URL's #hash names, decoded; '' for no hash or one that isn't
+ * valid percent-encoding (a hand-typed #%E0 would make decodeURIComponent
+ * throw inside the page's effect).
+ */
+export function hashId(hash: string): string {
+	try {
+		return decodeURIComponent(hash.replace(/^#/, ''));
+	} catch {
+		return '';
+	}
+}
+
 /** What holdAnchor needs from the browser; a test passes fakes. */
 export interface AnchorEnv {
 	/** Where the reader's own input arrives. */

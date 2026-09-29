@@ -13,7 +13,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { CATEGORY_TITLES, HELP, countryNames, helpFor } from '$lib/help/content';
 	import { glossaryPath, topicForSlug } from '$lib/help/glossaryLinks';
 	import { currentSection } from '$lib/help/spy';
@@ -30,7 +30,7 @@
 	// An entry that lives under another topic (a moved term, a hand-typed
 	// link) goes on to its own page.
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
+		const id = hashId(page.url.hash);
 		if (!id) return;
 		const here = entries.some((e) => e.id === id);
 		if (!here) {

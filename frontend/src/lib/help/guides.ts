@@ -1193,7 +1193,9 @@ export type InlinePart =
 	/** A reference that doesn't resolve: shown as plain text (and failed by the tests). */
 	| { kind: 'broken'; ref: string; text: string };
 
-const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\*([^*\s](?:[^*]*[^*\s])?)\*/g;
+// *italics* only where the asterisks stand apart from a word (a space,
+// punctuation or the ends either side), so 5*3 or a*b stays as written.
+const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<![\w*])\*([^*\s](?:[^*]*[^*\s])?)\*(?![\w*])/g;
 
 /**
  * A glossary term as it reads mid-sentence: an ordinary capitalised first

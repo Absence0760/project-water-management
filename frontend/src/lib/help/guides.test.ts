@@ -155,6 +155,17 @@ describe('inline', () => {
 		]);
 	});
 
+	it('reads *italics* only where the asterisks stand apart from a word', () => {
+		expect(inline('Open *Review*, then *Build the model*.')).toEqual([
+			{ kind: 'text', text: 'Open ' },
+			{ kind: 'em', text: 'Review' },
+			{ kind: 'text', text: ', then ' },
+			{ kind: 'em', text: 'Build the model' },
+			{ kind: 'text', text: '.' }
+		]);
+		expect(inline('5*3 and 2*4')).toEqual([{ kind: 'text', text: '5*3 and 2*4' }]);
+	});
+
 	it('resolves a field key to its glossary entry, and marks unknown references', () => {
 		expect(inline('[[node.damCapacityM3]]')).toEqual([{ kind: 'term', id: 'dam-capacity', text: 'dam capacity' }]);
 		expect(inline('[[nope]] [[guide:nope|x]]').filter((p) => p.kind === 'broken')).toHaveLength(2);

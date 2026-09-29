@@ -16,7 +16,7 @@
 	import { riverHref } from '$lib/components/river/links';
 	import { dataEndOf } from '$lib/format/age';
 	import { localIsoDate } from '$lib/format/number';
-	import { damsHeadline, headlines, historyDays, ranAgo, type DamsState } from './latestRun';
+	import { damsEnd, damsHeadline, headlines, historyDays, ranAgo, type DamsState } from './latestRun';
 
 	let {
 		meta,
@@ -49,8 +49,8 @@
 	} = $props();
 
 	const all = $derived(run ? headlines(run.summary, historyDays(run), previous?.summary ?? null) : []);
-	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the run's end is stale) · NSE; the outflow goes under them.
-	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams, dataEndOf(meta.endDate, localIsoDate())), ...all.filter((h) => h.id === 'nse')] : []);
+	// Reserve · Irrigation supplied · Dams today ("Dams on <date>" once the dams' last day is stale) · NSE; the outflow goes under them.
+	const cards = $derived(all.length ? [...all.filter((h) => h.id !== 'nse' && h.id !== 'outflow'), damsHeadline(dams, dataEndOf(damsEnd(dams, meta), localIsoDate())), ...all.filter((h) => h.id === 'nse')] : []);
 	const outflow = $derived(all.find((h) => h.id === 'outflow') ?? null);
 	const name = (r: RunMeta) => r.label || 'Untitled run';
 </script>

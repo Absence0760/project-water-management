@@ -10,7 +10,7 @@
 	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
 	import PictureTour from '$lib/components/help/PictureTour.svelte';
 	import RichText from '$lib/components/help/RichText.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { helpFor } from '$lib/help/content';
 	import { glossaryPath } from '$lib/help/glossaryLinks';
 	import { GUIDE_KIND_TITLES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
@@ -26,7 +26,7 @@
 	// while the pictures and fonts settle (lib/help/anchor.ts), focusing its
 	// heading, as the glossary does for a term.
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
+		const id = hashId(page.url.hash);
 		if (!id || !sectionIds.includes(id)) return;
 		let live = true;
 		let release: (() => void) | undefined;

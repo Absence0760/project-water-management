@@ -228,6 +228,14 @@ export type DamsState = { state: 'loading' } | { state: 'error' } | { state: 'no
 export const DAMS_HREF = '?tab=dams';
 
 /**
+ * The last day the Dams card's figure is for: the dams' own last day once
+ * their levels are in, else the run's history end (a forecast run's
+ * `endDate` is in the future, so it can't say whether the figure is stale).
+ */
+export const damsEnd = (d: DamsState, run: Pick<RunMeta, 'startDate' | 'endDate' | 'forecastFrom'>): string =>
+	d.state === 'ready' ? d.today.endDate : historyEnd(run);
+
+/**
  * The "Dams today" card: all dams' storage at the end of the run as a share
  * of their capacity (capacity-weighted), and its change over the run's last
  * AGO_DAYS days (not against the previous run: the question is which way the

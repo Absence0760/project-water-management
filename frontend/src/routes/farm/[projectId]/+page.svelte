@@ -34,7 +34,7 @@
 	import { fetchDownload, saveBlob } from '$lib/export/download';
 	import { errorText } from '$lib/i18n/apiError';
 	import { readUnit } from '$lib/components/farm/savedCopy';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { t, wordsLang } from '$lib/i18n/locale.svelte';
 
 	const projectId = $derived(page.params.projectId ?? '');
@@ -54,7 +54,7 @@
 	// (lib/help/anchor.ts), as the words page does.
 	const shown = $derived(farm.phase.kind === 'ready' && !!farm.view);
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
+		const id = hashId(page.url.hash);
 		if (!id || !shown) return;
 		let live = true;
 		let release: (() => void) | undefined;

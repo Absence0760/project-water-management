@@ -1149,14 +1149,6 @@
 //             read as missing, the Reserve requirement line on the flow vs
 //             reserve chart, and the CHIRPS feed note. No new dependency.
 //             Headroom ~3 KB.
-// 2026-09-29  total 1170 → 1176 KB (measured 1171 with all of issue #162
-//             merged: items 1–27 as one PR). The glossary as one page per
-//             topic with redirects for old term links, the Summary's
-//             days-below-the-reserve strip and the shared EWR-not-met
-//             wording, the one data-age formatter and stale-date wording,
-//             visible chip group names, one role-name map, and the
-//             register page's scrolling terms box. No new dependency.
-//             Headroom ~5 KB.
 // 2026-09-28  total 1089 → 1094 KB (measured 1090 with main, after #127,
 //             merged in; +4 KB on main). Demand-object on/off schedules (issue #90
 //             Q4, engine 1.17.0): the node form's schedule editor
@@ -1259,6 +1251,14 @@
 //             destination names, the one beforeNavigate) and the project
 //             details moved onto the page's save bar. No new dependency.
 //             Headroom ~3 KB.
+// 2026-09-29  total 1170 → 1176 KB (measured 1171 with all of issue #162
+//             merged: items 1–27 as one PR). The glossary as one page per
+//             topic with redirects for old term links, the Summary's
+//             days-below-the-reserve strip and the shared EWR-not-met
+//             wording, the one data-age formatter and stale-date wording,
+//             visible chip group names, one role-name map, and the
+//             register page's scrolling terms box. No new dependency.
+//             Headroom ~5 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

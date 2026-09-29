@@ -296,10 +296,18 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/**
 			 * What the importer flagged when the project was imported; null when it
 			 * wasn't (the server's `200 { report: null }`). A 404 (no such project,
-			 * or not a member) throws.
+			 * or not a member) throws, except the older backend's `404 no import
+			 * report`, which also means none: web@ and backend@ release separately,
+			 * so this frontend may be served against a backend from before #162.
 			 */
 			importReport: (id: string) =>
-				request<{ report: StoredImportReport | null }>('GET', `${p(id)}/import-report`).then((r) => r.report),
+				request<{ report: StoredImportReport | null }>('GET', `${p(id)}/import-report`).then(
+					(r) => r.report,
+					(e: unknown) => {
+						if (e instanceof ApiError && e.status === 404 && e.message === 'no import report') return null;
+						throw e;
+					}
+				),
 			copy: (id: string, name: string) =>
 				request<{ project: Project }>('POST', `${p(id)}/copy`, { name }).then((r) => r.project),
 			/**

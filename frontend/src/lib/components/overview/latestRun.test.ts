@@ -3,7 +3,7 @@ import type { EwrAssuranceSite, FarmSummary, RunSummary } from '@water-managemen
 import type { RunMeta } from '$lib/api/types';
 import { LOW_PCT } from './damLevels';
 import { fmtNum } from '$lib/format/number';
-import { damsHeadline, headlines, historyDays, historyEnd, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
+import { damsEnd, damsHeadline, headlines, historyDays, historyEnd, pickRuns, ranAgo, runDays, supplyFraction, type Headline } from './latestRun';
 
 const meta = (id: string, createdAt: string, over: Partial<RunMeta> = {}): RunMeta => ({
 	id,
@@ -238,6 +238,13 @@ describe('damsHeadline', () => {
 		expect(damsHeadline(today(64, -11), { end: '2022-01-28', age: 8 }).term).toBe('Dams on 28 Jan 2022');
 		// Known before the levels load, so the card's name doesn't change under the reader.
 		expect(damsHeadline({ state: 'loading' }, { end: '2022-01-28', age: 1700 }).term).toBe('Dams on 28 Jan 2022');
+	});
+
+	it('dates the card by the dams’ own last day, or the history end before they load, never a forecast’s end', () => {
+		const run = { startDate: '2022-01-01', endDate: '2022-06-30', forecastFrom: '2022-02-01' };
+		expect(damsEnd(today(64, -11), run)).toBe('2022-01-28');
+		expect(damsEnd({ state: 'loading' }, run)).toBe('2022-01-31');
+		expect(damsEnd({ state: 'none' }, { startDate: '2022-01-01', endDate: '2022-06-30', forecastFrom: null })).toBe('2022-06-30');
 	});
 
 	it('flags dams below the low line, and has no change when the run is too short', () => {

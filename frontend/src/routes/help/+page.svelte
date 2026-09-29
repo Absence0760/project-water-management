@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hashId } from '$lib/help/anchor';
 	// The help landing page: the illustrated catchment tour, the setup path
 	// through the workspace tabs, and the guides that explain the model. The
 	// sidebar (search, every guide, the glossary) is the help layout's.
@@ -17,7 +18,7 @@
 	// The glossary used to live here: /help#<term> links (old help tips,
 	// bookmarks) go on to the term's topic page.
 	$effect(() => {
-		const e = helpFor(decodeURIComponent(page.url.hash.slice(1)));
+		const e = helpFor(hashId(page.url.hash));
 		if (e) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
 	});
 </script>

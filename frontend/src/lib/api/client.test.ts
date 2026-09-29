@@ -518,6 +518,8 @@ describe('teams client', () => {
 		await expect(createApi('http://x', f).projects.importReport('p/1')).resolves.toEqual(stored);
 		expect(call(f, 0)).toMatchObject({ url: 'http://x/projects/p%2F1/import-report', method: 'GET' });
 		await expect(createApi('', mockFetch(200, { report: null })).projects.importReport('p')).resolves.toBeNull();
+		// An older backend (before #162) said the same with a 404.
+		await expect(createApi('', mockFetch(404, { error: 'no import report' })).projects.importReport('p')).resolves.toBeNull();
 		const err = await createApi('', mockFetch(404, { error: 'not found' })).projects.importReport('p').catch((e) => e);
 		expect(err.status).toBe(404);
 	});
