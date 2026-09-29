@@ -49,6 +49,8 @@ test('the page: one title, its context and Download in the header, the facts, de
 	for (const name of ['Project details', 'Recent notes', 'Team', 'Members', 'Share links']) await expect(region(page, name)).toBeVisible();
 	await expect(page.getByRole('region', { name: /^Farmers/ })).toBeVisible();
 	await expect(region(page, 'Import record')).toHaveCount(0);
+	// No Recent changes (issue #177): History is in the sidebar, and its header names the latest change.
+	await expect(region(page, 'Recent changes')).toHaveCount(0);
 
 	// Details on the left, who has access on the right: Team above Members, level with the details.
 	const details = (await region(page, 'Project details').boundingBox())!;

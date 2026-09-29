@@ -24,7 +24,6 @@
 	import { modelFacts, otherNodesLine } from './modelFacts';
 	import MembersPanel from './MembersPanel.svelte';
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
-	import RecentChanges from './RecentChanges.svelte';
 	import ShareLinksPanel from './ShareLinksPanel.svelte';
 	import TeamPanel from './TeamPanel.svelte';
 
@@ -36,7 +35,6 @@
 		runs,
 		canEdit,
 		isOwner,
-		canSeeHistory,
 		currentUserId,
 		onProjectChange,
 		onLeftProject
@@ -54,8 +52,6 @@
 		runs: RunMeta[] | null;
 		canEdit: boolean;
 		isOwner: boolean;
-		/** The member has the History tab (farmers never do): Recent changes shows only then. */
-		canSeeHistory: boolean;
 		currentUserId: string;
 		onProjectChange: (p: Project) => void;
 		onLeftProject: () => void;
@@ -175,8 +171,6 @@
 			<ImportReportPanel projectId={project.id} />
 			<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
 			<RecentNotes projectId={project.id} />
-			<!-- Who changed the model or settings last, and when (issue #42); the History tab has the rest. -->
-			{#if canSeeHistory}<RecentChanges projectId={project.id} updatedAt={project.updatedAt} saving={editor.saving} />{/if}
 		</div>
 
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->

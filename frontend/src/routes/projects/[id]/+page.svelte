@@ -816,7 +816,6 @@
 								{runs}
 								{canEdit}
 								{isOwner}
-								{canSeeHistory}
 								currentUserId={session.user?.id ?? ''}
 								{onProjectChange}
 								{onLeftProject}

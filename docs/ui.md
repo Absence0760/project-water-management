@@ -1103,21 +1103,13 @@ it scrolls, and isn't fitted to the window.
   changes** bar (editors); empty keeps "your WUA". Not the team's name, which may be a
   consultancy's.
 - **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
-  on a phone), then Project details, the import record, recent notes and
-  recent changes on the left; on the right, "who has access": Team above
+  on a phone), then Project details, the import record and recent notes on
+  the left; on the right, "who has access": Team above
   Members (or "Shared directly with" for a team project), so the two panels
   that refer to each other sit together, then **Farmers** and share links. The columns answer to
   the page's width (container queries on `project-page`: two columns from
   about 760 px of page), then one column in the order facts, details, import
-  record, notes, changes, team, members, farmers, share links.
-- **Recent changes** (`project/RecentChanges.svelte`, issue #42): the three
-  newest saved changes to the model or settings
-  (`GET /history?kind=revision`), each in one line with the History tab's
-  wording (`project/recentChanges.ts`: "Model changed: Upper farm: dam
-  capacity 150,000 m³ → 180,000 m³ and 2 more"), then who, when and the
-  save's reason, and a link to the History tab. Shown only to members who
-  have the History tab; reloads after a save of the model (the save bar) or
-  of the settings or details. e2e: `e2e/tests/history.spec.ts`.
+  record, notes, team, members, farmers, share links.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
@@ -4980,8 +4972,9 @@ the viewer's day, with a request's change set folded into one entry.
   inputs** (not for a scenario run).
 - **Elsewhere** (issue #42): the compare page's *What changed* says who
   changed each model or settings line between two runs and when
-  ([run-comparison.md](./run-comparison.md)), and the Project page lists
-  the three newest changes (**Recent changes**, [§ Project](#project)).
+  ([run-comparison.md](./run-comparison.md)). The Project page's **Recent
+  changes** panel (the three newest) was removed in 2026-09 (issue #177):
+  History is in the sidebar and its header names the latest change.
 - **Series values** aren't part of a version. A series change that kept
   the values it replaced (a replace, a person's merge, a delete, or a restore
   of them; `timeline.ts` `seriesRestore`) shows **Restore the earlier
