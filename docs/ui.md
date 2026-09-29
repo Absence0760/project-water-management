@@ -3874,22 +3874,26 @@ read it before.
   flow invasive plants and forestry took, its share of natural flow, the
   low-flow threshold, and per class the condensed area, reduction and mm/yr
   over that area (`RunSummaryView.svelte`).
-- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
-  a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
-  (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
-  by water year**: the GN 538 context note (area × Table 2 rate, at most
-  40 000 m³/a, in any 12 months; the ceiling only where a property's area or
-  rate isn't entered; the GA's exclusions; modelled use only, the app never
-  decides legality), the low-confidence note, then per farm or user the mean
-  pumped per year (partial years weighted by their days), the most in one
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes;
+  `HumanImpactTables.svelte`, `runs/groundwater.ts`). From engine 0.36.0
+  (WP-3.9) one table, **Groundwater by water year**: the GN 538 context note
+  (area × Table 2 rate, at most 40 000 m³/a, in any 12 months; the ceiling
+  only where a property's area or rate isn't entered; the GA's exclusions;
+  modelled use only, the app never decides legality), the low-confidence
+  note, then per farm or user the mean pumped per year (partial years
+  weighted by their days), its **share of supplied** (pumped ÷ supplied over
+  the run), the **stream depletion** it causes per year (weighted the same
+  way, `depletionM3Year`), the most in one
   year, the annual caps, the **GN 538 volume** ("(ceiling only)" when
   unknown), the **most in any 12 months**, how many years were above the GN
   538 volume over the water year or any 12 months ending in it (flagged; engine
   ≥ 1.12.0, `aboveGa`) and how many reached a cap; and per node a collapsed
   table of every water year: days, pumped, into the dam, stream depletion, the
   most in the 12 months to then, and each borehole's volume (of its cap,
-  marked when reached).
+  marked when reached). Until 2026-09-29 a daily-mean table (pumped, share of
+  supplied, stream depletion, m³/day) came first; issue #175 merged its two
+  columns the annual table lacked into it. A run before engine 0.36.0, which
+  has no annual figures, still shows that daily-mean table alone.
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   with each user's priority, demand, taken, deficit, % of demand supplied
   (flagged below 95 %), returned and EWR charge, whole-run means. It and the
