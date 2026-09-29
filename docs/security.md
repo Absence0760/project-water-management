@@ -435,7 +435,11 @@ buys a **render session** that can read one report and nothing else.
   the WAF's per-IP rate rule, and the only lasting handle on a PDF is the
   API route, behind the session, the WAF and the project's membership;
   every download re-checks membership. The behaviour caches nothing and
-  forwards only `response-content-disposition` to S3. Locally
+  forwards only `response-content-disposition` to S3. It takes precedence
+  over the SPA, so the frontend must never serve anything under `/reports`:
+  `scripts/guards/check_reports_path.mjs` (run by `pnpm test:guards` and
+  CI's guard step) fails on a top-level `reports` route, a top-level dynamic
+  route, or a static file there. Locally
   (`REPORT_DOWNLOADS=presigned`, the default) the link is a pre-signed MinIO
   GET instead, so no cloud account is needed; production's config check
   refuses anything but `cloudfront` (§ Production configuration). The

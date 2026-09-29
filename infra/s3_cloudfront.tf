@@ -304,8 +304,10 @@ resource "aws_cloudfront_distribution" "frontend" {
   # /reports/* -> the reports bucket, for signed URLs only (trusted_key_groups:
   # CloudFront refuses an unsigned, expired or altered request with 403 before
   # the origin). The object keys are reports/<project>/<report>.pdf, so the
-  # path needs no rewrite; the SPA has no top-level /reports route (its report
-  # pages live under /projects/:id/). CachingDisabled: a PDF is private to a
+  # path needs no rewrite. The SPA must never own a URL under /reports (its
+  # report pages live under /projects/:id/): scripts/guards/check_reports_path.mjs
+  # fails CI on a top-level reports or dynamic route, or a static file there
+  # (pnpm test:guards). CachingDisabled: a PDF is private to a
   # project's members, and every link is a fresh URL anyway. The API's header
   # policy (default-src 'none', nosniff, no-referrer) suits a download too.
   ordered_cache_behavior {
