@@ -238,6 +238,11 @@ export interface EwrAssuranceDelta {
 	lowFlowRate: MetricDelta;
 	/** Water years the high-flow components were met ÷ years they were required, summed over the components (engine ≥ 0.33.0). */
 	highFlowRate: MetricDelta;
+	/** Days below the day's requirement ÷ days, and the required volume not delivered, from daily data (engine ≥ 1.19.0, CR-29; null values on older runs). */
+	timeNotMet?: MetricDelta;
+	volumeNotMet?: MetricDelta;
+	/** The EWR as %nMAR at the site (engine ≥ 1.19.0, CR-29). */
+	ewrPctNmar?: MetricDelta;
 }
 
 export type InputChangeArea = 'settings' | 'network' | 'crops' | 'transfers' | 'series';
@@ -502,7 +507,10 @@ function compareAssurance(ra: EwrAssuranceSite[] | undefined, rb: EwrAssuranceSi
 		fdcRate: metricDelta(x?.fdc.rate, y?.fdc.rate),
 		byMonth: Array.from({ length: 12 }, (_, i) => metricDelta(x?.byMonth[i]?.rate, y?.byMonth[i]?.rate)),
 		lowFlowRate: metricDelta(x?.lowFlow?.rate, y?.lowFlow?.rate),
-		highFlowRate: metricDelta(highFlowRate(x), highFlowRate(y))
+		highFlowRate: metricDelta(highFlowRate(x), highFlowRate(y)),
+		timeNotMet: metricDelta(x?.daily?.timeNotMet, y?.daily?.timeNotMet),
+		volumeNotMet: metricDelta(x?.daily?.volumeNotMet, y?.daily?.volumeNotMet),
+		ewrPctNmar: metricDelta(x?.ewrPctNmar?.pct, y?.ewrPctNmar?.pct)
 	});
 	const rows = [...m.pairs.map(([x, y]) => row(x, y)), ...m.onlyA.map((x) => row(x, null)), ...m.onlyB.map((y) => row(null, y))];
 	return rows.sort((p, q) => Number(q.isOutlet) - Number(p.isOutlet));

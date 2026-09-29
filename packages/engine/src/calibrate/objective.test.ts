@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../random';
-import { fdcSignatures, fitScores, kgeNp, kgePrime, kgeYearly, nse, objectiveLoss } from './objective';
+import { fdcSignatures, fitScores, inverseFlows, kgeLowHigh, kgeNp, kgePrime, kgeYearly, nse, objectiveLoss } from './objective';
 import { OBJECTIVES } from './objectives';
 
 const flows = (seed: number, n = 500) => {
@@ -14,7 +14,7 @@ describe('objective scores', () => {
 		const o = flows(1);
 		const years = o.map((_, i) => Math.floor(i / 100));
 		const f = fitScores(o, o, years);
-		for (const k of ['kgePrime', 'kgeYearly', 'kgeNp', 'nse', 'nseSqrt', 'nseLog'] as const) expect(f[k], k).toBeCloseTo(1, 12);
+		for (const k of ['kgePrime', 'kgeYearly', 'kgeNp', 'nse', 'nseSqrt', 'nseLog', 'kgeLowHigh'] as const) expect(f[k], k).toBeCloseTo(1, 12);
 		for (const k of ['volumeErrorPct', 'fdcHighPct', 'fdcMidSlopePct', 'fdcLowPct'] as const) expect(f[k], k).toBeCloseTo(0, 10);
 		for (const id of OBJECTIVES) expect(objectiveLoss(id, o, o, years)).toBeCloseTo(0, 12);
 	});
@@ -90,5 +90,55 @@ describe('objective scores', () => {
 	it('gives null, not a number, when there is too little to score', () => {
 		expect(fitScores([1], [1])).toMatchObject({ days: 1, kgePrime: null, nse: null, fdcHighPct: null });
 		expect(fitScores([0, 0, 0], [1, 2, 3]).kgePrime).toBeNull();
+	});
+});
+
+describe('KGE′(Q) + KGE′(1/Q) (CR-3)', () => {
+	// KGE′ written out from its definition, independently of objective.ts.
+	const kgeRef = (o: number[], s: number[]) => {
+		const m = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+		const sd = (a: number[]) => Math.sqrt(m(a.map((v) => (v - m(a)) ** 2)));
+		const r = m(o.map((v, i) => (v - m(o)) * (s[i]! - m(s)))) / (sd(o) * sd(s));
+		return 1 - Math.hypot(r - 1, m(s) / m(o) - 1, sd(s) / m(s) / (sd(o) / m(o)) - 1);
+	};
+
+	it('is the mean of KGE′ on Q and on 1/(Q + ε), ε = 1 % of the mean observed flow, the same ε on both sides', () => {
+		const o = flows(11, 400);
+		const s = o.map((v, i) => v * (1 + 0.3 * Math.sin(i / 7)));
+		const eps = o.reduce((a, b) => a + b, 0) / o.length / 100;
+		const inv = (a: number[]) => a.map((q) => 1 / (q + eps));
+		expect(kgeLowHigh(o, s)).toBeCloseTo((kgeRef(o, s) + kgeRef(inv(o), inv(s))) / 2, 12);
+		expect(Array.from(inverseFlows([0, -1, 3], 0.5))).toEqual([2, 2, 1 / 3.5]);
+		expect(objectiveLoss('kgeLowHigh', o, s)).toBeCloseTo(1 - kgeLowHigh(o, s)!, 14);
+		expect(fitScores(o, s).kgeLowHigh).toBe(kgeLowHigh(o, s));
+	});
+
+	it('hand values with zero flows: ε keeps 1/Q finite, and a swapped pair scores −1 on both halves', () => {
+		// o = [0, 2]: mean 1, ε = 0.01. Swapping the two days gives r = −1 with β = γ = 1,
+		// on the flows and on 1/(Q + ε) alike, so each half is 1 − 2 = −1.
+		expect(kgeLowHigh([0, 2], [2, 0])).toBeCloseTo(-1, 12);
+		expect(kgeLowHigh([0, 2, 0, 5], [0, 2, 0, 5])).toBeCloseTo(1, 12);
+		// A simulation that is dry every day has no mean to compare: no score.
+		expect(kgeLowHigh([0, 2, 1], [0, 0, 0])).toBeNull();
+		expect(objectiveLoss('kgeLowHigh', [0, 2, 1], [0, 0, 0])).toBe(Infinity);
+	});
+
+	it('does not depend on the flow unit (ε scales with the flows)', () => {
+		const o = flows(12, 300);
+		const s = o.map((v, i) => v * (i % 3 === 0 ? 0.7 : 1.1));
+		const k = 86_400;
+		expect(kgeLowHigh(o.map((v) => v * k), s.map((v) => v * k))).toBeCloseTo(kgeLowHigh(o, s)!, 10);
+	});
+
+	it('weights the low flows: tripling the lowest 20 % barely moves KGE′ but costs the low/high score', () => {
+		const o = flows(13, 1000);
+		const cut = [...o].sort((a, b) => a - b)[200]!;
+		const s = o.map((v) => (v < cut ? v * 3 : v));
+		const plain = kgePrime(o, s)!;
+		expect(plain).toBeGreaterThan(0.9);
+		expect(kgeLowHigh(o, s)!).toBeLessThan(plain - 0.1);
+		// And the other way round: right on the low flows but 30 % high above them is judged on both halves.
+		const peaks = o.map((v) => (v >= cut ? v * 1.3 : v));
+		expect(kgeLowHigh(o, peaks)!).toBeGreaterThan(kgePrime(o, peaks)! + 0.05);
 	});
 });

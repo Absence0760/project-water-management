@@ -3,7 +3,8 @@
 	0.25.0; docs/model.md §2.10d): natural vs observed + net abstraction per
 	water year, EWR days by rain source, the double-mass check of observed flow
 	against rain, and the dry-season low-flow duration curves, overlaid with the
-	latest run of each other runoff model. Part of the Runs tab's chunk (RunsTab.svelte).
+	latest run of each other runoff model; from engine 1.19.0 the recession
+	diagnostics (RecessionDiagnostics.svelte). Part of the Runs tab's chunk (RunsTab.svelte).
 -->
 <script lang="ts">
 	import type { LowFlowCurve, PlausibilityChecks } from '@water-management/engine';
@@ -12,6 +13,7 @@
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtDate, fmtNum, fmtPct } from '$lib/format/number';
 	import { detailCache } from './cache';
+	import RecessionDiagnostics from './RecessionDiagnostics.svelte';
 	import { breakHint, curveLabel, findings, gaugeRow, lowFlowChart, otherModelRuns, seasonText, signedPct, type OtherCurves } from './plausibility';
 
 	let {
@@ -97,12 +99,14 @@
 		const i = lf?.points.indexOf(p) ?? -1;
 		return i >= 0 ? c.flowsM3s[i]! : null;
 	};
+	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth.
+	const checkCount = $derived(checks.recession === undefined ? 'Four' : 'Five');
 </script>
 
 <section aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Plausibility checks <HelpTip key="plausibility-checks" /></h3>
 	<p class="muted small">
-		Four checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season: {seasonText(checks.drySeason)}.
+		{checkCount} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season: {seasonText(checks.drySeason)}.
 	</p>
 	<ul class="flags" aria-label="Check results">
 		{#each flags as f (f.label)}
@@ -317,6 +321,13 @@
 		</div>
 	{:else}
 		<p class="muted small">Not computed: no flow record covers every calendar month, so there is no dry season.</p>
+	{/if}
+
+	{#if checks.recession}
+		<RecessionDiagnostics check={checks.recession} {projectId} {runId} />
+	{:else if checks.recession === null}
+		<h4>Recession diagnostics <HelpTip key="plausibility-recession" /></h4>
+		<p class="muted small">Not checked: needs an observed flow record and catchment rain.</p>
 	{/if}
 
 	{#if gauges.length}

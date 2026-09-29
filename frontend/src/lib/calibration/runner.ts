@@ -1,10 +1,11 @@
-// Starts a fit, or an uncertainty ensemble, in a Web Worker. cancel()
+// Starts a fit, an uncertainty ensemble or the sensitivity runs in a Web Worker. cancel()
 // terminates it at once (the engine loop is synchronous, so the worker can't
 // be asked to stop; nothing it found is kept, and the worker itself never
 // saves anything).
-import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult } from '@water-management/engine';
+import type { CalibrationProgress, CalibrationReport, EnsembleProgress, EnsembleResult, PairedResult, SensitivityResult } from '@water-management/engine';
 import type { EnsembleJob, EnsembleWorkerMessage } from './ensemble';
 import type { FitRequest, WorkerMessage } from './fit';
+import type { SensitivityJob, SensitivityWorkerMessage } from './sensitivity';
 // The worker is a chunk of the page build, so it shares the page's engine
 // chunks instead of carrying its own copy (frontend/vite.config.ts, issue #9).
 import autocalWorkerUrl from 'virtual:autocal-worker-url';
@@ -72,5 +73,13 @@ export function startEnsemble(job: EnsembleJob, onProgress: (p: EnsembleProgress
 	return startWorker<EnsembleResult | PairedResult, EnsembleWorkerMessage>(job, (m, done) => {
 		if (m.type === 'ensemble-progress') onProgress(m.progress);
 		else if (m.type === 'ensemble-done') done(m.result);
+	});
+}
+
+/** Run the sensitivity runs (CR-21, at most 11 model runs) in the calibration worker. */
+export function startSensitivity(job: SensitivityJob, onProgress: (p: { done: number; total: number }) => void): EnsembleHandle<SensitivityResult> {
+	return startWorker<SensitivityResult, SensitivityWorkerMessage>(job, (m, done) => {
+		if (m.type === 'sensitivity-progress') onProgress(m.progress);
+		else if (m.type === 'sensitivity-done') done(m.result);
 	});
 }

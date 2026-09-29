@@ -1,6 +1,29 @@
 import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { applyReport, fitInput, fitParams, fitRecordFor, fittedAtText, marPenaltyOn, progressFraction, SCORE_ROWS, scoreColumns, SEED_MAX, seedError, STAGE_LABEL, stageText, totalRuns, validationRecordOptions, waterYearsText } from './fit';
+import {
+	applyReport,
+	benchmarkRows,
+	climatologyWarning,
+	fitInput,
+	fitParams,
+	fitRecordFor,
+	fittedAtText,
+	fmtScore,
+	intervalText,
+	marPenaltyOn,
+	progressFraction,
+	rankedByText,
+	SCORE_ROWS,
+	scoreCellText,
+	scoreColumns,
+	SEED_MAX,
+	seedError,
+	STAGE_LABEL,
+	stageText,
+	totalRuns,
+	validationRecordOptions,
+	waterYearsText
+} from './fit';
 
 const scores = (kge: number) => ({
 	days: 100,
@@ -10,6 +33,7 @@ const scores = (kge: number) => ({
 	nse: 0.4,
 	nseSqrt: 0.5,
 	nseLog: 0.3,
+	kgeLowHigh: 0.4,
 	volumeErrorPct: 5,
 	fdcHighPct: -10,
 	fdcMidSlopePct: 20,
@@ -161,6 +185,12 @@ describe('scoreColumns', () => {
 		expect(waterYearsText([])).toBe('–');
 	});
 
+	it('says what ranked the dry → wet years: the reference gauge, else the fitted record (also for a test from before rankedBy)', () => {
+		expect(rankedByText({ rankedBy: 'reference' })).toBe('years ranked dry → wet by the reference gauge (other catchment), a regional wet/dry index that is never scored');
+		expect(rankedByText({ rankedBy: 'observed' })).toBe('years ranked dry → wet by the fitted record’s own mean flow');
+		expect(rankedByText({})).toBe(rankedByText({ rankedBy: 'observed' }));
+	});
+
 	it('adds the independent-record validation column when the report has one', () => {
 		const r = report({
 			independentRecord: {
@@ -175,6 +205,63 @@ describe('scoreColumns', () => {
 		const last = scoreColumns(r).at(-1)!;
 		expect(last).toMatchObject({ id: 'record-val', label: 'Independent record: Logger flow', period: '2005-10-01 – 2008-09-30', validation: true });
 		expect(last.scores.kgePrime).toBe(0.5);
+	});
+});
+
+describe('score intervals and benchmarks (CR-5)', () => {
+	const iv = (lo: number, hi: number) => ({ lo, hi });
+	const intervals = { level: 0.9, resamples: 1000, seed: 1, years: 6, kgePrime: iv(0.48, 0.71), nse: iv(-0.3, 0.05), kgeLowHigh: null };
+	const bench = (clim: number) => ({ meanFlow: { ...scores(1 - Math.SQRT2), nse: 0 }, climatology: scores(clim), halfWindowDays: 7 });
+	const withExtras = (p: ReturnType<typeof period>, clim: number) => ({ ...p, intervals, benchmarks: bench(clim) });
+
+	it('a score cell carries its 90 % interval when there is one, and a negative bound never reads as a dash', () => {
+		const [col] = scoreColumns(report({ before: withExtras(period('2003-01-01', '2008-12-31', 0.62), 0.3) }));
+		expect(scoreCellText(col!, 'kgePrime')).toBe('0.62 (0.48–0.71)');
+		expect(scoreCellText(col!, 'nse')).toBe('0.40 (-0.30 to 0.05)');
+		// No interval for this score, or not a score that gets one: the bare value.
+		expect(scoreCellText(col!, 'kgeLowHigh')).toBe('0.40');
+		expect(scoreCellText(col!, 'volumeErrorPct', '%')).toBe('+5.0%');
+		expect(intervalText(iv(-0.5, -0.1))).toBe('(-0.50 to -0.10)');
+	});
+
+	it('reads a report or stored record from before them: no intervals, no benchmarks, a missing score as "–"', () => {
+		const p = period('2003-01-01', '2008-12-31', 0.62);
+		const { kgeLowHigh: _, ...before118 } = p.scores;
+		const cols = scoreColumns(report({ fit: { ...p, scores: before118 as typeof p.scores } }));
+		expect(cols[1]).toMatchObject({ intervals: null, benchmarks: null });
+		expect(scoreCellText(cols[1]!, 'kgePrime')).toBe('0.62');
+		expect(scoreCellText(cols[1]!, 'kgeLowHigh')).toBe('–');
+		expect(benchmarkRows(cols, 'kgePrime')).toEqual([]);
+		expect(climatologyWarning(cols, 'kgePrime')).toBeNull();
+		expect(fmtScore(undefined)).toBe('–');
+		expect(fmtScore(Number.NaN)).toBe('–');
+	});
+
+	it('benchmark rows: the model, the mean flow and the climatology on the fit’s objective, over the columns that have them', () => {
+		const r = report({
+			fit: withExtras(period('2003-01-01', '2008-12-31', 0.62), 0.3),
+			splitSample: { params: {}, calibration: period('2003-01-01', '2005-12-31', 0.8), validation: withExtras(period('2006-01-01', '2008-12-31', 0.4), 0.2) }
+		});
+		const rows = benchmarkRows(scoreColumns(r), 'kgePrime');
+		expect(rows).toEqual([
+			{ label: 'Model', cells: ['0.62 (0.48–0.71)', '0.40 (0.48–0.71)'] },
+			{ label: 'Mean flow every day', cells: ['-0.41', '-0.41'] },
+			{ label: 'Day-of-year climatology (±7 days)', cells: ['0.30', '0.20'] }
+		]);
+		expect(climatologyWarning(scoreColumns(r), 'kgePrime')).toBeNull();
+	});
+
+	it('one plain sentence when the model doesn’t beat climatology on the fitted or a validation period (not on “current parameters”)', () => {
+		const r = report({
+			before: withExtras(period('2003-01-01', '2008-12-31', 0.1), 0.5),
+			fit: withExtras(period('2003-01-01', '2008-12-31', 0.62), 0.3),
+			splitSample: { params: {}, calibration: period('2003-01-01', '2005-12-31', 0.8), validation: withExtras(period('2006-01-01', '2008-12-31', 0.4), 0.45) }
+		});
+		expect(climatologyWarning(scoreColumns(r), 'kgePrime')).toBe(
+			'On “Split: other half”, the model scores no better than repeating each calendar day’s average observed flow: it adds little beyond the seasonal cycle there.'
+		);
+		const both = report({ ...r, fit: withExtras(period('2003-01-01', '2008-12-31', 0.3), 0.3) });
+		expect(climatologyWarning(scoreColumns(both), 'kgePrime')).toMatch(/^On the fitted period and “Split: other half”, /);
 	});
 });
 

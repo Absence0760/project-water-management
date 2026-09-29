@@ -1,7 +1,8 @@
 <!--
 	Calibration panel for a run: the scored window, fit metrics with one-line
-	explanations (no pass marks: calibration research CR-6), and the annual water
-	balance (observed vs simulated volume per water year).
+	explanations (no pass marks: calibration research CR-6), the WR2012
+	five-statistic table (CR-28), and the annual water balance (observed vs
+	simulated volume per water year).
 	Input: RunSummary.calibration; optional settings to show the requested window.
 -->
 <script lang="ts">
@@ -19,6 +20,7 @@
 		waterYearLabel
 	} from './metrics';
 	import { calibrationSample } from './sample';
+	import Wr2012FitTable from './Wr2012FitTable.svelte';
 
 	let {
 		calibration,
@@ -119,6 +121,10 @@
 			No pass marks: the published ones (Moriasi et al. 2007) were set for monthly flows and don't carry over to daily
 			fits. Compare with the mean flow instead: it scores NSE 0 and KGE −0.41.
 		</p>
+
+		{#if calibration.wr2012Fit}
+			<Wr2012FitTable periods={[{ id: 'run', label: 'This run', stats: calibration.wr2012Fit }]} />
+		{/if}
 
 		{#if years.length}
 			<h4 id="{uid}-y">Annual water balance</h4>

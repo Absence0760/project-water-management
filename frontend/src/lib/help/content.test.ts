@@ -58,7 +58,7 @@ const STATS: Record<keyof CalibrationStats, true> = {
 	days: true, nse: true, pbias: true, rmseM3s: true, meanObservedM3s: true, meanSimulatedM3s: true,
 	windowStart: true, windowEnd: true, firstObservedDate: true, lastObservedDate: true, kge: true, kgeR: true,
 	kgeAlpha: true, kgeBeta: true, r2: true, logNse: true, logEpsilonM3s: true, volumeErrorPct: true,
-	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true, fitStatus: true
+	annualVolumes: true, flowKind: true, simulatedKey: true, exclusions: true, excludedDays: true, fitStatus: true, wr2012Fit: true
 };
 // Run series keys emitted by packages/engine/src/run.ts and flow.ts.
 const RUN_KEYS = [

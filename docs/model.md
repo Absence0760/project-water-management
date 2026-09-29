@@ -715,11 +715,13 @@ setting, so run comparison reads it as legacy.
     says so. All three presets sit inside 0.6–0.85. From engine 0.31.0 the
     run warns only under `pe.kind: 'pan'`: with a monthly PE, GR4J doesn't
     use the coefficient.
-  - **Testing the effect of a choice.** There is no automated sensitivity
-    harness yet (that is CR-21, [calibration-research.md](./calibration-research.md));
-    until it exists, `pnpm pan-sensitivity <project.json>`
-    (`backend/scripts/pan-sensitivity.ts`) is the manual way to see how much a
-    pan-coefficient choice moves a catchment's results: it runs GR4J at a few
+  - **Testing the effect of a choice.** The sensitivity runs (§2.10g,
+    CR-21, engine ≥ 1.19.0) move the pan coefficient ±15 % with GR4J's
+    parameters held fixed, beside rain, dam evaporation, abstraction and the
+    dams' starting storage, and report EWR compliance as a range.
+    `pnpm pan-sensitivity <project.json>`
+    (`backend/scripts/pan-sensitivity.ts`) is the deeper manual check of the
+    pan coefficient alone, **refitting** at each value: it runs GR4J at a few
     values (flat 0.60, 0.70, 0.85, and a preset) and reports MAR, Q95 and EWR
     compliance, both with GR4J's parameters held fixed and refitted, scored
     against the logger record. The script takes any project.json and carries
@@ -729,6 +731,9 @@ setting, so run comparison reads it as legacy.
     `'monthly'`: the pan coefficient doesn't reach GR4J there, so every case
     would give the same numbers. Set `settings.pe` to `{ kind: 'pan' }` in a
     copy of the project.json to see the pan-coefficient sensitivity.
+    To compare *fits* across pan presets together with other fit settings
+    (bounds, objective, exclusions, the WR2012 band), use `pnpm fit-sweep`
+    (§2.10b).
 - **No evaporation, no run** (engine ≥ 0.11.1). When GR4J's PE is 0 in
   every month (A-pan × pan coefficient under `pan`, or the monthly PE row
   under `monthly`, engine ≥ 0.31.0), GR4J is refused (`GR4J_NO_PET`), as a
@@ -3265,6 +3270,52 @@ test needs it. The run also stores each site's requirement as a daily series,
 `ewr_rule` (m³/day, the month's R as a volume ÷ its days; NaN outside
 complete months), so it can be charted and downloaded beside the flow.
 
+**Reported as the gazette and CMAs report it** (engine ≥ 1.19.0,
+calibration research CR-29). Reserve compliance is published as % of time
+and % of volume not met per month, judged on daily as well as monthly data
+(daily data shows more non-compliance), with monthly flow-duration curves of
+natural, present-day and scenario flow drawn on the EWR, and the Reserve
+itself stated as %nMAR (Pollard et al. 2011; Riddell et al. 2014). Each site
+adds:
+
+- **From daily data** (`EwrAssuranceSite.daily` and `byMonth[].daily`):
+  every day of a complete month against that day's requirement, R_day = the
+  month's R ÷ its days (the `ewr_rule` series), on the day's total flow A_t:
+
+  ```
+  not met      A_t < R_day                                   (relative float tolerance 1e-9, as the month)
+  time not met = days not met ÷ days assessed
+  volume not met = Σ MAX(R_day − A_t, 0) ÷ Σ R_day
+  ```
+
+  Per calendar month over the run, and over the whole run. A month met on
+  volume can still have short days, and the panel marks a month of the year
+  whose every month was met but had short days. A `lowFlow` table judged on
+  base flow (`lowFlowMeasure: 'baseflow'`) still counts days on total flow:
+  a base-flow filter has no daily reading of its own. A resumed run's first
+  month, only part of which is in the run, is left out of the daily figures.
+- **The FDC overlay** (`byMonth[].fdc[].natural`): the run's *natural* flow
+  duration curve at each % point beside the simulated one (`impacted`) and
+  the EWR curve (`required`), always from the run's natural flow, whatever
+  the table's natural source (the `naturalCurve` is the one the requirement
+  is read from). A scenario's curve is the scenario run's own `impacted` at
+  the same site; the compare page draws it over run A's (run-comparison.md).
+- **The EWR as %nMAR** (`ewrPctNmar`, when every calendar month has a
+  complete year): the mean annual requirement, Σ over the 12 calendar months
+  of the mean complete-month R (m³), over the run's natural MAR at the site
+  computed the same way (as `naturalMar.runMcm`), × 100; with a low-flow
+  grid, the low flows alone the same way (`lowFlowPct`). Because R follows
+  the natural flow, it is the long-term share the rule asks for, as a
+  gazette's %nMAR is; it changes only with the table or the natural flow.
+
+None of it changes the monthly verdict, the charge or a result; a run from
+before engine 1.19.0 has none of the fields, and the panel and CSV leave
+them out. Tested in `reserve/assurance.test.ts` (a worked month met on volume
+with 10 of 31 days short; %nMAR over a year, with and without a low-flow
+grid; less flow never has fewer short days or less shortfall, and leaves
+%nMAR and the natural curve unchanged; the months of the year add up to the
+whole).
+
 **Warnings.** A table that isn't usable (validation below) is skipped; so is
 one whose site is missing or isn't the outlet or a gauge. When a site has
 two usable tables (the API refuses that; stored settings can still carry it),
@@ -3309,8 +3360,10 @@ years of a calendar month. From engine 1.11.0, a run natural MAR more than
 **Surfaces.** The results headline shows the monthly compliance at the outlet
 (else the first site) when a table exists, with days not met beside it as the
 secondary measure; the Reserve compliance panel has the per-month-of-year
-table and chart; the summary CSV has a block per site; run comparison compares
-each site's rates (docs/ui.md, docs/run-comparison.md).
+table and chart, and from engine 1.19.0 the %nMAR figure, the daily table
+and the FDC overlay; the summary CSV has a block per site; run comparison
+compares each site's rates and draws a scenario's (run B's) flow-duration
+curve over run A's (docs/ui.md, docs/run-comparison.md).
 
 **The charge from the rule table** (engine ≥ 1.3.0, issue #64;
 `settings.ewrChargeSource`, `'pragmatic'` by default). With `'ruleTable'`,
@@ -3716,7 +3769,7 @@ the gauge column to `flow_observed_m3s`, because for most workbooks it really is
 the catchment's own gauge. `extract_project.py --gauge-as-reference` imports it
 as **`flow_reference_m3s`** ("Reference gauge (other catchment)") instead, and
 `--gauge-scaling-from YYYY-MM-DD --gauge-scale-factor F` undoes a known
-scaling (values on or after the date are divided by F). The engine never reads
+scaling (values on or after the date are divided by F). A run never reads
 that kind: it is not in `CALIBRATION_FLOW_KINDS` (so it can't be the
 calibration or validation record, and the API refuses it as
 `calibrationFlowKind`), `pickObservedKind` never falls back to it, it is not
@@ -3725,7 +3778,9 @@ EWR results, including the EWR agreement with the observed record (§2.9b). A pr
 calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
 name. It can be charted on the Time series tab, where it serves as a regional
-wet/dry index (for example, to rank water years for the dry → wet test).
+wet/dry index. From engine 1.19.0 automatic calibration's dry → wet test
+ranks its water years by it (§2.10b) — its only use in the engine, and never
+as something scored.
 `reference-series.test.ts` pins all of this. If the workbook's `rUseFlow`
 pointed calibration at the gauge (2), the importer leaves `calibrationFlowKind`
 unset and prints a `WARNING`: a run then falls back to the logger, or has no
@@ -3778,6 +3833,65 @@ thresholds were set for mostly monthly, SWAT-type work and don't carry over to
 daily fits, so the app no longer labels daily NSE or PBIAS with them
 (calibration research CR-6). The benchmark that does carry over is the mean
 flow, which scores NSE 0 and KGE −0.41 (Knoben et al. 2019).
+
+log-NSE is a low-flow check, not a low-flow calibration target. When a fit
+will feed an EWR (low-flow) decision, fit to the mean of KGE′(Q) and
+KGE′(1/Q) instead (Fit automatically's `kgeLowHigh` objective, §2.10b;
+calibration research CR-3).
+
+**The WR2012 five-statistic table** (engine ≥ 1.19.0, calibration research
+CR-28; `packages/engine/src/reference/wr2012Fit.ts`). South African practice
+with the WRSM/Pitman model judges a calibration on five statistics of
+observed and simulated flow, each as a % difference against a "good fit"
+band, beside the hydrograph and flow-duration curve (WR2012: Bailey & Pitman
+2016; Ndiritu 2009). The daily model's statistics above say nothing a WR2012
+reviewer reads first, so every scored period of a fit (`ScoredPeriod.wr2012Fit`:
+the fit, the current parameters, each validation) and every run's
+calibration (`CalibrationStats.wr2012Fit`) carry them, on the same scored
+days as the other statistics:
+
+- **Months.** The scored days are summed per calendar month, observed and
+  simulated on the same days. A month counts when at least **90 %** of its
+  days are scored (`WR2012_FIT_MONTH_MIN_SHARE`); its volume, both sides, is
+  the mean of those days × the month's days (February 28 or 29), so a few
+  missing days don't bias either side.
+- **Years.** A hydrological (water) year, Oct–Sep, counts only when all 12
+  months count; every statistic is over those complete years. With none the
+  field is null ("Not computed"); a split-sample half or a record with gaps
+  in every year can have none.
+
+| Statistic | Formula (Y = annual runoff of a complete year, Mm³) |
+| --- | --- |
+| MAR | mean Y |
+| Mean of logs | mean log10 Y, over years with Y > 0 on both sides (`logYears`) |
+| SD | sample SD of Y (n − 1; needs 2 years) |
+| Log SD | sample SD of log10 Y |
+| Seasonal index | 100 × Σ_m \|Q̄_m − MAR/12\| ÷ MAR, Q̄_m the mean volume of month m (Walsh & Lawler 1981 as a %: 0 even, 183 all in one month) |
+
+Each carries **% difference** = 100 × (simulated − observed) ÷ |observed|
+(the absolute value keeps "+ = simulated higher" for a negative mean of logs,
+which annual runoff under 1 Mm³ gives) and **within band** = |difference| <
+the band. The bands (`WR2012_GOOD_FIT_BANDS`) are MAR 4 %, mean of logs 4 %,
+SD 6 %, log SD 6 %, seasonal index 8 %.
+
+**Unconfirmed: the bands and the seasonal index.** The bands are the
+"good fit" guidelines a 2025 consultant hydrology report submitted to a CMA
+tabulates citing WR2012 (Dabrowski 2025, Table 4); the WR2012 manuals that
+would define them (WRC TT 689/16, the WRSM/Pitman user manual, and TT
+690/16, the theory manual) could not be reached to check them (2026-09-28:
+the WRC and WR2012 sites were out of reach from the build environment). The
+seasonal index's WRSM definition wasn't found either; the Walsh & Lawler
+form above is the app's working definition. So `confirmed: false`, the
+stored result carries `bandsConfirmed: false`, and the UI calls them
+"indicative bands (to be confirmed)". Confirming either changes only that
+constant or `seasonalIndex()`. Question for the hydrologist
+(issue #90): are these the WR2012/WRSM bands, is the seasonal
+index WRSM's own, and are the SDs sample (n − 1) or population SDs?
+
+The table never changes a result or a score, and no fit optimises it.
+Tested by hand-computed series (`reference/wr2012Fit.test.ts`), and against
+the run's and the fit's other statistics' scored days (`network/stats.test.ts`,
+`calibrate/calibrate.test.ts`).
 
 The workbook's own summary (`[Flow data]` AF16/AG16) differs slightly: it
 treats blank observations as 0 and then only counts days with observed flow
@@ -3862,9 +3976,19 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
     once, so a few wet years can't dominate the score;
   - **non-parametric KGE** (Pool et al. 2018);
   - **NSE on √Q** (medium flows);
-  - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows).
+  - **NSE on ln(Q + ε)**, with ε = 1 % of the mean observed flow (low flows);
+  - **the mean of KGE′(Q) and KGE′(1/(Q + ε))** (`kgeLowHigh`, engine ≥
+    1.19.0, calibration research CR-3), ε = 1 % of the mean observed flow,
+    the same ε added to observed and simulated flows (Pushpalatha et al.
+    2012; Garcia et al. 2017). The inverse-flow half weights recessions and
+    low flows, the plain half keeps the peaks and the water balance, so
+    neither end is traded away. **The suggested objective when the fit feeds
+    an EWR (low-flow) decision**; the default stays KGE′. Because ε scales
+    with the flows, the score doesn't depend on the flow unit. A simulation
+    with no flow at all has no score (the KGE′ half needs a positive mean).
 
-  KGE is never applied to log flows (Santos et al. 2018).
+  KGE is never applied to log flows (Santos et al. 2018); on 1/(Q + ε) it
+  is, since those stay positive and its bias and CV terms keep their meaning.
 - **Reported with every fit** (`FitScores`): all of the above, plain NSE, the
   volume error, and the Yilmaz et al. (2008) flow-duration signatures:
   - %BiasFHV: volume of the top 2 % of flows;
@@ -3878,12 +4002,40 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   - **Split-sample** (Klemeš 1986): fit on the first half of the scored
     days, score the second half.
   - **Differential split-sample**, when at least 4 water years have 180 or
-    more observed days: fit on the driest half of those years (by mean
-    observed flow), score the wettest half. The dry and wet years
+    more observed days: fit on the driest half of those years, score the
+    wettest half. The dry and wet years
     interleave, so the two sets' first and last days overlap even though no
     year is in both. Every `ScoredPeriod` therefore carries the `waterYears`
     it scored, and the report shows this test by those years
     ("WY 2001/02, 2003/04"), never as a date range.
+    **What ranks the years** (engine ≥ 1.19.0, issue #4 phase 6, "make the
+    logger fit identifiable" step 2; `CalibrateOptions.rankYearsBy`,
+    `DifferentialTest.rankedBy`). Ranked by its own flow, the test's "wet"
+    years are the years this (impacted, often short) record ran high, not
+    necessarily the years the region was wet. So when the project has a **reference gauge**
+    (`flow_reference_m3s`, a gauge on another river, §2.10) the years are
+    ranked by it: each candidate year's mean reference flow over the whole
+    water year (whatever the calibration window), from days with a
+    reference value (`referenceYearMeans`). It is a regional wet/dry index
+    only: it picks which years go in which half and is never compared with
+    anything, so every score, the split-sample test and the fitted
+    parameters are exactly what they are without it (`calibrate.test.ts`
+    pins this, and that a reference ranking the years as the record does
+    gives the same test). This is the default whenever a reference exists;
+    `rankYearsBy: 'observed'` keeps the record's own mean observed flow over
+    its scored days (the only ranking before 1.19.0, and the default without
+    a reference). A reference with fewer than 180 days in any candidate year
+    falls back to the observed ranking, with a note naming the years it
+    misses; asking for `'reference'` without one also falls back, with a
+    note. `wetDryRatio` stays the fitted record's own mean flow of the wet
+    half ÷ the dry half, however they were ranked, so a reference that
+    disagrees with this river shows as a ratio near or under 1 (and the
+    "no clearly wet years" note, reworded for the reference). `rankedBy` is
+    stored in the fit record (absent on older records: `'observed'`) and
+    shown beside the test in Fit automatically and the fit record. The
+    uncertainty ensemble (§2.10e, Phase 9) has no year ranking to share:
+    its held-out split is chronological (the second half of the scored
+    days), so there is nothing for the reference to rank there.
   - **Independent record** (optional, `validationRecord`): the parameters
     fitted to the calibration record, scored against a second observed
     record, for example a logger when the fit used a gauge. It is
@@ -3909,6 +4061,90 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
 
   A short or unrepresentative record gets these notes rather than a
   clean bill of health.
+- **Score intervals and benchmarks** (engine ≥ 1.19.0, calibration research
+  CR-5, `calibrate/bootstrap.ts`). Every scored period of the report (fit,
+  before, both parts of each validation test, the independent record, the
+  unpenalised fit; not a start's score) carries two optional fields. A
+  report or stored fit record made before them has neither, and the app
+  shows the plain scores then.
+  - `intervals`: 90 % intervals of KGE′, NSE and the low/high-flow KGE′
+    (CR-3) by a **block bootstrap over water years** (Clark et al. 2021:
+    daily scores carry large sampling error, mostly from a few wet
+    spells). Days within a year are not independent, so whole water years
+    are drawn with replacement (as many as the period has) and the
+    resample is scored; the interval is the 5th–95th percentile (linear
+    interpolation) of `BOOTSTRAP_RESAMPLES` = 1 000 resamples. The seed is
+    fixed (`BOOTSTRAP_SEED`), so a period's intervals depend only on its
+    flows and are reproducible; `level`, `resamples`, `seed` and `years`
+    (the water years resampled) are recorded with them. Each resample is
+    scored from per-year sums, so it costs one pass over the years: 1 000
+    resamples and both benchmarks take about 35 ms on a 10-year daily
+    record (`bootstrap.perf.test.ts`, budget 200 ms). The low/high-flow
+    score keeps the whole period's ε. **Minimum: 3 water years with at
+    least 30 scored days each** (`BOOTSTRAP_MIN_YEARS`,
+    `BOOTSTRAP_MIN_DAYS`); below that `intervals` is null, since a
+    percentile over a handful of distinct resamples means little. Shorter
+    years are still resampled, they just don't count towards the minimum.
+    A score whose resamples can't be scored half the time or more gets a
+    null interval. Three years is a floor, not a recommendation: with
+    few years the interval is wide, which is the point.
+  - `benchmarks`: every score (`FitScores`) for two naive simulations on
+    the same days. `meanFlow` repeats the period's mean observed flow (KGE′
+    1 − √2 ≈ −0.41, NSE 0; Knoben et al. 2019). `climatology` gives each
+    day the period's mean observed flow on that calendar day, **smoothed
+    over a centred ±7-day window** (`CLIMATOLOGY_HALF_WINDOW`, 15 days in
+    all, circular across the new year, on a 366-day calendar so 29 February
+    has its own slot). A 10-year record has only ten values per calendar
+    day, so unsmoothed day-of-year means keep individual storms and make the
+    benchmark fit the record's own noise; 15 days smooths that while
+    keeping the seasonal cycle. Both are in-sample: built from the scored
+    period's own observations, so on a validation period the climatology
+    knows those days' flows and the model doesn't. That makes it a hard
+    benchmark, deliberately. In a strongly seasonal catchment climatology
+    is hard to beat (Schaefli & Gupta 2007), and a model that doesn't beat
+    it adds little beyond the seasonal cycle.
+- **How representative is the record** (engine ≥ 1.19.0, calibration
+  research CR-34, part of CR-22; `calibrate/representativeness.ts`,
+  `report.representativeness`). A few years from one climate state can't
+  support the flow's variability (the SD behind KGE's α), its seasonal
+  pattern or a high-flow calibration, however good the scores look, so every
+  fit states the record's length and where its years sit in the long-term
+  rainfall:
+  - **The long-term reference** is the run's own daily rain as calibration
+    reads it (`runRain`: catchment rain, else bias-corrected CHIRPS, else
+    forecast, × the areal factor, §2.4g) over the whole run. By default the
+    run covers the whole rain record, CHIRPS-infilled days included, so this
+    is the longest record the project holds. Only **complete** water years
+    count: 1 October to 30 September all inside the run, with rain on at
+    least `MIN_RAIN_COVERAGE` (95 %) of the days; a year's total is the sum
+    of its recorded days.
+  - **Per scored water year** (any year with a scored day): its scored days,
+    its rain total, and its **percentile**, the mid-rank non-exceedance
+    100 × (years below + ½ × years equal) ÷ n among the long-term totals
+    (the year itself included). A scored year without complete rain has
+    neither.
+  - **Dry / near normal / wet**: below the 33rd percentile (`DRY_PERCENTILE`)
+    is dry, above the 67th (`WET_PERCENTILE`) wet, the rest near normal —
+    terciles of the rain record. These are defaults for the hydrologist to
+    confirm. (A different quantity from the run's water-year classes, §2.14,
+    which class natural flow.) With fewer than `LONG_TERM_MIN_YEARS` (10)
+    complete years the reference is too short: percentiles are still given,
+    but no year is classed.
+  - **Mean against the long-term mean**: the mean rain of the scored years
+    with complete rain ÷ the long-term mean (`meanRatio`), with how many
+    long-term years there are.
+  - `summary` always states the length and the ratio. `notes` (added to the
+    report's notes, so the fit record keeps them) say what the record can't
+    show: every classed year dry ("it can't show how the model behaves in wet
+    years"), every one wet (droughts), every one near normal, or none wet /
+    none dry; a long-term reference under 10 years; and fewer than
+    `FEW_CALIBRATION_YEARS` (5) scored water years ("too few to pin down the
+    flow's variability (its SD), its seasonal pattern or its high flows").
+    A long record that spans dry and wet years gets no note.
+
+  It reads only the rain and the scored days, so it never changes a fit or a
+  score. Fit automatically shows it as **How representative is the record**
+  ([ui.md](./ui.md)).
 - **In the app:** Settings → Flow calibration → Fit automatically runs it in a
   Web Worker and can apply the result to the form ([ui.md](./ui.md)).
 - **Fit provenance (`settings.fitRecord`, `calibrate/provenance.ts`).** Apply
@@ -4021,6 +4257,44 @@ browser runs it in a Web Worker and a test can pin it. It doesn't change
   `pnpm seed:demo` reads the patch file and the switch per workbook from
   `WBT_SETTINGS` and `WBT_FIT=1` in `wbt-import.<Prefix>.env`, beside the
   workbooks (run-locally.md).
+- **Fit-settings sweep** (`pnpm fit-sweep <project.json> --grid <grid.json>`,
+  `backend/scripts/fit-sweep.ts`). The headless form of
+  the free / typical-bounds / band / both comparison: one fit per cell of
+  a grid of fit settings, so "what if we fit it this way" is a grid file,
+  not a hand-built table. The grid is JSON, every axis optional with one
+  default cell:
+  `panPresets` (`"project"`, the default, keeps the project's row; a preset
+  id from `PAN_COEFFICIENT_PRESETS`; a number for a flat row; or
+  `{ label, values }` with 12 water-year months), `bounds` (`wide` /
+  `typical`), `objectives` (any of `OBJECTIVES`), `exclusionSets` (named
+  lists of calibration exclusions, each with a reason, as stored ones are,
+  added on top of `settings.calibrationExclusions`; default `{ "none": [] }`),
+  `wr2012Band` (booleans; default the project's own
+  `calibrationPenalty.enabled`) and `wr2012Penalty` (`weight`, `marLowMm3`,
+  `marHighMm3` over the stored penalty, for the cells with the band on). The
+  file is checked with zod and every problem is named by its path; a band
+  cell needs a WR2012 reference and a penalty `wr2012PenaltyIssues`
+  accepts; a pan preset other than `"project"` is refused under a monthly
+  PE, as `pnpm pan-sensitivity` refuses it. Each cell runs `calibrate()`
+  with validation (split-sample, dry → wet, and the other observed record
+  when the project has both, as Fit at import picks it), then `runModel`
+  with the fitted parameters. The Markdown table has, per cell, X1–X4, the
+  score in the cell's own objective in-sample and on each validation test
+  (plus KGE′ in-sample and split-sample for every cell, since scores in
+  different objectives don't compare), simulated natural MAR over the whole
+  run, its ratio to the scaled WR2012 MAR (on the basis the run's WR2012
+  check uses) and EWR days not met; the header gives the engine version,
+  seed, starts, budget, fitted and independent records and each exclusion
+  set with its reasons, and the fits' notes follow the table. `--json`
+  writes the same results for tooling (CR-1's batch can reuse it). It
+  fits every cell and ranks nothing: the choice of fit stays the
+  hydrologist's, recorded with a reason. No database; each cell is a full
+  calibration, so a grid is capped at 24 cells unless `--max-cells`
+  raises it. It is not CR-21, which perturbs the inputs of one fit. A
+  report on the client catchment holds real figures, so it stays in the
+  gitignored `data/`. Paths are resolved from the directory the command
+  was typed in (both this and `pan-sensitivity` run through `pnpm -C
+  backend`, which moves the working directory).
 
 On a short or unrepresentative record, expect the validation columns to
 score well below the fit: such a record constrains the parameters poorly. That
@@ -4339,7 +4613,7 @@ question in [plan.md](./plan.md#model-and-hydrology-for-the-hydrologist)).
 
 ### 2.10d Hydrologist plausibility checks (engine ≥ 0.25.0, issue #4 phase 6)
 
-Not in the workbook. Four checks a reviewing hydrologist makes by hand
+Not in the workbook. Five checks (four before engine 1.19.0) a reviewing hydrologist makes by hand
 ([followups.md](./followups.md), *Issue #4 Phase 6: simulated review
 findings*), run on every run by `packages/engine/src/plausibility/`. They
 **only report and warn**: no check changes a model result. The run keeps them
@@ -4500,6 +4774,99 @@ only. A project without a gauge record runs exactly as before: no `gauges`
 key, no new warning (`gauges.test.ts` pins that the rest of the summary and
 every series are unchanged). The run comparison sets both runs' checks side
 by side ([run-comparison.md](./run-comparison.md#plausibility-checks)).
+
+#### Recession diagnostics (engine ≥ 1.19.0, calibration-research.md CR-13)
+
+A fifth check, on the calibration record (`packages/engine/src/recession/`,
+kept in `RunSummary.plausibility.recession`; absent on older runs, null
+without an observed record or rain). After rain stops the river falls at a
+pace set by how the catchment drains; the check compares that pace in the
+record with GR4J's on the same days. Since engine 1.0.0 there is no imported
+recession table to overlay (it went with the legacy model), so the
+segments are a check on the simulated recessions, not a calibration of a
+table. It only reports and warns.
+
+**Segments** (`segments.ts`). The specification is TOSSH (Gnann et al. 2021),
+`util_RecessionSegments.m` with the defaults `sig_RecessionAnalysis.m` passes
+it, plus the rain rule CR-13 asks for (Tallaksen 1995; Stoelzle et al. 2013;
+Dralle et al. 2017):
+
+| Setting | Default | Source |
+| --- | --- | --- |
+| `recessionLength` | 5 days | TOSSH `recession_length` |
+| `nStart` | 1 day dropped after the peak | TOSSH `n_start` |
+| `epsM3s` | 0 (strictly falling) | TOSSH `eps` (mm/timestep there) |
+| start | at the peak | TOSSH `start_of_recession = 'peak'`; the `'baseflow'` start (Lyne–Hollick, `filter_par` 0.925) is not ported |
+| `rainThresholdMm` | 1 mm/day | CR-13 (house default, for the hydrologist) |
+| `dQdtMethod` | `ETS` | TOSSH `dQdt_method` |
+
+A step from day t − 1 to day t is part of a recession when both days' flows
+are recorded, above zero (TOSSH sets zeros to NaN) and not excluded, the
+catchment rain (the run's final rain) on t and on t − 1 is known and at most
+the threshold, and Q(t) < Q(t − 1) + eps. A run of such steps from its peak p
+to its last day e is kept when e − p ≥ `recessionLength` + `nStart`, and the
+segment is [p + `nStart`, e]: at least 6 days with the defaults. A missing
+flow or rain day, a wet day, a zero or a rise ends a run. The rain rule means
+the first step after a storm day can't count (rain the day before), so the
+peak is the day after the storm and the segment starts two days after it.
+The day mask is the run's calibration exclusions; per-day flow quality flags
+(extrapolated, infilled, suspect: CR-18, not built yet) will join the same
+mask. Two departures from TOSSH, both about where a run ends: a run cut off
+by the end of the record is kept like one cut off by a gap (TOSSH drops an
+unpaired last run), and there is no Lyne–Hollick start (the rain rule and
+`nStart` keep the quickflow out).
+
+**−dQ/dt and the fit** (`analysis.ts`, TOSSH `util_dQdt.m` and
+`util_FitPowerLaw.m`). Time in days, Q in m³/s. The default, exponential time
+stepping (Roques et al. 2017, TOSSH's default): from each day i of a segment
+of L days, a least-squares line through Q(i … i + m) gives −dQ/dt (its slope)
+at their mean, weighted by the line's R², with m = 1 + ⌈0.1·L·e^(−1/(γk))⌉ for
+the k-th day and γ the segment's decay rate fitted in semilog space through
+its first day (γ < 0 → 0); it steps while i + m ≤ the segment's last day.
+`BN` (Brutsaert & Nieber 1977) takes Q(t − 1) − Q(t) at the pair's mean,
+`backwards` the same at Q(t) (Thomas et al. 2015). Points whose −dQ/dt is not
+positive are dropped, as TOSSH does. One power law −dQ/dt = a·Q^b is fitted
+through every segment's points (TOSSH `fit_individual = false`, `fitting_type
+= 'linear'`): least squares of log(−dQ/dt) on log Q with each row multiplied
+by its weight (R² floored at 10⁻¹⁸), from 3 points at least whose flows span
+a factor of 1.2 or more (`RECESSION_MIN_Q_RANGE`, not in TOSSH: across a
+narrower range b isn't identifiable, and a simulated flow that barely moved
+gave b ≈ 127 in the engine's fuzz tests); a fit or rate that overflows is
+left out (null), since a summary keeps only finite numbers. a is in
+(m³/s)^(1−b) per day; b = 1 is a linear store (an exponential recession).
+
+**The simulated recession** is the simulated outflow's points on the
+**observed** segments' days, by the same method, fitted the same way (a
+segment with a zero or missing simulated day gives no points). The two are
+compared at the **reference flow**, the median Q of the observed points, by
+the recession rate −dQ/dt ÷ Q = a·Q^(b−1) of each fit (a alone can't be
+compared when the b differ). `rateRatio` = simulated ÷ observed, `bDiff` =
+simulated b − observed b.
+
+**Warnings** (indicative thresholds, engine constants for the hydrologist to
+confirm):
+
+- fewer than **8** segments (`RECESSION_MIN_SEGMENTS`; CR-15: a recession fit
+  from fewer than about 8 isn't stable; TOSSH itself warns below 10): the
+  comparison is not judged (`agrees` null) and the panel says *Not judged*;
+  no run warning, since most short records have too few and it says nothing
+  about the model;
+- with 8 or more, the simulated rate more than a **factor of 2** from the
+  observed (`RECESSION_RATE_WARN_FACTOR`: a recession halving its flow in half
+  or twice the time), or b more than **0.5** apart (`RECESSION_B_WARN_DIFF`:
+  the method alone moves b by a few tenths, Stoelzle et al. 2013, Jachens et
+  al. 2020), or a simulated outflow that barely falls on those days (no
+  simulated fit), sets `agrees` false and warns, pointing at GR4J's routing
+  and groundwater parameters (X2, X3) and dry-spell abstraction.
+
+The Runs tab's Plausibility checks panel plots log(−dQ/dt) against log Q for
+both, with the two lines ([ui.md](./ui.md)); the points are rebuilt in the
+browser from the run's stored `observed_flow` and `simulated_outflow` with
+the engine's `recessionPoints`, so the summary keeps only the segments and
+fits. The summary CSV has a *Recession diagnostics* block
+([api.md](./api.md#export)). The check stays at the outlet: it doesn't run at
+gauges inside the network. Per-segment fits, bootstrap bands and seasonal
+tags are CR-15.
 
 ### 2.10e Uncertainty bands (engine ≥ 0.26.0, issue #4 phase 9)
 
@@ -4664,6 +5031,92 @@ limitations and the notes, whose RFC 8785 text (`signoffStatementText`) a
 sign-off's SHA-256 is taken over ([data-model.md § Sign-offs](./data-model.md#sign-offs)).
 The registration choices themselves, and which categories may sign or only
 warn, are `liability/registration.ts` (issue #47).
+
+### 2.10g Sensitivity runs: EWR compliance as a range (engine ≥ 1.19.0, calibration research CR-21)
+
+The uncertainty bands (§2.10e) sample the runoff parameters the observed
+record can't rule out. Some inputs the record can't settle at all, and a
+fit would only trade them against its parameters: how much rain really fell
+on the catchment, the pan coefficient, how much open water a farm dam loses,
+how much is really abstracted, and how full the dams were on the first day.
+CR-21 carries them through as **sensitivity factors**, never as free
+parameters (Renard et al. 2010; Oudin et al. 2006 on biased rain and PE
+inputs; Hughes & Mantel 2010 on the uncertainty of South African natural
+and modified flow simulations), and reports EWR compliance as a central
+value with a low–high range. Code: `packages/engine/src/uncertainty/sensitivity.ts`
+(`sensitivityRuns`, `sensitivityPlan`, `siteValues`) and, apart from the
+run so a page can show and re-judge a result without loading it,
+`sensitivityVerdict.ts` (the factors, the default ranges and thresholds,
+`siteVerdict`). It changes no run's results.
+
+**One factor at a time.** The **central run** is the project as it stands.
+Each factor is then run at its low and at its high with everything else at
+the project's values, so at most 11 model runs (`runModelWithoutChecks`, as
+the ensemble's members). Each change is a scenario op (`applyScenario`,
+[scenarios.md](./scenarios.md)), checked and applied as a scenario would:
+
+| Factor | Low / high (default) | What changes | Skipped when |
+| --- | --- | --- | --- |
+| Rain | × 0.9 / × 1.1 | every rain series the project has (station, CHIRPS, forecast; `series.scale`), so CHIRPS's bias-correction factors are unchanged and the whole forcing moves: runoff, effective rain on the crops, rain on the dams | there is no rain |
+| Pan coefficient | × 0.85 / × 1.15 | the monthly row (`settings.set panCoefficient`), capped at 2 | GR4J's PE is a monthly PE row (`pe.kind: 'monthly'`), which doesn't read it; or it is 0 in every month |
+| Dam evaporation factor | × 0.85 / × 1.15 | the A-pan lake-evaporation factor k_lake (§2.7a, audit N2; `lakeEvapFactor`, or each month of `lakeEvapFactorMonthly` when set), capped at 2 | no farm has a dam, or the factor is 0 |
+| Abstraction (demand) | × 0.7 / × 1.3 | every unit's demand (crop requirement and demand objects, §2.7f) and every other water user's (`demand.scale`, categories `farm` and `user`); boreholes and the river pump supply that demand, so they follow it | no unit or user has demand over the reporting window |
+| Initial dam storage | empty / full | every dam's `damInitialPct` 0 / 1 (`node.set`) | no farm has a dam |
+
+The ranges are CR-21's, except the dam evaporation factor's: ±15 % gives
+0.64–0.86 around the default 0.75, a little wider than open water's 0.7–0.8
+× Class-A pan (Linsley et al. 1982), since a farm dam's depth and siting
+are rarely known. Each multiplier can be changed (above 0, at most 2) and a
+factor left out; one not run is listed with its reason. The runoff
+parameters stay the project's throughout: calibration-research.md § 5 applies
+a rain range with the calibrated parameters held fixed, and a refit per case
+is `pnpm pan-sensitivity`'s job (§2.4a), not this one's.
+
+**At each EWR site** (the outlet and each gauge that is an EWR site, §2.7b,
+as the curtailment table lists them), each run reports:
+
+- **EWR days not met** over the reporting window (`settings.reportStart …
+  reportEnd`, §2.11), and the share of the window's days met;
+- the **shortfall volume** over the window, Mm³ (the site's mean daily
+  shortfall × the window's days);
+- with a Reserve rule table (§2.9c), the share of the run's complete months
+  **meeting the table**.
+
+**The envelope and the verdict.** The envelope is the lowest and highest
+value over the central run and every factor's low and high. It is not a
+joint bound: one factor at a time ignores their interactions, and two
+factors at their worst together can go further. The verdict judges one
+metric per site: the months meeting the rule table where the site has one,
+otherwise the share of days the pragmatic EWR was met. Against the
+**decision threshold** it reads:
+
+- **meets**: the whole envelope is at or above the threshold;
+- **fails**: the whole envelope is below it;
+- **not determinable with current data**: the envelope crosses it (CR-21's
+  wording), whatever the central value says;
+- no data, when the site has nothing to judge.
+
+A rule table states the requirement but not the share of months that must
+meet it, and the pragmatic EWR has no pass mark, so the threshold is a
+project choice: **0.8** for both (`SENSITIVITY_THRESHOLDS`) until the
+hydrologist or the licensing authority gives one. The screen lets it be
+changed and re-judges without re-running (`siteVerdict`).
+
+**Deterministic and not stored.** No sampling: the same input and options
+give the same result (tested). Like `pnpm pan-sensitivity` it is a live
+diagnostic: the browser runs it from the stored run's inputs
+(`…/model-input`) in the calibration worker, and nothing is saved; a
+screenshot or the table is the record. The tests check each factor's
+direction on a synthetic catchment (more rain, fewer days not met and a
+smaller shortfall; a higher pan coefficient, more dam evaporation or more
+abstraction, a larger shortfall; a dam that starts full, a smaller one) and
+the verdict's cases. **Cost:** 11 runs take 0.4–0.9 s on the example
+catchments (Node, warm; 2026-09-28; `backend/src/model/examples.perf.test.ts`
+budgets 2 s).
+
+**For the hydrologist:** the ranges (especially abstraction ±30 % and the
+dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
+not findings.
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

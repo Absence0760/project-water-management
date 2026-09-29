@@ -848,7 +848,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'plausibility-checks',
 		term: 'Plausibility checks',
-		short: 'Four checks a reviewing hydrologist makes on a run: they only warn, and never change a result.',
+		short: 'Five checks a reviewing hydrologist makes on a run (four before engine 1.19.0): they only warn, and never change a result.',
 		category: 'results'
 	},
 	{
@@ -875,6 +875,13 @@ export const TIPS: HelpTipText[] = [
 		term: 'Dry-season low-flow duration curve',
 		short: 'The flow duration curve of dry-season days only, for the gauge, the logger and each model’s simulated flow.',
 		units: 'm³/s',
+		category: 'results'
+	},
+	{
+		id: 'plausibility-recession',
+		term: 'Recession diagnostics',
+		short: 'How fast flow falls in rain-free spells (−dQ/dt against Q), in the record and in the model on the same days.',
+		units: 'm³/s; m³/s per day',
 		category: 'results'
 	},
 	{
@@ -1007,7 +1014,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'reference-gauge',
 		term: 'Reference gauge (other catchment)',
-		short: 'A gauge on a different river, such as a neighbouring sub-catchment. A regional wet/dry index only; the model never reads it.',
+		short: 'A gauge on another river: a regional wet/dry index. Runs never read it; Fit automatically ranks water years by it, never fits to it.',
 		units: 'm³/s',
 		category: 'data',
 		fields: ['series.flow_reference_m3s']

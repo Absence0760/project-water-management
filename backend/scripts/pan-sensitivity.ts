@@ -21,6 +21,7 @@
 //   systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 -- \
 //     pnpm pan-sensitivity data/client-catchment/project.json
 import { readFile, writeFile } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import {
 	calibrate,
@@ -101,7 +102,8 @@ function naturalFlowM3Day(out: ModelOutput): number[] {
 	return (out.series.find((s) => s.nodeId === null && s.key === 'natural_flow')?.values ?? []).map((v) => v ?? 0);
 }
 
-function metricsOf(out: ModelOutput): CaseMetrics {
+/** MAR, Q95 of natural flow, EWR days not met and NSE/KGE of one run (shared with fit-sweep.ts). */
+export function metricsOf(out: ModelOutput): CaseMetrics {
 	const natural = naturalFlowM3Day(out);
 	const cal = out.summary.calibration;
 	return {
@@ -127,6 +129,22 @@ export function panSensitivityRefusal(settings: { pe?: { kind: string } | null }
 	return null;
 }
 
+/**
+ * The settings with GR4J as the runoff model (its parameters filled from the
+ * defaults where the project leaves them out) and `panCoefficient` as the
+ * monthly pan coefficient (water-year order). Shared with fit-sweep.ts, whose
+ * pan-preset axis sets the coefficient the same way.
+ */
+export function withPanCoefficient<S extends ModelInput['settings']>(settings: S, panCoefficient: readonly number[]) {
+	const gr4j = { ...defaultProjectSettings().gr4j, ...(settings.gr4j as Partial<ModelInput['settings']['gr4j']> | undefined) };
+	return {
+		...settings,
+		runoffModel: 'gr4j' as const,
+		panCoefficient: [...panCoefficient] as unknown as ModelInput['settings']['panCoefficient'],
+		gr4j
+	};
+}
+
 export interface CalibrateSettings {
 	seed: number;
 	starts: number;
@@ -143,14 +161,8 @@ export interface CalibrateSettings {
 export function runCase(base: ModelInput, c: SensitivityCase, cal: CalibrateSettings): CaseResult {
 	const refusal = panSensitivityRefusal(base.settings);
 	if (refusal) throw new Error(refusal);
-	const gr4j = { ...defaultProjectSettings().gr4j, ...(base.settings.gr4j as Partial<ModelInput['settings']['gr4j']> | undefined) };
-	const settings = {
-		...base.settings,
-		runoffModel: 'gr4j' as const,
-		calibrationFlowKind: 'flow_logger_m3s' as const,
-		panCoefficient: c.panCoefficient as unknown as ModelInput['settings']['panCoefficient'],
-		gr4j
-	};
+	const settings = { ...withPanCoefficient(base.settings, c.panCoefficient), calibrationFlowKind: 'flow_logger_m3s' as const };
+	const gr4j = settings.gr4j;
 	const withPan: ModelInput = { ...base, settings };
 
 	const fixedOut = runModel(withPan);
@@ -168,6 +180,14 @@ export function runCase(base: ModelInput, c: SensitivityCase, cal: CalibrateSett
 
 const fmt = (v: number | null | undefined, digits = 2) => (v === null || v === undefined || !Number.isFinite(v) ? '–' : v.toFixed(digits));
 const pct = (v: number) => `${(v * 100).toFixed(1)} %`;
+
+/**
+ * A path given on the command line, resolved against the directory the
+ * command was typed in. The root script runs this one through `pnpm -C
+ * backend`, which moves the working directory to backend/, so a bare relative
+ * path would miss; pnpm keeps the caller's directory in INIT_CWD.
+ */
+export const cliPath = (p: string, env: NodeJS.ProcessEnv = process.env): string => resolve(env.INIT_CWD ?? process.cwd(), p);
 
 export function toMarkdown(results: CaseResult[], meta: { file: string; seed: number; starts: number; generatedAt: string }): string {
 	const lines = [
@@ -210,7 +230,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 			budget: { type: 'string' }
 		}
 	});
-	const file = positionals[0];
+	const file = positionals[0] ? cliPath(positionals[0]) : undefined;
 	if (!file) {
 		console.error('usage: pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]');
 		process.exit(1);
@@ -218,7 +238,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 	const seed = values.seed ? Number(values.seed) : 1;
 	const starts = values.starts ? Number(values.starts) : DEFAULT_STARTS;
 	const budget = values.budget ? Number(values.budget) : undefined;
-	const out = values.out ?? file.replace(/\/[^/]+$/, '/pan-sensitivity.md');
+	const out = values.out ? cliPath(values.out) : join(dirname(file), 'pan-sensitivity.md');
 
 	loadModelInput(file)
 		.then(async (base) => {
@@ -229,7 +249,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 				console.error(`running ${c.label}…`);
 				results.push(runCase(base, c, { seed, starts, budget }));
 			}
-			const md = toMarkdown(results, { file, seed, starts, generatedAt: new Date().toISOString() });
+			const md = toMarkdown(results, { file: positionals[0]!, seed, starts, generatedAt: new Date().toISOString() });
 			await writeFile(out, md, 'utf8');
 			console.log(`wrote ${out}`);
 		})

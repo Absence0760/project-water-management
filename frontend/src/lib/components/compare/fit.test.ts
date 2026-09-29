@@ -10,6 +10,7 @@ const scores = (v: number): FitScores => ({
 	nse: v,
 	nseSqrt: v,
 	nseLog: v,
+	kgeLowHigh: v,
 	volumeErrorPct: 0,
 	fdcHighPct: 0,
 	fdcMidSlopePct: 0,
