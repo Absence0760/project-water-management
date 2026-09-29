@@ -1210,8 +1210,11 @@ export function checkGroundwater(input: ModelInput, out: ModelOutput): string | 
 			if (gw < 0 || gw > G[t]! + tol(G[t]!) || gd < 0 || gw + gd > capSum + tol(capSum)) return `${where}: groundwater ${gw} outside [0, MIN(Σ capacity ${capSum}, supplied ${G[t]})]${gd ? ` (with ${gd} into the dam)` : ''}`;
 			const scale = Math.max(prev, U[t]! + DEP[t]!, gw + gd);
 			// One depletion factor: the infeed is d × pumped. Several: it lies between the smallest and largest share of it.
+			// Worked back from the store and the deficit, the infeed carries their float noise too: a deficit of
+			// 6.2e9 m³ (ulp 9.5e-7) left 1.2e-6 m³ on a day nothing was pumped (fuzz seed 10306).
 			const inf = dMin === dMax ? dMin * (gw + gd) : ST[t]! + DEP[t]! + UN[t]! - owedBefore - prev;
-			if (inf < dMin * (gw + gd) - tol(scale) || inf > dMax * (gw + gd) + tol(scale)) return `${where}: depletion infeed ${inf} outside [${dMin}, ${dMax}] × pumped ${gw + gd}`;
+			const infScale = dMin === dMax ? scale : Math.max(scale, ST[t]!, UN[t]!, owedBefore);
+			if (inf < dMin * (gw + gd) - tol(infScale) || inf > dMax * (gw + gd) + tol(infScale)) return `${where}: depletion infeed ${inf} outside [${dMin}, ${dMax}] × pumped ${gw + gd}`;
 			const inStore = prev + inf;
 			const due = b.depletionAlpha * inStore;
 			const owed = owedBefore + due;

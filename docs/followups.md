@@ -1422,6 +1422,29 @@ the suggested order (the IDs carry the detail):
       10306 (a depletion infeed of 1e-6 with nothing pumped) and 15467
       (supplied 1 ulp above demand). No soak since 1.0.0 had scanned
       seeds above 2 000, so any engine from 1.1.0 to 1.20.0 may have introduced them.
+      **Diagnosed and fixed (2026-09-29, engine 1.24.0).** Bisected over the
+      engines with history (1.2.0, then 1.15.0–1.20.0; 1.3.0–1.14.0 were
+      squashed by the repo recreation): all five pass on 1.2.0; 4536, 10028,
+      11421 and 15467 fail from 1.15.0 and 10306 from 1.19.0, and the
+      diagnosis names the feature behind each. **4536, 10028: the law, not
+      the engine.** A primary dam-target borehole tops the dam up only on a
+      day it is drawn for demand (engine 1.8.0), so more demand switches it
+      on like a drought trigger, and the stored groundwater seeps on
+      downstream or its stream depletion lands on a flood day. The law now
+      runs those units as supplemental (`droughtBoreholesAsSupplemental`).
+      **11421: engine float noise.** Behind that trigger it was seed 1774's
+      noise again (a supplemental top-up leaving the demand an ulp of a
+      1.4e6 m³ dam short), now counted as failed days of time reliability.
+      Fixed in `groundwaterDay`: a unit that pumped all it was asked for
+      leaves the dam supplying the demand exactly. **15467: engine float
+      noise.** Off-take water used + the rest rounded one ulp above demand
+      (engine 1.14.0); the supply is clamped to D. **10306: check noise.**
+      `checkGroundwater` works the infeed back from a 6.2e9 m³ depletion
+      deficit, and its tolerance now includes that scale. Each seed is a
+      named test (`run.invariants.test.ts`, `boreholes.test.ts`).
+      **20 000-case soak on engine 1.24.0 (2026-09-29,
+      `FUZZ_MAX_FAILURES=100`, seeds 1–20 000, 4.8 min on four shards):
+      passed.**
       **Owed for engines 1.1.0 and 1.2.0** (2026-09-27, superseded by the
       1.20.0 soak above): no 20 000-case soak
       is recorded since 1.0.0. Machine time only (15–20 min);
