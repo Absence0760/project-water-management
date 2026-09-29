@@ -1028,7 +1028,7 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 3
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 4
     error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API and site-wide rate rules."
   }
   assert {
@@ -2946,7 +2946,7 @@ run "waf_rate_rules_scope" {
     error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
   }
   assert {
-    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, RateLimitPerIP = 1, RateLimitSitePerIP = 2 }
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitSitePerIP = 3 }
     error_message = "The rate rules run tightest first: auth, API, then the site-wide backstop."
   }
 }
@@ -2973,7 +2973,7 @@ run "signin_captcha" {
   command = plan
 
   assert {
-    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP"])
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitSitePerIP"])
     error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
   }
   assert {
