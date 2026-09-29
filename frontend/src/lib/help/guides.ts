@@ -518,7 +518,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'Take the monthly Reserve flows for the river’s [[ecological-category]], usually from the [[desktop-reserve-model]] tables without high flows.',
 							'Pick one value per month (often a percentile) and convert it to m³/day.',
-							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent, a bar chart and the annual volume help catch a unit slip.',
+							'On **Settings & calibration → EWR**, enter the 12 values, Oct … Sep. The l/s equivalent and the annual volume help catch a unit slip.',
 							'Optionally set the **Curtailment reporting window** ([[report-window|reporting window]]) to a drought or dry season. The curtailment table then averages over that period only.',
 							'To assess the EWR above the outlet too, add a gauge on the **Network** tab at each EWR site of the Reserve determination.',
 							'Save and run.'

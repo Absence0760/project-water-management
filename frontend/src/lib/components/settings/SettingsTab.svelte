@@ -66,7 +66,6 @@
 	import { CHIRPS_BIAS_OPTIONS } from './rain';
 	import { AFTER_FORM_LABELS, saveBlockers, SETTINGS_SECTIONS, settingsNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
-	import MonthlyBars from './MonthlyBars.svelte';
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
@@ -973,12 +972,9 @@
 					</tbody>
 				</table>
 			</div>
-			<div class="ewr-side">
-				<MonthlyBars values={s.ewrPragmaticM3PerDay} unit="m³/day" label="Pragmatic EWR" caption="Pragmatic EWR by month, Oct–Sep, m³/day" />
-				<p class="muted small">
-					{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
-				</p>
-			</div>
+			<p class="muted small" data-testid="ewr-annual">
+				{fmtQty(ewrAnnual, 3)} Mm³/a in total · mean {fmtQty((ewrAnnual * 1e6) / 86_400 / 365.25, 3)} m³/s
+			</p>
 		</div>
 		<fieldset class="plain report">
 			<legend>Curtailment reporting window <HelpTip key="settings.reportStart" /></legend>
@@ -1293,17 +1289,13 @@
 		color: var(--warning);
 		font-weight: 600;
 	}
-	/* The monthly row gets the full width (beside it, the chart squeezed the
-	   row into a sideways scroll even at 1600px); the chart sits under it. */
+	/* The monthly row gets the full width; the annual total sits under it. */
 	.ewr {
 		display: grid;
-		gap: 0.75rem;
+		gap: 0.3rem;
 	}
-	.ewr-side {
-		max-width: 420px;
-	}
-	.ewr-side p {
-		margin: 0.3rem 0 0;
+	.ewr p {
+		margin: 0;
 	}
 	.report {
 		margin-top: 1rem;

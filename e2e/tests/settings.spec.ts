@@ -25,9 +25,9 @@ test('monthly A-pan and EWR values are saved and survive a reload', async ({ pag
 	await expect(save).toBeDisabled();
 
 	await page.reload();
-	// The EWR's bars beside its table say what they are: a caption with the span and unit.
-	await expect(page.getByTestId('monthly-bars-caption')).toHaveText('Pragmatic EWR by month, Oct–Sep, m³/day');
-	await expect(page.getByRole('img', { name: 'Pragmatic EWR by month (the table holds the values)' })).toBeVisible();
+	// Under the EWR row, its annual total (1800 × 31 + 5400 × 31 m³ = 0.223 Mm³); no chart redraws the row (issue #174).
+	await expect(page.getByTestId('ewr-annual')).toHaveText(/^0\.223 Mm³\/a in total · mean 0\.0071 m³\/s$/);
+	await expect(page.locator('#set-ewr svg[role="img"]')).toHaveCount(0);
 	await expect(apan('Oct')).toHaveValue('152');
 	await expect(apan('Jan')).toHaveValue('231.5');
 	await expect(apan('Nov')).toHaveValue('0');

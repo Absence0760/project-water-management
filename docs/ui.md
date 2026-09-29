@@ -3046,8 +3046,9 @@ which checks every catchment tab).
   to the WR2012 group.
 - **Flow share between hydrological units**.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
-  months get the full width) a bar chart captioned "Pragmatic EWR by month,
-  Oct–Sep, m³/day" (`MonthlyBars`' `caption`) and the annual volume, the
+  months get the full width) the annual volume and mean flow (no chart: a bar
+  chart of the same twelve values was removed as a restatement of the row,
+  issue #174), the
   curtailment reporting window (also the assurance of supply's window), and
   the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
   default 90 %: a water year counts as met at that supply ratio; engine ≥
