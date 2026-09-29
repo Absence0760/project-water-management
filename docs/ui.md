@@ -3486,12 +3486,15 @@ read it before.
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
-  panel of Runs & results, moved. Its demand, supply, share and dam size in a
-  line, then one chart at a time: **Supply vs demand** (the days the unit was
-  short shaded, from its `deficit` series) or, for a unit with a dam, **Dam
-  storage** (% of the capacity the run had, `runDamCapacity`); the **30 days
-  / 1 year / All** switch (opening on a year), Earlier / Later, and a forecast
-  run's band.
+  panel of Runs & results, moved. Its demand, supply, share and dam size (the
+  capacity the run had, `runDamCapacity`) in a line, then **Supply vs demand**
+  (the days the unit was short shaded, from its `deficit` series), with the
+  **30 days / 1 year / All** switch (opening on a year), Earlier / Later, and
+  a forecast run's band. A unit with a dam has **Dam storage on the Dams
+  page** in the panel's head (`?tab=dams&dam=<nodeId>`), the [Dams](#dams)
+  storage chart with its capacity and minimum lines. Until 2026-09-29
+  (issue #175) the panel drew its own *Dam storage* chart behind a switch, a
+  weaker copy of that one with neither line.
 - **Layout.** The page flows in the window's one scroll; nothing on it
   scrolls inside itself. From 56rem of page width the cards are a column
   beside the chart (a fixed 420 px plot; 260 px stacked). The three least
@@ -4217,9 +4220,8 @@ read it before.
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
   those runs; an older run shows neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17; dam
-  storage as % of the capacity the run had, from its model snapshot, not
-  today's model, `runDamCapacity`; supply against demand), and an explorer for any
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)

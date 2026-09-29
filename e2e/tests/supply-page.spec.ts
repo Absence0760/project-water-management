@@ -207,10 +207,9 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	await expect(windows.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(unitChart(page).getByRole('button', { name: 'm³/s' })).toHaveCount(0);
 
-	// Its dam: the storage chart, one click away.
-	await unitChart(page).getByRole('button', { name: 'Dam storage' }).click();
-	await expect(unitChart(page).getByRole('img', { name: /^Dam storage, % of capacity/ })).toBeVisible();
-	await expect(unitChart(page).getByRole('button', { name: 'Dam storage' })).toHaveAttribute('aria-pressed', 'true');
+	// Its dam: a link to its storage chart on the Dams page (issue #175 dropped this panel's weaker copy of it).
+	await expect(unitChart(page).getByRole('button', { name: 'Dam storage' })).toHaveCount(0);
+	await expect(unitChart(page).getByRole('link', { name: 'Dam storage on the Dams page' })).toHaveAttribute('href', `?tab=dams&dam=${upper.id as string}`);
 
 	// Back returns to the worst unit; a reload of a unit link opens it.
 	await page.goBack();
@@ -221,6 +220,12 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	// A unit the run doesn't have: the worst one instead.
 	await page.goto(`/projects/${project.id}?tab=supply&unit=nope`);
 	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${firstName}`);
+
+	// The dam link opens that dam's storage chart on the Dams page.
+	await page.goto(`/projects/${project.id}?tab=supply&unit=${upper.id as string}`);
+	await unitChart(page).getByRole('link', { name: 'Dam storage on the Dams page' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Storage/ }).getByRole('heading')).toHaveText('Storage: Upper farm');
 });
 
 test('the run follows run= and the header picker; Runs & results links here for its run; old Runs anchors land here', async ({ page, owner }) => {
