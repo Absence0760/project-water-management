@@ -629,6 +629,12 @@ Interaction details that bit:
   first panel after the form; the Data page's `.data-page` wrapper ends
   under the chart. Put a page's sticky menu at the tab's top level and check
   it is still in view on the last section.
+- **"Last section at the end of the page" overrides a link.** A scroll-spy
+  that marks the last section once the page can't scroll further also does
+  so after a jump to one of the last few sections of a short page: shortening
+  one glossary entry made Goodness of fit mark the wrong term. Keep a
+  just-linked section marked while its heading is on screen
+  (`lib/help/spy.ts` `currentSection`'s `linked`).
 - **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
   flex row of groups, each a wrapping flex row of links: a long group took
   full rows of its own, so Runs & results' menu was three rows at 1280 px

@@ -59,7 +59,7 @@
 			const doc = document.documentElement;
 			const atEnd = window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
 			const tops = ids.map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity);
-			const i = currentSection(tops, header + 64, atEnd);
+			const i = currentSection(tops, header + 64, atEnd, ids.indexOf(hashId(page.url.hash)), window.innerHeight);
 			reading = i >= 0 ? ids[i]! : '';
 		};
 		const onScroll = () => {
