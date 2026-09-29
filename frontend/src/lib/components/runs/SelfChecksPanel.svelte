@@ -1,6 +1,7 @@
 <!--
 	What the model says about its own run (engine ≥ 0.12.0): the self-checks,
-	the water balance per water year, and a trace of one farm's day with every
+	the water balance per water year (its own section on Runs & results,
+	WaterBalanceTable; here in the printable report), and a trace of one farm's day with every
 	intermediate column and its formula, or of the catchment's day in the
 	runoff model (docs/ui.md § Self-checks).
 -->
@@ -9,8 +10,9 @@
 	import type { RunSummary } from '@water-management/engine';
 	import { api, type RunCatchmentDay, type RunDay } from '$lib/api';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { fmtNum, fmtQty } from '$lib/format/number';
-	import { balanceColumns, balanceEquation, balanceTableRows, checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, residualIsNoise, traceRows, waterYearLabel } from './checks';
+	import { fmtNum } from '$lib/format/number';
+	import { checkLabel, catchmentClosure, catchmentTraceRows, checksHeadline, dayClosure, traceRows } from './checks';
+	import WaterBalanceTable from './WaterBalanceTable.svelte';
 
 	let {
 		summary,
@@ -20,7 +22,8 @@
 		endDate,
 		nodes,
 		engineVersion,
-		trace: showTrace = true
+		trace: showTrace = true,
+		balanceHref
 	}: {
 		summary: RunSummary;
 		projectId: string;
@@ -33,14 +36,13 @@
 		engineVersion?: string;
 		/** Show Trace a day (the printable report leaves the interactive trace out). */
 		trace?: boolean;
+		/** Where the water balance's own section is (Runs & results); without it the table is drawn here (the printable report). */
+		balanceHref?: string;
 	} = $props();
 
 	const uid = $props.id();
 	const v = $derived(summary.verification);
 	const headline = $derived(checksHeadline(v));
-	const balance = $derived(balanceTableRows(summary.waterBalance));
-	const hasStores = $derived(balance.some((r) => r.runoff !== null));
-	const cols = $derived(balanceColumns(balance));
 
 	// Trace: start on the farm and day with the largest balance residual, else the first farm on the first day.
 	let nodeId = $state('');
@@ -113,42 +115,14 @@
 	{/if}
 </section>
 
-<section aria-labelledby="{uid}-wb">
-	<h3 id="{uid}-wb">Water balance by water year</h3>
-	{#if balance.length === 0}
-		<p class="muted">This run was made before the water balance was recorded (engine 0.12.0). Run the model again to see it.</p>
-	{:else}
-		<p class="muted small">
-			{balanceEquation(cols)}. Volumes in Mm³; the residual, in m³, should be 0.
-			{#if summary.waterBalance?.areaKm2}Depths over {fmtNum(summary.waterBalance.areaKm2, 2)} km².{/if}
-		</p>
-		<div class="table-wrap">
-			<table class="data compact">
-				<thead>
-					<tr>
-						<th scope="col">Water year</th>
-						{#each cols as col (col.key)}<th scope="col" class="num" title={col.title}>{col.label}</th>{/each}
-						{#if hasStores}<th scope="col" class="num" title="Runoff model: rain − evaporation − flow + exchange − change in storage">Runoff-model residual (mm)</th>{/if}
-					</tr>
-				</thead>
-				<tbody>
-					{#each balance as r (r.waterYear ?? 'total')}
-						<tr class:total={r.waterYear === null}>
-							<th scope="row">{waterYearLabel(r.waterYear)}</th>
-							{#each cols as col (col.key)}
-								{@const x = col.value(r)}
-								<td class="num" class:off={col.key === 'residual' && !residualIsNoise(r)}>
-									{col.key === 'residual' ? fmtValue(x) : col.key === 'rain' ? fmtNum(x, 0) : fmtQty(x, 3, true)}
-								</td>
-							{/each}
-							{#if hasStores}<td class="num">{fmtValue(r.runoff?.residualMm ?? null)}</td>{/if}
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	{/if}
-</section>
+{#if balanceHref}
+	<!-- The water balance has its own section in Model quality (issue #137); the report keeps it here. -->
+	<p class="muted small balance-link" data-testid="checks-balance-link">
+		The water balance by water year is under Model quality: <a href={balanceHref}>Water balance</a>.
+	</p>
+{:else}
+	<div class="wb"><WaterBalanceTable {summary} /></div>
+{/if}
 
 {#if showTrace}
 <section aria-labelledby="{uid}-tr">
@@ -224,7 +198,9 @@
 {/if}
 
 <style>
-	section + section {
+	.wb,
+	.wb + section,
+	.balance-link + section {
 		margin-top: 1.25rem;
 	}
 	.alert.ok {
@@ -255,14 +231,8 @@
 		color: var(--danger);
 		overflow-wrap: anywhere;
 	}
-	tr.total th,
-	tr.total td {
-		font-weight: 600;
-		border-top: 2px solid var(--border);
-	}
-	td.off {
-		color: var(--danger);
-		font-weight: 600;
+	.balance-link {
+		margin: 0.75rem 0 0;
 	}
 	.trace-form {
 		display: flex;

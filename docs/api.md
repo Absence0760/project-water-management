@@ -263,7 +263,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
-- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, today, lastRunAt, publishedAt }`
 - `GET /projects/outcomes` (issue #17) feeds the project list's outcome
   columns and its *Needs attention* strip: one `PortfolioProject` (the
   [portfolio](#portfolio)'s row, same fields and rules) per project you can
@@ -304,7 +304,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   ISO timestamp of the current publication ([§ Publication](#publication)), or
   `null` before any; every member sees it, farmers included. All three come
   from the same query as the list (no per-project calls), for the list's
-  freshness badge and its "published" hint.
+  freshness badge and its "published" hint. `today` — the project's
+  calendar date now (`YYYY-MM-DD`, in its `timeZone`, `projects/timeZone.ts`
+  `localDate`): the day the list counts `dataUntil`'s age to, the same day
+  the portfolio row's `today` is (issue #137).
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).

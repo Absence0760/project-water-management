@@ -11,6 +11,7 @@
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { curtailmentRows, cutCount, ewrSiteRows, fmtCharged, fmtSigned, fmtVol } from './curtailment';
 	import ShareThePainBoard from './ShareThePainBoard.svelte';
+	import { SUPPLY_TARGET } from '$lib/components/runs/results';
 
 	let {
 		summary,
@@ -204,6 +205,7 @@
 							<th scope="col">Priority</th>
 							<th scope="col" class="num">Demand<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">Taken<br /><span class="u">m³/day</span></th>
+							<th scope="col" class="num">Supplied<br /><span class="u">% of demand</span></th>
 							<th scope="col" class="num">Returned<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">EWR charge<br /><span class="u">m³/day</span></th>
 							<th scope="col" class="num">Supply cut<br /><span class="u">m³/day</span></th>
@@ -212,11 +214,13 @@
 					</thead>
 					<tbody>
 						{#each c.otherUsers as u (u.nodeId)}
+							{@const short = u.fractionSupplied !== null && u.fractionSupplied < SUPPLY_TARGET}
 							<tr>
-								<th scope="row">{farmNames[u.nodeId] ?? u.name}</th>
+								<th scope="row">{farmNames[u.nodeId] ?? u.name}{#if short}<span class="badge badge-warn">below {fmtPct(SUPPLY_TARGET, 0)}</span>{/if}</th>
 								<td>{u.curtailed ? 'junior (curtailed)' : 'senior (not curtailed)'}</td>
 								<td class="num">{fmtVol(u.demandM3Day)}</td>
 								<td class="num">{fmtVol(u.suppliedM3Day)}</td>
+								<td class="num" class:neg={short}>{u.fractionSupplied === null ? '–' : fmtPct(u.fractionSupplied)}</td>
 								<td class="num">{fmtVol(u.returnedM3Day)}</td>
 								<td class="num">{fmtCharged(u.ewrChargeM3Day)}</td>
 								<td class="num" class:neg={u.supplyCutM3Day < 0}>{fmtSigned(u.supplyCutM3Day)}</td>

@@ -128,7 +128,7 @@
 </script>
 
 {#snippet freshBadge(p: ProjectSummary)}
-	{@const f = dataFreshness(p.dataUntil, now)}
+	{@const f = dataFreshness(p.dataUntil, p.today)}
 	<span class="badge fresh" class:badge-warn={f.stale} title={f.detail}>{f.label}</span>
 {/snippet}
 
