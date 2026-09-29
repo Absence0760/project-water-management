@@ -25,7 +25,7 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
-	import { foldCards } from '$lib/components/dams/dams';
+	import { foldList } from '$lib/components/common/fold';
 	import { runHref } from '$lib/components/overview/attention';
 	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
@@ -212,7 +212,7 @@
 	/** A card is about a third of the chart's height beside it; stacked, three keep the chart near the first screen. */
 	const CAP = 3;
 	let open = $state(false);
-	const fold = $derived(foldCards(cards, picked?.nodeId ?? null, open, CAP));
+	const fold = $derived(foldList(cards, (c) => c.nodeId, picked?.nodeId ?? null, open, CAP));
 	// A fixed plot height: taller beside the cards, where the panel sits level with the first three.
 	const chartH = $derived(side ? 420 : 260);
 

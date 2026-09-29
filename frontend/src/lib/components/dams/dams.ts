@@ -73,18 +73,6 @@ export function pickDam(cards: readonly DamCard[], param: string | null): DamCar
 	return (param ? cards.find((c) => c.nodeId === param) : undefined) ?? cards[0] ?? null;
 }
 
-/**
- * The cards a folded list shows: the first `cap` (the emptiest), plus the
- * picked dam's card if it sits further down, so the charted dam always has
- * its card in view. Folding away a single card isn't worth a button, so a
- * list of `cap + 1` shows whole. `hidden` is how many the fold leaves out.
- */
-export function foldCards<T extends { nodeId: string }>(cards: readonly T[], pickedId: string | null, open: boolean, cap: number): { shown: T[]; hidden: number } {
-	if (open || cards.length <= cap + 1) return { shown: [...cards], hidden: 0 };
-	const shown = cards.filter((c, i) => i < cap || c.nodeId === pickedId);
-	return { shown, hidden: cards.length - shown.length };
-}
-
 /** "2.4 million m³", "150 000 m³": a capacity in words a header can carry. */
 export function fmtVolume(m3: number): string {
 	if (m3 >= 1e6) return `${fmtNum(m3 / 1e6, m3 >= 1e7 ? 1 : 2, true)} million m³`;

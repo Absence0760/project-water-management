@@ -68,7 +68,7 @@
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
-	import { foldRows } from './fold';
+	import { foldList } from '$lib/components/common/fold';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 
@@ -422,7 +422,7 @@
 	let open = $state(false);
 	// Six rows and the chart's head sit on a 1440 × 960 first screen; below 640 px each row is a tall card, so four.
 	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
-	const fold = $derived(foldRows(rows, selectedId, open, cap));
+	const fold = $derived(foldList(rows, (r) => r.id, selectedId, open, cap));
 	const CHART_H = 320;
 
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.

@@ -173,7 +173,8 @@ section it belongs to, with the example that taught it.
   Dams and Hydrological units: the worst few cards (three), **Show all N**
   opening the rest in place, a sticky chart beside them, the pick in the URL
   so Back works; a folded list keeps the picked item's card in view
-  (`dams/dams.ts` `foldCards`, which Hydrological units imports), so a shared
+  (`common/fold.ts` `foldList`, which Data, Hydrological units and
+  Allocations share), so a shared
   `dam=` or `unit=` link shows its card. Both were fitted to the window with
   the cards scrolling in their column until 2026-09-29; with 40 units the
   column scrolled 8,000 px inside a 690 px box. **Under an "On this page"
@@ -656,7 +657,7 @@ Interaction details that bit:
   at its measured top, then set the list's own `scrollTop` from the two
   bounding boxes. Better still, don't fit: Allocations flows now (2026-09-29)
   and its folded list keeps the linked unit's rows after the first five
-  (`foldCards`), so the row is on the first screen with no scrolling at all
+  (`foldList`), so the row is on the first screen with no scrolling at all
   (`allocations-page.spec.ts` asserts it is in the viewport and
   `window.scrollY` is 0).
 - **Fold every long list on a flowing page, each with its own button name.**

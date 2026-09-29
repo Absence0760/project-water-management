@@ -21,7 +21,7 @@
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
 	import { api, type Allocation, type AllocationList, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
-	import { foldCards } from '$lib/components/dams/dams';
+	import { foldList } from '$lib/components/common/fold';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
@@ -160,8 +160,8 @@
 	let yearsAll = $state(false);
 	let rowsAll = $state(false);
 	// A shared `unit=` link keeps its row shown under the fold (both its sources).
-	const unitFold = $derived(foldCards(units, pickedId, unitsAll, UNIT_CAP));
-	// The volumes in the API's order (unmatched first); folding one away isn't worth a button, as foldCards.
+	const unitFold = $derived(foldList(units, (u) => u.nodeId, pickedId, unitsAll, UNIT_CAP));
+	// The volumes in the API's order (unmatched first); folding one away isn't worth a button, as foldList.
 	const volFold = $derived.by(() => {
 		const all = data?.allocations ?? [];
 		const shown = volsAll || all.length <= VOL_CAP + 1 ? all : all.slice(0, VOL_CAP);
@@ -169,7 +169,7 @@
 	});
 	const yearFold = $derived(foldYears(pickedYears, yearsAll, YEAR_CAP));
 	const listRows = $derived(rowsInListOrder(rows, units));
-	const rowFold = $derived(foldCards(listRows, null, rowsAll, ROW_CAP));
+	const rowFold = $derived(foldList(listRows, (r) => r.nodeId, null, rowsAll, ROW_CAP));
 	/** The picked unit's bars: modelled use against the registered volume, on one scale. */
 	const barScale = $derived(Math.max(1, ...yearFold.shown.map((r) => Math.max(r.year.modelledM3, r.year.registeredM3))));
 	const bothSources = $derived(new Set(pickedYears.map((r) => r.source)).size > 1);

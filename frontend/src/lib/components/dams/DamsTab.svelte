@@ -33,7 +33,8 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
 	import DamLevels from './DamLevels.svelte';
-	import { changeWords, damCards, damsSummary, fmtVolume, foldCards, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import { foldList } from '$lib/components/common/fold';
+	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 
 	let {
 		projectId,
@@ -193,7 +194,7 @@
 	// Beside the chart, three cards sit about level with it; stacked, two rows keep the chart near the first
 	// screen; before a run the cards are small (capacity only), so more fit.
 	const cap = $derived(!latest ? 8 : side ? 3 : 4);
-	const fold = $derived(foldCards(cards, latest ? (picked?.nodeId ?? null) : null, open, cap));
+	const fold = $derived(foldList(cards, (c) => c.nodeId, latest ? (picked?.nodeId ?? null) : null, open, cap));
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
