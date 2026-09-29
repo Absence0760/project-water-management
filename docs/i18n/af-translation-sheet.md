@@ -18,4 +18,15 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+2 strings: 2 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### landing.trust
+
+Landing page: “Why trust it”, and three figures from the example catchment.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `237c2d7f` | fit to the measured river flow (1 is perfect) |  |  |
+| `e0fcc06b` | From {name}, an invented example catchment: | Keep: {name} |  |

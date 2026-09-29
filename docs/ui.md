@@ -153,19 +153,25 @@ other signed-out route still goes to `/login?next=`.
   the hero's reserve tag, the story's charts (the river's on a square-root
   scale, which its unit says), the what-if (each bar labelled **Today** or
   **This plan**; the plan's supply in the app's supply bands), and *Why trust
-  it*'s three figures under "In the example catchment", the last the run's
-  calibration NSE. The art, the motion rules and the
+  it*'s three figures under "From Kleinberg, an invented example
+  catchment:", the last the run's calibration NSE in plain words ("fit to
+  the measured river flow (1 is perfect)"). The art, the motion rules and the
   pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
 
 ## Legal pages
 
 `/privacy` (the privacy notice) and `/terms` (terms of use),
 `routes/privacy`, `routes/terms`, framed by `lib/components/legal/LegalPage.svelte`:
-a slim header with the way home and **Open the app** (to `/login`, which sends
-a signed-in reader on to their projects: a static page can't know the session,
-so it doesn't claim "Sign in"), a contents list (folded behind a
-**Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
-the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
+a slim header whose logo is the way home (no second button), then the Help
+shell's layout at its 1480 px width: from 900 px the contents list is a
+sticky column on the left, like the Help menu, with the title and text
+beside it (paragraphs keep a ~68ch measure; the extra width goes to the
+contents, and only tables use the column's width). Below 900 px the contents
+sit above the text, folded behind a **Contents (13 sections)** disclosure
+(the privacy notice) on a phone, where the list alone filled the first
+screen, and open from 601 px. The footer's links (Home, the three pages, and
+**Contact**, which goes to the terms' contact section, `/terms#contact`, so
+the address is written once) start in line with the text column. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). Each has its
 own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
 `app.html`'s fallback title sits after the page's head, since the document's

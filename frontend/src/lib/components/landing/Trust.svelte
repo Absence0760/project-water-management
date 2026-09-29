@@ -4,9 +4,10 @@
 	// DWS marks: trademarks, and no implied endorsement), and three figures from
 	// the example catchment, named as its, that count up once in view (still
 	// under reduced motion, and the final figure before the script runs). The
-	// last is the one that earns trust: how closely the example's fitted model
-	// follows its weir's measured flow (the run's calibration NSE, from the
-	// engine: backend/scripts/landing-data.ts). The first statement is backed by
+	// head names the catchment and says it is invented (issue #162). The last
+	// figure is the one that earns trust: how closely the example's fitted
+	// model follows its weir's measured flow, in plain words (the run's
+	// calibration NSE, from the engine: backend/scripts/landing-data.ts). The first statement is backed by
 	// the engine audit's public summary, /methods, linked under the list.
 	import { onMount } from 'svelte';
 	import { base } from '$app/paths';
@@ -14,10 +15,12 @@
 	import { DATA } from './data.generated';
 	import { fmt } from './format';
 
+	// The seeded example's name (seed:examples, landing-data.ts): a proper noun, not translated.
+	const EXAMPLE = 'Kleinberg';
 	const FIGURES = [
 		{ value: DATA.hero.years, digits: 0, label: () => t('years of daily water balance') },
 		{ value: DATA.hero.days, digits: 0, label: () => t('days in one run') },
-		{ value: DATA.hero.calibrationNse, digits: 2, label: () => t('fit to the weir’s measured flow (NSE, where 1 is perfect)') }
+		{ value: DATA.hero.calibrationNse, digits: 2, label: () => t('fit to the measured river flow (1 is perfect)') }
 	];
 	const round = (v: number, digits: number) => Math.round(v * 10 ** digits) / 10 ** digits;
 	let shown = $state(FIGURES.map((f) => f.value));
@@ -56,7 +59,7 @@
 		<li>{t('Daily data from CHIRPS rainfall and the DWS gauges.')}</li>
 	</ul>
 	<p class="methods"><a href="{base}/methods">{t('How the model is checked')}</a></p>
-	<p class="figures-head">{t('In the example catchment')}</p>
+	<p class="figures-head">{t('From {name}, an invented example catchment:', { name: EXAMPLE })}</p>
 	<dl class="figures" bind:this={el}>
 		{#each FIGURES as f, i (i)}
 			<div>
@@ -110,13 +113,12 @@
 		border-radius: 50% 50% 50% 0;
 		rotate: -45deg;
 	}
+	/* A sentence (it names the catchment), so not the capitalised eyebrow style. */
 	.figures-head {
 		margin: 0 0 0.75rem;
 		font-family: var(--font-display);
 		font-weight: 600;
-		font-size: 0.85rem;
-		letter-spacing: 0.12em;
-		text-transform: uppercase;
+		font-size: 1rem;
 		color: var(--accent);
 	}
 	.figures {
