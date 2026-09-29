@@ -121,7 +121,7 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
  * m³/day). A year with demand but nothing registered gets 0; a year with
  * registered volume but no demand can't be scaled, gets 0 and is listed in
  * `unscaled` (water years). A unit that abstracts only from run day `from`
- * (NetworkNode.abstractionFrom, engine ≥ 1.27.0) is scaled to the volume
+ * (NetworkNode.abstractionFrom, engine ≥ 1.28.0) is scaled to the volume
  * over its days from then: a year it starts in asks for that part of the
  * year's volume, a year wholly before it for none (and isn't unscaled).
  */
@@ -132,7 +132,7 @@ export function fullAllocationFactors(
 	days: number,
 	/** A resumed run (../warmstart): the factor its first water year keeps from the run it was captured from. */
 	pinnedFirst?: number,
-	/** The first run day the unit abstracts on (engine ≥ 1.27.0); 0 = every day. */
+	/** The first run day the unit abstracts on (engine ≥ 1.28.0); 0 = every day. */
 	from = 0
 ): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[] } {
 	const factor = new Float64Array(days);
@@ -175,7 +175,7 @@ export interface AllocationPlan {
 	byNode: Map<number, AllocationEntry[]>;
 	/** 'fullAllocation': node index → its demand's factor per day, and per water year the demand before and the volume after. */
 	scaled: Map<number, { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[] }>;
-	/** Node index → the first run day it abstracts on, for units with an abstraction date (engine ≥ 1.27.0). */
+	/** Node index → the first run day it abstracts on, for units with an abstraction date (engine ≥ 1.28.0). */
 	abstractFrom?: Map<number, number>;
 	/**
 	 * 'fullAllocation' in a run resumed from a snapshot (../warmstart): node

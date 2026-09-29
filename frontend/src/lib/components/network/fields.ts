@@ -320,7 +320,7 @@ export function systemOf(efficiency: number): IrrigationSystemId | null {
 }
 
 /**
- * Whether a node carries any of a dam's development fields (engine ≥ 1.27.0:
+ * Whether a node carries any of a dam's development fields (engine ≥ 1.28.0:
  * survey date, sediment rate, in-service date), so the one-node form still
  * shows them on a node without a dam, or one turned into a gauge or user,
  * where they can be cleared (the save refuses them off a farm).

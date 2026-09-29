@@ -518,7 +518,7 @@ function runNetwork(
 			if (node.kind === 'user' && !userSeries.has(field)) continue;
 			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : withObjects ? (OBJECT_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
-		// A dam whose capacity changes over the run (engine ≥ 1.27.0, ./network/development.ts): the day's capacity.
+		// A dam whose capacity changes over the run (engine ≥ 1.28.0, ./network/development.ts): the day's capacity.
 		const ks = plan.nodes[i]!.capacityScale;
 		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
@@ -1124,7 +1124,7 @@ export function buildNetworkPlan(
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
 	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm);
-	// Development over the run (engine ≥ 1.27.0, ./network/development.ts): a unit takes nothing before
+	// Development over the run (engine ≥ 1.28.0, ./network/development.ts): a unit takes nothing before
 	// its abstraction date, and a dam's capacity follows its sediment rate and in-service date.
 	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
 	if (dated && start === undefined) throw new Error('buildNetworkPlan: a dated dam or abstraction needs the run start');
@@ -1318,7 +1318,7 @@ function storageResetOf(
 			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
 			continue;
 		}
-		// Against the capacity on the reset day (engine ≥ 1.27.0: it can change over the run).
+		// Against the capacity on the reset day (engine ≥ 1.28.0: it can change over the run).
 		const cap = damCapacityOn(n, start + day);
 		if (v < 0 || v > cap) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
 		byNode.set(i, Math.min(Math.max(v, 0), cap));

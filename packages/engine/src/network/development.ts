@@ -1,4 +1,4 @@
-// Development that changes during a run (engine ≥ 1.27.0, issue #67,
+// Development that changes during a run (engine ≥ 1.28.0, issue #67,
 // docs/model.md §2.7g): a dam losing capacity to sediment, a dam in service
 // from a date, and abstraction from a date. Each is off unless set, so a
 // model without them runs as before.

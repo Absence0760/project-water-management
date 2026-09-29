@@ -800,7 +800,7 @@ the reports):
   users) before a final calibration, because they are real modelled
   processes.
   - [x] **Gap:** development (dams, abstraction) can't vary over time within
-        a run. Done (engine 1.27.0, issue #67, model.md §2.7g): a dam in
+        a run. Done (engine 1.28.0, issue #67, model.md §2.7g): a dam in
         service from a date, abstraction from a date, and capacity lost to
         sediment from a survey date.
 - **Q4: pan and lake factors.** These are two separate settings. PET uses a
@@ -2180,7 +2180,7 @@ role and not before it.
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
-      - ~~*Capacity loss to sediment*~~: done (engine 1.27.0, issue #67,
+      - ~~*Capacity loss to sediment*~~: done (engine 1.28.0, issue #67,
         migration 110, model.md §2.7g): `damSurveyDate` and
         `damSedimentPctPerYear`, linear both ways from the survey; dead
         storage, the curve's volumes and the dam-level triggers scale with

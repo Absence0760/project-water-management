@@ -43,7 +43,7 @@ export interface PlanNode {
 	/** Dam capacity (m³), as entered. */
 	damCapacityM3: number;
 	/**
-	 * The day's capacity ÷ damCapacityM3 (engine ≥ 1.27.0, ./development.ts:
+	 * The day's capacity ÷ damCapacityM3 (engine ≥ 1.28.0, ./development.ts:
 	 * sediment, an in-service date); absent = 1 every day. Dead storage, the
 	 * survey curve's volumes and the dam-level triggers scale with it.
 	 */
@@ -469,7 +469,7 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 		// Survey curve (WP-3.5): area linear in volume between rows. The limiter
 		// above generalises to the curve's local exponent b = Q·A′/A: while it
 		// exceeds 1, evaporation is at most (1 − seepage) × A / A′. A dam whose
-		// capacity changes (engine ≥ 1.27.0) reads the curve with its volumes × k.
+		// capacity changes (engine ≥ 1.28.0) reads the curve with its volumes × k.
 		const c = curveAreaAt(node.damCurve, k === 1 ? qPrev : qPrev / k);
 		const A = c.area;
 		const slope = k === 1 ? c.slope : c.slope / k;
@@ -851,7 +851,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Evaporation takes at most what is there (yesterday's storage, the
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
-			// The day's capacity and dead storage (engine ≥ 1.27.0: sediment, an in-service date), and the
+			// The day's capacity and dead storage (engine ≥ 1.28.0: sediment, an in-service date), and the
 			// storage the dam-level triggers read, at the entered capacity's scale.
 			const k = capacityK(node, t);
 			const cap = node.damCapacityM3 * k;

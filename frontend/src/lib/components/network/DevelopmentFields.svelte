@@ -1,9 +1,9 @@
 <script lang="ts">
-	// Development over the run (engine ≥ 1.27.0, issue #67, docs/model.md
+	// Development over the run (engine ≥ 1.28.0, issue #67, docs/model.md
 	// §2.7g), in the one-node form. `part="dam"`: a farm dam's survey date,
 	// sediment rate and in-service date, under its survey and releases.
 	// `part="abstraction"`: the day a farm or water user starts to abstract.
-	// Empty is null: the field is off, as on a model from before 1.27.0. The
+	// Empty is null: the field is off, as on a model from before 1.28.0. The
 	// model check's message (engine developmentProblem) shows under the fields.
 	import type { NetworkNode } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';

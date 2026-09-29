@@ -90,7 +90,7 @@ describe('model store', () => {
 			pumpCapacityM3Day: 1234.5,
 			supplyTriggerPct: 0.35,
 			supplyStopPct: 0.65,
-			// Development over the run (engine 1.27.0, 110_node_development): a leap day survives as a date.
+			// Development over the run (engine 1.28.0, 110_node_development): a leap day survives as a date.
 			damSurveyDate: '2012-02-29',
 			damSedimentPctPerYear: 0.0125,
 			damInServiceFrom: '1999-10-01',
@@ -264,7 +264,7 @@ describe('model store', () => {
 		for (const bad of ['[]', '{}']) await expect(withUser(u.id, (db) => db.query('UPDATE demand_object SET schedule = $2::jsonb WHERE id = $1', [town.id, bad]))).rejects.toThrow(/demand_object_schedule_shape/);
 	});
 
-	it('stores the development fields (engine 1.27.0, 110): null clears them, a field that breaks a rule is refused', async () => {
+	it('stores the development fields (engine 1.28.0, 110): null clears them, a field that breaks a rule is refused', async () => {
 		const u = await signUp('Development');
 		const projectId = await newProject(u, 'Development over time');
 		const outlet = node('Outlet', null);

@@ -980,7 +980,7 @@ for every workspace tab. Its own chunk.
   are the record's, up to the day before the forecast, like the Summary's
   (issue #51); the chart shows the forecast days in their band.
 - **Levels are shares of the day's capacity** (issue #67): a dam losing
-  capacity to sediment or in service from a date (engine ≥ 1.27.0,
+  capacity to sediment or in service from a date (engine ≥ 1.28.0,
   [model.md §2.7g](./model.md)) holds a different volume each day, so every
   % full, minimum level, days-at-minimum count, sparkline point and
   capacity-weighted total here, on the Summary's Dams today, the Network's
@@ -1821,7 +1821,7 @@ note's link on the Summary, `notes.ts` `noteHref`).
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
-- **Development over the run** (engine ≥ 1.27.0, issue #67, [model.md §2.7g](./model.md)),
+- **Development over the run** (engine ≥ 1.28.0, issue #67, [model.md §2.7g](./model.md)),
   one-node form only (`DevelopmentFields.svelte`): under the dam survey and
   releases, **Capacity over time** with **Survey date**, **Sediment** (% of
   the capacity a year, 0–20 %, empty = none) and **In service from**; and

@@ -125,7 +125,7 @@ export interface SummaryMeta {
 	damCapacityM3?: Record<string, number>;
 	/**
 	 * The capacity on the summary's last day of each dam whose capacity changes
-	 * over the run (sediment, an in-service date; engine ≥ 1.27.0), m³ by node
+	 * over the run (sediment, an in-service date; engine ≥ 1.28.0), m³ by node
 	 * id: the dam's end-of-run storage is bounded by it, not by the entered
 	 * capacity. Absent or empty = no such dam, no column.
 	 */

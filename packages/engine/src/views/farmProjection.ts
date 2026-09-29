@@ -710,7 +710,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	const spill = need(run, nodeId, 'spill', days);
 	const charge = need(run, nodeId, 'ewr_charge', days);
 	const { season: sw, last30: lw } = analysis;
-	// A dam's capacity and stop level on a run day (engine ≥ 1.27.0: sediment, an in-service date;
+	// A dam's capacity and stop level on a run day (engine ≥ 1.28.0: sediment, an in-service date;
 	// ../network/development.ts), so a level is a share of what the dam could hold that day.
 	const capOn = (t: number) => damCapacityOn(node, d0 + t);
 	const hasDam = node.damCapacityM3 > 0;

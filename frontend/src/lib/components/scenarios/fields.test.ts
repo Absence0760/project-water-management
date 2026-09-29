@@ -104,7 +104,7 @@ describe('field specs cover the engine’s op catalogue', () => {
 	});
 });
 
-describe('development over the run (engine 1.27.0, issue #67)', () => {
+describe('development over the run (engine 1.28.0, issue #67)', () => {
 	it('offers the dam fields on a farm, the abstraction start on a farm and a user, and none on a gauge', () => {
 		const dev = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom', 'abstractionFrom'];
 		expect(nodeFields('farm').filter((f) => dev.includes(f.field))).toEqual([

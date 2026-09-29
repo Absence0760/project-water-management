@@ -48,7 +48,7 @@ export function ewrSiteIssue(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 
 }
 
 /**
- * Why a node's development fields (engine ≥ 1.27.0, issue #67: the dam's
+ * Why a node's development fields (engine ≥ 1.28.0, issue #67: the dam's
  * survey date, sediment rate and in-service date, the abstraction start)
  * can't be saved, as the API refuses them (engine developmentProblem, through
  * modelRules), in the editor's words, or null.
@@ -128,7 +128,7 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a hydrological unit has a dam';
 			if (bad) issues.push({ area: 'network', message: `${label}: dam survey curve: ${bad}.` });
 		}
-		// Development over the run (engine ≥ 1.27.0), as the API checks it.
+		// Development over the run (engine ≥ 1.28.0), as the API checks it.
 		const development = developmentIssue(n);
 		if (development) issues.push({ area: 'network', message: `${label}: ${development}` });
 		// Supply rule and river pump (WP-3.8), as the API checks them.

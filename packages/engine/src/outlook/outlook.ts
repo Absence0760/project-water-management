@@ -682,7 +682,7 @@ export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
 		metric,
 		siteNodeId: metric === 'reserveMonthsMet' ? siteNodeId : null,
 		startStorageM3: x.startStorageM3,
-		// On the season's last day, which the season-end storage is (engine ≥ 1.27.0: a dam's capacity can change).
+		// On the season's last day, which the season-end storage is (engine ≥ 1.28.0: a dam's capacity can change).
 		capacityM3: dams.reduce((a, n) => a + damCapacityOn(n, s.to), 0),
 		analogues: x.analogues,
 		excluded: x.excluded,

@@ -123,7 +123,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `{ levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`, or null for none, the power law;
   whether the rows make a usable curve, volume rising and some area, is a
   save rule checked when the op applies; a `node.add` could always carry
-  one); development over the run (engine ≥ 1.27.0, [model.md
+  one); development over the run (engine ≥ 1.28.0, [model.md
   §2.7g](./model.md)) `damSurveyDate`, `damSedimentPctPerYear` (0–0.2, a
   share of the surveyed capacity a year; needs the survey date, a save rule),
   `damInServiceFrom` and `abstractionFrom` (ISO dates or null), so a
@@ -171,7 +171,7 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   reads them (level, area, volume, one row per line) and checks them the
   same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
-  `userPriority`, `abstractionFrom` (engine ≥ 1.27.0), and the borehole fields.
+  `userPriority`, `abstractionFrom` (engine ≥ 1.28.0), and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
   EWR is assessed at the gauge ([model.md §2.7b](./model.md)). The outlet
   can't be taken off (a model rule), and the op is always a baseline
@@ -304,7 +304,7 @@ red **Baseline assumptions changed** callout shows whenever any op is
 | Op | Proposal when | Otherwise |
 | --- | --- | --- |
 | `settings.set`, `series.scale`, `ewrRule.set` | never | baseline (settings, calibration, EWR and the Reserve's rule tables, flow-share method, climate) |
-| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, or a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.27.0); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, and a dam's survey and sediment (the dam as it is) |
+| `node.set` | the node is owned and the field is not land or flow share (`areaKm2`, `areaHiKm2`, `areaLoKm2`, `flowShareManual`), a gauge's `ewrSite`, or a dam's `damSurveyDate` / `damSedimentPctPerYear` (engine ≥ 1.28.0); so the own farm's supply rule and river pump, and a dam or an abstraction from a date, are the proposal (how the farm takes water is what a licence to abstract asks for, like a new pump) | baseline: other parties' nodes, the catchment's partition of runoff, where the EWR is assessed, and a dam's survey and sediment (the dam as it is) |
 | `node.add` | not a gauge, and no land or manual flow share of its own (a new dam, pump or user) | baseline: a gauge moves an EWR site; land or a manual flow share re-partitions the catchment |
 | `node.remove` | owned, not a gauge, no land or manual flow share, and no EWR rule table sited at it (needs `input`) | baseline |
 | `cropArea.set`, `landCover.add` | on an owned node | baseline |

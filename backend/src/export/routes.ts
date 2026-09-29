@@ -113,7 +113,7 @@ async function loadDamCapacities(db: Db, runId: string): Promise<Record<string, 
 
 /**
  * The capacity on `date` of each dam whose capacity changes over the run
- * (a sediment rate, an in-service date; engine ≥ 1.27.0, docs/model.md
+ * (a sediment rate, an in-service date; engine ≥ 1.28.0, docs/model.md
  * §2.7g), m³ by node id; a dam whose capacity that day is the entered one is
  * left out, so a run without such dams has none.
  */

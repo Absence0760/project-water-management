@@ -2261,7 +2261,7 @@ series (only when the share is below 1), a sink in the balance check
 (`V = … − U − Dep − seepage lost`), and the water balance's
 `damSeepageLostM3` line (out). The dam itself behaves the same either way.
 
-Capacity loss to sediment (%/year) is §2.7g (engine ≥ 1.27.0). A scenario can add a dam with a curve (`node.add`) and,
+Capacity loss to sediment (%/year) is §2.7g (engine ≥ 1.28.0). A scenario can add a dam with a curve (`node.add`) and,
 from engine 1.20.0, set an existing dam's curve (`node.set` of `damCurve`,
 [scenarios.md § Dam capacity](./scenarios.md)).
 
@@ -3101,7 +3101,7 @@ supply fraction. Hand examples: `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
 dates, the year-end wrap, 29 February, overlap order).
 
-### 2.7g Development that changes during a run (engine ≥ 1.27.0, issue #67)
+### 2.7g Development that changes during a run (engine ≥ 1.28.0, issue #67)
 
 Four optional node fields let the dams and the abstraction change over a
 run instead of standing as they are today for the whole record
