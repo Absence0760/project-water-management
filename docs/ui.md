@@ -4797,7 +4797,9 @@ registered volumes (volume, source, authorisation, registration number, the
 holder for editors only, validity), each with **Change** and **Delete** for
 editors. The bars and the table show the latest six water years (both
 sources of each) until **Show all N water years** / **Show the latest 6
-water years** (`foldYears`; a run of seven years shows whole). The table
+water years** (`foldYears`; a run of seven years shows whole), then the
+band note ("“Within band” is within ±10 % of the registered volume…", with
+how a part year compares; under every unit's table until issue #175). The table
 turns into cards below 48rem of its own width (the picked unit's column at
 1280 px), so it never scrolls sideways there. Picking a unit far down an
 opened list scrolls the page back to its detail.
@@ -4820,9 +4822,14 @@ full hash, reference, row count, who and when, and **Remove this import**.
 **Every hydrological unit and water year**: the whole comparison as one table (one row
 per unit, source and water year, in the list's order so the units to look
 into first come first, each unit's years together, `rowsInListOrder`; a
-source with neither use nor a volume is left out) with the band note under
-it. Twelve rows until **Show all N rows** / **Show the first 12 rows**; the
-table grows with the page.
+source with neither use nor a volume is left out), the WUA manager's
+cross-unit view. It is the picked unit's table for every unit, so since
+issue #175 (2026-09-29) it is folded whole behind **Show all units' water
+years (N rows)** / **Hide all units' water years** (`aria-expanded`,
+`aria-controls="alloc-all-years"`; `foldList` with no cap, so a single row
+shows whole), and its band note moved under the picked unit's table. Until
+then it showed twelve rows until **Show all N rows**. Opened, the table
+grows with the page.
 
 **Import registered volumes** (the Import sheet, `AllocationImport.svelte`):
 what the file is (WARMS extract or CSV template), a reference, the file, and
