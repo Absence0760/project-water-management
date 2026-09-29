@@ -2,7 +2,7 @@
 //
 //   POST   /projects/:id/reports                        viewer   queue a PDF of a run, or its impact report (202 { jobId })
 //   GET    /projects/:id/reports/:jobId                 viewer   its status
-//   GET    /projects/:id/reports/:jobId/pdf             viewer   302 to a 60 s pre-signed GET of the PDF once done
+//   GET    /projects/:id/reports/:jobId/pdf             viewer   302 to a 60 s signed GET of the PDF once done (S3 locally, CloudFront in production)
 //   GET    /projects/:id/report-schedules               viewer   the project's schedules
 //   POST   /projects/:id/report-schedules               editor   add one
 //   PATCH  /projects/:id/report-schedules/:scheduleId   editor   change one
@@ -196,9 +196,11 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const { key: _key, ...report } = view;
 		return c.json({ report });
 	})
-	// The download: a fresh, one-minute pre-signed GET per click, behind the
+	// The download: a fresh, one-minute signed GET per click, behind the
 	// session and the project's membership, so the only lasting link to a PDF
-	// is this route (issue #126). A redirect rather than streaming the bytes:
+	// is this route (issue #126). In production it is a CloudFront signed URL
+	// on the site's own /reports/* path, so the transfer too passes the WAF
+	// (storage.ts downloadUrl). A redirect rather than streaming the bytes:
 	// the API's Function URL buffers responses (6 MB, less after base64), and
 	// streaming would hold a VPC Lambda open for every transfer.
 	.get('/:id/reports/:jobId/pdf', async (c) => {

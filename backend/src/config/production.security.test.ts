@@ -41,8 +41,12 @@ const DB_URL = `postgresql://water_app:${'a1'.repeat(16)}@water-management.abc12
 const CA = '/var/task/rds-global-bundle.pem';
 const SECRET_ARN = (role: string) => `arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/${role}-AbCdEf`;
 const runtimeSecret = (role: string) => ({ RUNTIME_SECRET_ARN: SECRET_ARN(role), RUNTIME_SECRET_VERSION: '00000000-0000-0000-0000-000000000000' });
+// PEM-shaped, not a key (the check is on shape; reports/cloudfrontSign.test.ts signs with a generated one).
+// Assembled so no committed line looks like a private key to a secret scanner.
+const PEM_LABEL = ['RSA', 'PRIVATE', 'KEY'].join(' ');
+const FAKE_PEM = `-----BEGIN ${PEM_LABEL}-----\n${`${'A'.repeat(64)}\n`.repeat(20)}-----END ${PEM_LABEL}-----\n`;
 const PROD_SECRETS: Record<Role, Record<string, string>> = {
-	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48) },
+	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: FAKE_PEM },
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
 	fetcher: {},
 	renderer: {},
@@ -61,7 +65,9 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
 		STORAGE: 's3',
-		REPORTS_BUCKET: 'water-management-reports-000000000000'
+		REPORTS_BUCKET: 'water-management-reports-000000000000',
+		REPORT_DOWNLOADS: 'cloudfront',
+		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F'
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -318,6 +324,10 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['api', 'AUTH_JWT_SECRET', devJwt],
 			['api', 'AUTH_JWT_SECRET', 'test-only-jwt-secret-0000000000000000000'],
 			['api', 'STORAGE', 'local'],
+			['api', 'REPORT_DOWNLOADS', 'presigned'],
+			['api', 'REPORT_DOWNLOADS', undefined],
+			['api', 'CLOUDFRONT_KEY_PAIR_ID', 'not-a-key-id'],
+			['api', 'CLOUDFRONT_PRIVATE_KEY', 'c'.repeat(64)],
 			['worker', 'STORAGE', 'local'],
 			['renderer', 'STORAGE', undefined],
 			['fetcher', 'FEED_SOURCE', 'fixtures'],

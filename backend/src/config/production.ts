@@ -111,6 +111,13 @@ const port: Check = (v) => {
 
 const appPassword: Check = (v) => (set(v) && /^[A-Za-z0-9]{24,}$/.test(v) ? null : 'must be 24+ alphanumeric characters');
 
+/** A CloudFront public key id (the signed URL's Key-Pair-Id), as Terraform's aws_cloudfront_public_key returns it. */
+const cloudFrontKeyId: Check = (v) => (!set(v) ? 'is not set' : /^K[A-Z0-9]{8,}$/.test(v.trim()) ? null : 'is not a CloudFront public key id');
+
+/** A PEM private key (Terraform's tls_private_key, PKCS#1 or PKCS#8). */
+const pemPrivateKey: Check = (v) =>
+	!set(v) ? 'is not set' : /^-----BEGIN (RSA )?PRIVATE KEY-----\r?\n[\s\S]{200,}\r?\n-----END (RSA )?PRIVATE KEY-----\s*$/.test(v.trim()) ? null : 'is not a PEM private key';
+
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
 const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(ROLES.map((r) => [r, check]));
@@ -224,6 +231,15 @@ export const SETTINGS: Record<string, Setting> = {
 	REPORT_RENDER_TIMEOUT_MS: { why: 'Render time limit; out-of-range values fall back to the safe default.' },
 	CHROMIUM_PATH: { why: 'A Chromium other than Playwright’s own; the renderer image uses the bundled one.' },
 	STORAGE: { why: 'local (the default) is MinIO with its public dev login.', checks: { api: oneOf('s3'), worker: oneOf('s3'), renderer: oneOf('s3') } },
+	REPORT_DOWNLOADS: {
+		why: 'presigned (the default) signs S3 GETs, which reach the bucket outside CloudFront and the WAF; production signs CloudFront URLs on the site’s /reports/* path (reports/storage.ts). The worker and renderer reach storage.ts but never sign a download.',
+		checks: { api: oneOf('cloudfront') }
+	},
+	CLOUDFRONT_KEY_PAIR_ID: { why: 'The distribution’s trusted public key that verifies download signatures (infra/reports.tf).', checks: { api: cloudFrontKeyId } },
+	CLOUDFRONT_PRIVATE_KEY: {
+		why: 'Signs report downloads (its public half is in the distribution’s key group). From the API’s runtime secret.',
+		checks: { api: pemPrivateKey }
+	},
 	REPORTS_BUCKET: { why: 'The private reports bucket.', checks: { api: required, worker: required, renderer: required } },
 	S3_ENDPOINT: { why: 'MinIO only (STORAGE=local), which production refuses; STORAGE=s3 ignores it.' },
 	S3_REGION: { why: 'MinIO only.' },

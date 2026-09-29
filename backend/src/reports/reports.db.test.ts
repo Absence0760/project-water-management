@@ -4,6 +4,7 @@
 // report API and its RLS, report schedules (RLS, recipients, the tick), and
 // impact reports (082): the baseline must be readable by the requester.
 // The render itself (Chromium + MinIO) is reports/render.db.test.ts.
+import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { newToken } from '../auth/tokens.js';
@@ -11,6 +12,7 @@ import { withUser } from '../db/tx.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
 import { finishReport, loadReport, REPORTS_PER_HOUR } from './store.js';
+import { cannedPolicy } from './cloudfrontSign.js';
 import { issueRenderToken } from './tokens.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -286,6 +288,7 @@ const pdf = (u: User, projectId: string, jobId: string) =>
 describe('GET /projects/:id/reports/:jobId/pdf', () => {
 	it('redirects a member to a one-minute pre-signed GET, fresh each time; a stranger, a pending or an expired PDF gets none', async () => {
 		vi.stubEnv('STORAGE', 'local');
+		vi.stubEnv('REPORT_DOWNLOADS', 'presigned');
 		const owner = await signUp('PdfOwner');
 		const viewer = await signUp('PdfViewer');
 		const stranger = await signUp('PdfStranger');
@@ -324,6 +327,47 @@ describe('GET /projects/:id/reports/:jobId/pdf', () => {
 		const gone = await pdf(viewer, projectId, jobId);
 		expect(gone.status).toBe(404);
 		expect(((await gone.json()) as { error: string }).error).toBe('the PDF has expired: PDFs are kept for 7 days');
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+
+	it('in production (REPORT_DOWNLOADS=cloudfront) redirects to a CloudFront signed URL on the site’s /reports/ path, never to S3', async () => {
+		// A throwaway key pair: production's comes from Terraform (infra/reports.tf).
+		const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+			modulusLength: 2048,
+			publicKeyEncoding: { type: 'spki', format: 'pem' },
+			privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
+		});
+		vi.stubEnv('REPORT_DOWNLOADS', 'cloudfront');
+		vi.stubEnv('SITE_URL', 'https://water.example.org');
+		vi.stubEnv('CLOUDFRONT_KEY_PAIR_ID', 'K2JCJMDEHXQW5F');
+		vi.stubEnv('CLOUDFRONT_PRIVATE_KEY', privateKey);
+		const owner = await signUp('PdfCfOwner');
+		const stranger = await signUp('PdfCfStranger');
+		const { projectId } = await withRun(owner, 'Upper Catchment');
+		const { jobId } = (await owner.call('POST', `/projects/${projectId}/reports`, {})).body;
+		const [r] = await asOwner('SELECT id FROM report WHERE job_id = $1', [jobId]);
+		await withUser(owner.id, (db) => db.query(`UPDATE report SET status = 'done', pages = 9, bytes = 1000, finished_at = now() WHERE id = $1`, [r.id]));
+
+		const before = Math.floor(Date.now() / 1000);
+		const res = await pdf(owner, projectId, jobId);
+		expect(res.status).toBe(302);
+		expect(res.headers.get('cache-control')).toBe('no-store');
+		const location = res.headers.get('location')!;
+		const m = /^(.*)&Expires=(\d+)&Signature=([A-Za-z0-9~_-]+)&Key-Pair-Id=K2JCJMDEHXQW5F&Hash-Algorithm=SHA256$/.exec(location);
+		expect(m, location).not.toBeNull();
+		const [, resource, expires, signature] = m!;
+		expect(resource).toMatch(
+			new RegExp(`^https://water\\.example\\.org/reports/${projectId}/${r.id}\\.pdf\\?response-content-disposition=attachment%3B%20filename%3D%22upper-catchment-report-\\d{4}-\\d{2}-\\d{2}\\.pdf%22$`)
+		);
+		expect(Number(expires) - before).toBeGreaterThanOrEqual(59);
+		expect(Number(expires) - before).toBeLessThanOrEqual(61);
+		expect(location).not.toMatch(/X-Amz-|amazonaws\.com|9002/);
+		// CloudFront's check: the canned policy rebuilt from the URL verifies with the public key.
+		const sig = Buffer.from(signature!.replace(/-/g, '+').replace(/_/g, '=').replace(/~/g, '/'), 'base64');
+		expect(createVerify('RSA-SHA256').update(cannedPolicy(resource!, Number(expires))).verify(publicKey, sig)).toBe(true);
+
+		// Membership still gates the signing: a stranger gets no URL.
+		expect((await pdf(stranger, projectId, jobId)).status).toBe(404);
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });

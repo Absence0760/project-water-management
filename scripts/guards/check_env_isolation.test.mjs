@@ -77,6 +77,10 @@ test('placeholders must stay placeholders', () => {
 	assert.deepEqual(checkEnvFile('backend/.env.development', 'STORAGE=local\nS3_ACCESS_KEY_ID=minioadmin\nS3_SECRET_ACCESS_KEY=minioadmin\n'), []);
 	assert.match(checkEnvFile('backend/.env.development', 'S3_ACCESS_KEY_ID=someone-elses-key').map((f) => f.rule).join(), /minioadmin/);
 	assert.match(checkEnvFile('backend/.env.development', 'S3_SECRET_ACCESS_KEY=not-the-default').map((f) => f.rule).join(), /minioadmin/);
+	assert.deepEqual(checkEnvFile('backend/.env.development', 'REPORT_DOWNLOADS=presigned\n'), []);
+	assert.match(checkEnvFile('backend/.env.development', 'REPORT_DOWNLOADS=cloudfront').map((f) => f.rule).join(), /REPORT_DOWNLOADS must be presigned/);
+	assert.match(checkEnvFile('backend/.env.development', 'CLOUDFRONT_PRIVATE_KEY=-----BEGIN').map((f) => f.rule).join(), /CLOUDFRONT_PRIVATE_KEY must stay unset/);
+	assert.match(checkEnvFile('backend/.env.development', 'CLOUDFRONT_KEY_PAIR_ID=K2JCJMDEHXQW5F').map((f) => f.rule).join(), /CLOUDFRONT_KEY_PAIR_ID must stay unset/);
 	assert.match(checkEnvFile('backend/.env.development', 'STORAGE=s3').map((f) => f.rule).join(), /local/);
 });
 
