@@ -243,13 +243,12 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	await expect(heading).toBeInViewport();
 });
 
-test('the Summary links here: its reserve strip and the outflow under its tiles', async ({ page, owner }) => {
+test('the Summary links here: its reserve strip', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River from summary');
 	const run = await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
-	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
-	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${run}`);
+	// (The Summary's mean outflow line, which linked here too, is gone; the outflow is this page's tile.)
 	await page.getByRole('region', { name: 'Days below the reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
 	await expect(riverTiles(page)).toHaveCount(4);
