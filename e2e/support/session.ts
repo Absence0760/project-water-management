@@ -3,8 +3,9 @@
 // its random `jti` is refused since 102_session_revocation), with the key the e2e
 // backend reads: AUTH_JWT_SECRET from backend/.env.development.local, else the
 // committed backend/.env.development (the dev-only key; server.ts loads them
-// in that order). Only for a state the API can no longer produce: a signed-in
-// account that never confirmed its address (api.ts signInUnconfirmed).
+// in that order). Only for a state the API can no longer produce (a signed-in
+// account that never confirmed its address, api.ts signInUnconfirmed), and to
+// act as an invitee who accepts an invite in setup (api.ts acceptInvites).
 import { createHmac, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

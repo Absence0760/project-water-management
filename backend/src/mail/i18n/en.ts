@@ -38,9 +38,9 @@ export const en = {
 	'mail.exists.ignore': "If it wasn't you, you can ignore this email — nothing has changed on your account.",
 
 	// The farmer invite (WP-2.2).
-	'mail.farmer.subject': '{inviter} has given you access to {farms} in {catchment}',
+	'mail.farmer.subject': '{inviter} invited you to see {farms} in {catchment}',
 	'mail.farmer.heading': 'Your hydrological unit on {product}',
-	'mail.farmer.body': '{inviter} has given you access to {farms} in {catchment}.',
+	'mail.farmer.body': '{inviter} invited you to see {farms} in {catchment}.',
 	'mail.farmer.privacy': "You will see your own hydrological unit's water, dam and any restriction notice, and nothing about your neighbours' hydrological units.",
 	'mail.farmer.estimate':
 		'The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.',
@@ -56,6 +56,8 @@ export const en = {
 	'mail.invite.confirm': 'There is already a {product} account for {email}. Confirm that this is your email address to accept.',
 	'mail.invite.confirmAction': 'Confirm email and accept',
 	'mail.invite.confirmExpires': 'This link expires in 48 hours.',
+	'mail.invite.accept': "Sign in to {product} as {email} to accept or decline. You won't join until you accept.",
+	'mail.invite.acceptAction': 'See the invitation',
 	'mail.invite.confirmTakeOver':
 		"If you never created a {product} account, someone else registered your address: don't confirm it — use “Forgot password” on the sign-in page to take the account over instead.",
 
@@ -137,7 +139,7 @@ export const sections: Record<string, string> = {
 	'mail.farmer':
 		'Email: the farmer invite. The WUA gives a farmer access to their hydrological unit(s), the model’s name for a farm, in a catchment. {farms} is one or more hydrological unit names joined with “and” (or “your hydrological unit”).',
 	'mail.invite':
-		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet.',
+		'Email: the farmer invite, how to accept. “signUp” lines go to an address with no account yet; “confirm” lines to an address whose account is not confirmed yet; “accept” lines to an address with a confirmed account, whose holder signs in to accept or decline.',
 	'mail.alert':
 		'Alert emails (WP-2.13): sent when a figure crosses a line the WUA set (a farm dam running low, the WUA’s restriction notice). Worded as what the model estimates, never as a promise or an order. {what} is one of the “what” lines; {date} and {madeOn} are dates like “3 Oct 2026”; {pct} and {threshold} are percentages like “28 %”.',
 	'mail.alert.digest': 'Alert emails: the daily summary (06:00), listing several alerts in one email.',

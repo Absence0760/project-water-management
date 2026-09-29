@@ -399,7 +399,9 @@ project with only a daily record runs. A run stores the series in its inputs
 (`run_input_series`, like every input series), so re-running it reproduces
 the same days. `pnpm pan-sensitivity` reads the series from a project.json
 too, so its cases vary the coefficient that multiplies the daily A-pan on the
-days it covers.
+days it covers. The one exception is the Crops & demand page's demand chart,
+a preview outside any run: it multiplies the monthly means, and with a daily
+series says so on the chart (issue #173, [ui.md](./ui.md)).
 
 **Scenarios.** `series.scale` can scale the daily series (it is in
 `SCALABLE_SERIES_KINDS`). A `settings.set` on `apanMm` reaches only the days
@@ -785,7 +787,7 @@ construction.
 **Warm-up.** The stores start half full (S = ½·X1, R = ½·X3) with empty queues.
 The model then runs `warmupDays` days that cycle the run's own forcing from its
 first day. Day k of the warm-up uses day k mod n, so a warm-up longer than the
-run repeats it. n is the run's historical days (engine ≥ 1.27.0): a forecast
+run repeats it. n is the run's historical days (engine ≥ 1.28.0): a forecast
 tail is never cycled into the warm-up, so it can't change the state day 1
 starts from (§2.4f). Warm-up days are never output or scored. Day 1 starts from the
 warm-up's end state.
@@ -1019,7 +1021,7 @@ and the series explorer:
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
-| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from with rain-source periods (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Only output when the settings list a period | NaN when no source has a value |
+| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Output with rain-source periods from engine 0.30.0, and in every run with rain from engine 1.27.0 (`rainSourceCodes`: without periods, the same pick as `rain_final`), so a series download can say where each day's rain used came from | NaN when no source has a value |
 | `rain_areal` (engine ≥ 1.13.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
@@ -1395,8 +1397,9 @@ label (`seriesProvenance`, 032), and where its run days' rain came from:
 `seriesDays` (with the raw and scaled millimetres), `chirpsDays`,
 `reanalysisDays`, `forecastDays` and `noneDays`. Each period adds one run
 warning with those counts, the factors (Oct–Sep) and their origin, and names
-any month without a factor. A daily column **`rain_source`** (only with
-periods) marks where each day's rain came from: 0 catchment, 1 alternative
+any month without a factor. A daily column **`rain_source`** (with
+periods from engine 0.30.0, in every run with rain from 1.27.0, where without
+periods it is only 0, 2 or 4) marks where each day's rain came from: 0 catchment, 1 alternative
 gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank for none. The summary CSV
 has a *Rain-source periods* block (`rainSourceCsvLines` in
 `backend/src/export/run-tables.ts`): one row per period with its reason,
@@ -1488,7 +1491,7 @@ calibration, the compliance grid), so yesterday's forecast would change the
 figures farmers and regulators rely on. Forecast mode
 (`packages/engine/src/forecast.ts`) keeps the two apart. The version moved
 to 0.37.0 for the new output fields (`forecastFrom`, `summary.forecast`)
-forecast runs carry, and to 1.27.0 when `runModel` became causal across a
+forecast runs carry, and to 1.28.0 when `runModel` became causal across a
 forecast tail (below).
 
 **Where the forecast starts.** `forecastSplit` reads the rain exactly as the
@@ -1522,8 +1525,8 @@ tail and with it. Its output is
   the tail;
 - every daily series of the run with the tail, whose days before
   `forecastFrom` equal the run without it, to the bit (the model is causal
-  across the tail, below), plus the `rain_source` column when the run has
-  none (so charts and exports can mark the days);
+  across the tail, below), `rain_source` included, so charts and exports can
+  mark the days;
 - `ModelOutput.forecastFrom` and `summary.forecast`: over the tail days, per
   farm the lowest dam level (storage ÷ capacity, and the first day at it),
   the days with a deficit, demand, supply and supplied ÷ demand, and at the
@@ -1552,13 +1555,13 @@ back in:
   saved run does after the project's, so the fit and its "before" scores see
   the record only and agree with an ordinary run's.
 
-**The model is causal across a forecast tail (engine ≥ 1.27.0, engine-audit.md
+**The model is causal across a forecast tail (engine ≥ 1.28.0, engine-audit.md
 K1).** The plan assumed a run with a tail and one without agree on every
-shared day because the simulation is causal. Until 1.27.0 it wasn't quite:
+shared day because the simulation is causal. Until 1.28.0 it wasn't quite:
 a few figures are record-wide statistics, so a day at the end of the record
 moved values at its start (a 14-day tail on a 900-day random network, by
 about 1e-8 relative; on a short record, by more), and forecast mode spliced
-the history of one run onto the tail of the other. From 1.27.0 each of them
+the history of one run onto the tail of the other. From 1.28.0 each of them
 reads only the run's **historical days**, those before its forecast tail
 (`forecastTail.ts`, the same `forecastFrom` as above; every day when there is
 no tail):
@@ -1793,7 +1796,7 @@ in mm/yr over its condensed area, the figure Le Maitre et al. compare
 **Each day**, per farm with land cover (network/landcover.ts), with I0 = its
 natural runoff (natural flow × share) and q = share × the catchment's natural
 flow exceeded on 75 % of the run's days (its low-flow threshold; from engine
-1.27.0 of its historical days, so a forecast tail doesn't move it, §2.4f):
+1.28.0 of its historical days, so a forecast tail doesn't move it, §2.4f):
 
 ```
 MAR_u  = Σ_p f_p × mar_p          LOW_u = Σ_p f_p × lowFlow_p
@@ -3271,7 +3274,7 @@ a larger or smaller catchment, e.g. site area ÷ table area), and where the
 natural percentile comes from (`naturalSource`):
 
 - `run` (default): the month's natural flow ranked among the same calendar
-  month in every complete year of the run (from engine 1.27.0, of its
+  month in every complete year of the run (from engine 1.28.0, of its
   historical days: a month in a forecast tail is ranked on the history's
   curve, and a month the history ends inside isn't assessed, §2.4f). The natural curve at the points is
   the run's own, at Weibull plotting positions i / (n + 1), linear between
@@ -6034,7 +6037,7 @@ bits whatever order they came in).
 
   over the run's days *D(y)* of the year (a part year asks for the prorated
   volume; the year a forecast tail starts in, over its historical days, the
-  factor then kept on its tail days, engine ≥ 1.27.0, §2.4f), so it asks for exactly its registered volume and keeps its own
+  factor then kept on its tail days, engine ≥ 1.28.0, §2.4f), so it asks for exactly its registered volume and keeps its own
   seasonal shape; the crop requirement F and every demand object scale by the
   same *k*, and the soil-water store and effective rain are untouched (they
   set the shape). A senior water user is scaled before its demand is passed
@@ -6475,7 +6478,7 @@ Reserve's natural duration curves §2.9c, the CHIRPS and rain-source factors
 a member's record. The older path, kept as `warmStart: false` and
 `outlookMemberInput`, re-ran the history in every member as forecast mode
 does (§2.4f) and refitted those statistics on each member's record
-(history + analogue season; from engine 1.27.0 on the history before the
+(history + analogue season; from engine 1.28.0 on the history before the
 decision date only, since the season is the member's forecast tail), so a member's history was the base run's only
 to float noise; §2.16 records what moving to the pinned statistics changes
 (nothing on the invented test catchment, which has neither land cover nor a
@@ -6898,7 +6901,7 @@ storage moves by less than 0.06 % and the share of demand met by less
 than 2e-5 (the low-flow threshold), and 9 of the 336 level × year ×
 month Reserve assessments change (the natural curves), which moves the
 years met in full from 7, 7, 7, 6 to 4, 5, 5, 4 of 12 (100, 85, 70, 55 %)
-(engine ≥ 1.27.0: the older path's curves rank the history before the
+(engine ≥ 1.28.0: the older path's curves rank the history before the
 decision date only, the season being its forecast tail, so 16 of 336
 change, from 10, 8, 8, 8);
 with the record ending the day before the decision date, 10 of 336 and

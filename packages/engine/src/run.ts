@@ -17,7 +17,8 @@ import {
 	seriesChecks
 } from './quality';
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
-import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
+import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
@@ -466,7 +467,12 @@ function runNetwork(
 	if (areal && catchmentRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
+	// Where each day's rain came from: with rain-source periods their column, else (engine ≥ 1.27.0) the same pick as rain_final.
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
+	else if (finalRain) {
+		const codes = rainSourceCodes(aligned('rain_catchment_mm'), aligned('rain_chirps_mm'), aligned('rain_forecast_mm'));
+		push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, codes);
+	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
 	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom'>, string, string][] = [
@@ -2162,8 +2168,7 @@ function buildDemand(
 	const thr = settings.calibration.rainThresholdMm;
 	const rain = new Float64Array(days);
 	for (let t = 0; t < days; t++) {
-		const v = catchment[t] ?? chirps[t] ?? forecast[t] ?? 0;
-		rain[t] = v > thr ? v : 0;
+		rain[t] = aboveRainThreshold(catchment[t] ?? chirps[t] ?? forecast[t] ?? 0, thr);
 	}
 
 	const wy = new Uint8Array(days);

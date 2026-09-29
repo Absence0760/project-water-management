@@ -170,6 +170,8 @@ export type AuditKind =
 	| 'farmer.unlinked'
 	| 'invite.sent'
 	| 'invite.revoked'
+	// The invitee declined it (109_invite_accept, issue #136): recorded by app_decline_invite, with no actor.
+	| 'invite.declined'
 	| 'publication.published'
 	| 'publication.notice_changed'
 	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).

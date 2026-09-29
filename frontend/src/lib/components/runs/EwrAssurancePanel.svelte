@@ -53,6 +53,11 @@
 	const src = $derived(sourceLine(site));
 	const mar = $derived(naturalMarLine(site));
 	const nmar = $derived(nmarTile(site));
+	// Month by month runs to one row a month (360 for 30 years): the first two years, then the rest in place
+	// under Show all, so the page grows by a screen rather than ten (no table scrolls inside its box).
+	const MONTHS_SHOWN = 24;
+	let allMonths = $state(false);
+	const monthRows = $derived(print || allMonths ? site.months : site.months.slice(0, MONTHS_SHOWN));
 
 	// The chart: share of months met per month of the year, on a fixed 0–100 % axis.
 	const W = 480;
@@ -293,7 +298,7 @@
 
 	<details open={print}>
 		<summary>Month by month ({fmtNum(site.months.length)} months)</summary>
-		<div class="table-wrap months">
+		<div class="table-wrap" id="{uid}-months">
 			<table class="data compact" aria-labelledby="{uid}-each">
 				<caption id="{uid}-each">Each complete month: natural flow, its condition, the requirement it selects and the simulated flow ({u})</caption>
 				<thead>
@@ -312,7 +317,7 @@
 					</tr>
 				</thead>
 				<tbody>
-					{#each site.months as m (`${m.year}-${m.month}`)}
+					{#each monthRows as m (`${m.year}-${m.month}`)}
 						<tr class:short-row={!m.met}>
 							<th scope="row">{monthLabel(m)}</th>
 							<td class="num">{fmtFlow(m.natural)}</td>
@@ -330,6 +335,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if !print && site.months.length > MONTHS_SHOWN}
+			<button type="button" class="btn btn-sm more" aria-expanded={allMonths} aria-controls="{uid}-months" onclick={() => (allMonths = !allMonths)}>
+				{allMonths ? `Show the first ${MONTHS_SHOWN} months` : `Show all ${fmtNum(site.months.length)} months`}
+			</button>
+		{/if}
 	</details>
 </section>
 
@@ -474,8 +484,7 @@
 		margin: 0.35rem 0 0;
 		color: var(--text-muted);
 	}
-	.months {
-		max-height: 28rem;
-		overflow: auto;
+	.more {
+		margin-top: 0.4rem;
 	}
 </style>

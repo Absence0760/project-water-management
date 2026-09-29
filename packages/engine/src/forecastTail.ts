@@ -2,10 +2,10 @@
 // the first day whose rain came from the forecast series after the last day
 // of rain from any other source. Two readers: ./forecast.ts splits forecast
 // mode's run there, and ./run.ts reads its record-wide statistics over the
-// days before it (engine ≥ 1.27.0, engine-audit.md K1), so a forecast tail
+// days before it (engine ≥ 1.28.0, engine-audit.md K1), so a forecast tail
 // never moves a historical value.
 import type { PreparedRun } from './prepare';
-import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
+import { RAIN_SOURCE_CODE, rainSourceCodes } from './rainSourcePeriods';
 
 /** A prepared run's forecast tail, as day indices into the run. */
 export interface ForecastTail {
@@ -37,24 +37,9 @@ export interface ForecastTail {
  */
 export function forecastTail(prep: Pick<PreparedRun, 'days' | 'aligned' | 'rainSource'>): ForecastTail {
 	const { days } = prep;
-	let source: Float64Array;
-	if (prep.rainSource) source = prep.rainSource.column;
-	else {
-		const catchment = prep.aligned('rain_catchment_mm');
-		const chirps = prep.aligned('rain_chirps_mm');
-		const forecast = prep.aligned('rain_forecast_mm');
-		source = new Float64Array(days);
-		for (let t = 0; t < days; t++) {
-			source[t] =
-				catchment[t] != null
-					? RAIN_SOURCE_CODE.catchment
-					: chirps[t] != null
-						? RAIN_SOURCE_CODE.chirps
-						: forecast[t] != null
-							? RAIN_SOURCE_CODE.forecast
-							: NaN;
-		}
-	}
+	const source = prep.rainSource
+		? prep.rainSource.column
+		: rainSourceCodes(prep.aligned('rain_catchment_mm'), prep.aligned('rain_chirps_mm'), prep.aligned('rain_forecast_mm'));
 	let last = -1;
 	for (let t = 0; t < days; t++) if (!Number.isNaN(source[t]!) && source[t] !== RAIN_SOURCE_CODE.forecast) last = t;
 	let from = -1;

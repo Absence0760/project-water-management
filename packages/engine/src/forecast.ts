@@ -20,7 +20,7 @@
 //                        tail, every summary from the run without it, and
 //                        summary.forecast over the tail days.
 //
-// The model is causal across a forecast tail (engine ≥ 1.27.0,
+// The model is causal across a forecast tail (engine ≥ 1.28.0,
 // engine-audit.md K1): its record-wide statistics (GR4J's cycled warm-up,
 // the land-cover Q75, the Reserve's natural duration curves and the months
 // it assesses, a full allocation's demand factors) read only the days

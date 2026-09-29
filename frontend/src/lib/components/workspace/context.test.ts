@@ -17,8 +17,8 @@ describe('sectionContext', () => {
 	});
 
 	it('counts input series and how many are behind', () => {
-		expect(sectionContext('series', base)).toBe('3 input series');
-		expect(sectionContext('series', { ...base, behind: 2 })).toBe('3 input series · 2 behind');
+		expect(sectionContext('series', base)).toBe('3 daily input series');
+		expect(sectionContext('series', { ...base, behind: 2 })).toBe('3 daily input series · 2 behind');
 		expect(sectionContext('series', { ...base, seriesCount: 0 })).toBe('No input series yet');
 		expect(sectionContext('series', { ...base, seriesCount: null })).toBeNull();
 	});

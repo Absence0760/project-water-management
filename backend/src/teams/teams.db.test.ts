@@ -130,7 +130,7 @@ describe('team viewer', () => {
 			const u = await signUp(name);
 			const r = await admin.call('POST', `/teams/${teamId}/members`, { email: u.email, role });
 			expect(r.status).toBe(201);
-			expect(r.body.member.role).toBe(role);
+			expect(r.body.invite.role).toBe(role);
 			users[name] = u;
 		}
 		return { admin, teamId, users };

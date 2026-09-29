@@ -9,6 +9,7 @@ import { beforeForecast, fdcPercentileTable, historyDayCount } from './views/fdc
 import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { randomInput } from './testing/fuzz';
+import { checkRainSource } from './verify/checks';
 import { checkForecastPrefix, summaryDifference } from './testing/forecastInvariants';
 
 const START = '2020-01-01';
@@ -133,6 +134,10 @@ describe('runForecastChecked', () => {
 		expect(source).toHaveLength(out.days);
 		expect(source[out.days - 15]).toBe(RAIN_SOURCE_CODE.catchment);
 		expect(source.slice(-14)).toEqual(new Array(14).fill(RAIN_SOURCE_CODE.forecast));
+		// One column (every run with rain has its own from engine 1.27.0), the full input's split, whole.
+		expect(out.series.filter((s) => s.nodeId === null && s.key === 'rain_source')).toHaveLength(1);
+		expect(source).toEqual(Array.from(forecastSplit(x).source));
+		expect(checkRainSource(out)).toBeNull();
 	});
 
 	it('names the forecast days in forecastRain but not in the warnings (the summaries leave them out)', () => {

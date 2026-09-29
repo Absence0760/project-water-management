@@ -77,6 +77,14 @@ export async function userIdByEmail(email: string): Promise<string> {
 	});
 }
 
+/** The id of the account with `email` if its address is confirmed, else null (no account, or unconfirmed). */
+export async function verifiedUserIdByEmail(email: string): Promise<string | null> {
+	return withDb(async (db) => {
+		const r = await db.query<{ id: string }>('SELECT id FROM app_user WHERE email = $1 AND email_verified_at IS NOT NULL', [email.trim().toLowerCase()]);
+		return r.rows[0]?.id ?? null;
+	});
+}
+
 /** The terms an account accepted at sign-up (app_user.terms_version / terms_accepted_at, 087). */
 export async function termsAccepted(email: string): Promise<{ version: string | null; at: Date | null }> {
 	return withDb(async (db) => {

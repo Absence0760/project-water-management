@@ -40,6 +40,15 @@ export const WEB_PORT = 7801 + E2E_SLOT;
 export const API_URL = `http://localhost:${API_PORT}`;
 export const WEB_URL = `http://localhost:${WEB_PORT}`;
 
+/**
+ * The site build's folders under frontend/ for a slot: slot 0 (the main checkout, CI) keeps
+ * `build-e2e` and `.svelte-kit-e2e`; any other slot gets its own, so two runs in one checkout on
+ * different slots (E2E_SLOT) never rebuild the site the other is serving, with the other's API URL.
+ */
+export function buildDirsFor(slot: number): { build: string; kit: string } {
+	return slot === 0 ? { build: 'build-e2e', kit: '.svelte-kit-e2e' } : { build: `build-e2e-${slot}`, kit: `.svelte-kit-e2e-${slot}` };
+}
+
 export const E2E_DB = E2E_SLOT === 0 ? 'water_e2e' : `water_e2e_${E2E_SLOT}`;
 const PG = process.env.E2E_PG_HOST ?? '127.0.0.1:5434';
 /** Schema owner: creates the database and runs migrations. */

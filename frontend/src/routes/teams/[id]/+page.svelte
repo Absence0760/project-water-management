@@ -41,9 +41,7 @@
 		damText,
 		DEFAULT_SORT,
 		ewrWindowLabel,
-		farmsShortLabel,
 		farmsShortText,
-		farmsShortTotalText,
 		farmsUnknownText,
 		portfolioTotals,
 		sortPortfolio,
@@ -82,12 +80,6 @@
 
 	const invitesApi = emailAuthApi(api).teamInvites;
 	let invites = $state<Invite[]>([]);
-
-	function addToMembers(m: TeamMember) {
-		const known = members.some((x) => x.userId === m.userId);
-		members = [...members.filter((x) => x.userId !== m.userId), m];
-		if (team && !known) team.memberCount += 1;
-	}
 
 	let deleteOpen = $state(false);
 	let deleting = $state(false);
@@ -147,15 +139,10 @@
 		addError = null;
 		added = null;
 		try {
+			// Always an invite, account or not (issue #136): they join when they accept it.
 			const r = await api.teams.addMember(teamId, email.trim(), role);
-			if (r.invited) {
-				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they confirm this email address (signing up first if they’re new).`;
-			} else {
-				addToMembers(r.member);
-				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());
-				added = `${r.member.displayName} added as ${roleLabel(r.member.role)}.`;
-			}
+			invites = upsertInvite(invites, r.invite);
+			added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they accept it.`;
 			email = '';
 			role = 'member';
 		} catch (err) {
@@ -338,16 +325,8 @@
 									<dd><StatusBar counts={totals.counts} /></dd>
 								</div>
 								<div class="kpi">
-									<dt>{farmsShortLabel(rows)}</dt>
-									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
-								</div>
-								<div class="kpi">
 									<dt>Alerts firing</dt>
 									<dd>{totals.alertsFiring}</dd>
-								</div>
-								<div class="kpi">
-									<dt>Last run</dt>
-									<dd>{totals.lastRunAt ? fmtDay(fmtDate(totals.lastRunAt)) : 'None yet'}</dd>
 								</div>
 							</dl>
 							<ul class="plist" aria-label="Projects of {team.name}">
@@ -449,12 +428,7 @@
 									bind:invites
 									idPrefix="team"
 									load={() => invitesApi.list(teamId)}
-									resend={async (inv) => {
-										const r = await invitesApi.add(teamId, inv.email, inv.role as TeamRole);
-										if (r.invited) return r.invite;
-										addToMembers(r.member);
-										return null;
-									}}
+									resend={async (inv) => (await invitesApi.add(teamId, inv.email, inv.role as TeamRole)).invite}
 									revoke={(inv) => invitesApi.revoke(teamId, inv.id)}
 								/>
 							{/key}

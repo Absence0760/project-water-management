@@ -8,11 +8,14 @@
 	// count as the sidebar's badge), Preview all data and Add data. The table
 	// lists the series behind first (series/freshness.ts `freshnessOrder`,
 	// the badge's own rule), then those a run reads, then the rest; picking a
-	// row charts it (`series=<id>`, so Back returns to the one before). On a
-	// big enough window the table and the chart are exactly the height left
-	// (the Dams page's measure): the table scrolls inside its box and the
-	// chart fills the rest. The checks, the upload form and the reference
-	// follow below.
+	// row charts it (`series=<id>`, so Back returns to the one before). The
+	// page flows in the window's one scroll: the first few rows show, the rest
+	// behind "Show all N series" (series/fold.ts; the charted row always
+	// shows), and nothing scrolls inside itself. The chart follows the table,
+	// and a pick brings it into view. The checks and the reference follow.
+	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
+	// page charts what it uploaded (`series=`), and the empty state's button
+	// opens the same dialog (`onadddata`).
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -56,18 +59,17 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
-	import { agoText, dateAge } from '$lib/format/age';
+	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
-	import UploadForm from './UploadForm.svelte';
-	import type { UploadResult } from './upload';
 	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
-	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
+	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
-	import { dataAnchor, dataNavGroups } from './sections';
+	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
+	import { foldList } from '$lib/components/common/fold';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 
@@ -79,7 +81,8 @@
 		settings = null,
 		gauges = [],
 		timeZone = null,
-		onSeriesChange
+		onSeriesChange,
+		onadddata
 	}: {
 		projectId: string;
 		readonly: boolean;
@@ -93,6 +96,8 @@
 		/** The project's time zone: data ages count to its calendar date, as in the header and on the project list (issue #137). */
 		timeZone?: string | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
+		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
+		onadddata?: () => void;
 	} = $props();
 
 	/** Gauge-vs-logger thresholds; null = the engine defaults. */
@@ -158,12 +163,27 @@
 		if ((e.target as Element).closest('button, a, input, select, summary, [role="menu"]')) return;
 		choose(id);
 	}
-	/** Chart a series: a URL change, so it can be shared and Back returns; stacked, the chart comes into view. */
+	/** Chart a series: a URL change, so it can be shared and Back returns; the chart, under the table, comes into view. */
 	function choose(id: string, replaceState = false) {
 		if (id === selectedId && seriesParam === id) return;
 		void goto(withParam(page.url, 'series', id), { noScroll: true, keepFocus: true, replaceState }).then(() => {
-			if (!fit && !replaceState) chartEl?.scrollIntoView({ block: 'nearest' });
+			if (!replaceState) showChart();
 		});
+	}
+	/** Scroll the chart just into view (its foot to the window's, less the save bar) unless it already is. */
+	function showChart() {
+		const el = chartEl;
+		if (!el) return;
+		const r = el.getBoundingClientRect();
+		const dock = parseFloat(getComputedStyle(el).getPropertyValue('--dock-h')) || 0;
+		if (r.top >= 0 && r.bottom <= innerHeight - dock) return;
+		const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+		const room = innerHeight - dock;
+		// Below the window (it sits under the table): its foot to the window's foot less the save bar, rounded up to a
+		// whole pixel. scrollIntoView's `nearest` lands on a rounded offset, which on a fractional layout left the chart's
+		// last half pixel under the window's edge. Taller than the window, or above it: its top to the header's foot.
+		if (r.height <= room && r.top >= 0) window.scrollTo({ top: Math.ceil(scrollY + r.bottom - room), behavior });
+		else el.scrollIntoView({ block: 'start', behavior });
 	}
 	let flowLog = $state(false);
 
@@ -227,7 +247,6 @@
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
 	// Recorded rain drives a run, so it is what "up to" means (series/freshness.ts).
-	const rainUpTo = $derived(list.filter((s) => isRecordedRain(s.kind)).reduce((m, s) => (endDate(s) > m ? endDate(s) : m), ''));
 	const newerThanRun = $derived(
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
@@ -371,12 +390,6 @@
 		}
 	}
 
-	async function uploaded(r: UploadResult) {
-		values = Object.fromEntries(Object.entries(values).filter(([id]) => id !== r.meta.id));
-		await load();
-		choose(r.meta.id, true);
-	}
-
 	const typical = (s: SeriesMeta) => {
 		const st = stats[s.id];
 		if (!st) return '…';
@@ -384,68 +397,64 @@
 		return st.meanDaily === null ? '–' : `${fmtNum(st.meanDaily, st.meanDaily < 1 ? 3 : 2)} ${s.unit}`;
 	};
 
+	// The empty state's Upload a CSV opens the header's Add data dialog. An upload takes the empty state,
+	// and the button, away, so the dialog has nothing to give focus back to: once no dialog is open
+	// (the discard question closing doesn't count), the series panel's heading takes it.
+	function addFromEmpty() {
+		onadddata?.();
+		const back = () => {
+			if (document.querySelector('dialog[open]')) return;
+			document.removeEventListener('close', back, true);
+			requestAnimationFrame(() => {
+				if (document.activeElement && document.activeElement !== document.body) return;
+				const h = document.getElementById('ser-h');
+				if (!h) return;
+				h.tabIndex = -1;
+				h.focus();
+			});
+		};
+		document.addEventListener('close', back, true);
+	}
+
 	// --- freshness first: the badge's "behind" (freshness.ts), the rows in that order ---
 	const fresh = $derived(freshness(list, today));
 	const behindAge = $derived(new Map((fresh?.behind ?? []).map((b) => [b.id, b.age])));
 	const rows = $derived(freshnessOrder(list, fresh?.behind ?? [], inUse));
-	const behindText = $derived(
-		behindAge.size ? `${behindAge.size} behind (more than ${STALE_DAYS} days old)` : ''
-	);
 
-	// --- the table and the chart fit the window on a big enough page (the Dams page's measure) ---
+	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
-	let innerH = $state(0);
-	// Below ~720 px high the table would get only a row or two; the page scrolls as before instead.
-	const fit = $derived(pageW >= 720 && innerH >= 720 && list.length > 0);
 	let chartEl: HTMLElement | undefined = $state();
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-	// Filling: the plot gets what the slot leaves after the chart's own head, legend and caption.
-	const FIXED_H = 320;
-	const MIN_H = 150;
-	let slot: HTMLDivElement | undefined = $state();
-	let fig: HTMLDivElement | undefined = $state();
-	let fillH = $state(FIXED_H);
-	$effect(() => {
-		if (!fit || !slot || !fig) return;
-		const s = slot;
-		const f = fig;
-		const measure = () => {
-			const wrap = f.querySelector<HTMLElement>('.u-wrap');
-			if (!wrap) return;
-			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
-			if (Math.abs(target - fillH) > 2) fillH = target;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(s);
-		ro.observe(f);
-		return () => ro.disconnect();
-	});
-	const chartH = $derived(fit ? fillH : FIXED_H);
+	let open = $state(false);
+	// Six rows and the chart's head sit on a 1440 × 960 first screen; below 640 px each row is a tall card, so four.
+	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
+	const fold = $derived(foldList(rows, (r) => r.id, selectedId, open, cap));
+	const CHART_H = 320;
 
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
 	$effect(() => fillHeader({ actions: headerActions }));
 
 	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
+	let usesOpen = $state(false);
 	const navGroups = $derived(
-		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks, upload: !readonly })
+		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
 	// A link to a panel (`?tab=series#data-checks`, the menu's own links reloaded): the tab is a lazy
 	// chunk and most panels wait for the series, so land on it once drawn and hold it while the page
 	// settles (as Settings, Runs and River & reserve do), with focus on its heading.
 	onMount(() => {
-		const hash = page.url.hash.slice(1);
+		let hash = page.url.hash.slice(1);
+		// The retired Upload CSV panel's `#upload-csv`: an editor gets the Add data dialog it now lives in
+		// (the fragment dropped, so Back or a reload doesn't reopen it); anyone else lands on the series.
+		const moved = retiredDataAnchor(hash);
+		if (moved) {
+			if (!readonly && onadddata) {
+				history.replaceState(history.state, '', `${page.url.pathname}${page.url.search}`);
+				onadddata();
+				return;
+			}
+			hash = moved;
+		}
 		if (!dataAnchor(hash)) return;
 		let release = () => {};
 		const land = () => {
@@ -468,8 +477,6 @@
 		};
 	});
 </script>
-
-<svelte:window bind:innerHeight={innerH} />
 
 {#snippet headerActions()}
 	{#if list.length}
@@ -498,15 +505,9 @@
 {#if list.length}<SectionNav groups={navGroups} label="Data sections" groupNames />{/if}
 
 <div class="data-page" bind:clientWidth={pageW}>
-<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
-		{#if list.length}
-			<span class="muted small" data-testid="series-summary"
-				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${dateAge(rainUpTo, daysBetween(rainUpTo, today))}` : ''}</span
-			>
-		{/if}
 	</div>
 	<LoadState
 		{loading}
@@ -515,20 +516,26 @@
 		empty={list.length === 0}
 		emptyText={readonly
 			? 'No time series yet. An editor can upload daily rainfall and observed flow as CSV files.'
-			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with Add data or the Upload CSV form below.'}
+			: 'No time series yet. Upload daily rainfall (and, to calibrate, observed flow at the outflow gauge) as CSV files with Add data.'}
 	>
+		{#snippet emptyAction()}
+			{#if !readonly && onadddata}
+				<!-- Secondary: the header's Add data is the page's primary action; this is the same dialog, where the eye lands. -->
+				<button type="button" class="btn" onclick={addFromEmpty}>Upload a CSV</button>
+			{/if}
+		{/snippet}
 		<!-- Below 640px each row is a card (CSS grid), so the row's numbers, coverage and
 		     buttons all fit a phone without scrolling the table sideways. The explicit
 		     table roles keep the table semantics that some browsers (Safari) drop once
 		     rows and cells stop being display: table-*. -->
 		<div class="table-wrap">
 			<!-- svelte-ignore a11y_no_redundant_roles -->
-			<table class="data series" role="table">
+			<table class="data series" id="series-rows" role="table">
 				<thead role="rowgroup">
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
 						<th scope="col" role="columnheader">Data up to</th>
-						<th scope="col" role="columnheader">Period</th>
+						<th scope="col" role="columnheader">From</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
 						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
@@ -536,7 +543,7 @@
 					</tr>
 				</thead>
 				<tbody role="rowgroup">
-					{#each rows as s (s.id)}
+					{#each fold.shown as s (s.id)}
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
@@ -624,7 +631,8 @@
 									>
 								{/if}
 							</td>
-							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
+							<!-- The start only: the end is Data up to's (issue #174). -->
+							<td role="cell" class="num period" data-label="From">{s.startDate}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -650,6 +658,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if open || fold.hidden}
+			<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="series-rows" onclick={() => (open = !open)}>
+				{open ? `Show only the first ${cap} series` : `Show all ${rows.length} series`}
+			</button>
+		{/if}
 		<p class="muted small key">
 			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
 			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
@@ -661,25 +674,21 @@
 	<section class="panel chart-panel" id="data-chart" aria-labelledby="chart-h" bind:this={chartEl}>
 		<h2 id="chart-h" class="visually-hidden">Series chart</h2>
 		{#if values[viewing.id]}
-			<div class="slot" bind:this={slot}>
-				<div bind:this={fig}>
-					<LineChart
-						title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
-						unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
-						height={chartH}
-						series={[
-							{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
-							...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
-						]}
-						logToggle={!isRain(viewing.kind)}
-						bind:log={flowLog}
-						recentDays={3 * 365}
-						recentLabel="Last 3 years"
-						shade={shading?.ranges ?? flowShading?.ranges ?? []}
-						caption={shading?.caption ?? flowShading?.caption ?? undefined}
-					/>
-				</div>
-			</div>
+			<LineChart
+				title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
+				unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
+				height={CHART_H}
+				series={[
+					{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
+					...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
+				]}
+				logToggle={!isRain(viewing.kind)}
+				bind:log={flowLog}
+				recentDays={3 * 365}
+				recentLabel="Last 3 years"
+				shade={shading?.ranges ?? flowShading?.ranges ?? []}
+				caption={shading?.caption ?? flowShading?.caption ?? undefined}
+			/>
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
 		{/if}
@@ -706,7 +715,6 @@
 		</div>
 	</section>
 {/if}
-</div>
 </div>
 
 {#if agreement}
@@ -742,18 +750,11 @@
 	</section>
 {/if}
 
-<div class="lower" class:with-upload={!readonly}>
-	<!-- Upload comes first in reading order so on a phone it sits right under the
-	     series table, not below the whole reference list; wide screens still show it
-	     on the right (grid areas). -->
-	{#if !readonly}
-		<section class="panel upload" id="upload-csv" aria-labelledby="up-h">
-			<div class="panel-head"><h2 id="up-h">Upload CSV</h2></div>
-			<UploadForm {projectId} {list} onuploaded={uploaded} />
-		</section>
-	{/if}
-	<section class="panel uses" id="data-uses" aria-labelledby="use-h">
-		<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
+<section class="panel uses" id="data-uses" aria-labelledby="use-h">
+	<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
+	<!-- Reference text for each kind of series, behind a disclosure so it doesn't fill the page's foot (issue #174). -->
+	<details class="uses-more" bind:open={usesOpen}>
+		<summary class="btn btn-sm">{usesOpen ? 'Hide' : 'Show'} what each kind of series is for</summary>
 		<dl class="roles">
 			{#each KIND_OPTIONS as o (o.value)}
 				{@const r = KIND_ROLES[o.value]}
@@ -764,12 +765,12 @@
 				</div>
 			{/each}
 		</dl>
-		<p class="muted small">
-			A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
-			With several series of one kind, the first by name is used.
-		</p>
-	</section>
-</div>
+	</details>
+	<p class="muted small">
+		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
+		With several series of one kind, the first by name is used.
+	</p>
+</section>
 
 {#if previewMounted}
 	<Lazy load={loadPreviewDialog}>
@@ -863,10 +864,6 @@
 	.key .behind {
 		margin-left: 0.4rem;
 	}
-	.behind-text {
-		color: var(--warning);
-		font-weight: 600;
-	}
 	@media (min-width: 641px) {
 		tr.is-behind > th[scope='row'] {
 			box-shadow: inset 3px 0 0 var(--warning);
@@ -899,42 +896,13 @@
 	.data-page {
 		container: data-page / inline-size;
 	}
-	.first {
-		display: flex;
-		flex-direction: column;
-	}
-	/* Big enough: the table and the chart are the height left in the window (less the save bar); the table's rows
-	   scroll inside its box, the chart takes the rest. */
-	.first.fit {
-		height: max(540px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-	.fit > .panel {
-		margin: 0;
-	}
-	.fit .list-panel {
-		flex: 0 1 auto;
-		min-height: 11rem;
-		max-height: 55%;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .list-panel :global(.table-wrap) {
-		flex: 1 1 auto;
-		min-height: 0;
+	/* The page is the one scroll: the table grows with its rows (six until "Show all", the charted one too)
+	   instead of scrolling inside the global 70vh cap; it still scrolls sideways if it must. */
+	.list-panel .table-wrap {
 		max-height: none;
 	}
-	.fit .chart-panel {
-		flex: 1 1 0;
-		min-height: 16rem;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .slot {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
+	.more {
+		margin-top: 0.5rem;
 	}
 	.warn {
 		color: var(--warning);
@@ -1020,24 +988,6 @@
 		text-transform: none;
 		margin-right: 0.25rem;
 	}
-	.lower {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr);
-		gap: 1rem;
-		align-items: start;
-	}
-	@media (min-width: 1001px) {
-		.lower.with-upload {
-			grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
-			grid-template-areas: 'uses upload';
-		}
-		.lower.with-upload .uses {
-			grid-area: uses;
-		}
-		.lower.with-upload .upload {
-			grid-area: upload;
-		}
-	}
 	/* Phone: each series row becomes a card, so nothing hides behind a sideways scroll. */
 	@media (max-width: 640px) {
 		.series,
@@ -1095,10 +1045,24 @@
 			justify-content: flex-start;
 		}
 	}
+	/* The reference spans the page: the kinds in columns at a readable measure each, one column on a phone. */
 	.roles {
-		margin: 0 0 0.5rem;
+		margin: 0 0 0.75rem;
 		display: grid;
-		gap: 0.5rem;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+		gap: 0.6rem 1.75rem;
+	}
+	.uses-more summary {
+		list-style: none;
+		cursor: pointer;
+		margin-bottom: 0.75rem;
+	}
+	.uses-more summary::-webkit-details-marker {
+		display: none;
+	}
+	.uses > p {
+		max-width: 44rem;
+		margin: 0;
 	}
 	.roles dt {
 		font-weight: 600;

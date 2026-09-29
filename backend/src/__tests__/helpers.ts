@@ -17,8 +17,17 @@ const ORIGIN = 'http://localhost:7777';
  * false }` gives a signed-in, unconfirmed account: no longer reachable by
  * signing in, but the state a session made before confirmation became
  * required is still in, so its session is minted directly (signSession).
+ *
+ * Adding someone by email only invites them (issue #136): a verified account
+ * joins when its holder accepts (POST /me/invites/:id/accept). Most tests
+ * add members as setup, so a verified test user accepts at once, as its
+ * holder would: after any add by email naming its address (POST
+ * /projects/:id/members, /farmers, /farmers/bulk, /teams/:id/members), the
+ * caller's `call` has the invitee accept its invites to that project or team,
+ * through the API as themselves. `{ acceptInvites: false }` leaves them
+ * pending, for the tests of the invitation itself.
  */
-export async function signUp(name = 'User', { verified = true }: { verified?: boolean } = {}) {
+export async function signUp(name = 'User', { verified = true, acceptInvites = true }: { verified?: boolean; acceptInvites?: boolean } = {}) {
 	const email = `${name.toLowerCase()}-${crypto.randomUUID()}@example.com`;
 	const password = 'correct horse';
 	const res = await app.request('/auth/register', {
@@ -51,9 +60,37 @@ export async function signUp(name = 'User', { verified = true }: { verified?: bo
 			body: body !== undefined ? JSON.stringify(body) : undefined
 		});
 		const text = await r.text();
-		return { status: r.status, body: text ? JSON.parse(text) : null };
+		const res = { status: r.status, body: text ? JSON.parse(text) : null };
+		if (method === 'POST' && r.ok) await acceptAddedByEmail(path, body);
+		return res;
 	};
+	if (verified && acceptInvites) acceptors.set(email.toLowerCase(), call);
 	return { id, email, cookie, call };
+}
+
+type Call = (method: string, path: string, body?: unknown) => Promise<{ status: number; body: any }>;
+/** Verified test users who accept an invite as soon as they get one (signUp), by address. */
+const acceptors = new Map<string, Call>();
+/** The routes that add people by email, all of which invite (issue #136). */
+const ADD_BY_EMAIL = /^\/(projects|teams)\/([^/?]+)\/(?:members|farmers|farmers\/bulk)$/;
+
+/** Stand in for each named test user pressing Accept on the invites that add just made (see signUp). */
+async function acceptAddedByEmail(path: string, body: unknown) {
+	const m = ADD_BY_EMAIL.exec(path);
+	if (!m || !body || typeof body !== 'object') return;
+	const b = body as { email?: unknown; rows?: { email?: unknown }[]; dryRun?: unknown };
+	if (b.dryRun) return;
+	const emails = [b.email, ...(b.rows ?? []).map((r) => r.email)].filter((e): e is string => typeof e === 'string');
+	for (const e of new Set(emails.map((x) => x.trim().toLowerCase()))) {
+		const accept = acceptors.get(e);
+		if (!accept) continue;
+		const mine = await accept('GET', '/me/invites');
+		for (const inv of mine.body.invites as { id: string; targetId: string }[]) {
+			if (inv.targetId !== m[2]) continue;
+			const ok = await accept('POST', `/me/invites/${inv.id}/accept`);
+			if (ok.status !== 200) throw new Error(`accepting an invite failed: ${ok.status} ${JSON.stringify(ok.body)}`);
+		}
+	}
 }
 
 export const monthly = (v: number) => new Array(12).fill(v);

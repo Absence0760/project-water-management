@@ -18,12 +18,26 @@ export interface NavGroup {
  * The section being read, for the menu's scroll spy: the last one whose top
  * has scrolled up to `line` (px from the viewport top, just under the sticky
  * menu), else the first. At the bottom of the page it is the last section,
- * since a short final panel may never reach the line. `tops` are viewport
- * offsets in page order; sections not rendered yet are simply absent.
+ * since a short final panel may never reach the line, unless the section a
+ * followed link named (`target`, the URL's fragment) still starts on the
+ * screen (its top between 0 and `viewH`): when the panels after it are
+ * shorter than the window, the page ends before its top can reach the line,
+ * and it is the one being read (River & reserve's `#res-outlook` once the
+ * water account got shorter, issue #175). `tops` are viewport offsets in page
+ * order; sections not rendered yet are simply absent.
  */
-export function activeSectionId(tops: { id: string; top: number }[], line: number, atBottom = false): string | null {
+export function activeSectionId(
+	tops: { id: string; top: number }[],
+	line: number,
+	atBottom = false,
+	target: string | null = null,
+	viewH = Infinity
+): string | null {
 	if (!tops.length) return null;
-	if (atBottom) return tops[tops.length - 1]!.id;
+	if (atBottom) {
+		const t = target ? tops.find((x) => x.id === target) : undefined;
+		return t && t.top >= 0 && t.top < viewH ? t.id : tops[tops.length - 1]!.id;
+	}
 	let current = tops[0]!.id;
 	for (const t of tops) {
 		if (t.top <= line) current = t.id;

@@ -16,15 +16,13 @@
 	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
 	import { dateAge, daysBetween, STALE_DAYS } from '$lib/format/age';
-	import { fmtDate, fmtDay } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
 	import {
 		ageText,
 		curtailmentHref as curtailmentLink,
 		damText,
 		ewrWindowLabel,
-		farmsShortLabel,
 		farmsShortText,
-		farmsShortTotalText,
 		farmsUnknownText,
 		feedsText,
 		alertsText,
@@ -211,20 +209,12 @@
 						</dd>
 					</div>
 					<div class="kpi">
-						<dt>{farmsShortLabel(rows)}</dt>
-						<dd class="num-big">{farmsShortTotalText(totals) ?? 'Unknown'}</dd>
-					</div>
-					<div class="kpi">
 						<dt>Alerts firing</dt>
 						<dd class="num-big">{totals.alertsFiring}</dd>
 					</div>
 					<div class="kpi">
 						<dt>Stale figures</dt>
 						<dd class="num-big">{totals.stale} <small>of {rows.length}</small></dd>
-					</div>
-					<div class="kpi">
-						<dt>Last run</dt>
-						<dd class="num-big">{totals.lastRunAt ? fmtDay(fmtDate(totals.lastRunAt)) : 'None yet'}</dd>
 					</div>
 				</dl>
 
@@ -340,7 +330,7 @@
 	.intro.thresholds {
 		margin-top: 0.2rem;
 	}
-	/* The numbers across the top: the statuses, farms short, alerts, stale figures, the last run. */
+	/* The numbers across the top: the statuses, alerts firing, stale figures. */
 	.kpis {
 		margin: 0 0 0.9rem;
 		display: grid;

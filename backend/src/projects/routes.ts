@@ -12,7 +12,7 @@ import {
 	recordLinkChanges,
 	recordModelRevision
 } from '../history/record.js';
-import { countInvites, dropInvite, inviteByEmail } from '../invites/invites.js';
+import { accountByEmail, countInvites, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
@@ -419,45 +419,33 @@ export const projectRoutes = new Hono<AuthEnv>()
 			return c.json({ members: rows });
 		})
 	)
+	// Every add by email is an invite (issue #136): the same `{ invited: true,
+	// invite }` whether or not the address has an account, so this never
+	// tells the owner which addresses are registered, and an existing account
+	// joins only when its holder accepts (POST /me/invites/:id/accept).
 	.post('/:id/members', async (c) => {
 		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await readJson(c));
 		const id = c.req.param('id');
-		const result = await withUser(c.get('userId'), async (db) => {
+		const invited = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'owner');
 			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
 			await countInvites(c, db, 'project', id, 1);
-			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
-				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
-				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',
-				[body.email]
-			);
-			const user = users[0];
-			// No account yet, or one that never proved it owns the address: invite
-			// by email (they join once the address is verified), so pre-registering
-			// a colleague's address can't get you added in their place.
-			if (!user?.verified) {
-				const invited = await inviteByEmail(db, 'project', id, body.email, body.role, user?.id);
-				// No `mailed` flag: whether an email went out depends on the address's
-				// account (an unverified one inside its verification cooldown gets none),
-				// so the owner's History would tell them the address is registered.
-				await recordAudit(db, id, 'invite.sent', { inviteId: invited.invite.id, email: maskEmail(body.email), role: body.role });
-				return { invited };
+			const account = await accountByEmail(db, body.email);
+			// Already on the members list the owner can read: saying so tells them nothing new.
+			if (account?.verified) {
+				const { rows } = await db.query('SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2', [id, account.id]);
+				if (rows[0]) throw new ApiError(409, 'already a member');
 			}
-			const { rowCount } = await db.query(
-				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
-				[id, user.id, body.role]
-			);
-			if (!rowCount) throw new ApiError(409, 'already a member');
-			await dropInvite(db, 'project', id, user.email);
-			await recordAudit(db, id, 'member.added', { userId: user.id, displayName: user.display_name, role: body.role });
-			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role, party: null } };
+			const result = await inviteByEmail(db, 'project', id, body.email, body.role, account);
+			// No `mailed` flag: whether an email went out depends on the address's
+			// account (an unverified one inside its verification cooldown gets none),
+			// so the owner's History would tell them the address is registered.
+			await recordAudit(db, id, 'invite.sent', { inviteId: result.invite.id, email: maskEmail(body.email), role: body.role });
+			return result;
 		});
 		// Mail goes out after the transaction commits, and never fails the request.
-		if (result.invited) {
-			if (result.invited.mail) await trySendMail(result.invited.mail);
-			return c.json({ invited: true, invite: result.invited.invite }, 201);
-		}
-		return c.json({ member: result.member }, 201);
+		if (invited.mail) await trySendMail(invited.mail);
+		return c.json({ invited: true, invite: invited.invite }, 201);
 	})
 	// A member's role, and their applying party (049: an applicant shares
 	// applications only within their own party; '' or null takes them out of

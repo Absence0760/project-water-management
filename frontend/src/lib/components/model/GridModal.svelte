@@ -25,7 +25,8 @@
 		onsave,
 		reason = $bindable(''),
 		projectId,
-		runs = null
+		runs = null,
+		apanDaily = false
 	}: {
 		open?: boolean;
 		grid: GridId;
@@ -39,9 +40,11 @@
 		projectId: string;
 		/** The project's runs (the node table's flow shares and the farmers' notes need none, but NetworkTab takes them). */
 		runs?: RunMeta[] | null;
+		/** The project has a daily A-pan series (the demand preview says it shows the monthly means, issue #173). */
+		apanDaily?: boolean;
 	} = $props();
 
-	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas', demand: 'demand' } as const;
+	const CROP_SECTION = { 'crop-factors': 'factors', 'planted-areas': 'areas' } as const;
 	const area = $derived(grid === 'nodes' ? 'network' : grid === 'transfers' ? 'transfers' : 'crops');
 </script>
 
@@ -53,7 +56,7 @@
 		{:else if grid === 'transfers'}
 			<TransfersTab {editor} {readonly} />
 		{:else}
-			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} />
+			<CropsTab {editor} {settings} {readonly} sections={[CROP_SECTION[grid]]} {apanDaily} />
 		{/if}
 	</div>
 

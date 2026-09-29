@@ -2,7 +2,7 @@ import type { GroundwaterAnnualUse } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { aboveGa, groundwaterByNode } from './groundwater';
 
-const year = (nodeId: string, waterYear: number, days: number, abstractionM3: number, capReached = false): GroundwaterAnnualUse => ({
+const year = (nodeId: string, waterYear: number, days: number, abstractionM3: number, capReached = false, streamDepletionM3 = 0): GroundwaterAnnualUse => ({
 	nodeId,
 	name: `Farm ${nodeId}`,
 	kind: 'farm',
@@ -11,7 +11,7 @@ const year = (nodeId: string, waterYear: number, days: number, abstractionM3: nu
 	days,
 	abstractionM3,
 	toDamM3: 0,
-	streamDepletionM3: 0,
+	streamDepletionM3,
 	annualCapM3: null,
 	gaLimitM3: 40_000,
 	boreholes: [{ id: 'b', name: 'BH', abstractionM3, annualCapM3: capReached ? abstractionM3 : null, capReached }]
@@ -19,10 +19,13 @@ const year = (nodeId: string, waterYear: number, days: number, abstractionM3: nu
 
 describe('groundwaterByNode (WP-3.9)', () => {
 	it('groups the run’s rows by node and weighs partial years by their length', () => {
-		const out = groundwaterByNode([year('a', 2003, 183, 10_000), year('a', 2004, 365, 45_000, true), year('b', 2003, 548, 3000)]);
+		const out = groundwaterByNode([year('a', 2003, 183, 10_000, false, 2_000), year('a', 2004, 365, 45_000, true, 9_000), year('b', 2003, 548, 3000)]);
 		expect(out.map((n) => n.nodeId)).toEqual(['a', 'b']);
 		const a = out[0]!;
 		expect(a.meanM3Year).toBeCloseTo((55_000 / 548) * 365.25, 9);
+		// The stream depletion per year, weighed the same way (the daily-mean table's column, merged in, issue #175).
+		expect(a.depletionM3Year).toBeCloseTo((11_000 / 548) * 365.25, 9);
+		expect(out[1]!.depletionM3Year).toBe(0);
 		expect(a.maxYear.label).toBe('2004/05');
 		expect(a.yearsAboveGa).toBe(1);
 		expect(a.yearsCapReached).toBe(1);
