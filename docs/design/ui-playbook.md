@@ -674,6 +674,15 @@ Interaction details that bit:
   (`toBeHidden`), as every save-then-reload spec does, so the reload leaves
   a saved page rather than one mid-save behind its unsaved-changes guard
   (issue #138, `transfers-page.spec.ts`).
+- **An axe scan of a big page gets a test of its own, on the smallest
+  fixture that reaches the state.** axe's time grows with the page
+  (color-contrast most of it): thirty transfer rules are a 4,400-element
+  page that scanned in 1.75 s idle and 6 s at a 4× CPU throttle, and
+  with two page loads in the same test it ran out of the 30 s budget at
+  twelve workers. The layout checks keep their thirty rules, one viewport
+  a test; the scan runs on twelve, which still scroll inside the card and
+  hold every kind of row (issue #138, `transfers-page.spec.ts`). Don't
+  scan thirty copies of a row the one-state scans already cover.
 - **A click on a row lands in its middle**, which may be a control that
   rightly ignores row picking (the CHIRPS row header holds its version
   select). Click the row's text instead.
