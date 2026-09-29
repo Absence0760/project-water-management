@@ -393,7 +393,9 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   `mail_send_failed` in the same two log groups (an account, invitation or
   report email that failed to send, § Email), one on `unhandled_error` in
   the API's log group (a request answered with an unhandled 500, which the
-  Lambda `Errors` metric can't see, § Runbooks), and the job queue's five (DLQ depth, worker errors and
+  Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
+  the API's log group (failed sign-ins across all accounts, password spraying,
+  § Runbooks), and the job queue's five (DLQ depth, worker errors and
   throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`. That variable is
   required: plan refuses an empty, malformed or reserved address
   (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
@@ -1040,6 +1042,55 @@ Every step is an ordinary app action by an owner unless it says "operator".
        people behind one NAT, so raise `waf_rate_limit_per_ip`.
     6. **Afterwards:** check Cost Explorer (daily, services CloudFront and
        WAF) for what it cost, and record the incident in the operator log.
+11. **Credential stuffing / password spraying** (the `login-failed` alarm,
+    operator). More than `login_failed_alarm_per_15min` (default 30) credential
+    checks failed in 15 minutes across all accounts. Each address's own lockout
+    (5 tries, then 1–15 minutes) can't see one password tried against many
+    accounts, so this alarm is the control that does
+    ([security.md § Throttles that don't depend on the WAF](./security.md#throttles-that-dont-depend-on-the-waf)).
+    Each failure logs `{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`,
+    with no address, id or IP.
+    1. **Look:** CloudWatch Logs Insights on the API's log group,
+       `filter event = "login_failed" | stats count() by reason, route, bin(5m)`.
+       Mostly `unknown_account` is a list of addresses being tried (stuffing
+       from a leaked list); mostly `bad_password` spread thinly is spraying
+       against real accounts; mostly `locked` is one or a few accounts being
+       hammered (the lockout is already holding); `invalid_link` on
+       `/auth/reset-password` or `/auth/verify-email` is a token scanner
+       (harmless: tokens are 256 random bits) or an old email being clicked.
+       Then the WAF console, region Global → `water-management-frontend-acl`
+       → Sampled requests for `RateLimitAuthPerIP` and the top IPs, countries
+       and user agents on `/api/auth/login`.
+    2. **A few people locking themselves out** (a handful of lines, one
+       burst, `bad_password` then `locked`): nothing to do. If real use grows
+       past the threshold, raise `login_failed_alarm_per_15min` (10–300) and
+       apply.
+    3. **A few IPs:** the WAF's auth rule already blocks each one over 100
+       requests in 5 minutes. Add them to a blocking IP-set rule in
+       `infra/waf.tf`, ahead of the rate rules, and apply.
+    4. **Many IPs, each under the limit:** tighten the auth rule. Lower
+       `RateLimitAuthPerIP`'s `limit` in `infra/waf.tf` (AWS minimum 100 per 5
+       minutes, the current value, so go further with a narrower scope-down on
+       `/api/auth/login` and a 1-minute `evaluation_window_sec`), add a geo
+       match blocking countries the users aren't in, or put `/api/auth/login`
+       behind the WAF's `CAPTCHA` action (AWS-hosted, no third party; the
+       sign-in page then shows the puzzle). In an emergency add the rule in
+       the console first and write it into `waf.tf` before the next apply,
+       which removes console-only rules.
+    5. **Accounts at risk:** a `bad_password` wave may have found a password
+       that works. As the schema owner, `SELECT email, failures, locked_until
+       FROM login_throttle WHERE last_attempt_at > now() - interval '1 hour'
+       ORDER BY failures DESC;` names the addresses being tried. A correct
+       password deletes the address's row, so an address that drops off the
+       list mid-attack may have been signed in to (its owner's own browser
+       counts on `login_device_throttle` and never touches this row). For any
+       that then
+       signed in from an unexpected place, have the owner reset their password
+       (it revokes every session) and follow
+       [legal/incident-procedure.md](./legal/incident-procedure.md).
+    6. **Afterwards:** record the incident in the operator log, and if it
+       recurs, raise the CAPTCHA follow-up (security.md) from "if needed" to
+       done.
 
 ## Rollback
 

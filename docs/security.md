@@ -220,7 +220,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for an
   unexpected job failure or an unhandled API error (`unhandled_error`, which
   also names the route's pattern, never the concrete path, since a path can
-  carry a token). Never an error's message or a pg `detail`, which
+  carry a token). A failed sign-in or bad account link logs `login_failed`
+  with the route's pattern and a reason code only, never the address tried
+  (§ Throttles that don't depend on the WAF). Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
@@ -299,8 +301,42 @@ different viewer address through an edge-verified app, so a limit keyed on the
 client would never engage, and checks that the sign-in lock, the reset
 cooldown and the verification cooldown each still do (with positive
 controls), and that `/%61uth/login` is refused before it is counted.
-Spraying one password across many accounts from many addresses is still only
-slowed by the WAF's per-IP limits; each account is limited on its own.
+
+**One password sprayed across many accounts.** Each account is limited on
+its own, so trying one password against many accounts from many addresses
+passes every limit above and is slowed only by the WAF's per-IP limits. It is
+**detected, not throttled**: every failed credential check logs one line,
+`{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`
+(`auth/loginFailed.ts`), which the `login-failed` alarm counts across all
+accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
+[deployment.md § Runbooks](./deployment.md#runbooks), Credential stuffing).
+
+- *Reasons:* `unknown_account` and `bad_password` (sign-in; change-password's
+  current password is `bad_password` on `/auth/change-password`), `locked`
+  (refused by the lockout before the password is checked), and `invalid_link`
+  (a malformed, used, expired or unknown reset or verification token).
+- *No personal data:* the line holds the route's pattern and the reason only,
+  never the typed address, an account id, the client address or a token; the
+  logger's signature takes two closed unions, so a caller can't pass one.
+- *The client can't tell the reasons apart:* an unknown address and a wrong
+  password answer the same `401 wrong_credentials` after the same bcrypt work
+  (`DUMMY_HASH`), and neither sets a cookie. `login-throttle.security.db.test.ts`
+  compares the two answers and checks the lines (with a no-line positive
+  control for a correct password and a good link).
+- *Why an alarm and no global circuit breaker:* a breaker that slows every
+  sign-in once failures across all accounts pass a threshold would be counted
+  in Postgres (Lambda has many instances), and its input is free to produce:
+  anyone can fail a sign-in with a made-up address. So an attacker could
+  switch it on at will, turning an attack on the few into a slowdown for
+  everyone, and each held request keeps an API Lambda busy (duration billed,
+  reserved concurrency used), so the delay spends this account's money and
+  crowds out real users rather than the attacker's. It also wouldn't stop a
+  spray, only stretch it. The alarm costs nothing on the request path; the
+  response is the operator's (a tighter or blocking WAF rule, the runbook).
+  The durable next step, if traffic shows a need, is a CAPTCHA (AWS WAF's
+  `CAPTCHA` action on `/api/auth/login`, no third party) after N global
+  failures. Trigger: this alarm firing on real traffic, or opening sign-up
+  beyond the pilot users.
 
 ## Render tokens
 

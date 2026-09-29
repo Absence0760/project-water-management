@@ -401,6 +401,52 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
   treat_missing_data  = "notBreaching"
 }
 
+# --- Failed sign-ins across all accounts --------------------------------------
+# Every sign-in throttle is keyed on one address (the lockout, the reset and
+# verification cooldowns; docs/security.md § Throttles that don't depend on the
+# WAF), so one password tried against many accounts from many IPs gets past
+# each of them and the WAF's per-IP auth limit alone slows it. Only a count
+# over all accounts sees that. Each failed credential check logs one line
+# (backend/src/auth/loginFailed.ts):
+#   {"event":"login_failed","route":"/auth/login","reason":"bad_password"}
+# the route's pattern and a reason code (unknown_account, bad_password,
+# locked, invalid_link), never the address, an id, the client IP or a token.
+# Only the API checks credentials, so only its log group is filtered.
+#
+# Threshold (login_failed_alarm_per_15min, default 30 in 15 minutes): the
+# pilot is a handful of users; one of them fumbling a password into a lock
+# logs 5-10 lines, so 30 is several people locking themselves out at once, or
+# someone guessing. One IP at the WAF auth limit (100 per 5 minutes) reaches it
+# in under 5 minutes. Alarm, not a circuit breaker: why is in docs/security.md.
+
+resource "aws_cloudwatch_log_metric_filter" "login_failed" {
+  name           = "${local.project}-login-failed"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.event = \"login_failed\" }"
+
+  metric_transformation {
+    name          = "LoginFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "login_failed" {
+  alarm_name          = "${local.project}-login-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+  period              = 900
+  statistic           = "Sum"
+  threshold           = var.login_failed_alarm_per_15min
+  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter event = \"login_failed\" | stats count() by reason, route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- Migrate Lambda --------------------------------------------------------
 # A failed migration also fails the deploy workflow loudly; this catches a
 # manual invocation (e.g. after a password rotation) that nobody watched.

@@ -82,3 +82,8 @@ waf_rate_limit_per_ip = 1000
 # busy 5 minutes for a handful of users. 1000-20000; raise it only for real
 # growth (infra/README.md § Cost).
 # cloudfront_requests_alarm_per_5min = 5000
+
+# Failed-sign-in alarm: failed credential checks per 15 minutes across all
+# accounts (password spraying). 10-300; raise it with the number of users
+# (docs/deployment.md § Runbooks, Credential stuffing).
+# login_failed_alarm_per_15min = 30

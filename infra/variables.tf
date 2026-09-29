@@ -154,6 +154,16 @@ variable "cloudfront_requests_alarm_per_5min" {
   }
 }
 
+variable "login_failed_alarm_per_15min" {
+  description = "Alarm when more than this many credential checks fail in 15 minutes across all accounts (the login-failed alarm: one password sprayed over many accounts, which each address's own lockout can't see). Default 30: a person locking themselves out logs 5-10, so 30 is several at once for a handful of users. Runbook: docs/deployment.md § Runbooks, Credential stuffing."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.login_failed_alarm_per_15min >= 10 && var.login_failed_alarm_per_15min <= 300
+    error_message = "Between 10 (one person locking themselves out would page) and 300 (one IP at the WAF's auth limit, 100 per 5 minutes, would stay unseen)."
+  }
+}
+
 variable "budget_monthly_usd" {
   description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 80 sits above af-south-1's ~$58–63 idle (infra/README.md § Cost), so ACTUAL 80% ($64) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number

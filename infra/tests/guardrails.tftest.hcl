@@ -1135,6 +1135,7 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.lambda_throttles,
       aws_cloudwatch_metric_alarm.lambda_duration,
       aws_cloudwatch_metric_alarm.unhandled_error,
+      aws_cloudwatch_metric_alarm.login_failed,
       aws_cloudwatch_metric_alarm.migrate_errors,
       aws_cloudwatch_metric_alarm.rds_cpu,
       aws_cloudwatch_metric_alarm.rds_cpu_credits,
@@ -1885,6 +1886,28 @@ run "rejects_tight_cloudfront_requests_alarm" {
   expect_failures = [var.cloudfront_requests_alarm_per_5min]
 }
 
+# The failed-sign-in alarm: below 10 one person locking themselves out pages;
+# above 300 one IP at the WAF's auth limit (100 per 5 minutes) stays unseen.
+run "rejects_loose_login_failed_alarm" {
+  command = plan
+
+  variables {
+    login_failed_alarm_per_15min = 301
+  }
+
+  expect_failures = [var.login_failed_alarm_per_15min]
+}
+
+run "rejects_tight_login_failed_alarm" {
+  command = plan
+
+  variables {
+    login_failed_alarm_per_15min = 9
+  }
+
+  expect_failures = [var.login_failed_alarm_per_15min]
+}
+
 # ---------------------------------------------------------------------------
 # Deploy role trust pin (bootstrap-owned; checked by the postcondition in
 # oidc.tf so a drifted trust policy fails the plan)
@@ -2234,6 +2257,35 @@ run "mail_failures_and_log_privacy" {
       contains(aws_cloudwatch_metric_alarm.unhandled_error.alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "One unhandled 500 must page the alerts topic."
+  }
+
+  # Failed sign-ins across all accounts (issue #126): the per-address lockout
+  # can't see one password sprayed over many accounts.
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.event = \"login_failed\" }"
+    )
+    error_message = "login_failed must be counted from the API's log group, by the exact event name logLoginFailed logs (backend/src/auth/loginFailed.ts)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.login_failed.metric_name == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.login_failed.namespace == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+    )
+    error_message = "The login-failed alarm must watch the metric the filter emits."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.login_failed.threshold == 30 &&
+      aws_cloudwatch_metric_alarm.login_failed.period == 900 &&
+      aws_cloudwatch_metric_alarm.login_failed.evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.login_failed.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.login_failed.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.login_failed.treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.login_failed.alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "More than 30 failed sign-ins in 15 minutes (the default) must page the alerts topic."
   }
 
   assert {
