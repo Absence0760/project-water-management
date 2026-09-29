@@ -61,6 +61,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 	alert_event: ['cleared_at', 'detail', 'state', 'value'],
 	// A sweep's base run, job, name and members' ops are fixed at insert; each gets its outcome once (062_scenario_sweeps.sql).
 	scenario_sweep: ['completed_at', 'engine_version', 'status'],
+	// A run of the calibration rules: its rules, plan and input hash are fixed at insert; its cases, outcome and application change once each (108_auto_calibration.sql).
+	auto_calibration: ['applied_at', 'applied_run_id', 'cases', 'chosen', 'error', 'job_id', 'report', 'status', 'uncertainty_id'],
 	scenario_sweep_member: ['end_date', 'finished_at', 'problems', 'series', 'start_date', 'status', 'summary'],
 	// An outlook's base run, job, season, levels and share are fixed at insert; it is completed once (063_seasonal_outlook.sql).
 	seasonal_outlook: ['completed_at', 'engine_version', 'result', 'status', 'triggers'],
@@ -208,6 +210,9 @@ const APP_USER_ON_DELETE: Record<string, 'cascade' | 'set null' | 'restrict'> = 
 	'scenario_member.added_by': 'set null',
 	// A sweep is derived (its base run is the evidence); it stays with who asked cleared (062_scenario_sweeps.sql).
 	'scenario_sweep.created_by': 'set null',
+	// A run of the calibration rules is derived; it stays with who asked for or applied it cleared (108_auto_calibration.sql).
+	'auto_calibration.applied_by': 'set null',
+	'auto_calibration.created_by': 'set null',
 	// An outlook likewise (063_seasonal_outlook.sql).
 	'seasonal_outlook.created_by': 'set null',
 	'series_revision.created_by': 'set null',

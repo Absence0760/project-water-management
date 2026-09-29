@@ -22,4 +22,16 @@ describe('currentSection', () => {
 		expect(currentSection([-900, -100, 400], 80, true)).toBe(2);
 		expect(currentSection([500], 80, true)).toBe(0);
 	});
+
+	it('at the end of the page, keeps the section the reader jumped to while its heading is in the window', () => {
+		// A term link near the end of a topic scrolls the page to its end: the term asked for is the one being read.
+		expect(currentSection([-900, 30, 400, 700], 80, true, 1)).toBe(1);
+		// Scrolled on past it (its heading has left the window): the last section again.
+		expect(currentSection([-900, -30, 400, 700], 80, true, 1)).toBe(3);
+		// No target, or one that isn't a section: the last section.
+		expect(currentSection([-900, 30, 400], 80, true)).toBe(2);
+		expect(currentSection([-900, 30, 400], 80, true, 7)).toBe(2);
+		// Not at the end: the target changes nothing.
+		expect(currentSection([-900, 30, 400], 80, false, 2)).toBe(1);
+	});
 });

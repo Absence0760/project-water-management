@@ -448,6 +448,14 @@ const WRITE_ROUTES: Entry[] = [
 	// --- exempt: they change nothing the history covers ----------------------------------
 	{ route: `DELETE ${P}`, exempt: 'the project goes, and its history with it (cascade)' },
 	{ route: `POST ${P}/jobs`, exempt: 'queues a model run; the run records run.created when it runs (runs/execute.ts storeRun)' },
+	{
+		route: `POST ${P}/auto-calibrations`,
+		exempt: 'queues a run of the calibration rules; nothing in the settings changes until its fit is applied, which records a revision'
+	},
+	{
+		route: `POST ${P}/auto-calibrations/:cid/apply`,
+		exempt: 'records a settings revision (calibration/store.ts applyCalibration) and run.created for its run; exercised end to end in calibration/calibration.db.test.ts, which needs a fitted calibration this sweep has none of'
+	},
 	{ route: `POST ${P}/feeds/:feedId/run-now`, exempt: 'queues a fetch; the fetch records series.merged or feed.failed (feeds/ingest.ts)' },
 	{ route: `POST ${P}/evidence`, exempt: 'run_nomination is itself an append-only history of who nominated which run and why (010_run_nomination.sql)' },
 	{ route: `POST ${P}/evidence/withdraw`, exempt: 'a withdrawal is a row of the same append-only run_nomination history: who withdrew it, when and why (098_nomination_withdrawal.sql)' },
