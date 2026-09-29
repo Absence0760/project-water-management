@@ -1304,8 +1304,8 @@
 //             worker bundles the engine, and the engine now runs causally
 //             across a forecast tail (engine 1.28.0), so the run it fits
 //             with grew ~1 KB. No new dependency. Headroom ~1 KB worker.
-// 2026-09-29  total 1194 → 1197 KB (issue #68: measured 1194 with main @
-//             35b17c02 merged, #136 included). A farm's Excel audit workbook, built
+// 2026-09-29  total 1194 → 1201 KB (issue #68: measured 1198 with main @
+//             84980243 merged, #136 and #198 included). A farm's Excel audit workbook, built
 //             in the existing export worker (10.5 → 19 KB, inside the 32 KB
 //             spreadsheet-worker budget): the engine's audit plan and
 //             formula tree (verify/audit.ts), the dam and evaporation
@@ -1326,7 +1326,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1197,
+	totalCodeKb: 1201,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
