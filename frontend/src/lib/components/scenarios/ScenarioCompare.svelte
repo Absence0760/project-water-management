@@ -1,7 +1,9 @@
 <script lang="ts">
 	// The scenario against its base (docs/ui.md § Scenarios): the latest run
 	// of the scenario compared with the base run it was made on, through
-	// GET /compare/runs like the compare page, showing the headline changes,
+	// GET /compare/runs like the compare page, showing the headline changes
+	// (the water balance only: the fit is scored against the real gauge, so it
+	// is no outcome of the scenario, issue #177),
 	// the farms, and the per-node daily overlay (issue #8's CompareOverlay and
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
@@ -102,7 +104,7 @@
 				{/if}
 				<section aria-labelledby="sc-headline-h">
 					<h3 id="sc-headline-h">Headline results</h3>
-					<HeadlineDeltas comparison={data.comparison} />
+					<HeadlineDeltas comparison={data.comparison} fit={false} />
 				</section>
 				<section aria-labelledby="sc-farms-h">
 					<h3 id="sc-farms-h">Hydrological units</h3>

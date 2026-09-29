@@ -4681,7 +4681,10 @@ them scenarios).
 - **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
   the scenario against the base run *that run* was made on (so an older run
   of a rebased scenario is still compared with its own base), through
-  `GET /compare/runs`: headline results, the farms table and the per-node
+  `GET /compare/runs`: headline results (the water balance only, without
+  the Compare page's calibration and WR2012 tables: the scenario run is
+  scored against the real gauge, so its fit is no outcome of the what-if,
+  and an unbuilt dam would score "worse"; issue #177), the farms table and the per-node
   daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
