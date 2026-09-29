@@ -465,7 +465,12 @@ emails in Afrikaans in Mailpit ([ui.md § Language](./ui.md#language)).
 
 The client catchment regression data comes from the import step above
 (`expected.json`) and from the extractors in `scripts/wbt-import/`, all written
-under `data/`. Without them, the
+under `data/`. The engine's client suites and the pan-sensitivity smoke test
+read `data/client-catchment`; `pnpm seed:demo` extracts to
+`data/client-<name>-app/` instead, so point them at the right extract with
+`WBT_CLIENT_CATCHMENT_DIR="$PWD/data/client-<name>-app" pnpm test:engine`
+(absolute: a relative path resolves against the workspace the tests run in).
+Without them, the
 workbook-comparison tests skip with a message, and the committed synthetic
 fixtures still run.
 
