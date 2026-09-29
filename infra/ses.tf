@@ -286,20 +286,33 @@ resource "aws_iam_role_policy" "lambda_ses_release" {
 }
 
 resource "aws_cloudwatch_metric_alarm" "mail_events_dlq_depth" {
-  alarm_name          = "${local.project}-mail-events-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-mail-events-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "An SES bounce or complaint was dead-lettered: the worker failed 5 times to record it (usually the database was unreachable). That person's alert emails are still on; redrive the DLQ once the worker is healthy."
+  alarm_description   = "An SES bounce or complaint was dead-lettered: the worker failed 5 times to record it (usually the database was unreachable). That person's alert emails are still on; redrive the DLQ once the worker is healthy. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.mail_events_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.mail_events_dlq.name
+      }
+    }
   }
 }
 

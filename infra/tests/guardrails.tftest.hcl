@@ -1810,8 +1810,8 @@ run "background_jobs" {
 
   # --- Alarms -----------------------------------------------------------------------
   assert {
-    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && aws_cloudwatch_metric_alarm.jobs_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.jobs_dlq.name
-    error_message = "DLQ depth > 0 must alarm."
+    condition     = aws_cloudwatch_metric_alarm.jobs_dlq_depth.threshold == 0 && one([for m in aws_cloudwatch_metric_alarm.jobs_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.jobs_dlq.name
+    error_message = "A new message in the jobs DLQ must alarm (the arrival expression: observability.tftest.hcl)."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.jobs_backlog.namespace == "water-management/Jobs" && aws_cloudwatch_metric_alarm.jobs_backlog.metric_name == "OldestDueJobAgeSeconds"
@@ -1975,11 +1975,11 @@ run "mail_suppression" {
   # --- Alarm ------------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.mail_events_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.mail_events_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.mail_events_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.mail_events_dlq.name &&
       aws_cloudwatch_metric_alarm.mail_events_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.mail_events_dlq_depth.alarm_actions == toset([aws_sns_topic.alerts.arn])
     )
-    error_message = "The mail-events DLQ must alarm on depth > 0."
+    error_message = "A new message in the mail-events DLQ must alarm."
   }
 }
 
@@ -2089,12 +2089,12 @@ run "data_feeds" {
   # --- Alarms -----------------------------------------------------------------------
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.fetch_requests_dlq.name &&
-      aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.ingest_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.fetch_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.ingest_results_dlq.name &&
       aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.ingest_results_dlq_depth.threshold == 0
     )
-    error_message = "Each feed DLQ must alarm on depth > 0."
+    error_message = "A new message in either feed DLQ must alarm."
   }
   assert {
     condition     = aws_cloudwatch_metric_alarm.fetcher_errors.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name
@@ -2375,12 +2375,12 @@ run "reports" {
   }
   assert {
     condition = (
-      aws_cloudwatch_metric_alarm.render_requests_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_requests_dlq.name &&
-      aws_cloudwatch_metric_alarm.render_results_dlq_depth.dimensions["QueueName"] == aws_sqs_queue.render_results_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.render_requests_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_requests_dlq.name &&
+      one([for m in aws_cloudwatch_metric_alarm.render_results_dlq_depth.metric_query : m.metric[0].dimensions["QueueName"] if m.id == "visible"]) == aws_sqs_queue.render_results_dlq.name &&
       aws_cloudwatch_metric_alarm.render_requests_dlq_depth.threshold == 0 &&
       aws_cloudwatch_metric_alarm.render_results_dlq_depth.threshold == 0
     )
-    error_message = "Each render DLQ must alarm on depth > 0."
+    error_message = "A new message in either render DLQ must alarm."
   }
 }
 

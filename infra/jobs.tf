@@ -432,20 +432,33 @@ data "aws_iam_policy_document" "sqs_endpoint" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "jobs_dlq_depth" {
-  alarm_name          = "${local.project}-jobs-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-jobs-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A jobs-queue message was dead-lettered: the worker failed its tick 5 times (usually the database was unreachable). Jobs are safe in the job table; check the worker's logs, then redrive or purge the DLQ."
+  alarm_description   = "A jobs-queue message was dead-lettered: the worker failed its tick 5 times (usually the database was unreachable). Jobs are safe in the job table; check the worker's logs, then redrive or purge the DLQ. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.jobs_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.jobs_dlq.name
+      }
+    }
   }
 }
 

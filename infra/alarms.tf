@@ -474,6 +474,39 @@ resource "aws_cloudwatch_metric_alarm" "login_failed" {
   treat_missing_data  = "notBreaching"
 }
 
+# --- Dead-letter queues: alarm on each new arrival --------------------------
+# Every SQS DLQ (jobs, fetch-requests, ingest-results, render-requests,
+# render-results, mail-events) alarms through this expression rather than on
+# its depth. A depth > 0 alarm stays in ALARM for as long as the message sits
+# in the DLQ (up to its 14-day retention), and SNS only notifies on a state
+# change, so a second, unrelated failure in that time is silent.
+#
+# The metric: SQS's NumberOfMessagesSent does NOT count a message the redrive
+# policy moves into a DLQ (only a SendMessage to it; SQS developer guide,
+# "Available CloudWatch metrics for Amazon SQS"), so it can't see a
+# dead-lettering. ApproximateNumberOfMessagesVisible does, and an increase in
+# it between two 5-minute periods is a new arrival:
+#
+#   DIFF(FILL(visible, 0)) > 0
+#
+# FILL(…, 0): SQS stops publishing a queue's metrics after ~6 hours with no
+# activity and no messages, which is an idle DLQ's normal state. Without the
+# fill the first arrival after a quiet spell has no preceding datapoint and
+# DIFF drops it, missing exactly the failure this is for. A DLQ holding
+# messages counts as active, so a real backlog is never zero-filled.
+# 1 of 3 datapoints (15 minutes): FILL also fills a latest period whose
+# datapoint hasn't been published yet (CloudWatch metric math docs, FILL), which
+# reads as a drop, never a rise, so the increase is caught one evaluation later
+# once the datapoint lands, and the alarm returns to OK 15 minutes after it.
+# A purge or redrive reads as a drop (no alarm). The one blind spot: a message
+# arriving in the same 5 minutes as one is removed; the redrive/purge runbook
+# (docs/deployment.md § Runbooks) says to check depth after clearing.
+locals {
+  dlq_arrivals_expression         = "DIFF(FILL(visible, 0))"
+  dlq_arrivals_evaluation_periods = 3
+  dlq_arrivals_note               = "(This alarm fires once per new arrival and clears after 15 minutes; the DLQ may still hold earlier messages: check its ApproximateNumberOfMessagesVisible.)"
+}
+
 # --- Migrate Lambda --------------------------------------------------------
 # A failed migration also fails the deploy workflow loudly; this catches a
 # manual invocation (e.g. after a password rotation) that nobody watched.

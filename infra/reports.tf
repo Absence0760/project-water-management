@@ -507,38 +507,64 @@ resource "aws_cloudfront_origin_request_policy" "report_downloads" {
 # --- Alarms -----------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "render_requests_dlq_depth" {
-  alarm_name          = "${local.project}-render-requests-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-render-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A render request was dead-lettered: the renderer Lambda failed to answer it 5 times. The report shows as failed after an hour; check the renderer's logs. Its render token has expired, so a redrive can't render it: purge the DLQ."
+  alarm_description   = "A render request was dead-lettered: the renderer Lambda failed to answer it 5 times. The report shows as failed after an hour; check the renderer's logs. Its render token has expired, so a redrive can't render it: purge the DLQ. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.render_requests_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.render_requests_dlq.name
+      }
+    }
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "render_results_dlq_depth" {
-  alarm_name          = "${local.project}-render-results-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-render-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A render result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy; the PDF is already stored."
+  alarm_description   = "A render result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy; the PDF is already stored. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.render_results_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.render_results_dlq.name
+      }
+    }
   }
 }
 
@@ -560,6 +586,88 @@ resource "aws_cloudwatch_metric_alarm" "renderer_errors" {
   dimensions = {
     FunctionName = aws_lambda_function.renderer[0].function_name
   }
+}
+
+# The renderer hit its reserved concurrency: a throttled SQS poll still counts
+# a receive, so a sustained run dead-letters render requests.
+resource "aws_cloudwatch_metric_alarm" "renderer_throttles" {
+  count = local.renderer_enabled ? 1 : 0
+
+  alarm_name          = "${local.project}-renderer-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The renderer Lambda hit reserved_concurrent_executions (renderer_reserved_concurrency): throttled SQS messages burn receive counts toward the render-requests DLQ. Usually a burst of scheduled reports; spread the schedules or raise the limit (each render is a Chromium: check the site's WAF limits first)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.renderer[0].function_name
+  }
+}
+
+# A render request nobody is consuming. Deliberately NOT gated on
+# renderer_enabled: with an empty renderer_image_tag the function doesn't
+# exist, requests queue with no consumer, and without this they expire
+# silently after 4 days while each report shows as failed after an hour. With
+# the renderer running, 5 receives x the 12-minute visibility timeout is the
+# longest a worked message waits, and the worker has given up on the report
+# (store.ts, 1 hour) well before, so 30 minutes means nothing is rendering.
+resource "aws_cloudwatch_metric_alarm" "render_requests_age" {
+  alarm_name          = "${local.project}-render-requests-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 1800
+  alarm_description   = "A render request has waited over 30 minutes in render-requests: nothing is rendering reports. If renderer_image_tag is still empty the renderer Lambda doesn't exist yet (docs/deployment.md § Reports: push an image, set the tag, apply); otherwise check its SQS trigger and the renderer-throttles alarm. The waiting requests' render tokens have expired: purge the queue once the renderer runs."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.render_requests.name
+  }
+}
+
+# A render the renderer answered as failed: the Lambda succeeded, so
+# renderer_errors never sees it. lambda-renderer.ts logs one line per failed
+# answer:
+#   {"event":"report_render_failed","reportId":"…","projectId":"…","reason":"render","retry":true}
+# the ids, render or store, and whether the worker asks again, never the error
+# text or the render token. The log group exists before the function does, so
+# this filter and its alarm are not gated on renderer_enabled.
+resource "aws_cloudwatch_log_metric_filter" "report_render_failed" {
+  name           = "${local.project}-report-render-failed"
+  log_group_name = aws_cloudwatch_log_group.renderer.name
+  pattern        = "{ $.event = \"report_render_failed\" }"
+
+  metric_transformation {
+    name          = "ReportRenderFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "report_render_failed" {
+  alarm_name          = "${local.project}-report-render-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The renderer answered a report render as failed (a retryable failure is asked again with backoff; the report shows failed once the attempts are used up). Logs Insights on the renderer log group: filter event = \"report_render_failed\" | stats count() by reason, retry. reason = store: the reports bucket refused the PDF (IAM); render with retry = false: the token was refused or the page said it can't show the report; with retry = true: a timeout, a WAF block or a browser crash. The report's own error (Reports tab) has the text. Runbook: docs/deployment.md § Reports."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
 }
 
 # A render creeping towards the 120 s limit (the app's own cap is 100 s).

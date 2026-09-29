@@ -1172,7 +1172,10 @@ Where the render runs (`REPORT_RENDERER`, `jobs/transport.ts`):
   report still waiting (`app_report_render_target`) and queues a follow-up
   `report_render` job carrying the result, as the requester, which records
   it and sends the mail. A renderer that never answers leaves the report
-  shown as failed after an hour; its DLQ alarms.
+  shown as failed after an hour; its DLQ alarms, and a request no renderer
+  has taken for 30 minutes alarms too (`render-requests-age`, which exists
+  before the renderer does); an answered failure logs `report_render_failed`,
+  which alarms (`report-render-failed`).
 - **Why a container image and not the worker:** Chromium and its libraries
   don't fit a zip Lambda comfortably, and the worker has no internet (no NAT,
   by design: [network.tf](../infra/network.tf)). The renderer mirrors the data

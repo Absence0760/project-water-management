@@ -109,7 +109,7 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $51–53/month | ≈ $50/month |
+| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $52–54/month | ≈ $51/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
@@ -503,8 +503,11 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   the API's log group (a request answered with an unhandled 500, which the
   Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
-  § Runbooks), and the job queue's five (DLQ depth, worker errors and
-  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`. That variable is
+  § Runbooks), the job queue's five (a new DLQ message, worker errors and
+  throttles, backlog, dead jobs), and the fetcher's and renderer's answered
+  failures, stuck request queues and throttles (§ Data feeds, § Reports);
+  every DLQ alarms on each new arrival, not on its depth (§ Background jobs);
+  all to the SNS topics that email `budget_alert_email`. That variable is
   required: plan refuses an empty, malformed or reserved address
   (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
   case), so a copied example tfvars can't leave the alarms paging nobody
@@ -909,7 +912,23 @@ plan-only until the first deploy):
   `jobs-dlq` (14 days' retention).
   The jobs are still in the table and run on the next good tick; inspect the
   worker's logs, then redrive or purge the DLQ.
-- **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
+- **Every DLQ alarm fires on a new arrival, not on depth** (all six:
+  `jobs`, `fetch-requests`, `ingest-results`, `render-requests`,
+  `render-results`, `mail-events`; `infra/alarms.tf`
+  `local.dlq_arrivals_expression`). A depth > 0 alarm would stay in ALARM
+  while the message sits in the DLQ (up to 14 days), and SNS mails only on a
+  change of state, so a second failure in that time would be silent. Each
+  `<queue>-dlq-arrivals` alarm is `DIFF(FILL(ApproximateNumberOfMessagesVisible, 0)) > 0`
+  on 5-minute maxima, 1 of 3 datapoints: it mails once per new
+  dead-lettering and returns to OK about 15 minutes later on its own.
+  (`NumberOfMessagesSent` would be simpler but doesn't count a message the
+  redrive policy moves into a DLQ.) *Runbook:* an OK alarm doesn't mean an
+  empty DLQ. After acting on one, check the DLQ's depth in the SQS console
+  (Messages available) and redrive or purge it; after a redrive or purge,
+  check again, because a message that arrived in the same 5 minutes as one
+  left reads as no change and doesn't alarm.
+- **Alarms** (to the alerts SNS topic): `jobs-dlq-arrivals`, a new message
+  in `jobs-dlq`; worker errors > 0;
   worker throttles > 0 (it hit its reserved concurrency);
   `worker-heartbeat`, fewer than 1 worker invocation in 15 minutes (three
   ticks), with missing data treated as breaching, so a worker that has
@@ -960,10 +979,27 @@ plan-only until the first deploy):
   retry: the fetcher sends the failure back, the feed records it and shows as
   failing, and the schedule tries again (15 minutes after one failure,
   doubling up to a day).
-- **Alarms:** `fetch-requests-dlq-depth`, `ingest-results-dlq-depth` and
-  `fetcher-errors` (a crash or timeout), all > 0, to the alerts topic. A
-  stale or failing feed shows in the app, and emails the owners and editors
-  of a project with the `data_stale` or `feed_failing` alert on.
+- **Alarms** (to the alerts topic): `fetch-requests-dlq-arrivals` and
+  `ingest-results-dlq-arrivals` (a new DLQ message, § Background jobs);
+  `fetcher-errors` (a crash or timeout) and `fetcher-throttles` (it hit
+  `fetcher_reserved_concurrency`), both > 0; `fetch-requests-age`, a request
+  waiting over an hour (nothing is consuming the queue: the fetcher still the
+  stub, its trigger disabled, or throttled; the request would otherwise
+  expire unseen after 4 days); and `feed-fetch-failed`, any fetch the fetcher
+  answered as failed in an hour. That last one is invisible to
+  `fetcher-errors`, because the Lambda succeeded: it counts the fetcher's
+  `{"event":"feed_fetch_failed","feedId","source","reason"}` log line
+  (ids, the source and a reason code, never the stored message, which can
+  name a grid cell or a station). A stale or failing feed also shows in the
+  app, and emails the owners and editors of a project with the `data_stale`
+  or `feed_failing` alert on.
+  - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
+    `filter event = "feed_fetch_failed" | stats count() by source, reason`.
+    `unavailable` or `timeout`: the source is down or slow; the feed retries
+    on its own schedule (nothing to do unless it persists; DWS from outside
+    South Africa answers 403, see Sources' terms below). `format`: the source
+    changed what it serves, a code fix. `invalid_request` or `internal`: a
+    bug; the feed's status panel has the stored message.
 - **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
   waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
   separate licence notice: confirm before relying on it commercially (the
@@ -971,10 +1007,10 @@ plan-only until the first deploy):
   before a DWS feed is used in production, and the DWS site answers our
   (non-South-African) network with HTTP 403: confirm the fetcher's region can
   reach it ([followups.md](./followups.md)).
-- **Cost (idle delta ≈ +$0.70/month):** two more queues and two DLQs cost
+- **Cost (idle delta ≈ +$1.00/month):** two more queues and two DLQs cost
   nothing at rest, but each SQS event source polls continuously (~0.65 M
   receives a month each); with the `jobs` queue's that is ~1.9 M, ~0.9 M past
-  the free tier, ≈ $0.40. Three alarms ≈ $0.30. The fetcher's own compute is
+  the free tier, ≈ $0.40. Six alarms ≈ $0.60. The fetcher's own compute is
   cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
   No NAT, no new endpoint.
 
@@ -1009,7 +1045,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   suppression list, so SES drops mail to them. The same set also publishes
   `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`, which
   delivers them raw to the SQS queue `mail-events` (SSE, a DLQ after 5
-  receives, the `mail-events-dlq-depth` alarm), which triggers the worker.
+  receives, the `mail-events-dlq-arrivals` alarm), which triggers the worker.
   The worker (`mail/suppression.ts`) flags the person with that address
   (`app_user.mail_suppressed_at`, 057) and pauses their alert emails; the
   account and alert pages show a banner, and **Turn alert emails back on**
@@ -1125,14 +1161,40 @@ plan-only until the first deploy):
   after 2, then 4 minutes, up to 3 renders; the report shows "rendering"
   meanwhile. A render request in the DLQ can't be redriven usefully (the
   token expired after 5 minutes): purge it; a render result in the DLQ can.
-- **Alarms:** `render-requests-dlq-depth`, `render-results-dlq-depth`,
-  `renderer-errors` (a crash or timeout) and `renderer-duration` (p90 over a
-  minute).
+- **Alarms:** `render-requests-dlq-arrivals`, `render-results-dlq-arrivals`
+  (a new DLQ message, § Background jobs), `renderer-errors` (a crash or
+  timeout), `renderer-throttles` (it hit `renderer_reserved_concurrency`),
+  `renderer-duration` (p90 over a minute), `render-requests-age` (a request
+  waiting over 30 minutes) and `report-render-failed` (any render the
+  renderer answered as failed in an hour). The renderer's errors, throttles
+  and duration alarms exist only with the function; `render-requests-age`
+  and `report-render-failed` exist from the first apply, so with
+  `renderer_image_tag` still empty a requested report alarms within 30
+  minutes instead of its request expiring silently after 4 days.
+  `report-render-failed` counts the renderer's
+  `{"event":"report_render_failed","reportId","projectId","reason","retry"}`
+  log line (ids, `render` or `store`, whether the worker asks again; never
+  the error text or the token): the Lambda succeeded, so `renderer-errors`
+  never sees these.
+  - *Runbook: `render-requests-age`.* If `renderer_image_tag` is empty, the
+    renderer doesn't exist: push an image and set the tag (above). Otherwise
+    check the renderer's SQS trigger and `renderer-throttles`. The waiting
+    requests' tokens have expired (5 minutes), so purge `render-requests`
+    once the renderer runs; the reports show as failed and can be asked for
+    again.
+  - *Runbook: `report-render-failed`.* Logs Insights on the renderer's log
+    group: `filter event = "report_render_failed" | stats count() by reason,
+    retry`. `store`: the reports bucket refused the PDF (the renderer's
+    role, `report_store_failed` has the error name). `render` with `retry`
+    false: the token was refused or the page said it can't show the report
+    (the report's own error, on the Reports tab, has the text). With `retry`
+    true: a timeout, a WAF block or a browser crash, asked again with
+    backoff; many at once usually means the WAF (`waf-blocked-requests`).
 - **SES**: report emails go to members, so they count against the same SES
   sending limits as account email; production access (Operator step 8a) is
   needed before a schedule can mail anyone but verified addresses.
-- **Cost (idle delta ≈ +$1.00–1.20/month):** two more event sources polling
-  (~$0.50), four alarms ($0.40), the image in ECR (~$0.10–0.30); a render is
+- **Cost (idle delta ≈ +$1.30–1.50/month):** two more event sources polling
+  (~$0.50), seven alarms ($0.70), the image in ECR (~$0.10–0.30); a render is
   ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
   endpoint.
 

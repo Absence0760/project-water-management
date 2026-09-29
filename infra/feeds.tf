@@ -222,38 +222,64 @@ resource "aws_lambda_event_source_mapping" "worker_ingest_results" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "fetch_requests_dlq_depth" {
-  alarm_name          = "${local.project}-fetch-requests-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-fetch-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A fetch request was dead-lettered: the fetcher Lambda failed to send its result 5 times. The feed shows stale until the next scheduled fetch; check the fetcher's logs."
+  alarm_description   = "A fetch request was dead-lettered: the fetcher Lambda failed to send its result 5 times. The feed shows stale until the next scheduled fetch; check the fetcher's logs. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.fetch_requests_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.fetch_requests_dlq.name
+      }
+    }
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "ingest_results_dlq_depth" {
-  alarm_name          = "${local.project}-ingest-results-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-ingest-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A fetch result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy."
+  alarm_description   = "A fetch result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.ingest_results_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.ingest_results_dlq.name
+      }
+    }
   }
 }
 
@@ -273,4 +299,84 @@ resource "aws_cloudwatch_metric_alarm" "fetcher_errors" {
   dimensions = {
     FunctionName = aws_lambda_function.fetcher.function_name
   }
+}
+
+# The fetcher hit its reserved concurrency: a throttled SQS poll still counts
+# a receive, so a sustained run dead-letters fetch requests.
+resource "aws_cloudwatch_metric_alarm" "fetcher_throttles" {
+  alarm_name          = "${local.project}-fetcher-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The fetcher Lambda hit reserved_concurrent_executions (fetcher_reserved_concurrency): throttled SQS messages burn receive counts toward the fetch-requests DLQ. Find what is flooding fetch-requests (a feed schedule, a manual refresh loop) before raising the limit."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.fetcher.function_name
+  }
+}
+
+# A fetch request nobody is consuming: the fetcher is still the stub (no
+# backend release yet), its event source is disabled, or it is throttled to
+# nothing. Each request is otherwise retried at most 5 times x the 12-minute
+# visibility timeout (~1 hour) before the DLQ, so an hour-old message is one
+# that isn't being worked; without this it would expire unseen after 4 days.
+resource "aws_cloudwatch_metric_alarm" "fetch_requests_age" {
+  alarm_name          = "${local.project}-fetch-requests-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 3600
+  alarm_description   = "A fetch request has waited over an hour in fetch-requests: the fetcher isn't consuming it (not deployed yet, its event source disabled, or throttled). Feeds go stale meanwhile, and the request expires after 4 days. Check the fetcher's function, its SQS trigger and the fetcher-throttles alarm."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.fetch_requests.name
+  }
+}
+
+# A fetch the fetcher answered as failed: the Lambda succeeded, so
+# fetcher_errors never sees it. lambda-fetcher.ts logs one line per failed
+# answer:
+#   {"event":"feed_fetch_failed","feedId":"…","source":"dws","reason":"unavailable"}
+# the feed's id, its source and a reason code (timeout, invalid_request,
+# unavailable, format, internal, other), never the stored message, which can
+# name a grid cell or a station. One failure alarms: feeds fetch a few times a
+# day, and SNS only notifies on the change to ALARM, so a source that stays
+# down alarms once, not on every fetch.
+resource "aws_cloudwatch_log_metric_filter" "feed_fetch_failed" {
+  name           = "${local.project}-feed-fetch-failed"
+  log_group_name = aws_cloudwatch_log_group.fetcher.name
+  pattern        = "{ $.event = \"feed_fetch_failed\" }"
+
+  metric_transformation {
+    name          = "FeedFetchFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
+  alarm_name          = "${local.project}-feed-fetch-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter event = \"feed_fetch_failed\" | stats count() by source, reason. unavailable/timeout = the source is down or slow (wait for the next fetch); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
 }
