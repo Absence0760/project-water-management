@@ -149,6 +149,18 @@ collected as a checklist in issue #46; tick it there as they answer.
       questions (plan.md questions 2–4), and the runoff-ratio check, which
       needs the client workbook back in
       `../project-water-management-source/Original/`.
+- [ ] **Flow gap filling defaults to confirm** (engine 1.20.0, issue #66,
+      [model.md §2.10h](./model.md)). Built off by default on these
+      engineering defaults; put each to the hydrologist as "confirm or
+      change": the 5-day interpolation limit (seasonal?); one whole-record
+      donor ratio (or per month / per flow class); the donor refusal
+      thresholds (r < 0.5, fewer than 365 shared days); clamping a donor day
+      to the record's own maximum (or the weir's rated maximum); and never
+      scoring filled days by default. Hand-off: CR-18's per-day flags read
+      the fill's code (`PreparedRun.flowFill[kind].code`, `FLOW_FILL_CODE`)
+      as *infilled*, and CR-19's flag-aware objective replaces the
+      `useFilledDays` switch with per-flag weights (keep the switch's
+      default: filled days not scored).
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":

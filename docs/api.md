@@ -483,6 +483,15 @@ alongside teams, e.g. to give an outside client `viewer` access.
   listed twice (overlapping periods are fine). They apply to the run's
   calibration statistics and EWR test on the observed record, and to Fit
   automatically.
+  `flowGapFill` (engine ≥ 1.20.0, issue #66) is `{ flow_observed_m3s,
+  flow_logger_m3s, useFilledDays }`: per observed record `null` (not filled,
+  the default) or `{ interpolateMaxDays (whole, 0–30), donor
+  ('flow_observed_m3s' | 'flow_logger_m3s' | 'flow_reference_m3s' | null, never
+  the record itself), donorMaxDays (whole, 1–366), donorMinOverlapDays (whole,
+  30–36 600) }`, strict, replaced whole; `useFilledDays` (default `false`) lets
+  the statistics read the filled days. A `PATCH` merges the group one level
+  deep. Anything else is a `400`; settings stored before it read back as off.
+  [model.md §2.10h](./model.md).
   `fitRecord` is the record of the automatic fit whose parameters Apply wrote
   (`FitRecord` in `packages/engine/src/calibrate/provenance.ts`), or `null`:
   `{ fittedAt (ISO timestamp), engineVersion, model, objective, bounds, seed,
@@ -495,8 +504,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   marLowMm3, marHighMm3, basis, marRatio, unpenalised`, `null` when it was
   off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
-  multi-start fit (absent on a record made before those, i.e. one start), and
-  no others. Each scored period (`fit`, `before`, a test's `calibration`
+  multi-start fit (absent on a record made before those, i.e. one start),
+  `observedOrigin` (`{ source, unit, factor }` of the fitted record, 107, or
+  `null`) and `flowGapFill` (`{ spec, useFilledDays }`, engine ≥ 1.20.0; both
+  absent on older records), and no others. Each scored period (`fit`, `before`, a test's `calibration`
   and `validation`, `marPenalty.unpenalised.fit`) is `{ start, end,
   waterYears, scores, intervals?, benchmarks? }`, `scores` at most 30
   numbers-or-null by name. From engine 1.19.0 (CR-5) `intervals` is `{ level,
@@ -1127,12 +1138,17 @@ naming `startDate`, not a server error).
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/series` | – | `{ series: SeriesMeta[] }` | viewer |
 | GET | `/projects/:id/series/:seriesId` | – | `SeriesMeta & { values }` | viewer |
-| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
-| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing; a `null` day keeps its stored value, so a file never erases: clear days with a PUT) | editor |
-| PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }` | `SeriesMeta`: says what an existing series holds, or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
+| PUT | `/projects/:id/series` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary?, source? }` | `SeriesMeta & { rerunQueuedFor }` (upsert on kind+name) | editor |
+| POST | `/projects/:id/series/merge` | `{ kind, name?, unit, startDate, values, product?, productVersion?, dayBoundary?, source? }` | `SeriesMeta & { rerunQueuedFor }` (merge by date; creates the series if missing; a `null` day keeps its stored value, so a file never erases: clear days with a PUT) | editor |
+| PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }`, and/or `{ source }` (a string, or `null` to clear; 107) | `SeriesMeta`: says what an existing series holds, where its values came from (`source`), or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, source, sourceUnit, sourceUnitFactor, rebuilding }` —
+`source` is where the values came from (a station id, agency, file or data feed; `null` = not recorded) and `sourceUnit` /
+`sourceUnitFactor` the unit the upload gave and the factor that converted it to `unit` (both `null` = not recorded; 107,
+[data-model.md § Series source and unit](./data-model.md#series-source-and-unit-107_series_sourcesql)). A PUT records exactly what it
+was (a `source` it doesn't give is cleared); a merge records them only on a new or empty series. `source` is 1–200 characters on one line
+(`400` otherwise); the given unit is never a body field, and a PATCH naming `sourceUnit` is a `400`;
 `lastValueDate` is the last day with a value (`null` when every day is blank): how far the data reaches, where `startDate + length − 1`
 counts the blank days a merge stores (the Data page's freshness, "Data now runs to", the report's data coverage);
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record);
@@ -1158,6 +1174,18 @@ recorded. A merge without them keeps the series' label; a merge with them
 labels a new or empty series, and is `409 { error: "the series holds CHIRPS
 v2.0 and these days are CHIRPS sat v3.0: merging them would splice two
 versions into one record. …" }` into a series holding values of another.
+
+**Source and given unit** (issue #66, [data-model.md § Series source and
+unit](./data-model.md#series-source-and-unit-107_series_sourcesql)): `source`
+says where the values came from, e.g. `DWS X1H001`; the unit the body gives
+(`l/s`, `ML/day` …) and the factor that converted it are recorded by the
+route itself as `sourceUnit` / `sourceUnitFactor`. A PUT records exactly
+what it was (no `source` clears it); a merge records them on a new or empty
+series and otherwise keeps the series' own. A data feed records itself
+(`"CHIRPS daily rainfall data feed"`, `"DWS gauge flow data feed, station
+A2H012"`) on a series it creates or replaces. The project document carries
+them per series (`source`, `sourceUnit`, `sourceUnitFactor`; an import
+without the unit pair records the file's own unit).
 
 **Day boundary** (issue #40 (b), [data-model.md § Series day
 boundary](./data-model.md#series-day-boundary-033_series_day_boundarysql)):
@@ -1330,6 +1358,17 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   the run also stores the one not scored as the catchment series
   `observed_flow_other` (labelled "Observed flow" for the gauge, "Observed
   flow (logger)" for the logger, like `observed_flow`).
+  Engine ≥ 1.20.0: when `settings.flowGapFill` fills a record (issue #66,
+  [model.md §2.10h](./model.md)), the run also stores, beside it,
+  `observed_flow_fill` / `observed_flow_other_fill` (per day 0 = measured or
+  still missing, 1 = interpolated, 2 = from a donor record) and
+  `observed_flow_filled` / `observed_flow_other_filled` (m³/day on the filled
+  days, missing elsewhere), and `summary.flowGapFill` lists per filled record
+  `{ kind, spec, interpolatedDays, interpolatedGaps, donorDays, donorGaps,
+  clampedDays, clampM3s, donor: { kind, ratio, overlapDays, correlation } |
+  null, donorRefused, openGaps, openDays }` (days counted over the run, gaps
+  and the donor's fit over the whole record); absent when no record is
+  filled. `observed_flow` itself stays the measured record.
   `RunSummary.ewrCompliance` is the water-year × month EWR grid for the outlet
   and each farm (tens of KB even for a multi-decade, multi-farm run). Both are defined in
   `packages/engine/src/project.ts`; runs saved before engine 0.3.0 lack the

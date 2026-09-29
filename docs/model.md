@@ -3777,7 +3777,8 @@ one of the two records `observedAgreement` compares, and it plays no part in the
 EWR results, including the EWR agreement with the observed record (§2.9b). A project with a logger and a reference gauge therefore
 calibrates on the logger with no default-pick warning. The only thing a run does
 with it is list data-quality checks (outliers, flat stretches) under its own
-name. It can be charted on the Time series tab, where it serves as a regional
+name, and, only when `settings.flowGapFill` names it as a donor (engine ≥
+1.20.0, §2.10h), scale it into the gaps of the gauge or logger record. It can be charted on the Time series tab, where it serves as a regional
 wet/dry index. From engine 1.19.0 automatic calibration's dry → wet test
 ranks its water years by it (§2.10b) — its only use in the engine, and never
 as something scored.
@@ -5117,6 +5118,100 @@ budgets 2 s).
 **For the hydrologist:** the ranges (especially abstraction ±30 % and the
 dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
 not findings.
+
+### 2.10h Gap filling of the observed flow records (engine ≥ 1.20.0, issue #66)
+
+Not in the workbook. `settings.flowGapFill` (`packages/engine/src/flowGapFill.ts`)
+fills gaps in the observed gauge (`flow_observed_m3s`) and logger
+(`flow_logger_m3s`) records **in a run only**: the stored series is never
+changed, and turning it off undoes it. **Off by default** (every record
+`null`), so a project that never sets it runs exactly as before, to the bit.
+Settings → Calibration record → *Flow gaps*.
+
+Only **interior** gaps are filled: a run of missing days (blank, non-finite or
+negative, as a run reads a flow) with a reading on both sides. A record's
+lead-in and tail are never filled; nothing bounds them. Per record:
+
+1. **Log-linear interpolation** of a gap of at most `interpolateMaxDays`
+   (default **5**, 0–30): the day a fraction f of the way across the gap gets
+   Q = a·(b/a)^f between the readings a before and b after, linearly where
+   either is 0. A recession is exponential, Q(t) = Q0·k^t, so the log-linear
+   line follows one exactly where a straight line overstates its volume. A
+   longer gap is never interpolated: nothing inside it is known, and a flood
+   there would be missed entirely. Five days is short enough that a gap
+   rarely hides a whole event in the dry season and long enough for a
+   logger's missed weekly download or a weekend without readings. *A draft,
+   pending the hydrologist.*
+2. **From a donor record** for a longer gap up to `donorMaxDays` (default
+   **60**, 1–366): the other observed record on the same reach (the logger
+   for the gauge, or the reverse) or the reference gauge on a neighbouring
+   river (`flow_reference_m3s`, otherwise never read by a run), × the ratio
+   Σ record / Σ donor over every day both have a reading in the whole stored
+   records. The donor is **refused**, and the summary and warning say why,
+   when the two share fewer than `donorMinOverlapDays` (default **365**, so
+   the ratio spans the seasons) or their daily flows correlate below
+   `DONOR_MIN_CORRELATION` = **0.5** (Pearson r on the shared days: the donor
+   doesn't rise and fall with the river). A filled day is **clamped** to the
+   record's own highest reading: a donor's flood scaled past anything the
+   gauge measured lies outside its rating. A gap day the donor has no
+   reading for stays open. One ratio over the whole record, not per month
+   or per flow class: see the questions below.
+
+Interpolation runs first, on the gaps short enough for it; the donor then
+fills only the longer ones. Everything is fitted and counted over the whole
+stored record, so the Data tab shows exactly what a run would fill. (A run
+resumed from a model-state snapshot, §2.16, fills from the records it is
+given: without the history before the snapshot's day, a gap across that day
+has no reading before it and stays open. The model's state never depends on
+an observed record, so only the fill columns and, with `useFilledDays`, the
+scores can differ.)
+
+**What reads a filled day.** `useFilledDays` (default **false**): the
+calibration statistics, the EWR test on the observed record, automatic
+calibration (the fit) and the plausibility checks read the **measured days
+only**, as before, so scoring never silently counts an estimate. The filled
+days are shown and exported. With `useFilledDays` true every one of them
+reads the filled record (`PreparedRun.aligned`), the calibration exclusions
+still applying. The gauge-vs-logger agreement (§2.10a) and the series checks
+always read the stored records: filling one record from the other would make
+them agree by construction. A gauge node's own record (§2.10d) is never
+filled.
+
+**Outputs.** Each filled record gets two run series beside it:
+`observed_flow_fill` / `observed_flow_other_fill` (per day 0 = measured or
+still missing, 1 = interpolated, 2 = from the donor: `FLOW_FILL_CODE`) and
+`observed_flow_filled` / `observed_flow_other_filled` (the filled values,
+m³/day, only on filled days). `RunSummary.flowGapFill` gives per record the
+spec, the days interpolated and from the donor (counted over the run), the
+donor's ratio, shared days and r (over the record), clamped days, why a donor
+was refused, and the gaps left open; a run warning says the same and whether
+the statistics read the filled days. The daily CSV has the two columns beside
+the record, and the summary CSV a *Gaps filled in the observed flow records*
+block (`flowGapFillLines` in `backend/src/export/run-tables.ts`), only on a run
+that filled a record. The per-day code is also on the
+prepared run (`PreparedRun.flowFill[kind].code`), which is what the per-day
+quality flags (CR-18) read as *infilled*; CR-19's flag-aware objective will
+generalise `useFilledDays` into per-flag weights.
+
+**Fit provenance.** A fit records the fitted record's spec and switch
+(`fitRecord.flowGapFill`). When filled days were read at the fit or are read
+now, a changed spec or switch flags the fit (`flowFillChanged`, and the run's
+`fitStatus` becomes `otherPeriod`: the scores are on other days); with filled
+days read at neither, a change of spec changes nothing the fit saw and isn't
+flagged. It also records where that record came from and the unit it was
+given in (`fitRecord.observedOrigin`, data-model.md § Series source and unit),
+flagged when either changes (`observedOriginChanged`).
+
+**Questions for the hydrologist** (the defaults above stand until answered):
+whether 5 days is the right interpolation limit for these rivers, or whether
+it should depend on season (a wet-season gap of three days can hide a flood);
+whether one whole-record donor ratio is good enough, or it should be fitted
+per month or per flow class (a neighbouring gauge's ratio usually differs
+between base flow and floods); whether the 0.5 correlation floor and the
+365-day minimum overlap are the right refusal thresholds; whether a filled
+day should be clamped to the record's maximum or to the weir's rated
+maximum, when known; and whether a filled record should ever be scored by
+default (it isn't).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
