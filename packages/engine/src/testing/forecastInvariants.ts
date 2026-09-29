@@ -40,6 +40,38 @@ function firstDifference(a: readonly number[], b: readonly number[], n: number):
 	return -1;
 }
 
+/** A JSON value in a failure message, cut to a readable length. */
+function shown(v: unknown): string {
+	const s = v === undefined ? 'absent' : JSON.stringify(v);
+	return s.length > 120 ? `${s.slice(0, 117)}...` : s;
+}
+
+/**
+ * The first place two JSON values differ, as `path: a vs b` (`summary.farms[2].deficitDays: 3 vs 4`),
+ * or null when they are equal. Keys are walked in `a`'s order, then those only `b` has, so the message
+ * names the figure that diverged instead of only saying that something did (issue #192).
+ */
+export function jsonDifference(a: unknown, b: unknown, path = 'summary'): string | null {
+	if (a === b) return null;
+	if (Array.isArray(a) && Array.isArray(b)) {
+		for (let i = 0; i < Math.max(a.length, b.length); i++) {
+			const d = jsonDifference(a[i], b[i], `${path}[${i}]`);
+			if (d) return d;
+		}
+		return null;
+	}
+	if (a && b && typeof a === 'object' && typeof b === 'object' && !Array.isArray(a) && !Array.isArray(b)) {
+		const x = a as Record<string, unknown>;
+		const y = b as Record<string, unknown>;
+		for (const k of new Set([...Object.keys(x), ...Object.keys(y)])) {
+			const d = jsonDifference(x[k], y[k], `${path}.${k}`);
+			if (d) return d;
+		}
+		return null;
+	}
+	return `${path}: ${shown(a)} vs ${shown(b)}`;
+}
+
 /**
  * Forecast mode keeps history apart from the forecast:
  * - without a forecast tail, runForecastChecked is runModelChecked plus
@@ -97,7 +129,8 @@ export function checkForecastPrefix(input: ModelInput): string | null {
 		if (t >= 0) return `prefix stability: ${s.nodeId}|${s.key} on ${fromEpochDay(toEpochDay(out.startDate) + t)}: ${s.values[t]} vs ${f[t]}`;
 	}
 	const strip = (o: ModelOutput) => JSON.stringify({ ...o.summary, forecast: undefined, forecastRain: undefined, warnings: undefined });
-	if (strip(out) !== strip(hist)) return 'prefix stability: the summaries differ';
+	const [a, b] = [strip(hist), strip(out)];
+	if (a !== b) return `prefix stability: the summaries differ at ${jsonDifference(JSON.parse(a), JSON.parse(b)) ?? '(no path found)'}`;
 	const extra = out.summary.warnings.filter((w) => !hist.summary.warnings.includes(w));
 	if (extra.some((w) => !w.startsWith('self-check failed on the run with the forecast tail'))) return `unexpected warnings: ${extra.join(' | ')}`;
 
