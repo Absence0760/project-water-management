@@ -118,13 +118,17 @@ const CI_EVENTS = ['push', 'workflow_dispatch'];
  * @param {Record<string, WorkflowRun[]>} runsBySuite workflow runs per check suite id
  * @param {string} sha
  * @param {string} repo owner/name
- * @returns {{ trusted: CheckRun[], ignored: string[] }}
+ * `unresolved` counts GitHub Actions runs whose check suite has no workflow run
+ * yet: right after a push the check run can appear before its workflow run is
+ * indexed, so that is a wait, not a verdict.
+ * @returns {{ trusted: CheckRun[], ignored: string[], unresolved: number }}
  */
 export function trustedCiGateRuns(checkRuns, runsBySuite, sha, repo) {
 	/** @type {CheckRun[]} */
 	const trusted = [];
 	/** @type {string[]} */
 	const ignored = [];
+	let unresolved = 0;
 	for (const cr of checkRuns) {
 		if (cr.app?.id !== ACTIONS_APP.id || cr.app?.slug !== ACTIONS_APP.slug) {
 			ignored.push(`check run ${cr.id} was posted by ${cr.app?.slug ?? 'an unknown app'}, not GitHub Actions`);
@@ -139,22 +143,27 @@ export function trustedCiGateRuns(checkRuns, runsBySuite, sha, repo) {
 			continue;
 		}
 		const w = wfRuns[0];
+		if (!w && cr.check_suite_id != null) unresolved++;
 		ignored.push(
 			w
 				? `check run ${cr.id} came from ${w.path ?? '(no path)'} on a ${w.event ?? '(unknown)'} event for ${(w.head_sha ?? '').slice(0, 12) || '(no sha)'}${w.head_repository && w.head_repository !== repo ? ` in ${w.head_repository}` : ''}, not ${CI_WORKFLOW_PATH} on a push or manual run of this commit`
 				: `check run ${cr.id} belongs to no workflow run of this repository`,
 		);
 	}
-	return { trusted, ignored };
+	return { trusted, ignored, unresolved };
 }
 
 /**
  * The newest `CI gate` check run decides.
  * @param {{ id: number, status: string, conclusion: string | null }[]} runs the trusted runs (trustedCiGateRuns)
  * @param {string[]} [ignored] why other runs by that name did not count
+ * @param {number} [unresolved] Actions runs whose workflow run is not indexed yet (trustedCiGateRuns)
  * @returns {{ state: 'pass' | 'pending' | 'fail', detail: string }}
  */
-export function ciGateState(runs, ignored = []) {
+export function ciGateState(runs, ignored = [], unresolved = 0) {
+	if (!runs.length && unresolved > 0) {
+		return { state: 'pending', detail: `"CI gate" exists but its workflow run is not visible yet (${unresolved} check suite${unresolved === 1 ? '' : 's'})` };
+	}
 	if (!runs.length) {
 		const why = ignored.length ? ` (ignored: ${ignored.join('; ')})` : '';
 		return { state: 'fail', detail: `no "CI gate" check run from ${CI_WORKFLOW_PATH} under GitHub Actions exists for this commit, so CI never ran on it${why}` };
@@ -417,11 +426,13 @@ async function main() {
 					lookupFailed = true;
 					break;
 				}
-				runsBySuite[String(suite)] = JSON.parse(wr.out);
+				// An empty answer isn't cached: the workflow run may just not be indexed yet.
+				const found = JSON.parse(wr.out);
+				if (found.length) runsBySuite[String(suite)] = found;
 			}
 			if (lookupFailed) break;
-			const { trusted, ignored } = trustedCiGateRuns(checkRuns, runsBySuite, outputs.sha, repo);
-			const state = ciGateState(trusted, ignored);
+			const { trusted, ignored, unresolved } = trustedCiGateRuns(checkRuns, runsBySuite, outputs.sha, repo);
+			const state = ciGateState(trusted, ignored, unresolved);
 			if (state.state === 'pass') break;
 			if (state.state === 'fail' || Date.now() > deadline) {
 				errors.push(`CI did not pass on ${outputs.sha.slice(0, 12)}: ${state.detail}${state.state === 'pending' ? ` after ${waitSeconds}s` : ''}. Only a commit whose CI gate is green may be released.`);

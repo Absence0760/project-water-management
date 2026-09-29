@@ -1224,8 +1224,8 @@ plan-only until the first deploy):
     once the renderer runs; the reports show as failed and can be asked for
     again.
   - *Runbook: `report-render-failed`.* Logs Insights on the renderer's log
-    group: `filter event = "report_render_failed" | stats count() by reason,
-    retry`. `store`: the reports bucket refused the PDF (the renderer's
+    group: `filter message.event = "report_render_failed" | stats count() by
+    message.reason, message.retry`. `store`: the reports bucket refused the PDF (the renderer's
     role, `report_store_failed` has the error name). `render` with `retry`
     false: the token was refused or the page said it can't show the report
     (the report's own error, on the Reports tab, has the text). With `retry`

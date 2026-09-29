@@ -94,16 +94,26 @@ test('only a CI gate from ci.yml under GitHub Actions, on a push or manual run o
 		['a pull_request run (the merge ref\'s ci.yml, which the PR can rewrite)', [gate(1, 10)], { 10: [ciRun({ event: 'pull_request' })] }, /pull_request event/],
 		['a run of another commit', [gate(1, 10)], { 10: [ciRun({ head_sha: 'b'.repeat(40) })] }, /bbbbbbbbbbbb/],
 		['a run in a fork', [gate(1, 10)], { 10: [ciRun({ head_repository: 'someone/fork' })] }, /someone\/fork/],
-		['a suite with no workflow run', [gate(1, 10)], {}, /no workflow run/],
 		['no suite id', [gate(1, null)], { 10: [ciRun()] }, /no workflow run/],
 	]) {
 		const r = trustedCiGateRuns(/** @type {any} */ (runs), /** @type {any} */ (bySuite), SHA, REPO);
 		assert.deepEqual(r.trusted, [], why);
 		assert.match(r.ignored.join(' '), reason, why);
-		const state = ciGateState(r.trusted, r.ignored);
+		const state = ciGateState(r.trusted, r.ignored, r.unresolved);
 		assert.equal(state.state, 'fail', why);
 		assert.match(state.detail, /ignored:/, why);
 	}
+
+	// a check run whose workflow run isn't indexed yet (just after a push) is a wait,
+	// and stays one only until the deadline; a hard mismatch beside it still fails
+	const early = trustedCiGateRuns([gate(1, 10)], {}, SHA, REPO);
+	assert.equal(early.unresolved, 1);
+	assert.match(early.ignored.join(' '), /no workflow run/);
+	assert.equal(ciGateState(early.trusted, early.ignored, early.unresolved).state, 'pending');
+	const forked = trustedCiGateRuns([gate(1, 10), gate(2, 20)], { 20: [ciRun({ head_repository: 'someone/fork' })] }, SHA, REPO);
+	assert.equal(forked.unresolved, 1);
+	assert.equal(ciGateState(forked.trusted, forked.ignored, forked.unresolved).state, 'pending');
+	assert.equal(trustedCiGateRuns([gate(1, null)], {}, SHA, REPO).unresolved, 0);
 
 	// an untrusted green run beside a trusted red one: the red one decides
 	const mixed = trustedCiGateRuns([gate(9, 20, { id: 7, slug: 'x' }), { ...gate(3, 10), conclusion: 'failure' }], { 10: [ciRun()], 20: [ciRun()] }, SHA, REPO);
