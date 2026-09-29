@@ -89,8 +89,11 @@ export interface User {
 }
 
 export interface UserPreferences {
-	/** The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`). */
-	hiddenTabs: string[];
+	/**
+	 * The workspace sections (`?tab=` ids) they hid from their sidebar (lib/workspace/tabs.ts `visibleTabs`);
+	 * null when they never chose (or reset), so `DEFAULT_HIDDEN_TABS` applies.
+	 */
+	hiddenTabs: string[] | null;
 }
 
 /**

@@ -488,16 +488,22 @@ Project page's headline facts still link to their tabs (a deep link, as above).
 
 **Your own sections** (`workspace/SectionsMenu.svelte`,
 `e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
-hides the sections they don't use. The **Choose sections** button (icon only
+hides the sections they don't use. Until they choose, three are hidden by
+default (`DEFAULT_HIDDEN_TABS` in `lib/workspace/tabs.ts`): **History** (the
+model's change log), **Allocations** (registered volumes against modelled
+use) and **Applications** (the licensing inbox), the sections most days don't
+need; each is one tick away and still opens from a link. The **Choose sections** button (icon only
 on the sidebar's "Catchment" line, in words at the foot of the phone's
 Sections menu; once some are hidden, a count on the corner of the sidebar's
 icon, kept within its 24 px button so the slot never scrolls sideways, and
 "Hidden (n)" in the phone's words) opens a dialog with a
 checkbox per section the role shows here, opening right beside the button
 (centred on a phone), grouped as the sidebar is (the groups side by side,
-one column on a phone), with **Reset to default** and
-**Done**. Summary is always shown (its box is ticked and disabled). The
-choice is the account's (`user.preferences.hiddenTabs`, `PATCH /auth/me`,
+one column on a phone), with **Reset to default** (back to those three hidden; off while the person
+has no choice of their own) and **Done**. Summary is always shown (its box is ticked and disabled). The
+choice is the account's (`user.preferences.hiddenTabs`, `null` until they make
+one, `[]` when they chose to show every section; `hiddenChoice` resolves it;
+`PATCH /auth/me`,
 [api.md § Auth](./api.md)), so it applies in every catchment and on every
 device; each change saves at once, in order, with the boxes kept live (a
 failed save says so and holds until a reload). It goes through `prefs.hidden`:
@@ -5221,9 +5227,10 @@ unit's own fields). A field never changed since it was set shows nothing.
   ([api.md § Field history](./api.md#field-history)), fetched only when the
   first line renders (opening a node sheet, the drawer or Settings), never at
   first paint, and again after a model save, a settings save or a restore.
-  The page shares it through context and sets it only for members whose tabs
-  include History (not farmers or applicants), so no one else fetches or sees
-  it. A failed fetch leaves the lines hidden; the fields work as before.
+  The page shares it through context and sets it only for members whose role
+  sees History (not farmers or applicants), so no one else fetches or sees
+  it; hiding History from one's own sidebar (it is hidden by default) keeps
+  the lines. A failed fetch leaves the lines hidden; the fields work as before.
 
 e2e: `e2e/tests/history.spec.ts` (the restore flows, a viewer, a field's line
 after two saves and its link) and `e2e/tests/history-page.spec.ts` (the page: header line, window fit and a

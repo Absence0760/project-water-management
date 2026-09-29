@@ -6,6 +6,8 @@ import {
 	NAV_SECTIONS,
 	navSections,
 	hasModelInputsToggle,
+	DEFAULT_HIDDEN_TABS,
+	hiddenChoice,
 	hiddenTabs,
 	stripTabs,
 	TAB_GROUP,
@@ -134,6 +136,23 @@ describe('hiddenTabs (the "Hidden (n)" count)', () => {
 		const viewerTabs = visibleTabs('viewer', {}, PAGE);
 		expect(hiddenTabs(viewerTabs, ['history', 'crops', 'runs'])).toEqual(['runs']);
 		expect(hiddenTabs(viewerTabs, undefined)).toEqual([]);
+	});
+});
+
+describe('hiddenChoice (the default hidden sections)', () => {
+	it('hides History, Allocations and Applications until the person chooses; their own choice, even [], wins', () => {
+		expect([...DEFAULT_HIDDEN_TABS].sort()).toEqual(['allocations', 'applications', 'history']);
+		for (const never of [null, undefined]) {
+			const shown = visibleTabs('owner', { hidden: hiddenChoice(never) }, PAGE);
+			expect(shown).not.toContain('history');
+			expect(shown).not.toContain('allocations');
+			expect(shown).not.toContain('applications');
+			expect(shown).toContain('overview');
+		}
+		expect(visibleTabs('owner', { hidden: hiddenChoice([]) }, PAGE)).toEqual(PAGE);
+		expect(visibleTabs('owner', { hidden: hiddenChoice(['crops']) }, PAGE)).toContain('history');
+		// Every default id is a real section, so the default never silently hides nothing.
+		for (const id of DEFAULT_HIDDEN_TABS) expect(ALL_TABS).toContain(id);
 	});
 });
 

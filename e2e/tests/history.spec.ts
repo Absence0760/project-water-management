@@ -3,7 +3,7 @@
 // earlier value back. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject } from '../support/api.ts';
+import { addMember, createProject, createRun, putModel, putSeries, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { historyDetail } from '../support/history.ts';
@@ -22,6 +22,8 @@ async function openCapacity(page: Page, projectId: string) {
 test('edit a dam capacity with a reason, see it in History, restore the earlier version', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'History round trip');
+	// History is hidden from the sidebar by default; this account shows it, to open it from there below.
+	await showAllSections(page.request);
 
 	const capacity = await openCapacity(page, project.id);
 	await expect(capacity).toHaveValue('150\u202f000');

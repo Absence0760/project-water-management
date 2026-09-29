@@ -15,7 +15,7 @@ describe('auth', () => {
 		const u = await signUp('Ann', { verified: false });
 		const me = await u.call('GET', '/auth/me');
 		expect(me.status).toBe(200);
-		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(me.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Ann', emailVerified: false, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
 		expect(JSON.stringify(me.body)).not.toContain('password');
 	});
 
@@ -397,7 +397,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 		const u = await signUp('Renamed');
 		const res = await u.call('PATCH', '/auth/me', { displayName: '  Dr Renamed  ' });
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Dr Renamed', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
 		expect((await u.call('GET', '/auth/me')).body.user.displayName).toBe('Dr Renamed');
 		expect((await u.call('PATCH', '/auth/me', { displayName: '   ' })).status).toBe(400);
 		expect((await u.call('PATCH', '/auth/me', { displayName: 'x'.repeat(101) })).status).toBe(400);
@@ -415,7 +415,7 @@ describe('account: display name and password change (WP-1.9)', () => {
 
 		const res = await change(u.cookie, 'correct horse', 'battery staple');
 		expect(res.status).toBe(200);
-		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: [] }, termsCurrent: true, farmNoticeCurrent: false });
+		expect(res.body.user).toEqual({ id: u.id, email: u.email, displayName: 'Changer', emailVerified: true, locale: null, volumeUnit: 'm3', mailSuppressed: null, preferences: { hiddenTabs: null }, termsCurrent: true, farmNoticeCurrent: false });
 		const fresh = cookieOf(res);
 		expect(fresh).toMatch(/^wm_session=.+/);
 

@@ -271,7 +271,7 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** Renames the account (1–100 characters, trimmed by the server). */
 			/**
 			 * Changes only the fields sent. `locale: null` goes back to following the browser.
-			 * `preferences`: the keys sent replace the account's (`hiddenTabs: []` shows every section again).
+			 * `preferences`: the keys sent replace the account's (`hiddenTabs: []` shows every section, `null` goes back to the default).
 			 */
 			/** "I understand" on the farm view's notice: records the version this build shows (409 farm_notice_changed if it is no longer current). */
 			acknowledgeFarmNotice: () =>

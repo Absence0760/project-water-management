@@ -18,25 +18,30 @@ export const MAX_HIDDEN_TABS = 32;
 /** What a PATCH may set. Unknown keys are refused, so the document can't collect junk. */
 export const PreferencesPatch = z
 	.object({
-		/** The sections hidden from the sidebar; [] shows them all again ("Reset to default"). */
+		/**
+		 * The sections hidden from the sidebar: [] shows them all, null forgets the choice so the
+		 * default applies again ("Reset to default"; the frontend's DEFAULT_HIDDEN_TABS).
+		 */
 		hiddenTabs: z
 			.array(tabId)
 			.max(MAX_HIDDEN_TABS)
 			.transform((ids) => [...new Set(ids)])
+			.nullable()
 	})
 	.partial()
 	.strict();
 export type PreferencesPatch = z.infer<typeof PreferencesPatch>;
 
 export interface Preferences {
-	hiddenTabs: string[];
+	/** null: the person never chose (or reset), so the app's default sections are hidden. */
+	hiddenTabs: string[] | null;
 }
 
 /** The stored document as the API returns it: every key present, anything malformed dropped. */
 export function toPreferences(doc: unknown): Preferences {
 	const d = doc && typeof doc === 'object' ? (doc as Record<string, unknown>) : {};
 	const hidden = tabId.array().safeParse(d.hiddenTabs);
-	return { hiddenTabs: hidden.success ? hidden.data : [] };
+	return { hiddenTabs: hidden.success ? hidden.data : null };
 }
 
 /**

@@ -71,6 +71,7 @@
 		ALL_TABS,
 		canOpenTab,
 		hasModelInputsToggle,
+		hiddenChoice,
 		navSections,
 		stripTabs,
 		TAB_LABELS,
@@ -120,12 +121,13 @@
 	// (SectionsMenu, their account's preferences).
 	const roleIds = $derived(visibleTabs(project?.role, { showModelInputs }, TAB_IDS));
 	const shownIds = $derived(
-		visibleTabs(project?.role, { showModelInputs, hidden: session.user?.preferences?.hiddenTabs }, TAB_IDS)
+		visibleTabs(project?.role, { showModelInputs, hidden: hiddenChoice(session.user?.preferences?.hiddenTabs) }, TAB_IDS)
 	);
 	const stripIds = $derived(stripTabs(shownIds, tab, TAB_IDS));
-	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those who see History,
-	// fetched once a line asks for it, and again after a save or a restore.
-	const canSeeHistory = $derived(shownIds.includes('history'));
+	// "Changed 3× · last by …" under the model inputs (docs/ui.md § Field history): for those whose role sees
+	// History, whether or not they keep it in their sidebar (it is hidden by default, DEFAULT_HIDDEN_TABS, and
+	// the line's link still opens it); fetched once a line asks for it, and again after a save or a restore.
+	const canSeeHistory = $derived(roleIds.includes('history'));
 	const fieldHistory = $derived(canSeeHistory && projectId ? new FieldHistoryStore(projectId) : null);
 	setFieldHistory(() => fieldHistory);
 	const LABEL = TAB_LABELS;

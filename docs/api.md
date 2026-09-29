@@ -82,9 +82,11 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   bounce or a spam complaint for the address (057): alert emails are paused
   until the person turns them back on (`POST /me/alerts/resume`,
   [§ Alerts](#alerts)). `preferences` is the person's own display choices
-  (`user_preferences`, 083), today `{ hiddenTabs: string[] }`: the workspace
-  sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs by
-  role](./ui.md)), `[]` until they hide one. Only ever their own.
+  (`user_preferences`, 083), today `{ hiddenTabs: string[] | null }`: the
+  workspace sections (`?tab=` ids) they hid from their sidebar ([ui.md § Tabs
+  by role](./ui.md)); `null` until they choose (the app then hides its default
+  sections: History, Allocations, Applications), `[]` once they chose to show
+  every one. Only ever their own.
   `termsCurrent` is whether the account accepted the terms and privacy
   notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
   `false` after the version changes, and for an account `import:project`
@@ -137,7 +139,8 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   including a different case, is a `400`) and `volumeUnit` (`'m3'` or `'ML'`),
   and `preferences`, whose keys sent replace the account's (the others stay):
   `hiddenTabs`, at most 32 section ids (`^[a-z][a-z-]{0,31}$`, each kept
-  once; `[]` is "Reset to default"). Any other key inside `preferences`, or a
+  once; `[]` shows every section, `null` forgets the choice, which is "Reset
+  to default"). Any other key inside `preferences`, or a
   value of another shape, is a `400` (`backend/src/auth/preferences.ts`). At least one
   field is required. The email address isn't editable; other top-level keys are ignored.
 - **`register`** takes an optional `locale` (the language the sign-up page

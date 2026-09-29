@@ -8,7 +8,7 @@
 // starts at the sidebar's edge instead of covering its foot. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, seedRunnableProject } from '../support/api.ts';
+import { addMember, seedRunnableProject, showAllSections } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -33,6 +33,8 @@ const OWNER_TABS = [
 	'Applications',
 	'History'
 ];
+/** Hidden until a person chooses their own sections (lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS). */
+const DEFAULT_HIDDEN = ['Allocations', 'Applications', 'History'];
 /** One sidebar row (the rows are 34 px): the room left for one more section. */
 const ROW = 34;
 
@@ -67,6 +69,14 @@ test.describe('1440×960', () => {
 
 		// Data's link also carries its "series behind" badge, so match each label at the start.
 		const links = nav(page).getByRole('link');
+		// By default three sections are hidden.
+		await expect(links).toHaveText(OWNER_TABS.filter((t) => !DEFAULT_HIDDEN.includes(t)).map((t) => new RegExp(`^${t}`)));
+		await expect(page.getByRole('button', { name: 'Choose sections: Hidden (3)' })).toBeVisible();
+
+		// The budget is for the worst case: every section shown.
+		await showAllSections(page.request);
+		await page.reload();
+		await expect(page.getByRole('heading', { level: 1, name: 'River & reserve' })).toBeVisible();
 		await expect(links).toHaveText(OWNER_TABS.map((t) => new RegExp(`^${t}`)));
 		for (const link of await links.all()) await expect(link).toBeInViewport({ ratio: 1 });
 		await expect(account(page)).toBeInViewport({ ratio: 1 });
@@ -155,11 +165,14 @@ test.describe('1440×960', () => {
 		const viewer = await signIn('Sidebar viewer');
 		await addMember(page.request, project.id, viewer.user.email, 'viewer');
 		const v = viewer.page;
+		// Every section the role sees, not the default that hides some.
+		await showAllSections(v.request);
 		await v.setViewportSize({ width: 1440, height: 960 });
 		await v.goto(`/projects/${project.id}`);
 		await expect(v.getByTestId('project-role')).toHaveText('viewer');
 		await sidebar(v).getByLabel('Show model inputs').check();
 		await expect(nav(v).getByRole('link', { name: 'Network' })).toBeVisible();
+		await expect(nav(v).getByRole('link', { name: 'History' })).toBeVisible();
 		await expect(account(v)).toBeInViewport({ ratio: 1 });
 		const m = await measure(v);
 		expect(m.asideOverflow).toBeLessThanOrEqual(0);
@@ -174,6 +187,8 @@ test.describe('1280×800', () => {
 	test('the sections scroll on their own; the account block and the open section stay in view', async ({ page, owner }) => {
 		void owner;
 		const project = await seedRunnableProject(page.request, LONG_NAME);
+		// Every section, so the list is at its longest and has to scroll.
+		await showAllSections(page.request);
 		await page.goto(`/projects/${project.id}?tab=history`);
 		await expect(page.getByRole('heading', { level: 1, name: 'History' })).toBeVisible();
 
@@ -210,7 +225,9 @@ test.describe('phone', () => {
 		await toggle.click();
 		await expect(toggle).toHaveAttribute('aria-expanded', 'true');
 		await expect(nav(page)).toHaveCount(1);
-		await expect(nav(page).getByRole('link', { name: 'History' })).toBeVisible();
+		// The last section by default (History, Applications and Allocations are hidden until chosen).
+		await expect(nav(page).getByRole('link', { name: 'Project', exact: true })).toBeVisible();
+		await expect(nav(page).getByRole('link', { name: 'History' })).toHaveCount(0);
 		expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 		await expectNoViolations(page);
 	});

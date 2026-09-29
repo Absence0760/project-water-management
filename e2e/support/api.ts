@@ -92,6 +92,16 @@ export async function createProject(request: APIRequestContext, name: string, de
 }
 
 /**
+ * Shows every workspace section in the signed-in account's sidebar (its own choice, `hiddenTabs: []`),
+ * instead of the default that hides History, Allocations and Applications (frontend
+ * lib/workspace/tabs.ts DEFAULT_HIDDEN_TABS): setup for the specs that reach one of those through the
+ * sidebar, or need every section in it. own-sections.spec.ts tests the choice and the default themselves.
+ */
+export async function showAllSections(request: APIRequestContext): Promise<void> {
+	await json(await request.patch(`${API_URL}/auth/me`, { data: { preferences: { hiddenTabs: [] } } }), 200);
+}
+
+/**
  * Adds `email` to a project as `role`. Every add by email is an invite (issue #136), and a verified
  * account joins only when its holder accepts, so this accepts it as them (acceptInvites): setup for the
  * specs about something else. invitations.spec.ts tests the invitation itself.

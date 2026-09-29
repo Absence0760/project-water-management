@@ -8,7 +8,7 @@
 	import { api } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import { session } from '$lib/auth/session.svelte';
-	import { ALWAYS_SHOWN, hiddenTabs, navSections, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
+	import { ALWAYS_SHOWN, hiddenChoice, hiddenTabs, navSections, TAB_LABELS, withTabHidden, type TabId } from '$lib/workspace/tabs';
 
 	let {
 		roleTabs,
@@ -19,7 +19,9 @@
 		showLabel?: boolean;
 	} = $props();
 
-	const stored = $derived(session.user?.preferences?.hiddenTabs ?? []);
+	// null: no choice of their own yet, so the default sections are hidden (and Reset has nothing to undo).
+	const own = $derived(session.user?.preferences?.hiddenTabs ?? null);
+	const stored = $derived(hiddenChoice(own));
 	const hidden = $derived(hiddenTabs(roleTabs, stored));
 	const groups = $derived(navSections(roleTabs));
 
@@ -32,7 +34,7 @@
 	// later click. The checkboxes stay live meanwhile (ui-playbook § 4).
 	let chain = Promise.resolve();
 	let seq = 0;
-	function save(next: string[]) {
+	function save(next: string[] | null) {
 		const user = session.user;
 		if (!user) return;
 		session.user = { ...user, preferences: { ...user.preferences, hiddenTabs: next } };
@@ -104,7 +106,7 @@
 		</div>
 		<p class="error" role="status">{error ?? ''}</p>
 		{#snippet actions()}
-			<button type="button" class="btn" disabled={stored.length === 0} onclick={() => save([])}>Reset to default</button>
+			<button type="button" class="btn" disabled={own === null} onclick={() => save(null)}>Reset to default</button>
 			<button type="button" class="btn btn-primary" onclick={() => (open = false)}>Done</button>
 		{/snippet}
 	</Dialog>
