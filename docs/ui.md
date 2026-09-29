@@ -894,9 +894,9 @@ put the results first; its first screen follows board A1 of the redesign
   each dam's `dam_storage` series through the Runs cache, when it says
   "loading dam levels" until they are in; "no dams in the run" without any. The card links to the [Dams](#dams) page: its term is a link
   (`Headline.href`, `DAMS_HREF`) stretched over the whole card, as the model
-  facts' tiles are. *Mean simulated outflow* (m³/s, % of natural) is a short
-  line under the cards, linking to [River & reserve](#river--reserve), which
-  has it as a tile with its change; then the run the changes are against. Each
+  facts' tiles are. *Mean simulated outflow* isn't on the Summary: it is a
+  tile on [River & reserve](#river--reserve), with its change. Under the
+  cards, the run the changes are against. Each
   card shows its change from the previous run (the one before it by
   `createdAt`) with the compare page's `Delta` (sign, ▲/▼ and a spoken
   better/worse, so colour is never the only cue), only when both runs have the
@@ -995,7 +995,7 @@ for every workspace tab. Its own chunk.
   shared, and Back returns to the one before. Without `dam=` (or with one
   that has no card) the first, emptiest, card is charted. When the layout is
   stacked the chart scrolls into view after a pick.
-- **Show all N dams**: the emptiest few cards show (`foldCards`: three
+- **Show all N dams**: the emptiest few cards show (`common/fold.ts` `foldList`: three
   beside the chart, four, two rows, stacked on a phone, eight before a run,
   when the cards are small), then a **Show all 14 dams** button
   (`aria-expanded`, `aria-controls="dam-cards"`) that opens the rest in place;
@@ -1396,10 +1396,8 @@ panel says team members keep their team role on the project. Below,
 "admin" and "member" are the API's team roles.
 
 **`/teams`** shows each team as a card: its name (opens the team) and your
-role, then **Projects**, **Members**, **Farms short this week** (added up
-over the projects whose count is known, "2 of 14 farms"; "–" when none is)
-and **Last run**, a stacked **EWR, last 30 days** bar with the counts in
-words ("1 red, 4 green"), and the projects worst first with their status
+role, then **Projects** and **Members**, a stacked **EWR, last 30 days**
+bar with the counts in words ("1 red, 4 green"), and the projects worst first with their status
 pills (five, ten when it's your only team; the rest are "N more projects on
 the portfolio"). *Open team* and *Portfolio* sit at the card's foot. The
 numbers come from each team's portfolio (`GET /teams/:id/portfolio`, one
@@ -1415,8 +1413,7 @@ your role, a summary line ("5 projects (1 red, 4 green) · 4 members ·
 created 26 Sep 2026") and the actions: **Portfolio**, **Team settings**,
 **Add member** (admins; focuses the add form) and **New project** (members
 and admins; opens the New project dialog with the team preselected). The
-main column is **Projects**: four tiles (EWR bar, farms short this week,
-alerts firing, last run), then each project worst first with its source
+main column is **Projects**: two tiles (EWR bar, alerts firing), then each project worst first with its source
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
 (linking to the run's curtailment, as on the portfolio), lowest dam and
 alerts; a footnote states the traffic-light rule with a link to the
@@ -1500,10 +1497,9 @@ a link to change them in the team page's settings sheet (§ Teams,
 `?settings=1`), anyone else is told a team owner can.
 
 A dashboard (issue #17). The header carries *Team page* and, for members
-and admins, *New project in this team*; under it five tiles: **EWR, last 30
+and admins, *New project in this team*; under it three tiles: **EWR, last 30
 days** (the "5 catchments: 1 red, 4 green" line, a live status, over the
-stacked bar), **Farms short this week** (added up), **Alerts firing**,
-**Stale figures** ("4 of 5") and **Last run** (the totals come from
+stacked bar), **Alerts firing** and **Stale figures** ("4 of 5") (the totals come from
 `portfolioTotals` in `portfolio.ts`; the pill and bar are
 `portfolio/StatusPill.svelte` and `StatusBar.svelte`, shared with the teams
 list and the team page). On a wide screen the page fits the window like the
@@ -2329,8 +2325,8 @@ with the table the data needs).
   more than seven series the table shows the first six in its order (four
   below 640 px, where each row is a card), then **Show all N series**
   (`aria-expanded`, `aria-controls="series-rows"`; open, **Show only the
-  first 6 series**), which opens the rest in place (`series/fold.ts`
-  `foldRows`). The charted series' row always shows, after the first six
+  first 6 series**), which opens the rest in place (`common/fold.ts`
+  `foldList`). The charted series' row always shows, after the first six
   when it sits further down, so a `series=` link or a pick never hides its
   row. The chart follows the table at a fixed 320 px plot; at 1440 × 960
   with 30 series the six rows, the button and the chart's head are on the
@@ -3364,7 +3360,7 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   flow chart's shading, the EWR by month grid and the projects list use; *Days below the reserve* (the
   count, and how many in an average year; the change compares the per-year
   figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
-  % of natural, moved here from the line under the Summary's cards, same
+  % of natural, the Summary's line until it was dropped there, same
   figure as `overview/latestRun.ts`); *Worst month* (the month of the water
   year with the largest share of days below the EWR over the run, from the
   EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
@@ -3505,7 +3501,7 @@ read it before.
   (`aria-expanded`, `aria-controls="unit-cards"`) opens the rest in place and
   becomes **Show the 3 least supplied**; four units show whole. A picked unit
   further down keeps its card after the three when the list is folded, so a
-  shared `unit=` link shows its card (`foldCards`, the Dams page's rule). On a
+  shared `unit=` link shows its card (`foldList`, the Dams page's rule). On a
   wide window at least 700 px tall the chart is `position: sticky` just under
   the *On this page* menu (its height measured into `--nav-h`), so it stays
   beside an opened list as it is read down. Narrower, one column: three
@@ -4530,10 +4526,9 @@ gives it an `h1` and **Back to runs**). The full reference is
 - **What changes** (left, ~55 %): the outcomes table (*EWR not met*, the
   share of days, worded as the Summary's card and River & reserve's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
-  #162; days
-  below the reserve per average year, irrigation supplied, farms below 95 %,
+  #162; irrigation supplied, farms below 95 %,
   up to two most-changed farms, dam storage at the end of the run (when a
-  run has a dam), mean outflow, calibration NSE when there is one), each what-if cell its value over its `Delta`, the unit on its own
+  run has a dam), mean outflow), each what-if cell its value over its `Delta`, the unit on its own
   line under the outcome; then the takeaways box (the first worse, else
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
@@ -4756,7 +4751,7 @@ the run covers no whole water year). The left edge is amber for above
 registered or unregistered use, green within the band, grey otherwise; the
 words say the same. Beside the picked unit it shows five rows (six on a
 phone), then **Show all N hydrological units and sources** / **Show the 5
-to look into first** (`foldCards` from `dams/dams.ts`, so six rows show
+to look into first** (`foldList` from `common/fold.ts`, so six rows show
 whole). A `unit=` link to a unit further down keeps its rows (both sources)
 after the five, so a shared link shows its row on the first screen.
 
