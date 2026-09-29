@@ -27,7 +27,7 @@ describe('warningGroups', () => {
 describe('credibility', () => {
 	const checks = (failed: number) => ({ passed: failed === 0, checks: Array.from({ length: 5 }, (_, i) => ({ label: `c${i}`, passed: i >= failed, detail: '' })) });
 
-	it('reads the self-checks, plausibility, WR2012 and the fit, each linking to its panel', () => {
+	it('reads the self-checks, plausibility and WR2012, each linking to its panel, and not the fit (issue #177)', () => {
 		const items = credibility({
 			verification: checks(0),
 			plausibility: {
@@ -42,23 +42,12 @@ describe('credibility', () => {
 		expect(items.map((i) => [i.label, i.text, i.tone, i.href])).toEqual([
 			['Self-checks', 'all 5 passed', 'ok', '#res-checks'],
 			['Plausibility', '1 of 3 checks found something', 'warn', '#res-plausibility'],
-			['WR2012', 'Note the difference', 'warn', '#res-wr2012'],
-			['Fit', 'NSE 0.71 over 400 observed days (in-sample)', 'none', '#res-calibration']
+			['WR2012', 'Note the difference', 'warn', '#res-wr2012']
 		]);
 	});
 
-	it('calls the fit in-sample only when the parameters were fitted on those days (issue #45)', () => {
-		const fit = (fitStatus?: string) => credibility({ calibration: { days: 400, nse: 0.712, fitStatus } } as unknown as Parameters<typeof credibility>[0]).find((i) => i.label === 'Fit')!.text;
-		expect(fit('fitted')).toBe('NSE 0.71 over 400 observed days (in-sample)');
-		expect(fit('notFitted')).toBe('NSE 0.71 over 400 observed days (parameters not fitted)');
-		expect(fit(undefined)).toBe('NSE 0.71 over 400 observed days');
-	});
-
-	it('says a failed self-check in red, leaves out what the run has no panel for, and says when there is no fit', () => {
-		const items = credibility({ verification: checks(2), calibration: null } as unknown as Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012' | 'calibration'>);
-		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([
-			['Self-checks', '2 of 5 failed', 'bad'],
-			['Fit', 'not scored: no observed flow in the calibration window', 'none']
-		]);
+	it('says a failed self-check in red and leaves out what the run has no panel for', () => {
+		const items = credibility({ verification: checks(2) } as unknown as Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>);
+		expect(items.map((i) => [i.label, i.text, i.tone])).toEqual([['Self-checks', '2 of 5 failed', 'bad']]);
 	});
 });

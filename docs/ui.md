@@ -3622,8 +3622,9 @@ read it before.
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
-     self-checks, the plausibility findings, the WR2012 flag and the calibration
-     fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
+     self-checks, the plausibility findings and the WR2012 flag, each in words
+     with a coloured edge and a link to its panel (not the calibration fit:
+     it has no verdict and the NSE card below says it, issue #177).
   2. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), runoff model, WR2012 check, EWR vs
