@@ -233,9 +233,35 @@ resource "aws_cloudwatch_event_rule" "worker_tick" {
   schedule_expression = "rate(5 minutes)"
 }
 
+# A tick is only worth running now: each one does the whole job (due jobs,
+# retries, lost wake-ups) and the next is 5 minutes away. So a tick that can't
+# be delivered is dropped, never retried. EventBridge's default retry policy
+# keeps a failed delivery for up to 24 hours (185 attempts), which would pile
+# stale ticks onto a worker that is already struggling and spend its reserved
+# concurrency on them. A dropped delivery counts in FailedInvocations (the
+# worker-tick-failed alarm), a worker that stops running altogether trips
+# worker-heartbeat, and the next tick recovers.
 resource "aws_cloudwatch_event_target" "worker_tick" {
   rule = aws_cloudwatch_event_rule.worker_tick.name
   arn  = aws_lambda_function.worker.arn
+
+  retry_policy {
+    maximum_retry_attempts       = 0
+    maximum_event_age_in_seconds = 300 # one tick; the provider's minimum is 60
+  }
+}
+
+# The same for Lambda's own async queue, which holds the tick once EventBridge
+# has handed it over: by default it retries a throttled event for up to 6 hours
+# and a failed one twice. The tick is the worker's only async caller (its SQS
+# triggers invoke synchronously and are untouched by this). A throttled tick
+# older than one tick is dropped, and a tick that throws is not run again:
+# worker-errors and worker-throttles report both, and the next tick picks the
+# work up.
+resource "aws_lambda_function_event_invoke_config" "worker_tick" {
+  function_name                = aws_lambda_function.worker.function_name
+  maximum_retry_attempts       = 0
+  maximum_event_age_in_seconds = 300
 }
 
 resource "aws_lambda_permission" "worker_tick" {
@@ -489,8 +515,9 @@ resource "aws_cloudwatch_metric_alarm" "worker_heartbeat" {
 }
 
 # EventBridge could not deliver the tick (the worker's invoke permission
-# removed, the target's function gone, or the invoke refused past
-# EventBridge's retries).
+# removed, the target's function gone, or the invoke refused). The target
+# retries nothing (worker_tick above), so each failed tick counts once and is
+# dropped; the next tick, 5 minutes later, tries again.
 resource "aws_cloudwatch_metric_alarm" "worker_tick_failed" {
   alarm_name          = "${local.project}-worker-tick-failed"
   comparison_operator = "GreaterThanThreshold"

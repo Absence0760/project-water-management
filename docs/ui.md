@@ -4833,8 +4833,9 @@ exists, says so with a link to Runs & results.
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
   email.", or "The PDF could not be made: …"), polling the API every 1.5 s
-  until it settles, and offers **Download the generated PDF** (a link valid
-  for an hour). The wrapper carries `data-state` (`idle`, `starting`,
+  until it settles, and offers **Download the generated PDF** (the API's
+  `/reports/:jobId/pdf` route, which checks membership on each click and
+  redirects to a one-minute pre-signed GET, so the link never goes stale). The wrapper carries `data-state` (`idle`, `starting`,
   `queued`, `rendering`, `retrying`, `done`, `failed`). Locally the worker
   must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
 - **The emailed link** opens `/projects/:id/reports/:jobId`
@@ -4845,8 +4846,9 @@ exists, says so with a link to Runs & results.
   its runs list, best effort), then one card: the state as a pill in words
   (Queued, Making, Retrying, Ready, Failed) beside the status line, when it
   was asked for (and "This page checks again every few seconds." while it's
-  pending, polling every 2 s), **Download the PDF** once ready (a fresh
-  one-hour link each visit), after a failure a line pointing back to the
+  pending, polling every 2 s), **Download the PDF** once ready (the same
+  API route, a fresh one-minute S3 link per click) beside "PDFs are kept for
+  7 days.", after a failure a line pointing back to the
   report, and **Open the report in the app** and **Go to the run** (**Go to
   Runs & results** for a scheduled PDF of the latest run). The card's
   `data-state` is the report's state. Anyone else, or a PDF past its 7

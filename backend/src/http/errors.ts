@@ -1,6 +1,7 @@
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
+import { safeError, stackFrames } from '../logging/safeError.js';
 
 /**
  * Throw from a handler to return `{ error }` with a status. `error` is
@@ -116,6 +117,21 @@ export function handleError(err: unknown, c: Context) {
 	if (code === PG_CHECK) return c.json({ error: 'violates a data rule' }, 409);
 	// RLS WITH CHECK failures surface as insufficient_privilege.
 	if (code === PG_RLS) return c.json({ error: 'forbidden' }, 403);
-	console.error('Unhandled error', err);
+	// Answering 500 means the Lambda invocation itself succeeds, so the
+	// function's `Errors` metric never counts it. Log one structured line
+	// instead, which the unhandled-error alarm counts (infra/alarms.tf,
+	// `unhandled_error`). Only the error's name, code and stack frames and the
+	// route's pattern go in (safeError): never its message, which for a pg
+	// error can carry row values and for anything else user input, and never
+	// the concrete path, which can hold a token.
+	console.error(
+		JSON.stringify({
+			event: 'unhandled_error',
+			method: c.req.method,
+			route: c.req.routePath,
+			...safeError(err),
+			at: stackFrames(err)
+		})
+	);
 	return c.json({ error: 'Internal server error' }, 500);
 }

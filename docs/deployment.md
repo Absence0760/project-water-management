@@ -360,8 +360,14 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   and the worker's log group (a saved run failing one of the engine's own
   invariant checks — docs/security.md § Infrastructure), one on
   `mail_send_failed` in the same two log groups (an account, invitation or
-  report email that failed to send, § Email), and the job queue's five (DLQ depth, worker errors and
-  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`.
+  report email that failed to send, § Email), one on `unhandled_error` in
+  the API's log group (a request answered with an unhandled 500, which the
+  Lambda `Errors` metric can't see, § Runbooks), and the job queue's five (DLQ depth, worker errors and
+  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`. That variable is
+  required: plan refuses an empty, malformed or reserved address
+  (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
+  case), so a copied example tfvars can't leave the alarms paging nobody
+  (`dmarc_report_email`, when set, gets the same check).
 
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
@@ -651,7 +657,12 @@ plan-only until the first deploy):
   Lambda. An **EventBridge rule ticks the worker every 5 minutes** as well,
   which runs retries whose backoff has passed and anything whose wake-up was
   lost, so a failed `SendMessage` (logged, never an error to the user) delays
-  a job by at most one tick.
+  a job by at most one tick. A tick is never retried: the EventBridge target
+  and the worker's async invoke config both allow 0 retries and a maximum
+  event age of 300 s, so a tick that can't be delivered or is throttled is
+  dropped (counted by `worker-tick-failed` or `worker-throttles`) instead of
+  queueing for up to 24 hours (EventBridge's default) or 6 hours (Lambda's)
+  and piling stale ticks onto a struggling worker; the next tick recovers.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
@@ -682,7 +693,7 @@ plan-only until the first deploy):
   stopped altogether (the tick rule disabled, reserved concurrency set to 0)
   alarms even though it emits no backlog metric; `worker-tick-failed`,
   EventBridge `FailedInvocations` > 0 on the tick rule (the invoke
-  permission or target broken); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
+  permission or target broken; with no retries each failed tick counts once); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
   (a metric filter on the worker's `job_dead` log line). A project with the
@@ -813,7 +824,11 @@ plan-only until the first deploy):
   client and playwright-core, installed with `npm ci` from the lockfile in
   `backend/renderer-deps/`; moving Playwright means the tag and digest there,
   that package.json and backend's, and a refreshed lock, and `pnpm
-  check:pins` fails until all of them agree with e2e's `@playwright/test`), x86_64,
+  check:pins` fails until all of them agree with e2e's `@playwright/test`;
+  its build stage's apt packages are pinned to exact versions from one
+  Ubuntu archive snapshot, `APT_SNAPSHOT`, which `check:pins` also
+  enforces, and Dependabot's `docker` entry proposes new tags and digests
+  but never auto-merges them), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,
@@ -839,9 +854,12 @@ plan-only until the first deploy):
   access blocked, bucket-owner objects), SSE-S3, TLS only, and a lifecycle
   that deletes `reports/` objects after **7 days** (the tick deletes the
   rows a day later). The API role may only `GetObject` there, to pre-sign
-  one-hour download links; signing is local, so the API needs no S3
-  endpoint. A pre-signed URL is only valid while the Lambda role's
-  temporary credentials are, which normally outlast the hour.
+  the 60-second download links `GET /projects/:id/reports/:jobId/pdf`
+  redirects to (one per click, so nothing long-lived leaves the API; the
+  browser fetches the object from S3 directly, not through CloudFront);
+  signing is local, so the API needs no S3 endpoint. A pre-signed URL is
+  only valid while the Lambda role's temporary credentials are, which
+  always outlast the minute.
 - **Retries and DLQs:** each render queue dead-letters after 5 receives. A
   failed render is an answer (the report shows it), not a retry: its token
   is spent. A render request in the DLQ can't be redriven usefully (the
@@ -941,6 +959,21 @@ Every step is an ordinary app action by an owner unless it says "operator".
    If `auditEventsTruncated` is `true` (more than 50 000 events), the
    operator adds the older events by query as the schema owner. Record the
    request in the operator log.
+9. **An unhandled 500** (the `unhandled-error` alarm, operator). The API
+   answered a request with a generic `500` (`handleError`,
+   `backend/src/http/errors.ts`): an exception no route expected, which the
+   Lambda `Errors` alarm never counts because the invocation succeeded. Each
+   one logs `{"event":"unhandled_error","method":"GET","route":"/projects/:id","error":"error","code":"42P01","at":["at …"]}`:
+   the route's pattern (never the concrete path), the error's name and code
+   (a Postgres SQLSTATE for a database error) and its stack frames, never its
+   message. In CloudWatch Logs Insights on the API's log group,
+   `filter event = "unhandled_error" | stats count() by route, error, code`
+   says which endpoint and what kind of failure; `at` points at the throwing
+   line. One route with a SQLSTATE after a deploy is usually a migration the
+   code got ahead of (§ A failed migration); every route at once with
+   `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
+   locally, fix the cause and add a test; the message was deliberately not
+   logged (it can hold row values), so the stack and code are the lead.
 
 ## Rollback
 

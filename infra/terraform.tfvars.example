@@ -29,6 +29,9 @@ bootstrap_slug = "water-management"
 # 80 for af-south-1 (idle ≈ $58–63); 60 would forecast-alert every month.
 # Full tier: ~170 (docs/deployment-tiers.md).
 budget_monthly_usd = 80
+# Required. Replace the placeholder: plan refuses an empty, malformed or
+# reserved address (example.com/.org/.net, .example, .test, .invalid,
+# .localhost), so an unedited copy of this file fails before it can page nobody.
 budget_alert_email = "you+aws-alerts@example.com"
 
 # Lambda concurrency caps. A new account's concurrency quota is 10 and AWS
@@ -51,7 +54,8 @@ migrate_reserved_concurrency = 1
 
 # Email (SES, ses.tf). Mail goes out as no-reply@<domain_name>.
 # DMARC starts at p=none; set a report mailbox, read a few weeks of reports,
-# then move to quarantine (docs/deployment.md § Email).
+# then move to quarantine (docs/deployment.md § Email). Empty omits rua; a
+# set value is held to budget_alert_email's rule, so replace the placeholder.
 dmarc_report_email = "you+dmarc@example.com"
 # dmarc_policy          = "none"
 # ses_tls_policy        = "REQUIRE"
