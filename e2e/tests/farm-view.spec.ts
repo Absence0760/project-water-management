@@ -474,6 +474,7 @@ test('the model card folds to its link line when the river asked for no cut', as
 	const farmer = await signInAs('No-cut farmer');
 	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	// The premise, as the farmer's own view has it: no day charged to the farm.
 	const view = (await (await farmer.page.request.get(`${API_URL}/projects/${project.id}/farm/${upper.id}`)).json()) as { farm: { river: { chargedDays: number } } };
 	expect(view.farm.river.chargedDays).toBe(0);
