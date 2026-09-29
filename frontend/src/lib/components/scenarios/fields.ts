@@ -21,7 +21,9 @@ import {
 	TRANSFER_SET_FIELDS,
 	USER_PRIORITIES,
 	ZERO_RAIN_MODES,
+	damCurveProblem,
 	isIsoDate,
+	type DamCurvePoint,
 	type NodeKind,
 	type NodeSetField,
 	type PeInput,
@@ -33,6 +35,7 @@ import { WATER_YEAR_MONTHS } from '$lib/format/months';
 import { fmtNum, parseNum } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
 import { peFormError, peOf, peText, withPeKind, type EditablePe } from '$lib/components/settings/peInput';
+import { curveText, parseDamCurve } from '$lib/components/network/damCurve';
 
 export interface EnumOption {
 	value: string;
@@ -58,7 +61,13 @@ export type ValueSpec =
 	 * coefficient × A-pan, or a monthly row in mm with a required source.
 	 * Typed as a PeDraft (the kind, the 12 values as text, the source).
 	 */
-	| { t: 'pe' };
+	| { t: 'pe' }
+	/**
+	 * A dam's survey curve (engine ≥ 1.20.0): level, area and volume rows,
+	 * pasted as the Network form's survey box reads them (network/damCurve.ts);
+	 * empty is none, the power law.
+	 */
+	| { t: 'curve' };
 
 /** The "Add a change" form's copy of a PE input: the monthly row stays text until it is parsed. */
 export interface PeDraft {
@@ -109,6 +118,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damReleaseM3Day: { label: 'Dam release by month', spec: { t: 'monthly', unit: 'm³/day', scale: 1, nullable: true } },
 	damOutletCapacityM3Day: { label: 'Dam outlet capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	damSeepageReturnPct: { label: 'Share of dam seepage returning', spec: pct() },
+	damCurve: { label: 'Dam survey curve', spec: { t: 'curve' } },
 	boreholeCapacityM3Day: { label: 'Borehole capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no boreholes' }) },
 	boreholeRule: { label: 'Borehole rule', spec: { t: 'enum', options: plain(BOREHOLE_RULES) } },
 	boreholeTriggerPct: { label: 'Borehole drought trigger', spec: pct() },
@@ -292,6 +302,14 @@ export function parseValue(spec: ValueSpec, input: string | readonly number[] | 
 			return isIsoDate(text) ? { ok: true, value: text } : { ok: false, error: 'enter a date as YYYY-MM-DD' };
 		case 'node':
 			return text ? { ok: true, value: text } : { ok: false, error: 'pick a node' };
+		case 'curve': {
+			if (text === '') return { ok: true, value: null };
+			// Read and checked as the Network form reads a pasted survey (the engine's damCurveProblem, a model rule applyScenario also runs).
+			const c = parseDamCurve(text);
+			if (c.error) return { ok: false, error: c.error.charAt(0).toLowerCase() + c.error.slice(1).replace(/\.$/, '') };
+			const bad = damCurveProblem(c.rows);
+			return bad ? { ok: false, error: bad } : { ok: true, value: c.rows };
+		}
 	}
 	return { ok: false, error: 'unknown field' };
 }
@@ -343,6 +361,8 @@ export function valueText(spec: ValueSpec, v: unknown): string {
 		case 'pe':
 			// The monthly row as typed; the kind and source are the PeDraft's (peDraftOf).
 			return peDraftOf(v, undefined).mm;
+		case 'curve':
+			return Array.isArray(v) ? curveText(v as DamCurvePoint[]) : '';
 		default:
 			return typeof v === 'string' ? v : String(v);
 	}
@@ -383,7 +403,16 @@ export function formatValue(spec: ValueSpec, v: unknown, nodeName: (id: string) 
 			return typeof v === 'string' ? `“${v}”` : String(v);
 		case 'pe':
 			return peText(v === null || v === undefined ? null : (v as PeInput));
+		case 'curve':
+			return curveSummary(v);
 	}
+}
+
+/** A survey curve in a few words: "none (power law)", or its rows and the volume at its top. */
+function curveSummary(v: unknown): string {
+	if (!Array.isArray(v) || v.length === 0) return 'none (power law)';
+	const top = Math.max(...(v as DamCurvePoint[]).map((r) => r.volumeM3));
+	return `${v.length} survey rows, ${fmtNum(top)} m³ at the top`;
 }
 
 /**

@@ -2875,9 +2875,13 @@ which checks every catchment tab).
   the decision date and the season end as a month and a day each
   (29 February and a one-day season block Save). **Planning share**, with
   **Use the default planning share (80 %)** (O6); unticked, a % of
-  analogue years in (0, 100]. The defaults are the engine's
-  (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`), confirmed by the
-  client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
+  analogue years in (0, 100]. **Review date** (issue #53 R6), with **Use
+  the default review date (1 Jan)** (the engine's `defaultReviewDate` for
+  the season set, O3); unticked, a month and a day inside the season,
+  after its decision date (outside it, or 29 February, blocks Save): the
+  day each outlook's review triggers are for. The defaults are the engine's
+  (`DEFAULT_OUTLOOK_SEASON`, `DEFAULT_PLANNING_SHARE`, `defaultReviewDate`),
+  confirmed by the client (issue #90), so no badge marks them pending. Viewers see it read-only; saving only this
   group doesn't mark the runs as out of date.
 
 ### Data feeds
@@ -3497,9 +3501,9 @@ read it before.
   (shown as 0 when X2 = 0 stored none), natural flow Q in m³/day and as mm
   over the catchment, each with its formula from `GR4J_COLUMNS`; then the
   store balance, stores before + P + F − AET − Q − stores after, with its
-  residual in mm. On a run's first day each store's starting value is shown
-  as – (only their total after the warm-up is recorded) and the balance uses
-  the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
+  residual in mm. On a run's first day each store starts from its value after
+  the warm-up (engine ≥ 1.20.0); a run from before kept only their total there,
+  so each store shows – and the balance uses the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
   and says it keeps no stores, so there is no store balance to close.
   A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
@@ -4046,7 +4050,9 @@ A panel on [River & reserve](#river--reserve), after the outcome matrix
 (`#res-outlook`; until issue #17 under *River & Reserve* on the Runs tab;
 `outlook/OutlookPanel.svelte`, in River & reserve's chunk,
 view model `outlook/view.ts`). For the WUA; English, like the workspace.
-There is no farmer view yet (ask E3 waits on the client's O5).
+The level the WUA sets reaches farmers through **Publish to farmers**
+(below) and the farm page's *This season* card (§ Farmer view; the client
+confirmed farmers see the outlook, O5, issue #90).
 
 - **Starting an outlook** (editors): **Demand levels** (% of today's farm
   demand, default *100, 85, 70*; up to 6, 0–200 %, separated by commas),
@@ -4094,16 +4100,42 @@ There is no farmer view yet (ask E3 waits on the client's O5).
   the engine's warnings, and the disclaimer's first and third paragraphs
   (not predictions; not official restrictions or allocations), with the
   draft note only while the wording is marked draft (D10).
+- **Review triggers** (issue #53 R6, view model `outlook/triggers.ts`,
+  model.md §2.15a), after the planning figure, when the outlook has a
+  review date (the project's, Settings → Seasonal outlook; 1 January by
+  default): *Review on 1 Jan 2019*, the day the table was drawn on (the
+  latest review date in the run's record, as a rule for that day of the
+  year) and where the bands come from. The table: one row per band of
+  total dam storage on the review date, fullest first (*At or above
+  53 333 m³*, with its share of capacity), the **demand level** picked or
+  *No level*, **years met in full** (*10 of 12 years*), and every level's
+  count (*below the share* where it falls short). Under it each row in the
+  engine's words (`describeTriggerRow`), the monotonicity notes, the
+  warnings and refused members, and that the WUA decides on the review
+  date. A table that couldn't be drawn (no farm dam, no such day in the
+  record) says why.
+- **Farmers** (issue #53 R5, E3): *Published to farmers: 85 % for 1 Oct
+  2018 – 30 Apr 2019, on … by …, 12 hydrological units* (or *from another
+  outlook*), or *No outlook is published to farmers*. Editors pick **Level
+  the WUA has set** (the levels that ran) and **Publish to farmers**,
+  which replaces the one published before, or **Withdraw**. Each linked
+  farmer then sees what that level gave their own hydrological unit, until
+  the season ends. The app never picks the level.
 - **No recommendation.** The panel reports how past years went at each
   level and never picks one (a unit test holds the view model to that, and
   the e2e spec checks the rendered panel).
 
 Tests: `outlook/view.test.ts` (the request and monthly plan, the state,
 the view against the engine's `summariseOutlook` on invented members, the
-pending badges, too few years, the wording guard, the settings check) and
+pending badges, too few years, the wording guard, the settings check,
+the review date's), `outlook/triggers.test.ts` (the table in words, fullest
+band first, the engine's sentence, why none) and
 `e2e/tests/seasonal-outlook.spec.ts` (settings, outlook with a monthly
 plan, worker, the rendered table against the stored per-year values
-re-summarised by hand, a viewer).
+re-summarised by hand, a viewer; then on a record up to the current
+season, the trigger table against the stored one, publishing 85 %, a
+linked farmer's *This season* card against the stored per-farm figures,
+axe on both, and withdrawing it).
 
 ## Compare runs (`?tab=compare`)
 
@@ -4226,7 +4258,15 @@ them scenarios).
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules
   (`settings/peInput.ts`), and a new monthly row starts from the PE GR4J
-  runs on now. Targets come from the model as
+  runs on now. A farm's dam survey curve (`damCurve`, engine ≥ 1.20.0) is
+  a paste box that reads rows as the Network tab's survey box does (level,
+  area, volume, one per line; `network/damCurve.ts` `parseDamCurve`) and
+  refuses a curve the engine couldn't use; empty is none (the power law),
+  and the change reads "none (power law) → 3 survey rows, 180 000 m³ at the
+  top". Its hint says to add it after a capacity change, so a raised dam
+  uses its own survey ([scenarios.md § Dam capacity](./scenarios.md)); in
+  override mode a curve pasted in the table is recorded that way too.
+  Targets come from the model as
   the listed ops leave it, so a node the scenario adds can be changed next.
   A field starts at its current value with "Now: …" under it; percentages
   are typed as %, areas in ha. The op is built and checked with the engine's
@@ -4677,6 +4717,37 @@ exists, says so with a link to Runs & results.
   baseline (`against`, 082), and the renderer opens this route with it. A
   baseline that can't be read has no server PDF (the API would refuse it);
   **Download PDF** (the browser's print) stays.
+- **Impact by year class** (issue #53 R7, `report/LicenceImpactBoard.svelte`,
+  view model `report/licenceImpact.ts`, in the impact section's chunk): the
+  impact section opens with this board, the baseline as the background run.
+  One column per water-year class of the baseline's natural flow (the
+  project's `settings.outcomes.yearClassMethod`, terciles by default; the
+  header shows the bounds and the years compared), and three rows: the
+  **annual waterfall** at the outlet, mean m³ a year (Natural flow, Existing
+  use in the baseline “<label>”, Proposed use (this run − baseline), Other:
+  dams, storage, groundwater, land cover, Flow left at the outlet), the
+  **months below the Reserve** at the project's Reserve site (the outcome
+  matrix's `settings.outcomes.siteNodeId`; the outlet, with a note, when a run
+  has no results there), or days below the pragmatic EWR without a rule
+  table in both runs, baseline, this run and the change, and the
+  **verdict** in words (`describeLicenceImpact`: "The Reserve was not met in
+  4 more months over 7 dry years (…)"), from the months, never from the
+  annual totals, and with no verdict colour. A class with fewer than 3
+  years reads *Not enough years* in every row. A note under the board says
+  existing use is the baseline's as that run modelled it, and that existing
+  *authorised* use needs a baseline at every holder's full registered volume
+  (a full-allocation run: Settings › Registered volumes › Allocation mode,
+  or a scenario that sets it). Against such a baseline the step reads
+  *Existing authorised use in the baseline “…”* and the note says so; a pair
+  where only one run is at full allocation gets a note under the board
+  ([model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+  The route fetches the board's three series before `data-report-ready`
+  (`report/impactSeries.ts`: the baseline's `natural_flow` and
+  `ewr_shortfall`, this run's `ewr_shortfall`); one that can't be read, or a
+  run from before the water account (engine 0.32.0), shows the reason in
+  place of the board. The server PDF prints it too: an impact report's
+  render session may read those two baseline series by key
+  ([security.md § Render tokens](./security.md#render-tokens)).
 - **Sections**, in order, from `report/sections.ts` (data-driven, so the
   licensing evidence pack, #15, can add its own): the cover (project, run,
   period, when and by whom it was made, engine version, evidence badge, a
@@ -4838,8 +4909,9 @@ exists, says so with a link to Runs & results.
   for the background worker…", "Making the PDF…", "The first try failed (…);
   trying again shortly…", "PDF ready (9 pages). The link is on its way by
   email.", or "The PDF could not be made: …"), polling the API every 1.5 s
-  until it settles, and offers **Download the generated PDF** (a link valid
-  for an hour). The wrapper carries `data-state` (`idle`, `starting`,
+  until it settles, and offers **Download the generated PDF** (the API's
+  `/reports/:jobId/pdf` route, which checks membership on each click and
+  redirects to a one-minute pre-signed GET, so the link never goes stale). The wrapper carries `data-state` (`idle`, `starting`,
   `queued`, `rendering`, `retrying`, `done`, `failed`). Locally the worker
   must be running (`pnpm dev:full`, or `pnpm dev:jobs:tick` once).
 - **The emailed link** opens `/projects/:id/reports/:jobId`
@@ -4850,8 +4922,9 @@ exists, says so with a link to Runs & results.
   its runs list, best effort), then one card: the state as a pill in words
   (Queued, Making, Retrying, Ready, Failed) beside the status line, when it
   was asked for (and "This page checks again every few seconds." while it's
-  pending, polling every 2 s), **Download the PDF** once ready (a fresh
-  one-hour link each visit), after a failure a line pointing back to the
+  pending, polling every 2 s), **Download the PDF** once ready (the same
+  API route, a fresh one-minute S3 link per click) beside "PDFs are kept for
+  7 days.", after a failure a line pointing back to the
   report, and **Open the report in the app** and **Go to the run** (**Go to
   Runs & results** for a scheduled PDF of the latest run). The card's
   `data-state` is the report's state. Anyone else, or a PDF past its 7
@@ -5055,7 +5128,20 @@ published.
   the forecast's own dates with "Forecasts change, and this is worked out
   by the model, not a promise. Only a notice from your WUA or from DWS is a
   restriction." A forecast made more than 3 days ago says how old it is
-  first. The dam page shows the same card under its chart. That chart
+  first. The dam page shows the same card under its chart. **This season**
+  (issue #53 R5, E3, `farm/OutlookCard.svelte`, wording in
+  `farm/outlookCard.ts`, section `farm.outlook`) comes next, only while the
+  WUA has a seasonal outlook published and its season hasn't ended: a
+  "Season outlook" kicker and a dotted edge; "Your WUA set irrigation at
+  85 % for 1 Oct to 30 Apr." (the level as the WUA labelled it); "In 24
+  past years’ weather, at this level you got about 81 % of the water you
+  needed, and between 62 % and 97 % in most of them" (10th–90th percentile;
+  too few years or no demand says so); the dam at the season's end the same
+  way (no dam, no line); "Your WUA reviews the level on 1 Jan."; and
+  "Worked out by the model from past years’ weather: not a forecast, and
+  not a promise. Only a notice from your WUA or from DWS is a
+  restriction." Only this farm's own figures ever reach the page
+  (`FarmView.outlook`, api.md § Farm). That chart
   (`farm/DamChart.svelte`, "Last 12 months") says what its line is under its
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each

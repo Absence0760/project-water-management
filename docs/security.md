@@ -214,10 +214,13 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   error's text (SES's `MessageRejected` names the recipient). A CloudWatch
   alarm counts it (`infra/alarms.tf`, `mail_send_failed`), so a broken send is
   paged rather than silent.
-- **No personal data in server logs.** Mail, alert and job failures log
-  through `safeError` (`backend/src/logging/safeError.ts`): the error's name,
-  machine code (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for
-  an unexpected job failure. Never an error's message or a pg `detail`, which
+- **No personal data in server logs.** Mail, alert and job failures and the
+  API's unhandled errors log through `safeError`
+  (`backend/src/logging/safeError.ts`): the error's name, machine code
+  (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for an
+  unexpected job failure or an unhandled API error (`unhandled_error`, which
+  also names the route's pattern, never the concrete path, since a path can
+  carry a token). Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
@@ -336,8 +339,11 @@ buys a **render session** that can read one report and nothing else.
   `/series`, `/day` and `/signoffs`: exactly the reads the report route
   makes. An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
-  parameters, once each: the impact section's one read), and never the
-  baseline's project or run directly. Any other method, project, run or route (the run list, members,
+  parameters, once each: the impact section's one read), and the
+  baseline run's `/series` with exactly `key=natural_flow` or
+  `key=ewr_shortfall` (the licence-impact board's, issue #53 R7; no other
+  key, no `nodeId`), and never the baseline's project, the run itself or
+  its other series. Any other method, project, run or route (the run list, members,
   jobs, reports, teams, compare, every write, and the run's own reads the
   report doesn't make: its CSV exports, the workbook's bulk series,
   reproduction, allocation comparison, model input, ensembles) answers
@@ -413,8 +419,16 @@ buys a **render session** that can read one report and nothing else.
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
   or taken from a message), deleted after 7 days. A download is a pre-signed
-  GET that lasts an hour, handed out only by `GET /projects/:id/reports/:jobId`
-  to a viewer of the project. **Emails carry no PDF and no download link**:
+  GET that lasts **60 seconds**, minted per request by
+  `GET /projects/:id/reports/:jobId/pdf` for a viewer of the project and
+  handed over as a `302` (`no-store`, `no-referrer`); the status route
+  carries no link (issue #126). So the only lasting handle on a PDF is that
+  API route, behind the session, CloudFront, the WAF's rate rule and the
+  project's membership, and every download re-checks membership. The
+  alternative, streaming the PDF through the API, was not taken: the API's
+  Function URL is in buffered mode (a 6 MB response cap, less after base64,
+  that a long report could pass), and streaming would hold a VPC Lambda open
+  and billed for every transfer. **Emails carry no PDF and no download link**:
   they link to the app's `/projects/:id/reports/:jobId` page, which needs the
   reader signed in and still a member, so a forwarded email opens nothing.
   Recipients must be direct project members with viewer or above, checked
@@ -424,9 +438,14 @@ buys a **render session** that can read one report and nothing else.
   schedules. The hourly and schedule caps are counted under an advisory lock
   (per user and project, per project), so a burst of concurrent requests
   can't pass them together (`jobs/costCaps.security.db.test.ts`).
-- **Accepted residual risks.** A pre-signed link works for its hour for
-  whoever holds it (as any download link would); keep it short and don't log
-  it. A render request dead-lettered in production still holds its token
+- **Accepted residual risks.** A pre-signed link works for its minute for
+  whoever holds it, from any address, and the S3 GET itself is outside
+  CloudFront and the WAF: a member who scripts the route can still pull a
+  PDF as often as the WAF's rate rule lets the redirects through, and each
+  URL may be replayed within its 60 s. Egress per minted URL is therefore
+  bounded by the PDF's size times what can be fetched in a minute, and the
+  minting is rate-limited and needs a live membership; don't log the
+  `Location` header. A render request dead-lettered in production still holds its token
   until it expires (5 minutes): the DLQ is encrypted and readable only by the
   account. The worker's inline render (local and CI only) holds the job's
   database transaction open for the few seconds it takes.
@@ -993,6 +1012,17 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
+- **Seasonal outlooks to farmers (issue #53 R5, 104).** A farmer never
+  reads a seasonal outlook (`seasonal_outlook` stays viewer-only): an
+  editor publishes one level, and the farmer reads that publication's row
+  for their own linked farms only (`outlook_publication_farm_select`:
+  viewers, or `node_id IN app_farm_nodes(project_id)`), holding the engine's
+  `FarmOutlookProjection`, that farm's own share of demand met and its own
+  dam's end-of-season fill, no other farm's id, name or figure
+  (`views/farmOutlook.test.ts`, `outlooks/publication.db.test.ts` with a
+  positive control). The publication row itself (level, season, who
+  published) is every member's. What was published is append-only; a
+  publication is ended, never edited or deleted by `water_app`.
 - **Publications and the farm view (WP-2.3, WP-2.6 API, 022).** A farmer reads
   run results only through the project's current publication: its counts-only
   `catchment_view`, their own farms' stored projections (`publication_farm`)
@@ -1391,8 +1421,11 @@ In short:
   registered route and fails if a non-public one answers an anonymous request
   with anything but `401`.
 - **Errors never echo the database.** `backend/src/http/errors.ts` maps
-  Postgres error codes to fixed messages; anything else is a logged, generic
-  `500`.
+  Postgres error codes to fixed messages; anything else is a generic `500`,
+  logged as one structured `{"event":"unhandled_error","method","route",…}`
+  line through `safeError` (no message, no path). The Lambda invocation
+  succeeds, so the `Errors` metric never sees these; a log metric filter +
+  alarm on that line (`infra/alarms.tf`, `unhandled_error`) pages them.
 
 ## Input handling
 
@@ -1579,8 +1612,10 @@ In short:
   `.href =`, except the blob download link in `lib/export/download.ts`),
   read from the whole file, since an inline handler in markup is code too. It
   also requires `rel="noopener"` on every `target="_blank"` link. The
-  one link that comes from the API, the report PDF's pre-signed URL, is
-  dropped unless it is http(s) (`serverPdf.ts` `reportsApi.get`). `?next=`
+  report PDF's download link is built in the client from `PUBLIC_API_URL`
+  and the ids (`api.reports.pdfUrl`), never taken from a response
+  (`serverPdf.ts` `reportsApi.get`), so no URL the API returns reaches an
+  `href`. `?next=`
   after sign-in (`lib/auth/redirect.ts` `safeNext`) follows only a path
   that resolves to the app's own origin, so `/\t/host` (a browser strips the
   tab) is refused as well as `//host`.
@@ -1865,8 +1900,62 @@ readable by anyone. The rules:
 - This app's production secrets: `AUTH_JWT_SECRET` and the `water_app` DB
   password. The owner (`water`) password is managed and rotated by RDS in
   Secrets Manager (`manage_master_user_password`), read only by the migrate
-  Lambda at run time. The CloudFront shared secret is generated by Terraform
-  (`random_password`).
+  Lambda at run time. The CloudFront shared secret and the alert
+  unsubscribe-token secret are generated by Terraform (`random_password`).
+
+### Runtime secrets
+
+No secret sits in a Lambda's environment variables (issue #126). Those are
+returned in plain text by `lambda:GetFunctionConfiguration`, which the deploy
+role holds (to deploy code) and AWS's `ReadOnlyAccess` grants, so a session
+key there would let any read-only principal forge any user's session.
+
+- **Where they are.** `infra/secrets.tf` writes one Secrets Manager secret per
+  Lambda that needs any (`water-management/runtime/<role>`), a JSON object
+  with exactly that Lambda's keys:
+
+  | Lambda | Keys |
+  | --- | --- |
+  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET` |
+  | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
+  | migrate | `WATER_APP_PASSWORD` |
+  | fetcher, renderer | none: no database, no session |
+
+  One secret per Lambda rather than one shared, so each role reads only what
+  it uses: the worker can't read the CloudFront secret, the API can't read
+  the unsubscribe-link key. The environment holds only `RUNTIME_SECRET_ARN`
+  and `RUNTIME_SECRET_VERSION`.
+- **Who can read them.** Each Lambda role has `secretsmanager:GetSecretValue`
+  on its own secret's ARN and nothing else. The VPC Lambdas reach Secrets
+  Manager through its interface endpoint, whose policy names each secret with
+  its one role, and whose security group admits only the API, worker and
+  migrate Lambdas. The deploy role has no Secrets Manager permission.
+  Encryption is the AWS-managed `aws/secretsmanager` key.
+- **How they are loaded.** `backend/src/config/runtimeSecrets.ts`, called
+  first by `lambda.ts`, `lambda-worker.ts` and `lambda-migrate.ts` (a
+  top-level `await`, before the production config check): one
+  `GetSecretValue` per cold start, never per request, pinned to
+  `RUNTIME_SECRET_VERSION`, and the values go into `process.env`, where the
+  code has always read them (lazily, inside functions, so they are there by
+  the time anything runs). It fails closed: the Lambda refuses to start if the
+  secret can't be read, isn't a JSON object, lacks a key, holds a key its role
+  shouldn't have, or if a secret key is also set in the environment (a
+  regression). Its errors name keys, never values, and it logs nothing. Off
+  Lambda it does nothing, so local dev reads `.env.development` as before and
+  needs no AWS.
+- **Guards.** `config/runtimeSecrets.test.ts` (the loader);
+  `config/production.security.test.ts` (Terraform's secret keys match
+  `RUNTIME_SECRETS`, every required setting is in the environment or the
+  secret, a denylist keeps secret names out of every environment block, and
+  each entry point loads its secret before its checks); the `runtime_secrets`
+  tftest (the keys, each role's grant scoped to its ARN, the endpoint policy
+  and security groups, no Secrets Manager access for the deploy role).
+- **What remains.** The values are still in Terraform state (as before; the
+  state bucket is private and encrypted). The CloudFront secret is also in the
+  distribution's origin header, which `cloudfront:GetDistributionConfig`
+  returns; it lets a caller past the WAF to the Function URL, where the app's
+  own authentication still applies. Rotation: [deployment.md § Rotating a
+  secret](./deployment.md#rotating-a-secret).
 - **Committed local defaults are non-sensitive by design.**
   `backend/.env.development` holds the docker-compose throwaway passwords
   (`water`/`water`, `water_app`/`water_app`) and a dev-only JWT secret. They
@@ -1910,7 +1999,8 @@ readable by anyone. The rules:
   password, `VITEST`, or no explicit `ALERTS_ENABLED` on the worker. The error
   names settings, never values. `config/production.security.test.ts` bundles
   each entry point and fails on any `process.env` read that `SETTINGS` doesn't
-  classify, checks each Lambda's Terraform environment block sets every
+  classify, checks each Lambda's Terraform environment block (or, for a secret,
+  its runtime secret, [§ Runtime secrets](#runtime-secrets)) sets every
   required setting, sweeps every `backend/.env.development` value, and starts
   each entry point with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
@@ -1960,8 +2050,12 @@ readable by anyone. The rules:
   URL or secret; its role can receive from `fetch-requests` and send to
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
   policy lets the worker, and only the worker, reach those two queues.
-- **Blast radius:** Lambda reserved concurrency is capped. There is a budget
-  alarm, plus alarms on Lambda errors, throttles and CloudFront 5xx.
+- **Blast radius:** Lambda reserved concurrency is capped. There are monthly
+  and daily budgets and Cost Anomaly Detection (deployment.md § Budget
+  alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
+  (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this
+  account's services (`aws:SourceAccount`, and `aws:SourceArn` for CloudWatch
+  and Budgets), so another account can't publish fake alerts through them.
 - **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a
   structured `{ event: "self_check_failed", projectId, runId, checks }` line
   — failed check ids only, never a farm name, date or value — when a saved
@@ -1982,7 +2076,7 @@ beside the resource; a new ignore needs a line here too.
 
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
-| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
+| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
 | AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
 
 Revisit AWS-0132 for `reports` if a client contract asks for customer-held

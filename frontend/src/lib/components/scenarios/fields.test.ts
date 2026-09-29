@@ -80,6 +80,11 @@ describe('field specs cover the engine’s op catalogue', () => {
 					return 'n1';
 				case 'pe':
 					return { kind: 'monthly', mm: [90, 110, 140, 160, 150, 120, 80, 50, 35, 30, 40, 60], source: 'Station FAO-56 ET₀, 2015–2020' };
+				case 'curve':
+					return [
+						{ levelM: 100, areaM2: 0, volumeM3: 0 },
+						{ levelM: 104.5, areaM2: 42_000, volumeM3: 95_000.5 }
+					];
 			}
 		};
 		const check = (table: Record<string, { spec: ValueSpec }>, err: (k: string, v: unknown) => string | null, skip: string[] = []) => {
@@ -95,6 +100,36 @@ describe('field specs cover the engine’s op catalogue', () => {
 		check(NODE_FIELD_SPECS, nodeFieldError);
 		check(TRANSFER_FIELD_SPECS, transferFieldError);
 		check(SETTINGS_SPECS, settingsValueError, ['gr4j.x1', 'gr4j.x2', 'gr4j.x3', 'gr4j.x4']);
+	});
+});
+
+describe('a dam survey curve (engine 1.20.0)', () => {
+	const spec = NODE_FIELD_SPECS.damCurve.spec;
+	it('reads pasted rows as the Network form does, and empty as none', () => {
+		expect(spec).toEqual({ t: 'curve' });
+		expect(parseValue(spec, 'level\tarea\tvolume\n0\t0\t0\n5.5\t60000\t180000\n')).toEqual({
+			ok: true,
+			value: [
+				{ levelM: 0, areaM2: 0, volumeM3: 0 },
+				{ levelM: 5.5, areaM2: 60_000, volumeM3: 180_000 }
+			]
+		});
+		expect(parseValue(spec, '  ')).toEqual({ ok: true, value: null });
+	});
+	it('refuses unreadable text and a curve the engine could not use', () => {
+		expect(parseValue(spec, '0, 0')).toEqual({ ok: false, error: 'line 1: expected 3 values (level, area, volume), found 2' });
+		expect(parseValue(spec, '0, 0, 0')).toEqual({ ok: false, error: 'a survey curve needs at least two rows' });
+		expect(parseValue(spec, '0, 0, 100\n1, 10, 100')).toEqual({ ok: false, error: 'two survey rows have the same volume (100 m³)' });
+	});
+	it('shows the rows back as the paste box reads them, and in a few words', () => {
+		const rows = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 5.5, areaM2: 60_000, volumeM3: 180_000 }
+		];
+		expect(valueText(spec, rows)).toBe('0, 0, 0\n5.5, 60000, 180000');
+		expect(valueText(spec, null)).toBe('');
+		expect(formatValue(spec, rows)).toBe('2 survey rows, 180\u202f000 m³ at the top');
+		expect(formatValue(spec, null)).toBe('none (power law)');
 	});
 });
 

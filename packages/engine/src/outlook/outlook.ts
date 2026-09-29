@@ -310,6 +310,12 @@ export interface OutlookMember {
 	storageM3ByDam: Record<string, number>;
 	/** The farms' irrigation demand and supply (the `demand` and `supplied` series) over the season. */
 	demandM3: number;
+	/**
+	 * The same per farm (node id → demand and supply over the season), every
+	 * farm node with any demand in the season (engine ≥ 1.19.0): the farmer
+	 * view's own-farm figures (issue #53 R5, E3).
+	 */
+	farms: Record<string, { demandM3: number; suppliedM3: number }>;
 	suppliedM3: number;
 	/** supplied ÷ demand; null without demand. */
 	demandMet: number | null;
@@ -343,6 +349,7 @@ export function outlookMember(
 	const i1 = s.to - d0;
 	if (i0 < 0 || i1 !== output.days - 1) throw new Error(`the member run (${output.startDate}, ${output.days} days) does not end on the season end ${s.seasonEnd}`);
 	const storageM3ByDam: Record<string, number> = {};
+	const farms: OutlookMember['farms'] = {};
 	let storage = 0;
 	let dams = 0;
 	let demand = 0;
@@ -362,6 +369,7 @@ export function outlookMember(
 		if (n.kind === 'farm') {
 			demand += dn;
 			supplied += gn;
+			if (dn > 0) farms[n.id] = { demandM3: dn, suppliedM3: gn };
 			if (n.damCapacityM3 > 0) {
 				const v = fin(seriesOf(output, n.id, 'dam_storage')?.[i1]);
 				storageM3ByDam[n.id] = v;
@@ -398,6 +406,7 @@ export function outlookMember(
 		seasonEndStorageM3: dams ? storage : null,
 		storageM3ByDam,
 		demandM3: demand,
+		farms,
 		suppliedM3: supplied,
 		demandMet: demand > 0 ? supplied / demand : null,
 		userDemandM3: userDemand,
@@ -447,6 +456,14 @@ export interface OutlookLevelResult {
 	yearsEwrMet: number;
 	/** Each farm dam's season-end storage. */
 	storageByDam: { nodeId: string; name: string; capacityM3: number; stat: OutlookStat | null }[];
+	/**
+	 * Each farm's share of its own demand met (supplied ÷ demand over the
+	 * season; a year with no demand on the farm left out), for every farm with
+	 * demand in any analogue year (engine ≥ 1.19.0; issue #53 R5, the farmer
+	 * view E3). `nYears` counts the years it had demand in; the statistic is
+	 * null below OUTLOOK_MIN_YEARS of them.
+	 */
+	demandMetByFarm: { nodeId: string; name: string; nYears: number; stat: OutlookStat | null }[];
 	/** In the order of the analogues. */
 	years: OutlookYear[];
 }
@@ -613,10 +630,11 @@ export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
 	if (!enoughYears) warnings.push(`Only ${nYears} analogue year${nYears === 1 ? '' : 's'}: at least ${OUTLOOK_MIN_YEARS} are needed for percentiles and a planning figure.`);
 	for (const l of x.levels) if (l.problems.length) warnings.push(`${l.label}: not run (${l.problems.join('; ')})`);
 	const dams = x.model.nodes.filter((n) => n.kind === 'farm' && n.damCapacityM3 > 0);
+	const farmNodes = x.model.nodes.filter((n) => n.kind === 'farm');
 
 	const levels: OutlookLevelResult[] = x.levels.map((l) => {
 		if (l.problems.length) {
-			return { id: l.id, label: l.label, problems: l.problems, nYears: 0, enoughYears: false, meanDemandM3: null, seasonEndStorageM3: null, demandMet: null, userDemandMet: null, ewr: null, yearsEwrMet: 0, storageByDam: [], years: [] };
+			return { id: l.id, label: l.label, problems: l.problems, nYears: 0, enoughYears: false, meanDemandM3: null, seasonEndStorageM3: null, demandMet: null, userDemandMet: null, ewr: null, yearsEwrMet: 0, storageByDam: [], demandMetByFarm: [], years: [] };
 		}
 		if (l.members.length !== nYears) throw new Error(`level ${l.id} has ${l.members.length} members for ${nYears} analogue years`);
 		const years: OutlookYear[] = l.members.map((m) => {
@@ -636,6 +654,13 @@ export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
 			ewr: stat(years.map((y) => y.ewr.share), enoughYears),
 			yearsEwrMet: years.filter((y) => y.ewr.met).length,
 			storageByDam: dams.map((n) => ({ nodeId: n.id, name: n.name, capacityM3: n.damCapacityM3, stat: stat(years.map((y) => y.storageM3ByDam[n.id] ?? null), enoughYears) })),
+			demandMetByFarm: farmNodes.flatMap((n) => {
+				const got = years.flatMap((y) => {
+					const f = y.farms[n.id];
+					return f && f.demandM3 > 0 ? [f.suppliedM3 / f.demandM3] : [];
+				});
+				return got.length ? [{ nodeId: n.id, name: n.name, nYears: got.length, stat: stat(got, got.length >= OUTLOOK_MIN_YEARS) }] : [];
+			}),
 			years
 		};
 	});

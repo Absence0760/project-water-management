@@ -757,7 +757,8 @@ function waterYearOfDay(day: number): number {
  * The runoff model's water balance, from the run's own series (nothing to
  * check when the caller supplied the natural flow):
  * - every day, rain − AET − Q + exchange = Δ(Σ stores), Q = natural flow in
- *   mm over the catchment, starting from the post-warm-up storage;
+ *   mm over the catchment, starting from the post-warm-up storage (whose
+ *   stores, when recorded, sum to it and sit in their bounds);
  * - Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1;
  * - the summary's totals are the sums of the series and close the balance.
  */
@@ -777,6 +778,14 @@ export function checkRunoffBalance(input: ModelInput, out: ModelOutput): string 
 	if (!ex && b.params.x2 !== 0) return 'exchange series missing with X2 ≠ 0';
 	const toMm = 1 / (b.areaKm2 * 1000);
 	const t9 = (x: number) => 1e-9 + 1e-12 * Math.abs(x);
+	// Each store's start (engine ≥ 1.20.0) sums to the total and sits in its bounds.
+	if (b.storesStartMm) {
+		const start = ['production_store', 'routing_store', 'uh_store'].map((k) => b.storesStartMm![k]);
+		if (start.some((x) => typeof x !== 'number' || !Number.isFinite(x) || x < -t9(0)) || start[0]! > b.params.x1! + t9(b.params.x1!))
+			return `runoff stores at the start ${JSON.stringify(b.storesStartMm)} are missing or outside their bounds`;
+		const sum = start[0]! + start[1]! + start[2]!;
+		if (Math.abs(sum - b.storageStartMm) > t9(b.storageStartMm)) return `runoff stores at the start sum to ${sum} mm, not the ${b.storageStartMm} mm storage`;
+	}
 	let before = b.storageStartMm;
 	const tot = { rain: 0, pet: 0, aet: 0, flow: 0, ex: 0 };
 	for (let t = 0; t < out.days; t++) {

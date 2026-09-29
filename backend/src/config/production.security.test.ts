@@ -3,7 +3,10 @@
 //   * the settings each Lambda can read: every `process.env.X` in the modules
 //     esbuild reaches from its entry point, each of which must be classified;
 //   * what Terraform sets: each aws_lambda_function's environment block in
-//     infra/*.tf, which must set every setting production requires;
+//     infra/*.tf, plus the keys of its runtime secret (local.runtime_secrets
+//     in infra/secrets.tf, config/runtimeSecrets.ts), which together must set
+//     every setting production requires, and no secret key may be in an
+//     environment block;
 //   * the local defaults: every value in the committed backend/.env.development,
 //     each of which a Lambda that checks that setting must refuse.
 // Positive control: the production-shaped env (the same keys Terraform sets)
@@ -12,6 +15,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { assertLambdaEnv, assertProductionEnv, productionEnvProblems, ROLES, type Role, SETTINGS } from './production.js';
+import { RUNTIME_SECRETS } from './runtimeSecrets.js';
 
 const SRC = fileURLToPath(new URL('..', import.meta.url));
 const BACKEND = fileURLToPath(new URL('../..', import.meta.url));
@@ -29,16 +33,24 @@ const TF_RESOURCE: Record<string, Role> = { backend: 'api', worker: 'worker', fe
 /** Read by the runtime or the test runner, not by our code: classified, but no module mentions them. */
 const RUNTIME = new Set(['NODE_EXTRA_CA_CERTS', 'VITEST']);
 
-// Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below).
+// Production-shaped values, as Terraform renders them (keys must match infra/*.tf exactly; checked below):
+// PROD is each environment block, PROD_SECRETS each runtime secret's JSON.
 const SITE = 'https://water.example.org';
 const SQS = (name: string) => `https://sqs.af-south-1.amazonaws.com/000000000000/water-management-${name}`;
 const DB_URL = `postgresql://water_app:${'a1'.repeat(16)}@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full`;
 const CA = '/var/task/rds-global-bundle.pem';
+const SECRET_ARN = (role: string) => `arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/${role}-AbCdEf`;
+const runtimeSecret = (role: string) => ({ RUNTIME_SECRET_ARN: SECRET_ARN(role), RUNTIME_SECRET_VERSION: '00000000-0000-0000-0000-000000000000' });
+const PROD_SECRETS: Record<Role, Record<string, string>> = {
+	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48) },
+	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
+	fetcher: {},
+	renderer: {},
+	migrate: { WATER_APP_PASSWORD: 'a1'.repeat(16) }
+};
 const PROD: Record<Role, Record<string, string>> = {
 	api: {
-		DATABASE_URL: DB_URL,
-		AUTH_JWT_SECRET: 'f'.repeat(64),
-		CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48),
+		...runtimeSecret('api'),
 		ALLOWED_ORIGINS: SITE,
 		COOKIE_SECURE: 'true',
 		NODE_EXTRA_CA_CERTS: CA,
@@ -52,9 +64,8 @@ const PROD: Record<Role, Record<string, string>> = {
 		REPORTS_BUCKET: 'water-management-reports-000000000000'
 	},
 	worker: {
-		DATABASE_URL: `${DB_URL}&application_name=worker`,
+		...runtimeSecret('worker'),
 		DB_POOL_MAX: '2',
-		AUTH_JWT_SECRET: 'f'.repeat(64),
 		NODE_EXTRA_CA_CERTS: CA,
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
@@ -68,7 +79,6 @@ const PROD: Record<Role, Record<string, string>> = {
 		MAIL_FROM: 'Water Management <no-reply@water.example.org>',
 		SITE_URL: SITE,
 		SES_CONFIGURATION_SET: 'water-management',
-		ALERTS_TOKEN_SECRET: 'a'.repeat(48),
 		ALERTS_ENABLED: 'true',
 		ALERTS_DAILY_CAP: '5',
 		MAIL_EVENTS_QUEUE_ARN: 'arn:aws:sqs:af-south-1:000000000000:water-management-mail-events'
@@ -87,13 +97,14 @@ const PROD: Record<Role, Record<string, string>> = {
 		DB_PORT: '5432',
 		DB_NAME: 'water',
 		MASTER_SECRET_ARN: 'arn:aws:secretsmanager:af-south-1:000000000000:secret:rds!db-0000-AbCdEf',
-		WATER_APP_PASSWORD: 'a1'.repeat(16),
+		...runtimeSecret('migrate'),
 		NODE_EXTRA_CA_CERTS: CA
 	}
 };
 
+/** A Lambda's environment once its runtime secret is loaded (the shape the config check sees). */
 const prod = (role: Role, patch: Record<string, string | undefined> = {}) => {
-	const env: Record<string, string | undefined> = { ...PROD[role], AWS_LAMBDA_FUNCTION_NAME: `water-management-${role}`, ...patch };
+	const env: Record<string, string | undefined> = { ...PROD[role], ...PROD_SECRETS[role], AWS_LAMBDA_FUNCTION_NAME: `water-management-${role}`, ...patch };
 	for (const [k, v] of Object.entries(patch)) if (v === undefined) delete env[k];
 	return env;
 };
@@ -164,6 +175,21 @@ function terraformEnv(): Record<Role, Map<string, string | null>> {
 	return out;
 }
 
+/** The keys of each role's runtime secret in infra/secrets.tf (local.runtime_secrets). */
+function terraformSecrets(): Record<Role, Set<string>> {
+	const tf = readFileSync(`${INFRA}secrets.tf`, 'utf8');
+	const start = tf.search(/^ {2}runtime_secrets = \{$/m);
+	expect(start, 'infra/secrets.tf has no local.runtime_secrets').toBeGreaterThan(0);
+	const block = tf.slice(start, tf.indexOf('\n  }\n', start));
+	const out = Object.fromEntries(ROLES.map((r) => [r, new Set<string>()])) as Record<Role, Set<string>>;
+	for (const m of block.matchAll(/^ {4}([a-z]+) = \{$([\s\S]*?)^ {4}\}$/gm)) {
+		const role = m[1] as Role;
+		expect(ROLES, `local.runtime_secrets.${role} is not a role`).toContain(role);
+		for (const kv of m[2]!.matchAll(/^ {6}([A-Z][A-Z0-9_]*)\s*=/gm)) out[role].add(kv[1]!);
+	}
+	return out;
+}
+
 function devEnv(): [string, string][] {
 	return readFileSync(`${BACKEND}.env.development`, 'utf8')
 		.split('\n')
@@ -174,6 +200,7 @@ function devEnv(): [string, string][] {
 
 afterEach(() => {
 	vi.unstubAllEnvs();
+	vi.doUnmock('./secretsManager.js');
 	vi.resetModules();
 });
 
@@ -211,9 +238,25 @@ describe('Terraform sets what production requires', () => {
 		expect(Object.keys(tf).sort()).toEqual([...ROLES].sort());
 	});
 
-	it.each(ROLES)('%s: every required setting is in its environment block', (role) => {
-		const missing = Object.keys(SETTINGS).filter((n) => requiredFor(role, n) && !tf[role].has(n));
+	const tfSecrets = terraformSecrets();
+
+	it.each(ROLES)('%s: every required setting is in its environment block or its runtime secret', (role) => {
+		const missing = Object.keys(SETTINGS).filter((n) => requiredFor(role, n) && !tf[role].has(n) && !tfSecrets[role].has(n));
 		expect(missing).toEqual([]);
+	});
+
+	it.each(ROLES)('%s: its runtime secret holds exactly RUNTIME_SECRETS, and the fixture mirrors it', (role) => {
+		expect([...tfSecrets[role]].sort()).toEqual([...RUNTIME_SECRETS[role]].sort());
+		expect(Object.keys(PROD_SECRETS[role]).sort()).toEqual([...RUNTIME_SECRETS[role]].sort());
+		if (RUNTIME_SECRETS[role].length) expect(tf[role].has('RUNTIME_SECRET_ARN') && tf[role].has('RUNTIME_SECRET_VERSION'), role).toBe(true);
+		else expect(tf[role].has('RUNTIME_SECRET_ARN'), role).toBe(false);
+	});
+
+	it('no environment block holds any secret (GetFunctionConfiguration reads them all): a denylist across every Lambda', () => {
+		const denied = new Set([...Object.values(RUNTIME_SECRETS).flat(), 'DB_PASSWORD', 'MASTER_PASSWORD']);
+		expect(denied.has('CLOUDFRONT_SHARED_SECRET') && denied.has('WATER_APP_PASSWORD')).toBe(true); // positive control
+		const leaks = ROLES.flatMap((role) => [...tf[role].keys()].filter((k) => denied.has(k) || /SECRET(?!_ARN$|_VERSION$)|PASSWORD|PRIVATE_KEY|TOKEN$/.test(k)).map((k) => `${role}: ${k}`));
+		expect(leaks).toEqual([]);
 	});
 
 	it.each(ROLES)('%s: every key it sets is a classified setting, and the fixture here mirrors it exactly', (role) => {
@@ -350,12 +393,34 @@ describe('each entry point runs the check at init', () => {
 		migrate: () => import('../lambda-migrate.js')
 	};
 
-	it.each(ROLES)('%s: loads with the production env, and refuses to load without a required setting', async (role) => {
-		stubProcessEnv(prod(role));
+	/** Secrets Manager, as the entry point's loader sees it: `secret` for this role's ARN. */
+	function stubSecretsManager(role: Role, secret: Record<string, string>) {
+		const read = vi.fn(async (id: string) => {
+			if (id !== SECRET_ARN(role)) throw Object.assign(new Error('not this role’s secret'), { name: 'AccessDeniedException' });
+			return JSON.stringify(secret);
+		});
+		vi.doMock('./secretsManager.js', () => ({ getSecretString: read }));
+		return read;
+	}
+
+	it.each(ROLES)('%s: loads with the production env and its secret, and refuses to load without a required setting', async (role) => {
+		// The environment block alone (no secret values in it), the secret from Secrets Manager.
+		stubProcessEnv({ ...PROD[role], AWS_LAMBDA_FUNCTION_NAME: `water-management-${role}` });
+		const read = stubSecretsManager(role, PROD_SECRETS[role]);
 		await expect(load[role]()).resolves.toHaveProperty('handler');
+		expect(read).toHaveBeenCalledTimes(RUNTIME_SECRETS[role].length ? 1 : 0);
+		for (const k of RUNTIME_SECRETS[role]) expect(process.env[k], k).toBe(PROD_SECRETS[role][k]);
 		vi.resetModules();
-		const name = Object.keys(SETTINGS).find((n) => requiredFor(role, n) && n !== 'CLOUDFRONT_SHARED_SECRET')!;
-		stubProcessEnv(prod(role, { [name]: undefined }));
+		const name = Object.keys(SETTINGS).find((n) => requiredFor(role, n) && n in PROD[role] && !n.startsWith('RUNTIME_SECRET_'))!;
+		stubProcessEnv(prod(role, { [name]: undefined, ...Object.fromEntries(RUNTIME_SECRETS[role].map((k) => [k, undefined])) }));
+		stubSecretsManager(role, PROD_SECRETS[role]);
 		await expect(load[role]()).rejects.toThrow(new RegExp(`refusing to start the ${role} Lambda: .*${name}`));
+	}, 30_000);
+
+	it.each(ROLES.filter((r) => RUNTIME_SECRETS[r].length))('%s: refuses to load when its secret lacks a key, naming the key', async (role) => {
+		const [key, ...rest] = RUNTIME_SECRETS[role];
+		stubProcessEnv({ ...PROD[role], AWS_LAMBDA_FUNCTION_NAME: `water-management-${role}` });
+		stubSecretsManager(role, Object.fromEntries(rest.map((k) => [k, PROD_SECRETS[role][k]!])));
+		await expect(load[role]()).rejects.toThrow(new RegExp(`refusing to start the ${role} Lambda: its runtime secret is missing keys: ${key}`));
 	}, 30_000);
 });

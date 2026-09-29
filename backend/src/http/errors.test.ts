@@ -2,7 +2,7 @@
 // and `params` only on the coded errors a farmer can meet, which the
 // translated pages word from their catalogue.
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError, ERROR_CODES, handleError, mustChange } from './errors.js';
 
 function appThrowing(err: unknown) {
@@ -29,6 +29,65 @@ describe('handleError', () => {
 	it('keeps the codes unique and snake_case (each is a key of the frontend apiError.ts CODES)', () => {
 		expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
 		for (const c of ERROR_CODES) expect(c).toMatch(/^[a-z]+(_[a-z]+)*$/);
+	});
+});
+
+describe('handleError: an unhandled error (issue #126)', () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	// A pg error's message and detail carry row values; a thrown Error can
+	// carry anything a user typed. Neither may reach the log or the response.
+	function pgLikeError() {
+		const e = Object.assign(new Error('duplicate key: farmer@example.com owns "Secret Farm"'), {
+			name: 'error',
+			code: '22P02',
+			detail: 'Key (email)=(farmer@example.com) already exists.'
+		});
+		return e;
+	}
+
+	it('logs one structured unhandled_error line (the alarm’s event): name, code, route pattern and stack frames, never the message', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const app = new Hono();
+		app.onError(handleError);
+		app.get('/projects/:id/secret-token/:token', () => {
+			throw pgLikeError();
+		});
+		const res = await app.request('/projects/11111111-2222-3333-4444-555555555555/secret-token/tok-abc123');
+
+		expect(res.status).toBe(500);
+		expect(await res.json()).toEqual({ error: 'Internal server error' });
+
+		expect(error).toHaveBeenCalledTimes(1);
+		expect(error.mock.calls[0]).toHaveLength(1);
+		const raw = error.mock.calls[0]![0] as string;
+		const line = JSON.parse(raw);
+		expect(line).toMatchObject({ event: 'unhandled_error', method: 'GET', route: '/projects/:id/secret-token/:token', error: 'error', code: '22P02' });
+		expect(Object.keys(line).sort()).toEqual(['at', 'code', 'error', 'event', 'method', 'route']);
+		expect(line.at.length).toBeGreaterThan(0);
+		for (const frame of line.at) expect(frame).toMatch(/^at /);
+		for (const leak of ['farmer@example.com', 'Secret Farm', 'duplicate key', 'already exists', 'tok-abc123', '11111111-2222']) {
+			expect(raw).not.toContain(leak);
+		}
+	});
+
+	it('keeps a name or code that isn’t a short token out of the line, and still answers the generic 500', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const err = Object.assign(new Error('boom'), { name: 'Failed for farmer@example.com', code: 'user text: Secret Farm' });
+		const res = await appThrowing(err).request('/');
+		expect(res.status).toBe(500);
+		expect(await res.json()).toEqual({ error: 'Internal server error' });
+		const raw = error.mock.calls[0]![0] as string;
+		expect(JSON.parse(raw)).toMatchObject({ event: 'unhandled_error', method: 'GET', route: '/', error: 'Error' });
+		expect(JSON.parse(raw)).not.toHaveProperty('code');
+		for (const leak of ['farmer@example.com', 'Secret Farm', 'boom']) expect(raw).not.toContain(leak);
+	});
+
+	it('does not log a handled error (the alarm counts server faults only)', async () => {
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		await appThrowing(new ApiError(404, 'not found')).request('/');
+		await appThrowing(Object.assign(new Error('dup'), { code: '23505' })).request('/');
+		expect(error).not.toHaveBeenCalled();
 	});
 });
 

@@ -63,7 +63,7 @@ origin**, so the session cookie is first-party.
 | Path | Package | What it is |
 | --- | --- | --- |
 | `packages/engine` | `@water-management/engine` | **The model.** Pure TypeScript with no I/O, no DB and no DOM. `runModel(ModelInput): ModelOutput`, plus the shared types (`project.ts`) for projects, model data, series and run outputs. Imported as source by both apps. Subpath exports: `/calendar` (only the pure date helpers, `src/calendar.ts`, for code that must not pull in the model, such as the fetcher Lambda) and `/testing`. |
-| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). |
+| `backend` | `@water-management/backend` | Hono API: auth (incl. password reset, email verification, invites — email via `src/mail/`: Mailpit locally, SES in prod), projects, teams, members, the model document, series, runs, run comparison and CSV/JSON export. `src/app.ts` builds the app; `server.ts` (local, loads dotenv) and `lambda.ts` (AWS) are the entry points. esbuild bundles `lambda.ts` into `dist/lambda.mjs`. A third entry, `lambda-migrate.ts`, is the production migrate Lambda: it sets up `water_app` and applies the migrations as the schema owner. `src/jobs/` is the background job queue ([§ Background work](#background-work)); its entries are `jobs/worker.ts` (local, loads dotenv) and `lambda-worker.ts` (AWS). In Lambda, the API, worker and migrate entry points first read their secrets (session key, `DATABASE_URL`, …) from their own Secrets Manager secret, once per cold start, never from environment variables (`src/config/runtimeSecrets.ts`, [security.md § Runtime secrets](./security.md#runtime-secrets)); locally they come from `.env.development`. |
 | `backend/migrations` | none | Plain SQL migrations, applied by `backend/scripts/migrate.ts`. |
 | `frontend` | `@water-management/frontend` | SvelteKit 5 as an SPA: `adapter-static` with a fallback `index.html`, `ssr = false`, `prerender = false`. Served as static files, and all data comes from the API. CloudFront maps 404s to `index.html` so deep links work. A client navigation commits only once the new page's stylesheets have loaded (root layout `onNavigate`, `lib/nav/stylesheets.ts`), since SvelteKit + Vite can otherwise render it before its CSS. The root layout frames a signed-in person's pages in `lib/components/layout/AppShell.svelte` (a sidebar from 900 px, a slim bar on phones; a page adds its own navigation through `layout/sidebar.svelte.ts`); the farmer view and the sign-in pages have their own frames ([ui.md § App shell](./ui.md#app-shell-and-account-menu)). |
 | `e2e` | none | Playwright specs. They run locally against their own `water_e2e` DB and servers on `:3101`/`:7801` (a worktree gets its own slot: `e2e/support/env.ts`); CI runs them as 14 shards. |
@@ -1084,7 +1084,10 @@ sequenceDiagram
   W->>S: put reports/<project>/<report>.pdf
   W->>DB: report done (pages, bytes); email the link to members
   U->>API: GET /projects/:id/reports/:jobId
-  API-->>U: { status, url: pre-signed, 1 h }
+  API-->>U: { status }
+  U->>API: GET /projects/:id/reports/:jobId/pdf (viewer)
+  API-->>U: 302 pre-signed GET, 60 s
+  U->>S: GET the PDF (direct, within the minute)
 ```
 
 - **The render token** (`render_token`, the `email_token` pattern with
@@ -1112,8 +1115,10 @@ sequenceDiagram
   on first use; `s3` is the private production bucket (SSE, 7-day
   lifecycle). The key is **derived from the ids**, never stored or taken from
   a message, so no row or message can point a download at another project's
-  PDF. Downloads are pre-signed GETs, an hour, signed by the API when a
-  viewer asks for the status.
+  PDF. Downloads go through `GET /projects/:id/reports/:jobId/pdf`, which
+  checks the viewer's membership on every click and redirects to a
+  pre-signed GET that expires after 60 s (issue #126; the trade-off against
+  streaming the PDF through the API is in security.md § Reports).
 - **Email** (`reports/store.ts finishReport`): after a good render, in the
   job's transaction, to the requester if they asked and to members named at
   request time **who are still viewers or above**, through the existing mail

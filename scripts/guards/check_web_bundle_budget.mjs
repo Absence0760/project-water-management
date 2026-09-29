@@ -1182,6 +1182,17 @@
 //             and sensitivity code it runs; all of it is scoring or run code
 //             the worker needs, so none can move to the page. No new
 //             dependency. Headroom ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1127 → 1137 KB (measured 1134 with #65's calibration
+//             batch merged in; the branch added 11 KB over main before it).
+//             Issue #53's remaining planning outputs: the impact report's
+//             licence-impact board by year class (R7: the engine's
+//             licenceImpact view, the board and its view model, in the
+//             impact section's lazy chunk), the seasonal outlook's review
+//             trigger table and publish-to-farmers controls (R6, R5; the
+//             outlook panel's lazy chunk), the review-date setting, and the
+//             farm page's "This season" card with its Afrikaans (E3). Every
+//             piece already sits in a lazy chunk, so a further split would
+//             only move bytes. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1192,7 +1203,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1127,
+	totalCodeKb: 1137,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,

@@ -57,6 +57,31 @@ output "reports_bucket" {
   value       = aws_s3_bucket.reports.bucket
 }
 
+# The database's names, for infra/scripts/restore-db.sh: a restore has to land
+# in this subnet group, security group and parameter group, and the parameter
+# group's name carries a generated suffix (name_prefix, rds.tf), so the script
+# reads them here rather than guessing. Not secret; export-tf-vars.sh pushes
+# them as plain GitHub variables, which no workflow reads.
+output "db_instance_identifier" {
+  description = "RDS instance identifier. restore-db.sh restores beside it and swaps identifiers."
+  value       = aws_db_instance.main.identifier
+}
+
+output "db_subnet_group_name" {
+  description = "RDS subnet group (the private subnets). restore-db.sh restores into it."
+  value       = aws_db_subnet_group.main.name
+}
+
+output "db_security_group_id" {
+  description = "Security group of the RDS instance (5432 from the VPC Lambdas only). restore-db.sh attaches it to the restored instance."
+  value       = aws_security_group.rds.id
+}
+
+output "db_parameter_group_name" {
+  description = "RDS parameter group (TLS enforced, slow-query logging without bind values). Its name has a generated suffix, so restore-db.sh reads it here."
+  value       = aws_db_parameter_group.main.name
+}
+
 output "public_site_url" {
   description = "Public URL of the site."
   value       = local.site_origin
