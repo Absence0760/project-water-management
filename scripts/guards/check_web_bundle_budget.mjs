@@ -1182,6 +1182,16 @@
 //             and sensitivity code it runs; all of it is scoring or run code
 //             the worker needs, so none can move to the page. No new
 //             dependency. Headroom ~3 KB total, ~1 KB worker.
+// 2026-09-28  total 1127 → 1133 KB (measured 1130; main @ 09c4ed7 measured
+//             1124). Issue #66, data-quality limits as settings (engine
+//             1.20.0): the Settings tab's Data quality section grows from 3
+//             to 17 fields (DataQualitySection, its validation and option
+//             lists; tab chunk 55.9 → 57.9 KB), the zero-run CHIRPS check,
+//             'usualRain' rule, moving low-vs-CHIRPS baseline and scaled
+//             minimum in quality.ts (shared engine chunk 40.5 → 41.1 KB,
+//             import worker +0.5 KB), their run-comparison labels, the fit
+//             provenance line and one help entry. No new dependency.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1192,7 +1202,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1127,
+	totalCodeKb: 1133,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,

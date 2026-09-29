@@ -139,3 +139,39 @@ test('flagged zero-rain runs are shaded as missing until Settings keeps them dry
 	await page.reload();
 	await expect(mode).toHaveValue('asRecorded');
 });
+
+// Issue #66: the zero-rain and low-vs-CHIRPS limits are settings (engine
+// 1.20.0), and the Data tab's checks follow the saved values.
+test('the zero-rain and low-vs-CHIRPS limits are settings the Data tab applies', async ({ page, owner }) => {
+	void owner;
+	const projectId = await seedZeroRain(page.request, 'Rain limits');
+	const items = page.getByTestId('series-checks').getByRole('listitem');
+
+	await page.goto(`/projects/${projectId}?tab=settings`);
+	const section = page.getByTestId('data-quality-settings');
+	const wet = section.getByLabel('Days in the wet season (days)');
+	await expect(wet).toHaveValue('60');
+	await expect(section.getByLabel('Check each zero-rain run against CHIRPS')).not.toBeChecked();
+	// The other rule shows its own two limits instead.
+	const rule = section.getByLabel('Judge a zero-rain run by');
+	await rule.selectOption('usualRain');
+	await expect(section.getByLabel('Share of the usual annual rain (%)')).toHaveValue('25');
+	await expect(wet).toHaveCount(0);
+	await rule.selectOption('wetDays');
+	// The 76-day run no longer reaches 80 wet-season days; 2013/14 (a third of the usual ratio) is above 30 %.
+	await wet.fill('80');
+	await section.getByLabel('Low vs CHIRPS: flag below (% of the usual ratio)').fill('30');
+	const save = page.getByRole('button', { name: 'Save settings' });
+	await save.click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	await page.goto(`/projects/${projectId}?tab=series`);
+	await expect(page.getByRole('heading', { name: 'Data checks' })).toBeVisible();
+	await expect(items).toHaveCount(0);
+
+	// A cap below the floor blocks Save with a message.
+	await page.goto(`/projects/${projectId}?tab=settings`);
+	await section.getByLabel('Shortest flow flat stretch (days)').fill('100');
+	await expect(section.getByRole('alert')).toHaveText('The longest flow flat-line can’t be shorter than the shortest.');
+	await expect(save).toBeDisabled();
+});
