@@ -971,6 +971,19 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.zeroRainRuns', 'run.rain_catchment_missing']
 	},
 	{
+		id: 'flow-gap-filling',
+		term: 'Gap filling of observed flow',
+		short: 'Short gaps in a gauge or logger record interpolated, longer ones filled from another record × a fitted ratio; in a run only.',
+		category: 'data',
+		fields: ['settings.flowGapFill', 'run.observed_flow_fill', 'run.observed_flow_filled', 'run.observed_flow_other_fill', 'run.observed_flow_other_filled']
+	},
+	{
+		id: 'series-source',
+		term: 'Series source and unit',
+		short: 'Where a series\' values came from (a station, agency, file or feed) and the unit they were given in before the app converted them.',
+		category: 'data'
+	},
+	{
 		id: 'rain-accumulations',
 		term: 'Multi-day rain accumulations',
 		short: 'Several days of rain read on one day after days entered as 0: the total is spread back over those days in proportion to CHIRPS.',

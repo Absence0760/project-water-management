@@ -1226,6 +1226,23 @@
 //             checks, so provenance and comparison chunks don't carry them.
 //             No new dependency. Headroom ~3 KB; #155's quantile map adds its
 //             own growth on top when it lands.
+// 2026-09-29  total 1156 → 1166 KB (measured 1163 with main @ ca9d933 merged
+//             in, which measures 1153). Issue #66's gap filling, series source
+//             and the infilled wiring (engine 1.23.0): the engine's
+//             flowGapFill module in the pages' engine chunk; the fit record
+//             and run comparison's source and fill lines; the Data tab's fill
+//             shading and source editor; Settings' Flow gaps fields (their own
+//             1.9 KB chunk); two help entries. Two ceilings that were full on
+//             main are fixed at the source, not raised: the Settings tab chunk
+//             (main 59.6 KB of 60) now loads the quality-flag fields as their
+//             own 2.2 KB chunk beside the Flow gaps fields: 58.5 KB;
+//             and the help glossary's long text (articles.ts, main 41.1 KB of
+//             42 as the largest chunk) is two modules, the "Input data"
+//             topic in articles-data.ts as its own 8.9 KB chunk
+//             (vite.config.ts helpArticlesChunk), so the largest chunk is
+//             34.1 KB. The split and the two lazy chunks cost ~2 KB of total
+//             (smaller files compress less well). Calibration worker 36 KB,
+//             unchanged. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1236,7 +1253,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1156,
+	totalCodeKb: 1166,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

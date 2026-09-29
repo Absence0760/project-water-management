@@ -2192,7 +2192,23 @@ simulated flow there (Runs & results → Plausibility checks), and it is never
 the outlet's record, whatever its name (calibration, the EWR test, the
 *What the model uses* badges, the setup checklist and the fit panel's
 records read only the outlet's). A record whose gauge has left the model says
-so, until it is moved. The alternative catchment gauge and the reanalysis (engine ≥
+so, until it is moved. **Source and unit** (issue #66, 107,
+[data-model.md](./data-model.md#series-source-and-unit-107_series_sourcesql)):
+a row whose series records a source, or was converted at upload (uploaded in
+l/s, ML/day …), says so under its name ("DWS X1H001 · given in l/s (× 0.001
+to m³/s)"); a series uploaded in the stored unit with no source adds nothing,
+so the table stays one line a row. Under the chart, the charted series shows
+its source and the unit it was uploaded in; editors edit the source there
+(*Source*, saved on change, `PATCH …/series/:id { source }`), viewers read
+it. The **Upload CSV** form has an optional **Source** field (up to 200
+characters; the existing series' own source when appending or replacing,
+until typed over); the unit chosen is recorded with it. **Flow gaps**: when
+Settings → Calibration record → *Flow gaps* fills the charted gauge or logger
+record (engine ≥ 1.23.0, [model.md §2.10i](./model.md)), the days a run would
+fill are shaded like the rain a run treats as missing, the filled values are
+drawn as points (*Filled in a run*), and the caption says how many days were
+interpolated and how many came from the donor record × its ratio, why a donor
+was refused, and how many gaps stay open (`series/flowFill.ts`). The alternative catchment gauge and the reanalysis (engine ≥
 0.30.0, issue #40 (b)) take an optional free **Product** and **Version**
 instead (e.g. SASSCAL AWS / 1), shown on their row; both kinds are marked
 *Not used: no rain-source period names it* until Settings → *Rain source
@@ -2626,6 +2642,18 @@ which checks every catchment tab).
   and **infilled days** ("Leave out (default)", "Score as recorded"). A
   range without its source, or a lowest gauging not below the highest, shows
   an alert and blocks Save. An emptied range stores nothing.
+    Then **Flow gaps** (engine ≥ 1.23.0, issue
+  #66, `settings/FlowGapFillFields.svelte`, [model.md §2.10i](./model.md)):
+  per observed record the project has (the gauge, the logger), a **Fill gaps
+  in a run** switch, off by default; on, **Interpolate gaps up to (days)**
+  (5), **Fill longer gaps from** (*No other record*, the other observed
+  record or the reference gauge, marked *none uploaded* when missing), and
+  with a donor **Longest gap filled from it (days)** (60) and **Fewest shared
+  days for the ratio** (365). Whether a filled day is scored is the
+  quality flags' **infilled days** select above (one control for the fit and
+  the run's statistics). Each number is held inside its
+  bounds by its field, so the section never blocks Save. The fit record
+  below lists the fitted record's source and its gap filling.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). It takes
   the objective, **Bounds** (a select: "Wide (default)" — each parameter's

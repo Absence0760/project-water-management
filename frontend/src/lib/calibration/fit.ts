@@ -25,6 +25,7 @@ import {
 	type ProjectModel,
 	type ProjectSettings,
 	type RunoffModelId,
+	type SeriesOrigin,
 	type SeriesProvenance,
 	type ApanDailyFingerprint
 } from '@water-management/engine';
@@ -306,8 +307,16 @@ export function seedError(seed: number | null): string | null {
  */
 export function fitRecordFor(
 	r: CalibrationReport,
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> & Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'dataQuality' | 'qualityFlags'>>,
-	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null }
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> &
+		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'flowGapFill' | 'dataQuality' | 'qualityFlags'>>,
+	opts: {
+		validate: boolean;
+		validationRecord: CalibrationFlowKind | null;
+		now?: Date;
+		chirpsSource?: SeriesProvenance | null;
+		apanDaily?: ApanDailyFingerprint | null;
+		observedOrigin?: SeriesOrigin | null;
+	}
 ): FitRecord {
 	return fitRecordFromReport(r, {
 		settings,
@@ -318,7 +327,9 @@ export function fitRecordFor(
 		// The CHIRPS series' product and version the fit ran on (issue #40c), when known.
 		...(opts.chirpsSource !== undefined ? { chirpsSource: opts.chirpsSource } : {}),
 		// The daily A-pan series it ran on (issue #45), when known.
-		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {})
+		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {}),
+		// The fitted record's source and given unit (107_series_source.sql), when known.
+		...(opts.observedOrigin !== undefined ? { observedOrigin: opts.observedOrigin } : {})
 	});
 }
 

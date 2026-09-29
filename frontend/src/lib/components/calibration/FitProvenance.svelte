@@ -6,7 +6,7 @@
 	form as it stands).
 -->
 <script lang="ts">
-	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesProvenance } from '@water-management/engine';
+	import { arealRainText, exclusionLabel, fitPeriodText, fitRecordCaveats, fitRecordStatus, gapFillRecordLabel, originLabel, provenanceLabel, rainSourceText, resolveArealRain, type ApanDailyFingerprint, type ChirpsFactorSet, type FitRecord, type PeInput, type ProjectSettings, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 	import { fittedAtText, objectiveName, rankedByText, scoreCellText, scoreColumns, waterYearsText } from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -27,7 +27,8 @@
 		context = 'run',
 		chirpsSource,
 		apanDaily,
-		chirpsFactors
+		chirpsFactors,
+		observedOrigin
 	}: {
 		record: FitRecord | null | undefined;
 		/** The settings the record sits in (a run's snapshot, or the form). */
@@ -42,10 +43,21 @@
 		apanDaily?: ApanDailyFingerprint | null;
 		/** The CHIRPS factor sets the run applied (runChirpsFactors, issue #51); undefined when not known (the form). */
 		chirpsFactors?: ChirpsFactorSet[] | null;
+		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
+		observedOrigin?: SeriesOrigin | null;
 	} = $props();
+	// The fitted record's gap filling (engine ≥ 1.23.0), in words.
+	const fillText = (f: FitRecord['flowGapFill']) => {
+		if (!f?.spec) return 'none';
+		const parts: string[] = [];
+		if (f.spec.interpolateMaxDays) parts.push(`interpolated up to ${f.spec.interpolateMaxDays} days`);
+		if (f.spec.donor) parts.push(`from the ${gapFillRecordLabel(f.spec.donor)} up to ${f.spec.donorMaxDays} days`);
+		// Whether the fit scored the filled days is the quality-flag row's infilled treatment.
+		return parts.join(', ') || 'none';
+	};
 
 	const uid = $props.id();
-	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) }) : null);
+	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}), ...(observedOrigin !== undefined ? { observedOrigin } : {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
 	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.id === 'fit-all' || c.validation)) : []);
@@ -109,6 +121,19 @@
 					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
 					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
+				<!-- Issue #66: the fitted record's source and given unit, and its gap filling (engine ≥ 1.23.0). -->
+				{#if record.observedOrigin !== undefined}
+					<div data-testid="fit-observed-source">
+						<dt>Calibration record source</dt>
+						<dd>{originLabel(record.observedOrigin)}{#if status?.observedOriginChanged}{' '}(now {originLabel(observedOrigin)}){/if}</dd>
+					</div>
+				{/if}
+				{#if record.flowGapFill}
+					<div data-testid="fit-gap-fill">
+						<dt>Gaps in the calibration record <HelpTip key="settings.flowGapFill" /></dt>
+						<dd>{fillText(record.flowGapFill)}</dd>
+					</div>
+				{/if}
 				<!-- Issue #40c: the CHIRPS product and version the fit ran on, and the series' now when it differs. -->
 				<div data-testid="fit-chirps-source">
 					<dt>CHIRPS series</dt>

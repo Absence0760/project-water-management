@@ -22,7 +22,7 @@
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
 	import { loadImpactSeries, type ImpactSeries } from '$lib/components/report/impactSeries';
 	import { parseRef } from '$lib/components/compare/picker';
-	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
+	import { apanDailyOfInput, chirpsSourceOfInput, originOfInput, runChirpsFactors } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -367,7 +367,7 @@
 							requestedStart={settings.calibrationStart ?? null}
 							requestedEnd={settings.calibrationEnd ?? null}
 						/>
-						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} />{/if}
+						{#if run.settings}<FitProvenance record={run.settings.fitRecord} settings={run.settings} chirpsSource={chirpsSourceOfInput(run.inputSeries)} apanDaily={apanDailyOfInput(run.inputSeries)} chirpsFactors={runChirpsFactors(run.summary)} observedOrigin={originOfInput(run.inputSeries, run.settings.fitRecord?.flowKind)} />{/if}
 						<LineChart
 							print
 							bind:ready={hydroDrawn}

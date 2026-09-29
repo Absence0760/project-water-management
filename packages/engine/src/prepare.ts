@@ -65,6 +65,16 @@ import {
 	type SeriesKind
 } from './project';
 import { resolveWr2012 } from './reference/wr2012Resolve';
+import {
+	fillFlowGaps,
+	fillSummaryInWindow,
+	flowFillWarning,
+	GAP_FILL_KINDS,
+	resolveFlowGapFill,
+	specFills,
+	type FlowFillSummary,
+	type GapFillKind
+} from './flowGapFill';
 import { resolveQualityFlags } from './calibrate/qualityFlagSettings';
 import { clonePlain, stableStringify } from './warmstart/plain';
 
@@ -87,6 +97,20 @@ export interface PrepareOptions {
 	pinned?: PreparedFits;
 	/** Return the fits the run used as PreparedRun.fits. */
 	captureFits?: boolean;
+}
+
+/**
+ * A filled record over the run's days (PreparedRun.flowFill). `code` is
+ * FLOW_FILL_CODE per run day (0 = measured or still missing), `values` the
+ * record with its filled days (m³/s, null = missing), `summary` counted over
+ * the run. `any`: the fill filled a day anywhere in the stored record, so the
+ * run carries its columns (a resumed run of the same record keeps them).
+ */
+export interface WindowFill {
+	code: Uint8Array;
+	values: (number | null)[];
+	summary: FlowFillSummary;
+	any: boolean;
 }
 
 /** The run's settings, window and aligned inputs: everything before natural flow. */
@@ -119,6 +143,14 @@ export interface PreparedRun {
 	rainSource: { info: RainSourceInfo; column: Float64Array } | null;
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
+	/**
+	 * The observed flow records settings.flowGapFill fills (engine ≥ 1.23.0,
+	 * ./flowGapFill.ts), each aligned to the run: null when no record is
+	 * filled. `aligned` returns the filled record only when
+	 * settings.qualityFlags.infilled is 'include'; this is where every other reader
+	 * (the run's fill columns, the per-day quality flags) finds the fill.
+	 */
+	flowFill: Partial<Record<GapFillKind, WindowFill>> | null;
 	/** The fits, with PrepareOptions.captureFits. */
 	fits?: PreparedFits;
 }
@@ -301,14 +333,20 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
+	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
+	const flowFill = flowFillsFor(settings, series, start, days, warnings);
+	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
+	const readFilled = settings.qualityFlags.infilled === 'include';
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
 			? catchment.slice()
 			: kind === 'rain_chirps_mm' && chirpsUsed
 				? chirpsUsed.slice()
-				: FLOW_KINDS.has(kind)
-					? alignFlow(series[kind], start, days)
-					: alignSeries(series[kind], start, days);
+				: readFilled && flowFill?.[kind as GapFillKind]
+					? flowFill[kind as GapFillKind]!.values.slice()
+					: FLOW_KINDS.has(kind)
+						? alignFlow(series[kind], start, days)
+						: alignSeries(series[kind], start, days);
 	const chirpsNote = chirpsCorrectionWarning(chirpsCorrection);
 	if (chirpsNote) warnings.push(chirpsNote);
 	warnings.push(...keepDryDoubtWarnings(chirpsCorrection));
@@ -355,8 +393,34 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 		doubleMass,
 		rainSource: rainSource ? { info: rainSource.info, column: rainSourceColumn! } : null,
 		apanDaily,
+		flowFill,
 		...(options.captureFits ? { fits: { chirpsCorrection: chirpsFit, rainSourceFactors: rsFit } } : {})
 	};
+}
+
+/** Each record settings.flowGapFill fills, aligned to the run, with its warning; null when none is. */
+function flowFillsFor(settings: ProjectSettings, series: ModelInput['series'], start: number, days: number, warnings: string[]): Partial<Record<GapFillKind, WindowFill>> | null {
+	let out: Partial<Record<GapFillKind, WindowFill>> | null = null;
+	for (const kind of GAP_FILL_KINDS) {
+		const spec = settings.flowGapFill[kind];
+		const record = series[kind];
+		if (!specFills(spec) || !record) continue;
+		const donor = spec.donor ? (series[spec.donor] ?? null) : null;
+		const f = fillFlowGaps(kind, record, spec, donor);
+		const summary = fillSummaryInWindow(f, start, days);
+		const code = new Uint8Array(days);
+		const offset = toEpochDay(f.startDate) - start;
+		for (let i = Math.max(0, -offset); i < Math.min(f.code.length, days - offset); i++) code[i + offset] = f.code[i]!;
+		const note = flowFillWarning(summary, settings.qualityFlags.infilled === 'include');
+		if (note) warnings.push(note);
+		(out ??= {})[kind] = {
+			code,
+			values: alignSeries({ startDate: f.startDate, values: f.values }, start, days),
+			summary,
+			any: f.summary.interpolatedDays + f.summary.donorDays > 0
+		};
+	}
+	return out;
 }
 
 /** The flow series kinds (m³/s): a record a gauge or logger reads, never below zero. */
@@ -451,6 +515,8 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	}
 	s.calibrationFlowKind ??= null;
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
+	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
+	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);
 	// Provenance only: never read by the model.
 	s.fitRecord = (raw?.fitRecord as ProjectSettings['fitRecord'] | undefined) ?? null;
 	for (const key of ['calibrationStart', 'calibrationEnd'] as const) {

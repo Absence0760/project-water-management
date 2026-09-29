@@ -62,7 +62,9 @@ describe('GET /compare/runs', () => {
 			startDate: '2020-01-01',
 			length: 60,
 			valuesSha256: expect.stringMatching(/^[0-9a-f]{64}$/),
-			provenance: null
+			provenance: null,
+			// The upload's source and given unit (107_series_source.sql): no source said, given in mm.
+			origin: { source: null, unit: 'mm', factor: 1 }
 		});
 		expect(res.body.b.run.summary.farms[0].name).toBe('Rooikloof');
 		expect(res.body.changes).toEqual([

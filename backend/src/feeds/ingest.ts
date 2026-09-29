@@ -49,10 +49,10 @@ import { fromEpochDay, toEpochDay } from '@water-management/engine/calendar';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
-import { hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
+import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
 import { onSeriesDaysChanged } from '../series/newData.js';
 import { replaceSeries } from '../series/routes.js';
-import { type FeedSource, feedProvenance, SOURCES } from './config.js';
+import { type FeedSource, feedProvenance, feedSourceText, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
 import { enqueueJob } from '../jobs/queue.js';
@@ -162,7 +162,16 @@ async function stageReplacement(
 			replaced = await replaceSeries(
 				db,
 				feed.projectId,
-				{ kind: feed.targetKind, name: feed.targetName, unit, startDate: stage!.startDate, values: stage!.values, provenance: writes },
+				{
+					kind: feed.targetKind,
+					name: feed.targetName,
+					unit,
+					startDate: stage!.startDate,
+					values: stage!.values,
+					provenance: writes,
+					// The feed is the replaced record's source (107); its values come in the stored unit.
+					origin: { source: feedSourceText(feed.source, feed.config), unit, factor: 1 }
+				},
 				{ revisionReason: 'feed_replace', audit: { feedId: feed.id, source: feed.source }, feedId: feed.id }
 			);
 		} catch (err) {
@@ -258,7 +267,13 @@ export async function ingestResult(db: Db, feed: FeedRow, raw: unknown, window: 
 				// feedId: only this feed's own days (and empty ones) are replaced; any
 				// other value, an upload or an import, is kept (031_feed_days, #30).
 				// provenance: labels a new or empty series with what the feed writes.
-				const r = await mergeSeries(db, feed.projectId, body, { keepOnNull: true, feedId: feed.id, ...(writes ? { provenance: writes } : {}) });
+				// origin (107_series_source.sql): a new or empty series records the feed as its source.
+				const r = await mergeSeries(db, feed.projectId, body, {
+					keepOnNull: true,
+					feedId: feed.id,
+					origin: bodyOrigin({ ...body, source: feedSourceText(feed.source, feed.config) }),
+					...(writes ? { provenance: writes } : {})
+				});
 				({ written: merged, kept } = r);
 				const subject = seriesSubject(r.meta, r.before, r.after, { feedId: feed.id, source: feed.source });
 				if (subject.daysChanged) {

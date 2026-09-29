@@ -132,6 +132,16 @@ export function feedProvenance(source: FeedSource, config: FeedConfig): SeriesPr
 	return chirpsProduct(config) === 'rnl' ? CHIRPS_V3_RNL : CHIRPS_V3_SAT;
 }
 
+/**
+ * Where a feed's days come from, as the series it creates records it
+ * (107_series_source.sql): "DWS gauge flow data feed, station A2H012", or
+ * the product's own label for CHIRPS. At most SOURCE_MAX characters.
+ */
+export function feedSourceText(source: FeedSource, config: FeedConfig): string {
+	const station = 'station' in config ? `, station ${config.station}` : '';
+	return `${SOURCES[source].label} data feed${station}`;
+}
+
 /** The config schema for a source. */
 export const configSchema = (source: FeedSource) => (source === 'dws' ? DwsConfig : GridConfig);
 

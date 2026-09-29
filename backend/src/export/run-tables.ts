@@ -7,6 +7,7 @@ import {
 	EQUITABLE_SHARE_FOOTNOTE,
 	FARM_COLUMNS as FARM_DAILY_COLUMNS,
 	fitPeriodText,
+	gapFillRecordLabel,
 	provenanceLabel,
 	rainSourceFactorOrigin,
 	rainSourceFallbackText,
@@ -48,6 +49,11 @@ const CATCHMENT_ORDER = [
 	'simulated_outflow',
 	'observed_flow',
 	'observed_flow_other',
+	// Gap filling (engine ≥ 1.23.0, issue #66): beside the records they fill.
+	'observed_flow_fill',
+	'observed_flow_filled',
+	'observed_flow_other_fill',
+	'observed_flow_other_filled',
 	'ewr',
 	'ewr_shortfall',
 	'ewr_charged',
@@ -556,6 +562,46 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 	for (const k of z.keptDry) yield csvRow(['Kept as recorded (dry)', k.start, k.end, k.reason, k.days]);
 }
 
+/**
+ * The observed flow records the run filled (engine ≥ 1.23.0, model.md §2.10i,
+ * issue #66), one row per record; nothing at all when no record is filled, so
+ * a run that never set it exports as before.
+ */
+export function* flowGapFillLines(f: RunSummary['flowGapFill']): Generator<string> {
+	if (!f?.length) return;
+	yield csvRow(['Gaps filled in the observed flow records (in the run only; the stored records are unchanged)']);
+	yield csvRow([
+		'Record',
+		'Interpolated up to (days)',
+		'Days interpolated',
+		'Donor record',
+		'Donor ratio',
+		'Shared days',
+		'Correlation r',
+		'Days from the donor',
+		'Days clamped to the record maximum',
+		'Donor refused because',
+		'Gaps left open',
+		'Days left open'
+	]);
+	for (const s of f) {
+		yield csvRow([
+			gapFillRecordLabel(s.kind),
+			s.spec.interpolateMaxDays,
+			s.interpolatedDays,
+			s.spec.donor ? gapFillRecordLabel(s.spec.donor) : 'none',
+			s.donor?.ratio ?? '',
+			s.donor?.overlapDays ?? '',
+			s.donor?.correlation ?? '',
+			s.donorDays,
+			s.clampedDays,
+			s.donorRefused ?? '',
+			s.openGaps,
+			s.openDays
+		]);
+	}
+}
+
 const WY_CALENDAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
 /**
@@ -823,6 +869,12 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield* zeroRainLines(summary.zeroRainInfill);
 	yield '';
+
+	// Only on a run that filled a record (engine ≥ 1.23.0): other exports are unchanged.
+	if (summary.flowGapFill?.length) {
+		yield* flowGapFillLines(summary.flowGapFill);
+		yield '';
+	}
 
 	yield* rainSourceCsvLines(summary.rainSource);
 	yield '';

@@ -15,7 +15,8 @@ import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolveP
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
-import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
+import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '../seriesProvenance';
+import type { FlowGapFillSettings, FlowGapFillSpec } from '../flowGapFill';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { CalibrationBounds, ParamSet } from './params';
 import type { DayQuality } from './dayFlags';
@@ -246,6 +247,20 @@ export interface FitRecord {
 		/** settings.dataQuality's rain-check limits (engine ≥ 1.20.0); absent = the defaults. */
 		rainChecks?: RainCheckLimits;
 	};
+	/**
+	 * Where the fitted record (flowKind) came from and the unit it was given
+	 * in (107_series_source.sql, engine ≥ 1.23.0): null = not recorded,
+	 * absent on a record made before it was tracked (never flagged).
+	 */
+	observedOrigin?: SeriesOrigin | null;
+	/**
+	 * The fitted record's gap filling (settings.flowGapFill, engine ≥ 1.23.0):
+	 * its spec (null = not filled). Whether the fit scored the filled days is
+	 * `qualityFlags.infilled`. Absent on a record made before it. A record
+	 * from the branch before the quality flags may carry a `useFilledDays`,
+	 * never read.
+	 */
+	flowGapFill?: { spec: FlowGapFillSpec | null; useFilledDays?: boolean };
 	splitSample: ValidationTest | null;
 	differential: DifferentialTest | null;
 	independentRecord: IndependentRecordTest | null;
@@ -292,6 +307,8 @@ export interface FitContext {
 		/** The areal rainfall correction (engine ≥ 1.13.0); absent = none. */
 		arealRain?: ArealRain | null;
 		panCoefficientSource?: string;
+		/** Gap filling of the observed flow records (engine ≥ 1.23.0); absent = none. */
+		flowGapFill?: FlowGapFillSettings | null;
 		/** settings.dataQuality (engine ≥ 1.20.0): its rain-check limits are recorded; absent = the defaults. */
 		dataQuality?: Partial<RainCheckLimits> | null;
 	};
@@ -303,6 +320,8 @@ export interface FitContext {
 	chirpsSource?: SeriesProvenance | null;
 	/** The daily A-pan series the fit ran on (null = none); omit when not known. */
 	apanDaily?: ApanDailyFingerprint | null;
+	/** The fitted record's source and unit (null = not recorded); omit when not known. */
+	observedOrigin?: SeriesOrigin | null;
 }
 
 /** The fit record for a report, as Apply stores it. */
@@ -349,6 +368,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
 			rainChecks: rainChecksOf(ctx.settings.dataQuality)
 		},
+		...(ctx.observedOrigin !== undefined ? { observedOrigin: ctx.observedOrigin ? { ...ctx.observedOrigin } : null } : {}),
+		flowGapFill: { spec: fillSpecOf(ctx.settings.flowGapFill, r.flowKind) },
 		splitSample: r.splitSample,
 		differential: r.differential,
 		independentRecord: r.independentRecord,
@@ -448,6 +469,21 @@ export interface FitRecordStatus {
 	 * say. Also sets `forcingChanged`.
 	 */
 	chirpsFactorsChanged: boolean;
+	/**
+	 * The fitted record now comes from another source, or was given in
+	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
+	 * 1.23.0): a unit conversion error or another station changes what the
+	 * parameters were fitted to. False when the record or the caller doesn't
+	 * know the source.
+	 */
+	observedOriginChanged: boolean;
+	/**
+	 * The fitted record's gap filling spec changed while infilled days are
+	 * scored both at the fit and now (engine ≥ 1.23.0): the filled days the fit
+	 * scored aren't the ones a run scores. A change of the infilled treatment
+	 * itself is qualityFlagsChanged, never this too.
+	 */
+	flowFillChanged: boolean;
 }
 
 /**
@@ -590,6 +626,28 @@ export interface FitForcingNow {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/** The daily A-pan series a run would read now (null = none); omit when not known. */
 	apanDaily?: ApanDailyFingerprint | null;
+	/** The fitted record's source and unit now (null = not recorded); omit when not known. */
+	observedOrigin?: SeriesOrigin | null;
+}
+
+/** A record's gap-fill spec, copied; null when it isn't filled (or isn't a record a spec fills). */
+function fillSpecOf(fill: FlowGapFillSettings | null | undefined, kind: string): FlowGapFillSpec | null {
+	const spec = kind === 'flow_observed_m3s' || kind === 'flow_logger_m3s' ? fill?.[kind] : null;
+	return spec ? { ...spec } : null;
+}
+
+/**
+ * Whether the filled days a fit of `kind` scored differ from those a run scores
+ * now (engine ≥ 1.23.0): only when infilled days are scored both then and now
+ * (settings.qualityFlags.infilled 'include') and the record's fill spec
+ * changed. A change of the infilled treatment itself is qualityFlagsChanged,
+ * so one change is flagged once.
+ */
+function flowFillDiffers(record: FitRecord, settings: Partial<ProjectSettings>, kind: string): boolean {
+	const scoredThen = record.qualityFlags?.infilled === 'include';
+	const scoredNow = resolveQualityFlags(settings.qualityFlags, []).infilled === 'include';
+	if (!scoredThen || !scoredNow) return false;
+	return !sameJson(record.flowGapFill?.spec ?? null, fillSpecOf(settings.flowGapFill, kind));
 }
 
 /** Compare a fit record with the settings (the form, or a run's snapshot), and with the CHIRPS series' version when `now` gives it. */
@@ -632,7 +690,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource || forcing.rainChecks)),
 		chirpsSourceChanged,
 		apanDailyChanged,
-		chirpsFactorsChanged
+		chirpsFactorsChanged,
+		observedOriginChanged: record.observedOrigin !== undefined && now.observedOrigin !== undefined && !sameOrigin(record.observedOrigin, now.observedOrigin),
+		flowFillChanged: flowFillDiffers(record, settings, record.flowKind)
 	};
 }
 
@@ -649,7 +709,7 @@ export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKin
 	if (!record || (record.model as string) !== 'gr4j') return 'notFitted';
 	const status = fitRecordStatus(settings, record);
 	if (status.editedParams.length) return 'edited';
-	if (status.windowChanged || status.exclusionsChanged || status.qualityFlagsChanged || record.flowKind !== flowKind) return 'otherPeriod';
+	if (status.windowChanged || status.exclusionsChanged || status.qualityFlagsChanged || record.flowKind !== flowKind || status.flowFillChanged) return 'otherPeriod';
 	return 'fitted';
 }
 
@@ -680,6 +740,12 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 		out.push(
 			`The monthly CHIRPS factors this run applies differ by more than ${CHIRPS_FACTOR_TOLERANCE * 100} % in some month from those the fit ran on: new days shared by the catchment rain and CHIRPS, or preliminary CHIRPS turned final, moved them, and with them the rain on every day CHIRPS fills. Refit, or fit the factors on fixed water years (Settings → CHIRPS fit period).`
 		);
+	}
+	if (status.observedOriginChanged) {
+		out.push('The calibration record now comes from another source, or was given in another unit, than the one the fit ran on. Check the record, then refit before relying on the parameters.');
+	}
+	if (status.flowFillChanged) {
+		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Settings → Flow gaps). Refit before relying on the parameters.');
 	}
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {
 		out.push(

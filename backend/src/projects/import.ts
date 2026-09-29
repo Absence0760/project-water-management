@@ -97,10 +97,28 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await saveModel(db, id, model);
 	for (const s of data.series) {
 		await db.query(
-			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
-			[id, s.kind, s.name, s.unit, s.startDate, s.values, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null, s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null]
+			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
+				source, source_unit, source_unit_factor)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			[
+				id,
+				s.kind,
+				s.name,
+				s.unit,
+				s.startDate,
+				s.values,
+				s.product ?? null,
+				s.productVersion ?? null,
+				s.dayBoundary ?? null,
+				// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
+				s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null,
+				// Where the values came from and the unit they were first given in (107): only what the file records.
+				// A file without them stores none, so a project round-trips exactly (export writes back only what is
+				// recorded). The file's own `unit` is not the upload's: a document holds values already converted.
+				s.source ?? null,
+				s.sourceUnit ?? null,
+				s.sourceUnitFactor ?? null
+			]
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).

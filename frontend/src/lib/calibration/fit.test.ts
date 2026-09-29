@@ -333,7 +333,9 @@ describe('applyReport', () => {
 			forcingChanged: false,
 			chirpsSourceChanged: false,
 			apanDailyChanged: false,
-			chirpsFactorsChanged: false
+			chirpsFactorsChanged: false,
+			observedOriginChanged: false,
+			flowFillChanged: false
 		});
 	});
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, provenanceError, provenanceKey, provenanceLabel, sameProvenance } from './seriesProvenance';
+import { CHIRPS_V3_RNL, CHIRPS_V3_SAT, originLabel, provenanceError, provenanceKey, provenanceLabel, sameOrigin, sameProvenance, seriesOrigin, sourceError } from './seriesProvenance';
 
 describe('series provenance', () => {
 	const v2 = { product: 'CHIRPS', version: '2.0' };
@@ -26,5 +26,33 @@ describe('series provenance', () => {
 		expect(provenanceError({ product: 'x'.repeat(41), version: '2.0' })).toMatch(/product/);
 		expect(provenanceError({ product: 'CHIRPS', version: '2 0' })).toMatch(/version/);
 		expect(provenanceError(null)).toMatch(/not a product/);
+	});
+});
+
+describe('series source and unit (issue #66, 107_series_source.sql)', () => {
+	it('reads a row’s columns; none recorded is null, and a factor without a unit is dropped', () => {
+		expect(seriesOrigin({})).toBeNull();
+		expect(seriesOrigin({ source: 'DWS X1H001' })).toEqual({ source: 'DWS X1H001', unit: null, factor: null });
+		expect(seriesOrigin({ sourceUnit: 'l/s', sourceUnitFactor: 0.001 })).toEqual({ source: null, unit: 'l/s', factor: 0.001 });
+		expect(seriesOrigin({ source: null, sourceUnit: null, sourceUnitFactor: 5 })).toBeNull();
+	});
+	it('labels the source and the conversion', () => {
+		expect(originLabel({ source: 'DWS X1H001', unit: 'l/s', factor: 0.001 }, 'm³/s')).toBe('DWS X1H001 · given in l/s (× 0.001 to m³/s)');
+		expect(originLabel({ source: null, unit: 'm³/s', factor: 1 })).toBe('source not recorded · given in m³/s');
+		expect(originLabel(null)).toBe('source not recorded');
+	});
+	it('compares source, unit and factor; none recorded equals only none', () => {
+		const a = { source: 'x', unit: 'l/s', factor: 0.001 };
+		expect(sameOrigin(a, { ...a })).toBe(true);
+		expect(sameOrigin(a, { ...a, factor: 1 })).toBe(false);
+		expect(sameOrigin(null, undefined)).toBe(true);
+		expect(sameOrigin(null, a)).toBe(false);
+	});
+	it('validates a source as the database CHECK does: one line, 1–200 characters', () => {
+		expect(sourceError('DWS X1H001')).toBeNull();
+		expect(sourceError('  ')).toMatch(/blank/);
+		expect(sourceError('x'.repeat(201))).toMatch(/200/);
+		expect(sourceError('a\nb')).toMatch(/one line/);
+		expect(sourceError(3)).toMatch(/text/);
 	});
 });

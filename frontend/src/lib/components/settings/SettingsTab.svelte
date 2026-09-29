@@ -1,3 +1,11 @@
+<script module lang="ts">
+	// Settings → Calibration record's quality flags and flow gaps (issue #66): each its own chunk,
+	// loaded when the section draws, so the Settings tab chunk stays under its size ceiling. The
+	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
+	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
+	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+</script>
+
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -23,6 +31,8 @@
 		type FlowShareMethod,
 		type PeInput,
 		type ProjectSettings,
+		type CalibrationFlowKind,
+		type SeriesOrigin,
 		type SeriesProvenance,
 		type ApanDailyFingerprint,
 		type AllocationMode,
@@ -31,7 +41,6 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
-	import QualityFlagsFields from './QualityFlagsFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import { api, type Project } from '$lib/api';
@@ -58,6 +67,7 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
@@ -81,6 +91,7 @@
 		editor,
 		seriesKinds = null,
 		chirpsSource,
+		observedOrigins,
 		apanSeries,
 		readonly,
 		onProjectChange
@@ -91,6 +102,8 @@
 		seriesKinds?: string[] | null;
 		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
+		/** Each observed record's source and given unit a run would read (107_series_source.sql); undefined when not known. */
+		observedOrigins?: Partial<Record<CalibrationFlowKind, SeriesOrigin | null>>;
 		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		readonly: boolean;
@@ -808,7 +821,16 @@
 			availableKinds={seriesKinds}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
-		<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />
+		<Lazy load={loadQualityFlags}>
+			{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />{/snippet}
+		</Lazy>
+		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
+		{#if s.flowGapFill}
+			<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->
+			<Lazy load={loadFlowGapFill}>
+				{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />{/snippet}
+			</Lazy>
+		{/if}
 	</section>
 
 	<div class="panel" id="set-fit">
@@ -824,7 +846,15 @@
 			onApply={applyFit}
 		/>
 		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} apanDaily={apanNow} />
+			<FitProvenance
+				record={s.fitRecord}
+				settings={s as unknown as ProjectSettings}
+				heading="Fit record of these parameters"
+				context="form"
+				{chirpsSource}
+				apanDaily={apanNow}
+				observedOrigin={observedOrigins ? (observedOrigins[s.fitRecord.flowKind as CalibrationFlowKind] ?? null) : undefined}
+			/>
 		{/if}
 	</div>
 

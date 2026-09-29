@@ -17,8 +17,9 @@ import { hasMonthlyRates, transferRatesM3s } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
+import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from './seriesProvenance';
+import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
-import { provenanceLabel, sameProvenance, type SeriesProvenance } from './seriesProvenance';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
@@ -74,6 +75,12 @@ export interface RunSeriesSnapshot {
 	 * null = not recorded, absent on runs stored before it was recorded.
 	 */
 	provenance?: SeriesProvenance | null;
+	/**
+	 * Where the values came from and the unit they were given in
+	 * (107_series_source.sql): null = not recorded, absent on runs stored
+	 * before it was recorded.
+	 */
+	origin?: SeriesOrigin | null;
 }
 
 /** The parts of a run compareRuns needs. */
@@ -824,8 +831,33 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		// Engine ≥ 1.22.0: absent means the defaults (a run before them had no gauged range, and its fit's flags don't reach it).
 		qualityFlags: resolveQualityFlags(r.qualityFlags, []),
 		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) },
-		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) }
+		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) },
+		// Engine ≥ 1.23.0: absent means no record was filled.
+		flowGapFill: { ...defaultFlowGapFill(), ...((r.flowGapFill as object | undefined) ?? {}) }
 	};
+}
+
+/** A record's gap-fill spec in words, for the settings diff (engine ≥ 1.23.0). */
+function gapFillText(v: unknown): string {
+	if (!v || typeof v !== 'object') return 'not filled';
+	const s = v as Partial<FlowGapFillSpec>;
+	const parts: string[] = [];
+	if (s.interpolateMaxDays) parts.push(`interpolate gaps up to ${s.interpolateMaxDays} days`);
+	if (s.donor) parts.push(`fill gaps up to ${s.donorMaxDays ?? '?'} days from the ${gapFillRecordLabel(s.donor)} (${s.donorMinOverlapDays ?? '?'} shared days at least)`);
+	return parts.length ? parts.join(', ') : 'not filled';
+}
+
+/** What changed in settings.flowGapFill between two runs (engine ≥ 1.23.0). */
+function diffFlowGapFill(ra: unknown, rb: unknown): InputChange[] {
+	const a = (ra ?? {}) as Record<string, unknown>;
+	const b = (rb ?? {}) as Record<string, unknown>;
+	const out: InputChange[] = [];
+	for (const k of GAP_FILL_KINDS) {
+		if (same(a[k] ?? null, b[k] ?? null)) continue;
+		const subject = `Gap filling of the ${gapFillRecordLabel(k)}`;
+		out.push({ area: 'settings', kind: 'changed', subject, text: `${subject}: ${gapFillText(a[k])} → ${gapFillText(b[k])}` });
+	}
+	return out;
 }
 
 function diffSettings(
@@ -906,6 +938,7 @@ function diffSettings(
 	}
 	out.push(...diffExclusions(za.keepReadings, zb.keepReadings, 'Keep-reading period'));
 	out.push(...diffExclusions(za.addAccumulations, zb.addAccumulations, 'Listed accumulation'));
+	out.push(...diffFlowGapFill(a.flowGapFill, b.flowGapFill));
 	for (const c of qualityFlagChanges(a.qualityFlags as QualityFlagSettings, b.qualityFlags as QualityFlagSettings)) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
@@ -920,6 +953,7 @@ function diffSettings(
 		'ewrRules',
 		'calibrationExclusions',
 		'zeroRainRuns',
+		'flowGapFill',
 		'qualityFlags',
 		'fitRecord',
 		'pe',
@@ -1562,6 +1596,10 @@ function diffSeries(
 					text: `${label} is now ${provenanceLabel(y.provenance)} (was ${provenanceLabel(x.provenance)})${k === 'rain_chirps_mm' ? ': the monthly CHIRPS factors are fitted on the new values, and a calibration made on the old ones no longer holds' : ''}`
 				});
 			}
+			// Where the values came from, or the unit they were given in (107_series_source.sql): its own line too. Only when both runs recorded it.
+			if (x.origin !== undefined && y.origin !== undefined && !sameOrigin(x.origin, y.origin)) {
+				out.push({ area: 'series', kind: 'changed', subject: label, text: `${label} now comes from ${originLabel(y.origin)} (was ${originLabel(x.origin)})` });
+			}
 			// An empty series has no dates to compare: say it emptied or filled.
 			if (ra.empty || rb.empty) {
 				if (ra.empty !== rb.empty) {
@@ -1649,6 +1687,7 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 	for (const [k, f] of Object.entries(GR4J_FIELDS)) out.push([`GR4J ${f.label}`, `gr4j.${k}`]);
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) out.push([`Calibration ${f.label}`, `calibration.${k}`]);
 	out.push(['Flagged zero-rain runs', 'zeroRainRuns.mode'], ['Multi-day rain accumulations', 'zeroRainRuns.accumulationMode']);
+	for (const k of GAP_FILL_KINDS) out.push([`Gap filling of the ${gapFillRecordLabel(k)}`, `flowGapFill.${k}`]);
 	return out;
 }
 
