@@ -1481,14 +1481,17 @@ run "alarms" {
   }
   assert {
     condition = (
-      length(data.aws_iam_policy_document.alerts_publish.statement) == 1 &&
+      # Two statements: CloudWatch alarms (here) and RDS events (AllowRdsEvents,
+      # pinned in data.tftest.hcl's db_events run).
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 2 &&
+      data.aws_iam_policy_document.alerts_publish.statement[1].sid == "AllowRdsEvents" &&
       one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
       toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
         "StringEquals|aws:SourceAccount|000000000000",
         "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
       ])
     )
-    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn); Budgets no longer publish there."
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn) and this instance's RDS events; Budgets no longer publish there."
   }
   assert {
     condition = {

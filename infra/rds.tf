@@ -130,7 +130,7 @@ resource "aws_db_instance" "main" {
   copy_tags_to_snapshot     = true
   delete_automated_backups  = false
   skip_final_snapshot       = false
-  final_snapshot_identifier = "${local.project}-final"
+  final_snapshot_identifier = "${local.project}-final-${random_id.final_snapshot_suffix.hex}"
   deletion_protection       = true
 
   # Off to keep the bill flat: Performance Insights and Enhanced Monitoring.
@@ -148,4 +148,57 @@ resource "aws_db_instance" "main" {
   tags = { Name = "${local.project}-db" }
 
   depends_on = [aws_cloudwatch_log_group.rds]
+
+  # A second guard beside deletion_protection: `terraform destroy`, or a plan
+  # that would replace the instance (an argument that forces a new one), fails
+  # at plan time instead of deleting the database. Tearing down on purpose
+  # means editing this to false first (infra/README.md § Tearing down).
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+# The final snapshot's name suffix. RDS refuses a final snapshot whose name
+# already exists, and manual snapshots outlive the instance, so a fixed name
+# (`water-management-final`) makes the second teardown of the stack fail after
+# the first left its snapshot behind. The suffix is random, generated once
+# with the stack and then stable in state (no perpetual diff, unlike
+# timestamp()); a teardown destroys it with the instance, so a rebuilt stack
+# gets a new one and its own teardown a new snapshot name. The byte_length
+# keeps the identifier well inside RDS's 255 characters.
+resource "random_id" "final_snapshot_suffix" {
+  byte_length = 4
+}
+
+# RDS events → the alerts topic (alarms.tf). The metric alarms can't see
+# these: the instance failing or being put into a failed state, running out of
+# storage, a failover or recovery, a restore, a deletion, maintenance and
+# engine patching, and RDS's own notices (a missing master secret, the
+# storage-autoscaling ceiling being approached). Left out on purpose:
+# `backup` (it fires on every daily backup, "Backing up" / "Finished", and
+# RDS publishes no backup-failed event, docs/deployment.md § Monitoring),
+# `configuration change` and `creation` (every Terraform apply).
+# Categories: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_Events.Messages.html
+resource "aws_db_event_subscription" "main" {
+  name      = "${local.project}-db-events"
+  sns_topic = aws_sns_topic.alerts.arn
+  enabled   = true
+
+  source_type = "db-instance"
+  source_ids  = [aws_db_instance.main.identifier]
+  event_categories = [
+    "availability",
+    "deletion",
+    "failover",
+    "failure",
+    "low storage",
+    "maintenance",
+    "notification",
+    "recovery",
+    "restoration",
+    "security patching",
+  ]
+
+  # The topic policy must allow events.rds.amazonaws.com before RDS can publish.
+  depends_on = [aws_sns_topic_policy.alerts]
 }
