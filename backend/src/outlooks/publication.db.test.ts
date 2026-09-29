@@ -6,7 +6,7 @@
 // planted complete (helpers.ts plantCompleteOutlook): the job is
 // outlooks.db.test.ts's.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { asOwner, plantCompleteOutlook } from '../__tests__/helpers.js';
+import { asOwner, plantCompleteOutlook, signUp } from '../__tests__/helpers.js';
 import { buildLadder, type LadderCtx } from '../__tests__/routeSamples.js';
 import { withUser } from '../db/tx.js';
 
@@ -50,6 +50,16 @@ describe('publishing an outlook to farmers', () => {
 		expect(await withUser(c.farmer.id, async (db) => (await db.query('SELECT count(*)::int AS n FROM outlook_publication WHERE project_id = $1', [c.projectId])).rows[0].n)).toBe(1);
 		// A viewer (the WUA's side) reads every farm's row.
 		expect(await withUser(c.viewer.id, async (db) => (await db.query('SELECT count(*)::int AS n FROM outlook_publication_farm WHERE project_id = $1', [c.projectId])).rows[0].n)).toBe(2);
+		// Against those positive controls (issue #122's privacy review): a contributor linked to no farm reads the
+		// publication's level and season (every member does) but no farm's figures; someone with no role here reads neither.
+		const readAs = (userId: string, table: string) =>
+			withUser(userId, async (db) => (await db.query(`SELECT count(*)::int AS n FROM ${table} WHERE project_id = $1`, [c.projectId])).rows[0].n);
+		expect(await readAs(c.contributor.id, 'outlook_publication')).toBe(1);
+		expect(await readAs(c.contributor.id, 'outlook_publication_farm')).toBe(0);
+		const stranger = await signUp('Pubstranger');
+		expect(await readAs(stranger.id, 'outlook_publication')).toBe(0);
+		expect(await readAs(stranger.id, 'outlook_publication_farm')).toBe(0);
+		expect((await c.contributor.call('GET', `${at}/farm/${c.farmId}`)).status).toBe(404);
 		// The outlook itself stays the WUA's: a farmer reads none of it.
 		expect(await withUser(c.farmer.id, async (db) => (await db.query('SELECT count(*)::int AS n FROM seasonal_outlook WHERE project_id = $1', [c.projectId])).rows[0].n)).toBe(0);
 
