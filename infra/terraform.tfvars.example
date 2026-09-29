@@ -25,8 +25,8 @@ bootstrap_slug = "water-management"
 # secrets_file = ""
 
 # Budget + alarm notifications. Budgets need IAM billing access enabled on the
-# member account (one-time root toggle) — set budget_monthly_usd and
-# cost_anomaly_threshold_usd to 0 until then.
+# member account (one-time root toggle) — set budget_monthly_usd to 0 until
+# then.
 # 80 (the default) for af-south-1 (idle ≈ $58–63; ACTUAL 80% = $64); ~60 in
 # us-east-1. Full tier: ~170 (docs/deployment-tiers.md).
 budget_monthly_usd = 80
@@ -34,9 +34,11 @@ budget_monthly_usd = 80
 # weeks of history). Unset = ceil(monthly × 2.25 / 30) = $6 on $80, ~3× idle;
 # 0 skips it. Must be below budget_monthly_usd.
 # budget_daily_usd = 6
-# Cost Anomaly Detection: page on an anomaly of at least this many USD. 0 skips
-# it, e.g. if the account already has its one services monitor
-# (infra/README.md § Operator steps, step 4).
+# Cost Anomaly Detection: page on an anomaly of at least this many USD. 0 (the
+# default) skips it. Leave it off for the first apply: an account holds one
+# services monitor and AWS may already have made it. Turn it on afterwards
+# (infra/README.md § Operator steps, step 11: check for an existing monitor,
+# import it if there is one, then set 10 and apply).
 # cost_anomaly_threshold_usd = 10
 # Required. Replace the placeholder: plan refuses an empty, malformed or
 # reserved address (example.com/.org/.net, .example, .test, .invalid,

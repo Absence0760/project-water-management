@@ -2072,8 +2072,8 @@ key there would let any read-only principal forge any user's session.
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
   policy lets the worker, and only the worker, reach those two queues.
 - **Blast radius:** Lambda reserved concurrency is capped. There are monthly
-  and daily budgets and Cost Anomaly Detection (deployment.md § Budget
-  alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
+  and daily budgets and Cost Anomaly Detection (off until the operator turns
+  it on after the first apply; deployment.md § Budget alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
   (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this
   account's services (`aws:SourceAccount`, and `aws:SourceArn` for CloudWatch
   and Budgets), so another account can't publish fake alerts through them.

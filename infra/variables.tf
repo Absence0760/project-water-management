@@ -196,9 +196,9 @@ variable "budget_daily_usd" {
 }
 
 variable "cost_anomaly_threshold_usd" {
-  description = "Cost Anomaly Detection (free): an AWS-services monitor whose anomalies with a total cost impact of at least this many USD page the us-east-1 alerts topic. 0 skips the monitor, e.g. when the account already has its one allowed services monitor (infra/README.md § Operator steps)."
+  description = "Cost Anomaly Detection (free): an AWS-services monitor whose anomalies with a total cost impact of at least this many USD page the us-east-1 alerts topic. Default 0 (off): an account may hold only one services monitor and AWS may have created one, which would fail the first apply, and the monitor needs ~10 days of history anyway. Turn it on after the first apply (10 is a sensible value; infra/README.md § Operator steps, step 11)."
   type        = number
-  default     = 10
+  default     = 0
 
   validation {
     condition     = var.cost_anomaly_threshold_usd >= 0

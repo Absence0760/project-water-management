@@ -1284,24 +1284,11 @@ run "alarms" {
     ])
     error_message = "Every budget notification publishes to the us-east-1 alerts topic, not the opt-in region's."
   }
+  # Off by default: an account holds one services monitor and AWS may have
+  # made it, which would fail the first apply (infra/README.md step 11).
   assert {
-    condition = (
-      length(aws_ce_anomaly_monitor.services) == 1 &&
-      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
-      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
-      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
-      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
-    )
-    error_message = "Cost Anomaly Detection: one AWS-services monitor with an IMMEDIATE subscription by default."
-  }
-  assert {
-    condition = (
-      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
-      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
-      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
-      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
-    )
-    error_message = "Anomalies with a total impact of $10 or more page the us-east-1 alerts topic."
+    condition     = var.cost_anomaly_threshold_usd == 0 && length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "Cost Anomaly Detection is off by default (anomaly_detection_off_by_default): the operator turns it on after the first apply."
   }
   assert {
     condition = (
@@ -1396,6 +1383,48 @@ run "daily_budget_explicit" {
   assert {
     condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
     error_message = "An explicit budget_daily_usd is used as given."
+  }
+}
+
+# Cost Anomaly Detection is off by default, so the first apply can't fail
+# on a services monitor AWS already made (one per account); the operator
+# turns it on after the first apply (infra/README.md § Operator steps, step 11).
+run "anomaly_detection_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "No anomaly monitor unless cost_anomaly_threshold_usd is set: the first apply must not create one."
+  }
+  assert {
+    condition     = length(aws_budgets_budget.monthly) == 1 && length(aws_budgets_budget.daily) == 1
+    error_message = "The budgets stay on by default; only the anomaly monitor waits."
+  }
+}
+
+run "anomaly_detection_on" {
+  command = plan
+  variables {
+    cost_anomaly_threshold_usd = 10
+  }
+  assert {
+    condition = (
+      length(aws_ce_anomaly_monitor.services) == 1 &&
+      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
+      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
+      aws_ce_anomaly_monitor.services[0].name == "water-management-services" &&
+      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
+      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
+    )
+    error_message = "Cost Anomaly Detection, once on: one AWS-services monitor with an IMMEDIATE subscription."
+  }
+  assert {
+    condition = (
+      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
+      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
+    )
+    error_message = "Anomalies with a total impact of the threshold ($10) or more page the us-east-1 alerts topic."
   }
 }
 

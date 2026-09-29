@@ -52,8 +52,8 @@ Terraform defaults.
 - Worker, fetcher and report-renderer Lambdas, SQS queues, the 5-minute tick.
 - SES for account, alert and report email.
 - One ENI each for the Secrets Manager, SES and SQS interface endpoints.
-- Monthly and daily budgets, Cost Anomaly Detection and the CloudWatch
-  alarms, mailed to `budget_alert_email` ([deployment.md § Budget
+- Monthly and daily budgets, Cost Anomaly Detection (off until turned on
+  after the first apply) and the CloudWatch alarms, mailed to `budget_alert_email` ([deployment.md § Budget
   alerts](./deployment.md#budget-alerts)).
 
 `terraform.tfvars` (on top of the required values in
@@ -178,7 +178,8 @@ reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 8,
 fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job,
 and the budgets page on a day over the daily amount, at 80% and 100% of the
 month and on a forecast over 100% (after ~5 weeks of history), plus Cost
-Anomaly Detection ([deployment.md § Budget alerts](./deployment.md#budget-alerts)).
+Anomaly Detection once it is turned on after the first apply
+([deployment.md § Budget alerts](./deployment.md#budget-alerts)).
 
 ## Cheaper options, and why they aren't used
 

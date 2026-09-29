@@ -1222,9 +1222,9 @@ monthly cost are compared in [deployment-tiers.md](./deployment-tiers.md).
 
 ### Budget alerts
 
-Terraform creates two budgets and a Cost Anomaly Detection monitor
-(`alarms.tf`, all free), mailed through the **us-east-1** alerts topic to
-`budget_alert_email`:
+Terraform creates two budgets and, once it is turned on, a Cost Anomaly
+Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
+alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
   `ceil(budget_monthly_usd × 2.25 / 30)` = $6/day on $80, about 3× the
@@ -1236,8 +1236,15 @@ Terraform creates two budgets and a Cost Anomaly Detection monitor
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
   until AWS has ~5 weeks of cost history.
-- **Cost anomaly** (`cost_anomaly_threshold_usd`, $10): one service's spend
-  jumped against its own history (needs ~10 days of it).
+- **Cost anomaly** (`cost_anomaly_threshold_usd`): one service's spend
+  jumped against its own history (needs ~10 days of it). **Off by default**
+  (0): an account may hold only one AWS-services monitor, and AWS creates a
+  default one for some new accounts, so creating ours could fail the first
+  apply. Nothing is lost by waiting, since it has no history to learn from
+  yet. **After the first apply**, turn it on: check for an existing monitor,
+  import it if there is one, set `cost_anomaly_threshold_usd = 10` and
+  apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps),
+  step 11, has the commands).
 
 Billing data refreshes at least daily, so every one of these lags the spend
 by up to a day; the Lambda concurrency caps and the CloudWatch alarms are
@@ -1245,6 +1252,5 @@ what bound and report a runaway as it happens. On any of them: open Cost
 Explorer, group by service and usage type for the last few days, and find
 what grew. `budget_monthly_usd` defaults to 80 (af-south-1; ~60 is enough
 in us-east-1, ~170 on the full tier). Before billing access is enabled, set
-it and `cost_anomaly_threshold_usd` to 0 ([infra/README.md § Operator
-steps](../infra/README.md#operator-steps), step 4, which also covers an
-account that already has its one anomaly monitor).
+it to 0 ([infra/README.md § Operator
+steps](../infra/README.md#operator-steps), step 4).

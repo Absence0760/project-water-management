@@ -400,7 +400,7 @@ alarms are what bound and report a runaway while it happens.
 | Monthly, ACTUAL 80% | the month's spend passes $64 (on $80) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
-| Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` ($10) | AWS-services monitor, free, needs ~10 days of history. |
+| Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
 
 Each topic's policy admits only this account (`aws:SourceAccount`, plus
 `aws:SourceArn` on CloudWatch's `…:alarm:*` and Budgets' `arn:aws:budgets::<acct>:*`,
@@ -438,15 +438,9 @@ Claude does not run any of these, and none of them print a secret. Replace
    `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
-   `budget_monthly_usd = 0` (skips both budgets) and
-   `cost_anomaly_threshold_usd = 0`. Then check whether the account already
-   has a Cost Anomaly Detection services monitor (AWS auto-creates one for
-   some new accounts, and an account may hold only one):
-   `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorDimension,MonitorArn]'`.
-   If it lists a `SERVICE` monitor, either import it before the apply
-   (`terraform import 'aws_ce_anomaly_monitor.services[0]' <arn>`, after
-   `init` in step 8) or keep `cost_anomaly_threshold_usd = 0`; otherwise
-   the apply fails on the monitor.
+   `budget_monthly_usd = 0` (skips both budgets). Cost Anomaly Detection is
+   off by default (`cost_anomaly_threshold_usd = 0`), so the first apply
+   can't fail on an existing monitor; step 11 turns it on.
 4a. **SES endpoint service check** (read-only, before the first plan): confirm
    the SES API endpoint service exists in the region (it launched Dec 2025):
    `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
@@ -552,6 +546,29 @@ Claude does not run any of these, and none of them print a secret. Replace
     rejects the endpoint policy itself (the endpoint service not supporting
     custom policies): note it on #126 before removing the `policy` argument.
 
+11. **Turn on Cost Anomaly Detection** (after the first apply; it needs ~10
+    days of billing history before it flags anything, so nothing is lost by
+    doing this in the first week or two). An account may hold only one
+    AWS-services monitor, and AWS creates a default one for some new Cost
+    Explorer users, so check first:
+    `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension,MonitorArn]'`.
+    - **No `DIMENSIONAL` / `SERVICE` monitor listed:** set
+      `cost_anomaly_threshold_usd = 10` in `prod.tfvars`, then plan and apply
+      (step 8). The plan adds `aws_ce_anomaly_monitor.services[0]` and its
+      subscription to the us-east-1 alerts topic.
+    - **One is listed:** set `cost_anomaly_threshold_usd = 10`, adopt it
+      before planning:
+      `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform import -var-file=../../infra-secrets/water-management/prod.tfvars 'aws_ce_anomaly_monitor.services[0]' <MonitorArn>`,
+      then plan. It should show the monitor renamed in place (to
+      `water-management-services`) and the subscription added; if it shows
+      the monitor replaced, stop and ask. AWS's default monitor may come with
+      its own subscription (it emails the account's root address): list them
+      with `aws ce get-anomaly-subscriptions --region us-east-1 --profile water-management --query 'AnomalySubscriptions[].[SubscriptionName,SubscriptionArn]'`,
+      and delete the default one once ours is applied, if you don't want both
+      (`aws ce delete-anomaly-subscription --subscription-arn <arn> --region us-east-1 --profile water-management`).
+    - Either way, confirm afterwards: the first command lists one monitor,
+      `water-management-services`.
+
 ### Rotating secrets
 
 Every secret below reaches its Lambdas through their runtime secrets
@@ -651,7 +668,8 @@ no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
 alarm; the budgets (monthly $80 with FORECASTED 100% / ACTUAL 80% / ACTUAL
 100%, the derived $6 daily ACTUAL 100%, all to the us-east-1 topic), the
-Cost Anomaly Detection monitor and subscription, and both alert topics'
+Cost Anomaly Detection monitor and subscription (off by default,
+`anomaly_detection_off_by_default`; on at a threshold, `anomaly_detection_on`), and both alert topics'
 policies (one service per statement, each pinned by `aws:SourceAccount`,
 CloudWatch and Budgets also by `aws:SourceArn`), with runs for the derived
 and explicit daily amounts and for switching each off, and five negative runs

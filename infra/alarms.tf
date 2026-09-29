@@ -9,8 +9,8 @@
 # Pre-condition: IAM billing access must be enabled in this account before
 # the first apply that includes `aws_budgets_budget` (a one-time root toggle,
 # infra/README.md § Operator steps). Until then set var.budget_monthly_usd = 0
-# (and var.cost_anomaly_threshold_usd = 0) or the apply fails with
-# AccessDeniedException on the budgets.
+# (and leave var.cost_anomaly_threshold_usd at its default 0) or the apply
+# fails with AccessDeniedException on the budgets.
 # ----------------------------------------------------------------------------
 
 # The regional topic carries the regional CloudWatch alarms. The budgets and
@@ -159,10 +159,12 @@ resource "aws_budgets_budget" "daily" {
 # spend and flags a jump in any one of them, which the budgets only see once
 # the account total crosses a line. It needs ~10 days of history, so in the
 # first month the daily budget is the guard, not this.
-# An account may hold only ONE services monitor. If this one already has one
-# (AWS auto-creates a default for some new Cost Explorer users), the apply
-# fails on it: import it, or set cost_anomaly_threshold_usd = 0
-# (infra/README.md § Operator steps, step 4).
+# An account may hold only ONE services monitor, and AWS auto-creates a
+# default for some new Cost Explorer users, so creating ours could fail the
+# first apply. Hence off by default (cost_anomaly_threshold_usd = 0), which
+# loses nothing (no history yet): the operator turns it on after the first
+# apply, importing an existing monitor if there is one (infra/README.md §
+# Operator steps, step 11).
 # Cost Explorer is a global API served from us-east-1, hence the provider.
 
 resource "aws_ce_anomaly_monitor" "services" {
