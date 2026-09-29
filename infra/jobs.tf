@@ -78,6 +78,8 @@ resource "aws_iam_role" "worker_lambda" {
 # SendMessage: only the API's routes wake the worker (jobs/wake.ts
 # wakeWorker); a job that queues follow-up work leaves it to the insert
 # trigger locally and the 5-minute tick in production (series/newData.ts).
+# The worker has no JOB_TRANSPORT / JOBS_QUEUE_URL either, and
+# backend/src/lambda-worker.test.ts fails if its bundle reaches jobs/wake.ts.
 data "aws_iam_policy_document" "worker_lambda" {
   statement {
     sid       = "ConsumeJobsQueue"
@@ -170,8 +172,8 @@ resource "aws_lambda_function" "worker" {
       RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
       DB_POOL_MAX            = "2"
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
-      JOB_TRANSPORT          = "sqs"
-      JOBS_QUEUE_URL         = aws_sqs_queue.jobs.url
+      # No JOB_TRANSPORT / JOBS_QUEUE_URL: only the API wakes the worker; the
+      # worker never sends to the jobs queue (no sqs:SendMessage on it, above).
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url

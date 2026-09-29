@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import type { TickResult } from './jobs/runner.js';
 
 const tick: TickResult = { purged: 1, invitesPurged: 0, claimed: 3, done: 1, failed: 1, dead: 1, lost: 0, stats: { due: 2, running: 0, oldestDueSeconds: 420 },
@@ -239,5 +240,30 @@ describe('handler', () => {
 	it('lets a failed tick throw, so SQS retries the batch (and dead-letters it after 5)', async () => {
 		runTick.mockRejectedValueOnce(new Error('connect ECONNREFUSED'));
 		await expect(handler({ Records: [] } as never)).rejects.toThrow('ECONNREFUSED');
+	});
+});
+
+describe('the worker bundle', () => {
+	// The worker never wakes itself: it has no permission to send to the `jobs`
+	// queue and no JOBS_QUEUE_URL (infra/jobs.tf), so wakeWorker there would
+	// only log a failure. Checked on the import graph, not on what calls it:
+	// the feed ingest once reached jobs/wake.ts through series/routes.ts, and
+	// only the routes' own handlers called it (hence series/replace.ts).
+	it('never reaches jobs/wake.ts or a routes module', async () => {
+		const { build } = await import('esbuild');
+		const out = await build({
+			entryPoints: [fileURLToPath(new URL('./lambda-worker.ts', import.meta.url))],
+			bundle: true,
+			platform: 'node',
+			format: 'esm',
+			// As infra/scripts/package-lambdas.sh builds it: only the renderer ships playwright-core.
+			external: ['playwright-core'],
+			write: false,
+			metafile: true,
+			logLevel: 'silent'
+		});
+		const inputs = Object.keys(out.metafile.inputs);
+		expect(inputs.some((f) => f.endsWith('src/lambda-worker.ts'))).toBe(true);
+		expect(inputs.filter((f) => /src\/(jobs\/wake|[a-z]+\/routes)\.ts$/.test(f))).toEqual([]);
 	});
 });
