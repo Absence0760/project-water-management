@@ -78,7 +78,7 @@ export const SECTIONS: Record<string, string> = {
  * edited message can't leave its note behind.
  */
 export const NOTES: Record<string, string> = {
-	'Reserve met on {pct} % of days': '{pct} is a number like “41.6”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”).',
+	'Reserve not met on {pct} % of days': '{pct} is a number like “58.5”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”).',
 	'It costs the river {days} more days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',
 	'It gives the river {days} fewer days a year below the reserve': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',
 	'The river is below the reserve about as often as today': 'First half of one sentence; the second half is one of the three “and the hydrological unit gets …” rows, joined with a comma.',

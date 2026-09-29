@@ -711,8 +711,6 @@ export const af: Catalogue = {
 	'744be623': 'Teken in',
 	// Create an account
 	'd7f6c093': 'Skep ’n rekening',
-	// Reserve met on {pct} % of days
-	'bc8fde2e': 'Reserwe behou op {pct} % van die dae',
 	// Example catchment, {years} years
 	'828ebfcc': 'Voorbeeld-opvanggebied, {years} jaar',
 	// Pause the animation

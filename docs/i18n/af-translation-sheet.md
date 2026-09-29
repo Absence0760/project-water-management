@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-19 strings: 19 on the site, 0 in emails, 0 in the glossary.
+20 strings: 20 on the site, 0 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -80,6 +80,14 @@ Shared view: each river site over the last 30 days. {days} is “30 days”.
 | `7479d547` | Kept its reserve on every one of the {days} to {date}. | Keep: {date}, {days} |  |
 | `249b65c8` | Below its reserve on all of the {days} to {date}. | Keep: {date}, {days} |  |
 | `0ba980dd` | Below its reserve on {n} of the {days} to {date}. | Keep: {date}, {days}, {n} |  |
+
+### landing.hero
+
+Landing page: the top of the page, its headline and the two buttons, and the tag beside the drawing’s river gauge.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `2e8484f9` | Reserve not met on {pct} % of days | {pct} is a number like “58.5”. The ecological reserve is the flow the river must keep for its ecosystem (“ekologiese reserwe”). Keep: {pct} |  |
 
 ### landing.trust
 

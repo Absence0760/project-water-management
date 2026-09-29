@@ -118,7 +118,7 @@ test('the hero moves only when motion is allowed, and rests on its last frame ot
 	const scene = page.locator('.hero .scene');
 	await expect(scene).toHaveAttribute('data-motion', 'off');
 	// The still frame shows the gauge's tag.
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await page.reload();
@@ -143,7 +143,7 @@ test('the hero’s loop can be stopped on its still frame and started again, and
 	const tag = page.locator('.hero .tag');
 	expect(await tag.evaluate((el) => el.getAnimations().length)).toBe(0);
 	await expect(tag).toHaveCSS('opacity', '1');
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	const pause = page.getByRole('button', { name: 'Pause the animation' });
 	await expect(pause).toHaveAttribute('aria-pressed', 'false');
@@ -151,7 +151,7 @@ test('the hero’s loop can be stopped on its still frame and started again, and
 	await expect(pause).toHaveAttribute('aria-pressed', 'true');
 	await expect(scene).toHaveAttribute('data-motion', 'off');
 	expect(await running()).toBe(0);
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	await pause.press('Enter');
 	await expect(pause).toHaveAttribute('aria-pressed', 'false');

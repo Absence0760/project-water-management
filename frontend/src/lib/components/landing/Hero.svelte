@@ -44,7 +44,7 @@
 		<Diorama mode="hero" priority {paused} bind:canMove>
 			{#snippet tag()}
 				<span class="gauge-tag">
-					<strong>{t('Reserve met on {pct} % of days', { pct: fmt(DATA.hero.reserveMetPct) })}</strong>
+					<strong>{t('Reserve not met on {pct} % of days', { pct: fmt(DATA.hero.reserveNotMetPct) })}</strong>
 					<span>{t('Example catchment, {years} years', { years: DATA.hero.years })}</span>
 				</span>
 			{/snippet}

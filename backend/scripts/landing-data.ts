@@ -136,7 +136,7 @@ const data = {
 	engineVersion: base.engineVersion,
 	period: { start: base.startDate, end: base.endDate },
 	hero: {
-		reserveMetPct: round((1 - base.summary.catchment.ewrFractionDaysNotMet) * 100, 1),
+		reserveNotMetPct: round(base.summary.catchment.ewrFractionDaysNotMet * 100, 1),
 		farms: kleinberg.model.nodes.filter((n) => n.kind === 'farm').length,
 		dams: kleinberg.model.nodes.filter((n) => n.damCapacityM3 > 0).length,
 		years: Math.round(years(base)),
@@ -162,4 +162,4 @@ await writeFile(
 export const DATA = ${JSON.stringify(data, null, '\t')};
 `
 );
-console.log(`landing data: ${out}, story year ${story.waterYear}, reserve met ${data.hero.reserveMetPct} %, grid ${EXTRA_HA.length} × ${DAM_SCALE.length}`);
+console.log(`landing data: ${out}, story year ${story.waterYear}, reserve not met ${data.hero.reserveNotMetPct} %, grid ${EXTRA_HA.length} × ${DAM_SCALE.length}`);

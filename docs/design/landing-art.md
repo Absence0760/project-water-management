@@ -60,7 +60,7 @@ example catchment's (the gauge tag, the story's intro, the what-if); the page
 carries no separate "invented data" disclaimers (the operator's call,
 2026-09-27).
 
-**The figures are honest.** The hero's tag ("Reserve met on 42 % of days") and
+**The figures are honest.** The hero's tag ("Reserve not met on 59 % of days", framed as "not met" like every EWR figure in the app, issue #162) and
 the what-if are what the engine gives on the example, not chosen numbers. On
 Kleinberg most of the reserve's failures come from the farms' use, and one
 farm's orchard moves them by a few days a year while its own supply falls
