@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DamCurvePoint, ModelInput, NetworkNode } from '../project';
 import { runModelWith, withVerification } from '../run';
-import { checkInvariants } from '../verify/checks';
+import { checkInvariants, checkTransferLimits } from '../verify/checks';
 import { modelRuleProblems } from '../modelRules';
 import { applyScenario } from '../scenario/overrides';
 import { sameOutput } from '../testing/invariants';
@@ -283,6 +283,56 @@ describe('dam storage (WP-3.5)', () => {
 		expect(g[last - 1]).toBeGreaterThan(0);
 		expect(x.at(-1)).toBe(0);
 		expect(g.at(-1)).toBe(0);
+	});
+
+	it('a transfer into a full dam with a fixed release refills what it releases (engine 1.29.0)', () => {
+		// U holds 50 000 m³ and sends to A (full, no demand, 400 m³/day fixed release) up to 864 m³/day.
+		const i = input({ damInitialPct: 1, damReleaseRule: 'fixed', damReleaseM3Day: flat(400) }, { settings: { lakeEvapFactor: 0 } });
+		i.model.nodes = i.model.nodes.map((n) => (n.id === 'U' ? { ...n, damCapacityM3: 50_000, damInitialPct: 1 } : n));
+		i.model.transfers = [{ id: 't', fromNodeId: 'U', toNodeId: 'A', months: [1, 2, 3], maxRateM3s: 0.01, dailyCapM3: null, minStoragePct: 0, enabled: true, priority: 0 }];
+		const o = run(i, new Array(60).fill(0));
+		passed(o);
+		const moved = col(o, 'A', 'transfer')!;
+		const q = col(o, 'A', 'dam_storage')!;
+		const spill = col(o, 'A', 'spill')!;
+		for (let t = 0; t < moved.length; t++) {
+			// The room is the release: 400 in, 400 out, the dam stays full and nothing spills.
+			expect(moved[t]).toBeCloseTo(400, 9);
+			expect(q[t]).toBeCloseTo(100_000, 6);
+			expect(spill[t]).toBeCloseTo(0, 9);
+		}
+		// The check holds the engine to that room: one m³ more than the release fails it.
+		const over = structuredClone(o);
+		over.series.find((s) => s.nodeId === 'A' && s.key === 'transfer')!.values[3] = 401;
+		over.series.find((s) => s.nodeId === 'U' && s.key === 'transfer')!.values[3] = -401;
+		expect(checkTransferLimits(i, over)).toMatch(/received 401 > its room/);
+		// Positive control: pass inflow (at most the inflow, which the room doesn't count) leaves the room at 0.
+		const pass = run({ ...i, model: { ...i.model, nodes: i.model.nodes.map((n) => (n.id === 'A' ? { ...n, damReleaseRule: 'passInflow' as const } : n)) } }, new Array(60).fill(0));
+		passed(pass);
+		expect(sum(col(pass, 'A', 'transfer')!)).toBe(0);
+	});
+
+	it('a dam that also sends later the same day releases less than the floor only down to dead storage, and never overfills', () => {
+		// A: full, fixed release 400, dead storage 0. U → A up to 300 m³/day at priority 0, then A → B uncapped at priority 1.
+		const i = input({ damInitialPct: 1, damReleaseRule: 'fixed', damReleaseM3Day: flat(400) }, { settings: { lakeEvapFactor: 0 } });
+		i.model.nodes = [
+			...i.model.nodes.map((n) => (n.id === 'U' ? { ...n, damCapacityM3: 50_000, damInitialPct: 1 } : n)),
+			node('B', 'farm', 'G', { damCapacityM3: 1_000_000, pctUpstreamToDam: 0, pctRunoffToDam: 0 })
+		];
+		const tr = { months: [1, 2, 3], minStoragePct: 0, enabled: true, dailyCapM3: null };
+		i.model.transfers = [
+			{ ...tr, id: 'u', fromNodeId: 'U', toNodeId: 'A', maxRateM3s: 300 / 86_400, priority: 0 },
+			{ ...tr, id: 'b', fromNodeId: 'A', toNodeId: 'B', maxRateM3s: 1e3, priority: 1 }
+		];
+		const o = run(i, new Array(60).fill(0));
+		passed(o);
+		const q = col(o, 'A', 'dam_storage')!;
+		const rel = col(o, 'A', 'dam_release')!;
+		// Day 0: A takes 300 (its room counted the 400 floor), sends all it holds to B, and releases only the 300 left.
+		expect(col(o, 'A', 'transfer')![0]).toBeCloseTo(300 - 100_000, 6);
+		expect(rel[0]).toBeCloseTo(300, 6);
+		expect(q[0]).toBeCloseTo(0, 6);
+		for (const v of col(o, 'A', 'spill')!) expect(v).toBeCloseTo(0, 9);
 	});
 
 	it('pass inflow: the dam passes MIN(inflow, what the river below still needs, outlet), and fewer EWR days are missed', () => {

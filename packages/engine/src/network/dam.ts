@@ -109,3 +109,19 @@ export function releaseToday(r: PlanRelease, calendarMonth: number, inflow: numb
 	}
 	return Math.max(0, Math.min(r.m3DayByMonth![calendarMonth]!, r.outletM3Day, avail - dead));
 }
+
+/**
+ * A fixed release's floor before the day's inflow and transfers are known
+ * (engine ≥ 1.29.0): releaseToday with `held` (the dam after the day's
+ * rain, evaporation and seepage, less what it has sent so far) as all it
+ * has; a transfer's room into the dam counts it. For a dam that only
+ * receives, the day's release is at least this (inflow and water
+ * transferred in only add to what it releases from). A dam that sends more
+ * later the same day can release less, but only when its release is cut to
+ * the water above dead storage, so it ends the day at dead storage and is
+ * never overfilled. 0 for a pass-inflow release, which is at most the day's
+ * inflow, which the room doesn't count either.
+ */
+export function fixedReleaseFloor(r: PlanRelease, calendarMonth: number, held: number, dead: number): number {
+	return r.rule === 2 ? releaseToday(r, calendarMonth, 0, 0, 0, Math.max(held, 0), dead) : 0;
+}

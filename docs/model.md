@@ -1860,7 +1860,20 @@ The workbook has two blocks of columns:
   water it was allowed to send. That shortfall did not grow with the demand,
   so more irrigated land could raise a farm's supply fraction (fuzz seed
   921, `run.test.ts` › "counts the destination dam's own losses today in its
-  room"). Rules run by `priority` (integer, lower
+  room"). **Engine ≥ 1.29.0** adds a *fixed* release's floor (§2.7a) to
+  the room: the release as it would be with no inflow and nothing
+  transferred in, `MIN(amount[month], outlet, storage after the dam's gains
+  and losses − drawn from it today − dead storage)`, never below 0. For a
+  dam that only receives, the day's release is at least that (inflow and
+  the transfer only add to what it releases from); one that also sends
+  later the same day can release less, but only when the release is cut to
+  the water above dead storage, and it then ends the day at dead storage.
+  So the dam passes on what it lets out and a transfer still never
+  overfills it; before, a full dam with a fixed release took
+  nothing, though it would release water that day. A *pass-inflow* release
+  isn't counted: it is at most the day's inflow, which the room doesn't
+  count either (transfers are settled before the day's flows are known).
+  Rules run by `priority` (integer, lower
   first). Within one priority, rules into one destination share its room and
   rules from one source share its free water, each pro rata to its own limit
   (MIN(maxDaily, srcFree)), so results never depend on the list order.
@@ -2263,9 +2276,11 @@ G = MIN(MAX(avail − X − dead storage, 0), D);   P = avail − X − G;   U =
   toward every EWR site below. It is the `dam_release` series (only on a dam
   with a rule) and the water balance's `damReleaseM3` line (part of outflow,
   for information).
-- A transfer's room at the destination (§2.6) does not count today's
-  release, as it doesn't count today's inflow: conservative, noted in
-  [followups.md](./followups.md).
+- A transfer's room at the destination (§2.6) counts a fixed release's
+  floor (engine ≥ 1.29.0: the release with no inflow and nothing
+  transferred in). A pass-inflow
+  release is not counted, as the day's inflow it passes isn't: both come
+  after the transfers are settled.
 
 **4. Monthly lake factors** (`settings.lakeEvapFactorMonthly`, 12 values
 0–2, water-year order). When set they replace `lakeEvapFactor` month by
@@ -7100,7 +7115,7 @@ text:
 | `checkBalance` | Every value finite. Each farm's day closes: upstream + runoff + transfer + rain on the dam + yesterday's storage = outflow + supplied − return flow + dam evaporation + storage, with return flow β(1 − e) × supplied and seepage inside the outflow, less any seepage lost from the catchment, which is a sink (engine ≥ 0.35.0, 0 ≤ lost ≤ seepage); rain on the dam, evaporation and seepage are ≥ 0. 0 ≤ storage ≤ capacity; spill only from a full dam; 0 ≤ supplied ≤ demand; deficit = demand − supplied; EWR shortfall = MIN(outflow − EWR required, 0). Gauges pass the sum of their upstream through; the outlet's outflow is the simulated outflow. Other water users (engine ≥ 0.22.0, §2.7c): taken G = MIN(D, H) when senior, MIN(D, MAX(0, H − senior requirement arriving)) when junior; return = r × G; outflow = H − G + return; deficit = D − G; the senior requirement never grows past a user. Transfers net to zero each day, and the catchment closes over the run (opening storage + runoff = outflow + consumptive use + the users' taken − returned + closing storage). |
 | `checkWorkings` | Each farm's working columns (§2.7) follow their formulas: F = MAX(0, gross demand) − effective rain used, F ≥ 0; D = F / e; the dam's area (power law or survey curve), rain on it, evaporation (single or monthly lake factor) and seepage follow §2.7a; a release X follows its rule and never exceeds the outlet (engine ≥ 0.35.0, §2.7a "Dam geometry, losses and releases"); G = MIN(MAX(Q[t−1] + Pd − E − Sp + M + O + K + J − X − dead storage, 0), D); K + L = H and M + N = I with K ≤ H × %, M ≤ I × %; 0 ≤ O ≤ MIN(capacity, L + N); P = Q[t−1] + Pd − E − Sp + M + O + K + J − X − G; Q and R split P at the capacity; S = L + N − O; T = β(1 − e) × G; U = R + S + T + Sp × return share + X; V is the recomputed residual and float noise. With senior other users below (§2.7c): the farm's senior requirement ≥ what arrives from upstream, S ≥ MIN(requirement, H + I), and nothing is kept out of the dam without a requirement. |
 | `checkSoilWater` | Engine ≥ 0.14.0 (§2.3 step 4), redone from the run's own `rain_final` and settings: each farm's soil-water store stays within 0 … `effectiveRainStoreMm`; the rain used each day is MIN(store[t−1] + Pe, MAX(0, gross)); the store is MIN(size, store[t−1] + Pe − used); and over the run Σ used ≤ Σ Pe, so the store never hands out more rain than fell. Runs without a `soil_water` column have nothing to check. |
-| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
+| `checkTransferLimits` | Per day, whatever the priority between rules (Q18): a farm no active rule touches moves nothing (months); received ≤ Σ limits of its incoming rules and sent ≤ Σ limits of its outgoing rules (limit = MIN(rate × 86 400, daily cap)); sent ≤ yesterday's storage − the lowest reserve (minimum storage); a farm that sends nothing receives at most its room, capacity − (storage[t−1] + rain on the dam − evaporation − seepage) + demand D (N4; the dam terms from engine 0.19.0) + a fixed release's floor (engine ≥ 1.29.0, §2.6). For a source whose destinations are fed only by it, no water is left on the table: it sends at least MIN(Σ over destinations of MIN(Σ limits into it, its room), storage − highest reserve). |
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
