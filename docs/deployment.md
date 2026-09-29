@@ -199,20 +199,28 @@ never stores, and each Lambda reads its own once per cold start
 ### Rotating a secret
 
 Because Terraform keeps no copy of a write-only value, it can't see that a
-sops value changed. The counter `runtime_secret_version` (in `prod.tfvars`,
-default 1) is what tells it to write again:
+sops value changed. The counter `runtime_secret_version` is what tells it to
+write again, and `tf.sh` sets it for you: it reads the sops file's plaintext
+`sops.lastmodified` (which sops rewrites on every edit, without decrypting
+anything) and passes it as `YYYYMMDDhhmmss`. So:
 
 - **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`):
-  edit it with sops, raise `runtime_secret_version` by one in `prod.tfvars`,
-  then plan and apply through `tf.sh`. **A sops edit without the bump
-  changes nothing**: the plan shows no change and the Lambdas keep the old
-  value.
+  edit it with sops, then plan and apply through `tf.sh`. The edit moved
+  `lastmodified`, so the plan replaces every runtime secret version.
 - **The CloudFront header:** apply with
-  `-replace=random_password.cloudfront_shared_secret` (no bump needed: the
-  replacement rewrites the runtime secrets in the same apply).
+  `-replace=random_password.cloudfront_shared_secret`; the replacement
+  rewrites the runtime secrets in the same apply.
+- **Unchanged values, forced** (e.g. after a hand edit in the console):
+  `-var runtime_secret_version=$(date -u +%Y%m%d%H%M%S)`. The next plain run
+  goes back to `lastmodified`, which rewrites once more (a harmless cold
+  start).
+
+Don't put `runtime_secret_version` in a tfvars file: Terraform ranks var
+files above `tf.sh`'s value, so it would pin the counter and silently stop
+rotation. `tf.sh` refuses to run if one does.
 
 The commands are in [infra/README.md § Rotating secrets](../infra/README.md#rotating-secrets).
-Either way the apply replaces every runtime secret's version (all three,
+Every one of these applies replaces every runtime secret's version (all three,
 whichever key changed), so each Lambda's `RUNTIME_SECRET_VERSION` changes
 with it. Changing a function's configuration retires its running instances,
 so the next request or tick cold-starts onto the new value; there is no
@@ -817,7 +825,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
 
   | Variable | Value |
   | --- | --- |
-  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value and a raised `runtime_secret_version`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
+  | `ALERTS_TOKEN_SECRET` | The sops key `alerts_token_secret` (32+ alphanumeric characters), in the worker's runtime secret (not its environment, not Terraform state). Signs the one-click unsubscribe links. Only the worker has it; the API Lambda checks a link by its hash. Rotating it (a new sops value, applied through `tf.sh`, [§ Rotating a secret](#rotating-a-secret)) breaks the unsubscribe link in every alert already sent ("Manage your alerts" still works), so rotate only if it leaked |
   | `ALERTS_ENABLED` | `var.alerts_enabled` (default `true`): **the kill switch**. `false` stops every alert email and drops those waiting; alerts are still evaluated and shown in the app |
   | `ALERTS_DAILY_CAP` | `5`: immediate alert emails per person per day (06:00 to 06:00 in the project's time zone, South Africa's by default) before the rest wait for the 06:00 digest |
   | `SITE_URL` | also the base of the RFC 8058 one-click address, `SITE_URL/api/alerts/unsubscribe` (CloudFront's `/api/*`; `API_PUBLIC_URL` overrides it, which only local dev needs) |

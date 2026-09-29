@@ -243,7 +243,9 @@ write-only argument of each runtime secret's version (Terraform sends it to
 AWS and keeps no copy; the tftest checks the plan holds no `secret_string`
 and that the values are ephemeral). Because nothing is stored,
 Terraform can't see a changed sops value: `runtime_secret_version`
-(`secret_string_wo_version`) is the signal to write again
+(`secret_string_wo_version`) is the signal to write again, and `tf.sh` derives
+it from the sops file's plaintext `sops.lastmodified` (awk over the `sops:`
+block, nothing decrypted for it), so every sops edit rotates by itself
 ([§ Rotating secrets](#rotating-secrets)). Needs Terraform 1.11+ and the AWS
 provider's 6.x line, both pinned in `main.tf`.
 
@@ -553,31 +555,37 @@ Claude does not run any of these, and none of them print a secret. Replace
 
 Every secret below reaches its Lambdas through their runtime secrets
 (`secrets.tf`), written write-only: Terraform keeps no copy, so **it can't
-tell that a sops value changed**. A sops rotation is always three steps: edit
-the value with sops, raise `runtime_secret_version` by one in `prod.tfvars`,
-and apply through `tf.sh`. Without the bump the plan shows no change and
-nothing is written. The bump replaces every runtime secret's version, which
-changes `RUNTIME_SECRET_VERSION` in each Lambda's configuration, so every
-running instance is replaced by a cold start that reads the new value: there
-is no separate restart step. A value changed by hand in the console is
-**not** picked up (each Lambda reads the version Terraform pinned); change it
-at its source and apply instead.
+tell that a sops value changed** by itself. `tf.sh` gives it the signal:
+it sets `runtime_secret_version` from the sops file's `sops.lastmodified`
+(`YYYYMMDDhhmmss`; plaintext metadata sops rewrites on every edit), so a sops
+rotation is two steps: edit the value with sops, apply through `tf.sh`. The
+new counter replaces every runtime secret's version, which changes
+`RUNTIME_SECRET_VERSION` in each Lambda's configuration, so every running
+instance is replaced by a cold start that reads the new value: there is no
+separate restart step. A value changed by hand in the console is **not**
+picked up (each Lambda reads the version Terraform pinned); change it at its
+source and apply instead.
+
+- **Forced rewrite of unchanged values:** add
+  `-var runtime_secret_version=$(date -u +%Y%m%d%H%M%S)` to the apply (or
+  export `TF_VAR_runtime_secret_version`, which `tf.sh` then leaves alone).
+  The next plain run returns to `lastmodified` and rewrites once more.
+- **Never set `runtime_secret_version` in `prod.tfvars`** (or any var file):
+  Terraform ranks var files above `tf.sh`'s value, so it would pin the
+  counter and silently stop rotation. `tf.sh` refuses to run if one does.
 
 The apply, for any of the sops keys:
 `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`
 
-- **`db_app_password`:** edit it with sops, raise `runtime_secret_version`,
-  apply, and invoke the migrate Lambda straight away. The API fails DB logins
+- **`db_app_password`:** edit it with sops, apply, and invoke the migrate Lambda straight away. The API fails DB logins
   until you do:
   `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
-- **`auth_jwt_secret`:** edit it with sops, raise `runtime_secret_version`,
-  apply. Everyone is signed out.
+- **`auth_jwt_secret`:** edit it with sops, apply. Everyone is signed out.
 - **`alerts_token_secret`** (WP-2.13, the worker only): only if it leaked,
   since every unsubscribe link in alert emails already sent stops working
-  ("Manage your alerts" still does). Edit it with sops, raise
-  `runtime_secret_version`, apply. The alert kill switch is
+  ("Manage your alerts" still does). Edit it with sops, apply. The alert kill switch is
   `alerts_enabled = false` (docs/deployment.md § Runbooks, alert storm).
-- **CloudFront shared secret** (no bump: replacing it rewrites the runtime
+- **CloudFront shared secret** (not in sops: replacing it rewrites the runtime
   secrets in the same apply, `replace_triggered_by` in `secrets.tf`):
   `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).

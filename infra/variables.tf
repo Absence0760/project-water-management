@@ -106,12 +106,15 @@ variable "alerts_token_secret" {
 }
 
 variable "runtime_secret_version" {
-  description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed: raise this after editing prod.sops.yaml. Every runtime secret is then written again, and the API, worker and migrate Lambdas cold-start onto it (docs/deployment.md § Rotating a secret)."
+  description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed; any change to this number writes every runtime secret again and cold-starts the API, worker and migrate Lambdas. Don't set it in a tfvars file: scripts/tf.sh derives it from prod.sops.yaml's sops.lastmodified (YYYYMMDDhhmmss), so every sops edit rotates, and refuses a var file that pins it. Pass -var runtime_secret_version=… only to force a rewrite of unchanged values (docs/deployment.md § Rotating a secret)."
   type        = number
   default     = 1
   validation {
-    condition     = var.runtime_secret_version >= 1 && floor(var.runtime_secret_version) == var.runtime_secret_version
-    error_message = "runtime_secret_version is a whole number, 1 or more. Only ever raise it."
+    # Up to 16 digits: YYYYMMDDhhmmss is 14, and the AWS provider holds
+    # secret_string_wo_version as a 64-bit int (its 64-bit builds are the only
+    # platforms in .terraform.lock.hcl).
+    condition     = var.runtime_secret_version >= 1 && var.runtime_secret_version < 1e16 && floor(var.runtime_secret_version) == var.runtime_secret_version
+    error_message = "runtime_secret_version is a whole number from 1 to 16 digits (scripts/tf.sh sets it from sops.lastmodified as YYYYMMDDhhmmss)."
   }
 }
 
