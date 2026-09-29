@@ -7,6 +7,7 @@
 import { monthOfEpochDay, toEpochDay } from '../calendar';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
 import { seepageReturnOf } from '../network/dam';
+import { abstractionStartDay } from '../network/development';
 import { DAM_AREA_EXPONENT, DEFAULT_FEBRUARY_DAYS, DEFAULT_LAKE_EVAP_FACTOR, ESTIMATED_DAM_DEPTH_M, type ModelInput, type NetworkNode } from '../project';
 
 /**
@@ -41,8 +42,9 @@ export function lakeEvaporationMmDay(input: { settings: ModelInput['settings']; 
  * applies it after the soil-water store: the demand.scale factor for the
  * day's month (engine ≥ 0.41.0) from settings.demandFactorFrom on (engine ≥
  * 0.44.0; an invalid date: every day), × a full allocation's factor
- * `allocation` (engine ≥ 1.18.0, the run's allocation_demand_factor series).
- * `scaled` is false when neither applies (every day 1).
+ * `allocation` (engine ≥ 1.18.0, the run's allocation_demand_factor series);
+ * 0 before the unit's abstraction date (engine ≥ 1.30.0, abstractionFrom).
+ * `scaled` is false when none applies (every day 1).
  */
 export function dailyDemandFactor(
 	settings: ModelInput['settings'],
@@ -54,8 +56,11 @@ export function dailyDemandFactor(
 	const factor = demandFactorOf(n, []);
 	const dff = settings?.demandFactorFrom;
 	const from = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, days) : 0;
-	const perDay = Float64Array.from({ length: days }, (_, t) => (factor && t >= from ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (allocation ? Number(allocation[t]) : 1));
-	return { perDay, scaled: !!factor || !!allocation };
+	const abstractFrom = abstractionStartDay(n, day0, days, []);
+	const perDay = Float64Array.from({ length: days }, (_, t) =>
+		t < abstractFrom ? 0 : (factor && t >= from ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (allocation ? Number(allocation[t]) : 1)
+	);
+	return { perDay, scaled: !!factor || !!allocation || abstractFrom > 0 };
 }
 
 /** A farm dam's power-law area and its seepage, as runModel resolves them. */

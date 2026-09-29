@@ -1,6 +1,7 @@
 // GET /projects/:id/runs/:runId/day: one node's columns on one day, for the
 // day trace in the results (docs/ui.md § Self-checks).
 import { beforeAll, describe, expect, it } from 'vitest';
+import { damCapacityOn, toEpochDay, type NetworkNode } from '@water-management/engine';
 import { asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -82,6 +83,33 @@ describe('GET /projects/:id/runs/:runId/day', () => {
 		expect(res.status).toBe(200);
 		expect(res.body.previousStorageM3).toBe(2_000); // 0.4 × 5 000 m³
 		expect(res.body.previousSoilWaterMm).toBe(0); // the soil-water store starts empty
+	});
+
+	it("starts a dam whose capacity changes from its initial share of the first day's capacity (issue #67)", async () => {
+		// Surveyed a year after the run with 10 % a year lost to sediment: on the first day it held more than 5 000 m³.
+		const dev = { ...farm, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.1 };
+		const model = { nodes: [outlet, dev], crops: [crop], cropAreas: [{ nodeId: farm.id, cropId: crop.id, areaM2: 10_000 }], transfers: [] };
+		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
+		const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Sediment' });
+		expect(run.status).toBe(201);
+		const id = run.body.run.id as string;
+		try {
+			const at = (date: string) => owner.call('GET', `/projects/${projectId}/runs/${id}/day?${new URLSearchParams({ date, nodeId: farm.id })}`);
+			const first = await at('2020-01-01');
+			expect(first.status).toBe(200);
+			const cap = damCapacityOn(dev as unknown as NetworkNode, toEpochDay('2020-01-01'));
+			expect(cap).toBeGreaterThan(5_000);
+			expect(first.body.previousStorageM3).toBeCloseTo(0.4 * cap, 9);
+			// The first day closes from that start, as every other day does.
+			const v = (k: string) => valueOf(first.body, k);
+			const closes =
+				v('inflow_upstream') + v('runoff') + v('transfer') + v('rain_on_dam') - (v('supplied') - v('return_flow')) - v('dam_evaporation') - (v('dam_storage') - first.body.previousStorageM3) - v('outflow');
+			expect(Math.abs(closes)).toBeLessThan(1e-6);
+		} finally {
+			// Positive control, and the model back as the other tests expect it.
+			expect((await owner.call('PUT', `/projects/${projectId}/model`, { ...model, nodes: [outlet, farm] })).status).toBe(200);
+			expect((await day(owner, '2020-01-01')).body.previousStorageM3).toBe(2_000);
+		}
 	});
 
 	it('returns the soil-water store the day started from, so the carried-over rain can be redone (N3)', async () => {

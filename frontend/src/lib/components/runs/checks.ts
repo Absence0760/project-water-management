@@ -102,7 +102,7 @@ export function traceRows(day: RunDay): TraceRow[] {
 			letter: 'Q[t−1]',
 			label: 'Dam storage at the end of the day before',
 			unit: 'm³',
-			formula: 'the run’s initial storage (initial % × capacity) on its first day',
+			formula: 'the run’s initial storage on its first day (initial % × that day’s capacity)',
 			value: day.previousStorageM3
 		});
 		// The store the day's effective rain was added to (engine ≥ 0.14.0).

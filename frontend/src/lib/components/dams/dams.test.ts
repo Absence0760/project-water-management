@@ -147,3 +147,42 @@ describe('storageChartSeries', () => {
 		]);
 	});
 });
+
+describe("the sparkline and chart against the day's capacity (issue #67)", () => {
+	// Capacity 1 250 m³ falling by 1 m³ a day (a dam losing capacity to sediment); the dam kept 90 % of it.
+	const cap = (i: number) => 1250 - i;
+	const values = Array.from({ length: 40 }, (_, i) => 0.9 * cap(i));
+
+	it('keeps each sparkline point a share of that day’s capacity, never above 100 %', () => {
+		const s = storageSpark({ startDate: '2021-01-01', values }, 1000, 365, 60, cap)!;
+		for (const v of s.values) expect(v).toBeCloseTo(90, 9);
+		// Against the entered 1 000 m³ it read up to 112.5 %.
+		expect(Math.max(...storageSpark({ startDate: '2021-01-01', values }, 1000)!.values)).toBeGreaterThan(100);
+	});
+
+	it('draws the capacity and minimum lines at the day’s capacity in m³, and % as a share of it', () => {
+		const [storage, capacity, min] = storageChartSeries({ startDate: '2021-01-01', values }, 1000, 10, 'm3', cap);
+		expect(storage!.values).toEqual(values);
+		expect(capacity!.values).toEqual(values.map((_, i) => cap(i)));
+		expect(min!.values).toEqual(values.map((_, i) => 0.1 * cap(i)));
+		const pct = storageChartSeries({ startDate: '2021-01-01', values }, 1000, 10, 'pct', cap);
+		for (const v of pct[0]!.values) expect(v).toBeCloseTo(90, 9);
+		expect(new Set(pct[1]!.values)).toEqual(new Set([100]));
+		expect(new Set(pct[2]!.values)).toEqual(new Set([10]));
+	});
+
+	it('shows no % on a day before the dam is in service', () => {
+		const inService = (i: number) => (i < 2 ? 0 : 1000);
+		const [storage, capacity] = storageChartSeries({ startDate: '2021-01-01', values: [0, 0, 500] }, 1000, 0, 'pct', inService);
+		expect(storage!.values).toEqual([null, null, 50]);
+		expect(capacity!.values).toEqual([null, null, 100]);
+		expect(storageSpark({ startDate: '2021-01-01', values: [0, 0, 500] }, 1000, 365, 60, inService)!.values).toEqual([0, 0, 50]);
+	});
+
+	it('positive control: without a changing capacity the lines are as before', () => {
+		const s = { startDate: '2021-01-01', values: [500, 600] };
+		expect(storageChartSeries(s, 1000, 10, 'pct', undefined)).toEqual(storageChartSeries(s, 1000, 10, 'pct'));
+		expect(storageChartSeries(s, 1000, 10, 'pct')[0]!.values).toEqual([50, 60]);
+		expect(storageSpark(s, 1000, 365, 60, undefined)).toEqual(storageSpark(s, 1000));
+	});
+});

@@ -139,6 +139,20 @@ describe('summary sheet', () => {
 		expect([...summaryCsvLines(meta, summary)].find((l) => l.startsWith('Farm,'))).not.toContain('Dam capacity');
 	});
 
+	it("adds the capacity on the last day beside a dam whose capacity changes over the run (issue #67), and nothing when none does", () => {
+		const s = structuredClone(summary);
+		// Surveyed after the run with a sediment rate: the dam held more than its entered 1000 m³ on the last day.
+		Object.assign(s.farms[0]!, { damEndM3: 1050, damAgoM3: 900, damLowM3: 100, damLowDate: '2000-08-01', damDaysAtMin: 0 });
+		const lines = [...summaryCsvLines({ ...meta, damCapacityM3: { n1: 1000 }, damCapacityEndM3: { n1: 1100 } }, s)];
+		const header = lines.find((l) => l.startsWith('Farm,'))!;
+		expect(header).toContain(',Dam capacity (m³),Dam capacity on the last day (m³),Dam storage on the last day (m³),');
+		expect(lines.find((l) => l.startsWith('"Farm, upper"'))!).toContain(',1000,1100,1050,900,');
+		// Positive control: an empty map (no dam changes) writes the sheet as before.
+		const plain = [...summaryCsvLines({ ...meta, damCapacityM3: { n1: 1000 }, damCapacityEndM3: {} }, s)];
+		expect(plain).toEqual([...summaryCsvLines({ ...meta, damCapacityM3: { n1: 1000 } }, s)]);
+		expect(plain.find((l) => l.startsWith('Farm,'))).not.toContain('Dam capacity on the last day');
+	});
+
 	it('labels every calibration score with its unit and lists the exclusions and annual volumes (hydrologist review, #17)', () => {
 		const s = structuredClone(summary);
 		s.catchment.runoffCoefficient = 0.12;

@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, modelFarmEfficiency, toEpochDay, upgradeLegacyModel, type CropArea, type CropDef, type NetworkNode, type RunoffBalance, type RunSummary } from '@water-management/engine';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
 import { type Db, withUser } from '../db/tx.js';
@@ -228,9 +228,14 @@ export const runRoutes = new Hono<AuthEnv>()
 			if (!rows.length || !r.node) throw new ApiError(404, 'not found');
 			const node = r.node as { name: string; kind: 'farm' | 'gauge'; damCapacityM3?: number; damInitialPct?: number };
 			const storage = rows.find((x) => x.key === 'dam_storage');
-			// Storage at the end of the day before: the run's initial storage on its first day.
+			// Storage at the end of the day before: the run's initial storage on its first day, a share of
+			// the capacity on that day (engine ≥ 1.30.0: sediment, an in-service date; network/development.ts).
 			const previousStorageM3 =
-				node.kind !== 'farm' ? null : r.index === 0 ? (node.damInitialPct ?? 0) * (node.damCapacityM3 ?? 0) : (storage?.previous ?? null);
+				node.kind !== 'farm'
+					? null
+					: r.index === 0
+						? (node.damInitialPct ?? 0) * damCapacityOn({ ...(r.node as unknown as NetworkNode), damCapacityM3: node.damCapacityM3 ?? 0 }, toEpochDay(q.date))
+						: (storage?.previous ?? null);
 			// Soil-water store at the end of the day before (engine ≥ 0.14.0): empty on the first day; null without the column.
 			const soil = rows.find((x) => x.key === 'soil_water');
 			const previousSoilWaterMm = node.kind !== 'farm' || !soil ? null : r.index === 0 ? 0 : soil.previous;

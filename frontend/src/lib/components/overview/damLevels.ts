@@ -8,15 +8,72 @@
 // On a forecast run the figures are the record's (issue #51): the summary's
 // are, and damLevel() stops the series at `forecastFrom`, so "at the end" is
 // the day before the forecast, never a forecast day.
+// Every level is a share of the dam's capacity on that day (engine ≥ 1.30.0,
+// issue #67): a dam losing capacity to sediment, or in service from a date,
+// holds a different volume on each day (damCapacityOn), so a long record
+// surveyed recently never reads above 100 %. A dam whose capacity doesn't
+// change reads against its entered capacity, as before.
 import { fmtNum } from '$lib/format/number';
-import { beforeForecast, fromEpochDay, toEpochDay, type DailySeries, type FarmSummary } from '@water-management/engine';
+import { beforeForecast, damCapacityOn, fromEpochDay, toEpochDay, type DailySeries, type FarmSummary, type NetworkNode } from '@water-management/engine';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
+
+/** A dam's fields that change its capacity over a run (engine ≥ 1.30.0, docs/model.md §2.7g). */
+export type DamDev = Pick<NetworkNode, 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom'>;
+
+/** A dam as a run saw it: its entered capacity, minimum level (%) and, when set, what changes its capacity. */
+export interface RunDam {
+	nodeId: string;
+	name: string;
+	capacityM3: number;
+	minPct: number;
+	/** Present only when the dam's capacity changes over the run (a sediment rate, an in-service date). */
+	dev?: DamDev;
+}
+
+/** The dam's capacity (m³) on epoch day `day`: the entered capacity unless its capacity changes (engine damCapacityOn). */
+export function capacityOnDay(dam: { capacityM3: number; dev?: DamDev }, day: number): number {
+	return dam.dev ? damCapacityOn({ kind: 'farm', damCapacityM3: dam.capacityM3, abstractionFrom: null, ...dam.dev }, day) : dam.capacityM3;
+}
+
+/** The dam's capacity (m³) on an ISO date. */
+export function capacityOnDate(dam: { capacityM3: number; dev?: DamDev }, iso: string): number {
+	return dam.dev ? capacityOnDay(dam, toEpochDay(iso)) : dam.capacityM3;
+}
+
+/** The capacity on each index of a series starting `startDate`, or undefined when it doesn't change (use capacityM3). */
+export function capacityOver(dam: { capacityM3: number; dev?: DamDev }, startDate: string): ((i: number) => number) | undefined {
+	if (!dam.dev) return undefined;
+	const d0 = toEpochDay(startDate);
+	return (i) => capacityOnDay(dam, d0 + i);
+}
+
+/** Storage as % of a day's capacity: 0 on a day the dam has none (before it is in service). */
+export const pctOfCapacity = (m3: number, capacityM3: number) => (capacityM3 > 0 ? (m3 / capacityM3) * 100 : 0);
+
+const hasDev = (n: { damSurveyDate?: unknown; damSedimentPctPerYear?: unknown; damInServiceFrom?: unknown }) =>
+	(typeof n.damSedimentPctPerYear === 'number' && n.damSedimentPctPerYear > 0 && typeof n.damSurveyDate === 'string') || typeof n.damInServiceFrom === 'string';
+
+/** The node's DamDev when its capacity changes over a run, else undefined (so an unchanged dam reads as before). */
+export function damDevOf(n: { kind?: unknown; damSurveyDate?: unknown; damSedimentPctPerYear?: unknown; damInServiceFrom?: unknown }): DamDev | undefined {
+	if ((n.kind !== undefined && n.kind !== 'farm') || !hasDev(n)) return undefined;
+	return {
+		damSurveyDate: typeof n.damSurveyDate === 'string' ? n.damSurveyDate : null,
+		damSedimentPctPerYear: typeof n.damSedimentPctPerYear === 'number' ? n.damSedimentPctPerYear : null,
+		damInServiceFrom: typeof n.damInServiceFrom === 'string' ? n.damInServiceFrom : null
+	};
+}
 
 export interface DamLevel {
 	nodeId: string;
 	name: string;
+	/** The entered capacity (the dam's size). */
 	capacityM3: number;
+	/** What changes its capacity over the run; the % figures below are shares of the day's capacity. */
+	dev?: DamDev;
+	/** The capacity on endDate, and AGO_DAYS before it, when it differs from capacityM3 (absent: capacityM3). */
+	endCapacityM3?: number;
+	agoCapacityM3?: number;
 	/** The dam's minimum operating level, % of capacity (0 when none). */
 	minPct: number;
 	/** Storage on the run's last day with a value, % of capacity, and that day. */
@@ -42,7 +99,7 @@ export const AGO_DAYS = 30;
  * days from `forecastFrom` on are left out.
  */
 export function damLevel(
-	dam: { nodeId: string; name: string; capacityM3: number; minPct: number },
+	dam: RunDam,
 	series: DailySeries,
 	forecastFrom: string | null = null
 ): DamLevel | null {
@@ -57,7 +114,8 @@ export function damLevel(
 		}
 	}
 	if (last < 0) return null;
-	const pct = (x: number) => (x / dam.capacityM3) * 100;
+	const capOn = capacityOver(dam, series.startDate);
+	const pct = (x: number, i: number) => (capOn ? pctOfCapacity(x, capOn(i)) : (x / dam.capacityM3) * 100);
 	const from = Math.max(0, last - YEAR_DAYS + 1);
 	// The first day of the lowest level: scan forward, replace only on a lower value.
 	let low = -1;
@@ -67,20 +125,21 @@ export function damLevel(
 		if (x == null || !Number.isFinite(x)) continue;
 		if (low < 0 || x < v[low]!) low = i;
 		// A small tolerance: the engine holds a dam at its minimum as a float.
-		if (dam.minPct > 0 && pct(x) <= dam.minPct + 1e-6) daysAtMin++;
+		if (dam.minPct > 0 && (!capOn || capOn(i) > 0) && pct(x, i) <= dam.minPct + 1e-6) daysAtMin++;
 	}
 	const ago = last - AGO_DAYS >= 0 ? v[last - AGO_DAYS] : null;
 	return {
 		nodeId: dam.nodeId,
 		name: dam.name,
 		capacityM3: dam.capacityM3,
+		...(capOn ? { dev: dam.dev, endCapacityM3: capOn(last), agoCapacityM3: capOn(last - AGO_DAYS) } : {}),
 		minPct: dam.minPct,
-		endPct: pct(v[last]!),
+		endPct: pct(v[last]!, last),
 		endDate: addDays(series.startDate, last),
-		lowPct: pct(v[low]!),
+		lowPct: pct(v[low]!, low),
 		lowDate: addDays(series.startDate, low),
 		daysAtMin,
-		agoPct: ago != null && Number.isFinite(ago) ? pct(ago) : null
+		agoPct: ago != null && Number.isFinite(ago) ? pct(ago, last - AGO_DAYS) : null
 	};
 }
 
@@ -97,27 +156,42 @@ export interface DamsToday {
 /**
  * All dams together, weighted by capacity (a 90 000 m³ dam counts more than a
  * 5 000 m³ one): total storage over total capacity, and its change over the
- * last AGO_DAYS days. null without levels.
+ * last AGO_DAYS days. null without levels. Each dam's capacity is the day's
+ * (endCapacityM3, agoCapacityM3), so the total is a share of what the dams
+ * held on those days.
  */
 export function damsToday(levels: readonly DamLevel[]): DamsToday | null {
 	if (!levels.length) return null;
 	let cap = 0;
+	let agoCap = 0;
 	let end = 0;
 	let ago = 0;
 	let allAgo = true;
 	let endDate = levels[0]!.endDate;
 	for (const l of levels) {
-		cap += l.capacityM3;
-		end += (l.endPct / 100) * l.capacityM3;
+		const endCap = l.endCapacityM3 ?? l.capacityM3;
+		const agoCapL = l.agoCapacityM3 ?? l.capacityM3;
+		cap += endCap;
+		agoCap += agoCapL;
+		end += (l.endPct / 100) * endCap;
 		if (l.agoPct === null) allAgo = false;
-		else ago += (l.agoPct / 100) * l.capacityM3;
+		else ago += (l.agoPct / 100) * agoCapL;
 		if (l.endDate > endDate) endDate = l.endDate;
 	}
-	const pct = (end / cap) * 100;
-	return { pct, change: allAgo ? pct - (ago / cap) * 100 : null, dams: levels.length, endDate };
+	const pct = pctOfCapacity(end, cap);
+	return { pct, change: allAgo && agoCap > 0 ? pct - (ago / agoCap) * 100 : null, dams: levels.length, endDate };
 }
 
-type DamNode = { id: string; name?: string; kind?: unknown; damCapacityM3?: unknown; damMinPct?: unknown };
+type DamNode = {
+	id: string;
+	name?: string;
+	kind?: unknown;
+	damCapacityM3?: unknown;
+	damMinPct?: unknown;
+	damSurveyDate?: unknown;
+	damSedimentPctPerYear?: unknown;
+	damInServiceFrom?: unknown;
+};
 
 /**
  * The dams a run stored storage for: nodes with a capacity and a dam_storage
@@ -126,22 +200,27 @@ type DamNode = { id: string; name?: string; kind?: unknown; damCapacityM3?: unkn
  * run saved before it kept its model. The model keeps the minimum level as a
  * fraction of capacity (`damMinPct` 0.1 = 10 %), and only a farm's dam has
  * one (the engine's dead storage; the node form offers it on farms only), so
- * it comes back as a percentage, 0 for any other node.
+ * it comes back as a percentage, 0 for any other node. A dam whose capacity
+ * changes over the run carries `dev` (damDevOf), read by capacityOnDay.
  */
 export function damsInRun(
 	runNodes: readonly DamNode[] | undefined,
 	liveNodes: readonly DamNode[],
 	refs: readonly { key: string; nodeId: string | null }[]
-): { nodeId: string; name: string; capacityM3: number; minPct: number }[] {
+): RunDam[] {
 	const nodes = runNodes?.length ? runNodes : liveNodes;
 	const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 	return nodes
-		.map((n) => ({
-			nodeId: n.id,
-			name: n.name || '(unnamed)',
-			capacityM3: num(n.damCapacityM3),
-			minPct: n.kind === undefined || n.kind === 'farm' ? num(n.damMinPct) * 100 : 0
-		}))
+		.map((n): RunDam => {
+			const dev = damDevOf(n);
+			return {
+				nodeId: n.id,
+				name: n.name || '(unnamed)',
+				capacityM3: num(n.damCapacityM3),
+				minPct: n.kind === undefined || n.kind === 'farm' ? num(n.damMinPct) * 100 : 0,
+				...(dev ? { dev } : {})
+			};
+		})
 		.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
 }
 
@@ -157,18 +236,20 @@ export function damInRun(
 	liveNodes: readonly DamNode[],
 	refs: readonly { key: string; nodeId: string | null }[],
 	nodeId: string
-): { nodeId: string; name: string; capacityM3: number; minPct: number } | null {
+): RunDam | null {
 	return damsInRun(runNodes, liveNodes, refs).find((d) => d.nodeId === nodeId) ?? null;
 }
 
 /**
- * A dam's storage at the end of the run, % of the run's capacity, from the run
+ * A dam's storage at the end of the run, % of the run's capacity on `endDate`
+ * (the summary's last day, latestRun.ts historyEnd), from the run
  * summary (engine ≥ 1.2.0, issue #55); undefined when the summary lacks the
  * figure (a run saved before it), so the caller reads the series (damLevel).
  */
-export function damEndPctFromSummary(dam: { nodeId: string; capacityM3: number }, farms: readonly FarmSummary[]): number | undefined {
+export function damEndPctFromSummary(dam: { nodeId: string; capacityM3: number; dev?: DamDev }, farms: readonly FarmSummary[], endDate: string): number | undefined {
 	const end = farms.find((f) => f.nodeId === dam.nodeId)?.damEndM3;
-	return end === undefined ? undefined : (end / dam.capacityM3) * 100;
+	if (end === undefined) return undefined;
+	return dam.dev ? pctOfCapacity(end, capacityOnDate(dam, endDate)) : (end / dam.capacityM3) * 100;
 }
 
 /**
@@ -210,9 +291,11 @@ export function damEndTile(end: DamEnd | null, liveCapacityM3: number): { value:
  * storage has a value every day): the run's last day, or on a forecast run
  * the day before the forecast (latestRun.ts historyEnd). null when any dam lacks the figures (a run saved before
  * them): the caller falls back to the series (loadDamLevels). Emptiest first.
+ * Each figure is a share of the capacity on its own day (the end, 30 days
+ * before it, the low's date; damDaysAtMin is the engine's, already so).
  */
 export function damLevelsFromSummary(
-	dams: readonly { nodeId: string; name: string; capacityM3: number; minPct: number }[],
+	dams: readonly RunDam[],
 	farms: readonly FarmSummary[],
 	endDate: string
 ): DamLevel[] | null {
@@ -220,15 +303,17 @@ export function damLevelsFromSummary(
 	for (const d of dams) {
 		const f = farms.find((x) => x.nodeId === d.nodeId);
 		if (f?.damEndM3 === undefined || f.damLowM3 === undefined || f.damLowDate === undefined || f.damDaysAtMin === undefined) return null;
-		const pct = (x: number) => (x / d.capacityM3) * 100;
+		const agoDate = addDays(endDate, -AGO_DAYS);
+		const pct = (x: number, date: string) => (d.dev ? pctOfCapacity(x, capacityOnDate(d, date)) : (x / d.capacityM3) * 100);
 		out.push({
 			...d,
-			endPct: pct(f.damEndM3),
+			...(d.dev ? { endCapacityM3: capacityOnDate(d, endDate), agoCapacityM3: capacityOnDate(d, agoDate) } : {}),
+			endPct: pct(f.damEndM3, endDate),
 			endDate,
-			lowPct: pct(f.damLowM3),
+			lowPct: pct(f.damLowM3, f.damLowDate),
 			lowDate: f.damLowDate,
 			daysAtMin: f.damDaysAtMin,
-			agoPct: f.damAgoM3 == null ? null : pct(f.damAgoM3)
+			agoPct: f.damAgoM3 == null ? null : pct(f.damAgoM3, agoDate)
 		});
 	}
 	return sortDamLevels(out);
@@ -255,7 +340,7 @@ export const LOW_PCT = 30;
  * progress. Emptiest first; a dam whose series has no value is left out.
  */
 export async function loadDamLevels(
-	dams: readonly { nodeId: string; name: string; capacityM3: number; minPct: number }[],
+	dams: readonly RunDam[],
 	get: (nodeId: string) => Promise<DailySeries>,
 	atOnce = 4,
 	onDone?: (done: number) => void,

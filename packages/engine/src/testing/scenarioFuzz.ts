@@ -63,6 +63,12 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 				return { levelM: 100 + depth * f, areaM2: (top / depth) * f, volumeM3: top * f };
 			});
 		}
+		case 'damSurveyDate':
+		case 'damInServiceFrom':
+		case 'abstractionFrom':
+			return g.bool(0.3) ? null : fromEpochDay(toEpochDay('1985-01-01') + g.int(0, 40 * 365));
+		case 'damSedimentPctPerYear':
+			return g.pick([null, 0, g.float(0, 0.05)]);
 		default:
 			// Every other editable node field is a fraction 0–1.
 			return g.frac();
