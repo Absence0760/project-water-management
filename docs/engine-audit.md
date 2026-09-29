@@ -263,14 +263,18 @@ end-to-end comparison of natural flow from rain is retired (below).
   column differs.
 - **N1 (engine ≥ 0.16.0):** the workbook's return flow % r runs as
   efficiency 1 − r with every loss returning (migration 006). Workbook F is
-  compared with `crop_requirement` (the daily R1 bound). On every farm with
-  r > 0, every node downstream of one, and both ends of a transfer touching
-  one (`n1Affected`), supplied, deficit, inflow_upstream, transfer,
-  dam_storage, spill, outflow, ewr_shortfall and ewr_shortfall_incremental
-  are skipped, and so are the catchment outflow and EWR-not-met series when
-  the outlet is among them. Where that covers most of the network, the suite
-  checks the routing mainly through the runoff, EWR and crop-requirement
-  columns and the invariants.
+  compared with `crop_requirement` (the daily R1 bound). The network columns
+  N1 moves (supplied, deficit, inflow_upstream, transfer, dam_storage, spill,
+  outflow, ewr_shortfall, ewr_shortfall_incremental, and the catchment
+  outflow and EWR-not-met) are compared against a second run, the **N1
+  replay** (issue #68): each farm with e < 1 gets a demand factor of e, so it
+  abstracts e·F ÷ e = F, the workbook's demand, and returns β(1 − e)·G = r·G
+  with β = 1, the workbook's return. Its supplied, return flow and everything
+  downstream are then the workbook's again (the "N1 replay" test checks D = F
+  and T = r·G per farm and fails on an N1 farm with β ≠ 1). Up to #68 these
+  columns were skipped on every N1 farm and everything below one, which on
+  the client catchment was most of the network; what is still skipped is N4
+  (below).
 - **N2 (engine ≥ 0.16.0):** the replay gives every dam an area of 0 m² and no
   seepage, which is the workbook's dam bit for bit, so no column is listed
   for it. A separate test runs the estimated areas on the client catchment:
@@ -278,12 +282,18 @@ end-to-end comparison of natural flow from rain is retired (below).
   dam storage is lower.
 - **N4 / Q18 (engine ≥ 0.16.0):** a transfer is capped at the destination's
   room, and rules run by priority. The replay runs the workbook's rules at
-  priority 0; where their sources and destinations are already in
-  `n1Affected` (N1), no further column is listed. Where the room binds,
-  the transfer, both dams' storage and spill, and everything downstream would
-  differ from the workbook. From 0.19.0 the room also counts the
-  destination dam's rain, evaporation and seepage; the replay's dams have
-  none (N2 above), so nothing changes.
+  priority 0. Where the room binds (on the client catchment the destination
+  is near full on almost every day the engine moves less), the workbook pours
+  into a full dam that spills, and the engine leaves the water in the source,
+  which spills it there instead. No input sets a transfer's volume, so the
+  replay can't undo it: on both ends of every enabled rule, and below only
+  one end, the N1 columns are skipped (`n4Ends`, `n4OneEnd`); below the node
+  where the ends' flows join (`n4Joined`), outflow and inflow_upstream are
+  still compared (the volume is the same, mean rule) and only the columns
+  that depend on the day (supplied, deficit, transfer, dam_storage, spill and
+  the two EWR shortfalls; the catchment's EWR-not-met) are skipped. From
+  0.19.0 the room also counts the destination dam's rain, evaporation and
+  seepage; the replay's dams have none (N2 above), so nothing changes.
 - **Q17 (engine ≥ 0.17.0):** the farm's EWR charge at the EWR sites replaces
   AB as what drives curtailment, and the workbook has no charge. AB itself
   (`ewr_shortfall_incremental`, now the diagnostic reach shortfall) is still

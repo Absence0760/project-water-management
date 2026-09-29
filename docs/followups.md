@@ -298,13 +298,21 @@ collected as a checklist in issue #46; tick it there as they answer.
       natural-MAR tolerance. Still to build, not a judgement: a scenario op
       for a dam's surveyed curve (§ Yield) and GN 538's quaternary → rate
       schedule as data (Appendix B is a scan; the rate is an input today).
-- [ ] **Client regression suite is thinner since N1.** Client farms with
-      return flow, which the new efficiency model can't reproduce, have
-      their balance columns skipped by the replay and everything
-      downstream (listed under N1). It now checks the network mainly through
-      runoff, EWR and crop requirement. Durable fix: replay the workbook's
-      own G and T per farm into the network (as `[Shortfalls]` already is)
-      so the downstream columns are tested again.
+- [x] **Client regression suite is thinner since N1** (fixed 2026-09-28,
+      issue #68). The suite now compares the N1 columns against an **N1
+      replay**: each farm with e < 1 runs with a demand factor of e, so it
+      abstracts the workbook's F and returns r·G (β = 1), and the network
+      downstream is the workbook's again (engine-audit.md § regression suite,
+      N1). That restored about half the network comparisons N1 had skipped on
+      the client catchment. The rest are N4: the one transfer's destination is
+      near full, so the room cap moves less than the workbook's rule does, and
+      no input can replay a transfer's volume. Both ends and anything below
+      only one end stay skipped; below the join, outflow and inflow are
+      compared again and only the day-dependent columns are skipped. Also
+      found on the way: the suites read `data/client-catchment` only, while
+      `pnpm seed:demo` writes `data/client-<name>-app/`, so on a machine set
+      up by the seed they skipped. `WBT_CLIENT_CATCHMENT_DIR` now points them
+      at an extract (run-locally.md).
 - [x] **Validation scores are saved with a run** (issue #4). Apply stores the
       fit record (seed, objective, window, exclusions, the in-sample and
       validation scores) with the parameters, each run snapshots it, and the

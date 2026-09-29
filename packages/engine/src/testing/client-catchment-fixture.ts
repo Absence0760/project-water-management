@@ -63,17 +63,29 @@ export interface ClientCatchmentFixture {
 type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
 
 /**
- * Loads `data/client-catchment` (from `scripts/wbt-import/extract_project.py`)
+ * Where the client-catchment extract may be, in order: `WBT_CLIENT_CATCHMENT_DIR`
+ * (absolute, or relative to the working directory) when set, else
+ * `data/client-catchment` from the repo root or a workspace. `pnpm seed:demo`
+ * extracts each workbook to `data/client-<name>-app/`, a name the repo never
+ * carries, so point the variable at the right one (docs/run-locally.md).
+ */
+export function clientCatchmentDirs(): string[] {
+	const env = (globalThis as { process?: { cwd(): string; env: Record<string, string | undefined> } }).process;
+	const cwd = env?.cwd() ?? '.';
+	const override = env?.env.WBT_CLIENT_CATCHMENT_DIR;
+	if (override) return [override.startsWith('/') ? override : `${cwd}/${override}`];
+	return ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment'].map((p) => `${cwd}/${p}`);
+}
+
+/**
+ * Loads `data/client-catchment` (or `WBT_CLIENT_CATCHMENT_DIR`; from `scripts/wbt-import/extract_project.py`)
  * and builds the replay `ModelInput`, or returns `null` when the gitignored
  * fixture is absent (CI, a fresh clone) — callers `describe.skipIf(!fixture)`.
  */
 export async function loadClientCatchmentFixture(): Promise<ClientCatchmentFixture | null> {
 	const fsSpecifier = 'node:fs';
 	const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
-	const cwd = (globalThis as { process?: { cwd(): string } }).process?.cwd() ?? '.';
-	const dataDir = ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment']
-		.map((p) => `${cwd}/${p}`)
-		.find((p) => fs.existsSync(`${p}/expected.json`));
+	const dataDir = clientCatchmentDirs().find((p) => fs.existsSync(`${p}/expected.json`));
 	if (!dataDir) return null;
 
 	const project = JSON.parse(fs.readFileSync(`${dataDir}/project.json`, 'utf8')) as ImportedProject;

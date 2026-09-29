@@ -31,6 +31,7 @@ import {
 } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel } from './calendar';
 import { defaultDataQualitySettings, defaultProjectSettings, SERIES_KINDS, type NetworkNode } from './project';
+import { clientCatchmentDirs } from './testing/client-catchment-fixture';
 
 // 1 m³/s for one day = 0.0864 Mm³.
 const constant = (startDate: string, days: number, v: number | null) => ({ startDate, values: new Array(days).fill(v) });
@@ -846,10 +847,7 @@ describe('quality checks do not depend on the local time zone', () => {
 type Fs = { existsSync(p: string): boolean; readFileSync(p: string, enc: string): string };
 const fsSpecifier = 'node:fs';
 const fs = (await import(/* @vite-ignore */ fsSpecifier)) as Fs;
-const cwd = (globalThis as { process?: { cwd(): string } }).process?.cwd() ?? '.';
-const dataDir = ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment']
-	.map((p) => `${cwd}/${p}`)
-	.find((p) => fs.existsSync(`${p}/project.json`));
+const dataDir = clientCatchmentDirs().find((p) => fs.existsSync(`${p}/project.json`));
 
 describe.skipIf(!dataDir)('series checks on the client catchment (needs data/client-catchment)', () => {
 	const load = () => {
