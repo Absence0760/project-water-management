@@ -11,7 +11,7 @@ import { outlookError, resolveOutlook } from './settings';
 import { buildOutlookView, monthlyPlanOps, outlookRequest, outlookState, parseLevels, seasonMonths } from './view';
 
 const SEASON = { decisionDate: '2012-10-01', seasonEnd: '2013-04-30' };
-const DEFAULTS: OutlookSettings = { season: null, planningShare: null };
+const DEFAULTS: OutlookSettings = { season: null, planningShare: null, review: null };
 const model = {
 	nodes: [
 		{ id: 'out', name: 'Outlet', kind: 'gauge', damCapacityM3: 0 },
@@ -31,6 +31,7 @@ function member(wy: number, below: number, factor: number): OutlookMember {
 		analogueTo: `${wy + 1}-04-30`,
 		seasonEndStorageM3: 40_000 + (wy - 2000) * 1000 * (1.2 - factor),
 		storageM3ByDam: { dam: 40_000 },
+		farms: {},
 		demandM3: 100_000 * factor,
 		suppliedM3: 90_000 * factor,
 		demandMet: 0.9,
@@ -187,7 +188,7 @@ describe('settings.outlook in the form', () => {
 		expect(resolveOutlook({})).toEqual(DEFAULTS);
 		const season = { startMonth: 11, startDay: 15, endMonth: 3, endDay: 31 };
 		const r = resolveOutlook({ outlook: { season, planningShare: 0.7 } });
-		expect(r).toEqual({ season, planningShare: 0.7 });
+		expect(r).toEqual({ season, planningShare: 0.7, review: null });
 		expect(r.season).not.toBe(season);
 		expect(outlookError(DEFAULTS)).toBeNull();
 		expect(outlookError({ season, planningShare: 1 })).toBeNull();
@@ -196,5 +197,14 @@ describe('settings.outlook in the form', () => {
 		expect(outlookError({ season: { startMonth: 4, startDay: 1, endMonth: 4, endDay: 1 }, planningShare: null })).toMatch(/at least two days/);
 		expect(outlookError({ season: null, planningShare: 0 })).toMatch(/planning share/);
 		expect(outlookError({ season: null, planningShare: 1.2 })).toMatch(/planning share/);
+		// The review date (R6): a real day inside the season (the default one when none is set), after its decision date.
+		expect(resolveOutlook({ outlook: { season: null, planningShare: null, review: { month: 2, day: 1 } } }).review).toEqual({ month: 2, day: 1 });
+		expect(outlookError({ season: null, planningShare: null, review: { month: 1, day: 1 } })).toBeNull();
+		expect(outlookError({ season: null, planningShare: null, review: { month: 4, day: 30 } })).toBeNull();
+		expect(outlookError({ season: null, planningShare: null, review: { month: 10, day: 1 } })).toMatch(/after the decision date/);
+		expect(outlookError({ season: null, planningShare: null, review: { month: 7, day: 1 } })).toMatch(/after the decision date/);
+		expect(outlookError({ season: null, planningShare: null, review: { month: 2, day: 29 } })).toMatch(/29 February/);
+		expect(outlookError({ season: { startMonth: 1, startDay: 15, endMonth: 6, endDay: 30 }, planningShare: null, review: { month: 3, day: 1 } })).toBeNull();
+		expect(outlookError({ season: { startMonth: 1, startDay: 15, endMonth: 6, endDay: 30 }, planningShare: null, review: { month: 12, day: 1 } })).toMatch(/after the decision date/);
 	});
 });
