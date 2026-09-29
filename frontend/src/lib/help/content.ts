@@ -3,13 +3,15 @@
 //
 //   tips.ts      term, short text, units, field keys: what a <HelpTip> shows.
 //                HelpTip loads that module alone (~11 KB gzip), never this one.
-//   articles.ts  the fuller text, other names, related ids and source, by id.
+//   articles.ts  the fuller text, other names, related ids and source, by id;
+//                articles-data.ts the same for the "Input data" topic (its own chunk).
 //   farmer.ts    the farm view's words, whole (/farm/words loads only those).
 //
 // Every /help page loads this (the help sidebar lists the glossary's terms),
 // so the /help pages get every entry; nothing outside /help imports it.
 
-import { ARTICLES } from './articles';
+import { ARTICLES as TOPIC_ARTICLES } from './articles';
+import { DATA_ARTICLES } from './articles-data';
 import { FARMER_HELP } from './farmer';
 import { TIPS, tipFor } from './tips';
 import type { HelpCategory, HelpEntry } from './types';
@@ -30,6 +32,9 @@ export const CATEGORY_TITLES: Record<HelpCategory, string> = {
 	fit: 'Goodness of fit',
 	farmer: 'Words on your hydrological unit page'
 };
+
+/** Every article by id: articles.ts and the "Input data" topic's (articles-data.ts). */
+export const ARTICLES = { ...TOPIC_ARTICLES, ...DATA_ARTICLES };
 
 const regions = new Intl.DisplayNames(['en'], { type: 'region' });
 

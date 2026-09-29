@@ -1,5 +1,8 @@
 <script module lang="ts">
-	// Settings → Calibration record → Flow gaps (issue #66): its own chunk, loaded when the section draws.
+	// Settings → Calibration record's quality flags and flow gaps (issue #66): each its own chunk,
+	// loaded when the section draws, so the Settings tab chunk stays under its size ceiling. The
+	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
+	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
 	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
 </script>
 
@@ -38,7 +41,6 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
-	import QualityFlagsFields from './QualityFlagsFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import { api, type Project } from '$lib/api';
@@ -819,7 +821,9 @@
 			availableKinds={seriesKinds}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
-		<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />
+		<Lazy load={loadQualityFlags}>
+			{#snippet children(QualityFlagsFields)}<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />{/snippet}
+		</Lazy>
 		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
 		{#if s.flowGapFill}
 			<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->

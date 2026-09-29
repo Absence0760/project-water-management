@@ -204,6 +204,20 @@ export function svelteRuntimeChunk(id: string): string | undefined {
 	return /\/node_modules\/svelte\/src\//.test(id) && !id.includes('/svelte/src/compiler/') ? 'svelte' : undefined;
 }
 
+/**
+ * The help glossary's "Input data" articles (src/lib/help/articles-data.ts)
+ * as a chunk of their own (issue #66). Every /help page loads the glossary's
+ * long text through content.ts, and as one module (articles.ts) it reached the
+ * bundle guard's per-chunk ceiling. Split into two modules, Rolldown would
+ * still put both in one chunk (the same importers), so this group names the
+ * second: the /help pages load the same bytes as two files, in parallel, each
+ * well under the ceiling. Nothing outside /help imports either (content.ts
+ * says so), so no other page gains a request.
+ */
+export function helpArticlesChunk(id: string): string | undefined {
+	return /\/src\/lib\/help\/articles-data\.ts$/.test(id) ? 'help-articles-data' : undefined;
+}
+
 export default defineConfig({
 	plugins: [shortFileNames(), autocalWorkerChunk(), preload.plugin, chunkModuleMap(), sveltekit()],
 	// The spreadsheet workers (`new Worker(new URL(…))`) are separate Rolldown
@@ -235,7 +249,8 @@ export default defineConfig({
 		rolldownOptions: {
 			// svelteRuntimeChunk as a code-splitting group: Rolldown's replacement for
 			// Rollup's manualChunks, which Rolldown deprecates; same result.
-			output: { codeSplitting: { groups: [{ name: svelteRuntimeChunk }] } },
+			// helpArticlesChunk likewise: the glossary's long text apart from the rest of /help.
+			output: { codeSplitting: { groups: [{ name: svelteRuntimeChunk }, { name: helpArticlesChunk }] } },
 			treeshake: {
 				// See engineIsPure. Rolldown otherwise groups engine code by phantom
 				// edges: the farm and share pages loaded ~13 KB of engine code they

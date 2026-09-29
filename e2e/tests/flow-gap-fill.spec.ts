@@ -58,6 +58,9 @@ test('the Data tab shades the gap days a run fills, and Settings turns the filli
 	const fill = gauge.getByRole('checkbox', { name: 'Fill gaps in a run' });
 	await expect(fill).toBeChecked();
 	await expect(gauge.getByLabel('Interpolate gaps up to (days)')).toHaveValue('5');
+	// One control for scoring filled days: the quality flags' infilled treatment, which says so here.
+	await expect(page.getByTestId('gap-fill-scoring')).toContainText('Infilled days');
+	await expect(page.getByLabel('Infilled days')).toHaveValue('exclude');
 	await fill.uncheck();
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
