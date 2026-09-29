@@ -99,13 +99,14 @@
 		const i = lf?.points.indexOf(p) ?? -1;
 		return i >= 0 ? c.flowsM3s[i]! : null;
 	};
+	// Four checks before engine 1.19.0; the recession diagnostics (CR-13) are the fifth.
+	const checkCount = $derived(checks.recession === undefined ? 'Four' : 'Five');
 </script>
 
 <section aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Plausibility checks <HelpTip key="plausibility-checks" /></h3>
 	<p class="muted small">
-		{checks.recession === undefined ? 'Four' : 'Five'} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season:
-		{seasonText(checks.drySeason)}.
+		{checkCount} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season: {seasonText(checks.drySeason)}.
 	</p>
 	<ul class="flags" aria-label="Check results">
 		{#each flags as f (f.label)}
