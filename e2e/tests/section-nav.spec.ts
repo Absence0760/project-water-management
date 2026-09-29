@@ -161,6 +161,16 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	const menu = page.getByRole('navigation', { name: 'River sections' });
 	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'EWR by month', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
 	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+	// The group names show on the bar, each just before its first link, so the gaps between groups read as groups (issue #162).
+	const names = menu.locator('.groups .grp-h');
+	await expect(names).toHaveText(['The reserve', 'How sure, and what if', 'Water balance']);
+	for (const [name, first] of [['The reserve', 'Flow vs reserve'], ['How sure, and what if', 'Uncertainty'], ['Water balance', 'Water account']] as const) {
+		const n = (await names.filter({ hasText: name }).boundingBox())!;
+		const l = (await menu.getByRole('link', { name: first }).boundingBox())!;
+		expect(Math.round(n.y)).toBe(Math.round(l.y));
+		expect(n.x + n.width).toBeLessThanOrEqual(l.x);
+		expect(l.x - (n.x + n.width)).toBeLessThan(12);
+	}
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
 	// One row at 1440, so the first screen, which fits the window below it, loses little.
 	expect(await barRows(menu)).toBe(1);
