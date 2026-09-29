@@ -114,7 +114,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 const TS_URL_SINKS =
 	/\.(href|src|action|formAction|srcdoc)\s*=(?!=)|\.setAttribute\(\s*['"`](href|src|action|formaction|srcdoc|xlink:href)['"`]|\blocation\s*=(?!=)|\blocation\.(assign|replace)\s*\(|\bwindow\.open\s*\(|['"`]\s*(javascript|vbscript)\s*:/gi;
 const TS_URL_SINKS_ALLOWED: Record<string, string> = {
-	'lib/export/download.ts': 'saveBlob: a.href = URL.createObjectURL(blob), a blob: URL for a download'
+	'lib/export/download.ts': 'saveBlob: a.href = URL.createObjectURL(blob), a blob: URL for a download',
+	'lib/auth/wafCaptcha.ts': 'loadCaptchaSdk: script.src = the build-time CAPTCHA SDK URL, refused unless it matches CAPTCHA_SCRIPT (https, *.captcha-sdk.awswaf.com/<id>/jsapi.js), the one origin the CSP allows'
 };
 
 function sourceFiles(dir: string, ext: RegExp): string[] {

@@ -87,3 +87,15 @@ waf_rate_limit_per_ip = 1000
 # accounts (password spraying). 10-300; raise it with the number of users
 # (docs/deployment.md § Runbooks, Credential stuffing).
 # login_failed_alarm_per_15min = 30
+
+# Sign-in CAPTCHA (waf.tf SignInCaptchaPerIP): past this many sign-ins per IP
+# in 5 minutes the WAF asks for a puzzle (10-99, below the auth block's 100).
+# COUNT switches the puzzle off but keeps counting (the runbook's switch-off).
+# waf_signin_captcha_per_5min = 20
+# waf_signin_captcha_action   = "CAPTCHA"
+#
+# The account's CAPTCHA integration URL (not a secret), from:
+#   aws wafv2 list-api-keys --scope CLOUDFRONT --region us-east-1 --query ApplicationIntegrationURL --output text
+# Empty: the CSP allows no WAF origin and the sign-in page says to wait
+# instead of showing the puzzle.
+# waf_captcha_integration_url = "https://<id>.edge.captcha-sdk.awswaf.com/<id>/"

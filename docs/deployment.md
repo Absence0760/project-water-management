@@ -357,9 +357,23 @@ environment's job is the required reviewer (§ 1), not storage.
 | `CLOUDFRONT_DOMAIN_NAME` | `cloudfront_domain_name` (not read by the workflows) |
 | secret `AWS_DEPLOY_ROLE_ARN` | `aws_deploy_role_arn` |
 | secret `LAMBDA_FUNCTION_URL` | `lambda_function_url` (debugging only) |
+| `WAF_CAPTCHA_SCRIPT_URL` | `waf_captcha_script_url` (the sign-in CAPTCHA's jsapi.js; empty until `waf_captcha_integration_url` is set) |
+| secret `WAF_CAPTCHA_API_KEY` | `waf_captcha_api_key` (the CAPTCHA API key for the site's domain; it ships in the public bundle, but the provider marks it sensitive) |
 
 `PUBLIC_API_URL` is not a GitHub variable: the build reads `/api` from the
 committed `frontend/.env.production`.
+
+**The sign-in CAPTCHA** ([security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha))
+needs one value Terraform can't read: the account's CAPTCHA integration URL.
+It is not a secret. Before the first apply (or any time after), run
+`aws wafv2 list-api-keys --scope CLOUDFRONT --region us-east-1 --query ApplicationIntegrationURL --output text --profile water-management`
+and set the result as `waf_captcha_integration_url` in `terraform.tfvars`.
+Apply, then run `export-tf-vars.sh` again: `deploy-frontend.yml` bakes
+`WAF_CAPTCHA_SCRIPT_URL` and the `WAF_CAPTCHA_API_KEY` secret into the build as
+`PUBLIC_WAF_CAPTCHA_SCRIPT_URL` / `PUBLIC_WAF_CAPTCHA_API_KEY`. Until then
+the WAF rule still asks for a puzzle past its threshold, and the sign-in page
+says "Too many sign-in attempts from your network. Wait a few minutes, then
+try again." instead of showing it.
 
 `PUBLIC_SITE_URL` also reaches the frontend build as `SITE_ORIGIN`
 (`deploy-frontend.yml`): the prerendered landing page (`/welcome`, issue #57)
@@ -1068,15 +1082,18 @@ Every step is an ordinary app action by an owner unless it says "operator".
     3. **A few IPs:** the WAF's auth rule already blocks each one over 100
        requests in 5 minutes. Add them to a blocking IP-set rule in
        `infra/waf.tf`, ahead of the rate rules, and apply.
-    4. **Many IPs, each under the limit:** tighten the auth rule. Lower
-       `RateLimitAuthPerIP`'s `limit` in `infra/waf.tf` (AWS minimum 100 per 5
-       minutes, the current value, so go further with a narrower scope-down on
-       `/api/auth/login` and a 1-minute `evaluation_window_sec`), add a geo
-       match blocking countries the users aren't in, or put `/api/auth/login`
-       behind the WAF's `CAPTCHA` action (AWS-hosted, no third party; the
-       sign-in page then shows the puzzle). In an emergency add the rule in
-       the console first and write it into `waf.tf` before the next apply,
-       which removes console-only rules.
+    4. **Many IPs, each under the limit:** the sign-in CAPTCHA
+       (`SignInCaptchaPerIP`, below) already asks each IP past
+       `waf_signin_captcha_per_5min` (default 20) sign-ins in 5 minutes for a
+       puzzle; its WAF metric (`water-management-frontend-SignInCaptchaPerIP`)
+       and Sampled requests show how often. To tighten: lower
+       `waf_signin_captcha_per_5min` (AWS minimum 10) and apply; add a geo
+       match blocking countries the users aren't in, ahead of the rate rules
+       in `infra/waf.tf`; or narrow `RateLimitAuthPerIP` (its limit is AWS's
+       old minimum, 100; a scope-down on `/api/auth/login` alone with a
+       1-minute `evaluation_window_sec` is stricter). In an emergency add the
+       rule in the console first and write it into `waf.tf` before the next
+       apply, which removes console-only rules.
     5. **Accounts at risk:** a `bad_password` wave may have found a password
        that works. As the schema owner, `SELECT email, failures, locked_until
        FROM login_throttle WHERE last_attempt_at > now() - interval '1 hour'
@@ -1088,9 +1105,36 @@ Every step is an ordinary app action by an owner unless it says "operator".
        signed in from an unexpected place, have the owner reset their password
        (it revokes every session) and follow
        [legal/incident-procedure.md](./legal/incident-procedure.md).
-    6. **Afterwards:** record the incident in the operator log, and if it
-       recurs, raise the CAPTCHA follow-up (security.md) from "if needed" to
-       done.
+    6. **Afterwards:** record the incident in the operator log. CAPTCHA
+       solves are billed ($0.40 per 1,000), so check Cost Explorer (WAF) too.
+12. **The sign-in CAPTCHA misfires** (people report a puzzle they can't get
+    past, or "Too many sign-in attempts from your network" when there is no
+    attack, operator). The WAF's `SignInCaptchaPerIP` rule
+    ([security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)) asks an
+    IP past `waf_signin_captcha_per_5min` sign-ins in 5 minutes for a puzzle;
+    the sign-in page shows it and signs in with the token.
+    1. **Look:** WAF console, region Global → the ACL → Sampled requests for
+       `SignInCaptchaPerIP`: one office or farm address (many people behind
+       one NAT) means the threshold is too low for them; every IP means the
+       puzzle itself is broken (the browser console on `/login` shows a CSP
+       refusal or a script error; the `WAF_CAPTCHA_SCRIPT_URL` variable or
+       the `WAF_CAPTCHA_API_KEY` secret is empty or stale, after
+       `waf_captcha_integration_url` changed; or the key's domain isn't the
+       site's).
+    2. **Switch the puzzle off, keep the counts:** set
+       `waf_signin_captcha_action = "COUNT"` and apply (a WAF-only change,
+       seconds to take effect). The rule then only counts, and every sign-in
+       goes through to the API again, where the per-address lockout and the
+       `login-failed` alarm still hold. Nothing in the app changes.
+    3. **Too low for a shared network:** raise `waf_signin_captcha_per_5min`
+       (up to 99; the auth block is at 100) and apply.
+    4. **The puzzle doesn't render:** check the integration URL
+       (`aws wafv2 list-api-keys --scope CLOUDFRONT --region us-east-1 --query ApplicationIntegrationURL --output text`)
+       against `waf_captcha_integration_url`, apply, re-export the Terraform
+       outputs to GitHub (`WAF_CAPTCHA_SCRIPT_URL`, secret
+       `WAF_CAPTCHA_API_KEY`), and deploy the web again: the script URL and
+       key are baked into the build.
+    5. Switch back to `CAPTCHA` once fixed, and record it in the operator log.
 
 ## Rollback
 

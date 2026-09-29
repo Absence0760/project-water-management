@@ -304,8 +304,9 @@ controls), and that `/%61uth/login` is refused before it is counted.
 
 **One password sprayed across many accounts.** Each account is limited on
 its own, so trying one password against many accounts from many addresses
-passes every limit above and is slowed only by the WAF's per-IP limits. It is
-**detected, not throttled**: every failed credential check logs one line,
+passes every limit above. Two controls see it: the WAF's **sign-in CAPTCHA**
+(below) makes every IP past 20 sign-ins in 5 minutes solve a puzzle, and the
+failures are **counted across all accounts**: every failed credential check logs one line,
 `{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`
 (`auth/loginFailed.ts`), which the `login-failed` alarm counts across all
 accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
@@ -333,10 +334,78 @@ accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
   crowds out real users rather than the attacker's. It also wouldn't stop a
   spray, only stretch it. The alarm costs nothing on the request path; the
   response is the operator's (a tighter or blocking WAF rule, the runbook).
-  The durable next step, if traffic shows a need, is a CAPTCHA (AWS WAF's
-  `CAPTCHA` action on `/api/auth/login`, no third party) after N global
-  failures. Trigger: this alarm firing on real traffic, or opening sign-up
-  beyond the pilot users.
+  The puzzle is per IP at the edge instead: it costs a real user nothing
+  unless their own network is over the threshold.
+
+### Sign-in CAPTCHA
+
+`infra/waf.tf` `SignInCaptchaPerIP` (issue #126): past
+`waf_signin_captcha_per_5min` (default 20) `POST /api/auth/login` requests from
+one IP in 5 minutes, AWS WAF answers a sign-in that carries no valid CAPTCHA
+token itself, with **HTTP 405 and `x-amzn-waf-action: captcha`** (an API
+request gets no interstitial page). A request with a valid token is counted
+and goes on. Below the threshold nobody sees a puzzle.
+
+- *Scope:* `POST` and exactly `/api/auth/login`, after URL-decoding,
+  normalising and lower-casing the path (as the auth block rule does), so
+  `/api/%61uth/login` counts too. Not forgot-password or the confirmation
+  resends: they answer the same `202` for every address, so they reveal and
+  guess nothing, and each address is capped at 10 emails a day (above);
+  spraying them costs mail, not accounts.
+- *Order:* after `RateLimitAuthPerIP` (100 per 5 minutes on `/api/auth/*`,
+  blocks), so an IP past 100 is blocked outright rather than offered a puzzle
+  (solves are billed, $0.40 per 1,000), and before the site-wide limit.
+- *Immunity:* a solved puzzle lasts 300 seconds (`captcha_config`, pinned
+  rather than inherited): enough to sign in; someone paying people to solve
+  puzzles buys 5 minutes, still under the 100-per-5-minute block, with every
+  failure still counted by the `login-failed` alarm.
+- *The page:* the API client turns that 405 into an `ApiError` with code
+  `captcha_required` (`frontend/src/lib/api/client.ts`, `isWafCaptcha`: the
+  header, not the status alone). The sign-in page then loads AWS's CAPTCHA
+  JavaScript API (`jsapi.js`) **only then**, renders the puzzle in the form
+  (`auth-extras/SignInCaptcha.svelte`, focus to its heading; the puzzle's
+  audio button plays a spoken version), and sends the sign-in again with the
+  token in the `x-aws-waf-token` header. A retry that gets the 405 again, or
+  a script that fails to load, says "Too many sign-in attempts from your
+  network. Wait a few minutes, then try again." (never a loop).
+  `lib/auth/wafCaptcha.test.ts` and `e2e/tests/captcha.spec.ts` (a faked 405
+  and a stub SDK) test it.
+- *Off locally:* the script URL and key are build-time config
+  (`PUBLIC_WAF_CAPTCHA_SCRIPT_URL`, `PUBLIC_WAF_CAPTCHA_API_KEY`), empty in the
+  committed env files; there is no WAF locally, so nothing asks for a puzzle.
+  A production build without them shows the "wait" message instead.
+- *The API key* (`aws_wafv2_api_key.captcha`, CloudFront scope, token domain
+  the site's domain only) lets pages on that domain render this account's
+  puzzles. It ships in the page, like any CAPTCHA site key; it goes to a
+  GitHub secret only because the provider marks it sensitive.
+- *CSP:* the one third-party origin the site allows. Once
+  `waf_captcha_integration_url` is set, the header's `script-src` and
+  `connect-src` add exactly the CAPTCHA SDK's origin
+  (`<id>.edge.captcha-sdk.awswaf.com`) and its challenge script's
+  (`<id>.edge.sdk.awswaf.com`, which `jsapi.js` loads; without it no token is
+  issued), and `media-src` allows `data:` for the audio. SvelteKit's meta CSP
+  adds the same two to `script-src` from the build's script URL
+  (`frontend/svelte.config.js` refuses any other shape). No `'unsafe-eval'`,
+  no `blob:`, no wildcard: loading AWS's SDK (2026-09) under exactly this
+  policy in Chromium drew no violation beyond its web-font stylesheet on
+  `static.captcha.awswaf.com`, left blocked (the puzzle uses the system font).
+  Guardrail runs `signin_captcha*` pin the rule, the key and the CSP.
+- *Switch-off:* `waf_signin_captcha_action = "COUNT"` keeps the rule counting
+  and stops the puzzle ([deployment.md § Runbooks](./deployment.md#runbooks),
+  The sign-in CAPTCHA misfires).
+- *Limits:*
+  - Per IP: a botnet with each address under 20 sign-ins per 5 minutes never
+    meets it; the `login-failed` alarm is what sees that.
+  - The puzzle's words are AWS's, in English (it has no Afrikaans); the
+    heading and explanation around it are translated.
+  - Anyone can load the public SDK with the public key and submit solves,
+    which AWS bills. Budgets and Cost Anomaly Detection
+    ([deployment.md § Budget alerts](./deployment.md#budget-alerts)) are the
+    backstop; AWS offers no cap on it.
+  - The challenge script's host is derived from the integration URL (same id
+    on `sdk.awswaf.com`), as AWS's SDK does today. If AWS changes that, the
+    puzzle fails to load under the CSP and the page says to wait: it fails
+    closed, and the runbook's step "the puzzle doesn't render" covers it.
 
 ## Render tokens
 
@@ -2175,7 +2244,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build
-  `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script,
+  `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script
+  (and the sign-in CAPTCHA SDK's two origins once configured, § Sign-in CAPTCHA),
   and the frontend deploy refuses a build without that meta policy
   (`infra/scripts/check-csp.mjs`). This needs `kit.csp.mode = 'hash'` in
   `frontend/svelte.config.js`. Styles keep `'unsafe-inline'`, because Svelte

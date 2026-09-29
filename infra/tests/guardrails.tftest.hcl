@@ -840,8 +840,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 2
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth + site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 3
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA and the site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -909,7 +909,7 @@ run "edge_security" {
   }
   assert {
     condition     = !can(regex("https?:", aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy))
-    error_message = "Site CSP must not allow any third-party origin (everything is self-hosted)."
+    error_message = "Site CSP must not allow any third-party origin (everything is self-hosted; the one exception, the sign-in CAPTCHA SDK, appears only once waf_captcha_integration_url is set, run signin_captcha_with_integration_url)."
   }
   assert {
     condition     = startswith(aws_cloudfront_response_headers_policy.api.security_headers_config[0].content_security_policy[0].content_security_policy, "default-src 'none'")
@@ -2437,6 +2437,155 @@ run "waf_auth_rule_matches_decoded_path" {
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
   }
+}
+
+# ---------------------------------------------------------------------------
+# The sign-in CAPTCHA (waf.tf SignInCaptchaPerIP, issue #126): only sign-in
+# POSTs, only past a per-IP rate below the auth block, a 5-minute immunity,
+# COUNT as the switch-off; the API key for the site's domain; and a CSP that
+# allows exactly the account's two SDK origins once they are known.
+# ---------------------------------------------------------------------------
+
+run "signin_captcha" {
+  command = plan
+
+  assert {
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP"])
+    error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
+  }
+  assert {
+    condition = (
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].captcha) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].count) == 0 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].block) == 0
+    )
+    error_message = "By default the sign-in rule's action is CAPTCHA, never a block."
+  }
+  assert {
+    condition     = one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).captcha_config[0].immunity_time_property[0].immunity_time == 300
+    error_message = "A solved puzzle lasts 5 minutes (captcha_config immunity_time = 300)."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].limit == 20 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].evaluation_window_sec == 300 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].limit < one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].limit
+    )
+    error_message = "The puzzle starts past 20 sign-ins per IP in 5 minutes, below the auth block's limit."
+  }
+  # Scope: POST and exactly /api/auth/login (decoded, normalised, lower-cased).
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].search_string == "POST" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].field_to_match[0].method) == 1 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].positional_constraint == "EXACTLY"
+    )
+    error_message = "The sign-in CAPTCHA applies to POST only."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].search_string == "/api/auth/login" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].positional_constraint == "EXACTLY" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].field_to_match[0].uri_path) == 1 &&
+      toset([for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].text_transformation : "${t.priority}:${t.type}"]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    )
+    error_message = "The sign-in CAPTCHA matches exactly the path /api/auth/login, after URL_DECODE, NORMALIZE_PATH and LOWERCASE."
+  }
+  assert {
+    condition = (
+      aws_wafv2_api_key.captcha.scope == "CLOUDFRONT" &&
+      aws_wafv2_api_key.captcha.token_domains == toset([var.domain_name])
+    )
+    error_message = "The CAPTCHA API key is CloudFront-scoped and valid for the site's domain only."
+  }
+  # No integration URL yet: no WAF origin in the CSP, and no script URL for the build.
+  assert {
+    condition = (
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "awswaf") &&
+      strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "media-src 'self' data:") &&
+      output.waf_captcha_script_url == ""
+    )
+    error_message = "Without waf_captcha_integration_url the CSP names no WAF origin (media-src allows data: for the puzzle's audio) and the build gets no script URL."
+  }
+}
+
+run "signin_captcha_with_integration_url" {
+  command = plan
+
+  variables {
+    waf_captcha_integration_url = "https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com/a1b2c3d4e5f6/"
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "script-src 'self' 'unsafe-inline' https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com https://a1b2c3d4e5f6.edge.sdk.awswaf.com;")
+    error_message = "script-src allows exactly the CAPTCHA SDK origin and its challenge script's."
+  }
+  assert {
+    condition     = strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "connect-src 'self' https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com https://a1b2c3d4e5f6.edge.sdk.awswaf.com;")
+    error_message = "connect-src allows exactly the same two origins (the puzzle, verify and telemetry calls)."
+  }
+  assert {
+    condition = (
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "*") &&
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "unsafe-eval") &&
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "blob:") &&
+      length(regexall("https://", aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy)) == 4
+    )
+    error_message = "The CAPTCHA adds exactly two origins to two directives: no wildcard, no unsafe-eval, no blob:."
+  }
+  assert {
+    condition     = output.waf_captcha_script_url == "https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com/a1b2c3d4e5f6/jsapi.js"
+    error_message = "The build's script URL is the integration URL's jsapi.js."
+  }
+}
+
+run "signin_captcha_count_mode" {
+  command = plan
+
+  variables {
+    waf_signin_captcha_action = "COUNT"
+  }
+
+  assert {
+    condition = (
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].count) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].captcha) == 0
+    )
+    error_message = "COUNT switches the puzzle off and keeps the rule counting."
+  }
+}
+
+run "rejects_signin_captcha_at_the_block_limit" {
+  command = plan
+  variables {
+    waf_signin_captcha_per_5min = 100
+  }
+  expect_failures = [var.waf_signin_captcha_per_5min]
+}
+
+run "rejects_signin_captcha_below_aws_minimum" {
+  command = plan
+  variables {
+    waf_signin_captcha_per_5min = 9
+  }
+  expect_failures = [var.waf_signin_captcha_per_5min]
+}
+
+run "rejects_unknown_signin_captcha_action" {
+  command = plan
+  variables {
+    waf_signin_captcha_action = "BLOCK"
+  }
+  expect_failures = [var.waf_signin_captcha_action]
+}
+
+run "rejects_a_wildcard_captcha_integration_url" {
+  command = plan
+  variables {
+    waf_captcha_integration_url = "https://*.awswaf.com/"
+  }
+  expect_failures = [var.waf_captcha_integration_url]
 }
 
 # ---------------------------------------------------------------------------

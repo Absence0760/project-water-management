@@ -118,9 +118,18 @@ jobs:
       # (og:url, og:image, canonical) need the site's absolute address
       # (frontend/svelte.config.js, kit.prerender.origin). REQUIRED_CONFIG
       # above already refuses a run without PUBLIC_SITE_URL.
+      # The sign-in CAPTCHA (frontend/src/lib/auth/wafCaptcha.ts), from the
+      # Terraform outputs waf_captcha_script_url (a variable) and
+      # waf_captcha_api_key (a secret: the provider marks it sensitive, though
+      # it ships in the public bundle like any CAPTCHA site key). Unset, both
+      # are empty, like .env.production: no puzzle, and the sign-in page says
+      # to wait. svelte.config.js refuses a script URL that isn't the CAPTCHA
+      # SDK's and adds its two origins to the meta CSP.
       - name: Build frontend
         env:
           SITE_ORIGIN: ${{ vars.PUBLIC_SITE_URL }}
+          PUBLIC_WAF_CAPTCHA_SCRIPT_URL: ${{ vars.WAF_CAPTCHA_SCRIPT_URL }}
+          PUBLIC_WAF_CAPTCHA_API_KEY: ${{ secrets.WAF_CAPTCHA_API_KEY }}
         run: pnpm build:frontend
 
       # The CloudFront CSP header allows inline scripts only because SvelteKit's

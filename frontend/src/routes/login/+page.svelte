@@ -4,6 +4,10 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { api, ApiError } from '$lib/api';
+	import { CAPTCHA_REQUIRED } from '$lib/api/client';
+	import { PUBLIC_WAF_CAPTCHA_API_KEY, PUBLIC_WAF_CAPTCHA_SCRIPT_URL } from '$env/static/public';
+	import { captchaConfig } from '$lib/auth/wafCaptcha';
+	import SignInCaptcha from '$lib/components/auth-extras/SignInCaptcha.svelte';
 	import { onMount } from 'svelte';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import { CONFIRM_EMAIL_KEY, safeNext } from '$lib/auth/redirect';
@@ -60,14 +64,24 @@
 		`${base}/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`
 	);
 
+	// The WAF's sign-in CAPTCHA (issue #126, $lib/auth/wafCaptcha): null
+	// locally and until the deploy sets it, and then the page says to wait.
+	const captcha = captchaConfig(PUBLIC_WAF_CAPTCHA_SCRIPT_URL, PUBLIC_WAF_CAPTCHA_API_KEY);
+	let puzzle = $state(false);
+
 	async function submit(e: SubmitEvent) {
 		e.preventDefault();
+		await signIn();
+	}
+
+	/** `wafToken`: the retry after a solved puzzle. */
+	async function signIn(wafToken?: string) {
 		busy = true;
 		error = null;
 		unconfirmed = null;
 		resent = null;
 		try {
-			session.user = await api.auth.login(email.trim(), password);
+			session.user = await api.auth.login(email.trim(), password, wafToken);
 			try {
 				sessionStorage.removeItem(CONFIRM_EMAIL_KEY);
 			} catch {
@@ -75,6 +89,12 @@
 			}
 			await goto(safeNext(page.url.searchParams.get('next'), `${base}/`), { replaceState: true });
 		} catch (err) {
+			// Too many sign-ins from this network: show the puzzle, once. A
+			// retry that gets the answer again (the token was refused) says to wait.
+			if (err instanceof ApiError && err.code === CAPTCHA_REQUIRED && captcha && !wafToken) {
+				puzzle = true;
+				return;
+			}
 			if (err instanceof ApiError && err.code === 'email_unconfirmed') {
 				unconfirmed = email.trim();
 				password = '';
@@ -129,6 +149,19 @@
 		</div>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+	{#if puzzle && captcha}
+		<SignInCaptcha
+			config={captcha}
+			onsolved={(token) => {
+				puzzle = false;
+				void signIn(token);
+			}}
+			onfailed={() => {
+				puzzle = false;
+				error = errorText(new ApiError(405, 'captcha failed', undefined, CAPTCHA_REQUIRED));
+			}}
+		/>
+	{/if}
 	<form onsubmit={submit}>
 		<div class="field">
 			<label for="email">{t('Email')}</label>

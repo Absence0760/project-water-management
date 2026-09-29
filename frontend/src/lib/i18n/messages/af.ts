@@ -85,6 +85,12 @@ export const af: Catalogue = {
 	'c184a764': 'Volgens die reënvoorspelling kan jou dam onder die waarskuwingsvlak van {threshold} daal: ongeveer {pct} rondom {date}.',
 	// Your dam is below the alert level of {threshold}: about {pct} on {date}.
 	'321b2d7f': 'Jou dam is onder die waarskuwingsvlak van {threshold}: ongeveer {pct} op {date}.',
+	// Check that you’re a person
+	'1f452b01': 'Bevestig dat jy ’n mens is',
+	// There were many sign-in attempts from your network, so we need to check this one is a person. Solve the puzzle and you’ll be signed in. The audio button in the puzzle plays a spoken version.
+	'bd577c5a': 'Daar was baie pogings om van jou netwerk af in te teken, so ons moet seker maak dat dit ’n mens is wat nou inteken. Los die raaisel op, dan word jy ingeteken. Die klankknoppie in die raaisel speel ’n gesproke weergawe.',
+	// Loading the puzzle…
+	'20707b22': 'Laai tans die raaisel…',
 	// If you live or are based in South Africa, South African law and courts now apply to the Terms.
 	'1ec0dbee': 'As jy in Suid-Afrika woon of daar gevestig is, geld die Suid-Afrikaanse reg en howe nou vir die Voorwaardes.',
 	// If you pass on a report, export or share link, pass it on whole, and don’t use a run that isn’t signed off as evidence for a licence application.
@@ -997,6 +1003,8 @@ export const af: Catalogue = {
 	'f3414d07': 'Iets in wat jy gestuur het, kan nie gestoor word nie (’n verborge beheerkarakter, of ’n getal wat heeltemal te groot is). Kyk na wat jy ingevul het en probeer weer.',
 	// This run wasn’t stored by the model run itself, so it can’t be signed off or decided on. Delete it and run it again.
 	'04f58c9d': 'Hierdie lopie is nie deur die modellopie self gestoor nie, so dit kan nie afgeteken word nie, en geen besluit kan daaroor geneem word nie. Vee dit uit en laat dit weer loop.',
+	// Too many sign-in attempts from your network. Wait a few minutes, then try again.
+	'3c2a05a7': 'Te veel pogings om van jou netwerk af in te teken. Wag ’n paar minute en probeer dan weer.',
 	// {n} minute / {n} minutes
 	'a60f17d2': { one: '{n} minuut', other: '{n} minute' },
 	// Couldn’t reach the server. Check your connection and try again.
