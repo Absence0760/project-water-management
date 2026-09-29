@@ -445,9 +445,10 @@ resource "aws_cloudwatch_metric_alarm" "ses_complaint_rate" {
   treat_missing_data  = "notBreaching"
 }
 
-# --- CloudFront alarms (must live in us-east-1) ----------------------------
-# A CloudWatch alarm can only notify an SNS topic in its own region, so the
-# us-east-1 alarm gets its own topic (same subscriber).
+# --- CloudFront + WAF alarms (must live in us-east-1) -----------------------
+# CloudFront metrics and a CLOUDFRONT-scope WAF's metrics are published in
+# us-east-1 only, and a CloudWatch alarm can only notify an SNS topic in its
+# own region, so these alarms get their own topic (same subscriber).
 
 # Not KMS-encrypted, as aws_sns_topic.alerts (docs/security.md § Accepted IaC findings).
 #trivy:ignore:AWS-0095
@@ -498,5 +499,77 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
   dimensions = {
     DistributionId = aws_cloudfront_distribution.frontend.id
     Region         = "Global"
+  }
+}
+
+# --- Request volume: nothing caps the edge's bill ---------------------------
+# CloudFront and WAF request charges have no ceiling. The per-IP WAF limits
+# stop one client, not a botnet that keeps each IP under them. Every allowed
+# request costs WAF $0.60/M + CloudFront $0.010 per 10k HTTPS ($1.00/M at
+# US/EU edges, ~$2.20/M at Africa's) = $1.60-2.80 per million. A request the
+# WAF blocks costs WAF's $0.60/M only: CloudFront stopped billing
+# WAF-blocked requests on 2024-10-25.
+#
+# Normal traffic is a handful of concurrent users (docs/deployment-tiers.md).
+# A cold visit loads the SPA shell and its chunks (~150 requests, immutable
+# and cached after), plus API calls, so a busy 5 minutes is ~250 requests.
+# The default threshold, 5,000 per 5 minutes
+# (var.cloudfront_requests_alarm_per_5min), is 20x that, and five people each
+# at the WAF's per-IP limit (1,000).
+#   Unseen: a flood just under it is 16.7 req/s = 1.44M/day
+#     = $2.30-4.03/day, 4-7% of the $60 monthly budget per day.
+#   Seen: the infra audit's 1,000 req/s flood is 300,000 per 5 minutes, 60x
+#     the threshold, so the first period fires, ~$0.48-0.84 in.
+# The budget's ACTUAL notifications lag 8-24 h; this is the prompt signal.
+resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
+  provider            = aws.us_east_1
+  alarm_name          = "${local.project}-cloudfront-requests"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Requests"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = var.cloudfront_requests_alarm_per_5min
+  alarm_description   = "CloudFront served more than ${var.cloudfront_requests_alarm_per_5min} requests in 5 minutes, ~20x normal. Nothing caps this bill: each million costs $1.60-2.80 (WAF + CloudFront). In the WAF console (us-east-1), the ACL's traffic overview and sampled requests show the top IPs, paths and countries. A flood: block it (runbook: docs/deployment.md, Runbooks, Request flood). Real growth: raise cloudfront_requests_alarm_per_5min."
+  alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.frontend.id
+    Region         = "Global"
+  }
+}
+
+# Sustained blocks. Only the two rate rules block (waf.tf has no managed rule
+# groups), so a block means one IP went over 100 auth requests, or
+# waf_rate_limit_per_ip requests, in 5 minutes. 100 blocked in a period is a
+# whole auth-rule window's worth; in each of 3 periods running (15 minutes)
+# it is someone persisting (credential stuffing, a scraper) or a real client
+# stuck behind a limit: the report renderer (<= 2 Lambda egress IPs, one
+# /api/auth/render-session call per render) or an office behind one NAT.
+# Blocked requests cost WAF's $0.60/M only, so this is the attack and
+# false-positive signal; cloudfront_requests is the cost one.
+# Dimensions: the ACL's metric name and Rule = ALL (every rule). A
+# CLOUDFRONT-scope ACL's metrics have no Region dimension (AWS WAF metrics
+# and dimensions, developer guide).
+resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
+  provider            = aws.us_east_1
+  alarm_name          = "${local.project}-waf-blocked-requests"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 3
+  datapoints_to_alarm = 3
+  metric_name         = "BlockedRequests"
+  namespace           = "AWS/WAFV2"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 100
+  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are failing; one office IP means raise waf_rate_limit_per_ip. Runbook: docs/deployment.md, Runbooks, Request flood."
+  alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    WebACL = aws_wafv2_web_acl.frontend.visibility_config[0].metric_name
+    Rule   = "ALL"
   }
 }

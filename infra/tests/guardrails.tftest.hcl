@@ -162,6 +162,7 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:cloudfront::000000000000:distribution/E0000000000000"
+    id  = "E0000000000000"
   }
 }
 
@@ -365,6 +366,14 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:sns:af-south-1:000000000000:water-management-prod-alerts"
+  }
+}
+
+override_resource {
+  target          = aws_sns_topic.alerts_us_east_1
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:us-east-1:000000000000:water-management-prod-alerts"
   }
 }
 
@@ -896,6 +905,59 @@ run "alarms" {
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])])
     error_message = "Every regional alarm must notify the alerts SNS topic."
   }
+  # CloudFront and CLOUDFRONT-scope WAF metrics exist only in us-east-1, and an
+  # alarm can only notify a topic in its own region.
+  assert {
+    condition = alltrue([for a in [
+      aws_cloudwatch_metric_alarm.cloudfront_5xx,
+      aws_cloudwatch_metric_alarm.cloudfront_requests,
+      aws_cloudwatch_metric_alarm.waf_blocked_requests,
+    ] : a.alarm_actions == toset([aws_sns_topic.alerts_us_east_1.arn])])
+    error_message = "Every us-east-1 alarm (CloudFront, WAF) must notify the us-east-1 alerts topic."
+  }
+
+  # --- Request-flood alarm (alarms.tf; issue #126, the audit's one High) -----
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.cloudfront_requests.namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.metric_name == "Requests" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+    )
+    error_message = "The request-flood alarm must sum this distribution's Requests (Region = Global) over 5 minutes."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_requests.threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests.comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests.evaluation_periods == 1
+    error_message = "By default the request-flood alarm fires on the first 5 minutes over 5,000 requests (a flood just under it costs $2.30-4.03/day)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.namespace == "AWS/WAFV2" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.metric_name == "BlockedRequests" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions == tomap({ WebACL = "water-management-frontend-acl", Rule = "ALL" })
+    )
+    error_message = "The WAF alarm must sum BlockedRequests across every rule (Rule = ALL) of the ACL, by its metric name, with no Region dimension (CLOUDFRONT scope)."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions["WebACL"] == aws_wafv2_web_acl.frontend.visibility_config[0].metric_name
+    error_message = "The WebACL dimension is the ACL's CloudWatch metric name."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.threshold == 100 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.period == 300 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.evaluation_periods == 3 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.datapoints_to_alarm == 3
+    )
+    error_message = "The WAF alarm fires on sustained blocks only: over 100 in each of three 5-minute periods."
+  }
+  assert {
+    condition     = strcontains(aws_cloudwatch_metric_alarm.cloudfront_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood") && strcontains(aws_cloudwatch_metric_alarm.waf_blocked_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood")
+    error_message = "Both edge alarms must point the operator at the Request flood runbook."
+  }
+
   assert {
     condition     = aws_cloudwatch_metric_alarm.lambda_duration.threshold == 24000
     error_message = "Duration alarm fires at 80% of the 30 s timeout."
@@ -1368,6 +1430,29 @@ run "rejects_short_jobs_backlog_alarm" {
   }
 
   expect_failures = [var.jobs_backlog_alarm_seconds]
+}
+
+# The request-flood alarm stays a cost control: above 20,000 per 5 minutes a
+# flood just under it costs $9-16/day unseen; below 1,000 one person at the
+# WAF's per-IP limit pages.
+run "rejects_loose_cloudfront_requests_alarm" {
+  command = plan
+
+  variables {
+    cloudfront_requests_alarm_per_5min = 20001
+  }
+
+  expect_failures = [var.cloudfront_requests_alarm_per_5min]
+}
+
+run "rejects_tight_cloudfront_requests_alarm" {
+  command = plan
+
+  variables {
+    cloudfront_requests_alarm_per_5min = 999
+  }
+
+  expect_failures = [var.cloudfront_requests_alarm_per_5min]
 }
 
 # ---------------------------------------------------------------------------

@@ -974,6 +974,41 @@ Every step is an ordinary app action by an owner unless it says "operator".
    `ECONNREFUSED` or `57P01` is the database (RDS alarms). Reproduce it
    locally, fix the cause and add a test; the message was deliberately not
    logged (it can hold row values), so the stack and code are the lead.
+10. **Request flood** (the `cloudfront-requests` or `waf-blocked-requests`
+    alarm, operator; both live in us-east-1 and mail the same address).
+    Nothing caps CloudFront and WAF request charges: every allowed request
+    costs $1.60–2.80 per million (WAF + CloudFront), a blocked one WAF's
+    $0.60 per million only. The arithmetic behind the thresholds is in
+    [infra/README.md § Cost](../infra/README.md#cost).
+    1. **Look:** WAF console, region Global (CloudFront) →
+       `water-management-frontend-acl` → Traffic overview and Sampled
+       requests (the last 3 hours): top client IPs, paths, countries, and
+       which rule blocked. CloudFront console → Reports shows the top
+       objects and viewers.
+    2. **Real growth** (more users, a new catchment going live; normal
+       paths, many ordinary IPs, no blocks): raise
+       `cloudfront_requests_alarm_per_5min` (1,000–20,000) and apply.
+    3. **A few IPs over the per-IP limit:** the WAF already blocks them,
+       so each request costs $0.60 per million and nothing else. If they sit
+       just under the limit instead, lower `waf_rate_limit_per_ip` (AWS
+       minimum 100) and apply.
+    4. **A distributed flood** (many IPs, each under the limit): add a
+       blocking rule to `infra/waf.tf` ahead of the rate rules (an IP set, a
+       geo match, or a byte match on the path being hammered) and apply. In
+       an emergency add it in the console first; the next apply removes a
+       console-only rule, so write it into `waf.tf` before that. Last resort:
+       disable the distribution (CloudFront console → the distribution →
+       Disable). That stops the charges and takes the whole site and API down
+       until it is enabled again.
+    5. **Sustained blocks** (`waf-blocked-requests` alone): blocks on
+       `/api/auth/` from many IPs are credential stuffing (the per-account
+       sign-in lockout slows it further; expect locked-out users to ask);
+       blocks from AWS Lambda addresses
+       on `/api/auth/render-session` are the report renderer being rate
+       limited, so reports fail (§ Reports); one office or farm address is
+       people behind one NAT, so raise `waf_rate_limit_per_ip`.
+    6. **Afterwards:** check Cost Explorer (daily, services CloudFront and
+       WAF) for what it cost, and record the incident in the operator log.
 
 ## Rollback
 
@@ -998,6 +1033,8 @@ the report renderer run outside the VPC for the same reason. Total ≈ $50/month
 us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
 is set from `budget_monthly_usd` (default 60; raise it to ~80 for
-af-south-1). The minimal (defaults) and full (Multi-AZ, highly available)
+af-south-1). CloudFront and WAF request charges have no ceiling; the
+`cloudfront-requests` alarm (us-east-1) fires within 5 minutes of a flood,
+long before the budget's billing data catches up (§ Runbooks, Request flood). The minimal (defaults) and full (Multi-AZ, highly available)
 configurations, their tfvars and monthly cost are compared in
 [deployment-tiers.md](./deployment-tiers.md).

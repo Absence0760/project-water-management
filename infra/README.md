@@ -153,14 +153,14 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
+| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (38 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (40 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -303,9 +303,27 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 32 alarms (incl. the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.20 |
+| CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
+
+**Request charges have no ceiling.** Every request the WAF allows costs WAF
+$0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
+at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
+only (CloudFront doesn't bill WAF-blocked requests). The per-IP rate limits
+stop one client, not a botnet keeping each IP under them: 1,000 requests a
+second is ~$140–240 a day. Nothing can cap that without dropping the CSP (the
+CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
+`cloudfront-requests` fires on the first 5 minutes over
+`cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
+for a handful of users: ~250 requests). A flood just under it is 16.7 req/s =
+1.44M a day = $2.30–4.03 a day unseen, 4–7% of the $60 budget; a 1,000 req/s
+flood is 60× the threshold and fires in the first period. The variable is held
+to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
+`waf-blocked-requests` fires on more than 100 blocks in each of three
+5-minute periods: an attack persisting, or a real client (the renderer, an
+office NAT) stuck behind a limit. What to do: [docs/deployment.md §
+Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
 which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
@@ -507,7 +525,11 @@ wired to SNS, including the `self_check_failed` log metric filters (pattern
 and metric name, on both the API and worker log groups) and its alarm, and
 the `mail_send_failed` filters (both log groups) and alarm, and the
 `unhandled_error` filter (the API's log group, the API's unhandled 500s the
-Lambda `Errors` metric can't see) and alarm; the SES send
+Lambda `Errors` metric can't see) and alarm; the us-east-1 alarms
+(`cloudfront-5xx`, `cloudfront-requests`, `waf-blocked-requests`) wired to the
+us-east-1 topic, with the request-flood alarm's metric, dimensions and 5,000
+threshold and the WAF alarm's `BlockedRequests` on the ACL's metric name with
+`Rule = ALL`, over 100 in 3 of 3 periods; the SES send
 policy (`identity/*` in this account and region + the configuration set,
 single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
@@ -520,7 +542,8 @@ deploy role's trust postcondition, with negative runs for a branch subject, a
 immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
-below two ticks does. Another six refuse an alert mailbox nobody reads:
+below two ticks does; two more refuse a `cloudfront_requests_alarm_per_5min`
+outside 1,000–20,000. Another six refuse an alert mailbox nobody reads:
 `budget_alert_email` is required, and an empty, malformed or reserved
 address fails the plan (example.com/.org/.net and their subdomains, and the
 `.example`, `.test`, `.invalid` and `.localhost` TLDs of RFC 2606 / RFC 6761,

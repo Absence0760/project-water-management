@@ -136,6 +136,24 @@ variable "waf_rate_limit_per_ip" {
   }
 }
 
+# The request-flood alarm (alarms.tf cloudfront_requests). A flood that stays
+# just under it goes unseen, so the ceiling is set by what that costs: every
+# allowed request is billed by WAF ($0.60/M) and CloudFront ($1.00/M at
+# US/EU edges, ~$2.20/M at Africa's), $1.60–2.80/M in all. At the 20,000
+# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 15–27%
+# of the $60 budget a day; above it the alarm stops being a cost control.
+# The 1,000 floor is one person at the WAF's per-IP limit, which must not
+# page. The default's arithmetic is at the alarm in alarms.tf.
+variable "cloudfront_requests_alarm_per_5min" {
+  description = "Alarm when CloudFront serves more than this many requests in 5 minutes (the request-flood alarm, us-east-1). Default 5000: ~20x a busy 5 minutes for a handful of users, and a flood just under it costs $2.30-4.03/day unseen. Runbook: docs/deployment.md § Runbooks, Request flood."
+  type        = number
+  default     = 5000
+  validation {
+    condition     = var.cloudfront_requests_alarm_per_5min >= 1000 && var.cloudfront_requests_alarm_per_5min <= 20000
+    error_message = "Between 1000 (one person at the WAF's per-IP limit would page) and 20000 (a flood just under it would cost ~$9-16/day unseen)."
+  }
+}
+
 variable "budget_monthly_usd" {
   description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$49 in us-east-1 and ~$58–63 in af-south-1 (infra/README.md § Cost): 60 fits us-east-1; raise it to ~80 for af-south-1 or the forecast alert fires every month. Set to 0 to skip budget creation (NOT recommended for prod)."
   type        = number
