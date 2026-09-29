@@ -51,11 +51,13 @@ No env files to write. `backend/.env.development` and
 | `RENDER_SITE_URL` / `RENDER_API_URL` | `http://localhost:7777` / `http://localhost:3001` | The site the renderer opens, and the API it signs in to |
 | `STORAGE` | `local` | Where PDFs go: `local` = MinIO from docker-compose; `s3` in production |
 | `REPORTS_BUCKET` / `S3_ENDPOINT` | `water-reports` / `http://127.0.0.1:9002` | The bucket (created on first use) and MinIO's API |
+| `REPORT_DOWNLOADS` | `presigned` | How the download route signs a PDF link: `presigned` = a 60 s MinIO GET; production uses `cloudfront` (a CloudFront signed URL on the site's `/reports/*`, with `CLOUDFRONT_KEY_PAIR_ID` / `CLOUDFRONT_PUBLIC_KEY` from Terraform and `CLOUDFRONT_PRIVATE_KEY` from sops; security.md § Reports) |
 | `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY` | `minioadmin` / `minioadmin` | MinIO's documented default login, for the local container only (`pnpm check:env` holds them to it) |
 | `ALERTS_TOKEN_SECRET` | a dev-only string (≥ 32 chars) | Signs alert emails' unsubscribe links (the worker). Production gets a random one from Terraform. See [Alerts](#alerts) |
 | `API_PUBLIC_URL` | `http://localhost:3001` | Where a mail client posts an alert's one-click unsubscribe (production: `SITE_URL/api`, the default) |
 | `ALERTS_ENABLED` / `ALERTS_DAILY_CAP` | `true` / `5` | The alert kill switch, and immediate alert emails per person per day |
 | `PUBLIC_API_URL` (frontend) | `http://localhost:3001` | `/api` in production |
+| `PUBLIC_WAF_CAPTCHA_SCRIPT_URL`, `PUBLIC_WAF_CAPTCHA_API_KEY` (frontend) | empty (no sign-in CAPTCHA: there is no WAF locally) | set by `deploy-frontend.yml` from Terraform outputs (security.md § Sign-in CAPTCHA) |
 
 To override something on your machine, create a gitignored
 `.env.development.local` next to the committed file. It wins.
@@ -465,7 +467,12 @@ emails in Afrikaans in Mailpit ([ui.md § Language](./ui.md#language)).
 
 The client catchment regression data comes from the import step above
 (`expected.json`) and from the extractors in `scripts/wbt-import/`, all written
-under `data/`. Without them, the
+under `data/`. The engine's client suites and the pan-sensitivity smoke test
+read `data/client-catchment`; `pnpm seed:demo` extracts to
+`data/client-<name>-app/` instead, so point them at the right extract with
+`WBT_CLIENT_CATCHMENT_DIR="$PWD/data/client-<name>-app" pnpm test:engine`
+(absolute: a relative path resolves against the workspace the tests run in).
+Without them, the
 workbook-comparison tests skip with a message, and the committed synthetic
 fixtures still run.
 

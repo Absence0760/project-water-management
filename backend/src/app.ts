@@ -93,7 +93,11 @@ export function createApp() {
 		cors({
 			origin: (origin) => (allowedOrigins.includes(origin) ? origin : null),
 			allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-			allowHeaders: ['Content-Type'],
+			// x-aws-waf-token: the sign-in retry after the WAF's CAPTCHA
+			// (frontend lib/auth/wafCaptcha.ts). Only the WAF reads it; the API
+			// ignores it. In production the SPA calls same-origin /api, so no
+			// preflight; this lets a cross-origin dev or e2e site send it too.
+			allowHeaders: ['Content-Type', 'x-aws-waf-token'],
 			// Lets the SPA read the export file name when it downloads via fetch().
 			exposeHeaders: ['Content-Disposition'],
 			// The session is an httpOnly cookie, so the browser must send credentials.

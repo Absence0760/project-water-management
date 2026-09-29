@@ -277,6 +277,24 @@ under a dead-invitation warning).
   pages. Sign-up through a live invitation link is still confirmed, joined and
   signed in at once.
 
+- **The security check** (the WAF's sign-in CAPTCHA, issue #126;
+  [security.md § Sign-in CAPTCHA](./security.md#sign-in-captcha)). Only when
+  many sign-ins come from one network does the WAF answer *Sign in* with its
+  CAPTCHA (a 405); the page then shows a **Check that you’re a person**
+  section above the form (`auth-extras/SignInCaptcha.svelte`): a heading and
+  one line of why, then AWS's picture puzzle, loaded only at that moment.
+  Focus moves to the section's heading, so a screen reader reads why it is
+  there, and the next Tab enters the puzzle, whose audio button plays a
+  spoken version. Solving it signs in straight away with the puzzle's token;
+  the form stays usable meanwhile. If the puzzle can't load, or the retry is
+  refused again, an alert says *Too many sign-in attempts from your network.
+  Wait a few minutes, then try again.* (so it never loops), as it does when
+  the build has no CAPTCHA configured (locally). The puzzle's own words are
+  AWS's, in English (it has no Afrikaans); the heading and line around it are
+  translated. It is AWS-sized (about 320 px wide, `dynamicWidth`), the one
+  state that may scroll at 1280 × 800. `e2e/tests/captcha.spec.ts` covers it
+  with a faked 405 and a stub of AWS's script, axe included.
+
 - **One place for the title.** The form starts on the brand copy's top line
   rather than centred in the height, so the brand lockup, the language
   switch and the page title (the only `h1`) sit in the same place on every

@@ -15,8 +15,12 @@
 //
 // A request it can't parse is dropped (logged): a retry can't fix it. A
 // failed answer throws the record back to SQS (retried, then dead-lettered
-// and alarmed); a failed render is an answer (ok: false), not a retry,
-// because its token is spent.
+// and alarmed); a failed render is an answer (ok: false), not an SQS retry,
+// because its token may be spent. The answer's `retry` says whether another
+// attempt could succeed (reports/render.ts: only the API's coded refusal of
+// the token, the page's own "can't show this", or a page that tried to leave
+// are final), and the worker then asks again with a fresh token, after a
+// backoff (jobs/handlers/report-render.ts requestRenderAgain).
 //
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { SQSBatchResponse, SQSEvent } from 'aws-lambda';

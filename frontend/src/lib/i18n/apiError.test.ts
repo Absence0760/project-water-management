@@ -51,6 +51,12 @@ describe('errorText', () => {
 		for (const code of codes) expect(errorText(new ApiError(418, 'x', undefined, code)), code).toBe(WORDS[code]);
 	});
 
+	it('words the WAF’s CAPTCHA answer (a client-side code) without the puzzle', () => {
+		expect(errorText(new ApiError(405, 'solve the puzzle to continue', undefined, 'captcha_required'))).toBe(
+			'Too many sign-in attempts from your network. Wait a few minutes, then try again.'
+		);
+	});
+
 	it('words a coded error from the catalogue, not the server’s English', () => {
 		expect(errorText(new ApiError(400, 'this link is invalid or has expired — request a new one', undefined, 'link_invalid'))).toBe(
 			'This link is invalid or has expired. Ask for a new one.'

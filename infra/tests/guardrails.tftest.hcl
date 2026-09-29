@@ -1,10 +1,11 @@
 # Plan-only tests against mocked providers — no AWS credentials, no state, no
-# sops key. They pin the production guardrails that `terraform validate` can't
+# sops key (the runtime secrets are ephemeral variables, set to synthetic
+# values below). They pin the production guardrails that `terraform validate` can't
 # see: runtime/sizing of the Lambdas, the DB's durability + privacy settings,
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
+# the report bucket / renderer image and Lambda / render queues, report downloads through CloudFront signed URLs, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
 # the private-only network (no gateway or default route, the exact security-group graph, the Function
 # URL's auth type, every security group's description), the runtime secrets (in Secrets Manager, never a Lambda
 # environment), and the plan-time rejection of
@@ -48,17 +49,6 @@ mock_provider "aws" {
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-}
-
-mock_provider "sops" {
-  mock_data "sops_file" {
-    defaults = {
-      data = {
-        auth_jwt_secret = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        db_app_password = "abcdef0123456789abcdef0123456789abcdef01234567"
-      }
     }
   }
 }
@@ -385,6 +375,53 @@ override_resource {
   values = {
     arn    = "arn:aws:s3:::water-management-reports-000000000000"
     bucket = "water-management-reports-000000000000"
+    # The /reports/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-reports-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+# Report downloads through CloudFront (reports.tf): known values so the key
+# pair, key group, OAC and origin request policy can be matched by equality.
+# Placeholder text, not a key: nothing is generated in a test.
+# One id per trusted public key (the overlap run uses both), so a key-id
+# check can tell them apart.
+override_resource {
+  target          = aws_cloudfront_public_key.report_downloads["2026-09"]
+  override_during = plan
+  values = {
+    id = "K2026090000000A"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_public_key.report_downloads["2027-03"]
+  override_during = plan
+  values = {
+    id = "K2027030000000B"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_key_group.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-key-group-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.reports
+  override_during = plan
+  values = {
+    id = "reports-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_request_policy.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-origin-request-policy-id"
   }
 }
 
@@ -503,11 +540,67 @@ override_resource {
   }
 }
 
+# Distinct version IDs, so matching each Lambda's RUNTIME_SECRET_VERSION to its
+# own secret's version can fail.
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["api"]
+  override_during = plan
+  values = {
+    version_id = "aaaaaaaa-0000-0000-0000-000000000001"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["worker"]
+  override_during = plan
+  values = {
+    version_id = "bbbbbbbb-0000-0000-0000-000000000002"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["migrate"]
+  override_during = plan
+  values = {
+    version_id = "cccccccc-0000-0000-0000-000000000003"
+  }
+}
+
+# A known CloudFront header, for the ephemerality check's positive control.
+override_resource {
+  target          = random_password.cloudfront_shared_secret
+  override_during = plan
+  values = {
+    result = "synthetic0cloudfront0header0000000000000000000000"
+  }
+}
+
 variables {
   aws_region      = "af-south-1"
   route53_zone_id = "Z0000000000000000000"
   github_repo     = "Absence0760/project-water-management"
-  secrets_file    = "/dev/null"
+  # Synthetic runtime secrets (ephemeral variables, secrets.tf).
+  auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
+  db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
+  alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  # PEM armour around a placeholder: the shape the variable checks, not a key.
+  cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
+  # Report downloads (reports.tf): a public key generated for these tests (its
+  # private half was never kept). Public keys aren't secret.
+  report_download_public_keys = {
+    "2026-09" = <<-EOT
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+      BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+      hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+      EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+      t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+      qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+      nQIDAQAB
+      -----END PUBLIC KEY-----
+    EOT
+  }
+  report_download_signing_key = "2026-09"
   # Required and validated. Not an example.* (or other RFC 2606) address,
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
@@ -668,19 +761,72 @@ run "runtime_secrets" {
   assert {
     condition = (
       toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
-      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
       toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
     )
-    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret and the download signing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
-    condition     = local.runtime_secrets.migrate.WATER_APP_PASSWORD == local.db_app_password && local.runtime_secrets.api.AUTH_JWT_SECRET == local.auth_jwt_secret
-    error_message = "The runtime secrets carry the values from their sources (sops)."
+    condition = (
+      local.runtime_secrets.migrate.WATER_APP_PASSWORD == var.db_app_password &&
+      local.runtime_secrets.api.AUTH_JWT_SECRET == var.auth_jwt_secret &&
+      local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret
+    )
+    error_message = "The runtime secrets carry the values from their sources (the sops-fed variables)."
+  }
+
+  # Out of state (issue #126). Every version is written write-only: the plan
+  # holds no secret_string (a plain one would put the JSON in state), the
+  # write-only argument reads back null (Terraform keeps no copy), and the
+  # counter is the one thing that says when to write again.
+  assert {
+    condition = alltrue([for k, v in aws_secretsmanager_secret_version.runtime :
+      v.secret_string == null && v.secret_string_wo == null && v.secret_string_wo_version == var.runtime_secret_version
+    ])
+    error_message = "Every runtime secret version must use secret_string_wo + secret_string_wo_version (var.runtime_secret_version), never secret_string: a plain secret_string puts the values in state."
+  }
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret_version.runtime)) == toset(["api", "migrate", "worker"])
+    error_message = "Each runtime secret has one write-only version (the check above ranges over them all)."
+  }
+  # The values are ephemeral, so Terraform refuses to store them anywhere:
+  # ephemeralasnull() turns an ephemeral value into null and leaves any other
+  # alone. Positive control: the CloudFront header is not ephemeral (its
+  # custom_header argument is not write-only, so it stays in state by design;
+  # secrets.tf), and ephemeralasnull keeps it.
+  assert {
+    condition = alltrue([
+      ephemeralasnull(var.auth_jwt_secret) == null,
+      ephemeralasnull(var.db_app_password) == null,
+      ephemeralasnull(var.alerts_token_secret) == null,
+      ephemeralasnull(var.cloudfront_private_key) == null,
+      ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY) == null,
+      ephemeralasnull(local.runtime_secrets.api.DATABASE_URL) == null,
+      ephemeralasnull(local.runtime_secrets.worker.DATABASE_URL) == null,
+      ephemeralasnull(local.runtime_secrets.migrate.WATER_APP_PASSWORD) == null,
+    ])
+    error_message = "The sops values, and DATABASE_URL built from one, must be ephemeral, so no state or plan can hold them."
+  }
+  assert {
+    condition     = ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_SHARED_SECRET) != null
+    error_message = "Positive control: ephemeralasnull keeps a non-ephemeral value (the CloudFront header, the one runtime value left in state)."
+  }
+  assert {
+    condition     = local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY == var.cloudfront_private_key
+    error_message = "The API's runtime secret carries the report-download signing key from its sops-fed variable, the same path as the session key."
   }
 
   # Each Lambda names its own secret and the version Terraform wrote (a new
   # version changes the variable, so a rotation cold-starts every instance).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["api"].version_id &&
+      aws_lambda_function.worker.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["worker"].version_id &&
+      aws_lambda_function.migrate.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["migrate"].version_id
+    )
+    error_message = "RUNTIME_SECRET_VERSION must be the version_id of the Lambda's own runtime secret version, which changes whenever runtime_secret_version is raised."
+  }
   assert {
     condition = (
       aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["api"].arn &&
@@ -782,50 +928,92 @@ run "runtime_secrets" {
 run "rejects_short_jwt_secret" {
   command = plan
 
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "too-short"
-        db_app_password = "abcdef0123456789abcdef0123456789abcdef01234567"
-      }
-    }
+  variables {
+    auth_jwt_secret = "too-short"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.auth_jwt_secret]
 }
 
 run "rejects_dev_placeholder_jwt_secret" {
   command = plan
 
   # Long enough, so only the placeholder check can refuse it.
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
-        db_app_password = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      }
-    }
+  variables {
+    auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.auth_jwt_secret]
 }
 
 run "rejects_non_alphanumeric_db_password" {
   command = plan
 
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        db_app_password = "has@special/chars-and-is-long-enough"
-      }
-    }
+  variables {
+    db_app_password = "has@special/chars-and-is-long-enough"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.db_app_password]
+}
+
+run "rejects_short_alerts_token_secret" {
+  command = plan
+
+  variables {
+    alerts_token_secret = "0123456789abcdef"
+  }
+
+  expect_failures = [var.alerts_token_secret]
+}
+
+run "rejects_fractional_runtime_secret_version" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 1.5
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+run "rejects_zero_runtime_secret_version" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 0
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+run "rejects_runtime_secret_version_past_16_digits" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 10000000000000000
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+# Rotation: scripts/tf.sh sets the counter from sops.lastmodified as
+# YYYYMMDDhhmmss (14 digits: past 2^32, well inside the provider's 64-bit
+# secret_string_wo_version). It must pass the variable's validation and reach
+# every runtime secret version unchanged (the AWS provider replaces a version
+# whose secret_string_wo_version changed, so its version_id, and each Lambda's
+# RUNTIME_SECRET_VERSION with it, changes; the mocks can't show the
+# replacement itself, runtime_secrets checks the wiring).
+run "rotation_counter_from_sops_lastmodified" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 20260928081500
+  }
+
+  assert {
+    condition     = alltrue([for k, v in aws_secretsmanager_secret_version.runtime : v.secret_string_wo_version == 20260928081500])
+    error_message = "A lastmodified-derived runtime_secret_version (YYYYMMDDhhmmss) must pass validation and reach every runtime secret version unchanged."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -840,8 +1028,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 2
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth + site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 4
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth block, the sign-in CAPTCHA, and the API and site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -909,7 +1097,7 @@ run "edge_security" {
   }
   assert {
     condition     = !can(regex("https?:", aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy))
-    error_message = "Site CSP must not allow any third-party origin (everything is self-hosted)."
+    error_message = "Site CSP must not allow any third-party origin (everything is self-hosted; the one exception, the sign-in CAPTCHA SDK, appears only once waf_captcha_integration_url is set, run signin_captcha_with_integration_url)."
   }
   assert {
     condition     = startswith(aws_cloudfront_response_headers_policy.api.security_headers_config[0].content_security_policy[0].content_security_policy, "default-src 'none'")
@@ -1002,6 +1190,35 @@ run "email_ses" {
   assert {
     condition     = aws_vpc_security_group_ingress_rule.vpce_ses_from_api.from_port == 443 && aws_vpc_security_group_ingress_rule.vpce_ses_from_api.to_port == 443
     error_message = "The SES endpoint accepts HTTPS only."
+  }
+
+  # The SES endpoint policy: the API and worker send as no-reply@, only the
+  # API releases a suppressed address, and nobody else uses the endpoint.
+  assert {
+    condition     = aws_vpc_endpoint.ses.service_name != "" && can(regex("policy\\s*=\\s*data\\.aws_iam_policy_document\\.ses_endpoint\\.json", regex("(?s)resource \"aws_vpc_endpoint\" \"ses\" \\{.*?\\n\\}", file("ses.tf"))))
+    error_message = "The SES endpoint must carry an endpoint policy (ses_endpoint)."
+  }
+  assert {
+    condition = toset([for s in data.aws_iam_policy_document.ses_endpoint.statement :
+      "${s.sid} ${join(",", sort(tolist(s.actions)))} ${join(",", sort(flatten([for p in s.principals : p.identifiers])))}"
+      ]) == toset([
+      "ApiSendsAsNoReply ses:SendEmail ${aws_iam_role.lambda.arn}",
+      "WorkerSendsAsNoReply ses:SendEmail ${aws_iam_role.worker_lambda.arn}",
+      "ApiReleasesSuppressedAddress ses:DeleteSuppressedDestination ${aws_iam_role.lambda.arn}",
+    ])
+    error_message = "The SES endpoint policy must be exactly: the API and worker roles may SendEmail, and only the API role may DeleteSuppressedDestination."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.ses_endpoint.statement :
+      toset(s.resources) == toset(["arn:aws:ses:af-south-1:000000000000:identity/*", aws_sesv2_configuration_set.main.arn]) &&
+      length(s.condition) == 1 && one(s.condition).variable == "ses:FromAddress" && one(s.condition).values == tolist(["no-reply@water-management.jaredhoward.com"])
+      if contains(s.actions, "ses:SendEmail")
+    ])
+    error_message = "A send through the SES endpoint must be pinned like the IAM policy: this account's identities and configuration set, From = no-reply@<domain>."
+  }
+  assert {
+    condition     = alltrue([for s in data.aws_iam_policy_document.ses_endpoint.statement : length(s.principals) == 1 && one(s.principals).type == "AWS" && alltrue([for a in s.actions : !strcontains(a, "*")])])
+    error_message = "Every SES endpoint statement names one AWS principal and no wildcard action."
   }
   assert {
     condition = (
@@ -1135,6 +1352,7 @@ run "alarms" {
       aws_cloudwatch_metric_alarm.lambda_throttles,
       aws_cloudwatch_metric_alarm.lambda_duration,
       aws_cloudwatch_metric_alarm.unhandled_error,
+      aws_cloudwatch_metric_alarm.login_failed,
       aws_cloudwatch_metric_alarm.migrate_errors,
       aws_cloudwatch_metric_alarm.rds_cpu,
       aws_cloudwatch_metric_alarm.rds_cpu_credits,
@@ -1255,24 +1473,11 @@ run "alarms" {
     ])
     error_message = "Every budget notification publishes to the us-east-1 alerts topic, not the opt-in region's."
   }
+  # Off by default: an account holds one services monitor and AWS may have
+  # made it, which would fail the first apply (infra/README.md step 11).
   assert {
-    condition = (
-      length(aws_ce_anomaly_monitor.services) == 1 &&
-      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
-      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
-      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
-      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
-    )
-    error_message = "Cost Anomaly Detection: one AWS-services monitor with an IMMEDIATE subscription by default."
-  }
-  assert {
-    condition = (
-      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
-      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
-      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
-      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
-    )
-    error_message = "Anomalies with a total impact of $10 or more page the us-east-1 alerts topic."
+    condition     = var.cost_anomaly_threshold_usd == 0 && length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "Cost Anomaly Detection is off by default (anomaly_detection_off_by_default): the operator turns it on after the first apply."
   }
   assert {
     condition = (
@@ -1367,6 +1572,48 @@ run "daily_budget_explicit" {
   assert {
     condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
     error_message = "An explicit budget_daily_usd is used as given."
+  }
+}
+
+# Cost Anomaly Detection is off by default, so the first apply can't fail
+# on a services monitor AWS already made (one per account); the operator
+# turns it on after the first apply (infra/README.md § Operator steps, step 11).
+run "anomaly_detection_off_by_default" {
+  command = plan
+  assert {
+    condition     = length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "No anomaly monitor unless cost_anomaly_threshold_usd is set: the first apply must not create one."
+  }
+  assert {
+    condition     = length(aws_budgets_budget.monthly) == 1 && length(aws_budgets_budget.daily) == 1
+    error_message = "The budgets stay on by default; only the anomaly monitor waits."
+  }
+}
+
+run "anomaly_detection_on" {
+  command = plan
+  variables {
+    cost_anomaly_threshold_usd = 10
+  }
+  assert {
+    condition = (
+      length(aws_ce_anomaly_monitor.services) == 1 &&
+      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
+      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
+      aws_ce_anomaly_monitor.services[0].name == "water-management-services" &&
+      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
+      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
+    )
+    error_message = "Cost Anomaly Detection, once on: one AWS-services monitor with an IMMEDIATE subscription."
+  }
+  assert {
+    condition = (
+      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
+      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
+    )
+    error_message = "Anomalies with a total impact of the threshold ($10) or more page the us-east-1 alerts topic."
   }
 }
 
@@ -1599,7 +1846,7 @@ run "background_jobs" {
   assert {
     condition = (
       contains(keys(local.runtime_secrets.worker), "ALERTS_TOKEN_SECRET") &&
-      random_password.alerts_token_secret.length >= 32 && !random_password.alerts_token_secret.special &&
+      local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret &&
       aws_lambda_function.worker.environment[0].variables["ALERTS_ENABLED"] == "true"
     )
     error_message = "The worker signs unsubscribe links (ALERTS_TOKEN_SECRET, ≥ 32 characters) and sends alerts unless the kill switch is off."
@@ -1885,6 +2132,28 @@ run "rejects_tight_cloudfront_requests_alarm" {
   expect_failures = [var.cloudfront_requests_alarm_per_5min]
 }
 
+# The failed-sign-in alarm: below 10 one person locking themselves out pages;
+# above 300 one IP at the WAF's auth limit (100 per 5 minutes) stays unseen.
+run "rejects_loose_login_failed_alarm" {
+  command = plan
+
+  variables {
+    login_failed_alarm_per_15min = 301
+  }
+
+  expect_failures = [var.login_failed_alarm_per_15min]
+}
+
+run "rejects_tight_login_failed_alarm" {
+  command = plan
+
+  variables {
+    login_failed_alarm_per_15min = 9
+  }
+
+  expect_failures = [var.login_failed_alarm_per_15min]
+}
+
 # ---------------------------------------------------------------------------
 # Deploy role trust pin (bootstrap-owned; checked by the postcondition in
 # oidc.tf so a drifted trust policy fails the plan)
@@ -2067,10 +2336,10 @@ run "reports" {
   }
   assert {
     condition = (
-      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.actions])) == toset(["s3:GetObject"]) &&
-      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.resources])) == toset(["${aws_s3_bucket.reports.arn}/reports/*"])
+      length([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s if s.effect != "Deny"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s.sid if s.effect != "Deny"]) == "AllowCloudFrontReadReportPdfs"
     )
-    error_message = "The API may only read PDFs (it pre-signs downloads)."
+    error_message = "The bucket policy's only grant is CloudFront's read of PDFs (run report_downloads pins it); the API never reads the bucket, it signs CloudFront URLs."
   }
   assert {
     condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_reports.statement : s.resources])) == toset([aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn])
@@ -2092,9 +2361,10 @@ run "reports" {
       aws_lambda_function.worker.environment[0].variables["RENDER_REQUESTS_QUEUE_URL"] == aws_sqs_queue.render_requests.url &&
       aws_lambda_function.worker.environment[0].variables["MAIL_TRANSPORT"] == "ses" &&
       aws_lambda_function.backend.environment[0].variables["STORAGE"] == "s3" &&
-      aws_lambda_function.backend.environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket
+      aws_lambda_function.backend.environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket &&
+      aws_lambda_function.backend.environment[0].variables["REPORT_DOWNLOADS"] == "cloudfront"
     )
-    error_message = "The worker hands renders to the renderer and mails through SES; the API signs downloads from the reports bucket."
+    error_message = "The worker hands renders to the renderer and mails through SES; the API signs downloads as CloudFront URLs."
   }
   assert {
     condition     = aws_lambda_event_source_mapping.worker_render_results.event_source_arn == aws_sqs_queue.render_results.arn && aws_lambda_event_source_mapping.worker_render_results.function_name == aws_lambda_function.worker.arn
@@ -2109,6 +2379,226 @@ run "reports" {
     )
     error_message = "Each render DLQ must alarm on depth > 0."
   }
+}
+
+# ---------------------------------------------------------------------------
+# Report downloads through CloudFront (reports.tf, s3_cloudfront.tf; issue
+# #126): /reports/* serves the private bucket through its own OAC to signed
+# URLs only, behind the WAF, and nothing else can read a PDF.
+# ---------------------------------------------------------------------------
+
+run "report_downloads" {
+  command = plan
+
+  # --- The behaviour: signed URLs only, uncached, GET/HEAD, https ----------------------
+  assert {
+    condition     = length([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b if b.path_pattern == "/reports/*"]) == 1
+    error_message = "The distribution must have exactly one /reports/* behaviour (report PDF downloads)."
+  }
+  assert {
+    condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : (
+      b.target_origin_id == "s3-reports" &&
+      b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]) &&
+      b.viewer_protocol_policy == "https-only" &&
+      toset(b.allowed_methods) == toset(["GET", "HEAD"]) &&
+      b.cache_policy_id == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" &&
+      b.origin_request_policy_id == aws_cloudfront_origin_request_policy.report_downloads.id &&
+      b.response_headers_policy_id == "api-headers-policy-id"
+    ) if b.path_pattern == "/reports/*"])
+    error_message = "/reports/* must serve the reports bucket only to CloudFront signed URLs from the download key group, uncached (CachingDisabled), GET/HEAD over https, with the API's security headers."
+  }
+  # Positive control for the signer check: no other behaviour trusts a key
+  # group, and only /reports/* reaches the reports origin.
+  assert {
+    condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior :
+      (b.path_pattern == "/reports/*") == (b.target_origin_id == "s3-reports") &&
+      (b.path_pattern == "/reports/*") == (length(coalesce(b.trusted_key_groups, [])) > 0)
+    ]) && length(coalesce(aws_cloudfront_distribution.frontend.default_cache_behavior[0].trusted_key_groups, [])) == 0
+    error_message = "Only the /reports/* behaviour reaches the reports bucket, and it alone requires signed URLs."
+  }
+  assert {
+    condition     = aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
+    error_message = "/api/* stays the first ordered behaviour (edge_security indexes it)."
+  }
+  assert {
+    condition     = aws_cloudfront_distribution.frontend.web_acl_id == aws_wafv2_web_acl.frontend.arn
+    error_message = "Downloads pass the distribution's WAF (the per-IP rate rule covers every path)."
+  }
+
+  # --- The origin: the reports bucket through its own OAC ----------------------------------
+  assert {
+    condition = alltrue([for o in aws_cloudfront_distribution.frontend.origin :
+      o.domain_name == aws_s3_bucket.reports.bucket_regional_domain_name && o.origin_access_control_id == aws_cloudfront_origin_access_control.reports.id
+    if o.origin_id == "s3-reports"]) && length([for o in aws_cloudfront_distribution.frontend.origin : o if o.origin_id == "s3-reports"]) == 1
+    error_message = "The s3-reports origin must be the reports bucket, read through its OAC."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_origin_access_control.reports.origin_access_control_origin_type == "s3" &&
+      aws_cloudfront_origin_access_control.reports.signing_behavior == "always" &&
+      aws_cloudfront_origin_access_control.reports.signing_protocol == "sigv4"
+    )
+    error_message = "The reports OAC must sign every origin request (sigv4)."
+  }
+  assert {
+    condition = (
+      one(aws_cloudfront_origin_request_policy.report_downloads.cookies_config).cookie_behavior == "none" &&
+      one(aws_cloudfront_origin_request_policy.report_downloads.headers_config).header_behavior == "none" &&
+      one(aws_cloudfront_origin_request_policy.report_downloads.query_strings_config).query_string_behavior == "whitelist" &&
+      one(one(aws_cloudfront_origin_request_policy.report_downloads.query_strings_config).query_strings).items == toset(["response-content-disposition"])
+    )
+    error_message = "Only the download file name (response-content-disposition) may reach the bucket: no cookies, no viewer headers, no other query."
+  }
+
+  # --- The bucket policy: this distribution, GetObject on reports/ only ---------------------
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : (
+      s.effect == null || s.effect == "Allow"
+      ) ? (
+      s.sid == "AllowCloudFrontReadReportPdfs" &&
+      toset(s.actions) == toset(["s3:GetObject"]) &&
+      toset(s.resources) == toset(["${aws_s3_bucket.reports.arn}/reports/*"]) &&
+      one(s.principals).type == "Service" &&
+      one(s.principals).identifiers == toset(["cloudfront.amazonaws.com"]) &&
+      one(s.condition).test == "StringEquals" &&
+      one(s.condition).variable == "AWS:SourceArn" &&
+      one(s.condition).values == tolist([aws_cloudfront_distribution.frontend.arn])
+    ) : true])
+    error_message = "The reports bucket grants CloudFront s3:GetObject on reports/* for this distribution (AWS:SourceArn) only."
+  }
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s if s.sid == "AllowCloudFrontReadReportPdfs"]) == 1
+    error_message = "The CloudFront read grant must be present (positive control for the check above)."
+  }
+
+  # --- The keys: operator-generated; public halves trusted, private half from sops -----------
+  assert {
+    condition = (
+      keys(aws_cloudfront_public_key.report_downloads) == ["2026-09"] &&
+      aws_cloudfront_public_key.report_downloads["2026-09"].encoded_key == var.report_download_public_keys["2026-09"] &&
+      aws_cloudfront_public_key.report_downloads["2026-09"].name == "water-management-report-downloads-2026-09"
+    )
+    error_message = "One CloudFront public key per report_download_public_keys entry, from its PEM."
+  }
+  assert {
+    condition     = aws_cloudfront_key_group.report_downloads.items == toset(["K2026090000000A"])
+    error_message = "The key group trusts exactly the configured public keys."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads["2026-09"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_PUBLIC_KEY"] == var.report_download_public_keys["2026-09"]
+    )
+    error_message = "The API names the signing key's id (Key-Pair-Id) and gets its public PEM, which it matches its private key against at cold start."
+  }
+}
+
+# A rotation's overlap: two trusted keys, the API signing with the new one.
+run "report_download_key_rotation_overlap" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {
+      "2026-09" = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+        BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+        hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+        EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+        t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+        qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+        nQIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+      "2027-03" = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvJouwFdIK8ScEDRGmkzG
+        gTg3bwqCaj7lyU0ws6m8vQH2NazCuQYeiuEbG4Hrq19iNaAD0UwVmf4CCWR9X7Wt
+        AXJQGo9bAGhIHhQiaTo/uAarQ8usWnuXCbUdzOMfg9/SEmc2PoCz3Y40rsPysWdC
+        T+zv8UJjVUog6OixnQYQYxvlWjlEP/wgyEnTTw+JkTpItcECYwj0r3k1HirCdpZs
+        Zp6JCjwnHK6OVtMIhsdN+ITAHicOECRXxIjQOoCfJVd1TK/g3Y14tMx1qm2HG6g0
+        wwRSyAYT7tioKZnqvzkCxh/ayuW/Ak6vVCBREqSijnM2d8gpxppx8OCPbsyBxynC
+        UwIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+    }
+    report_download_signing_key = "2027-03"
+  }
+
+  assert {
+    condition     = aws_cloudfront_key_group.report_downloads.items == toset(["K2026090000000A", "K2027030000000B"])
+    error_message = "During a rotation the key group trusts both keys, so links signed with either verify."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_public_key.report_downloads["2026-09"].id != aws_cloudfront_public_key.report_downloads["2027-03"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads["2027-03"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_PUBLIC_KEY"] == var.report_download_public_keys["2027-03"]
+    )
+    error_message = "The API signs with report_download_signing_key's key (the new one), not the other."
+  }
+}
+
+run "rejects_signing_key_outside_the_trusted_keys" {
+  command = plan
+
+  variables {
+    report_download_signing_key = "2027-03"
+  }
+
+  expect_failures = [var.report_download_signing_key]
+}
+
+run "rejects_a_private_key_as_a_public_key" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {
+      "2026-09" = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
+    }
+  }
+
+  expect_failures = [var.report_download_public_keys]
+}
+
+run "rejects_no_trusted_key" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {}
+  }
+
+  expect_failures = [var.report_download_public_keys]
+}
+
+run "rejects_a_malformed_private_key" {
+  command = plan
+
+  variables {
+    cloudfront_private_key = "REPLACE_ME"
+  }
+
+  expect_failures = [var.cloudfront_private_key]
+}
+
+run "rejects_a_public_key_as_the_private_key" {
+  command = plan
+
+  variables {
+    cloudfront_private_key = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+        BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+        hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+        EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+        t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+        qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+        nQIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+  }
+
+  expect_failures = [var.cloudfront_private_key]
 }
 
 run "reports_renderer_created_from_its_image" {
@@ -2234,6 +2724,35 @@ run "mail_failures_and_log_privacy" {
       contains(aws_cloudwatch_metric_alarm.unhandled_error.alarm_actions, aws_sns_topic.alerts.arn)
     )
     error_message = "One unhandled 500 must page the alerts topic."
+  }
+
+  # Failed sign-ins across all accounts (issue #126): the per-address lockout
+  # can't see one password sprayed over many accounts.
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.event = \"login_failed\" }"
+    )
+    error_message = "login_failed must be counted from the API's log group, by the exact event name logLoginFailed logs (backend/src/auth/loginFailed.ts)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.login_failed.metric_name == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name &&
+      aws_cloudwatch_metric_alarm.login_failed.namespace == aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+    )
+    error_message = "The login-failed alarm must watch the metric the filter emits."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.login_failed.threshold == 30 &&
+      aws_cloudwatch_metric_alarm.login_failed.period == 900 &&
+      aws_cloudwatch_metric_alarm.login_failed.evaluation_periods == 1 &&
+      aws_cloudwatch_metric_alarm.login_failed.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.login_failed.comparison_operator == "GreaterThanThreshold" &&
+      aws_cloudwatch_metric_alarm.login_failed.treat_missing_data == "notBreaching" &&
+      contains(aws_cloudwatch_metric_alarm.login_failed.alarm_actions, aws_sns_topic.alerts.arn)
+    )
+    error_message = "More than 30 failed sign-ins in 15 minutes (the default) must page the alerts topic."
   }
 
   assert {
@@ -2385,6 +2904,211 @@ run "waf_auth_rule_matches_decoded_path" {
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
   }
+}
+
+# The API's per-IP limit counts /api/* only, so the SPA's files (a cold visit
+# is ~150 requests; the report renderer loads them for every PDF) don't eat
+# it; the site-wide backstop still caps one IP on every path (waf.tf).
+run "waf_rate_rules_scope" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].limit == 1000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/api/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].positional_constraint == "STARTS_WITH" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].field_to_match[0].uri_path) == 1
+    )
+    error_message = "The API rate rule must count only paths starting /api/ (the URI path), per IP, at waf_rate_limit_per_ip."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The API rate rule must match the path as the API routes it (URL_DECODE, NORMALIZE_PATH, LOWERCASE), or /%61pi/… slips past it."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].limit == 5000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].scope_down_statement) == 0 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).action[0].block) == 1
+    )
+    error_message = "The site-wide backstop must block per IP on every path (no scope-down) at waf_site_rate_limit_per_ip."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/api/auth/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].limit == 100
+    )
+    error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
+  }
+  assert {
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, SignInCaptchaPerIP = 1, RateLimitPerIP = 2, RateLimitSitePerIP = 3 }
+    error_message = "The rate rules run tightest first: auth, API, then the site-wide backstop."
+  }
+}
+
+run "rejects_site_rate_limit_below_the_api_limit" {
+  command = plan
+
+  variables {
+    waf_rate_limit_per_ip      = 2000
+    waf_site_rate_limit_per_ip = 1999
+  }
+
+  expect_failures = [var.waf_site_rate_limit_per_ip]
+}
+
+# ---------------------------------------------------------------------------
+# The sign-in CAPTCHA (waf.tf SignInCaptchaPerIP, issue #126): only sign-in
+# POSTs, only past a per-IP rate below the auth block, a 5-minute immunity,
+# COUNT as the switch-off; the API key for the site's domain; and a CSP that
+# allows exactly the account's two SDK origins once they are known.
+# ---------------------------------------------------------------------------
+
+run "signin_captcha" {
+  command = plan
+
+  assert {
+    condition     = toset([for r in aws_wafv2_web_acl.frontend.rule : "${r.priority}:${r.name}"]) == toset(["0:RateLimitAuthPerIP", "1:SignInCaptchaPerIP", "2:RateLimitPerIP", "3:RateLimitSitePerIP"])
+    error_message = "Rule order: the auth block first (an IP past 100 is blocked, not offered a billed puzzle), then the sign-in CAPTCHA, then the site-wide limit."
+  }
+  assert {
+    condition = (
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].captcha) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].count) == 0 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].block) == 0
+    )
+    error_message = "By default the sign-in rule's action is CAPTCHA, never a block."
+  }
+  assert {
+    condition     = one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).captcha_config[0].immunity_time_property[0].immunity_time == 300
+    error_message = "A solved puzzle lasts 5 minutes (captcha_config immunity_time = 300)."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].limit == 20 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].evaluation_window_sec == 300 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].limit < one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].limit
+    )
+    error_message = "The puzzle starts past 20 sign-ins per IP in 5 minutes, below the auth block's limit."
+  }
+  # Scope: POST and exactly /api/auth/login (decoded, normalised, lower-cased).
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].search_string == "POST" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].field_to_match[0].method) == 1 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[0].byte_match_statement[0].positional_constraint == "EXACTLY"
+    )
+    error_message = "The sign-in CAPTCHA applies to POST only."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].search_string == "/api/auth/login" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].positional_constraint == "EXACTLY" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].field_to_match[0].uri_path) == 1 &&
+      toset([for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].and_statement[0].statement[1].byte_match_statement[0].text_transformation : "${t.priority}:${t.type}"]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    )
+    error_message = "The sign-in CAPTCHA matches exactly the path /api/auth/login, after URL_DECODE, NORMALIZE_PATH and LOWERCASE."
+  }
+  assert {
+    condition = (
+      aws_wafv2_api_key.captcha.scope == "CLOUDFRONT" &&
+      aws_wafv2_api_key.captcha.token_domains == toset([var.domain_name])
+    )
+    error_message = "The CAPTCHA API key is CloudFront-scoped and valid for the site's domain only."
+  }
+  # No integration URL yet: no WAF origin in the CSP, and no script URL for the build.
+  assert {
+    condition = (
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "awswaf") &&
+      strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "media-src 'self' data:") &&
+      output.waf_captcha_script_url == ""
+    )
+    error_message = "Without waf_captcha_integration_url the CSP names no WAF origin (media-src allows data: for the puzzle's audio) and the build gets no script URL."
+  }
+}
+
+run "signin_captcha_with_integration_url" {
+  command = plan
+
+  variables {
+    waf_captcha_integration_url = "https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com/a1b2c3d4e5f6/"
+  }
+
+  assert {
+    condition     = strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "script-src 'self' 'unsafe-inline' https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com https://a1b2c3d4e5f6.edge.sdk.awswaf.com;")
+    error_message = "script-src allows exactly the CAPTCHA SDK origin and its challenge script's."
+  }
+  assert {
+    condition     = strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "connect-src 'self' https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com https://a1b2c3d4e5f6.edge.sdk.awswaf.com;")
+    error_message = "connect-src allows exactly the same two origins (the puzzle, verify and telemetry calls)."
+  }
+  assert {
+    condition = (
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "*") &&
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "unsafe-eval") &&
+      !strcontains(aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy, "blob:") &&
+      length(regexall("https://", aws_cloudfront_response_headers_policy.site.security_headers_config[0].content_security_policy[0].content_security_policy)) == 4
+    )
+    error_message = "The CAPTCHA adds exactly two origins to two directives: no wildcard, no unsafe-eval, no blob:."
+  }
+  assert {
+    condition     = output.waf_captcha_script_url == "https://a1b2c3d4e5f6.edge.captcha-sdk.awswaf.com/a1b2c3d4e5f6/jsapi.js"
+    error_message = "The build's script URL is the integration URL's jsapi.js."
+  }
+}
+
+run "signin_captcha_count_mode" {
+  command = plan
+
+  variables {
+    waf_signin_captcha_action = "COUNT"
+  }
+
+  assert {
+    condition = (
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].count) == 1 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "SignInCaptchaPerIP"]).action[0].captcha) == 0
+    )
+    error_message = "COUNT switches the puzzle off and keeps the rule counting."
+  }
+}
+
+run "rejects_signin_captcha_at_the_block_limit" {
+  command = plan
+  variables {
+    waf_signin_captcha_per_5min = 100
+  }
+  expect_failures = [var.waf_signin_captcha_per_5min]
+}
+
+run "rejects_signin_captcha_below_aws_minimum" {
+  command = plan
+  variables {
+    waf_signin_captcha_per_5min = 9
+  }
+  expect_failures = [var.waf_signin_captcha_per_5min]
+}
+
+run "rejects_unknown_signin_captcha_action" {
+  command = plan
+  variables {
+    waf_signin_captcha_action = "BLOCK"
+  }
+  expect_failures = [var.waf_signin_captcha_action]
+}
+
+run "rejects_a_wildcard_captcha_integration_url" {
+  command = plan
+  variables {
+    waf_captcha_integration_url = "https://*.awswaf.com/"
+  }
+  expect_failures = [var.waf_captcha_integration_url]
 }
 
 # ---------------------------------------------------------------------------

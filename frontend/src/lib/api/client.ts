@@ -133,6 +133,16 @@ export class ApiError extends Error {
 
 type FetchFn = typeof fetch;
 
+/** ApiError.code for the WAF's CAPTCHA answer (set here; the API never sends it). */
+export const CAPTCHA_REQUIRED = 'captcha_required';
+/** The header AWS WAF reads a token from, besides its aws-waf-token cookie. */
+export const WAF_TOKEN_HEADER = 'x-aws-waf-token';
+
+/** AWS WAF's CAPTCHA action on a request that isn't for an HTML page: 405 and `x-amzn-waf-action: captcha`. */
+export function isWafCaptcha(res: Pick<Response, 'status' | 'headers'>): boolean {
+	return res.status === 405 && res.headers.get('x-amzn-waf-action')?.trim().toLowerCase() === 'captcha';
+}
+
 /** Human-readable fallback when the server sent no `{ error }` body. */
 function statusText(status: number): string {
 	switch (status) {
@@ -175,19 +185,24 @@ function describeDetails(details: unknown): string {
 export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(...a)) {
 	const base = baseUrl.replace(/\/+$/, '');
 
-	async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+	async function request<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
 		let res: Response;
+		const headers = { ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...extraHeaders };
 		try {
 			res = await fetchFn(`${base}${path}`, {
 				method,
 				credentials: 'include',
-				headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+				headers: Object.keys(headers).length ? headers : undefined,
 				body: body === undefined ? undefined : JSON.stringify(body)
 			});
 		} catch (e) {
 			throw new ApiError(0, statusText(0), e);
 		}
 		if (res.status === 204) return undefined as T;
+		// The WAF's sign-in CAPTCHA (infra/waf.tf SignInCaptchaPerIP): a request
+		// without a valid token gets 405 with this header, from CloudFront,
+		// never from the API. Only the header makes a 405 one.
+		if (isWafCaptcha(res)) throw new ApiError(405, 'solve the puzzle to continue', undefined, CAPTCHA_REQUIRED);
 		const text = await res.text();
 		let data: unknown = undefined;
 		if (text) {
@@ -215,8 +230,15 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		request,
 		auth: {
 			me: () => request<{ user: User }>('GET', '/auth/me').then((r) => r.user),
-			login: (email: string, password: string) =>
-				request<{ user: User }>('POST', '/auth/login', { email, password }).then((r) => r.user),
+			/**
+			 * `wafToken`: the token from a solved WAF CAPTCHA, for the retry
+			 * after a CAPTCHA_REQUIRED ApiError ($lib/auth/wafCaptcha), sent
+			 * in the header the WAF reads.
+			 */
+			login: (email: string, password: string, wafToken?: string) =>
+				request<{ user: User }>('POST', '/auth/login', { email, password }, wafToken ? { [WAF_TOKEN_HEADER]: wafToken } : undefined).then(
+					(r) => r.user
+				),
 			/**
 			 * Sign up. An ordinary sign-up signs nobody in: it mails a
 			 * confirmation link and answers `{ confirm, email }` (the same for a

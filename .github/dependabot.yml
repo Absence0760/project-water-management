@@ -55,7 +55,10 @@ updates:
   # The report renderer image's npm packages (backend/renderer.Dockerfile
   # installs them with npm ci from this lockfile). playwright-core moves by
   # hand, together with the image tag and digest and backend's playwright-core
-  # (the Dockerfile's header says how), so it is ignored here.
+  # (the Dockerfile's header says how), so it is ignored here. Never
+  # auto-merged: what goes into the renderer image gets a human review
+  # (dependabot-auto-merge.yml excludes this directory, and
+  # `pnpm check:workflows`, auto-merge rule, keeps it excluded).
   - package-ecosystem: npm
     directory: "/backend/renderer-deps"
     schedule:
@@ -70,9 +73,11 @@ updates:
   # lines: mcr.microsoft.com/playwright:v<version>-noble@sha256:…). Dependabot
   # moves the tag and digest together. A new Playwright version must also move
   # renderer-deps, backend's playwright-core and e2e's @playwright/test, and
-  # `pnpm check:pins` fails the PR until it does; a digest-only bump (the same
-  # tag rebuilt) is the moment to re-read the apt pins against the new base
-  # (the Dockerfile says how). Never auto-merged: `docker` is left out of
+  # `pnpm check:pins` fails the PR until it does. Every one of these PRs,
+  # digest-only bumps (the same tag rebuilt) included, also moves the build
+  # stage's apt snapshot and versions against the new base: run
+  # `pnpm gen:renderer-apt` on the PR's branch (the Dockerfile's header says
+  # why). Never auto-merged: `docker` is left out of
   # dependabot-auto-merge.yml's allowlist, and `pnpm check:workflows`
   # (auto-merge rule) keeps it out.
   - package-ecosystem: docker

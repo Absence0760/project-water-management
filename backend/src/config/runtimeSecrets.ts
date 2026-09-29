@@ -28,9 +28,10 @@ import { getSecretString } from './secretsManager.js';
 
 /** The keys each role's secret holds: no more (least privilege), no fewer. */
 export const RUNTIME_SECRETS: Record<Role, readonly string[]> = {
-	// The session key, the RLS-bound connection (its water_app password), and
-	// the header CloudFront stamps on every /api request.
-	api: ['AUTH_JWT_SECRET', 'DATABASE_URL', 'CLOUDFRONT_SHARED_SECRET'],
+	// The session key, the RLS-bound connection (its water_app password), the
+	// header CloudFront stamps on every /api request, and the key that signs
+	// report downloads (CloudFront signed URLs, reports/storage.ts).
+	api: ['AUTH_JWT_SECRET', 'DATABASE_URL', 'CLOUDFRONT_SHARED_SECRET', 'CLOUDFRONT_PRIVATE_KEY'],
 	// The run-stamp key (the session secret, runs/stamp.ts), the connection,
 	// and the key that signs unsubscribe links (only the worker signs).
 	worker: ['AUTH_JWT_SECRET', 'DATABASE_URL', 'ALERTS_TOKEN_SECRET'],

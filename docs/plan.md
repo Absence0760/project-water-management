@@ -380,9 +380,9 @@ region **`af-south-1`**, **minimal tier** to start (`budget_monthly_usd = 80`;
 - ⬜ Secrets: `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region <region>`,
   then `sops water-management/prod.sops.yaml` with `AUTH_JWT_SECRET`, the
   `water_app` DB password and the owner/migration DB password (unless RDS
-  Secrets Manager manages it). Terraform reads them with the `carlpett/sops`
-  provider (`data "sops_file"`), or through a decrypt-to-tfvars step. Plaintext
-  never touches this repo.
+  Secrets Manager manages it). Terraform gets them as ephemeral variables
+  through `infra/scripts/tf.sh` (`sops exec-env`), so they stay out of state
+  too (issue #126). Plaintext never touches this repo.
 - ⬜ **Region.** Given POPIA and latency to South Africa, `af-south-1` (Cape
   Town) is the natural choice for the DB and Lambda. It is an opt-in region with
   somewhat higher prices, and RDS PostgreSQL 17 on t4g must be available
@@ -410,8 +410,9 @@ lives in [infra/README.md](../infra/README.md). The intent:
   the owner role and also creates or updates `water_app`. The deploy invokes it
   before publishing new API code.
 - 🚧 **Secrets through sops.** `AUTH_JWT_SECRET` and the DB passwords come from
-  `infra-secrets/water-management/prod.sops.yaml` (the `carlpett/sops` provider)
-  into Lambda configuration. Nothing is in this repo.
+  `infra-secrets/water-management/prod.sops.yaml` (through `infra/scripts/tf.sh`,
+  as ephemeral variables) into write-only Secrets Manager values, out of the
+  Lambda configuration and out of Terraform state. Nothing is in this repo.
 - 🚧 **Lambda runtime `nodejs24.x`** (the repo moves to Node 24). Timeout ~30 s
   for runs and memory ~1024 MB (engine plus large JSON). Reserved concurrency
   stays capped.

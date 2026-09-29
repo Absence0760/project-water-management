@@ -2,7 +2,7 @@
 //
 //   POST   /projects/:id/reports                        viewer   queue a PDF of a run, or its impact report (202 { jobId })
 //   GET    /projects/:id/reports/:jobId                 viewer   its status
-//   GET    /projects/:id/reports/:jobId/pdf             viewer   302 to a 60 s pre-signed GET of the PDF once done
+//   GET    /projects/:id/reports/:jobId/pdf             viewer   302 to a 60 s signed GET of the PDF once done (S3 locally, CloudFront in production)
 //   GET    /projects/:id/report-schedules               viewer   the project's schedules
 //   POST   /projects/:id/report-schedules               editor   add one
 //   PATCH  /projects/:id/report-schedules/:scheduleId   editor   change one
@@ -196,9 +196,11 @@ export const reportRoutes = new Hono<AuthEnv>()
 		const { key: _key, ...report } = view;
 		return c.json({ report });
 	})
-	// The download: a fresh, one-minute pre-signed GET per click, behind the
+	// The download: a fresh, one-minute signed GET per click, behind the
 	// session and the project's membership, so the only lasting link to a PDF
-	// is this route (issue #126). A redirect rather than streaming the bytes:
+	// is this route (issue #126). In production it is a CloudFront signed URL
+	// on the site's own /reports/* path, so the transfer too passes the WAF
+	// (storage.ts downloadUrl). A redirect rather than streaming the bytes:
 	// the API's Function URL buffers responses (6 MB, less after base64), and
 	// streaming would hold a VPC Lambda open for every transfer.
 	.get('/:id/reports/:jobId/pdf', async (c) => {
@@ -303,9 +305,10 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));
 	const hash = parseToken(body.token);
-	if (!hash) throw new ApiError(400, INVALID_TOKEN);
+	// Coded (render_token_refused): the renderer treats only this refusal as final (reports/render.ts).
+	if (!hash) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	const t = await withoutUser((db) => consumeRenderToken(db, hash));
-	if (!t) throw new ApiError(400, INVALID_TOKEN);
+	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	await withUser(t.userId, async (db) => {
 		// The run, and an impact report's baseline, both still readable by the requester (RLS: model_run is theirs).
 		const { rows } = await db.query<{ ok: boolean }>(
@@ -313,7 +316,7 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 				AND ($4::uuid IS NULL OR (app_has_role($3, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $4 AND project_id = $3))) AS ok`,
 			[t.projectId, t.runId, t.against?.projectId ?? null, t.against?.runId ?? null]
 		);
-		if (!rows[0]?.ok) throw new ApiError(403, 'the requester can no longer see this report');
+		if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this report');
 	});
 	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}) });
 	return c.json({ ok: true });

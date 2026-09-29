@@ -10,13 +10,25 @@
 //
 // A PDF's key is derived from its ids (reportKey), never stored or taken from
 // a message, so nothing can point a download at another project's file.
-// Downloads are pre-signed GET URLs that expire after a minute, minted per
-// click by the auth-checked GET /projects/:id/reports/:jobId/pdf (a 302), so
-// the only lasting handle on a PDF is that route, behind the session, the
-// WAF and the project's membership (docs/security.md § Reports).
+// Downloads are short-lived signed URLs, minted per click by the auth-checked
+// GET /projects/:id/reports/:jobId/pdf (a 302), so the only lasting handle on
+// a PDF is that route, behind the session, the WAF and the project's
+// membership (docs/security.md § Reports). REPORT_DOWNLOADS picks the signer:
+//
+//   presigned  — default. A pre-signed S3 GET on the storage above (MinIO
+//                locally): no AWS account, no CloudFront.
+//   cloudfront — production: a CloudFront signed URL on the site's own
+//                origin (SITE_URL/reports/…), which CloudFront serves from the
+//                private bucket through its origin access control, behind the
+//                WAF (infra/reports.tf). Signed with the private key of the
+//                distribution's trusted key group (CLOUDFRONT_KEY_PAIR_ID,
+//                CLOUDFRONT_PRIVATE_KEY from the API's runtime secret;
+//                CLOUDFRONT_PUBLIC_KEY, its public half, checked against it at
+//                cold start). The API itself can't read the bucket.
 //
 // The AWS SDK is imported lazily, like the mail and queue transports.
 import type { S3Client } from '@aws-sdk/client-s3';
+import { assertKeyPair, signCloudFrontUrl } from './cloudfrontSign.js';
 
 export const STORAGES = ['local', 's3'] as const;
 export type Storage = (typeof STORAGES)[number];
@@ -27,9 +39,18 @@ export function storageKind(value: string | undefined = process.env.STORAGE): St
 	return v as Storage;
 }
 
+export const REPORT_DOWNLOADS = ['presigned', 'cloudfront'] as const;
+export type ReportDownloads = (typeof REPORT_DOWNLOADS)[number];
+
+export function reportDownloads(value: string | undefined = process.env.REPORT_DOWNLOADS): ReportDownloads {
+	const v = value?.trim() || 'presigned';
+	if (!(REPORT_DOWNLOADS as readonly string[]).includes(v)) throw new Error(`unknown REPORT_DOWNLOADS "${v}" (expected ${REPORT_DOWNLOADS.join(', ')})`);
+	return v as ReportDownloads;
+}
+
 /**
- * Pre-signed download links last this long (seconds): long enough for the
- * browser to follow the API's redirect and start the download (S3 checks the
+ * Signed download links last this long (seconds): long enough for the
+ * browser to follow the API's redirect and start the download (S3 and CloudFront check the
  * expiry when the GET starts, not while it streams), short enough that a
  * leaked or logged link is useless almost at once.
  */
@@ -109,13 +130,38 @@ export async function putPdf(key: string, body: Uint8Array): Promise<void> {
 	await c.send(new sdk.PutObjectCommand({ Bucket: reportsBucket(), Key: key, Body: body, ContentType: 'application/pdf' }));
 }
 
-/** A pre-signed GET for a PDF, downloaded under `fileName`. Signing is local: no request is made. */
-export async function downloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL_SECONDS): Promise<string> {
+/**
+ * The API's cold-start check (lambda.ts): with REPORT_DOWNLOADS=cloudfront,
+ * refuse to start unless the signing key is the private half of the public
+ * key Terraform trusts (cloudfrontSign.ts assertKeyPair). Off (presigned) it
+ * does nothing.
+ */
+export function assertDownloadSigner(): void {
+	if (reportDownloads() !== 'cloudfront') return;
+	assertKeyPair(process.env.CLOUDFRONT_PRIVATE_KEY ?? '', process.env.CLOUDFRONT_PUBLIC_KEY ?? '');
+}
+
+/**
+ * A signed GET for a PDF, downloaded under `fileName` (REPORT_DOWNLOADS picks
+ * S3 or CloudFront). Signing is local: no request is made.
+ */
+export async function downloadUrl(key: string, fileName: string, expiresIn = DOWNLOAD_URL_TTL_SECONDS, now = Date.now()): Promise<string> {
+	const disposition = `attachment; filename="${fileName}"`;
+	if (reportDownloads() === 'cloudfront') {
+		const keyPairId = process.env.CLOUDFRONT_KEY_PAIR_ID?.trim() ?? '';
+		const privateKey = process.env.CLOUDFRONT_PRIVATE_KEY ?? '';
+		if (!keyPairId || !privateKey.trim()) throw new Error('REPORT_DOWNLOADS=cloudfront needs CLOUDFRONT_KEY_PAIR_ID and CLOUDFRONT_PRIVATE_KEY');
+		const site = (process.env.SITE_URL || 'http://localhost:7777').trim().replace(/\/+$/, '');
+		// The bucket's key is the path (the /reports/* behaviour), and S3 sets the
+		// file name from the forwarded query; the signature covers both.
+		const url = `${site}/${key}?response-content-disposition=${encodeURIComponent(disposition)}`;
+		return signCloudFrontUrl(url, Math.floor(now / 1000) + expiresIn, { keyPairId, privateKey });
+	}
 	const { s3: c, sdk } = await s3();
 	const { getSignedUrl } = await import('@aws-sdk/s3-request-presigner');
 	return getSignedUrl(
 		c,
-		new sdk.GetObjectCommand({ Bucket: reportsBucket(), Key: key, ResponseContentDisposition: `attachment; filename="${fileName}"` }),
+		new sdk.GetObjectCommand({ Bucket: reportsBucket(), Key: key, ResponseContentDisposition: disposition }),
 		{ expiresIn }
 	);
 }

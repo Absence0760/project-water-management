@@ -15,6 +15,7 @@ export const SECTIONS: Record<string, string> = {
 	password: 'Password fields: the Show / Hide button inside each one (it shows the typed password as text), and the rules shown under the field when the password is not accepted.',
 	auth: 'The sign-in pages: the brand panel beside every sign-in form.',
 	login: 'The sign-in page.',
+	captcha: 'The sign-in page’s security check, shown only when many sign-ins come from one network: a heading and a short explanation above a picture puzzle from Amazon (its own buttons and words are Amazon’s, in English). “Person” means a human, as opposed to an automated program.',
 	register: 'The create-an-account page, including an emailed invitation (from the WUA or a colleague).',
 	'terms-summary': 'The main points of the Terms of use, in a box above the create-account button and on the “Our terms have changed” page. Legal points: keep their exact force. The Terms themselves are in English only; this box is the one part a farmer reads in their own language. “§13” is section 13 of the Terms.',
 	'terms-update': 'The page a signed-in person sees after the Terms of use or Privacy notice changed, before anything else: what changed, and a button to accept the new terms (or sign out).',

@@ -17,7 +17,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | Method | Path | Body | Response |
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
-| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked |
+| POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked. In production, past 20 sign-ins per IP in 5 minutes, AWS WAF (not the API) may answer `405` with `x-amzn-waf-action: captcha`; send it again with a solved CAPTCHA token in `x-aws-waf-token` (docs/security.md § Sign-in CAPTCHA) |
 | POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
-| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run; both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -199,6 +199,15 @@ language. A code is a contract: add new ones, never rename one
 code has no message in `apiError.ts` `CODES`). A guard (`backend/src/http/errorCodes.test.ts`)
 fails on any uncoded `ApiError` in the routes the translated pages call,
 unless it is listed there with why its status says enough.
+
+**Machine-only codes.** A code that only a machine client reads, never a
+translated page, is in `MACHINE_ERROR_CODES` instead, so it has no words in
+the frontend catalogue (same contract: add, never rename). One so far:
+`render_token_refused` (`400`/`403` from `POST /auth/render-session`: the
+render token is used, expired or unknown, or the requester lost access). The
+report renderer treats only that code as a final refusal; a `403` without it
+is a WAF or CloudFront block, and is retried with the other passing failures
+(`backend/src/reports/render.ts` `sessionRefusal`).
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -2587,7 +2596,7 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
 | --- | --- | --- | --- | --- |
 | POST | `/projects/:id/reports` | `{ runId?, against?, email? }` | `202 { jobId }`: a render of `runId` (the latest run without one) is queued. `against` (`"<projectId>:<runId>"`, the report route's and Compare runs' ref; needs `runId`) makes it the **impact report** of `runId` against that baseline, which may be another project's run but must be one **you can read** (`404 no such baseline run, or its project isn't shared with you` otherwise, as Compare runs; `400` malformed, or the run itself). `email`: `true` emails the link to you; a list of user ids emails it to those members (editors and owners only; `403` for a viewer naming anyone else). `404` a `runId` not in the project; `409` the project has no runs; `429` over 10 on-demand PDFs an hour per user and project | viewer |
 | GET | `/projects/:id/reports/:jobId` | – | `{ report: ReportView }`. No download link: the PDF is fetched from the route below once `status` is `done`. `404` unknown job, or not a report's | viewer |
-| GET | `/projects/:id/reports/:jobId/pdf` | – | `302` to a pre-signed S3 GET of the PDF that expires after **60 s**, minted on every request (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`), with `Content-Disposition: attachment` and the file name `<project>-report-<date>.pdf`. A plain link works (the session cookie goes with it), so the app links here and this route is the only lasting handle on a PDF. `409` not rendered yet (or failed); `404` unknown job, not a report's, or finished more than 7 days ago (`the PDF has expired…`, the bucket's lifecycle has deleted it) | viewer |
+| GET | `/projects/:id/reports/:jobId/pdf` | – | `302` to a signed GET of the PDF that expires after **60 s**, minted on every request (`Cache-Control: no-store`, `Referrer-Policy: no-referrer`), with `Content-Disposition: attachment` and the file name `<project>-report-<date>.pdf`. In production it is a CloudFront signed URL on the site's own origin (`/reports/<project>/<report>.pdf?response-content-disposition=…&Expires=…&Signature=…&Key-Pair-Id=…&Hash-Algorithm=SHA256`), so the download passes CloudFront and the WAF; locally (`REPORT_DOWNLOADS=presigned`) a pre-signed MinIO GET. CloudFront answers `403` to a link that is unsigned, altered or expired. A plain link works (the session cookie goes with it), so the app links here and this route is the only lasting handle on a PDF. `409` not rendered yet (or failed); `404` unknown job, not a report's, or finished more than 7 days ago (`the PDF has expired…`, the bucket's lifecycle has deleted it) | viewer |
 | GET | `/projects/:id/report-schedules` | – | `{ schedules: ScheduleView[] }` | viewer |
 | POST | `/projects/:id/report-schedules` | `ScheduleInput` | `201 { schedule: ScheduleView }`. `409` past 10 schedules per project | editor |
 | PATCH | `/projects/:id/report-schedules/:scheduleId` | any of `ScheduleInput`'s fields | `200 { schedule }`. Saving makes you its acting user; changing its timing (or pausing / resuming it) starts it afresh from now | editor |
@@ -2599,7 +2608,9 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   `status` ∈ `queued` → `rendering` → `done`; `retrying` (the render failed
   and will be tried again; up to 3 attempts); `failed` (out of attempts, a
   failure no retry can fix, or, in production, no answer from the renderer
-  within an hour). `error` is the server's own text, never raw database or
+  within an hour). In production a retryable failure the renderer Lambda
+  reports (a WAF block, a timeout) is asked for again after 2, then 4
+  minutes, up to 3 renders, and the report shows `rendering` meanwhile. `error` is the server's own text, never raw database or
   browser output: e.g. `the render took longer than 90 s`, `the report page
   did not load: …` (the page's own message), `the run was deleted before its
   report was made`, `the baseline run was deleted, or its project isn't
