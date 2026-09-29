@@ -24,6 +24,11 @@
 //     enqueueRerun → app_enqueue_rerun (debounce, maximum wait, dedupe).
 //   - A forecast feed's new days also queue the scheduled forecast run
 //     (queueForecastFor, WP-2.12), under the same setting.
+//   - New days of any other series also queue a run of the calibration rules
+//     (queueAutoCalibrationFor, issue #153), when
+//     settings.calibrationRules.after.onNewData asks for it (off by default):
+//     app_enqueue_auto_calibration, 108_auto_calibration.sql, one pending per
+//     project, debounced like the re-run, as the same acting user.
 //   - It never wakes the worker (that has to wait for the commit): a route
 //     wakes it after committing when the re-run is due at once
 //     (series/routes.ts wakeForRerun); inside a job nothing is needed (the job
@@ -60,9 +65,21 @@ export async function queueForecastFor(db: Db, projectId: string, change: Series
 	return change.daysChanged > 0 && change.via === 'feed' && change.kind === 'rain_forecast_mm' ? enqueueForecastRun(db, projectId) : null;
 }
 
+/**
+ * New observed or rain data queues a run of the calibration rules (issue
+ * #153), when the rules ask for it; null when they don't, or for the
+ * forecast (it is never fitted to). Returns the queued job's id.
+ */
+export async function queueAutoCalibrationFor(db: Db, projectId: string, change: SeriesDaysChanged): Promise<string | null> {
+	if (change.daysChanged <= 0 || change.kind === 'rain_forecast_mm') return null;
+	const { rows } = await db.query<{ id: string | null }>('SELECT app_enqueue_auto_calibration($1) AS id', [projectId]);
+	return rows[0]?.id ?? null;
+}
+
 /** The hook (see the header). Returns `rerunQueuedFor`: when the re-run is due, or null. */
 export async function onSeriesDaysChanged(db: Db, projectId: string, change: SeriesDaysChanged): Promise<string | null> {
 	const rerun = await queueRerunFor(db, projectId, change);
 	await queueForecastFor(db, projectId, change);
+	await queueAutoCalibrationFor(db, projectId, change);
 	return rerun?.runAfter ?? null;
 }

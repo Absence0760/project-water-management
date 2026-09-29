@@ -43,6 +43,7 @@ describe('calibrationRulesError', () => {
 		[{ signedOff: { by: ' ', on: '2026-09-29' } }, 'needs a name'],
 		[{ signedOff: { by: 'A. Hydrologist', on: '29/09/2026' } }, 'YYYY-MM-DD'],
 		[{ run: { seed: -1, starts: 5, budget: 1500 } }, 'the seed'],
+		[{ after: { onNewData: 'always', ensemble: true } }, 'unknown new-data action'],
 		[{ run: { seed: 1, starts: 11, budget: 1500 } }, 'the starts'],
 		[{ run: { seed: 1, starts: 5, budget: 20 } }, 'model runs per fit']
 	] as [Partial<CalibrationRules>, string][])('refuses %j', (over, msg) => {
@@ -121,6 +122,7 @@ describe('sameRules and the change lines', () => {
 			'The project’s pan coefficient',
 			expect.stringContaining('wide and typical bounds'),
 			expect.stringContaining('dry → wet test'),
+			'on new data, nothing; a kept fit applied also gets a run and its uncertainty ensemble',
 			'seed 1, 5 starts per fit, 1500 model runs per optimisation',
 			'MAR inside the WR2012 band; parameters in the typical range'
 		]);

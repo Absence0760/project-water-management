@@ -386,7 +386,7 @@ describe('automated calibration rules and fits (issue #153)', () => {
 		}
 	});
 
-	it('bumps the revision on a rule change, stores only a fit made under the saved rules, and snapshots both in a run', async () => {
+	it('bumps the revision on a rule change, refuses an automated fit a client writes, and snapshots the rules in a run', async () => {
 		const u = await signUp('Autorules');
 		const projectId = await runnable(u);
 		const current = (await u.call('GET', `/projects/${projectId}`)).body.project.settings;
@@ -399,30 +399,19 @@ describe('automated calibration rules and fits (issue #153)', () => {
 		const rules = changed.body.project.settings.calibrationRules;
 		expect(rules).toMatchObject({ revision: 2, selection: { test: 'split' } });
 
-		// A fit made under revision 1 (before the change) is refused, with nothing stored.
-		const stale = await u.call('PATCH', `/projects/${projectId}`, { settings: { fitRecord: autoRecord({ ...current.calibrationRules }) } });
-		expect(stale.status).toBe(409);
-		expect(stale.body.error).toContain('revision 1, but the saved rules are revision 2');
+		// Even under the saved rules, a client can't write an automated fit: the server applies those (calibration/store.ts).
+		for (const ranUnder of [current.calibrationRules, rules]) {
+			const res = await u.call('PATCH', `/projects/${projectId}`, { settings: { fitRecord: autoRecord(ranUnder) } });
+			expect(res.status).toBe(409);
+			expect(res.body.error).toContain('applied by the server');
+		}
 		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.fitRecord).toBeNull();
-		// Nor can the rules change in the same save as the fit they picked.
-		const both = await u.call('PATCH', `/projects/${projectId}`, {
-			settings: { calibrationRules: { ...rules, exclusions: { maxFlaggedShare: 0.5 } }, fitRecord: autoRecord(rules) }
-		});
-		expect(both.status).toBe(409);
-		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.calibrationRules.revision).toBe(2);
 
-		// Positive control: a fit made under the saved rules is stored, and a run snapshots it with the rules.
-		const ok = await u.call('PATCH', `/projects/${projectId}`, { settings: { gr4j: { ...current.gr4j, x1: 420, x3: 70, x4: 2.1 }, fitRecord: autoRecord(rules) } });
-		expect(ok.status).toBe(200);
-		expect(ok.body.project.settings.fitRecord.auto.rules.revision).toBe(2);
-		const run = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'auto' })).body.run.id;
+		const run = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'rules' })).body.run.id;
 		const detail = (await u.call('GET', `/projects/${projectId}/runs/${run}`)).body.run;
 		expect(detail.settings.calibrationRules).toMatchObject({ revision: 2 });
-		expect(detail.settings.fitRecord.auto.chosen).toBe(0);
-		// A later rule change leaves the stored fit alone (the page says it is stale).
+		// A later rule change moves the revision on again.
 		const later = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibrationRules: { ...rules, exclusions: { maxFlaggedShare: 0.3 } } } });
-		expect(later.status).toBe(200);
-		expect(later.body.project.settings.fitRecord.auto.rules.revision).toBe(2);
 		expect(later.body.project.settings.calibrationRules.revision).toBe(3);
 	});
 
