@@ -145,6 +145,9 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	VITEST: { why: 'Set by the test runner; lowers the bcrypt cost to 4.', checks: ALL(unset) },
 	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
+	AWS_LAMBDA_LOG_FORMAT: {
+		why: 'Set by the Lambda runtime from the function\'s logging_config (reserved; infra/lambda.tf local.lambda_logging): JSON makes logging/logEvent.ts log an object, so every alarm\'s filter ($.message.event) matches. Pinned to JSON on every Lambda by infra/tests/logging.tftest.hcl, not here: Terraform sets it through logging_config, not an environment block.'
+	},
 
 	// --- Runtime secrets (config/runtimeSecrets.ts) --------------------------------------
 	RUNTIME_SECRET_ARN: {
