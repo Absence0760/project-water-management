@@ -4689,8 +4689,9 @@ them scenarios).
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
-  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab; for an
-  applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab). Only the
+  assessors see this section; an applicant gets a note instead
+  ([§ Applications](#applications-wp-33)). A note says when the changes were
   edited since that run. Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).

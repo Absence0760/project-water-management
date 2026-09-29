@@ -8,8 +8,7 @@
 	// its overlay.ts helpers, as is). The base is the one the run recorded, so
 	// a rebased scenario's older run is still compared with its own base.
 	// Under it, the scenario run's validation statement (WP-3.13), folded shut.
-	import { base } from '$app/paths';
-	import { compareSearch, compareTabHref } from '$lib/components/compare/picker';
+	import { compareTabHref } from '$lib/components/compare/picker';
 	import { untrack } from 'svelte';
 	import { api, ApiError, type RunCompareResponse, type Scenario } from '$lib/api';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -21,16 +20,8 @@
 
 	const loadOverlay = () => import('$lib/components/compare/CompareOverlay.svelte');
 
-	let {
-		projectId,
-		scenario,
-		applicant = false
-	}: {
-		projectId: string;
-		scenario: Scenario;
-		/** An applicant has no workspace tabs, so the full comparison is the /compare page for them. */
-		applicant?: boolean;
-	} = $props();
+	// Only assessors see it: ScenarioEditor shows an applicant a note instead.
+	let { projectId, scenario }: { projectId: string; scenario: Scenario } = $props();
 
 	let data = $state<RunCompareResponse | null>(null);
 	let loading = $state(false);
@@ -71,11 +62,7 @@
 
 	/** The scenario's ops changed since this run: its results are of the older list. */
 	const stale = $derived(!!data?.b.scenario && data.b.scenario.opsSha256 !== scenario.opsSha256);
-	const compareHref = $derived.by(() => {
-		if (!data) return '';
-		const [a, b] = [{ projectId, runId: data.a.run.id }, { projectId, runId: data.b.run.id }];
-		return applicant ? `${base}/compare${compareSearch(a, b)}` : compareTabHref(a, b);
-	});
+	const compareHref = $derived(data ? compareTabHref({ projectId, runId: data.a.run.id }, { projectId, runId: data.b.run.id }) : '');
 </script>
 
 <section class="panel" aria-labelledby="sc-compare-h">

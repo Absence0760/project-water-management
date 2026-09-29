@@ -526,7 +526,7 @@
 		The assessors compare each run of your application with the published baseline. A view of the results for applicants is still to come.
 	</p>
 {:else}
-	<ScenarioCompare {projectId} scenario={s} {applicant} />
+	<ScenarioCompare {projectId} scenario={s} />
 {/if}
 
 {#if yieldFarms.length}
