@@ -416,6 +416,15 @@ bootstrap printed), `bootstrap_slug = "water-management"`, the region, the budge
 email and the DMARC report mailbox. Both files are gitignored (the estate
 keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
+Before the first plan, run the read-only pre-apply check (the Lambda
+concurrency quota against the reservations, the state bucket and sops key in
+us-east-1, the SES endpoint service, the RDS instance class; PASS/FAIL per
+check, exit 1 on any FAIL; infra/README.md § Operator steps, step 7a):
+
+```bash
+cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+```
+
 ```bash
 cd infra && terraform init -backend-config=backend.config && ./scripts/tf.sh plan
 ```
@@ -431,6 +440,18 @@ and secrets:
 
 ```bash
 ~/github/templates/scripts/export-tf-vars.sh infra/
+```
+
+After the apply (and again after the first frontend release, when the
+site's edge checks can pass), run the read-only post-apply check: both alert
+topics' email subscriptions confirmed, the RDS event subscription active,
+SES production access (a warning while in the sandbox), the renderer's ECR
+policy, the site's 404s and no S3 bucket listing, and the Function URL's 403
+without the shared secret (infra/README.md § Operator steps, steps 8, 10a
+and 10c; `--rds-event-test` proves RDS events reach the topic):
+
+```bash
+cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
 ```
 
 They are **repository-level** values (`gh variable set` / `gh secret set`
@@ -1170,7 +1191,8 @@ plan-only until the first deploy):
   queue.
   **After that apply, and again after the second backend release** (the
   first to move an existing renderer), confirm the repository policy still
-  holds only Terraform's statement:
+  holds only Terraform's statement (`infra/scripts/postapply-check.sh`,
+  its `ecr-policy` line, or by hand):
   `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
   (step 10a says what to look for). The renderer's role pulls the image
   with its own grant, and the repository policy carries the statement

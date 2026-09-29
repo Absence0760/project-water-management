@@ -201,6 +201,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
+| `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist. PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
@@ -536,7 +538,8 @@ Claude does not run any of these, and none of them print a secret. Replace
    `-1` (unreserved) is refused by the variables' validation: it would lift
    the spend and DB-connection caps.
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
-   Check it with
+   Check it with `scripts/preapply-check.sh` (step 7a), which sums the
+   reservations from `variables.tf` and your tfvars, or by hand with
    `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
@@ -547,6 +550,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    the SES API endpoint service exists in the region (it launched Dec 2025):
    `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
    An empty result means the apply would fail on `aws_vpc_endpoint.ses`.
+   `scripts/preapply-check.sh` (step 7a) runs this check too.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
    with `openssl rand -hex 32` (JWT, alert-token secret) and
@@ -561,6 +565,16 @@ Claude does not run any of these, and none of them print a secret. Replace
    [`terraform.tfvars.example`](./terraform.tfvars.example).
 7. **Backend config:**
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
+7a. **Pre-apply check** (read-only; needs step 7's `backend.config`):
+   `cd ~/github/project-water-management/infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   PASS/FAIL per check, exit 1 on any FAIL: the Lambda concurrency quota
+   (step 3; the sum of every `*_reserved_concurrency`, `variables.tf`
+   defaults overridden by plain numbers in the tfvars, + 10; `--reserved <n>`
+   to give the sum yourself), the state bucket from `backend.config` and the
+   `alias/water-management-sops` key existing in **us-east-1**, the SES
+   endpoint service (step 4a) and the RDS instance class offering the
+   PostgreSQL major `rds.tf` pins. The region comes from the tfvars'
+   `aws_region` (or `--region`). Plan only once it passes.
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
    - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
@@ -578,6 +592,16 @@ Claude does not run any of these, and none of them print a secret. Replace
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
    topic (the us-east-1 one carries every budget and cost-anomaly alert).
+   Then run the post-apply check (read-only):
+   `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   It FAILS while a subscription is still `PendingConfirmation`, and checks
+   the RDS event subscription is `active`, the renderer's ECR policy (10a),
+   SES production access (a WARN until step 8a is granted) and the edge: a
+   missing `/x.pdf` and a missing file under `/_app/` answer 404, no
+   `?list-type=2` or directory request returns an S3 `ListBucketResult`, and
+   the API's Function URL answers 403 without the CloudFront shared secret.
+   The edge checks need the site's DNS and certificate live; re-run it after
+   the first frontend release (step 10).
    `budget_alert_email` is required and must be a real mailbox; plan
    refuses an empty, malformed or reserved (`example.com` etc.) address.
    Then check that the budgets accepted the topic (no "Invalid SNS topic"
@@ -659,7 +683,8 @@ Claude does not run any of these, and none of them print a secret. Replace
     had tried, the apply would have failed rather than widened the policy.
     `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
     must show exactly that one statement, with its `aws:sourceArn` condition
-    naming `water-management-renderer`. Any other statement: note it on #126
+    naming `water-management-renderer` (`scripts/postapply-check.sh` checks
+    the single statement as `ecr-policy`). Any other statement: note it on #126
     and fold its shape into `renderer_ecr` rather than leaving drift.
     **On the second backend release** (the first that moves an existing
     renderer, as the deploy role, with `UpdateFunctionCode`): check the
@@ -686,6 +711,29 @@ Claude does not run any of these, and none of them print a secret. Replace
     and record the finding in #126. The same applies if the first apply
     rejects the endpoint policy itself (the endpoint service not supporting
     custom policies): note it on #126 before removing the `policy` argument.
+10c. **RDS event delivery** (at the first deploy, before the database holds
+    client data; issue #126). The regional topic's policy lets
+    `events.rds.amazonaws.com` publish only with `aws:SourceAccount` = the
+    account and `aws:SourceArn` = the DB instance's ARN (`alarms.tf`
+    `AllowRdsEvents`), the shape AWS documents in
+    [Granting permissions to publish notifications to an Amazon SNS topic](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_Events.GrantingPermissions.html).
+    A plan can't prove RDS sends that `SourceArn`, and SNS drops a denied
+    publish silently, so prove it once. `postapply-check.sh` already checks
+    the subscription is `active` (`rds-events`). Produce one harmless event:
+    reboot the instance while it holds no client data (about a minute of API
+    downtime; the script never does this for you):
+    `aws rds reboot-db-instance --db-instance-identifier water-management --region <region> --profile water-management`
+    Within a few minutes a "DB instance restarted" email (an `availability`
+    event) should arrive at `budget_alert_email`. Then run
+    `./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --rds-event-test`:
+    `rds-delivery` compares the instance's subscribed events of the last 24
+    hours (`rds describe-events`) with the topic's `NumberOfMessagesPublished`
+    and `NumberOfNotificationsFailed`; events with nothing published FAIL (the
+    policy is denying RDS). Alarms publish to the same topic, so a PASS is
+    not proof on its own: the email is. No email: note it on #126 and widen
+    the `aws:SourceArn` condition to the event subscription's ARN
+    (`arn:aws:rds:<region>:<account>:es:water-management-db-events`) or drop it,
+    keeping `aws:SourceAccount`, then apply and repeat.
 
 11. **Turn on Cost Anomaly Detection** (after the first apply; it needs ~10
     days of billing history before it flags anything, so nothing is lost by
