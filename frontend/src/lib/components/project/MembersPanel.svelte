@@ -68,16 +68,10 @@
 		error = null;
 		added = null;
 		try {
+			// Always an invite, account or not (issue #136): they join when they accept it.
 			const r = await api.members.add(projectId, email.trim(), role);
-			if (r.invited) {
-				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they confirm this email address (signing up first if they’re new).`;
-			} else {
-				const m = r.member;
-				members = [...members.filter((x) => x.userId !== m.userId), m];
-				invites = invites.filter((x) => x.email.toLowerCase() !== m.email.toLowerCase());
-				added = `${m.displayName} added as ${roleLabel(m.role)}.`;
-			}
+			invites = upsertInvite(invites, r.invite);
+			added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they accept it.`;
 			email = '';
 		} catch (err) {
 			error = msg(err);
@@ -256,13 +250,7 @@
 			bind:invites
 			idPrefix="project"
 			load={async () => (await invitesApi.list(projectId)).filter((i) => i.role !== 'farmer') /* farmer invites: FarmersPanel */}
-			resend={async (inv) => {
-				const r = await invitesApi.add(projectId, inv.email, inv.role as Role);
-				if (r.invited) return r.invite;
-				// Signed up meanwhile: a member now, not an invite.
-				members = [...members.filter((x) => x.userId !== r.member.userId), r.member];
-				return null;
-			}}
+			resend={async (inv) => (await invitesApi.add(projectId, inv.email, inv.role as Role)).invite}
 			revoke={(inv) => invitesApi.revoke(projectId, inv.id)}
 		/>
 	{/if}

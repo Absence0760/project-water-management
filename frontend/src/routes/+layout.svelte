@@ -191,6 +191,11 @@
 		{:catch}
 			<div class="verify-failed"><ChunkFailed text={words(BANNER_FAILED)} reload={words(RELOAD_PAGE)} /></div>
 		{/await}
+	{:else if !authScreen && session.user?.emailVerified && !session.user.renderSession}
+		<!-- Invitations waiting to be accepted (issue #136); its own chunk, it draws nothing when there are none. -->
+		{#await import('$lib/components/auth-extras/InvitesBanner.svelte') then banner}
+			<banner.default />
+		{/await}
 	{/if}
 	{#if bootError && !staticPage}
 		<main class="page">

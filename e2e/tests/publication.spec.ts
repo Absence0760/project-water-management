@@ -5,7 +5,7 @@
 // notice changes without re-publishing; and a farmer linked to a farm then
 // reads the published figures and the notice through the farm API.
 import { API_URL } from '../support/env.ts';
-import { createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 test('an editor publishes a run with a notice, then changes the notice; a farmer reads it', async ({ page, owner, signIn }) => {
@@ -70,6 +70,7 @@ test('an editor publishes a run with a notice, then changes the notice; a farmer
 	const upper = model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper] } });
 	expect(add.status()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	const view = await farmer.page.request.get(`${API_URL}/projects/${project.id}/farm/${upper}`);
 	expect(view.status()).toBe(200);
 	const body = await view.json();

@@ -4,7 +4,7 @@ import type { AuthEnv } from '../auth/middleware.js';
 import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError, mustChange } from '../http/errors.js';
-import { countInvites, dropInvite, inviteByEmail } from '../invites/invites.js';
+import { accountByEmail, countInvites, inviteByEmail } from '../invites/invites.js';
 import { trySendMail } from '../mail/transport.js';
 import { UUID } from '../projects/access.js';
 import { requireTeamRole, TEAM_ROLES, type TeamRole } from './access.js';
@@ -137,40 +137,26 @@ export const teamRoutes = new Hono<AuthEnv>()
 			return c.body(null, 204);
 		})
 	)
+	// Every add by email is an invite (issue #136), as for a project's members:
+	// one answer whether or not the address has an account.
 	.post('/:id/members', async (c) => {
 		const body = z.object({ email: z.string().trim().toLowerCase().email().max(254), role: RoleEnum }).parse(await readJson(c));
-		const result = await withUser(c.get('userId'), async (db) => {
+		const invited = await withUser(c.get('userId'), async (db) => {
 			const id = c.req.param('id');
 			await requireTeamRole(db, id, 'admin');
 			// The daily cap on adding by email (101_invite_throttle), counted before the address is looked up.
 			await countInvites(c, db, 'team', id, 1);
-			const { rows: users } = await db.query<{ id: string; email: string; display_name: string; verified: boolean }>(
-				// Not yet someone they work with, so RLS (068) hides the row: the by-address lookup.
-				'SELECT id, email, display_name, verified FROM app_user_by_email(ARRAY[$1::citext])',
-				[body.email]
-			);
-			const user = users[0];
-			// No account yet, or one that never proved it owns the address: invite
-			// by email (they join once the address is verified), so pre-registering
-			// a colleague's address can't get you added in their place.
-			if (!user?.verified) {
-				return { invited: await inviteByEmail(db, 'team', id, body.email, body.role, user?.id) };
+			const account = await accountByEmail(db, body.email);
+			// Already on the member list the admin can read: saying so tells them nothing new.
+			if (account?.verified) {
+				const { rows } = await db.query('SELECT 1 FROM team_member WHERE team_id = $1 AND user_id = $2', [id, account.id]);
+				if (rows[0]) throw new ApiError(409, 'already a member');
 			}
-			const { rowCount } = await db.query(
-				'INSERT INTO team_member (team_id, user_id, role) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
-				[id, user.id, body.role]
-			);
-			if (!rowCount) throw new ApiError(409, 'already a member');
-			await dropInvite(db, 'team', id, user.email);
-			await recordTeamAudit(db, id, 'team_member.added', (await memberSubject(db, id, user.id))!);
-			return { member: { userId: user.id, email: user.email, displayName: user.display_name, role: body.role } };
+			return inviteByEmail(db, 'team', id, body.email, body.role, account);
 		});
 		// Mail goes out after the transaction commits, and never fails the request.
-		if (result.invited) {
-			if (result.invited.mail) await trySendMail(result.invited.mail);
-			return c.json({ invited: true, invite: result.invited.invite }, 201);
-		}
-		return c.json({ member: result.member }, 201);
+		if (invited.mail) await trySendMail(invited.mail);
+		return c.json({ invited: true, invite: invited.invite }, 201);
 	})
 	.patch('/:id/members/:userId', async (c) => {
 		const body = z.object({ role: RoleEnum }).parse(await readJson(c));

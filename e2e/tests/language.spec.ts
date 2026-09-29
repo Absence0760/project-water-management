@@ -12,7 +12,7 @@
 // email through Mailpit by alerts-mailpit.spec.ts.
 import { readFile } from 'node:fs/promises';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { createRun, register, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, createRun, register, seedRunnableProject } from '../support/api.ts';
 import { words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
@@ -70,6 +70,7 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	const added = await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } });
 	expect(added.status(), await added.text()).toBe(201);
+	await acceptInvites(farmer.email, project.id);
 
 	await page.goto('/farm');
 	await expect(page).toHaveURL(new RegExp(`/farm/${project.id}$`));

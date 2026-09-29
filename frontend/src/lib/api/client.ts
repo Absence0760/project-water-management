@@ -60,6 +60,7 @@ import type {
 	SignoffList,
 	SignoffRequest,
 	Member,
+	MyInvite,
 	Nomination,
 	Reproduction,
 	Note,
@@ -357,9 +358,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		members: {
 			list: (id: string) =>
 				request<{ members: Member[] }>('GET', `${p(id)}/members`).then((r) => r.members),
-			/** An address with no account gets a pending invite instead (`{ invited: true, invite }`). */
+			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			add: (id: string, email: string, role: Role) =>
-				request<AddMemberResult<Member>>('POST', `${p(id)}/members`, { email, role }),
+				request<AddMemberResult>('POST', `${p(id)}/members`, { email, role }),
 			setRole: (id: string, userId: string, role: Role) =>
 				request<{ member: Member }>('PATCH', `${p(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member
@@ -378,8 +379,8 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 		farmers: {
 			list: (id: string) => request<{ farmers: FarmerEntry[] }>('GET', `${p(id)}/farmers`).then((r) => r.farmers),
 			/**
-			 * A verified account is added (`{ farmer }`); any other address is invited (`{ invited: true, invite }`).
-			 * `role: 'contributor'` adds or invites a licence applicant with their farms (WP-3.3).
+			 * Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136).
+			 * `role: 'contributor'` invites a licence applicant with their farms (WP-3.3).
 			 */
 			add: (id: string, email: string, nodeIds: string[], locale: InviteLocale = 'en', role: FarmRole = 'farmer') =>
 				request<AddFarmerResult>('POST', `${p(id)}/farmers`, { email, nodeIds, locale, role }),
@@ -425,9 +426,9 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			setThresholds: (id: string, thresholds: { green: number; amber: number } | null) =>
 				request<{ team: Team }>('PATCH', t(id), { settings: { portfolio: { thresholds } } }).then((r) => r.team),
 			remove: (id: string) => request<void>('DELETE', t(id)),
-			/** An address with no account gets a pending invite instead (`{ invited: true, invite }`). */
+			/** Always an invite (`{ invited: true, invite }`), account or not: its holder accepts it (issue #136). */
 			addMember: (id: string, email: string, role: TeamRole) =>
-				request<AddMemberResult<TeamMember>>('POST', `${t(id)}/members`, { email, role }),
+				request<AddMemberResult>('POST', `${t(id)}/members`, { email, role }),
 			setRole: (id: string, userId: string, role: TeamRole) =>
 				request<{ member: TeamMember }>('PATCH', `${t(id)}/members/${enc(userId)}`, { role }).then(
 					(r) => r.member
@@ -596,6 +597,14 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			create: (id: string, body: ApiKeyCreate) => request<{ key: ApiKey; secret: string }>('POST', `${p(id)}/api-keys`, body),
 			/** Revoke a key (owner): the next request with it is refused. */
 			revoke: (id: string, keyId: string) => request<void>('DELETE', `${p(id)}/api-keys/${enc(keyId)}`)
+		},
+		/** Your own pending invitations (issue #136, docs/api.md § Invites): a verified account joins only by accepting. */
+		invites: {
+			mine: () => request<{ invites: MyInvite[] }>('GET', '/me/invites').then((r) => r.invites),
+			/** Join: the project or team it was for. 404 when it isn't yours, has expired or was revoked. */
+			accept: (inviteId: string) =>
+				request<{ joined: { kind: 'project' | 'team'; id: string } }>('POST', `/me/invites/${enc(inviteId)}/accept`).then((r) => r.joined),
+			decline: (inviteId: string) => request<void>('DELETE', `/me/invites/${enc(inviteId)}`)
 		},
 		/** Alert emails (WP-2.13, docs/api.md § Alerts). */
 		alerts: {

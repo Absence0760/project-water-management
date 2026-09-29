@@ -29,7 +29,7 @@ export function emailAuthApi(api: Pick<Api, 'request'>) {
 		projectInvites: {
 			/** Same endpoint as members.add, typed with the invite branch. */
 			add: (projectId: string, email: string, role: Role) =>
-				request<AddMemberResult<Member>>('POST', `/projects/${enc(projectId)}/members`, { email, role }),
+				request<AddMemberResult>('POST', `/projects/${enc(projectId)}/members`, { email, role }),
 			list: (projectId: string) =>
 				request<{ invites: Invite[] }>('GET', `/projects/${enc(projectId)}/invites`).then((r) => r.invites),
 			revoke: (projectId: string, inviteId: string) =>
@@ -37,7 +37,7 @@ export function emailAuthApi(api: Pick<Api, 'request'>) {
 		},
 		teamInvites: {
 			add: (teamId: string, email: string, role: TeamRole) =>
-				request<AddMemberResult<TeamMember>>('POST', `/teams/${enc(teamId)}/members`, { email, role }),
+				request<AddMemberResult>('POST', `/teams/${enc(teamId)}/members`, { email, role }),
 			list: (teamId: string) =>
 				request<{ invites: Invite[] }>('GET', `/teams/${enc(teamId)}/invites`).then((r) => r.invites),
 			revoke: (teamId: string, inviteId: string) =>
