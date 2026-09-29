@@ -985,8 +985,140 @@ Every step is an ordinary app action by an owner unless it says "operator".
 - **Database:** migrations are forward-only, so a backend rollback runs old
   API code against the current schema. That is safe only because migrations
   are expand/contract. To undo a migration, ship a new one. For data loss,
-  restore to a point in time from the automated backups into a new instance
-  and repoint the Lambda. Rehearse this once before go-live.
+  restore the database to a point in time with
+  `infra/scripts/restore-db.sh` (§ Restoring the database, next).
+
+## Restoring the database
+
+For lost or damaged data (a destructive migration, a bad bulk edit, anything
+the app's own revision history can't undo) and for an instance RDS can't
+bring back. The script restores into a **new** instance beside the old one,
+checks it, then swaps identifiers so the endpoint address, `DATABASE_URL` and
+Terraform's resource address all stay the same. The old instance is kept
+until you delete it.
+
+**What you lose (RPO).** A point-in-time restore can land on any second from
+the earliest restorable time (the retention window,
+`db_backup_retention_days`: 7 days by default, 14 in the full tier) up to
+`LatestRestorableTime`, which trails the present by about **5 minutes**,
+because RDS uploads the transaction logs to S3 every five minutes
+([AWS: Restoring a DB instance to a specified time](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PIT.html)).
+A snapshot restore loses everything since the snapshot. Whatever reaches the
+old instance after the restore point stays on the old instance only.
+Multi-AZ (the full tier) covers a lost host or AZ with no data loss; this
+restore is for damage to the data itself.
+
+**Why a script, not the console.** `RestoreDBInstanceToPointInTime` creates
+the target "with the default security group, the default subnet group, and
+the default DB parameter group", and deletion protection "isn't enabled" by
+default ([API reference](https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_RestoreDBInstanceToPointInTime.html);
+the snapshot restore is the same,
+[RestoreDBInstanceFromDBSnapshot](https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_RestoreDBInstanceFromDBSnapshot.html)).
+Restored with only the obvious flags, the copy lands in the account's default
+VPC, where none of the Lambdas can reach it, without this project's TLS and
+logging parameters, and deletable. The script passes the stack's subnet
+group, security group and parameter group (from `terraform output`; the
+parameter group's name has a generated suffix), deletion protection, no
+public access, tag copying, and the live instance's class, Multi-AZ, CA,
+backup retention and window, maintenance window, minor-upgrade setting,
+storage-autoscaling ceiling and tags. Encryption and its KMS key come from
+the backup (a restore can't change them); monitoring and Performance
+Insights stay off, as `rds.tf` has them. It then checks all of that on the
+restored instance and stops, before touching production, if anything is off.
+
+**The master password is not kept.** A PostgreSQL restore can neither keep
+nor request RDS-managed master credentials: `ManageMasterUserPassword` on
+both restore APIs "Applies to RDS for Oracle only"
+([API reference](https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/API_RestoreDBInstanceToPointInTime.html)),
+and the RDS guide lists "Restore a DB instance from a snapshot or to a point
+in time (RDS for Oracle only)" among the operations that can turn it on
+([AWS: Password management with Secrets Manager](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html)).
+Broadcom's field note on the same case says the restored instance "does not
+have the AWS Secrets Manager integration enabled"
+([KB 388927](https://knowledge.broadcom.com/external/article/388927/general-guideline-about-restoring-rds-db.html)).
+So the copy comes up with `water`'s password as it stood at the restore point
+(the database's own catalogue) and no `MasterUserSecret`; the old instance's
+secret still belongs to the old instance and is deleted with it. The script
+therefore runs `modify-db-instance --manage-master-user-password` on the
+copy, which gives it a **new** secret with a new ARN, and waits for it to be
+`active`. The migrate Lambda's `MASTER_SECRET_ARN` and the Secrets Manager
+endpoint's policy name that ARN, so the migrate Lambda can't log in until
+the Terraform apply below. `water_app`'s password lives in the database, so
+the API works as soon as the swap finishes (unless `db_app_password` was
+rotated after the restore point; the migrate run below resets it). The
+rehearsal confirms this on a real restore (checklist below).
+
+**Why the script moves Terraform state.** The AWS provider keys
+`aws_db_instance` by its `DbiResourceId`, not its identifier (it reads by
+resource ID and only falls back to the identifier when that ID is gone;
+[provider source, v6.66.0](https://github.com/hashicorp/terraform-provider-aws/blob/v6.66.0/internal/service/rds/instance.go),
+`resourceInstanceRead` / `findDBInstanceByID`). After the swap, a plain
+refresh would find the *old* instance under its new name and plan to rename
+it back. So the script runs `terraform state rm aws_db_instance.main` and
+`terraform import aws_db_instance.main water-management`, then a `plan`
+(without `-out`: a plan file holds decrypted secrets, infra/README.md). The
+plan should show only in-place changes: the migrate Lambda's
+`MASTER_SECRET_ARN`, the Secrets Manager endpoint policy, and arguments that
+exist only in Terraform (`final_snapshot_identifier`, `skip_final_snapshot`,
+`delete_automated_backups`, `apply_immediately`). The script stops on a
+replace or destroy; don't apply one.
+
+**Doing it:**
+
+1. Pick the restore point in UTC, just before the damage (CloudTrail, the
+   deploy log, the app's audit log). If something is still writing bad data,
+   stop the API and the worker first (the apply in step 5 puts their
+   concurrency back):
+   `aws lambda put-function-concurrency --function-name water-management-backend --reserved-concurrent-executions 0 --region <region> --profile water-management`
+   and the same for `water-management-worker`. The fetcher and the renderer
+   run outside the VPC and never reach the database.
+2. `aws sso login --profile water-management`, and have `infra/` initialised
+   (`terraform init -backend-config=backend.config`, § 3).
+3. Dry run. It makes only read calls (the caller, `terraform output`, the
+   instance, its restore window) and prints every command it would run:
+   `infra/scripts/restore-db.sh --region <region> --profile water-management --var-file ../infra-secrets/water-management/prod.tfvars --restore-time 2026-09-28T08:15:00Z`
+   (or `--latest`, or `--snapshot <id>`). It refuses a time outside the
+   restore window, a region that isn't the stack's, and a missing profile or
+   region.
+4. The same with `--execute`. It asks you to type the identifier before the
+   swap (`--yes` skips that). The API is down from the first rename to the
+   end of the second, a few minutes; the restore before it takes roughly
+   15 to 30 minutes for a small database. If it stops part-way, it prints
+   where and the command that finishes or undoes that step.
+5. Read the plan it printed, then apply it (the script never applies):
+   `cd infra && AWS_PROFILE=water-management terraform apply -var-file=../../infra-secrets/water-management/prod.tfvars`.
+6. Invoke the migrate Lambda (the script prints the command). It applies any
+   migration newer than the restore point and resets `water_app`'s password.
+7. Check the site and that the data is as of the restore point.
+8. Only then delete the old instance, with a final snapshot (the script
+   prints both commands: turn off its deletion protection, then
+   `delete-db-instance --final-db-snapshot-identifier …`). Export first
+   anything written to it after the restore point that you want back.
+
+**If the instance itself is gone** (deleted, or never coming back from
+`failed`), the script refuses, since it swaps with the live instance. The
+automated backups outlive the instance (`delete_automated_backups = false`),
+so restore straight into the original identifier with the same flags the
+script's dry run prints, from `--source-dbi-resource-id` (see
+`aws rds describe-db-instance-automated-backups`), then turn on the managed
+password and do the state move, plan, apply and migrate as above.
+
+**Rehearse it once before go-live** (operator; it needs the deployed stack,
+so it can't be tested here beyond `infra/scripts/restore-db.test.mjs`, which
+runs it against a fake `aws` and `terraform`):
+
+- [ ] After the first deploy, with only test data in, run steps 2 to 8 with
+      `--latest`. Cost: about an hour of a second db.t4g.micro, cents.
+- [ ] After step 4, confirm the master-password finding on a real restore:
+      `aws rds describe-db-instances --db-instance-identifier water-management --query 'DBInstances[0].MasterUserSecret' --region <region> --profile water-management`
+      shows a new, `active` secret (and note whether the copy had none before
+      the modify, as the docs say).
+- [ ] Confirm the plan was in-place only, and the migrate run and the site
+      work after the apply.
+- [ ] Write down how long the restore, the swap and the whole run took (the
+      real RTO), and the date, here.
+
+Rehearsed: not yet.
 
 ## Costs (rough, idle to light use)
 
