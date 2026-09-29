@@ -47,14 +47,14 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	// The outcomes table: a column per run, each what-if cell its value and its change.
 	const table = outcomes(page);
 	await expect(table.getByRole('columnheader')).toHaveText(['Outcome', 'Baseline', 'What-if 1', 'What-if 2']);
-	const days = table.getByRole('row', { name: /^Days below the reserve, average year/ });
-	await expect(days.getByRole('cell')).toHaveCount(3);
-	// More orchard irrigates more, so the river is below its reserve on more days: a worse change, said in words.
-	await expect(days.getByRole('cell').nth(1)).toContainText(/up \d+, worse/);
-	// One framing across the app (issue #162): EWR not met, a rise said as worse, as the days row is.
+	// One framing across the app (issue #162): EWR not met, a rise said as worse. More orchard irrigates more,
+	// so the river is below its EWR on more days: a worse change, said in words.
 	const notMet = table.getByRole('row', { name: /^EWR not met/ });
+	await expect(notMet.getByRole('cell')).toHaveCount(3);
 	await expect(notMet.getByRole('rowheader')).toHaveText('EWR not met, % of days');
 	await expect(notMet.getByRole('cell').nth(1)).toContainText(/up [\d.]+ pp, worse/);
+	// No days-a-year restatement of that share, and no calibration NSE: a what-if's fit to the gauge is not an outcome.
+	await expect(table.getByRole('rowheader', { name: /average year|NSE/ })).toHaveCount(0);
 	await expect(table.getByRole('rowheader', { name: /^Irrigation supplied/ })).toBeVisible();
 	await expect(table.getByRole('rowheader', { name: /^Mean outflow/ })).toBeVisible();
 	// Dam storage at the end of each run (issue #55's run-summary figures), as a share of each run's own capacity.
@@ -67,8 +67,8 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 
 	// Takeaways in plain words, from the same numbers.
 	const takeaways = page.getByTestId('takeaways');
-	await expect(takeaways.locator('.lead')).toHaveText(/^What-if [12] costs the reserve \d+ more days a year\.$/);
-	await expect(takeaways).toContainText(/What-if 2 costs the reserve \d+ more days a year/);
+	await expect(takeaways.locator('.lead')).toHaveText(/^What-if [12] puts the river below the EWR on \d+ more days a year\.$/);
+	await expect(takeaways).toContainText(/What-if 2 puts the river below the EWR on \d+ more days a year/);
 
 	// Days below the reserve per water year: the three runs over three water years (the last one part of a year).
 	await expect(reserveChart(page)).toHaveAccessibleName(
@@ -147,9 +147,9 @@ test("Export impact report opens each what-if's report with its impact against t
 
 	// Two what-ifs: a menu naming each; Escape closes it with focus back on its button.
 	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.baseline}&b=${p.id}:${p.whatIf1}&c=${p.id}:${p.whatIf2}`);
-	const days = outcomes(page).getByRole('row', { name: /^Days below the reserve, average year/ });
-	await expect(days.getByRole('cell')).toHaveCount(3);
-	const onScreen = (await days.getByRole('cell').nth(2).locator('.val').textContent())!.trim();
+	const notMet = outcomes(page).getByRole('row', { name: /^EWR not met/ });
+	await expect(notMet.getByRole('cell')).toHaveCount(3);
+	const onScreen = (await notMet.getByRole('cell').nth(2).locator('.val').textContent())!.trim();
 	await exportMenu(page).click();
 	const items = sectionHeader(page).getByRole('group', { name: 'Impact report of' }).getByRole('link');
 	await expect(items).toHaveText(['What-if 1: More orchard', 'What-if 2: More orchard and a bigger dam']);
@@ -166,9 +166,9 @@ test("Export impact report opens each what-if's report with its impact against t
 	const impact = page.getByRole('region', { name: '1. Impact against the baseline' });
 	const table = impact.getByRole('table', { name: 'Headline outcomes of the baseline and this run, with the change' });
 	await expect(table.getByRole('columnheader')).toHaveText(['Outcome', 'Baseline', 'This run', 'Change']);
-	await expect(table.getByRole('row', { name: /^Days below the reserve, average year/ }).getByRole('cell').nth(1)).toHaveText(onScreen);
+	await expect(table.getByRole('row', { name: /^EWR not met/ }).getByRole('cell').nth(1)).toHaveText(onScreen);
 	await expect(table.getByRole('rowheader', { name: /^Dam storage, end of run/ })).toBeVisible();
-	await expect(impact.getByTestId('impact-takeaways')).toContainText(/“More orchard and a bigger dam” costs the reserve \d+ more days a year\./);
+	await expect(impact.getByTestId('impact-takeaways')).toContainText(/“More orchard and a bigger dam” puts the river below the EWR on \d+ more days a year\./);
 	await expect(impact.getByText('Upper farm: dam capacity 150\u202f000 m³ → 300\u202f000 m³')).toBeVisible();
 	// The licence-impact board opens the section; two complete water years are too few for any class (impact-board.spec.ts has a long record).
 	for (const id of ['dry', 'normal', 'wet']) await expect(impact.getByTestId(`board-verdict-${id}`)).toHaveAttribute('data-verdict', 'notEnoughYears');

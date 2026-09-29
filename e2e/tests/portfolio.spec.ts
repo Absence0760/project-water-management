@@ -67,7 +67,6 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	await expect(pr).toContainText(/\d+ of \d+ hydrological units? short in the week to 28 Jan 2022/);
 	await expect(pr).toContainText(/Rain to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ })).toBeVisible();
-	await expect(page.getByText('Hydrological units short in the week to 28 Jan 2022', { exact: true })).toBeVisible();
 
 	// Run only: the EWR from the run, farms and dams honestly unknown.
 	const rr = tableRow(page, 'Pf run only A');

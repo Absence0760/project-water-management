@@ -4,7 +4,7 @@
 	// its dam's storage. The unit detail panel of Runs & results, moved here:
 	// the same series (fetched once each, through the Runs cache) and the same
 	// words, one chart at a time behind a switch, with the 30 days / 1 year /
-	// All windows. With `fit` the chart fills the height its panel is given.
+	// All windows, at the plot height the page gives it.
 	import type { DailySeries, FarmSummary } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -25,7 +25,7 @@
 		capacity,
 		deficit = null,
 		forecastFrom = null,
-		fit = false
+		height = 260
 	}: {
 		projectId: string;
 		runId: string;
@@ -39,8 +39,8 @@
 		/** Its daily deficit, when the page has fetched it: the days short are shaded. */
 		deficit?: DailySeries | null;
 		forecastFrom?: string | null;
-		/** Fill the panel's height (the page's window-fitting layout) instead of a fixed chart height. */
-		fit?: boolean;
+		/** The plot's height in px (taller beside the cards on a wide page). */
+		height?: number;
 	} = $props();
 
 	const band = $derived(forecastBand(forecastFrom));
@@ -90,33 +90,9 @@
 		return s && pct ? [{ label: 'Dam storage', startDate: s.startDate, values: pct, color: '--series-1' }] : [];
 	});
 	const shade = $derived(deficit ? shortRanges(deficit) : []);
-
-	// Filling: the plot gets what the slot leaves after the chart's own head, legend and caption (DamsTab's way).
-	const FIXED_H = 260;
-	const MIN_H = 180;
-	let slot: HTMLDivElement | undefined = $state();
-	let fig: HTMLDivElement | undefined = $state();
-	let fillH = $state(FIXED_H);
-	$effect(() => {
-		if (!fit || !slot || !fig) return;
-		const s = slot;
-		const f = fig;
-		const measure = () => {
-			const wrap = f.querySelector<HTMLElement>('.u-wrap');
-			if (!wrap) return;
-			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
-			if (Math.abs(target - fillH) > 2) fillH = target;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(s);
-		ro.observe(f);
-		return () => ro.disconnect();
-	});
-	const chartH = $derived(fit ? fillH : FIXED_H);
 </script>
 
-<section class="panel detail" class:fit id="res-farm" aria-labelledby="farm-h" aria-busy={loading}>
+<section class="panel detail" id="res-farm" aria-labelledby="farm-h" aria-busy={loading}>
 	<div class="panel-head">
 		<h2 id="farm-h"><span class="visually-hidden">Hydrological unit detail:</span> {name}</h2>
 		{#if hasDam}
@@ -135,33 +111,29 @@
 			{error} <button type="button" class="btn btn-sm" onclick={() => attempt++}>Try again</button>
 		</div>
 	{:else}
-		<div class="slot" bind:this={slot}>
-			<div bind:this={fig}>
-				{#if shown === 'supply'}
-					{#if supplySeries.length}
-						<LineChart
-							title="Supply vs demand"
-							unit="m³/day"
-							height={chartH}
-							series={supplySeries}
-							recentDays={FLOW_OPEN_DAYS}
-							windows={FLOW_WINDOWS}
-							{shade}
-							{band}
-							caption={shade.length ? 'Shaded: the days the hydrological unit got less than its demand.' : undefined}
-						/>
-					{:else}
-						<div class="chart-ph" style:height="{chartH}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
-					{/if}
-				{:else if storageSeries.length}
-					<LineChart title="Dam storage, % of capacity" unit="%" height={chartH} series={storageSeries} recentDays={FLOW_OPEN_DAYS} windows={FLOW_WINDOWS} {band} />
-				{:else if loading}
-					<div class="chart-ph" style:height="{chartH}px" role="status">Loading…</div>
-				{:else}
-					<p class="muted nodam">This hydrological unit has no dam storage in the run.</p>
-				{/if}
-			</div>
-		</div>
+		{#if shown === 'supply'}
+			{#if supplySeries.length}
+				<LineChart
+					title="Supply vs demand"
+					unit="m³/day"
+					{height}
+					series={supplySeries}
+					recentDays={FLOW_OPEN_DAYS}
+					windows={FLOW_WINDOWS}
+					{shade}
+					{band}
+					caption={shade.length ? 'Shaded: the days the hydrological unit got less than its demand.' : undefined}
+				/>
+			{:else}
+				<div class="chart-ph" style:height="{height}px" role="status">{loading ? 'Loading…' : 'No demand series.'}</div>
+			{/if}
+		{:else if storageSeries.length}
+			<LineChart title="Dam storage, % of capacity" unit="%" {height} series={storageSeries} recentDays={FLOW_OPEN_DAYS} windows={FLOW_WINDOWS} {band} />
+		{:else if loading}
+			<div class="chart-ph" style:height="{height}px" role="status">Loading…</div>
+		{:else}
+			<p class="muted nodam">This hydrological unit has no dam storage in the run.</p>
+		{/if}
 	{/if}
 </section>
 
@@ -196,13 +168,5 @@
 	.nodam {
 		padding: 2rem 0;
 		text-align: center;
-	}
-	.fit {
-		min-height: 0;
-	}
-	.fit .slot {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
 	}
 </style>

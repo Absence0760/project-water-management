@@ -64,9 +64,9 @@
 		type="button"
 		class="trigger"
 		class:some={hidden.length > 0}
-		class:icon-only={!showLabel && hidden.length === 0}
+		class:icon-only={!showLabel}
 		aria-haspopup="dialog"
-		title="Choose the sections in your sidebar"
+		title={hidden.length ? `${hidden.length} hidden. Choose the sections in your sidebar` : 'Choose the sections in your sidebar'}
 		bind:this={button}
 		onclick={() => (open = true)}
 	>
@@ -74,7 +74,12 @@
 			><path d="M2 4h7M13 4h1M2 12h1M7 12h7M11 2.5v3M5 10.5v3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg
 		>
 		<span class:visually-hidden={!showLabel}>Choose sections{hidden.length ? ':' : ''}</span>
-		{#if hidden.length}Hidden ({hidden.length}){/if}
+		<!-- The sidebar's head has room for the icon and a count, not "Hidden (n)": the words wrapped the
+		     button onto a line of its own. The accessible name keeps the words either way. -->
+		{#if hidden.length && showLabel}Hidden ({hidden.length}){:else if hidden.length}<span class="visually-hidden">Hidden ({hidden.length})</span><span
+				class="count"
+				aria-hidden="true">{hidden.length}</span
+			>{/if}
 	</button>
 	<Dialog bind:open title="Sections in your sidebar" wide anchor={button}>
 		<p class="muted hint">Untick a section to hide it from your sidebar. A hidden section still opens from a link. Your choice applies to every catchment.</p>
@@ -133,6 +138,26 @@
 	.trigger.icon-only {
 		justify-content: center;
 		padding: 0;
+	}
+	/* Some hidden: the count is a small badge on the icon's corner, so the button stays the 24 px square and
+	   the head's line ("Catchment", the role, this) doesn't wrap; beside the icon it took 41 px and did. */
+	.trigger.icon-only.some {
+		position: relative;
+	}
+	.count {
+		position: absolute;
+		top: -5px;
+		right: -6px;
+		min-width: 14px;
+		padding: 0 3px;
+		border-radius: 999px;
+		background: var(--accent-soft);
+		color: var(--accent);
+		font-size: 0.62rem;
+		font-weight: 700;
+		line-height: 14px;
+		text-align: center;
+		pointer-events: none;
 	}
 	.trigger:hover {
 		border-color: var(--border);

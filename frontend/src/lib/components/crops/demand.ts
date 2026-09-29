@@ -70,6 +70,26 @@ export function farmDemands(
 }
 
 /**
+ * The demand chart's note when the project has a daily A-pan series (issue
+ * #173): the preview multiplies the monthly A-pan means, while a run uses the
+ * daily series on the days it has a value and these means only on the others
+ * (docs/model.md §2.3a), so a run's demand differs. null without a series.
+ */
+export function demandApanNote(apanDaily: boolean): string | null {
+	return apanDaily
+		? 'Shows the monthly A-pan means. Runs use the daily A-pan series (Data tab) on the days it has a value and these means only on the other days, so their demand differs.'
+		: null;
+}
+
+/**
+ * The demand alert's opening when no monthly A-pan mean is set but a daily
+ * A-pan series exists (issue #173): the preview shows no demand, yet runs
+ * take the series on the days it covers. A link to Settings follows it.
+ */
+export const DAILY_APAN_NO_MEANS =
+	"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value.";
+
+/**
  * Crops with a factor above 1.0 in any month, with those months (water-year
  * labels). The engine multiplies the factor by A-pan evaporation, not by FAO
  * reference ET₀ (about 0.7–0.85 × pan), so a factor above 1 means the crop

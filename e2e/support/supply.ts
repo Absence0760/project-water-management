@@ -9,7 +9,8 @@ import { createProject, putModel, putSeries, sampleModel, syntheticFlow, synthet
  * The sample network (Upper and Lower farm) plus `extra` more units, each
  * with a small catchment, no dam and a large orchard, so they run short;
  * `units` = 2 + extra. The rain covers 1 Oct 2021 to 28 Jan 2022, as
- * seedRunnableProject's (`days` longer for a realistic chart).
+ * seedRunnableProject's (`days` longer for a realistic chart). Past 26 extra
+ * units the names run long ("Unit 27 on the long tributary"), for the big case.
  */
 export async function seedSupplyProject(request: APIRequestContext, name: string, extra = 2, days = 120): Promise<{ id: string; model: Model }> {
 	const project = await createProject(request, name);
@@ -20,7 +21,7 @@ export async function seedSupplyProject(request: APIRequestContext, name: string
 	for (let i = 0; i < extra; i++) {
 		const id = crypto.randomUUID();
 		// Smaller catchments and bigger orchards further down the list: from a little short to very short.
-		model.nodes.push({ ...template, id, name: `Unit ${String.fromCharCode(65 + i)}`, downstreamNodeId: gauge.id, sortOrder: 4 + i, areaKm2: Math.max(0.5, 8 - i), damCapacityM3: i % 3 === 0 ? 40_000 : 0 });
+		model.nodes.push({ ...template, id, name: i < 26 ? `Unit ${String.fromCharCode(65 + i)}` : `Unit ${i + 1} on the long tributary`, downstreamNodeId: gauge.id, sortOrder: 4 + i, areaKm2: Math.max(0.5, 8 - i), damCapacityM3: i % 3 === 0 ? 40_000 : 0 });
 		model.cropAreas.push({ nodeId: id, cropId: crop.id, areaM2: 150_000 + i * 60_000 });
 	}
 	await putModel(request, project.id, model);

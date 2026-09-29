@@ -1,9 +1,11 @@
 <script lang="ts">
 	// Summary → Supply by farm (issue #17 A1): every farm's share of its
-	// irrigation demand supplied in the latest run, fullest first and emptiest
-	// last (supplyBars.ts), amber below the target and red below the low band,
+	// irrigation demand supplied in the latest run, emptiest first
+	// (supplyBars.ts), amber below the target and red below the low band,
 	// as the Network's supply colours. The % is always written, so colour is
-	// never the only cue. A farm's name opens its farm drawer; `more` links to
+	// never the only cue. It shows the emptiest few and a "Show all" that
+	// opens the rest in place: the card never scrolls inside itself, and a
+	// catchment's sixty units don't push the rest of the Summary a screen down. A farm's name opens its farm drawer; `more` links to
 	// Units & supply for the whole picture (issue #17).
 	import type { FarmSummary } from '@water-management/engine';
 	import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
@@ -22,7 +24,12 @@
 		more?: { href: string; label: string } | null;
 	} = $props();
 
+	/** Rows shown before "Show all" (the Dams page's Dam levels shows as many). */
+	const FIRST = 8;
+	let showAll = $state(false);
+
 	const rows = $derived(supplyBars(farms, modelFarmIds));
+	const visible = $derived(showAll ? rows : rows.slice(0, FIRST));
 	const bands = $derived(new Set(rows.map((r) => r.band)));
 </script>
 
@@ -34,8 +41,8 @@
 		</div>
 		<!-- What the bars and the % measure (ui-playbook § 3, "Label every chart"). -->
 		<p class="what" data-testid="supply-bars-what">Share of each hydrological unit's irrigation demand supplied, latest run</p>
-		<ul class="rows">
-			{#each rows as r (r.nodeId)}
+		<ul class="rows" id="supply-rows">
+			{#each visible as r (r.nodeId)}
 				<li data-farm={r.nodeId} data-band={r.band}>
 					{#if r.inModel}
 						<a class="name" href={farmDrawerHref(null, r.nodeId)} title="Open {r.name}’s planted areas">{r.name}</a>
@@ -47,6 +54,11 @@
 				</li>
 			{/each}
 		</ul>
+		{#if rows.length > FIRST}
+			<button type="button" class="btn btn-sm more" aria-expanded={showAll} aria-controls="supply-rows" onclick={() => (showAll = !showAll)}>
+				{showAll ? `Show the ${FIRST} emptiest` : `Show all ${rows.length} hydrological units`}
+			</button>
+		{/if}
 		{#if bands.has('short') || bands.has('low')}
 			<p class="key">
 				{#if bands.has('short')}<span><i class="short" aria-hidden="true"></i>{BAND_LABEL.short}</span>{/if}
@@ -95,6 +107,9 @@
 		align-items: center;
 		gap: 0.6rem;
 		font-size: 0.85rem;
+	}
+	.more {
+		margin-top: 0.6rem;
 	}
 	.name {
 		overflow: hidden;

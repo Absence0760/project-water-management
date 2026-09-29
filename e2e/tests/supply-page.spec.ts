@@ -11,6 +11,13 @@ import { expect, test } from '../support/fixtures.ts';
 import { openSupply, seedSupplyProject, supplyTile, supplyTiles, unitCards, unitChart } from '../support/supply.ts';
 
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
+/** Elements on the page that scroll vertically inside themselves (the window is the one scroll). */
+const innerScrollers = (page: Page) =>
+	page.locator('.supply-page').evaluate((root) =>
+		[root, ...root.querySelectorAll('*')]
+			.filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
+			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
+	);
 const pcts = (page: Page) => unitCards(page).evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.level .v')?.textContent ?? 'NaN')));
 
 test('four tiles, a card per hydrological unit worst supplied first in the Summary’s bands, and the tables that moved from Runs & results', async ({ page, owner }) => {
@@ -82,9 +89,86 @@ test('four tiles, a card per hydrological unit worst supplied first in the Summa
 	await expect(page.locator('#res-curtailment').getByLabel('Reporting window')).toHaveValue('project');
 	await expect(page.getByRole('region', { name: 'Assurance of supply' }).getByTestId('reliability-table').getByRole('rowheader')).toHaveCount(4);
 
-	// The first screen fits the window: the cards and the chart end at its bottom edge.
-	const block = await page.locator('.first').boundingBox();
-	expect(Math.abs(block!.y + block!.height - 960)).toBeLessThanOrEqual(24);
+	// The page flows in the window's one scroll (it was fitted to the window, cards scrolling in their column, until
+	// 2026-09-29): four units show whole, no fold, nothing scrolls inside itself, and the tables start below the cards.
+	await expect(page.getByRole('button', { name: /^Show all \d+ hydrological units$/ })).toHaveCount(0);
+	expect(await innerScrollers(page)).toEqual([]);
+	const list = (await page.getByRole('list', { name: 'Hydrological units', exact: true }).boundingBox())!;
+	const chart = (await unitChart(page).boundingBox())!;
+	expect(chart.y + chart.height).toBeLessThanOrEqual(960);
+	expect((await results.boundingBox())!.y).toBeGreaterThan(Math.max(list.y + list.height, chart.y + chart.height));
+});
+
+test('many hydrological units: the three least supplied show, the rest open in place under “Show all”; the picked unit keeps its card; the chart and the table header stay in view; nothing scrolls inside itself', async ({ page, owner }) => {
+	void owner;
+	test.setTimeout(90_000);
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedSupplyProject(page.request, 'Supply many', 30);
+	await createRun(page.request, project.id, 'Baseline');
+	await openSupply(page, project.id);
+	await expect(page.getByTestId('supply-summary')).toContainText('32 hydrological units');
+
+	// Beside the chart: the three least supplied, then the fold, all on the first screen.
+	const more = page.getByRole('button', { name: 'Show all 32 hydrological units' });
+	await expect(unitCards(page)).toHaveCount(3);
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(more).toHaveAttribute('aria-controls', 'unit-cards');
+	await expect(more).toBeInViewport();
+	const firstThree = await unitCards(page).locator('a.name').allInnerTexts();
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// Open: all 32 in place, least supplied first, the page (not the list) growing; the chart sticks beside them.
+	await more.click();
+	await expect(unitCards(page)).toHaveCount(32);
+	expect((await unitCards(page).locator('a.name').allInnerTexts()).slice(0, 3)).toEqual(firstThree);
+	const shown = await pcts(page);
+	expect([...shown].sort((a, b) => a - b)).toEqual(shown);
+	const fewer = page.getByRole('button', { name: 'Show the 3 least supplied' });
+	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+	expect(await innerScrollers(page)).toEqual([]);
+	await unitCards(page).nth(28).scrollIntoViewIfNeeded();
+	await expect(unitChart(page).getByRole('heading')).toBeInViewport();
+	// …under the "On this page" menu, not behind it.
+	const menu = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
+	expect((await unitChart(page).boundingBox())!.y).toBeGreaterThanOrEqual(menu.y + menu.height);
+
+	// Pick one far down, then fold: its card stays, after the three least supplied; a reload of its link keeps it.
+	const far = unitCards(page).nth(28);
+	const farName = (await far.locator('a.name').innerText()).trim();
+	await far.locator('a.name').click();
+	await expect(page).toHaveURL(/[?&]unit=/);
+	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${farName}`);
+	await fewer.click();
+	await expect(unitCards(page)).toHaveCount(4);
+	await expect(unitCards(page).locator('a.name')).toHaveText([...firstThree, farName]);
+	await page.reload();
+	await expect(unitCards(page)).toHaveCount(4);
+	await expect(unitCards(page).last().locator('a.name')).toHaveAttribute('aria-current', 'true');
+	await expect(page.getByRole('button', { name: 'Show all 32 hydrological units' })).toBeVisible();
+
+	// The unit results table grows with its rows (no 70vh box), its header row sticking under the menu as the window scrolls.
+	const results = page.getByRole('region', { name: 'Hydrological unit results' });
+	await expect(results.locator('tbody tr')).toHaveCount(32);
+	await results.locator('tbody tr').nth(30).scrollIntoViewIfNeeded();
+	const head = (await results.locator('thead').boundingBox())!;
+	const bar = (await page.getByRole('navigation', { name: 'Hydrological units sections' }).boundingBox())!;
+	expect(Math.abs(head.y - (bar.y + bar.height))).toBeLessThanOrEqual(2);
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// On a phone: three cards and the fold before the chart, still nothing scrolling inside itself, no sideways scroll.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openSupply(page, project.id);
+	await expect(unitCards(page)).toHaveCount(3);
+	await expect(page.getByRole('button', { name: 'Show all 32 hydrological units' })).toBeVisible();
+	// Stacked in reading order: the cards, their fold, then the chart (measured in one go, so a scroll between can't skew it).
+	const order = await page.evaluate(() => {
+		const top = (el: Element | null) => el!.getBoundingClientRect().top;
+		return [top(document.getElementById('unit-cards')), top(document.querySelector('#unit-cards ~ button.more')), top(document.getElementById('res-farm'))];
+	});
+	expect([...order].sort((a, b) => a - b)).toEqual(order);
+	expect(await innerScrollers(page)).toEqual([]);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await expectNoViolations(page);
 });
 
 test('picking a hydrological unit charts its supply against demand, the link round-trips, Back returns, and the windows switch', async ({ page, owner }) => {
@@ -221,6 +305,7 @@ test('a viewer sees the page and its tables; it passes axe at desktop, in dark a
 	await v.setViewportSize({ width: 390, height: 844 });
 	await expect(unitCards(v)).toHaveCount(4);
 	expect(await v.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	expect(await innerScrollers(v)).toEqual([]);
 	await expectNoViolations(v);
 	await unitCards(v).nth(2).locator('a.name').click();
 	await expect(v).toHaveURL(/[?&]unit=/);

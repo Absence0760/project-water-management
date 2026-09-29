@@ -41,9 +41,7 @@
 		damText,
 		DEFAULT_SORT,
 		ewrWindowLabel,
-		farmsShortLabel,
 		farmsShortText,
-		farmsShortTotalText,
 		farmsUnknownText,
 		portfolioTotals,
 		sortPortfolio,
@@ -338,16 +336,8 @@
 									<dd><StatusBar counts={totals.counts} /></dd>
 								</div>
 								<div class="kpi">
-									<dt>{farmsShortLabel(rows)}</dt>
-									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
-								</div>
-								<div class="kpi">
 									<dt>Alerts firing</dt>
 									<dd>{totals.alertsFiring}</dd>
-								</div>
-								<div class="kpi">
-									<dt>Last run</dt>
-									<dd>{totals.lastRunAt ? fmtDay(fmtDate(totals.lastRunAt)) : 'None yet'}</dd>
 								</div>
 							</dl>
 							<ul class="plist" aria-label="Projects of {team.name}">

@@ -399,7 +399,9 @@ project with only a daily record runs. A run stores the series in its inputs
 (`run_input_series`, like every input series), so re-running it reproduces
 the same days. `pnpm pan-sensitivity` reads the series from a project.json
 too, so its cases vary the coefficient that multiplies the daily A-pan on the
-days it covers.
+days it covers. The one exception is the Crops & demand page's demand chart,
+a preview outside any run: it multiplies the monthly means, and with a daily
+series says so on the chart (issue #173, [ui.md](./ui.md)).
 
 **Scenarios.** `series.scale` can scale the daily series (it is in
 `SCALABLE_SERIES_KINDS`). A `settings.set` on `apanMm` reaches only the days
