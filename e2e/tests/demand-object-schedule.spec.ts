@@ -75,9 +75,7 @@ test('give a town weekends off and an Easter peak, save, reload, run, and see it
 	await page.getByLabel(/^Run label/).fill('Town with weekends off');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Town with weekends off' })).toBeVisible();
-	// On Hydrological units since issue #175.
-	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
-	const table = page.getByRole('region', { name: 'Other water uses' }).getByTestId('demand-objects-table');
+	const table = page.getByTestId('demand-objects-table');
 	await expect(table.getByRole('columnheader', { name: 'Days off' })).toBeVisible();
 	const row = table.getByRole('row', { name: /Town/ });
 	// Unit, priority, demand, supplied, %, days short, days off.

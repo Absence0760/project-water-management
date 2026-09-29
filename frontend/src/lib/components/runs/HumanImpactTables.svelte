@@ -3,19 +3,13 @@
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
 	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split out of
 	// RunSummaryView and loaded only for a run that has any of them, so the
-	// Runs tab stays within its chunk budget for every other project. `parts`
-	// picks which: the catchment's (land cover, groundwater) on Runs & results,
-	// the units' (demand objects, other water users) on Hydrological units,
-	// which took them from Runs in issue #175, and all of them in the report.
+	// Runs tab stays within its chunk budget for every other project.
 	import { DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
-	import type { ImpactParts } from './humanImpacts';
 
-	let { summary, parts = 'all' }: { summary: RunSummary; parts?: ImpactParts } = $props();
-	const catchment = $derived(parts !== 'units');
-	const units = $derived(parts !== 'catchment');
+	let { summary }: { summary: RunSummary } = $props();
 
 	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
 	const pumping = $derived([...(summary.farms ?? []), ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
@@ -34,7 +28,7 @@
 	const anyOff = $derived(objects.some(({ o }) => o.daysOff !== undefined));
 </script>
 
-{#if units && objects.length}
+{#if objects.length}
 	<h3>Demand objects</h3>
 	<p class="muted small">
 		Demands on the hydrological units that aren’t crops, supplied from each hydrological unit’s dam, river pump and boreholes with its crops (daily averages over the run).
@@ -74,7 +68,7 @@
 	</div>
 {/if}
 
-{#if catchment && summary.landCover}
+{#if summary.landCover}
 	{@const lc = summary.landCover}
 	<h3>Land cover</h3>
 	<p class="muted small">
@@ -105,7 +99,7 @@
 	</div>
 {/if}
 
-{#if catchment && pumping.length}
+{#if pumping.length}
 	<h3>Groundwater</h3>
 	{#if !annual.length}
 		<!-- A run before engine 0.36.0 has no annual figures: the daily means only. -->
@@ -222,7 +216,7 @@
 	{/if}
 {/if}
 
-{#if units && summary.users?.length}
+{#if summary.users?.length}
 	<h3>Other water users</h3>
 	<p class="muted small">Towns, industry and unlisted users taking water from the river (daily averages over the run).</p>
 	<div class="table-wrap">

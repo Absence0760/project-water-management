@@ -1862,9 +1862,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   window the run couldn't use says why under it ("Not used: …"), and the
   save refuses it. Read-only for viewers; removing the unit asks
   about its objects too. Scenario override mode can't record an object edit
-  yet and says so. After a run, Hydrological units' **Other water uses**
-  panel (`#res-users`; the Runs tab's run summary until issue #175) shows
-  **Demand objects**: per object its unit, priority, demand, supplied (m³/day and %),
+  yet and says so. After a run, the human-impact tables show **Demand
+  objects**: per object its unit, priority, demand, supplied (m³/day and %),
   days short, days off (a column only when an object has a schedule; "–" on
   one without) and returned (or "piped out").
 - **Land cover** (engine ≥ 0.24.0, WP-1.35, [model.md §2.5a](./model.md)),
@@ -2268,10 +2267,7 @@ to its own redesign.
 - **Sticks and marks.** It sticks at the top (under the phone bar on a
   phone), marks the section being read with `aria-current="location"`
   (`activeSectionId`: the last section whose top has passed under the menu,
-  or the last at the bottom of the page, unless the section the URL's
-  fragment names still starts on the screen there: a followed link to a
-  panel whose followers are shorter than the window stays marked, issue
-  #175), and raises the page's
+  or the last at the bottom of the page), and raises the page's
   `scroll-padding-top` by its height, so a jumped-to section or a focused
   control clears it. It sits at the page's top level (Settings: above the
   form), so it stays stuck to the last panel.
@@ -3526,20 +3522,16 @@ read it before.
 - **Below it**, under *Tables for this run*, the moved panels with their
   ids: **Hydrological unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
   table that was in the run summary; the printable report still shows it
-  there), **Other water uses** (`#res-users`, only when the run has demand
-  objects or other water users: those two tables, moved from the run
-  summary in issue #175, `HumanImpactTables parts="units"`, lazy in the chunk
-  the run summary and the report share), **Curtailment** (`#res-curtailment`, with the
+  there), **Curtailment** (`#res-curtailment`, with the
   [reporting window](#report-window), `window=`) and **Assurance of supply**
   (`#res-assurance`). Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one
-  row), and sticks down the page: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**,
-  **Other water uses** (when the panel shows), **Curtailment**
-  and **Assurance of supply** (`supply/supply.ts`, `supplyNav`). Until it,
+  row), and sticks down the page: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**, **Curtailment**
+  and **Assurance of supply** (`supply/supply.ts`, `SUPPLY_NAV`). Until it,
   the three tables ran four screens under the cards with no way to them but
   scrolling. Not shown with no run or no units.
-- **Links in.** A `#res-farm`, `#res-farms`, `#res-users`, `#res-curtailment` or
+- **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment` or
   `#res-assurance` fragment scrolls to its panel once the run is in and holds
   it there (`holdAnchor`), focus on its heading. An old link to one of them on
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
@@ -3895,14 +3887,9 @@ read it before.
   columns the annual table lacked into it. A run before engine 0.36.0, which
   has no annual figures, still shows that daily-mean table alone.
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
-  with each user's priority, demand, taken, deficit, % of demand supplied
-  (flagged below 95 %), returned and EWR charge, whole-run means. It and the
-  **Demand objects** table sat under the run summary here until 2026-09-29;
-  issue #175 moved both to [Hydrological units](#hydrological-units)'
-  **Other water uses** panel (`#res-users`), left on Runs when the unit
-  table moved there in issue #17. The run summary draws only the catchment's
-  tables (`RunSummaryView impacts="catchment"`: land cover and groundwater);
-  the printable report still draws all four (`HumanImpactTables`, `parts`).
+  under the farms with each user's priority, demand, taken, deficit, % of
+  demand supplied (flagged below 95 %), returned and EWR charge, whole-run
+  means (`RunSummaryView.svelte`).
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the

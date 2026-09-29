@@ -113,10 +113,8 @@ River & reserve, Hydrological units, Runs & results, Scenarios, History) is a dy
 on-demand dialogs (Add data, and the Data tab's series preview) and the two
 Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and River & reserve's compliance panel, loaded for a
-run that has a report), and the human-impact tables (engine ≥ 0.22.0:
-`runs/HumanImpactTables.svelte`: land cover and groundwater under the Runs & results
-summary, demand objects and other water users on Hydrological units, issue #175; loaded
-for a run with land cover, boreholes, demand objects or other
+run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
+`runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
 water users). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
