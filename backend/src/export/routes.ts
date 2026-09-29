@@ -6,11 +6,13 @@ import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSumm
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
-import { withUser } from '../db/tx.js';
+import { withUser, type Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadProjectDocument } from '../projects/document.js';
 import { listNominations, runEvidence } from '../runs/evidence.js';
+import { seriesHash } from '../runs/execute.js';
+import { mergeSettings } from '../projects/settings.js';
 import {
 	attachment,
 	collectCsv,
@@ -19,13 +21,13 @@ import {
 	exportFilename,
 	forecastColumn,
 	MAX_EXPORT_BYTES,
-	seriesHeader,
 	withResultComments,
 	withRunComments,
 	type DailyColumn,
 	type RunProvenance
 } from './csv.js';
 import { loadDailyScope } from './daily-columns.js';
+import { RUN_CATCHMENT_KEYS, seriesExportColumns, type ExportSeries, type ReadingRun, type RunColumn } from './series-columns.js';
 import { loadFlowDuration } from './fdc.js';
 import { FARM_SERIES_KEYS, nodeColumnHeader, summaryCsvLines } from './run-tables.js';
 
@@ -60,7 +62,7 @@ function csvResponse(c: Context, body: string, filename: string) {
 }
 
 /** The project's name and time zone (the date in a download's file name is the project's, 058_project_time_zone). */
-async function projectInfo(db: import('../db/tx.js').Db, id: string): Promise<{ name: string; timeZone: string }> {
+async function projectInfo(db: Db, id: string): Promise<{ name: string; timeZone: string }> {
 	const { rows } = await db.query<{ name: string; timeZone: string }>('SELECT name, time_zone AS "timeZone" FROM project WHERE id = $1', [id]);
 	if (!rows[0]) throw new ApiError(404, 'not found');
 	return rows[0];
@@ -82,7 +84,7 @@ interface RunRow {
 	notesUpdatedBy: string | null;
 }
 
-async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: string): Promise<RunRow> {
+async function loadRun(db: Db, projectId: string, runId: string): Promise<RunRow> {
 	if (!UUID.test(runId)) throw new ApiError(404, 'not found');
 	const { rows } = await db.query<RunRow>(
 		`SELECT label, engine_version AS "engineVersion", start_date AS "startDate", end_date AS "endDate",
@@ -99,7 +101,7 @@ async function loadRun(db: import('../db/tx.js').Db, projectId: string, runId: s
 }
 
 /** Each node's dam capacity as the run's stored model had it (m³ by node id); a node without one is left out. */
-async function loadDamCapacities(db: import('../db/tx.js').Db, runId: string): Promise<Record<string, number>> {
+async function loadDamCapacities(db: Db, runId: string): Promise<Record<string, number>> {
 	const { rows } = await db.query<{ id: string; capacity: number }>(
 		`SELECT n->>'id' AS id, (n->>'damCapacityM3')::float8 AS capacity
 		 FROM model_run, jsonb_array_elements(COALESCE(inputs->'model'->'nodes', '[]'::jsonb)) n
@@ -150,6 +152,64 @@ function provenance(run: RunRow, damCapacityM3?: number | null): RunProvenance {
 		startDate: run.startDate,
 		endDate: run.endDate,
 		...(damCapacityM3 === undefined ? {} : { damCapacityM3 })
+	};
+}
+
+/** Said under the provenance line when the series has changed since the run read it: the run's columns are what it read then. */
+export const SERIES_CHANGED_COMMENT = '# series_changed_since_run=true; the run columns show the values the run read, not the ones above';
+
+function* withChangedNote(changed: boolean, lines: Iterable<string>): Generator<string> {
+	if (changed) yield SERIES_CHANGED_COMMENT;
+	yield* lines;
+}
+
+/**
+ * The latest run (visible to the caller) that read this series, as
+ * run_input_series.series_id records it (056_accepted_series: never a scenario
+ * run, nor one from before 056), with the series it stored for the download.
+ */
+async function loadReadingRun(
+	db: Db,
+	projectId: string,
+	seriesId: string,
+	s: { startDate: string; values: (number | null)[] }
+): Promise<{ run: RunRow; columns: ReadingRun; changed: boolean } | null> {
+	const { rows } = await db.query<{ runId: string; inputKey: string; inputStart: string; sha256: string; threshold: number | null }>(
+		`SELECT i.run_id AS "runId", i.kind AS "inputKey", i.start_date AS "inputStart", i.sha256,
+			(r.inputs->'settings'->'calibration'->>'rainThresholdMm')::float8 AS threshold
+		 FROM run_input_series i JOIN model_run r ON r.id = i.run_id
+		 WHERE i.project_id = $1 AND i.series_id = $2
+		 ORDER BY r.created_at DESC, r.id DESC LIMIT 1`,
+		[projectId, seriesId]
+	);
+	const hit = rows[0];
+	if (!hit) return null;
+	const run = await loadRun(db, projectId, hit.runId);
+	const siteNodeId = hit.inputKey.includes('@') ? hit.inputKey.slice(hit.inputKey.indexOf('@') + 1) : null;
+	const { rows: stored } = await db.query<{ nodeId: string | null; nodeName: string | null; key: string; label: string | null; unit: string | null; values: (number | null)[] }>(
+		`SELECT s.node_id AS "nodeId", n.name AS "nodeName", s.key, s.meta->>'label' AS label, s.meta->>'unit' AS unit, s."values"
+		 FROM run_series s LEFT JOIN node n ON n.id = s.node_id
+		 WHERE s.run_id = $1 AND ((s.node_id IS NULL AND s.key = ANY($2)) OR (s.node_id = $3::uuid AND s.key = 'outflow'))`,
+		[hit.runId, RUN_CATCHMENT_KEYS, siteNodeId]
+	);
+	const catchment: Record<string, RunColumn> = {};
+	let gaugeFlow: ReadingRun['gaugeFlow'] = null;
+	for (const r of stored) {
+		const col = { label: r.label ?? r.key, unit: r.unit || null, values: r.values };
+		if (r.nodeId === null) catchment[r.key] = col;
+		else gaugeFlow = { ...col, gaugeName: r.nodeName ?? 'the gauge' };
+	}
+	return {
+		run,
+		changed: hit.inputStart !== s.startDate || hit.sha256 !== seriesHash(s.values),
+		columns: {
+			name: run.label || new Date(run.createdAt).toISOString().slice(0, 10),
+			startDate: run.startDate,
+			inputKey: hit.inputKey,
+			rainThresholdMm: hit.threshold,
+			catchment,
+			gaugeFlow
+		}
 	};
 }
 
@@ -244,24 +304,28 @@ export const exportRoutes = new Hono<AuthEnv>()
 			return csvResponse(c, body, exportFilename(name, [run.label || 'run', 'summary'], 'csv', timeZone));
 		});
 	})
-	// One input series (rain, flow …) as date,value.
+	// One input series (rain, flow …): date, the value, its checks and, from the latest run that read it, how the model used it.
 	.get('/:id/series/:seriesId/export.csv', async (c) => {
 		const { id, seriesId } = c.req.param();
 		const q = WindowQuery.parse(c.req.query());
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'viewer');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
-			const { rows } = await db.query<{ kind: string; name: string; unit: string; startDate: string; values: (number | null)[] }>(
-				`SELECT kind, name, unit, start_date AS "startDate", "values" FROM time_series WHERE project_id = $1 AND id = $2`,
+			const { rows } = await db.query<{ kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; siteNodeId: string | null; settings: unknown }>(
+				`SELECT kind, name, unit, start_date AS "startDate", "values", site_node_id AS "siteNodeId",
+					(SELECT settings FROM project WHERE id = $1) AS settings
+				 FROM time_series WHERE project_id = $1 AND id = $2`,
 				[id, seriesId]
 			);
 			const s = rows[0];
 			if (!s) throw new ApiError(404, 'not found');
 			const { name, timeZone } = await projectInfo(db, id);
-			const label = s.name ? `${s.kind} – ${s.name}` : s.kind;
 			const range = dayRange(s.startDate, s.values.length, q.from, q.to);
 			if (!range) throw new ApiError(400, 'the window is outside the series');
-			const body = collectCsv(dailyCsvLines(s.startDate, [{ header: seriesHeader(label, s.unit), values: s.values }], range));
+			const series: ExportSeries = { ...s, label: s.name ? `${s.kind} – ${s.name}` : s.kind };
+			const reading = await loadReadingRun(db, id, seriesId, s);
+			const lines = dailyCsvLines(s.startDate, seriesExportColumns(series, mergeSettings(s.settings), reading?.columns ?? null), range);
+			const body = collectCsv(reading ? withRunComments(reading.run.legacy, provenance(reading.run), withChangedNote(reading.changed, lines)) : lines);
 			if (body === null) throw tooLarge('narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');
 			return csvResponse(c, body, exportFilename(name, [s.name ? `${s.kind}-${s.name}` : s.kind], 'csv', timeZone));
 		});

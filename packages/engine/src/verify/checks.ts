@@ -25,6 +25,7 @@ import { supplyOf, type PlanSupply } from '../network/supply';
 import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
 import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
 
@@ -50,7 +51,8 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // month at either end of the run is not assessed against the Reserve rules.
 // ewr_binding_site (engine ≥ 1.5.0) is NaN on a day the farm isn't charged: no site set a charge.
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
-const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
+// rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
+const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
 
 /**
  * The irrigation efficiency runModel used for farm `n` (run.ts irrigation):
@@ -107,6 +109,27 @@ function unitReturn(G: number, returnPerSupplied: number, objs: ObjectColumns | 
 	return (G - got) * returnPerSupplied + back;
 }
 
+/**
+ * The `rain_source` column (every run with rain from engine 1.27.0) against
+ * `rain_final`: blank on exactly the days rain_final is, and without
+ * rain-source periods only catchment, CHIRPS or forecast, the fall-through
+ * order both are built with (rainSourceCodes, reference/wr2012.ts runRain).
+ */
+export function checkRainSource(out: ModelOutput): string | null {
+	const final = out.series.find((s) => s.nodeId === null && s.key === 'rain_final')?.values;
+	const source = out.series.find((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key)?.values;
+	if (!final || !source) return null;
+	if (source.length !== final.length) return `rain_source has ${source.length} days, rain_final ${final.length}`;
+	const periods = (out.summary.rainSource?.periods.length ?? 0) > 0;
+	const plain: readonly number[] = [RAIN_SOURCE_CODE.catchment, RAIN_SOURCE_CODE.chirps, RAIN_SOURCE_CODE.forecast];
+	for (let t = 0; t < final.length; t++) {
+		const v = source[t]!;
+		if (Number.isNaN(v) !== Number.isNaN(final[t]!)) return `rain_source[${t}] is ${v} where rain_final is ${final[t]}`;
+		if (!periods && !Number.isNaN(v) && !plain.includes(v)) return `rain_source[${t}] is ${v} in a run without rain-source periods`;
+	}
+	return null;
+}
+
 export function checkBalance(input: ModelInput, out: ModelOutput): string | null {
 	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
@@ -117,6 +140,8 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			if (!Number.isFinite(s.values[t]!)) return `${s.nodeId}/${s.key}[${t}] is ${s.values[t]}`;
 		}
 	}
+	const rainSourceProblem = checkRainSource(out);
+	if (rainSourceProblem) return rainSourceProblem;
 	const nodes = input.model.nodes;
 	const outlet = nodes.find((n) => n.downstreamNodeId === null)!;
 	let totIn = 0;

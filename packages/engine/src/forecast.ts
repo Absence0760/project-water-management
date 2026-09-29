@@ -39,7 +39,7 @@
 import { fromEpochDay, toEpochDay } from './calendar';
 import { damCapacityOn } from './network/development';
 import type { ModelInput, ModelOutput, RunSeries } from './project';
-import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
+import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { prepareRun } from './prepare';
 
@@ -78,24 +78,9 @@ export interface ForecastSplit {
 export function forecastSplit(input: ModelInput): ForecastSplit {
 	const prep = prepareRun(input);
 	const { days, start } = prep;
-	let source: Float64Array;
-	if (prep.rainSource) source = prep.rainSource.column;
-	else {
-		const catchment = prep.aligned('rain_catchment_mm');
-		const chirps = prep.aligned('rain_chirps_mm');
-		const forecast = prep.aligned('rain_forecast_mm');
-		source = new Float64Array(days);
-		for (let t = 0; t < days; t++) {
-			source[t] =
-				catchment[t] != null
-					? RAIN_SOURCE_CODE.catchment
-					: chirps[t] != null
-						? RAIN_SOURCE_CODE.chirps
-						: forecast[t] != null
-							? RAIN_SOURCE_CODE.forecast
-							: NaN;
-		}
-	}
+	const source = prep.rainSource
+		? prep.rainSource.column
+		: rainSourceCodes(prep.aligned('rain_catchment_mm'), prep.aligned('rain_chirps_mm'), prep.aligned('rain_forecast_mm'));
 	let last = -1;
 	for (let t = 0; t < days; t++) if (!Number.isNaN(source[t]!) && source[t] !== RAIN_SOURCE_CODE.forecast) last = t;
 	let from = -1;
@@ -241,8 +226,10 @@ const fin = (v: number | null | undefined) => (typeof v === 'number' && Number.i
  * - every series is the run without the tail's up to forecastFrom − 1 and
  *   the run with it from forecastFrom on (the model isn't causal, so the
  *   two runs' shared days can differ by float noise: see the head of this
- *   file), plus the `rain_source` column when the run has none, so every
- *   chart and export can mark the forecast days;
+ *   file), except `rain_source`, which is the full run's whole (forecastSplit's
+ *   source: before forecastFrom it equals the run without the tail's, which
+ *   keeps forecast rain filling a gap), so every chart and export can mark
+ *   the forecast days;
  * - summary.forecast covers the tail days, and summary.forecastRain is the
  *   full run's (it names the days that used forecast rain);
  * - a self-check the full run fails is added to the warnings, named as the
@@ -259,9 +246,11 @@ export function runForecastChecked(input: ModelInput): ModelOutput {
 		const h = history.get(`${x.nodeId ?? ''}|${x.key}`);
 		return h ? { ...x, values: [...h.slice(0, cut), ...x.values.slice(cut)] } : x;
 	});
-	if (!series.some((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key)) {
-		series.push({ nodeId: null, key: RAIN_SOURCE_COLUMN.key, label: RAIN_SOURCE_COLUMN.label, unit: RAIN_SOURCE_COLUMN.unit, values: Array.from(split.source) });
-	}
+	// The rain source is the full run's whole: before forecastFrom it equals the run without the tail's (both read the same rain), so nothing is spliced.
+	const at = series.findIndex((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key);
+	const sourceSeries = { nodeId: null, key: RAIN_SOURCE_COLUMN.key, label: RAIN_SOURCE_COLUMN.label, unit: RAIN_SOURCE_COLUMN.unit, values: Array.from(split.source) };
+	if (at >= 0) series[at] = sourceSeries;
+	else series.push(sourceSeries);
 	const warnings = [...hist.summary.warnings];
 	for (const c of full.summary.verification?.checks ?? []) {
 		if (!c.passed) warnings.push(`self-check failed on the run with the forecast tail (${c.label}): ${c.detail}`);
