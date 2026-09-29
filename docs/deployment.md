@@ -175,6 +175,7 @@ Keys this app needs:
 | `auth_jwt_secret` | `AUTH_JWT_SECRET` in the API's and worker's runtime secrets: signs session cookies, and keys the run stamps (security.md § Run stamps; rotating it leaves stored runs unverified) (≥ 32 random bytes) |
 | `db_app_password` | The `water_app` role's password (RLS-bound runtime role; 24+ alphanumeric characters): in the API's and worker's `DATABASE_URL` and the migrate Lambda's `WATER_APP_PASSWORD`, each in that Lambda's runtime secret |
 | `alerts_token_secret` | `ALERTS_TOKEN_SECRET` in the worker's runtime secret: signs the one-click unsubscribe links in alert emails (32+ alphanumeric characters, `openssl rand -hex 32`). Rotating it breaks the unsubscribe link in every alert already sent |
+| `cloudfront_private_key` | `CLOUDFRONT_PRIVATE_KEY` in the API's runtime secret: signs report download links (CloudFront signed URLs). An RSA 2048 private key, PEM, as a YAML block scalar; its public half goes in `prod.tfvars` (`report_download_public_keys`, `report_download_signing_key`). Generating and rotating it: [§ The report-download signing key](#the-report-download-signing-key) |
 
 The key list is `infra/prod.sops.yaml.example`. There is no `db_owner_password`
 key: the owner/migration role always uses RDS-managed master credentials in
@@ -204,7 +205,8 @@ write again, and `tf.sh` sets it for you: it reads the sops file's plaintext
 `sops.lastmodified` (which sops rewrites on every edit, without decrypting
 anything) and passes it as `YYYYMMDDhhmmss`. So:
 
-- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`):
+- **A sops key** (`auth_jwt_secret`, `db_app_password`, `alerts_token_secret`;
+  `cloudfront_private_key` also needs its public key moved, below):
   edit it with sops, then plan and apply through `tf.sh`. The edit moved
   `lastmodified`, so the plan replaces every runtime secret version.
 - **The CloudFront header:** apply with
@@ -228,15 +230,48 @@ separate restart. After `db_app_password`, invoke the migrate Lambda at once
 (it sets the new password on `water_app`; the API and worker fail DB logins
 until it has).
 
-The report-download signing key rotates the same way:
-`terraform apply -replace=tls_private_key.report_downloads`. The new
-CloudFront public key is created first (`create_before_destroy`), the key
-group and the API (its `CLOUDFRONT_KEY_PAIR_ID` and runtime secret) move to
-it, and the old public key is deleted last. A download link minted in the
-seconds between the key group moving and the API cold-starting is refused
-(`403`); clicking again works. Links live 60 seconds, so there is nothing
-longer-lived to invalidate. Rotate if the key may have leaked (state or the
-runtime secret read by someone who shouldn't have), not on a schedule.
+#### The report-download signing key
+
+The API signs report download links with `cloudfront_private_key` (sops);
+CloudFront trusts the public keys in `report_download_public_keys`
+(`prod.tfvars`, name → PEM) through one key group, and
+`report_download_signing_key` names the entry the private key belongs to.
+First setup, and every rotation, generate the pair outside any repo:
+
+```bash
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out report-downloads.key && openssl pkey -in report-downloads.key -pubout
+```
+
+The second command prints the public key for `prod.tfvars`; the private key
+goes into sops as `cloudfront_private_key` (a YAML block scalar), then delete
+`report-downloads.key`. To rotate without a single failed download, overlap
+the two keys:
+
+1. **Trust the new key alongside the old.** Add the new public key to
+   `report_download_public_keys` under a new name (e.g. `"2027-03"`), keep the
+   old entry and `report_download_signing_key` as they are, and apply through
+   `tf.sh`. The key group now trusts both; the API still signs with the old.
+   Give CloudFront a few minutes to carry the key group to its edges.
+2. **Put the new private key in sops** (`cloudfront_private_key`) and set
+   `report_download_signing_key` to the new name.
+3. **Apply through `tf.sh`.** The sops edit moved `lastmodified`, so the
+   API's runtime secret is rewritten, and its `CLOUDFRONT_KEY_PAIR_ID` /
+   `CLOUDFRONT_PUBLIC_KEY` move to the new key in the same apply (the function
+   update waits for the key group). The API cold-starts signing with the new
+   key; links it signed with the old one in the last minute still verify,
+   because the old key is still trusted. Steps 2 and 3 must change both
+   together: the API **refuses to start** when its private key isn't the
+   private half of `CLOUDFRONT_PUBLIC_KEY` (the error names both settings),
+   so a sops key without the matching `report_download_signing_key`, or the
+   reverse, takes the API down until they agree.
+4. **Drop the old key.** A minute after step 3 no valid link uses it: remove
+   its entry from `report_download_public_keys` and apply.
+
+Rotate if the private key may have leaked (sops or the API's runtime secret
+read by someone who shouldn't have), not on a schedule. The private key is
+never in Terraform state: it is an ephemeral variable that reaches only the
+write-only runtime secret. The public keys are in state (CloudFront's
+`encoded_key`), which is fine: they're public.
 
 Don't edit a runtime secret in the console: each Lambda reads the version
 Terraform pinned, so a hand edit is ignored until the next apply overwrites it.
@@ -329,9 +364,10 @@ origin), `COOKIE_SECURE=true`, `NODE_EXTRA_CA_CERTS` (the RDS CA bundle) and
 secret: `DATABASE_URL` (as `water_app`, `sslmode=verify-full`),
 `AUTH_JWT_SECRET`, `CLOUDFRONT_SHARED_SECRET` and `CLOUDFRONT_PRIVATE_KEY`
 (the report-download signing key) come from there at cold start
-([§ Rotating a secret](#rotating-a-secret)). `REPORT_DOWNLOADS=cloudfront` and
-`CLOUDFRONT_KEY_PAIR_ID` (the trusted public key's id) are plain settings
-([§ Reports](#reports)).
+([§ Rotating a secret](#rotating-a-secret)). `REPORT_DOWNLOADS=cloudfront`,
+`CLOUDFRONT_KEY_PAIR_ID` (the signing public key's id) and
+`CLOUDFRONT_PUBLIC_KEY` (its PEM, which the API checks its private key
+against at cold start) are plain settings ([§ Reports](#reports)).
 
 The release package (`infra/scripts/package-lambdas.sh`) bundles `nodemailer`
 and `@aws-sdk/client-sesv2` into the API's `lambda.mjs` (~670 KB zipped,
@@ -934,7 +970,9 @@ plan-only until the first deploy):
   long-lived leaves the API), and the browser fetches the PDF through
   CloudFront and the WAF. The API has no S3 grant and needs no S3 endpoint:
   signing is local (`REPORT_DOWNLOADS=cloudfront`, `CLOUDFRONT_KEY_PAIR_ID`
-  in its environment, `CLOUDFRONT_PRIVATE_KEY` in its runtime secret).
+  and `CLOUDFRONT_PUBLIC_KEY` in its environment, `CLOUDFRONT_PRIVATE_KEY`
+  from sops in its runtime secret; it refuses to start if the two halves
+  don't pair).
   Rotating the key: [§ Rotating a secret](#rotating-a-secret).
 - **Retries and DLQs:** each render queue dead-letters after 5 receives. A
   failed render is an answer (the report shows it), not a retry: its token
