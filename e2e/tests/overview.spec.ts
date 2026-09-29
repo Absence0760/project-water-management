@@ -57,11 +57,10 @@ test('the latest run: its headline figures, the change from the run before, and 
 	await expect(card('Dams on 28 Jan 2022')).toContainText(/\d+%full/);
 	await expect(card('Dams today')).toHaveCount(0);
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
-	// Reserve · Irrigation supplied · Dams (on the run's last day) · NSE, in that order; the mean outflow is a short line under them,
-	// its change and the rest on River & reserve (river-page.spec.ts).
+	// Reserve · Irrigation supplied · Dams (on the run's last day) · NSE, in that order; the mean outflow is only on River & reserve
+	// (river-page.spec.ts), with its change.
 	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams on 28 Jan 2022', 'Calibration NSE']);
-	await expect(latest.locator('[data-headline="outflow"]')).toContainText(/^Mean simulated outflow [\d.]+ m³\/s \(\d+% of natural\): its change and the reserve in detail are on River & reserve\.$/);
-	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${second}`);
+	await expect(latest.locator('[data-headline="outflow"]')).toHaveCount(0);
 	// Same inputs, so every change is zero, and it says which run it is against.
 	await expect(card('Irrigation supplied')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(latest).toContainText('Changes are against the previous run, Baseline.');
