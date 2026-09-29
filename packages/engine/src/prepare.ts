@@ -65,7 +65,7 @@ import {
 	type SeriesKind
 } from './project';
 import { resolveWr2012 } from './reference/wr2012Resolve';
-import { resolveQualityFlags } from './calibrate/dayFlags';
+import { resolveQualityFlags } from './calibrate/qualityFlagSettings';
 import { clonePlain, stableStringify } from './warmstart/plain';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */

@@ -1193,6 +1193,20 @@
 //             farm page's "This season" card with its Afrikaans (E3). Every
 //             piece already sits in a lazy chunk, so a further split would
 //             only move bytes. No new dependency. Headroom ~3 KB.
+// 2026-09-28  total 1137 → 1144 KB (measured 1141; origin/main measured
+//             1134 the same day), largestWorkerKb 34 → 36 (calibration worker
+//             measured 36, was 34). Issue #66, per-day quality flags (engine
+//             1.20.0, CR-18/19/22): the calibration worker now flags each day
+//             (calibrate/dayFlags.ts, with the Data checks' flat-stretch and
+//             outlier rules from quality.ts), censors or leaves out flagged
+//             days and writes the data-quality summary and its notes; that
+//             code has to run where the fit runs. On the main thread: the
+//             data-quality panel (DataQualityPanel), the gauged-range fields
+//             (QualityFlagsFields), the fit record's quality-flag row and the
+//             help article. The settings resolver and run-comparison lines
+//             sit in calibrate/qualityFlagSettings.ts, which imports none of
+//             the checks, so settings, provenance and comparison chunks don't
+//             carry them. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1203,10 +1217,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1137,
+	totalCodeKb: 1144,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 34,
+	largestWorkerKb: 36,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

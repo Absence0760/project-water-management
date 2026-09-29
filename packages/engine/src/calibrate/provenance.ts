@@ -18,7 +18,8 @@ import type { RunoffModelId } from '../runoff/types';
 import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { CalibrationBounds, ParamSet } from './params';
-import { resolveQualityFlags, type DayQuality, type QualityFlagSettings } from './dayFlags';
+import type { DayQuality } from './dayFlags';
+import { resolveQualityFlags, type QualityFlagSettings } from './qualityFlagSettings';
 import type { ObjectiveId } from './objectives';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */

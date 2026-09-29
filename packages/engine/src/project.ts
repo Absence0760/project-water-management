@@ -3,7 +3,7 @@
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
-import type { QualityFlagSettings } from './calibrate/dayFlags';
+import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
