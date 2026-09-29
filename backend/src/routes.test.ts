@@ -136,7 +136,7 @@ describe('route auth inventory', () => {
 			'POST /projects/:id/outlooks',
 			'GET /projects/:id/outlooks',
 			'GET /projects/:id/outlooks/:outlookId',
-			// Publishing one level to farmers (104, issue #53 R5).
+			// Publishing one level to farmers (106, issue #53 R5).
 			'POST /projects/:id/outlooks/:outlookId/publish',
 			'GET /projects/:id/outlook-publication',
 			'DELETE /projects/:id/outlook-publication'

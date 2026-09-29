@@ -193,6 +193,8 @@ export const af: Catalogue = {
 	'54a6fc83': 'Water wat jy elke maand nodig gehad en ontvang het',
 	// Season outlook
 	'874f0827': 'Seisoensvooruitsig',
+	// What is the season outlook?
+	'd82c623d': 'Wat is die seisoensvooruitsig?',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -1147,6 +1149,8 @@ export const af: Catalogue = {
 	'3e1ec91d': 'van die water wat jy hierdie seisoen nodig gehad het',
 	// dam full
 	'07095e7e': 'dam vol',
+	// The season outlook could not be loaded. Check your connection, then reload the page.
+	'50e81dc9': 'Die seisoensvooruitsig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
 	// More
 	'4f34d900': 'Meer',
 	// Download my figures (CSV)

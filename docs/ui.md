@@ -5158,8 +5158,12 @@ published.
   way (no dam, no line); "Your WUA reviews the level on 1 Jan."; and
   "Worked out by the model from past years’ weather: not a forecast, and
   not a promise. Only a notice from your WUA or from DWS is a
-  restriction." Only this farm's own figures ever reach the page
-  (`FarmView.outlook`, api.md § Farm). That chart
+  restriction."; then "What is the season outlook?", a link to the
+  `farm-season-outlook` entry on `/farm/words` (issue #122). Only this
+  farm's own figures ever reach the page (`FarmView.outlook`, api.md §
+  Farm). The farm page imports the card only when `outlookCard()` returns
+  one, so it is a chunk of its own (under 1 KB gzipped) that a farm with no
+  outlook published never downloads. That chart
   (`farm/DamChart.svelte`, "Last 12 months") says what its line is under its
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each

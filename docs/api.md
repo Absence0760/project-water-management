@@ -2316,7 +2316,7 @@ run; an outlook member is one level in one year, measured over the season.
 The same job then draws the **review triggers** for the season's review
 date (issue #53 R6, [model.md §2.15a](./model.md#215a-review-triggers-from-the-outlook-issue-53-r6)),
 and an editor can **publish** one level to the project's farmers (R5, the
-farmer view E3, migration 104).
+farmer view E3, migration 106).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |

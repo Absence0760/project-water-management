@@ -19,6 +19,8 @@ import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { words as siteWords } from '../support/lang.ts';
+import { clippedText, expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const START = '2006-10-01';
 /** Rain multiplier per water year, 2006/07 … 2017/18 (invented). */
@@ -287,6 +289,28 @@ test('the review triggers show for the review date, and a level published to far
 	expect(await flat(3)).toBe(`Your dam ended the season about ${share(dam.stat!.p50)} full, and between ${share(dam.stat!.p10)} and ${share(dam.stat!.p90)} in most of those years.`);
 	expect(await flat(4)).toBe('Your WUA reviews the level on 1 Jan.');
 	await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
+
+	// On a phone in Afrikaans (issue #122): the card in the farmer's language, nothing cut off or scrolling
+	// sideways, clean in light and dark, and its help link lands on the words page's entry.
+	const af = await siteWords('af');
+	await farmer.page.setViewportSize({ width: 360, height: 740 });
+	await farmer.page.getByRole('group', { name: 'Language' }).first().getByRole('button', { name: 'Afrikaans' }).click();
+	await expect(farmer.page.locator('html')).toHaveAttribute('lang', 'af');
+	await expect(card.getByRole('heading', { name: af('This season') })).toBeVisible();
+	await expect(card.getByText(af('Season outlook'), { exact: true })).toBeVisible();
+	expect(await flat(1)).toContain('85 %');
+	expect(await flat(5)).toBe(af('Worked out by the model from past years’ weather: not a forecast, and not a promise. Only a notice from your WUA or from DWS is a restriction.'));
+	for (const scheme of ['light', 'dark'] as const) {
+		await farmer.page.emulateMedia({ colorScheme: scheme });
+		await expectNoSidewaysScroll(farmer.page);
+		expect(await clippedText(farmer.page), 'text cut off in its box').toEqual([]);
+		await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
+	}
+	await farmer.page.emulateMedia({ colorScheme: 'light' });
+	await card.getByRole('link', { name: af('What is the season outlook?') }).click();
+	await expect(farmer.page).toHaveURL(/\/farm\/words#farm-season-outlook$/);
+	await expect(farmer.page.locator('#farm-season-outlook')).toBeVisible();
+	await farmer.page.goBack();
 
 	// Withdrawn: the farm page drops the card.
 	await publish.getByRole('button', { name: 'Withdraw' }).click();
