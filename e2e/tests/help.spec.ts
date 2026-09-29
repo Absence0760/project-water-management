@@ -63,7 +63,7 @@ test('a help tip in the network table opens on top, unclipped, and closes on Esc
 	// "More in the glossary" lands on the term's entry.
 	await tip.click();
 	await bubble.getByRole('link', { name: 'More in the glossary' }).click();
-	await expect(page).toHaveURL(/\/help\/glossary#element-farm$/);
+	await expect(page).toHaveURL(/\/help\/glossary\/network#element-farm$/);
 	await expect(page.getByRole('article', { name: 'Hydrological unit', exact: true })).toBeInViewport();
 });
 
@@ -144,18 +144,21 @@ test('neighbouring help tips show their own close-up, with their feature ringed'
 	expect(seen[2]!.ring).not.toEqual(seen[1]!.ring);
 });
 
-test('the help sidebar stays beside the glossary and follows the section being read', async ({ page, owner }) => {
+test('the help contents: static groups under headings, the glossary one link per topic (issue #162)', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto('/help/glossary');
 	const nav = page.getByRole('navigation', { name: 'Help' });
-	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
-	const first = (await topics.first().textContent())!.trim();
-	const last = (await topics.last().textContent())!.trim();
-	expect(first).not.toBe(last);
 
-	await expect(nav.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
-	await expect(nav.getByRole('link', { name: first, exact: true })).toHaveAttribute('aria-current', 'location');
+	// Each group's name is a heading, not a link, and names its list of links.
+	await expect(nav.getByRole('heading', { level: 2 })).toHaveText(['Start here', 'How it works', 'How to', 'Reference']);
+	await expect(nav.getByRole('link', { name: /^(Start here|How it works|How to|Reference)$/i })).toHaveCount(0);
+	const reference = nav.getByRole('list', { name: 'Reference' });
+	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
+	const names = (await topics.allTextContents()).map((t) => t.trim());
+	expect(names.length).toBeGreaterThan(5);
+	await expect(reference.getByRole('link')).toHaveText(['Glossary', ...names]);
+	await expect(reference.getByRole('link', { name: 'Glossary', exact: true })).toHaveAttribute('aria-current', 'page');
 
 	// The search heads the page, above the text (not in the contents column, issue #17).
 	const search = await page.getByRole('searchbox', { name: 'Search help' }).boundingBox();
@@ -163,20 +166,35 @@ test('the help sidebar stays beside the glossary and follows the section being r
 	expect(search!.y).toBeLessThan(main!.y);
 	expect(search!.x).toBeGreaterThanOrEqual(main!.x - 1);
 
-	// Scroll to the end: the contents column is still in view (the list scrolled
-	// within it), and marks the last topic, on screen.
-	await page.keyboard.press('End');
-	await expect(nav.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'location');
-	await expect(nav.getByRole('link', { name: first, exact: true })).not.toHaveAttribute('aria-current', 'location');
+	// A topic is a page of its own, marked in the contents; the contents don't
+	// change as the page scrolls (no term list in them).
+	const last = names.at(-1)!;
+	await reference.getByRole('link', { name: last, exact: true }).click();
+	await expect(page.getByRole('heading', { level: 1, name: last })).toBeVisible();
+	await expect(reference.getByRole('link', { name: last, exact: true })).toHaveAttribute('aria-current', 'page');
+	const before = await nav.getByRole('link').count();
+	await page.evaluate(() => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }));
+	await expect(nav.getByRole('link')).toHaveCount(before);
 	await expect(nav.getByRole('link', { name: last, exact: true })).toBeInViewport();
+});
 
-	// The current topic lists its terms, and a term link jumps to it.
-	// (The Glossary item holds every topic, so the topic's own item is the innermost match.)
-	const current = nav.getByRole('listitem').filter({ has: page.getByRole('link', { name: last, exact: true }) }).last();
-	const term = current.getByRole('list').getByRole('link').first();
-	const name = (await term.textContent())!.trim();
-	await term.click();
-	await expect(page.getByRole('article', { name })).toBeInViewport();
+test('a glossary topic spans the help column, with "On this page" pinned to its right edge', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/help/glossary/goodness-of-fit');
+	await expect(page.getByRole('heading', { level: 1, name: 'Goodness of fit' })).toBeVisible();
+	const onPage = page.getByRole('navigation', { name: 'On this page' });
+	const col = (await page.locator('.help-main').boundingBox())!;
+	const rail = (await onPage.boundingBox())!;
+	expect(Math.abs(rail.x + rail.width - (col.x + col.width))).toBeLessThanOrEqual(2);
+	// The rail lists this topic's terms; a term link lands on its entry and marks it.
+	const names = (await page.getByRole('main').getByRole('article').locator('h2 > span').allTextContents()).map((t) => t.trim());
+	await expect(onPage.getByRole('link')).toHaveText(names);
+	const term = names.at(-3)!;
+	await onPage.getByRole('link', { name: term, exact: true }).click();
+	await expect(page.getByRole('article', { name: term, exact: true })).toBeInViewport();
+	await expect(onPage.locator('a[aria-current="location"]')).toHaveText([term]);
+	await expect(onPage).toBeInViewport();
 });
 
 test('on a phone the help contents fold behind a button above the page', async ({ page, owner }) => {
@@ -273,7 +291,7 @@ test('a guide shows its diagrams and links into the glossary', async ({ page, ow
 
 	// A term link lands on its glossary entry.
 	await page.getByRole('region', { name: 'Terms in this guide' }).getByRole('link', { name: 'Fit record' }).click();
-	await expect(page).toHaveURL(/\/help\/glossary#fit-record$/);
+	await expect(page).toHaveURL(/\/help\/glossary\/goodness-of-fit#fit-record$/);
 	await expect(page.getByRole('article', { name: 'Fit record' })).toBeInViewport();
 });
 
@@ -292,14 +310,32 @@ test('help search finds guides and glossary terms as you type', async ({ page, o
 	await expect(page.getByText('Nothing matches.')).toBeVisible();
 });
 
-test('an old /help#term link goes on to the glossary entry', async ({ page, owner }) => {
+test('old links to a term (/help#term, the one-page /help/glossary#term) go on to its topic page', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/help#nse');
-	await expect(page).toHaveURL(/\/help\/glossary#nse$/);
+	await expect(page).toHaveURL(/\/help\/glossary\/goodness-of-fit#nse$/);
+	await expect(page.getByRole('article', { name: /^NSE/ })).toBeInViewport();
+	await expect(page.getByRole('article', { name: /^NSE/ })).toBeFocused();
+
+	await page.goto('/help/glossary#spill');
+	await expect(page).toHaveURL(/\/help\/glossary\/units-and-dams#spill$/);
+	await expect(page.getByRole('article', { name: 'Spill', exact: true })).toBeInViewport();
+
+	// A term linked under the wrong topic goes on to its own.
+	await page.goto('/help/glossary/basics#nse');
+	await expect(page).toHaveURL(/\/help\/glossary\/goodness-of-fit#nse$/);
 	await expect(page.getByRole('article', { name: /^NSE/ })).toBeInViewport();
 });
 
-test('the glossary shows every term in full, as many as the help page counts', async ({ page, owner }) => {
+test('an unknown glossary topic says so and links to every topic', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/glossary/no-such-topic');
+	await expect(page.getByRole('heading', { level: 1, name: 'Topic not found' })).toBeVisible();
+	await page.getByRole('main').getByRole('link', { name: 'See every topic' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Glossary' })).toBeVisible();
+});
+
+test('the glossary lists every term by topic, as many as the help page counts, and shows each in full', async ({ page, owner }) => {
 	void owner;
 	await page.goto('/help');
 	const link = page.getByRole('main').getByRole('link', { name: /^Glossary, \d+ terms/ });
@@ -307,32 +343,42 @@ test('the glossary shows every term in full, as many as the help page counts', a
 	expect(count).toBeGreaterThan(100);
 	await link.click();
 	await expect(page).toHaveURL(/\/help\/glossary$/);
-	await expect(page.getByRole('main').getByRole('article')).toHaveCount(count);
+	// The index: every topic, with its terms (each links to its entry).
+	const topics = page.getByRole('main').getByRole('heading', { level: 2 });
+	await expect(page.getByRole('main').getByRole('list', { name: /^Terms in / }).getByRole('link')).toHaveCount(count);
+	let total = 0;
+	for (const name of (await topics.allTextContents()).map((t) => t.trim())) {
+		await page.goto('/help/glossary');
+		await page.getByRole('main').getByRole('heading', { level: 2, name }).getByRole('link').click();
+		await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+		total += await page.getByRole('main').getByRole('article').count();
+	}
+	expect(total).toBe(count);
 
 	// One entry, every part: the short text, the fuller text, units, other
-	// names, related terms (linked) and where the idea comes from.
+	// names and related terms (linked). Not where the idea comes from: that
+	// names developer documents (docs/model.md, issues), kept in the data only.
+	await page.goto('/help/glossary/units-and-dams');
 	const dam = page.getByRole('article', { name: 'Dam capacity' });
 	await expect(dam.locator('.short')).toHaveText(
 		'Combined full-supply volume of the hydrological unit’s dams, in m³. 0 means no storage: water not used the same day flows on.'
 	);
 	await expect(dam.locator('.long')).toHaveText([/^b023 treats a hydrological unit’s dams as one composite dam\./]);
-	await expect(dam.getByRole('definition')).toHaveText([
-		'm³',
-		'composite dam, storage capacity, full supply',
-		/Spill/,
-		'b023 Farm spec'
-	]);
+	await expect(dam.getByRole('term')).toHaveText(['Units', 'Also called', 'See also']);
+	await expect(dam.getByRole('definition')).toHaveText(['m³', 'composite dam, storage capacity, full supply', /Spill/]);
+	await expect(page.getByRole('main').getByRole('term').filter({ hasText: 'Source' })).toHaveCount(0);
+	await expect(page.getByRole('main')).not.toContainText('docs/');
 	await dam.getByRole('link', { name: 'Spill', exact: true }).click();
-	await expect(page).toHaveURL(/\/help\/glossary#spill$/);
+	await expect(page).toHaveURL(/\/help\/glossary\/units-and-dams#spill$/);
 	await expect(page.getByRole('article', { name: 'Spill', exact: true })).toBeInViewport();
 });
 
 test('the farm glossary shows the glossary’s farmer words and jumps to the one linked', async ({ page, owner }) => {
 	void owner;
-	await page.goto('/help/glossary');
-	const topic = page.getByRole('region', { name: 'Words on your hydrological unit page' });
+	await page.goto('/help/glossary/farm-page-words');
+	const topic = page.getByRole('main');
 	await expect(topic.getByRole('article').first()).toBeVisible();
-	const terms = (await topic.getByRole('article').locator('h3 > span').allTextContents()).map((t) => t.trim());
+	const terms = (await topic.getByRole('article').locator('h2 > span').allTextContents()).map((t) => t.trim());
 	expect(terms.length).toBeGreaterThan(0);
 
 	await page.goto('/farm/words#farm-reserve');
@@ -350,10 +396,11 @@ test('an unknown guide says so and links back to help', async ({ page, owner }) 
 
 test('the glossary says which entries apply only in South Africa (issue #76)', async ({ page, owner }) => {
 	void owner;
-	await page.goto('/help/glossary#wr2012-check');
+	await page.goto('/help/glossary/natural-flow#wr2012-check');
 	const wr2012 = page.getByRole('article', { name: 'WR2012 check' });
 	await expect(wr2012.getByRole('term').filter({ hasText: 'Applies in' })).toBeVisible();
 	await expect(wr2012.getByRole('definition').filter({ hasText: /^South Africa$/ })).toBeVisible();
 	// An entry that holds anywhere says nothing about a country.
+	await page.goto('/help/glossary/basics');
 	await expect(page.getByRole('article', { name: 'Water balance', exact: true }).getByRole('term').filter({ hasText: 'Applies in' })).toHaveCount(0);
 });

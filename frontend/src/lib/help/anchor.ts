@@ -1,4 +1,4 @@
-// Landing on a #term link: the glossary (/help/glossary#<id>) and the farm
+// Landing on a #term link: a glossary topic (/help/glossary/<topic>#<id>) and the farm
 // words page (/farm/words#<id>) scroll the linked entry to the top once the
 // SPA has rendered it, and the Runs tab (and River & reserve) do the same for a #res-* panel
 // once the run's results are in (the portfolio's "farms short this week"). One scroll isn't enough: the page is still settling

@@ -140,7 +140,7 @@
 			grid-column: 2;
 		}
 		/* In view while reading; it scrolls on its own only when it is taller
-		   than the window (a short window, or the glossary's term list). It
+		   than the window (a short window). It
 		   starts and sticks at the page's top gutter and ends as far from the
 		   bottom, so at the top of a short page it doesn't make the page scroll. */
 		.side {

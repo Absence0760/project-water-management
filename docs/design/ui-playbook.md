@@ -111,6 +111,16 @@ section it belongs to, with the example that taught it.
   page's top gutter and ends as far from the bottom
   (`max-height: calc(100vh - 2 × gutter)`); the end-of-page reading space goes
   on the text column (`help-pages.spec.ts` checks the page and the column).
+- **A reading page spans its column; the measure is on the text.** Help's
+  guides and glossary sat in a 42rem article with the "On this page" rail
+  beside it, leaving 200–350 px empty at 1440 (issue #162). Cap body text,
+  notes and lists at a reading measure (44rem) and let figures, diagrams and
+  tables take the column; pin a side rail to the column's right edge.
+- **Navigation groups are headings, not items; a menu doesn't change as you
+  scroll.** A group name styled like its links reads as one of them; make
+  it a heading with its links indented under a rule. A contents list that
+  grew a nested list of the terms on screen (three levels, moving while you
+  read) was replaced by one page per topic and search (issue #162).
 - **Position the box that scrolls.** A list that scrolls inside its card
   must be `position: relative` (or otherwise positioned) when anything
   inside it is absolutely positioned. The Projects list fitted its card to
