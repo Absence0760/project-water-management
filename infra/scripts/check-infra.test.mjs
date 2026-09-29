@@ -70,7 +70,7 @@ const envFor = (ctx, extra = {}) => ({
 	...extra,
 });
 
-const runSync = (ctx, extra) => spawnSync(BASH, [join(ctx.repo, 'bin', 'check-infra.sh')], { encoding: 'utf8', env: envFor(ctx, extra) });
+const runSync = (ctx, extra, args = []) => spawnSync(BASH, [join(ctx.repo, 'bin', 'check-infra.sh'), ...args], { encoding: 'utf8', env: envFor(ctx, extra) });
 const calls = (ctx) =>
 	readFileSync(ctx.log, 'utf8')
 		.split('\n')
@@ -103,6 +103,15 @@ test('runs fmt, init, validate and test in a private copy that holds a local-bac
 	assert.deepEqual(infraFiles(ctx), before);
 	assert.equal(existsSync(c[0].cwd), false);
 	assert.deepEqual(readdirSync(ctx.tmp), []);
+});
+
+test('passes its arguments to terraform test only', () => {
+	const ctx = setup();
+	const r = runSync(ctx, {}, ['-filter=tests/a.tftest.hcl']);
+	assert.equal(r.status, 0, r.stderr);
+	const c = calls(ctx);
+	assert.deepEqual(c[3].args, ['test', '-filter=tests/a.tftest.hcl']);
+	assert.deepEqual(c[2].args, ['validate']);
 });
 
 test('a failing step fails the run and still removes the copy', () => {

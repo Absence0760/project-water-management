@@ -741,7 +741,8 @@ local-backend override in `infra/` identical to the one older versions wrote
 makes the script stop and ask you to delete it. If you create an override
 by hand, delete it before any real `terraform init
 -backend-config=backend.config`. `CHECK_INFRA_KEEP=1` keeps the copy and
-prints its path. `pnpm test:guards` tests the script against a fake
+prints its path; arguments go to `terraform test`
+(`pnpm check:infra -filter=tests/logging.tftest.hcl` runs one file). `pnpm test:guards` tests the script against a fake
 `terraform` (`infra/scripts/check-infra.test.mjs`).
 
 The test suite (`tests/*.tftest.hcl`) plans against mocked providers

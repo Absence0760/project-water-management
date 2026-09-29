@@ -609,6 +609,11 @@ variables {
 run "lambda_json_logs" {
   command = plan
 
+  # The renderer exists only once its image is tagged (reports.tf).
+  variables {
+    renderer_image_tag = "0.4.0"
+  }
+
   assert {
     condition = alltrue([
       for f in [
@@ -616,7 +621,7 @@ run "lambda_json_logs" {
         aws_lambda_function.migrate,
         aws_lambda_function.worker,
         aws_lambda_function.fetcher,
-        aws_lambda_function.renderer,
+        aws_lambda_function.renderer[0],
       ] : length(f.logging_config) == 1 && f.logging_config[0].log_format == "JSON"
     ])
     error_message = "Every Lambda logs in JSON (the metric filters read $.message.event, which only the JSON format produces)."
@@ -629,7 +634,7 @@ run "lambda_json_logs" {
         aws_lambda_function.migrate,
         aws_lambda_function.worker,
         aws_lambda_function.fetcher,
-        aws_lambda_function.renderer,
+        aws_lambda_function.renderer[0],
       ] : f.logging_config[0].system_log_level == "WARN"
     ])
     error_message = "System logs at WARN: the START / END / REPORT lines (three per API request) are INFO and are not kept."
@@ -642,7 +647,7 @@ run "lambda_json_logs" {
         aws_lambda_function.migrate,
         aws_lambda_function.worker,
         aws_lambda_function.fetcher,
-        aws_lambda_function.renderer,
+        aws_lambda_function.renderer[0],
       ] : f.logging_config[0].application_log_level == "INFO"
     ])
     error_message = "Application logs from INFO: the worker's EMF lines (jobs_backlog, alert mail metrics) are recorded as INFO, and a higher level drops them silently."
@@ -656,14 +661,14 @@ run "lambda_json_logs" {
       aws_lambda_function.migrate.logging_config[0].log_group == aws_cloudwatch_log_group.migrate.name &&
       aws_lambda_function.worker.logging_config[0].log_group == aws_cloudwatch_log_group.worker.name &&
       aws_lambda_function.fetcher.logging_config[0].log_group == aws_cloudwatch_log_group.fetcher.name &&
-      aws_lambda_function.renderer.logging_config[0].log_group == aws_cloudwatch_log_group.renderer.name &&
+      aws_lambda_function.renderer[0].logging_config[0].log_group == aws_cloudwatch_log_group.renderer.name &&
       alltrue([
         for f in [
           aws_lambda_function.backend,
           aws_lambda_function.migrate,
           aws_lambda_function.worker,
           aws_lambda_function.fetcher,
-          aws_lambda_function.renderer,
+          aws_lambda_function.renderer[0],
         ] : f.logging_config[0].log_group == "/aws/lambda/${f.function_name}"
       ])
     )

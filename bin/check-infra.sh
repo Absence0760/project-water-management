@@ -24,6 +24,8 @@
 # concurrent installs.
 #
 #   CHECK_INFRA_KEEP=1 bin/check-infra.sh   keeps the copy and prints its path
+#   bin/check-infra.sh -filter=tests/logging.tftest.hcl
+#                                           passes its arguments to `terraform test`
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -77,4 +79,4 @@ else
 	terraform init -backend=false -input=false -lockfile=readonly >/dev/null
 fi
 terraform validate
-terraform test
+terraform test "$@"
