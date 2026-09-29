@@ -1,6 +1,7 @@
-import { damFigures, type FarmSummary } from '@water-management/engine';
+import { damFigures, type FarmSummary, type NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { AGO_DAYS, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
+import { damColouring } from '$lib/components/network/farmColour';
+import { AGO_DAYS, damEndPctFromSummary, damEndTile, damInRun, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
 const series = (startDate: string, values: (number | null)[]) => ({ startDate, values });
@@ -165,6 +166,61 @@ describe('damsInRun', () => {
 		expect(damsInRun(undefined, [{ id: 'b', name: '', damCapacityM3: 50, damMinPct: 'x' }], refs)).toEqual([
 			{ nodeId: 'b', name: '(unnamed)', capacityM3: 50, minPct: 0 }
 		]);
+	});
+});
+
+describe('damInRun and damEndPctFromSummary: the Network card’s Dam at end of run (issue #173)', () => {
+	const refs = [{ key: 'dam_storage', nodeId: 'a' }];
+	const summary = [{ nodeId: 'a', name: 'A', damEndM3: 400, damLowM3: 300, damLowDate: '2024-12-01', damDaysAtMin: 0 } as FarmSummary];
+
+	it('reads the end of the run against the run’s capacity, as the map’s colour by dam level does, after a capacity edit', () => {
+		// The run modelled a 1 000 m³ dam; the model has since been edited to 500 m³.
+		const run = [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 1000, damMinPct: 0 }];
+		const live = [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 500, damMinPct: 0 }];
+		const dam = damInRun(run, live, refs, 'a')!;
+		expect(dam.capacityM3).toBe(1000);
+		expect(damEndPctFromSummary(dam, summary)).toBe(40);
+		// The map's colouring reads the same figure (damLevelsFromSummary over damsInRun).
+		expect(damLevelsFromSummary(damsInRun(run, live, refs), summary, '2025-01-01')![0]!.endPct).toBe(40);
+	});
+
+	it('is null for a dam the run stored no storage for, and undefined without the summary figure', () => {
+		const run = [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 1000 }];
+		expect(damInRun(run, [], [], 'a')).toBeNull();
+		expect(damInRun(run, [], refs, 'b')).toBeNull();
+		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [{ nodeId: 'a', name: 'A' } as FarmSummary])).toBeUndefined();
+		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [])).toBeUndefined();
+	});
+});
+
+describe('damEndTile: what the Network card writes (issue #173)', () => {
+	const end = (over: Partial<Parameters<typeof damEndTile>[0] & object> = {}) => ({ nodeId: 'a', inRun: true, pct: 36.4, capacityM3: 150_000, ...over });
+
+	it('shows the % alone when the capacity is unchanged since the run', () => {
+		expect(damEndTile(end(), 150_000)).toEqual({ value: '36%', sub: null });
+	});
+
+	it('says what the % is a share of when the capacity was edited since the run', () => {
+		expect(damEndTile(end(), 75_000)).toEqual({ value: '36%', sub: 'of 150\u202f000 m³ in the run' });
+	});
+
+	it('reads a farm as the map’s colour by dam level does: a dam removed since is "No dam", one added since is not in the run', () => {
+		const run = { name: 'Baseline', ago: 'today' };
+		const live = (damCapacityM3: number) => [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3 } as NetworkNode];
+		const level = { nodeId: 'a', name: 'A', capacityM3: 150_000, minPct: 0, endPct: 36.4, endDate: '2025-01-01', lowPct: 30, lowDate: '2024-12-01', daysAtMin: 0, agoPct: null };
+		expect(damEndTile(end(), 0)).toEqual({ value: 'No dam', sub: null });
+		expect(damColouring(live(0), [level], run, false).byNode.get('a')!.text).toBe('no dam');
+		expect(damEndTile({ nodeId: 'a', inRun: false, pct: null, capacityM3: 0 }, 5_000)).toEqual({ value: '–', sub: 'not in this run' });
+		expect(damColouring(live(5_000), [], run, false).byNode.get('a')!.text).toBe('not in this run');
+		// Same % on both after a capacity edit.
+		expect(damColouring(live(75_000), [level], run, false).byNode.get('a')!.text).toBe('36% full');
+		expect(damEndTile(end(), 75_000).value).toBe('36%');
+	});
+
+	it('is a dash while loading or before the run is read, and "No dam" without a dam', () => {
+		expect(damEndTile(end({ pct: null }), 150_000)).toEqual({ value: '–', sub: null });
+		expect(damEndTile(null, 5_000)).toEqual({ value: '–', sub: null });
+		expect(damEndTile(null, 0)).toEqual({ value: 'No dam', sub: null });
 	});
 });
 

@@ -134,17 +134,16 @@ describe('pickUnit', () => {
 describe('supplyTotals', () => {
 	const farms = [farm('a', 1), farm('b', 0.5), farm('c', SUPPLY_TARGET - 0.001)];
 	const s = summary(farms, { curtailment: { farms: [{ nodeId: 'b', totalChangeM3Day: -1 }] } as unknown as RunSummary['curtailment'] });
-	it('counts the hydrological units below the target (as the Summary), short this week and to cut, and adds up the shortfall', () => {
+	it('counts the hydrological units below the target (as the Summary), and short this week, and adds up the shortfall', () => {
 		const cards = unitCards(s, new Set(), new Map(), new Map([['b', 2], ['a', 0]]));
 		const t = supplyTotals(s, cards, true);
-		expect(t).toMatchObject({ units: 3, below: 2, weekShort: 1, mustCut: 1 });
+		expect(t).toMatchObject({ units: 3, below: 2, weekShort: 1 });
 		expect(t.shortfallM3Day).toBeCloseTo(50 + 100 * (1 - (SUPPLY_TARGET - 0.001)));
 		expect(t.shortfallMm3a).toBeCloseTo((t.shortfallM3Day * 365.25) / 1e6);
 	});
-	it('leaves this week unknown until the deficits are in, and the cut without a curtailment table', () => {
+	it('leaves this week unknown until the deficits are in', () => {
 		const t = supplyTotals(summary(farms), unitCards(summary(farms), new Set(), new Map(), null), false);
 		expect(t.weekShort).toBeNull();
-		expect(t.mustCut).toBeNull();
 	});
 });
 

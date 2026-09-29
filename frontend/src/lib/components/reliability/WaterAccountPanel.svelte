@@ -2,15 +2,17 @@
 	The water account (engine ≥ 0.32.0, WP-3.4, docs/model.md §2.11b): per
 	water year and over the run, what came into the river network, where it
 	went, the change in dam storage and the closure residual; a pair of bars
-	for one period (in vs out); EWR required vs met at each site. Input:
-	RunSummary.supplyAssurance.waterAccount; absent on older runs.
+	for one period (in vs out). Input: RunSummary.supplyAssurance.waterAccount;
+	absent on older runs. The EWR required vs met at each site, which closed
+	this panel until issue #175, is not part of the balance: River & reserve
+	shows it in the EWR by month panel (ewr/EwrRequiredMet.svelte).
 -->
 <script lang="ts">
 	import type { SupplyAssurance, WaterAccountRow } from '@water-management/engine';
 	import { fmtNum } from '$lib/format/number';
 	import { waterYearLabel } from '$lib/components/calibration/metrics';
 	import { fmtVolume } from '$lib/components/ewr/heatmap';
-	import { accountBars, accountLines, ewrMetShare, notComputedText, pctText } from './reliability';
+	import { accountBars, accountLines, notComputedText } from './reliability';
 
 	let {
 		assurance,
@@ -100,35 +102,6 @@
 				</tbody>
 			</table>
 		</div>
-
-		{#if account.total.ewr.length}
-			<h4>EWR required vs met</h4>
-			<div class="table-wrap scroll">
-				<table class="data" data-testid="account-ewr">
-					<caption class="visually-hidden">EWR required and met at each site per water year, m³</caption>
-					<thead>
-						<tr>
-							<th scope="col">Site</th>
-							{#each rows as r (r.waterYear ?? 'run')}<th scope="col" class="num">{label(r)}</th>{/each}
-						</tr>
-					</thead>
-					<tbody>
-						{#each account.total.ewr as site, si (site.nodeId ?? 'outlet')}
-							<tr>
-								<th scope="row">{site.name}{site.nodeId === null ? ' (outlet)' : ''}</th>
-								{#each rows as r (r.waterYear ?? 'run')}
-									{@const e = r.ewr[si]}
-									<td class="num">
-										{#if e}{pctText(ewrMetShare(e), 1)} <span class="muted">of {fmtVolume(e.requiredM3)}; {fmtNum(e.daysNotMet)} days short</span>{:else}–{/if}
-									</td>
-								{/each}
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-			<p class="note muted">Met = the part of the requirement that passed the site (the flow, capped at the requirement each day).</p>
-		{/if}
 	{/if}
 </section>
 
@@ -231,9 +204,5 @@
 	tr.storage th,
 	tr.storage td {
 		border-top: 1px solid var(--border);
-	}
-	.note {
-		font-size: 0.8rem;
-		margin-top: 0.4rem;
 	}
 </style>

@@ -47,13 +47,20 @@ test('edit a farm’s boreholes, run, and see the groundwater and stream depleti
 	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
 	const uses = page.getByRole('region', { name: 'Other uses of water' });
 	await expect(uses.getByRole('heading', { level: 3, name: 'Groundwater' })).toBeVisible();
-	const row = uses.locator('table.groundwater').getByRole('row', { name: /^Upper farm/ });
+	// One table (issue #175): the daily-mean one's share of supplied and stream depletion are columns of the annual table.
+	await expect(uses.locator('table.groundwater')).toHaveCount(0);
+	const table = uses.locator('table.groundwater-annual');
+	await expect(table.getByRole('columnheader')).toContainText(['Hydrological unit or user', 'Mean pumped', 'Share of supplied', 'Stream depletion', 'Most in a year']);
+	const row = table.getByRole('row', { name: /^Upper farm/ });
 	await expect(row).toBeVisible();
 	// Primary boreholes pump up to 600 m³/day, and half of it comes out of the river.
 	const pumped = ungroup(await row.getByRole('cell').first().innerText());
 	expect(pumped).toBeGreaterThan(0);
-	expect(pumped).toBeLessThanOrEqual(600);
-	await expect(row.getByRole('cell').nth(2)).not.toHaveText('0');
+	expect(pumped).toBeLessThanOrEqual(600 * 366);
+	await expect(row.getByRole('cell').nth(1)).toHaveText(/^\d+(\.\d)?%$/);
+	const depleted = ungroup(await row.getByRole('cell').nth(2).innerText());
+	expect(depleted).toBeGreaterThan(0);
+	expect(depleted).toBeLessThanOrEqual(pumped);
 });
 
 test('add an individual borehole with an annual cap, run, and read its use per water year against the cap (WP-3.9)', async ({ page, owner }) => {
@@ -104,12 +111,13 @@ test('add an individual borehole with an annual cap, run, and read its use per w
 	await expect(uses.getByTestId('gw-annual-note')).toContainText('never decides whether a use is lawful');
 	const row = uses.locator('table.groundwater-annual').getByRole('row', { name: /^Upper farm/ });
 	await expect(row).toBeVisible();
-	// The cap column shows the borehole's 20 000 m³/a; no year pumps more than it.
-	await expect(row.getByRole('cell').nth(2)).toHaveText('20\u202f000');
-	const most = ungroup((await row.getByRole('cell').nth(1).innerText()).split(' ')[0]!);
+	// The cap column shows the borehole's 20 000 m³/a; no year pumps more than it. (Share of supplied and stream
+	// depletion come first, after the mean: the daily-mean table's columns, merged in, issue #175.)
+	await expect(row.getByRole('cell').nth(4)).toHaveText('20\u202f000');
+	const most = ungroup((await row.getByRole('cell').nth(3).innerText()).split(' ')[0]!);
 	expect(most).toBeGreaterThan(0);
 	expect(most).toBeLessThanOrEqual(20_000);
 	// The property's GN 538 volume, not the 40 000 ceiling, and the most in any 12 months beside it.
-	await expect(row.getByRole('cell').nth(3)).toHaveText('1\u202f500');
-	await expect(row.getByRole('cell').nth(4)).not.toHaveText('');
+	await expect(row.getByRole('cell').nth(5)).toHaveText('1\u202f500');
+	await expect(row.getByRole('cell').nth(6)).not.toHaveText('');
 });

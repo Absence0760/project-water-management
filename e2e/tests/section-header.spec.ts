@@ -61,7 +61,7 @@ test.describe('desktop', () => {
 		// Data: Add data is the section's main action, after the tab's Preview all data; no Run model here. The context counts the series.
 		await nav(page).getByRole('link', { name: /^Data/ }).click();
 		await expect(h.getByRole('heading', { level: 1, name: 'Data' })).toBeVisible();
-		await expect(h.getByTestId('section-context')).toHaveText('2 input series · 1 behind');
+		await expect(h.getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
 		await expect(actions).toHaveText(['Preview all data', 'Add data']);
 		await expect(h.getByRole('button', { name: 'Add data' })).toHaveClass(/btn-primary/);
 
@@ -241,9 +241,9 @@ test.describe('a long context line', () => {
 			expect(await noSideScroll(page)).toBe(true);
 			await expectNoViolations(page);
 
-			// Data's short context ("2 input series · 1 behind") keeps its controls beside it, as before.
+			// Data's short context ("2 daily input series · 1 behind") keeps its controls beside it, as before.
 			await nav(page).getByRole('link', { name: /^Data/ }).click();
-			await expect(header(page).getByTestId('section-context')).toHaveText('2 input series · 1 behind');
+			await expect(header(page).getByTestId('section-context')).toHaveText('2 daily input series · 1 behind');
 			expect(await contextLayout(page), `Data at ${size.width} px`).toEqual({ lines: 1, beside: true });
 		}
 	});

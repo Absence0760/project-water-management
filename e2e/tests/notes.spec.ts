@@ -8,7 +8,7 @@
 // off the screen.
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
@@ -20,6 +20,7 @@ test('a farm note shown to the farm reaches its farmer; a team note never does',
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	const farmer = await signIn('Notes farmer');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 
 	await page.goto(`/projects/${project.id}?tab=network&grid=nodes`);
 	await page.getByRole('button', { name: 'Add a note on Upper farm' }).click();

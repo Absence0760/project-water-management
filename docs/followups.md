@@ -1975,7 +1975,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       year (value and first day) and the days at the minimum level in
       `FarmSummary` (`damEndM3`, `damAgoM3`, `damLowM3`, `damLowDate`,
       `damDaysAtMin`). The Summary's Dams today card and the Network's colour
-      by dam level and *Dam now* read them, and fetch the daily `dam_storage`
+      by dam level and *Dam at end of run* read them, and fetch the daily `dam_storage`
       series only for a run from before 1.2.0. The Dams page still fetches
       every dam's series, because its sparklines and storage chart draw them.
 - [x] **Exports carry unrounded values** now that the engine doesn't round.
@@ -2046,6 +2046,34 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       the self-checks used), and the self-checks link to it; the printable
       report keeps it under the checks. `self-checks.spec.ts` and
       `runs.spec.ts` pin it.
+- [ ] **The same water balance by water year in two places, and the
+      catchment's in a third** (issue #175's overlap check, 2026-09-29).
+      Model quality's *Water balance* (`#res-water-balance`, issue #137) and
+      Dig deeper › Self-checks both draw the per-unit column-V balance by
+      water year (`runs/WaterBalanceTable.svelte`, `runs/checks.ts`
+      `BALANCE_COLUMNS`, Mm³), and River & reserve's Water account
+      (`reliability/WaterAccountPanel.svelte`, `reliability.ts`
+      `ACCOUNT_LINES`, m³) draws the catchment's for the same water years.
+      About ten of the self-check's thirteen terms are the account's too
+      (rain on dams, groundwater, transfers, consumptive use, other users,
+      dam evaporation, seepage lost, stream depletion, off-take losses,
+      outflow, change in storage, residual); the self-check starts from unit
+      runoff (after land cover and flow shares) where the account starts
+      from natural flow and lists land cover and unallocated flow as outs,
+      and only the self-check has rain (mm), the runoff coefficient and
+      start and end storage.
+      **Durable fix:** one client-facing balance. Either the Water account
+      gains rain (mm), the runoff coefficient, start and end storage and an
+      **m³ / Mm³** switch, and Model quality's Water balance becomes a link
+      to it; or the Water balance section stays the client's table and the
+      account links to it. Either way the Self-checks panel shrinks to the
+      closure check (each water year's residual, pass or fail) with a link,
+      and the summary CSV and `.xlsx` export keep both tables. Pin the
+      surviving table's rendered lines with an e2e spec first, and update
+      ui.md § Water account, § Self-checks and the help articles.
+      **Who:** operator (which table is the client's).
+      **Trigger:** the next change to the Water account, the Water balance
+      section or the Self-checks panel, or a client asking for the table.
 
 ## Roles and what each member sees
 
@@ -2113,34 +2141,35 @@ the first non-modeller user is invited (WUA staff, a client reviewer), and
 with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
 role and not before it.
 
-- [ ] **Adding someone by email tells the adder whether they have an
-      account, and adds a verified account without asking it** (issue #51,
-      adversary finding 3). `POST /projects/:id/members`, `/farmers`,
-      `/farmers/bulk` and `POST /teams/:id/members` add a verified account
-      at once (`201 { member }` with its display name, bulk `status:
-      'added'`) and invite any other address (`201 { invited: true }`,
-      `'invited'`). Any registered user can create a project and so own
-      one, so this probes which addresses have verified accounts, learns
-      their display names, and makes a stranger a member (with the alert
-      mails that brings) without their consent. Built now: the daily cap on
-      adding by email, 300 a person and 300 a project or team, counted
-      before the lookup (`101_invite_throttle.sql`, `invites/invites.ts`
-      `INVITE_CAP`), which bounds both the probing and the invite mail.
-      **Not built, and one change:** every add by email becomes an invite,
-      and a verified account joins only when its holder accepts (a link in
-      the invite mail opening an accept page while signed in, or a pending
-      invitation on their project list), so every answer is the same
-      `{ invited: true, invite }` / `'invited'` and no display name is shown
-      before acceptance. Changing the response shape alone would not close
-      the leak: `GET /projects/:id/members` (and the farmers list) shows an
-      added account, with its name and address, at once, so the shape and
-      acceptance have to land together. Size: the invite routes, an accept
-      endpoint and page, the members and farmers panels' wording, and the
-      tests that add verified members directly (about 200 call sites use
-      `POST …/members` as setup and would need an accept step or a test
-      helper). Who: operator (product call: WUA staff lose "added at once").
-      Trigger: before public registration opens, or before the first
-      catchment with members outside the operator's own team.
+- [x] **Adding someone by email told the adder whether they have an
+      account, and added a verified account without asking it** (issue #51,
+      adversary finding 3; done 2026-09-29, issue #136). Every add by email
+      (`POST /projects/:id/members`, `/farmers`, `/farmers/bulk`, `POST
+      /teams/:id/members`) is an invite, answered `201 { invited: true,
+      invite }` / bulk `'invited'` whether or not the address has an
+      account, and a verified account joins only when its holder accepts on
+      `/account/invitations` (`GET /me/invites`, `POST
+      /me/invites/:id/accept`, `DELETE /me/invites/:id`;
+      `109_invite_accept.sql`). The members and farmers lists show nobody
+      before they accept, and a decline reaches the owner's History as
+      `invite.declined` with the masked address only. An existing farmer's
+      bulk rows still add farms at once (`'added'`): they are on the list
+      already. The daily cap (`101_invite_throttle.sql`) stays. Tests:
+      `auth/account-tokens.security.db.test.ts` (unknown, unconfirmed and
+      verified addresses get the same answer and row, with a positive
+      control), `invites/invites.db.test.ts`, `sharing.spec.ts`.
+- [ ] **An invite outlives its sender's right to send it** (review of
+      issue #136, 2026-09-29). `invite` RLS checks owner/admin only when the
+      invite is written, so if the owner who sent it is removed or demoted
+      before it is accepted, the invitee still joins with the invited role
+      (`owner` included), through the invitations page or, as before #136,
+      a sign-up or confirmation link. **Durable fix:** in 109's functions
+      and `app_accept_invites`, accept (and list) an invite only while its
+      `invited_by` still holds owner on the project (directly or as team
+      admin) or admin on the team, or delete a person's sent invites when
+      they lose that role (a trigger on `project_member`/`team_member`),
+      with a DB test for each path. **Trigger:** before a catchment has more
+      than one owner outside the operator's own team.
 
 ## Features left half-way
 

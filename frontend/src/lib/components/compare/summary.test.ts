@@ -34,7 +34,7 @@ function cmp(o: {
 const ctx = (n: number) => ({ samePeriod: Array(n).fill(true), engineChanged: Array(n).fill(false) });
 
 describe('outcomeRows', () => {
-	it('gives each outcome the baseline and every what-if, with EWR not met and days a year from the share of days', () => {
+	it('gives each outcome the baseline and every what-if, EWR not met as the share of days and no days-a-year restatement of it', () => {
 		const rows = outcomeRows([cmp({ ewrShare: [0.13, 0.166] }), cmp({ ewrShare: [0.13, 0.139] })]);
 		// Framed as the Summary and River & reserve frame it (issue #162): the share not met, a rise is worse.
 		const notMet = rows.find((r) => r.id === 'ewrNotMet')!;
@@ -43,13 +43,10 @@ describe('outcomeRows', () => {
 		expect(notMet.base).toBeCloseTo(0.13);
 		expect(notMet.whatIfs.map((m) => m.b)).toEqual([expect.closeTo(0.166), expect.closeTo(0.139)]);
 		expect(notMet.whatIfs[0]!.delta).toBeCloseTo(0.036);
-		const days = rows.find((r) => r.id === 'reserveDays')!;
-		expect(days.base).toBeCloseTo(0.13 * DAYS_PER_YEAR);
-		expect(days.whatIfs[0]!.delta).toBeCloseTo(0.036 * DAYS_PER_YEAR);
-		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'reserveDays', 'supplied', 'farmsBelow', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'deficit', 'farmsBelow', 'outflow', 'natural', 'runoffCoefficient']);
 	});
 
-	it('adds rows for the (at most two) farms most changed, matched on the baseline node, and NSE only with calibration', () => {
+	it('adds rows for the (at most two) farms most changed, matched on the baseline node, and never the calibration NSE', () => {
 		const rows = outcomeRows([
 			cmp({ ewrShare: [0.1, 0.1], farms: [farm('f1', 'Farm 1', 0.9, 0.7), farm('f2', 'Farm 2', 0.9, 0.895), farm('f3', 'Farm 3', 0.8, 0.75)], nse: [0.6, 0.62] }),
 			cmp({ ewrShare: [0.1, 0.1], farms: [farm('f3', 'Farm 3', 0.8, 0.95)] })
@@ -59,7 +56,9 @@ describe('outcomeRows', () => {
 		// Farm 1 isn't in what-if 2's comparison: unknown there, not zero.
 		expect(farms[0]!.whatIfs[1]).toEqual({ a: null, b: null, delta: null });
 		expect(farms[1]!.whatIfs[1]!.b).toBe(0.95);
-		expect(rows.at(-1)!.id).toBe('nse');
+		// A what-if's fit to the real gauge is not an outcome of the what-if: Headline results → Calibration has it.
+		expect(rows.some((r) => r.id === 'nse')).toBe(false);
+		expect(rows.slice(-3).map((r) => r.id)).toEqual(['outflow', 'natural', 'runoffCoefficient']);
 	});
 });
 
@@ -104,7 +103,7 @@ describe('dam storage (issue #55 figures)', () => {
 			{ a: 0.6, b: 0.48, delta: -0.12 },
 			{ a: 0.6, b: 0.63, delta: 0.03 }
 		]);
-		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'reserveDays', 'supplied', 'farmsBelow', 'dams', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'deficit', 'farmsBelow', 'dams', 'outflow', 'natural', 'runoffCoefficient']);
 		const dams = rows.find((r) => r.id === 'dams')!;
 		expect(dams).toMatchObject({ label: 'Dam storage, end of run', unit: '% of capacity', base: 0.6, spec: { format: 'fraction', better: 'neutral' } });
 		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2)).map((x) => x.text)).toEqual([
@@ -121,11 +120,11 @@ describe('takeaways', () => {
 			cmp({ ewrShare: [0.13, 0.13 - 2 / DAYS_PER_YEAR], supplied: [0.92, 0.925], below: [1, 0] })
 		]);
 		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2))).toEqual([
-			{ tone: 'worse', text: 'What-if 1 costs the reserve 13 more days a year' },
+			{ tone: 'worse', text: 'What-if 1 puts the river below the EWR on 13 more days a year' },
 			{ tone: 'worse', text: "What-if 1 supplies 3.0 pp less of the hydrological units' demand" },
 			{ tone: 'worse', text: 'What-if 1 leaves 1 more hydrological unit below 95% supplied' },
 			{ tone: 'neutral', text: 'What-if 1 lowers the mean outflow by 10%' },
-			{ tone: 'better', text: 'What-if 2 gives the reserve back 2 days a year' },
+			{ tone: 'better', text: 'What-if 2 puts the river below the EWR on 2 fewer days a year' },
 			{ tone: 'better', text: 'What-if 2 brings 1 hydrological unit up to 95% supplied' }
 		]);
 	});
@@ -135,14 +134,14 @@ describe('takeaways', () => {
 		expect(takeaways(rows, ['What-if 1'], ctx(1))).toEqual([{ tone: 'neutral', text: 'What-if 1 makes no material change to these outcomes' }]);
 	});
 
-	it('compares two what-ifs that both cost the reserve, and names a farm that moves a lot', () => {
+	it('compares two what-ifs that both add days below the EWR, and names a farm that moves a lot', () => {
 		const rows = outcomeRows([
 			cmp({ ewrShare: [0.1, 0.1 + 13 / DAYS_PER_YEAR], farms: [farm('f4', 'Farm 4', 0.93, 0.81)] }),
 			cmp({ ewrShare: [0.1, 0.1 + 3 / DAYS_PER_YEAR], farms: [farm('f4', 'Farm 4', 0.93, 0.94)] })
 		]);
 		const t = takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2)).map((x) => x.text);
 		expect(t).toContain('Under What-if 1, Farm 4 gets −12 pp of its demand');
-		expect(t.at(-1)).toBe('What-if 2 costs the reserve less than What-if 1: 3 against 13 more days a year');
+		expect(t.at(-1)).toBe('What-if 2 costs the EWR less than What-if 1: 3 against 13 more days a year below it');
 		expect(t.some((x) => x.startsWith('Under What-if 2'))).toBe(false);
 	});
 

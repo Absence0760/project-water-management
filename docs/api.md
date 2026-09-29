@@ -749,7 +749,7 @@ out, and a re-import of an export records itself as a `project-file` import.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Invites); `409` if a verified account with that address is already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
@@ -770,9 +770,11 @@ they reach only the farm view, the publication and their own applications
 Members with the role `farmer`, linked to the farm nodes they may read
 ([data-model.md § Farmers](./data-model.md#farmers-019_farmer_rolesql-020_farm_scopesql)).
 Remove one (or a farmer leaves) with `DELETE /projects/:id/members/:userId`;
-their links go with the membership. An address without a **verified**
-account is invited instead (WP-2.2, [§ Invites](#invites)), with the farms
-the invite will link; revoke a pending one with
+their links go with the membership. Adding a farmer by email is always an
+invite (WP-2.2, issue #136, [§ Invites](#invites)), with the farms the invite
+will link, whether or not the address has an account; a `409` if a verified
+account with that address is already a member (change a farmer's farms with
+`PUT …/farmers/:userId`). Revoke a pending one with
 `DELETE /projects/:id/invites/:inviteId`.
 
 | Method | Path | Body | Response | Min role |
@@ -799,10 +801,11 @@ the invite will link; revoke a pending one with
   and case-insensitively** (never a guess at a near name), or a language
   that is neither a code in the language table nor a language's own name
   (`en`, `English`, `af`, `Afrikaans`, any case) is that row's `error`
-  (`unknown language “fr” (use en, af, or the language’s name)`). Rows are then grouped by address: a verified account is added (or,
-  already a farmer, gains the farms; the rows never take one away), anyone
-  else is invited with the farms of all their rows (added to any the invite
-  already names), and a member with another role is an `error`, as is an
+  (`unknown language “fr” (use en, af, or the language’s name)`). Rows are then grouped by address: a farmer already
+  here gains the farms (`'added'`; the rows never take one away), anyone
+  else, account or not, is invited with the farms of all their rows (added
+  to any the invite already names; `'invited'`, issue #136), and a member
+  with another role is an `error`, as is an
   address given more than 50 farms in one request (the single-add cap). One email
   per address at most, after commit, with the usual re-send cooldown; the
   first row's language wins. `row` is the index into `rows`.
@@ -812,9 +815,9 @@ the invite will link; revoke a pending one with
 
 ### Invites
 
-Adding an address that has no **verified** account creates a **pending
-invite**; the response is the same whether or not an account exists. The
-email depends on the case:
+Adding any address creates a **pending invite** (issue #136): the response,
+and the row in the owner's invite list, are the same whether the address has
+no account, an unconfirmed one or a verified one. Only the email differs:
 
 - **No account:** a sign-up link (`/register?invite=…`, valid 7 days).
 - **An account that never verified the address** (it can't sign up again): a
@@ -823,17 +826,19 @@ email depends on the case:
   account (someone else registered their address). No email if a
   verification link went out in the last minute — that link accepts the
   invite too.
+- **A verified account:** a link to the invitations page
+  (`/account/invitations`), where its holder accepts or declines it
+  ([§ Your invitations](#your-invitations)).
 
-The invite becomes a membership with the invited role once that address is
-**verified** — by signing up through the link, by the verification email, or
-by a password reset. An unverified account alone never claims invites, so
-pre-registering a colleague's address doesn't get you added in their place.
+For no account or an unconfirmed one, the invite becomes a membership with
+the invited role once that address is **verified** — by signing up through
+the link, by the verification email, or by a password reset. An unverified
+account alone never claims invites, so pre-registering a colleague's address
+doesn't get you added in their place. A verified account joins only when its
+holder **accepts** the invite, so nobody is made a member unasked and the
+adder never learns whether the address has an account.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
-Adding an address whose account *is* verified makes it a member directly and
-clears its invite (so the answer, and the members list, tell the adder that
-the address has a verified account: [followups.md § Roles and what each
-member sees](./followups.md#roles-and-what-each-member-sees), issue #51).
 
 **The daily cap on adding by email** (issue #51, `101_invite_throttle.sql`,
 `invites/invites.ts` `INVITE_CAP`): a person adds at most **300** addresses a
@@ -856,6 +861,23 @@ A window is 24 hours from its first add.
   "farmer"`; `GET /projects/:id/farmers` lists them with their farms. The
   Members panel leaves them to the Farmers panel.
 
+### Your invitations
+
+The signed-in account's own pending invitations (issue #136,
+`109_invite_accept.sql`), for an address it has **verified**: projects and
+teams alike. Any signed-in account; each call sees only its own.
+
+| Method | Path | Body | Response |
+| --- | --- | --- | --- |
+| GET | `/me/invites` | – | `{ invites: MyInvite[] }`, live ones only, newest first; empty for an unverified address |
+| POST | `/me/invites/:inviteId/accept` | – | `200 { joined: { kind: 'project' \| 'team', id } }`: the membership, a farmer or applicant invite's farm links, and the `member.added` / `farmer.linked` / `team_member.added` events, as the account; `404` when it isn't yours, has expired or doesn't exist |
+| DELETE | `/me/invites/:inviteId` | – | `204` (decline: the invite is deleted; a project's History records `invite.declined` with the masked address and no actor); `404` as above |
+
+- `MyInvite = { id, kind: 'project' | 'team', targetId, name, role,
+  invitedBy, farms: string[], createdAt, expiresAt }`: `name` is the
+  project's or team's, `role` the project role (or team role) it gives,
+  `farms` a farmer or applicant invite's farm names.
+
 ## Teams
 
 A team owns many projects (catchments) together. Team roles: `viewer` <
@@ -874,7 +896,7 @@ email show them by the project role they give, viewer / editor / owner
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { invited: true, invite }`, the same whether or not the address has an account (issue #136, see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |

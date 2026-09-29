@@ -52,6 +52,17 @@ describe('activeSectionId', () => {
 		expect(activeSectionId(tops(-900, -200, 400), 68, true)).toBe('s2');
 	});
 
+	it('at the bottom, keeps the section a followed link named while it still starts on the screen', () => {
+		// #s1 was followed; the page ended before its top reached the line (s2 below it is short).
+		expect(activeSectionId(tops(-900, 108, 400), 68, true, 's1', 960)).toBe('s1');
+		// Scrolled past it (its top above the window), below the window, or a fragment that isn't a section: the last, as before.
+		expect(activeSectionId(tops(-900, -40, 400), 68, true, 's1', 960)).toBe('s2');
+		expect(activeSectionId(tops(-900, 980, 1400), 68, true, 's1', 960)).toBe('s2');
+		expect(activeSectionId(tops(-900, 108, 400), 68, true, 'elsewhere', 960)).toBe('s2');
+		// Not at the bottom, the fragment changes nothing.
+		expect(activeSectionId(tops(-900, 60, 400), 68, false, 's2', 960)).toBe('s1');
+	});
+
 	it('has nothing to mark before any section is on the page', () => {
 		expect(activeSectionId([], 68)).toBeNull();
 	});

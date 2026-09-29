@@ -120,8 +120,6 @@ export interface SupplyTotals {
 	below: number;
 	/** Units short on at least one of the run's last 7 days; null until every unit's deficit series is in. */
 	weekShort: number | null;
-	/** Units the curtailment table asks to cut over the project window; null without the table. */
-	mustCut: number | null;
 	/** Mean demand not supplied, all units, m³/day, and the same as a yearly volume. */
 	shortfallM3Day: number;
 	shortfallMm3a: number;
@@ -134,7 +132,6 @@ export function supplyTotals(summary: CardInput, cards: readonly UnitCard[], wee
 		units: farms.length,
 		below: farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length,
 		weekShort: weekLoaded ? cards.filter((c) => (c.weekShort ?? 0) > 0).length : null,
-		mustCut: summary.curtailment ? cards.filter((c) => (c.cutM3Day ?? 0) > 0).length : null,
 		shortfallM3Day: shortfall,
 		shortfallMm3a: m3DayToMm3a(shortfall)
 	};

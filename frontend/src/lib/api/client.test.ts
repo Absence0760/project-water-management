@@ -430,16 +430,25 @@ describe('teams client', () => {
 		await expect(offline.farm.view('p', 'n')).rejects.toMatchObject({ status: 0 });
 	});
 
-	it('members.add / teams.addMember return the member or the pending invite, never undefined', async () => {
-		const member = { userId: 'u', email: 'a@b.c', displayName: 'A', role: 'viewer' };
-		const m = await createApi('', mockFetch(201, { member })).members.add('p', 'a@b.c', 'viewer');
-		expect(m).toEqual({ member });
-
+	it('members.add / teams.addMember return the pending invite, never undefined (always an invite, issue #136)', async () => {
 		const invite = { id: 'i', email: 'new@b.c', role: 'member', invitedBy: 'Ann', createdAt: '', expiresAt: '', expired: false };
 		const r = await createApi('', mockFetch(201, { invited: true, invite })).teams.addMember('t', 'new@b.c', 'member');
-		expect(r.invited).toBe(true);
-		expect(r.invite).toEqual(invite);
-		expect(r.member).toBeUndefined();
+		expect(r).toEqual({ invited: true, invite });
+		const m = await createApi('', mockFetch(201, { invited: true, invite: { ...invite, role: 'viewer' } })).members.add('p', 'new@b.c', 'viewer');
+		expect(m.invite.role).toBe('viewer');
+	});
+
+	it('invites: lists, accepts and declines your own, by id', async () => {
+		const mine = { id: 'i/1', kind: 'project', targetId: 'p', name: 'P', role: 'viewer', invitedBy: 'Ann', farms: [], createdAt: '', expiresAt: '' };
+		const f = mockFetch(200, { invites: [mine] });
+		expect(await createApi('', f).invites.mine()).toEqual([mine]);
+		expect(call(f)).toMatchObject({ url: '/me/invites', method: 'GET' });
+		const a = mockFetch(200, { joined: { kind: 'project', id: 'p' } });
+		expect(await createApi('', a).invites.accept('i/1')).toEqual({ kind: 'project', id: 'p' });
+		expect(call(a)).toMatchObject({ url: '/me/invites/i%2F1/accept', method: 'POST' });
+		const d = mockFetch(204);
+		await createApi('', d).invites.decline('i/1');
+		expect(call(d)).toMatchObject({ url: '/me/invites/i%2F1', method: 'DELETE' });
 	});
 
 	it('register sends inviteToken only when there is one, and always the terms version it accepts', async () => {

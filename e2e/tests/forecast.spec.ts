@@ -6,7 +6,7 @@
 // crediting CHIRPS-GEFS only when a CHIRPS-GEFS feed wrote them.
 // Published, the forecast run gives the linked farmer a "Next 14 days"
 // card; an ordinary run of the same data stops at the record.
-import { putSeries, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, putSeries, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { plantGefsForecastDays } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
@@ -101,6 +101,7 @@ test('a forecast run keeps its forecast days apart: tagged, its own panel, a lab
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	const farmer = await signIn('Forecast farmer');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	await farmer.page.goto(`/farm/${project.id}`);
 	const card = farmer.page.getByTestId('farm-forecast');
 	await expect(card.getByRole('heading', { name: /^Next 14\sdays$/ })).toBeVisible();

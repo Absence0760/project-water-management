@@ -22,9 +22,6 @@
 		share,
 		readonly,
 		onremove,
-		onmove,
-		canMoveUp = false,
-		canMoveDown = false,
 		onmakeoutlet,
 		landCover = [],
 		onaddcover,
@@ -44,9 +41,6 @@
 		share: number | null;
 		readonly: boolean;
 		onremove?: () => void;
-		onmove?: (delta: -1 | 1) => void;
-		canMoveUp?: boolean;
-		canMoveDown?: boolean;
 		onmakeoutlet?: () => void;
 		/** This node's land-cover patches (WP-1.35; farms only). */
 		landCover?: LandCoverPatch[];
@@ -294,10 +288,6 @@
 
 	{#if !readonly}
 		<div class="actions">
-			{#if onmove}
-				<button type="button" class="btn" disabled={!canMoveUp} onclick={() => onmove(-1)}>Move up the list</button>
-				<button type="button" class="btn" disabled={!canMoveDown} onclick={() => onmove(1)}>Move down the list</button>
-			{/if}
 			{#if onmakeoutlet && node.downstreamNodeId !== null}
 				<button type="button" class="btn" onclick={onmakeoutlet} title="This node drains nowhere; the current outflow gauge drains into it">
 					Make outflow gauge

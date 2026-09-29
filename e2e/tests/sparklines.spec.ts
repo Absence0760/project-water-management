@@ -112,7 +112,7 @@ test('the crop list at phone width: the caption still over the column, every row
 	await expectNoViolations(page);
 });
 
-test('a dam card: its caption, the window’s first and last day, the low the Dam levels table gives, a read-out; a click picks the dam', async ({ page, owner }) => {
+test('a dam card: its caption, the window’s first and last day, the low the chart’s facts line gives, a read-out; a click picks the dam', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Dam sparklines');
@@ -121,14 +121,17 @@ test('a dam card: its caption, the window’s first and last day, the low the Da
 
 	const cards = page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
 	await expect(cards).toHaveCount(2);
-	const table = page.getByRole('region', { name: 'Dam levels' });
 	for (const name of ['Upper farm', 'Lower farm']) {
 		const card = cards.filter({ has: page.getByText(name, { exact: true }) });
 		const spark = card.getByTestId('sparkline');
 		await expect(spark.locator('figcaption')).toHaveText("% full over the run's last year");
 		await expect(spark.getByRole('img', { name: new RegExp(`^${name}: % full over the run's last year\\. 1 Oct 2021 to 28 Jan 2022: \\d+% at the start, \\d+% at the end; low \\d+% on \\d+ \\w+ 202[12], high \\d+% on \\d+ \\w+ 202[12]\\.$`) })).toBeVisible();
-		// The low is the table's "Lowest in its last year", to the day.
-		const lowest = (await table.getByRole('row', { name: new RegExp(`^${name}`) }).locator('td').nth(1).innerText()).replace(/\s+/g, ' ').trim();
+		// The low is the picked dam's "lowest in its last year" (the facts line over its chart), to the day.
+		await card.getByRole('link', { name, exact: true }).click();
+		await expect(page.getByRole('heading', { name: `Storage: ${name}` })).toBeVisible();
+		const facts = (await page.getByTestId('dam-facts').innerText()).replace(/\s+/g, ' ');
+		const [, lowPctFact, lowDayFact] = facts.match(/lowest in its last year (\d+%) on (\d+ \w+ \d{4})/)!;
+		const lowest = `${lowPctFact} · ${lowDayFact}`;
 		await expect(ticks(spark)).toHaveText(['1 Oct 2021', `low ${lowest}`, '28 Jan 2022']);
 		// The card's % full is where the line ends.
 		const end = (await card.locator('.level .v').innerText()).trim();
@@ -147,7 +150,9 @@ test('a dam card: its caption, the window’s first and last day, the low the Da
 		await slider.blur();
 	}
 
-	// The line is above the card's stretched link, yet a click on it still picks the dam.
+	// The line is above the card's stretched link, yet a click on it still picks the dam (from a page with none picked).
+	await page.goto(`/projects/${project.id}?tab=dams`);
+	await expect(page).not.toHaveURL(/[?&]dam=/);
 	const lower = cards.filter({ has: page.getByText('Lower farm', { exact: true }) });
 	await lower.getByTestId('sparkline').locator('.plot').click();
 	await expect(page).toHaveURL(/[?&]dam=/);

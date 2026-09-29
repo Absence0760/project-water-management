@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NetworkNode } from '@water-management/engine';
 import type { DamLevel } from '$lib/components/overview/damLevels';
-import { areaColouring, damColouring, supplyColouring } from './farmColour';
+import { damColouring, supplyColouring } from './farmColour';
 
 const node = (id: string, kind: NetworkNode['kind'] = 'farm', damCapacityM3 = 1000) =>
 	({ id, name: id, kind, downstreamNodeId: kind === 'gauge' ? null : 'g', damCapacityM3 }) as NetworkNode;
@@ -29,39 +29,6 @@ describe('damColouring', () => {
 		expect(c.byNode.get('a')!.band).toBe('met');
 		expect(c.byNode.get('b')!.band).toBe('short');
 		expect(c.unsaved).toBe(true);
-	});
-});
-
-describe('areaColouring', () => {
-	it('bands farms by planted area in thirds of the largest, and marks nothing planted', () => {
-		const model = {
-			nodes: [node('a'), node('b'), node('c'), node('d'), node('g', 'gauge')],
-			cropAreas: [
-				{ nodeId: 'a', cropId: 'x', areaM2: 900_000 },
-				{ nodeId: 'b', cropId: 'x', areaM2: 300_000 },
-				{ nodeId: 'b', cropId: 'y', areaM2: 200_000 },
-				{ nodeId: 'c', cropId: 'x', areaM2: 100_000 }
-			]
-		};
-		const c = areaColouring(model);
-		expect(Object.fromEntries(c.byNode)).toEqual({
-			a: { band: 'area3', text: '90.0 ha planted' },
-			b: { band: 'area2', text: '50.0 ha planted' },
-			c: { band: 'area1', text: '10.0 ha planted' },
-			d: { band: 'none', text: 'nothing planted' }
-		});
-		expect(c.legend).toEqual([
-			{ band: 'area3', label: 'Over 60 ha' },
-			{ band: 'area2', label: '30–60 ha' },
-			{ band: 'area1', label: 'Up to 30 ha' },
-			{ band: 'none', label: 'Nothing planted' }
-		]);
-	});
-
-	it('with nothing planted anywhere, every farm says so', () => {
-		const c = areaColouring({ nodes: [node('a')], cropAreas: [] });
-		expect(c.byNode.get('a')).toEqual({ band: 'none', text: 'nothing planted' });
-		expect(c.legend).toEqual([{ band: 'none', label: 'Nothing planted' }]);
 	});
 });
 

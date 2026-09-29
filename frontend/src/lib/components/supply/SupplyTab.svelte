@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Units & supply (issue #17, option A · Outcomes): how much of each unit's
-	// irrigation demand one run supplied. Four tiles (irrigation supplied with
-	// its change from the previous run, units below the target, units short
-	// this week, the total shortfall), a card per unit, worst supplied first
+	// irrigation demand one run supplied. Three tiles (irrigation supplied with
+	// the units below the target and its change from the previous run, as the
+	// Summary's card has it; units short this week; the total shortfall), a card per unit, worst supplied first
 	// (% supplied in the Summary's and the Network's supply bands, shortfall,
 	// days short, this week, the curtailment cut; links to its node on the
 	// Network and its planted areas), beside the picked unit's supply against
@@ -10,8 +10,11 @@
 	// Runs & results, unchanged: the unit results table, the curtailment
 	// targets with their reporting window and assurance of supply. The run is
 	// `run=` (a picker in the header), else the newest run, as on the Summary.
-	// On a wide, tall enough page the cards and the chart are the height left
-	// in the window, the cards scrolling inside their column (DamsTab's way).
+	// The page flows in the window's one scroll (as the Dams page): the three
+	// least supplied cards show, the rest behind "Show all N hydrological
+	// units" (no card list scrolls inside itself), and on a wide page the chart
+	// sticks beside the cards, under the "On this page" menu, as they are read
+	// down. The tables below grow with their rows rather than scrolling in a box.
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -22,12 +25,13 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
+	import { foldList } from '$lib/components/common/fold';
 	import { runHref } from '$lib/components/overview/attention';
 	import { headlines, historyDays, historyEnd, pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
-	import { runDamCapacity, SUPPLY_TARGET } from '$lib/components/runs/results';
+	import { runDamCapacity } from '$lib/components/runs/results';
 	import { runYears } from '$lib/components/runs/runList';
 	import { dataEndOf } from '$lib/format/age';
 	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
@@ -189,15 +193,12 @@
 	const modelUnits = $derived(modelFarmIds.size);
 	const runText = $derived(meta ? `run “${runName(meta)}”, ran ${ranAgo(meta.createdAt)}` : null);
 	const headerLine = $derived(supplySummary(totals, modelUnits, runText, weekEnd));
-	const target = fmtPct(SUPPLY_TARGET, 0);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 
 	// --- picking a unit: a link (`unit=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
 	let pageW = $state(0);
-	let innerH = $state(0);
 	// The same width as the container query that sets the two columns (56rem).
 	const side = $derived(pageW >= 896);
-	const fit = $derived(side && innerH >= 620 && cards.length > 0);
 	let chartEl: HTMLElement | undefined = $state();
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -212,15 +213,24 @@
 		void goto(`?${q}`, { noScroll: true, keepFocus: true });
 	}
 
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
+	// --- the fold: the least supplied few cards (and the picked one), the rest behind "Show all N hydrological units" ---
+	/** A card is about a third of the chart's height beside it; stacked, three keep the chart near the first screen. */
+	const CAP = 3;
+	let open = $state(false);
+	const fold = $derived(foldList(cards, (c) => c.nodeId, picked?.nodeId ?? null, open, CAP));
+	// A fixed plot height: taller beside the cards, where the panel sits level with the first three.
+	const chartH = $derived(side ? 420 : 260);
+
+	// The "On this page" menu sticks at the top; the chart sticks just under it, so it needs the menu's height.
+	let pageEl: HTMLDivElement | undefined = $state();
+	let navH = $state(0);
+	// The menu renders with the cards, after the run loads: rerun then (effects run after the DOM updates).
+	const hasNav = $derived(cards.length > 0);
 	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
+		const nav = hasNav ? pageEl?.querySelector<HTMLElement>('nav.sections') : null;
+		if (!nav) return;
+		const ro = new ResizeObserver(() => (navH = nav.offsetHeight));
+		ro.observe(nav);
 		return () => ro.disconnect();
 	});
 
@@ -254,8 +264,6 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
-<svelte:window bind:innerHeight={innerH} />
-
 {#snippet headerContext()}<span data-testid="supply-summary">{headerLine}</span>{/snippet}
 {#snippet headerActions()}
 	{#if runs && runs.length > 1 && meta}
@@ -269,7 +277,7 @@
 	{#if meta}<a class="btn" href={runHref(meta.id)}>Open in Runs</a>{/if}
 {/snippet}
 
-<div class="supply-page" bind:clientWidth={pageW}>
+<div class="supply-page" bind:clientWidth={pageW} bind:this={pageEl} style:--nav-h="{navH}px">
 	{#if gone}
 		<p class="alert alert-info" role="note">That run no longer exists, so this shows the newest run.</p>
 	{/if}
@@ -315,18 +323,14 @@
 							<dt>Irrigation supplied <HelpTip key="summary.fractionSupplied" /></dt>
 							<dd class="value">{supplied?.value ?? '–'}<small>of demand</small></dd>
 							<dd class="sub">over the whole record</dd>
+							<!-- The units below the target, in the Summary card's words (it was a tile of its own until issue #175). -->
+							{#each supplied?.sub ?? [] as line, i (i)}<dd class="sub" data-testid="supply-below">{line}</dd>{/each}
 							{#if supplied?.delta}<dd class="sub change"><Delta m={supplied.delta} spec={supplied.spec} /> vs previous run</dd>{/if}
-						</div>
-						<div class="stat" class:flagged={totals.below > 0} data-kpi="below">
-							<dt>Hydrological units below {target}</dt>
-							<dd class="value">{fmtNum(totals.below)}<small>of {fmtNum(totals.units)}</small></dd>
-							<dd class="sub">{totals.below ? `got under ${target} of their demand` : `all got ${target} or more`}</dd>
 						</div>
 						<div class="stat linked" class:flagged={(totals.weekShort ?? 0) > 0} data-kpi="week">
 							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short {weekText(weekEnd)}</a></dt>
 							<dd class="value" class:none={totals.weekShort === null}>{totals.weekShort === null ? (weekError ? '–' : '…') : fmtNum(totals.weekShort)}<small>of {fmtNum(totals.units)}</small></dd>
 							<dd class="sub">{week ? `${week.reportStart} to ${week.reportEnd}` : ''}</dd>
-							{#if totals.mustCut !== null}<dd class="sub">{totals.mustCut ? `${fmtNum(totals.mustCut)} to cut (curtailment)` : 'none to cut (curtailment)'}</dd>{/if}
 						</div>
 						<div class="stat" class:flagged={totals.shortfallM3Day > 0.5} data-kpi="shortfall">
 							<dt>Total shortfall</dt>
@@ -341,11 +345,11 @@
 						</p>
 					{/if}
 
-					<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+					<div class="first">
 						<section class="list" aria-labelledby="unit-cards-h">
 							<h2 id="unit-cards-h" class="visually-hidden">Each hydrological unit, least supplied first</h2>
-							<ul class="cards" aria-label="Hydrological units">
-								{#each cards as c (c.nodeId)}
+							<ul class="cards" id="unit-cards" aria-label="Hydrological units">
+								{#each fold.shown as c (c.nodeId)}
 									<li class="card {c.band}" class:picked={picked?.nodeId === c.nodeId} data-unit={c.nodeId} data-band={c.band}>
 										<div class="card-head">
 											<a class="name" href={withParam(page.url, UNIT_PARAM, c.nodeId)} aria-current={picked?.nodeId === c.nodeId ? 'true' : undefined} onclick={(e) => choose(e, c.nodeId)}>{c.name}</a>
@@ -372,6 +376,11 @@
 									</li>
 								{/each}
 							</ul>
+							{#if open || fold.hidden}
+								<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="unit-cards" onclick={() => (open = !open)}>
+									{open ? `Show the ${CAP} least supplied` : `Show all ${cards.length} hydrological units`}
+								</button>
+							{/if}
 						</section>
 
 						<div class="chart-col" bind:this={chartEl}>
@@ -386,7 +395,7 @@
 										capacity={damCapacity.get(picked.nodeId) ?? 0}
 										deficit={deficits.get(picked.nodeId) ?? null}
 										forecastFrom={summary.forecast?.from ?? null}
-										{fit}
+										height={chartH}
 									/>
 								{/key}
 							{/if}
@@ -444,15 +453,18 @@
 		justify-content: center;
 		gap: 0.5rem;
 	}
-	/* Four tiles: one row, then 2 × 2 (the Summary's). */
+	/* Three tiles: one row, then two over one (the shortfall across the row). */
 	.kpis {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		margin-bottom: 1rem;
 	}
 	@container supply-page (max-width: 44rem) {
 		.kpis {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
+		}
+		.kpis > :last-child {
+			grid-column: 1 / -1;
 		}
 	}
 	.stat {
@@ -645,8 +657,25 @@
 		display: flex;
 		flex-direction: column;
 	}
-	.chart-col > :global(.panel) {
-		flex: 1 1 auto;
+	.more {
+		align-self: flex-start;
+		margin-top: 0.6rem;
+	}
+	/* The page is the one scroll: the run's tables (the unit results, curtailment and assurance of supply) grow
+	   with their rows instead of scrolling inside the global 70vh cap; they still scroll sideways on a narrow screen. */
+	.supply-page :global(.table-wrap) {
+		max-height: none;
+	}
+	/* Wide enough for the unit results table's seven columns: its box stops being a scroll container, so its
+	   header row sticks under the "On this page" menu as the window scrolls down forty or sixty units. Narrower,
+	   it keeps its sideways scroll (and its header scrolls away with the page). */
+	@container supply-page (min-width: 64rem) {
+		#res-farms :global(.table-wrap) {
+			overflow: visible;
+		}
+		#res-farms :global(table.data thead) {
+			top: calc(var(--header-h, 0px) + var(--nav-h, 0px));
+		}
 	}
 	/* A group of panels: a quiet label above them, as on Runs & results. */
 	.group-h {
@@ -675,20 +704,15 @@
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
-	/* Wide and tall enough: the block is the height left in the window (less the save bar), the chart fills its
-	   panel and the cards scroll inside their column. */
-	.first.fit {
-		height: max(420px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		align-items: stretch;
-	}
-	.fit .list {
-		overflow: auto;
-		/* Room for the picked card's outline and the focus ring inside the scroller. */
-		padding: 3px;
-		margin: -3px;
-	}
-	.fit .chart-col {
-		min-height: 0;
+	/* The chart stays in view beside the cards as an opened list is read down (the window scrolls; nothing inside
+	   does), just under the sticky "On this page" menu. Only where the window is tall enough to hold it. */
+	@media (min-height: 700px) {
+		@container supply-page (min-width: 56rem) {
+			.chart-col {
+				position: sticky;
+				top: calc(var(--header-h, 0px) + var(--nav-h, 0px) + 0.75rem);
+			}
+		}
 	}
 	@media (max-width: 640px) {
 		.run-pick select {

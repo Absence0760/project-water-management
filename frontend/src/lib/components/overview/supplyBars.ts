@@ -1,8 +1,8 @@
 // Summary → Supply by farm: every farm in the latest run with the share of
-// its irrigation demand supplied, fullest first and emptiest last, banded as
-// the Network's "Colour farms by: Supply" (network/supplyColour.ts), so the
-// two never disagree. Farms without demand go last: 100 % of nothing isn't a
-// result.
+// its irrigation demand supplied, emptiest first (the card shows the first
+// few, so the short ones must lead), banded as the Network's "Colour farms
+// by: Supply" (network/supplyColour.ts), so the two never disagree. Farms
+// without demand go last: 100 % of nothing isn't a result.
 import type { FarmSummary } from '@water-management/engine';
 import { farmSupply, type SupplyBand } from '$lib/components/network/supplyColour';
 
@@ -23,6 +23,6 @@ export function supplyBars(farms: readonly FarmSummary[], modelFarmIds: Readonly
 	});
 	return rows.sort((a, b) => {
 		if (a.fraction === null || b.fraction === null) return a.fraction === null ? (b.fraction === null ? a.name.localeCompare(b.name) : 1) : -1;
-		return b.fraction - a.fraction || a.name.localeCompare(b.name);
+		return a.fraction - b.fraction || a.name.localeCompare(b.name);
 	});
 }

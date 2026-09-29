@@ -1291,8 +1291,16 @@
 //             Other uses section on Units & supply with the Summary's link to
 //             it, and the project's-date helper the data-age badges count to.
 //             No new dependency. Headroom ~3 KB.
-// 2026-09-29  total 1190 → 1198 KB (issue #68: measured 1195 on main @
-//             0a9cc278 plus the change). A farm's Excel audit workbook, built
+// 2026-09-29  total 1190 → 1194 KB (issue #136: measured 1191 with main @
+//             0a9cc278 merged, #137 included). Every add by email is an
+//             invite that an existing account accepts: the invitations page
+//             (routes/account/invitations, its own chunk), the banner that
+//             counts waiting invitations (auth-extras/InvitesBanner, lazy,
+//             with its store) and their Afrikaans words in the af
+//             catalogue. The members, farmers and team panels lost their
+//             added-at-once branches. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1194 → 1197 KB (issue #68: measured 1194 with main @
+//             35b17c02 merged, #136 included). A farm's Excel audit workbook, built
 //             in the existing export worker (10.5 → 19 KB, inside the 32 KB
 //             spreadsheet-worker budget): the engine's audit plan and
 //             formula tree (verify/audit.ts), the dam and evaporation
@@ -1313,7 +1321,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1198,
+	totalCodeKb: 1197,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

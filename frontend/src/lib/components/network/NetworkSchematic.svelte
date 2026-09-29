@@ -725,19 +725,6 @@
 	[data-supply='low'] .dam-water {
 		stroke: var(--sch-fill);
 	}
-	/* Irrigated area: one hue in three steps (more area is neither good nor bad). */
-	[data-supply='area1'] .farm {
-		fill: color-mix(in srgb, var(--accent) 22%, var(--sch-fill));
-	}
-	[data-supply='area2'] .farm {
-		fill: color-mix(in srgb, var(--accent) 55%, var(--sch-fill));
-	}
-	[data-supply='area3'] .farm {
-		fill: var(--accent);
-	}
-	[data-supply='area3'] .dam-water {
-		stroke: var(--sch-fill);
-	}
 	[data-supply='none'] .farm {
 		fill: var(--sch-fill);
 		stroke-dasharray: 2 2;

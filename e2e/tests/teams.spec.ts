@@ -3,7 +3,7 @@
 // The pages as laid out for the app frame (issue #17): the list's cards, the
 // team page's projects beside members, and the settings sheet.
 import type { APIRequestContext } from '@playwright/test';
-import { createRun, seedRunnableProject, uniqueEmail } from '../support/api.ts';
+import { acceptInvites, createRun, seedRunnableProject, uniqueEmail } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -25,7 +25,12 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	await expect(page.getByRole('heading', { level: 1, name: 'Breede Hydrology' })).toBeVisible();
 	await page.getByLabel('Add member by email').fill(colleague.user.email);
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
+	// An invitation, even for an account that exists (issue #136): a member once they accept it.
+	await expect(page.getByText(`Invitation sent to ${colleague.user.email}. They’ll join as editor once they accept it.`)).toBeVisible();
 	const members = page.getByRole('region', { name: 'Members' });
+	await expect(members.getByRole('rowheader', { name: /Team colleague/ })).toHaveCount(0);
+	expect(await acceptInvites(colleague.user.email, new URL(page.url()).pathname.split('/').at(-1)!)).toBe(1);
+	await page.reload();
 	await expect(members.getByRole('rowheader', { name: /Team colleague/ })).toBeVisible();
 
 	// The only admin is told to hand over before leaving (no request sent), in the settings sheet.
@@ -110,7 +115,9 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await page.getByLabel('Add member by email').fill(reviewer.user.email);
 	await page.getByLabel('Role', { exact: true }).selectOption('viewer');
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
-	await expect(page.getByText('Team reviewer added as viewer.')).toBeVisible();
+	await expect(page.getByText(`Invitation sent to ${reviewer.user.email}. They’ll join as viewer once they accept it.`)).toBeVisible();
+	expect(await acceptInvites(reviewer.user.email, team.id)).toBe(1);
+	await page.reload();
 	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('viewer');
 	// One set of role names across teams and projects (#162): the picker and the key say Viewer / Editor / Owner.
 	await expect(page.getByLabel('Role', { exact: true }).locator('option')).toHaveText(['viewer', 'editor', 'owner']);
@@ -154,6 +161,7 @@ test('only a team admin edits the portfolio traffic lights; a member reads which
 	const { team } = (await res.json()) as { team: { id: string } };
 	const colleague = await signIn('Lights member');
 	expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+	await acceptInvites(colleague.user.email, team.id);
 
 	// The admin: the defaults, said to be waiting for the hydrologist, and a form.
 	// They live in the team settings sheet, out of the page's reading path; the page states the rule.
@@ -219,7 +227,6 @@ test('the teams list shows each team’s numbers and its projects’ traffic lig
 	await page.goto('/teams');
 	const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Card Board' }) });
 	await expect(card.getByRole('definition').first()).toHaveText('2'); // projects
-	await expect(card).toContainText(/Hydrological units short in the week to 28 Jan 2022\s*\d+ of \d+ hydrological units?/);
 	await expect(card).toContainText(/1 (red|amber|unknown), 1 (unknown|green)/);
 	await expect(card.getByRole('list', { name: /^Projects of Card Board/ }).getByRole('link')).toHaveCount(2);
 	await expect(card.getByText('Unknown: no run yet')).toBeVisible();
@@ -282,6 +289,7 @@ test('an admin renames and deletes the team from the settings sheet; a member le
 	const { team } = (await res.json()) as { team: { id: string } };
 	const colleague = await signIn('Leaving member');
 	expect((await page.request.post(`${API_URL}/teams/${team.id}/members`, { data: { email: colleague.user.email, role: 'member' } })).status()).toBe(201);
+	await acceptInvites(colleague.user.email, team.id);
 
 	// Rename: the header follows, and Back closes the sheet rather than leaving the page.
 	await page.goto(`/teams/${team.id}`);

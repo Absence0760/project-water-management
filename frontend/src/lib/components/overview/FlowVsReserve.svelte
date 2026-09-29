@@ -5,8 +5,8 @@
 	// ewr_shortfall series, summaryChart.ts). Its own chunk (it pulls in uPlot),
 	// loaded by RiverTab only once the run's record is in. Series come
 	// through the Runs tab's cache, so opening the run there next draws at once.
-	// With `fill` the chart takes the height its panel is given (the page's
-	// first screen fits the window, issue #17) instead of a fixed one. The
+	// The plot's height is the page's to give (`height`, a fixed number: the
+	// page flows in the window's one scroll, so nothing sizes it to the window). The
 	// Runs tab's old controls can be turned on: the m³/s ↔ m³/day switch
 	// (`units`) and Earlier / Later by the window picked (`pannable`). The
 	// shaded days are dates from the shortfall series, so they hold in both units.
@@ -28,7 +28,7 @@
 		runId,
 		refs,
 		forecastFrom = null,
-		fill = false,
+		height = 240,
 		units = false,
 		pannable = false
 	}: {
@@ -38,8 +38,8 @@
 		refs: RunSeriesRef[];
 		/** A forecast run's first forecast day: the chart shades from it. */
 		forecastFrom?: string | null;
-		/** Fill the panel's height (its parent sizes it). */
-		fill?: boolean;
+		/** The plot's height in px. */
+		height?: number;
 		/** The m³/s ↔ m³/day switch (off: m³/s only). */
 		units?: boolean;
 		/** Earlier / Later through the record, by the window picked, and Shift+drag. */
@@ -48,9 +48,6 @@
 
 	// The outlet's Reserve rule requirement too, when it has a table (issue #51): the headline judges that line.
 	const SLOTS = [['simulated', 'simulated_outflow'], ['ewr', 'ewr'], EWR_RULE_KEY, ['shortfall', 'ewr_shortfall']] as const;
-	/** The chart's height when it doesn't fill, and the least it gets when it does. */
-	const FIXED_H = 240;
-	const MIN_H = 180;
 
 	// $state.raw: long daily arrays must not become deep proxies (RunCharts.svelte).
 	let flows = $state.raw<CatchmentFlows & { shortfall?: DailySeries }>({});
@@ -96,29 +93,6 @@
 			: 'Days the outflow dips below the pragmatic EWR line count as EWR not met.'
 	);
 	const caption = $derived(flows.ewrRule ? `${pragmatic} ${EWR_RULE_CAPTION}` : pragmatic);
-
-	// Filling: the plot gets what the slot leaves after the chart's own head,
-	// legend and caption (measured from the drawn chart, so wrapping is counted).
-	let slot: HTMLDivElement | undefined = $state();
-	let fig: HTMLDivElement | undefined = $state();
-	let fillH = $state(FIXED_H);
-	$effect(() => {
-		if (!fill || !slot || !fig) return;
-		const s = slot;
-		const f = fig;
-		const measure = () => {
-			const wrap = f.querySelector<HTMLElement>('.u-wrap');
-			if (!wrap) return;
-			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
-			if (Math.abs(target - fillH) > 2) fillH = target;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(s);
-		ro.observe(f);
-		return () => ro.disconnect();
-	});
-	const height = $derived(fill ? fillH : FIXED_H);
 </script>
 
 {#snippet unitToggle()}
@@ -128,7 +102,7 @@
 	</span>
 {/snippet}
 
-<section class="panel flow" class:fill aria-labelledby="flow-h" aria-busy={loading}>
+<section class="panel flow" aria-labelledby="flow-h" aria-busy={loading}>
 	<div class="head">
 		<h2 id="flow-h">Flow vs reserve</h2>
 	</div>
@@ -136,25 +110,21 @@
 		{#if series.length === 0}
 			<p class="muted">This run stored no outflow or EWR series.</p>
 		{:else}
-			<div class="slot" bind:this={slot}>
-				<div bind:this={fig}>
-					<LineChart
-						title="EWR vs simulated outflow"
-						{unit}
-						{height}
-						{series}
-						{shade}
-						logToggle
-						bind:log
-						recentDays={FLOW_OPEN_DAYS}
-						windows={FLOW_WINDOWS}
-						{pannable}
-						toolbar={units ? unitToggle : undefined}
-						{band}
-						{caption}
-					/>
-				</div>
-			</div>
+			<LineChart
+				title="EWR vs simulated outflow"
+				{unit}
+				{height}
+				{series}
+				{shade}
+				logToggle
+				bind:log
+				recentDays={FLOW_OPEN_DAYS}
+				windows={FLOW_WINDOWS}
+				{pannable}
+				toolbar={units ? unitToggle : undefined}
+				{band}
+				{caption}
+			/>
 		{/if}
 	</LoadState>
 </section>
@@ -171,18 +141,5 @@
 	.flow h2 {
 		margin: 0;
 		font-size: 1.05rem;
-	}
-	.flow.fill {
-		display: flex;
-		flex-direction: column;
-		flex: 1;
-		min-height: 0;
-		margin: 0;
-	}
-	/* The slot is sized by the panel, not by the chart, so the chart can be fitted to it. */
-	.fill .slot {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
 	}
 </style>

@@ -115,7 +115,7 @@ Reserve rule-table panels (engine ≥ 0.21.0: the Settings editor, loaded once
 the project has a table, and River & reserve's compliance panel, loaded for a
 run that has a report), and the Runs & results human-impact tables (engine ≥ 0.22.0:
 `runs/HumanImpactTables.svelte`, loaded for a run with land cover, boreholes or other
-water users). Inside the Overview, the flow chart, the Dam levels table,
+water users). Inside the Overview, the flow chart,
 Supply by farm and the owner's Share links panel are their own chunks too, so
 the route's chunk stays under its 42 KB budget (the Share links split made
 room for the section header, issue #17). The compare page loads its daily overlay and, only when a side

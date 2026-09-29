@@ -8,9 +8,7 @@ import {
 	DEFAULT_SORT,
 	ewrText,
 	ewrWindowLabel,
-	farmsShortLabel,
 	farmsShortText,
-	farmsShortTotalText,
 	farmsUnknownText,
 	portfolioTotals,
 	feedsText,
@@ -182,20 +180,17 @@ describe('the thresholds (D11)', () => {
 	});
 });
 
-describe('the labels over several catchments (column headers, totals)', () => {
+describe('the EWR label over several catchments', () => {
 	const stale = { figuresUntil: '2024-12-31', figuresAgeDays: 637 };
-	it('say "last 30 days" and "this week" only while every catchment’s figures are current', () => {
+	it('says "last 30 days" only while every catchment’s figures are current', () => {
 		expect(ewrWindowLabel([row(), row({ figuresUntil: null, figuresAgeDays: null })])).toBe('EWR, last 30 days');
-		expect(farmsShortLabel([row()])).toBe('Hydrological units short this week');
 		expect(ewrWindowLabel([])).toBe('EWR, last 30 days');
 	});
-	it('name the day when every catchment’s figures end on the same stale one', () => {
+	it('names the day when every catchment’s figures end on the same stale one', () => {
 		expect(ewrWindowLabel([row(stale), row(stale)])).toBe('EWR, 30 days to 31 Dec 2024');
-		expect(farmsShortLabel([row(stale), row(stale)])).toBe('Hydrological units short in the week to 31 Dec 2024');
 	});
-	it('stay neutral when the catchments’ figures end on different days, one of them stale', () => {
+	it('stays neutral when the catchments’ figures end on different days, one of them stale', () => {
 		expect(ewrWindowLabel([row(stale), row()])).toBe('EWR, last 30 days of figures');
-		expect(farmsShortLabel([row(stale), row()])).toBe('Hydrological units short, last week of figures');
 	});
 });
 
@@ -205,30 +200,13 @@ describe('totals (the teams list, the team page and the portfolio header)', () =
 		expect(statusSummary({ red: 0, amber: 0, unknown: 0, green: 0 })).toBe('');
 	});
 
-	it('adds up farms short only over known counts, and finds the newest run', () => {
+	it('counts the statuses, the alerts firing and the stale catchments', () => {
 		const t = portfolioTotals([
-			row({ id: 'a', farmsShort7: 2, farmCount: 5, alertsFiring: 1, stale: true, lastRunAt: '2026-09-20T06:00:00.000Z' }),
-			row({ id: 'b', farmsShort7: null, farmCount: 9, lastRunAt: '2026-09-24T06:00:00.000Z', ewr: { status: 'green', daysNotMet30: 0, days30: 30, fraction30: 0 } }),
-			row({ id: 'c', farmsShort7: 0, farmCount: 3, alertsFiring: 2, lastRunAt: null, ewr: unknown('no-figures') })
+			row({ id: 'a', alertsFiring: 1, stale: true }),
+			row({ id: 'b', ewr: { status: 'green', daysNotMet30: 0, days30: 30, fraction30: 0 } }),
+			row({ id: 'c', alertsFiring: 2, ewr: unknown('no-figures') })
 		]);
-		expect(t).toEqual({
-			catchments: 3,
-			counts: { red: 1, amber: 0, green: 1, unknown: 1 },
-			farmsShort7: 2,
-			farmsCounted: 8,
-			alertsFiring: 3,
-			stale: 1,
-			lastRunAt: '2026-09-24T06:00:00.000Z'
-		});
-		expect(farmsShortTotalText(t)).toBe('2 of 8 hydrological units');
-	});
-
-	it('says nothing is known rather than zero when no catchment has a count', () => {
-		const t = portfolioTotals([row({ farmsShort7: null, lastRunAt: null })]);
-		expect(t.farmsShort7).toBeNull();
-		expect(farmsShortTotalText(t)).toBeNull();
-		expect(portfolioTotals([])).toMatchObject({ catchments: 0, farmsShort7: null, lastRunAt: null, alertsFiring: 0, stale: 0 });
-		expect(farmsShortTotalText({ farmsShort7: 0, farmsCounted: 0 })).toBe('No hydrological units');
-		expect(farmsShortTotalText({ farmsShort7: 1, farmsCounted: 1 })).toBe('1 of 1 hydrological unit');
+		expect(t).toEqual({ catchments: 3, counts: { red: 1, amber: 0, green: 1, unknown: 1 }, alertsFiring: 3, stale: 1 });
+		expect(portfolioTotals([])).toEqual({ catchments: 0, counts: { red: 0, amber: 0, green: 0, unknown: 0 }, alertsFiring: 0, stale: 0 });
 	});
 });

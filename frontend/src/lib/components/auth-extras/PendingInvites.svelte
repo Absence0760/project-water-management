@@ -22,10 +22,9 @@
 		load: () => Promise<Invite[]>;
 		/**
 		 * Add the same address again with the same role: a fresh link, unless one
-		 * went out a minute ago. Null = they have an account now and were added
-		 * as a member directly (the parent updates its member list).
+		 * went out a minute ago. Always an invite, account or not (issue #136).
 		 */
-		resend: (inv: Invite) => Promise<Invite | null>;
+		resend: (inv: Invite) => Promise<Invite>;
 		revoke: (inv: Invite) => Promise<void>;
 		idPrefix: string;
 	} = $props();
@@ -52,11 +51,6 @@
 		message = error = null;
 		try {
 			const fresh = await resend(inv);
-			if (!fresh) {
-				invites = invites.filter((x) => x.id !== inv.id);
-				message = `${inv.email} has signed up meanwhile and is now a member.`;
-				return;
-			}
 			invites = upsertInvite(invites, fresh);
 			message = resendWasMailed(inv, fresh)
 				? `Invitation re-sent to ${inv.email}. The earlier link no longer works.`

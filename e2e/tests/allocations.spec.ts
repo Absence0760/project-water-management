@@ -27,7 +27,9 @@ test('an editor imports registered volumes and compares them with modelled use',
 
 	await page.goto(`/projects/${project.id}?tab=allocations`);
 	await expect(page.getByTestId('allocations-empty')).toContainText('No registered volumes yet.');
-	// With nothing registered, the modelled use shows as having no registered volume.
+	// With nothing registered, the modelled use shows as having no registered volume (every unit's water years are
+	// folded behind a disclosure since issue #175).
+	await page.getByRole('button', { name: /^Show all units' water years/ }).click();
 	const compare = page.getByTestId('allocation-compare-table');
 	await expect(compare.getByRole('row', { name: /Upper farm/ }).first()).toContainText('No registered volume');
 
@@ -92,6 +94,7 @@ test('licence conditions entered by hand show with the volume, and a capped run 
 	await page.goto(`/projects/${project.id}?tab=allocations`);
 	await expect(page.getByTestId('allocations-empty')).toBeVisible();
 	// Compare only: nothing said about a mode.
+	await page.getByRole('button', { name: /^Show all units' water years/ }).click();
 	await expect(page.getByTestId('allocation-compare-table')).toBeVisible();
 	await expect(page.getByTestId('allocation-mode-note')).toHaveCount(0);
 

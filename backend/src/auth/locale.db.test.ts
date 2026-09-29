@@ -111,7 +111,7 @@ describe('a new account takes its language from the invite it accepts (050, app_
 	it('an Afrikaans farmer invite: the invite email and the new account are Afrikaans', async () => {
 		const email = newEmail('farmer-af');
 		const token = await invite(email, 'af');
-		expect(lastMailTo(email)!.subject).toBe('[af] Lowner has given you access to Farm L in Locale catchment');
+		expect(lastMailTo(email)!.subject).toBe('[af] Lowner invited you to see Farm L in Locale catchment');
 		const user = await register({ email, inviteToken: token });
 		expect(user.locale).toBe('af');
 		// Positive control: the invite really was accepted (the farmer is linked).
