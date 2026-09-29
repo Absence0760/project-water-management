@@ -1,8 +1,8 @@
 <script lang="ts">
 	// The Project page (`?tab=project`, issue #17 option A): what the project
-	// is and who can open it. The model's headline facts, the project's
-	// details, its import record and notes on the left; the team, members,
-	// farmers and share links on the right. Everything here sat below the
+	// is and who can open it. The project's details, its import record, notes
+	// and the model's headline facts on the left; the team, members, farmers
+	// and share links on the right. Everything here sat below the
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
 	// links here, and its old `#…-h` links are sent here (links.ts). A
 	// reading page: it scrolls, it isn't fitted to the window.
@@ -119,20 +119,6 @@
 {#snippet headerActions()}<DownloadMenu items={projectDownloads} />{/snippet}
 
 <div class="project-page" bind:this={body}>
-	<h2 class="model-h" id="model-h">The model</h2>
-	<!-- Each fact links to the tab where it is edited or looked at; the link is
-	     stretched over the whole tile, so the tile is the click target. -->
-	<dl class="stats">
-		<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>{otherNodesLine(stats)}</small></dd></div>
-		<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
-		<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
-		<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
-		<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
-		<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
-		<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
-		<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
-	</dl>
-
 	<div class="grid">
 		<div class="col">
 			<section class="panel" aria-labelledby="details-h">
@@ -171,6 +157,25 @@
 			<ImportReportPanel projectId={project.id} />
 			<!-- The newest notes on anything in the project, and the project's own notes (WP-2.7). -->
 			<RecentNotes projectId={project.id} />
+			<!-- The model's headline facts, at the column's foot (issue #176): each repeats the context line of the
+			     tab it links to, so they are reference, not the page's first row. -->
+			<section class="panel" aria-labelledby="model-h">
+				<div class="panel-head">
+					<h2 id="model-h">The model</h2>
+				</div>
+				<!-- Each fact links to the tab where it is edited or looked at; the link is
+				     stretched over the whole tile, so the tile is the click target. -->
+				<dl class="stats">
+					<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>{otherNodesLine(stats)}</small></dd></div>
+					<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
+					<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
+					<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>
+					<div class="stat"><dt><a href="?tab=transfers">Active transfers</a></dt><dd>{fmtNum(stats.transfers)}</dd></div>
+					<div class="stat"><dt><a href="?tab=series">Time series</a></dt><dd>{seriesCount === null ? '–' : fmtNum(seriesCount)}</dd></div>
+					<div class="stat"><dt><a href="?tab=runs">Model runs</a></dt><dd>{runCount === null ? '–' : fmtNum(runCount)}</dd></div>
+					<div class="stat"><dt><a href="?tab=network">Outflow gauge</a></dt><dd class="text">{stats.outlet ?? '–'}</dd></div>
+				</dl>
+			</section>
 		</div>
 
 		<!-- Who can open the project: the owning team, the people shared directly, then the farmers (their own farms only). -->
@@ -193,21 +198,18 @@
 	.project-page {
 		container: project-page / inline-size;
 	}
-	.model-h {
-		margin: 0 0 0.5rem;
-		font-size: 1.05rem;
-	}
 	.grid {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
 		gap: 1rem;
 		align-items: start;
 	}
-	/* Eight facts: one row on wide pages, then 4 × 2, then 2 × 4. */
+	/* Eight facts: 2 × 4 in the left column and on a phone, 4 × 2 across a one-column page. */
 	dl.stats {
-		grid-template-columns: repeat(8, minmax(0, 1fr));
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		margin: 0;
 	}
-	@container project-page (max-width: 1100px) {
+	@container project-page (min-width: 521px) and (max-width: 760px) {
 		dl.stats {
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}

@@ -1102,14 +1102,17 @@ it scrolls, and isn't fitted to the window.
   ("Questions? Contact Vaalbank WUA."), saved with the page's **Save
   changes** bar (editors); empty keeps "your WUA". Not the team's name, which may be a
   consultancy's.
-- **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
-  on a phone), then Project details, the import record and recent notes on
-  the left; on the right, "who has access": Team above
+- **Layout**: Project details, the import record, recent notes and the
+  model's facts (a panel, 2 × 4 tiles) on the left; on the right, "who has access": Team above
   Members (or "Shared directly with" for a team project), so the two panels
   that refer to each other sit together, then **Farmers** and share links. The columns answer to
   the page's width (container queries on `project-page`: two columns from
-  about 760 px of page), then one column in the order facts, details, import
-  record, notes, team, members, farmers, share links.
+  about 760 px of page), then one column in the order details, import
+  record, notes, facts (4 × 2 tiles, 2 × 4 on a phone), team, members,
+  farmers, share links. The facts were the page's first row, eight across,
+  until 2026-09 (issue #176): each repeats the header line of the tab it
+  links to, so the first row now answers what the project is and who has
+  it.
 - **Members**: each applicant row has an **Applying party** box for owners
   (saved on change; blank for none): an applicant shares applications only
   with the members of their own party, so put an applicant and their
