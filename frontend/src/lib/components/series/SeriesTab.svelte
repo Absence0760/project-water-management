@@ -53,7 +53,8 @@
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { downloads } from '$lib/export';
-	import { fmtNum, localIsoDate } from '$lib/format/number';
+	import { fmtNum } from '$lib/format/number';
+	import { projectToday } from '$lib/components/projects/freshness';
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
@@ -79,6 +80,7 @@
 		runs = null,
 		settings = null,
 		gauges = [],
+		timeZone = null,
 		onSeriesChange,
 		onadddata
 	}: {
@@ -91,6 +93,8 @@
 		settings?: ProjectSettings | null;
 		/** The model's gauge nodes above the outlet: a flow record can be attached to one (084_gauge_records, engine ≥ 1.4.0). */
 		gauges?: readonly { id: string; name: string }[];
+		/** The project's time zone: data ages count to its calendar date, as in the header and on the project list (issue #137). */
+		timeZone?: string | null;
 		onSeriesChange?: (list: SeriesMeta[]) => void;
 		/** Opens the page's Add data dialog (the header's button): the empty state's action, and the retired `#upload-csv` link. */
 		onadddata?: () => void;
@@ -112,8 +116,8 @@
 	// $state.raw: 16k-value daily arrays must not be wrapped in deep reactive
 	// proxies — reading them element by element froze the Runs tab. Replace, never mutate.
 	let values = $state.raw<Record<string, Daily>>({});
-	// The viewer's calendar date, as on the project list (projects/freshness.ts).
-	const today = localIsoDate();
+	// The project's calendar date, as in the header and on the project list (projects/freshness.ts).
+	const today = $derived(projectToday(timeZone));
 
 	// The page's list changed without us (the header's Add data dialog uploaded a file): show it.
 	// Our own changes come back through onSeriesChange as this same array, so they are skipped.
