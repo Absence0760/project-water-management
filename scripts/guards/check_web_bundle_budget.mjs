@@ -1249,6 +1249,41 @@
 //             api chunk and its puzzle section in the sign-in route chunk take
 //             ~2 KB of that headroom; AWS's script is loaded on demand, never
 //             bundled. Headroom ~1 KB.
+// 2026-09-29  total 1166 → 1170 KB (measured 1167 on main @ 58192db8 plus
+//             issue #162 items 11, 12, 13, 21). The app's own confirmation
+//             dialog replacing the browser's confirm() in 24 files (the
+//             ConfirmHost in the root layout, each call's title, detail and
+//             button words), the leave guard (lib/nav: the registry, the
+//             destination names, the one beforeNavigate) and the project
+//             details moved onto the page's save bar. No new dependency.
+//             Headroom ~3 KB.
+// 2026-09-29  total 1170 → 1176 KB (measured 1173 with all of issue #162
+//             merged: items 1–27 as one PR. The glossary as one page per
+//             topic with redirects for old term links, the Summary's
+//             days-below-the-reserve strip and the shared EWR-not-met
+//             wording, the one data-age formatter and stale-date wording,
+//             visible chip group names, one role-name map, and the
+//             register page's scrolling terms box, on main @ 12cde4ae, with
+//             #126's sign-in CAPTCHA). No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1176 → 1199 KB, calibration worker 36 → 44 KB (issue
+//             #153, automated calibration with pre-declared rules; measured
+//             1185 / 43 against main @ 12cde4a's 1162 / 36, and 1196 / 43 once
+//             merged with #162's 1173). The worker runs
+//             the engine's autoCalibrate: its orchestration, the filters and
+//             selection and the rule-set resolver are ~5 KB gzipped on their
+//             own (auto.ts 2.1, rulesSettings.ts 2.0, rules.ts 1.0); the rest
+//             of the worker's growth is chunk boundaries. Outside the worker:
+//             the Automated calibration panel (4.4 KB) and the Calibration
+//             rules fields (2.8 KB), each its own lazy chunk that loads only
+//             with Settings → Fit automatically; the glossary article; and the
+//             rule helpers run comparison and the fit record read. Headroom
+//             ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1199 → 1186 KB (down), calibration worker 44 → 36 KB
+//             (down; issue #153's follow-ups: measured 1183 / 36 on main @
+//             89482bf0). The server now runs the calibration rules, one
+//             background job per fit, so the worker no longer carries
+//             autoCalibrate, the filters or the rule resolver; the panel
+//             follows the server's run instead. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1259,7 +1294,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1166,
+	totalCodeKb: 1186,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

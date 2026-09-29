@@ -1,8 +1,8 @@
-import { canonicalUnit } from '@water-management/engine';
+import { canonicalUnit, defaultCalibrationRules } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { MAX_EXPORT_BYTES } from '../export/csv.js';
 import { ProjectFile } from './document.js';
-import { freshIds, IMPORT_MAX_BYTES, projectFileProblems } from './import.js';
+import { freshIds, IMPORT_MAX_BYTES, parseProjectFile, projectFileProblems } from './import.js';
 
 const LAMBDA_REQUEST_PAYLOAD = 6 * 1024 * 1024;
 
@@ -78,5 +78,60 @@ describe('projectFileProblems', () => {
 		expect(projectFileProblems(file([{ kind: 'flow_observed_m3s', name: 'G' }, { kind: 'flow_observed_m3s', name: 'G' }]))).toEqual([
 			'duplicate series flow_observed_m3s "G"'
 		]);
+	});
+});
+
+describe('parseProjectFile: an automated fit must match the file’s own calibration rules (issue #153)', () => {
+	const period = { start: '2020-01-01', end: '2020-01-30', waterYears: [2019], scores: { days: 30, kgePrime: 0.7 } };
+	const params = { x1: 420, x2: 0, x3: 70, x4: 2.1 };
+	const rules = { ...defaultCalibrationRules(), revision: 2 };
+	const record = {
+		fittedAt: '2026-09-29T10:00:00.000Z',
+		engineVersion: '1.25.0',
+		model: 'gr4j',
+		objective: 'kgePrime',
+		bounds: 'typical',
+		seed: 1,
+		budget: 1500,
+		evaluations: 4500,
+		cancelled: false,
+		free: ['x1', 'x3', 'x4'],
+		params,
+		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
+		flowKind: 'flow_observed_m3s',
+		simulatedKey: 'simulated_outflow',
+		calibrationStart: null,
+		calibrationEnd: null,
+		exclusions: [],
+		validate: true,
+		validationRecord: null,
+		fit: period,
+		before: period,
+		splitSample: null,
+		differential: null,
+		independentRecord: null,
+		notes: [],
+		editedParams: [],
+		auto: {
+			rules,
+			ruleExclusions: [],
+			chosen: 0,
+			cases: [{ label: 'typical', pan: 'project', bounds: 'typical', objective: 'kgePrime', score: 0.7, eligible: true, reasons: [], params }]
+		}
+	};
+	const doc = (calibrationRules: unknown) => ({ name: 'P', model: { nodes: [], crops: [], cropAreas: [], transfers: [] }, series: [], settings: { calibrationRules, fitRecord: record } });
+
+	it('takes a file whose fit ran under its own rules', () => {
+		expect(() => parseProjectFile(doc(rules))).not.toThrow();
+	});
+
+	it('refuses a file whose rules moved on from the fit (another revision, content or sign-off)', () => {
+		for (const other of [
+			{ ...rules, revision: 3 },
+			{ ...rules, selection: { test: 'split', score: 'kgePrime' } },
+			{ ...rules, signedOff: { by: 'Someone', on: '2026-09-29' } }
+		]) {
+			expect(() => parseProjectFile(doc(other)), JSON.stringify(other)).toThrow('invalid project file');
+		}
 	});
 });

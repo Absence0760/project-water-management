@@ -14,6 +14,7 @@ import { seedApplicantProject } from '../support/applications.ts';
 import { tamperRunSummary } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const NAME = 'Raise the Upper farm dam';
 
@@ -22,7 +23,6 @@ test('an applicant submits an application on the published baseline, and the ass
 	const applicant = await signIn('Applicant');
 	const { project } = await seedApplicantProject(page, 'Applications golden path', applicant.user);
 	const a = applicant.page;
-	a.on('dialog', (d) => d.accept());
 
 	// The workspace shows an applicant their own view, not the tabs.
 	await a.goto(`/projects/${project.id}`);
@@ -61,12 +61,12 @@ test('an applicant submits an application on the published baseline, and the ass
 	await a.getByRole('button', { name: 'Run scenario' }).click();
 	await expect(a.getByTestId('applicant-results-note')).toBeVisible();
 	await a.getByRole('button', { name: 'Submit to the assessors' }).click();
+	await answerConfirm(a, true, `Submit “${NAME}” to the assessors?`);
 	await expect(a.getByTestId('application-panel')).toContainText('Submitted: the assessors can see it');
 	await expect(a.getByRole('form', { name: 'Add a change' })).toHaveCount(0);
 	await expect(a.getByText('Lower farm')).toHaveCount(0);
 
 	// The assessor's Applications tab lists it; they open and decide it.
-	page.on('dialog', (d) => d.accept());
 	await page.goto(`/projects/${project.id}?tab=applications`);
 	const row = page.getByRole('row').filter({ has: page.getByRole('rowheader', { name: NAME }) });
 	await expect(row).toContainText('Applicant');

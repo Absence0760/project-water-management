@@ -12,6 +12,7 @@
 	long list would push it a screen down).
 -->
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { api, NOTE_MAX, type Note } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
 	import { bodyProblem, createBody, normaliseBody, targetQuery, type NoteTarget } from './notes';
@@ -120,7 +121,7 @@
 	}
 
 	async function remove(n: Note) {
-		if (!confirm(words.confirmDelete(n))) return;
+		if (!(await confirmDialog({ title: words.deleteTitle, message: words.confirmDelete(n), confirmLabel: words.delete, cancelLabel: words.cancel, danger: true }))) return;
 		busy = true;
 		error = null;
 		try {

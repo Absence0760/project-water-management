@@ -30,17 +30,22 @@ describe('daysSince', () => {
 
 describe('dataFreshness', () => {
 	const now = at(2026, 9, 23);
-	it('flags missing and stale data', () => {
-		expect(dataFreshness(null, now)).toMatchObject({ label: 'no rain yet', stale: true });
-		expect(dataFreshness('2026-09-23', now)).toMatchObject({ label: 'rain up to date', stale: false });
-		expect(dataFreshness('2026-09-30', now)).toMatchObject({ label: 'rain up to date', stale: false });
-		expect(dataFreshness('2026-09-22', now)).toMatchObject({ label: 'rain 1 day old', stale: false });
-		expect(dataFreshness('2026-09-16', now)).toMatchObject({ label: 'rain 7 days old', stale: false });
-		expect(dataFreshness('2026-09-11', now)).toMatchObject({ label: 'rain 12 days old', stale: true, detail: 'Recorded rain runs to 2026-09-11' });
+	it('says the rain’s last day and its age, and flags missing and stale data', () => {
+		expect(dataFreshness(null, now)).toMatchObject({ label: 'No rain yet', stale: true });
+		expect(dataFreshness('2026-09-23', now)).toMatchObject({ label: 'Rain to 23 Sep 2026 (today)', stale: false });
+		// A day ahead of the viewer (another zone's today) still reads today, never "in the future".
+		expect(dataFreshness('2026-09-24', now)).toMatchObject({ label: 'Rain to 24 Sep 2026 (today)', stale: false });
+		expect(dataFreshness('2026-09-22', now)).toMatchObject({ label: 'Rain to 22 Sep 2026 (yesterday)', stale: false });
+		expect(dataFreshness('2026-09-16', now)).toMatchObject({ label: 'Rain to 16 Sep 2026 (7 days ago)', stale: false });
+		expect(dataFreshness('2026-09-11', now)).toMatchObject({
+			label: 'Rain to 11 Sep 2026 (12 days ago)',
+			stale: true,
+			detail: 'Recorded rain (catchment or CHIRPS) runs to 11 Sep 2026'
+		});
 	});
 	it('switches to months and years for old records', () => {
-		expect(dataFreshness('2026-06-01', now).label).toBe('rain 3 months old');
-		expect(dataFreshness('2025-09-30', now).label).toBe('rain 11 months old');
-		expect(dataFreshness('2021-09-30', now).label).toBe('rain 4 years old');
+		expect(dataFreshness('2026-06-01', now).label).toBe('Rain to 1 Jun 2026 (3 months ago)');
+		expect(dataFreshness('2024-12-31', now).label).toBe('Rain to 31 Dec 2024 (20 months ago)');
+		expect(dataFreshness('2021-09-30', now).label).toBe('Rain to 30 Sep 2021 (4 years ago)');
 	});
 });

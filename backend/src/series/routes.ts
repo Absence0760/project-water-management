@@ -24,7 +24,7 @@ import {
 import { readJson } from '../http/body.js';
 import { wakeWorker } from '../jobs/wake.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
-import { queueRerunFor } from './newData.js';
+import { queueAutoCalibrationFor, queueRerunFor } from './newData.js';
 import { originChange, provenanceChange, replaceSeries } from './replace.js';
 
 // Moved to merge.ts beside mergeSeries (shared with the data feeds and the
@@ -153,7 +153,10 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			// A replace says how its days were built (a sub-daily upload's day boundary), or clears it.
 			const r = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null, origin: bodyOrigin(body) });
 			// The new-data hook (series/newData.ts): a replace that changed days is new data too.
-			const queued = await queueRerunFor(db, id, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: r.daysChanged, via: 'user' });
+			const change = { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: r.daysChanged, via: 'user' as const };
+			const queued = await queueRerunFor(db, id, change);
+			// And a run of the calibration rules, when they ask for one (issue #153).
+			await queueAutoCalibrationFor(db, id, change);
 			return { meta: await setDayBoundary(db, id, r.meta, body.dayBoundary ?? null), queued };
 		});
 		await wakeForRerun(queued);

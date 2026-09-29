@@ -1,16 +1,17 @@
 <script lang="ts">
-	// Summary → the latest run's outflow against the pragmatic EWR, the Runs
+	// River & reserve → the run's outflow against the pragmatic EWR, the Runs
 	// tab's "EWR vs simulated outflow" chart (flowSeries.ts), with a 30 days /
 	// 1 year / All switch and the days below the reserve shaded (the run's
 	// ewr_shortfall series, summaryChart.ts). Its own chunk (it pulls in uPlot),
-	// loaded by OverviewTab only once the run's record is in. Series come
+	// loaded by RiverTab only once the run's record is in. Series come
 	// through the Runs tab's cache, so opening the run there next draws at once.
-	// With `fill` the chart takes the height its panel is given (the Summary's
-	// first screen fits the window, issue #17 A1) instead of a fixed one.
-	// River & reserve shows the same chart, larger (river/RiverTab.svelte),
-	// with the Runs tab's old controls turned on: the m³/s ↔ m³/day switch
+	// With `fill` the chart takes the height its panel is given (the page's
+	// first screen fits the window, issue #17) instead of a fixed one. The
+	// Runs tab's old controls can be turned on: the m³/s ↔ m³/day switch
 	// (`units`) and Earlier / Later by the window picked (`pannable`). The
 	// shaded days are dates from the shortfall series, so they hold in both units.
+	// The Summary drew this chart too until issue #162: it now shows the
+	// days below the reserve by month (ReserveStrip.svelte) and links here.
 	import type { DailySeries } from '@water-management/engine';
 	import { api, type RunSeriesRef } from '$lib/api';
 	import LineChart from '$lib/components/charts/LineChart.svelte';
@@ -28,7 +29,6 @@
 		refs,
 		forecastFrom = null,
 		fill = false,
-		more = null,
 		units = false,
 		pannable = false
 	}: {
@@ -40,11 +40,9 @@
 		forecastFrom?: string | null;
 		/** Fill the panel's height (its parent sizes it). */
 		fill?: boolean;
-		/** A link beside the heading (the Summary's "More on River & reserve"). */
-		more?: { href: string; label: string } | null;
-		/** The m³/s ↔ m³/day switch (River & reserve; the Summary shows m³/s only). */
+		/** The m³/s ↔ m³/day switch (off: m³/s only). */
 		units?: boolean;
-		/** Earlier / Later through the record, by the window picked, and Shift+drag (River & reserve). */
+		/** Earlier / Later through the record, by the window picked, and Shift+drag. */
 		pannable?: boolean;
 	} = $props();
 
@@ -133,7 +131,6 @@
 <section class="panel flow" class:fill aria-labelledby="flow-h" aria-busy={loading}>
 	<div class="head">
 		<h2 id="flow-h">Flow vs reserve</h2>
-		{#if more}<a class="small" href={more.href}>{more.label}</a>{/if}
 	</div>
 	<LoadState {loading} {error} retry={() => attempt++}>
 		{#if series.length === 0}
@@ -170,12 +167,6 @@
 		flex-wrap: wrap;
 		gap: 0.25rem 0.75rem;
 		margin: 0 0 0.25rem;
-	}
-	/* A 24 px target (WCAG 2.5.8). */
-	.head a {
-		display: inline-flex;
-		align-items: center;
-		min-height: 24px;
 	}
 	.flow h2 {
 		margin: 0;

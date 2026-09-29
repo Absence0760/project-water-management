@@ -78,6 +78,8 @@
 	{:else}
 		<p class="small">
 			<strong>{fitModelLabel(record.model)} fit of {fittedAtText(record.fittedAt)}</strong>
+			{#if record.auto}<span class="badge" data-testid="fit-auto-badge">Automated</span>{/if}
+			{#if status && status.rulesChanged}<span class="badge badge-warn">Rules changed since fit</span>{/if}
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
 			{#if status && status.forcingChanged}<span class="badge badge-warn">Forcing changed since fit</span>{/if}
 			{#if status && status.qualityFlagsChanged}<span class="badge badge-warn">Quality flags changed since fit</span>{/if}
@@ -89,6 +91,21 @@
 			<div><dt>Seed</dt><dd>{record.seed}</dd></div>
 			<div><dt>Model runs</dt><dd>{fmtNum(record.budget)} per fit{(record.starts ?? 1) > 1 ? `, ${record.starts} starts` : ''}, {fmtNum(record.evaluations)} in all{record.cancelled ? ' (cancelled)' : ''}</dd></div>
 			<div><dt>Engine</dt><dd>{record.engineVersion}</dd></div>
+			<!-- Issue #153: the fit automated calibration kept, under which rules, and what they left out. -->
+			{#if record.auto}
+				{@const a = record.auto}
+				<div data-testid="fit-auto">
+					<dt>Picked by <HelpTip key="settings.calibrationRules" /></dt>
+					<dd>
+						calibration rules revision {a.rules.revision} ({a.rules.signedOff ? `signed off by ${a.rules.signedOff.by} on ${a.rules.signedOff.on}` : 'draft, not signed off'}): kept
+						{a.cases[a.chosen]?.label ?? '–'} of {a.cases.length} fit{a.cases.length === 1 ? '' : 's'}, {a.cases.filter((c) => c.eligible).length} passing the filters
+					</dd>
+				</div>
+				<div data-testid="fit-auto-exclusions">
+					<dt>Left out by rule</dt>
+					<dd>{a.ruleExclusions.length ? a.ruleExclusions.map((x) => `${exclusionLabel(x)} (${x.reason})`).join('; ') : 'none'}</dd>
+				</div>
+			{/if}
 			<div><dt>Fitted to</dt><dd>{FLOW_KIND_LABEL[record.flowKind] ?? record.flowKind}, {windowText(record)}</dd></div>
 			{#if record.forcing}
 				<div data-testid="fit-pe">

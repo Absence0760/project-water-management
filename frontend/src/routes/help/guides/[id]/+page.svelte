@@ -1,6 +1,6 @@
 <script lang="ts">
 	// One guide from $lib/help/guides: sections of text, steps, notes,
-	// formulas and diagrams, with links into the glossary (/help/glossary#<id>) and to
+	// formulas and diagrams, with links into the glossary (/help/glossary/<topic>#<id>) and to
 	// other guides. Guide text is plain strings with a small markup that
 	// inline() parses, so nothing here is {@html}.
 	import { tick } from 'svelte';
@@ -10,15 +10,13 @@
 	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
 	import PictureTour from '$lib/components/help/PictureTour.svelte';
 	import RichText from '$lib/components/help/RichText.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { helpFor } from '$lib/help/content';
-	import { GUIDE_KIND_TITLES, GUIDES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
+	import { glossaryPath } from '$lib/help/glossaryLinks';
+	import { GUIDE_KIND_TITLES, TAB_TITLES, guideFor, sectionId } from '$lib/help/guides';
 	import { currentSection } from '$lib/help/spy';
 
 	const guide = $derived(guideFor(page.params.id ?? ''));
-	const index = $derived(guide ? GUIDES.indexOf(guide) : -1);
-	const prev = $derived(index > 0 ? GUIDES[index - 1] : undefined);
-	const next = $derived(index >= 0 && index < GUIDES.length - 1 ? GUIDES[index + 1] : undefined);
 	const terms = $derived((guide?.terms ?? []).map((id) => helpFor(id)).filter((e) => e !== undefined));
 	const related = $derived((guide?.related ?? []).map((id) => guideFor(id)).filter((g) => g !== undefined));
 	const sectionIds = $derived(guide ? guide.sections.map((s) => sectionId(s.heading)) : []);
@@ -28,7 +26,7 @@
 	// while the pictures and fonts settle (lib/help/anchor.ts), focusing its
 	// heading, as the glossary does for a term.
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
+		const id = hashId(page.url.hash);
 		if (!id || !sectionIds.includes(id)) return;
 		let live = true;
 		let release: (() => void) | undefined;
@@ -61,7 +59,8 @@
 			const doc = document.documentElement;
 			const atEnd = window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
 			const tops = ids.map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity);
-			const i = currentSection(tops, header + 64, atEnd);
+			// The section a link jumped to (the URL's hash) stays marked at the end of the page (lib/help/spy.ts).
+			const i = currentSection(tops, header + 64, atEnd, ids.indexOf(hashId(window.location.hash)));
 			reading = i >= 0 ? ids[i]! : '';
 		};
 		const onScroll = () => {
@@ -137,8 +136,8 @@
 						<Diagram id={b.id} caption={b.caption} />
 					{:else if b.type === 'picture'}
 						<figure class="picture">
-							<figcaption>{b.caption}</figcaption>
-							<PictureTour shot={b.shot} stops={b.stops} sizes="(min-width: 64rem) 46rem, 100vw" />
+							<figcaption><RichText text={b.caption} /></figcaption>
+							<PictureTour shot={b.shot} stops={b.stops} />
 						</figure>
 					{/if}
 				{/each}
@@ -151,7 +150,7 @@
 				<dl>
 					{#each terms as e (e.id)}
 						<div>
-							<dt><a href="{base}/help/glossary#{e.id}">{e.term}</a></dt>
+							<dt><a href="{base}{glossaryPath(e)}">{e.term}</a></dt>
 							<dd class="muted">{e.short}</dd>
 						</div>
 					{/each}
@@ -173,26 +172,31 @@
 			</section>
 		{/if}
 
-		<nav class="pager" aria-label="Previous and next guide">
-			{#if prev}<a href="{base}/help/guides/{prev.id}" rel="prev"><span class="muted">Previous</span> {prev.title}</a>{:else}<span></span>{/if}
-			{#if next}<a href="{base}/help/guides/{next.id}" rel="next" class="next"><span class="muted">Next</span> {next.title}</a>{/if}
-		</nav>
 	{/if}
 </article>
 
 <style>
-	.guide-page {
-		max-width: 46rem;
+	/* The guide spans the Help column, as the overview does (issue #162):
+	   text keeps a readable measure, while figures, diagrams, formulas and the
+	   terms table take the column's whole width. */
+	.head,
+	section > h2,
+	section > p,
+	.steps,
+	.list,
+	.note,
+	.related,
+	.onpage {
+		max-width: 44rem;
 	}
 	/* With room beside the text (the Help column's own width), "On this page"
-	   becomes a rail on the right that stays in view while reading, instead of
-	   a box in the text; the article keeps its reading width. */
+	   becomes a rail pinned to the column's right edge that stays in view
+	   while reading, instead of a box in the text. */
 	@container help-main (min-width: 56rem) {
 		.guide-page {
 			display: grid;
-			grid-template-columns: minmax(0, 42rem) 12rem;
-			column-gap: 2rem;
-			max-width: none;
+			grid-template-columns: minmax(0, 1fr) 12rem;
+			column-gap: 2.5rem;
 			align-items: start;
 		}
 		.guide-page > :global(*) {
@@ -342,21 +346,6 @@
 	.related p {
 		margin: 0.35rem 0 0;
 		font-size: 0.9rem;
-	}
-	.pager {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-top: 2rem;
-		padding-top: 1rem;
-		border-top: 1px solid var(--border);
-	}
-	.pager a {
-		display: grid;
-		max-width: 48%;
-	}
-	.pager .next {
-		text-align: right;
 	}
 	@media (max-width: 480px) {
 		.terms dl div {

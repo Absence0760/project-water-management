@@ -89,6 +89,17 @@ CASES = [
     ("git push --mirror", "deny"),
     ("cd x && git push origin main", "deny"),
     ("git stash push -- foo.ts", "allow"),
+    # PR titles must pass CI's pr-title-lint (conventional, lowercase subject).
+    ('gh pr create --title "feat(ui): add the leave guard (#162)" --body x', "allow"),
+    ('gh pr create -t "fix: stop the 404"', "allow"),
+    ('gh pr edit 5 --title="docs(api): note the null report"', "allow"),
+    ('gh pr create --title "UI feedback: help pages (#162)"', "deny"),
+    ('gh pr create --title "feat(ui): Help pages"', "deny"),
+    ('gh pr create --title "feat: add a thing."', "deny"),
+    ('gh pr edit 167 --title "Add the leave guard"', "deny"),
+    ('cd x && gh pr create --title "wip"', "deny"),
+    ("gh pr create --fill", "allow"),
+    ("gh pr view 5", "allow"),
 ]
 
 failures = []
@@ -124,6 +135,17 @@ for staged, args, want_deny in [
         failures.append((f"_check_commit({args}) staged={staged}", want_deny, got_deny))
     print(f"  [{'ok' if ok else 'FAIL'}] amend staged={str(staged):5} "
           f"expect {'deny' if want_deny else 'allow':5} got {'deny' if got_deny else 'allow':5}  {args}")
+
+# The hook's title rule must stay the workflow's: same types, same subject pattern.
+wf = (Path(__file__).parents[2] / ".github/workflows/pr-title-lint.yml").read_text()
+import re as _re  # noqa: E402
+wf_types = tuple(_re.search(r"types: \|\n((?:\s+\w+\n)+)", wf).group(1).split())
+wf_subject = _re.search(r"subjectPattern: (.+)", wf).group(1).strip()
+for what, hook_v, wf_v in [("types", gsg.PR_TITLE_TYPES, wf_types), ("subjectPattern", gsg.PR_SUBJECT_PATTERN, wf_subject)]:
+    ok = hook_v == wf_v
+    if not ok:
+        failures.append((f"PR title {what} vs pr-title-lint.yml", wf_v, hook_v))
+    print(f"  [{'ok' if ok else 'FAIL'}] PR title {what} matches pr-title-lint.yml")
 
 if failures:
     print(f"\n{len(failures)} FAILED:")

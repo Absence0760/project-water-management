@@ -4,6 +4,7 @@
 	// and who it is shared with. The server holds every rule (who may move it,
 	// that a submit freezes the ops, that no one decides their own); this
 	// offers only the moves it would allow.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { api, OUTCOME_LABEL, scenarioProblems, SCENARIO_OUTCOMES, type Scenario, type ScenarioOutcome, type ScenarioWithCheck } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import { fmtDate } from '$lib/format/number';
@@ -63,8 +64,13 @@
 			busy = false;
 		}
 	}
-	function submit() {
-		if (!confirm(`Submit “${s.name}” to the assessors? Its changes are then frozen; you can withdraw it until it is decided.`)) return;
+	async function submit() {
+		const ok = await confirmDialog({
+			title: `Submit “${s.name}” to the assessors?`,
+			message: 'Its changes are then frozen; you can withdraw it until it is decided.',
+			confirmLabel: 'Submit application'
+		});
+		if (!ok) return;
 		act('Submitted.', () => api.scenarios.submit(projectId, s.id));
 	}
 	const withdraw = () => act('Withdrawn.', () => api.scenarios.withdraw(projectId, s.id));
@@ -122,7 +128,12 @@
 	}
 	async function unshare(userId: string, name: string) {
 		const self = userId === session.user?.id;
-		if (!confirm(self ? `Stop reading “${s.name}”?` : `Stop sharing “${s.name}” with ${name}?`)) return;
+		const ok = await confirmDialog(
+			self
+				? { title: `Stop reading “${s.name}”?`, confirmLabel: 'Stop reading' }
+				: { title: `Stop sharing “${s.name}” with ${name}?`, confirmLabel: 'Stop sharing', danger: true }
+		);
+		if (!ok) return;
 		busy = true;
 		error = null;
 		try {

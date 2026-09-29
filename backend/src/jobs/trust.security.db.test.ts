@@ -81,6 +81,12 @@ async function catchment(owner: User, name: string) {
 	return { projectId, farmId: farm.id as string, runId: run.body.run.id as string };
 }
 
+/** An observed record on a catchment (a quarter of its rain, invented), so a calibration or an ensemble can start on it. */
+async function withFlow(owner: User, projectId: string) {
+	const flow = Array.from({ length: 730 }, (_, i) => (i % 3 === 0 ? 0.4 : 0.1));
+	expect((await owner.call('PUT', `/projects/${projectId}/series`, { kind: 'flow_observed_m3s', unit: 'm3/s', startDate: START, values: flow })).status).toBe(200);
+}
+
 /**
  * The kinds that run for someone below editor, and why that's safe. Every
  * other kind needs an editor. A new kind lands here only with its reason.
@@ -213,6 +219,31 @@ const CROSS: Partial<Record<JobKind, CrossCase>> = {
 			return { jobId: res.body.jobId, ref: res.body.sweep.id };
 		},
 		effect: async (id) => (await asOwner('SELECT status FROM scenario_sweep WHERE id = $1', [id]))[0].status
+	},
+	auto_calibration: {
+		// A run of B's calibration rules: a quick search, so B's own job fits its one case.
+		async queue(owner, b) {
+			await withFlow(owner, b.projectId);
+			const rules = (await owner.call('GET', `/projects/${b.projectId}`)).body.project.settings.calibrationRules;
+			const quick = { ...rules, run: { seed: 1, starts: 1, budget: 50 }, cases: { bounds: ['typical'], objectives: ['kgePrime'] }, selection: { test: 'split', score: 'kgePrime' } };
+			expect((await owner.call('PATCH', `/projects/${b.projectId}`, { settings: { calibrationRules: quick } })).status).toBe(200);
+			const res = await owner.call('POST', `/projects/${b.projectId}/auto-calibrations`, {});
+			expect(res.status, JSON.stringify(res.body)).toBe(202);
+			return { jobId: res.body.jobId, ref: res.body.calibration.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status, jsonb_array_length(cases) AS n FROM auto_calibration WHERE id = $1', [id]))[0]
+	},
+	uncertainty: {
+		// An ensemble started on B's run, and B's own job to compute it (as applying an automated fit queues one).
+		async queue(owner, b) {
+			await withFlow(owner, b.projectId);
+			const run = (await owner.call('POST', `/projects/${b.projectId}/runs`, { label: 'with flow' })).body.run.id as string;
+			const res = await owner.call('POST', `/projects/${b.projectId}/runs/${run}/uncertainty`, { request: { members: 30, thresholds: { minSkill: -10, maxLowFlowBiasPct: null, wr2012MaxLevel: 'unusable' } } });
+			expect(res.status, JSON.stringify(res.body)).toBe(201);
+			const { job } = await enqueue(owner, b.projectId, 'uncertainty', { uncertaintyId: res.body.ensemble.id });
+			return { jobId: job.id, ref: res.body.ensemble.id };
+		},
+		effect: async (id) => (await asOwner('SELECT status FROM run_uncertainty WHERE id = $1', [id]))[0].status
 	},
 	outlook: {
 		async queue(owner, b) {

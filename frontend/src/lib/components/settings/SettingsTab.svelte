@@ -4,6 +4,9 @@
 	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
 	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
 	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
+	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
+	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -39,7 +42,7 @@
 		type SeriesMeta
 	} from '@water-management/engine';
 	import { apanDailyOfValues } from '$lib/series/provenance';
-	import { applyReport } from '$lib/calibration/fit';
+	import { applyReport, marPenaltyOn } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
@@ -183,9 +186,10 @@
 	const outlookErr = $derived(outlookError(s.outlook));
 	let wr2012Error = $state<string | null>(null);
 	let qualityFlagsErr = $state<string | null>(null);
+	let rulesErr = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -193,6 +197,7 @@
 			{ id: 'set-record', message: calWindowError },
 			{ id: 'set-record', message: exclusionsError },
 			{ id: 'set-record', message: qualityFlagsErr },
+			{ id: 'set-fit', message: rulesErr },
 			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-rain', message: rainSourceError },
@@ -239,6 +244,18 @@
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
+	// The rules as saved: the server runs automated calibration only on these (issue #153).
+	const savedRules = $derived((JSON.parse(saved) as ProjectSettings).calibrationRules);
+
+	/** The server saved an automated fit (issue #153): take the project's settings as they now are. */
+	async function reloadAfterApply() {
+		const p = await api.projects.get(project.id);
+		onProjectChange(p);
+		s = clone(p.settings);
+		saved = JSON.stringify(clone(p.settings));
+		x2Open = s.gr4j.x2 !== 0;
+	}
+
 	function applyFit(report: CalibrationReport, record: FitRecord) {
 		s = { ...applyReport(s, report), fitRecord: record };
 		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
@@ -369,6 +386,8 @@
      Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
      the header's context says where the parameters came from. Outside the form, so it stays stuck
      down the panels after it too (inside, it scrolled away at Data feeds). -->
+<!-- No visible group names: with them its seventeen links no longer fit two rows at 1280 px, so its
+     links are evenly spaced instead (common/SectionNav, issue #162). -->
 <SectionNav groups={navGroups} label="Settings sections" />
 
 <form onsubmit={save} novalidate>
@@ -855,6 +874,26 @@
 				apanDaily={apanNow}
 				observedOrigin={observedOrigins ? (observedOrigins[s.fitRecord.flowKind as CalibrationFlowKind] ?? null) : undefined}
 			/>
+		{/if}
+		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
+		{#if s.calibrationRules}
+			<Lazy load={loadCalibrationRules}>
+				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={rulesErr} {readonly} />{/snippet}
+			</Lazy>
+			<Lazy load={loadAutoFit}>
+				{#snippet children(AutoFitPanel)}
+					<AutoFitPanel
+						projectId={project.id}
+						{savedRules}
+						formRules={s.calibrationRules}
+						formDirty={dirty}
+						penalty={marPenaltyOn(s as unknown as ProjectSettings)}
+						hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+						{readonly}
+						onApplied={reloadAfterApply}
+					/>
+				{/snippet}
+			</Lazy>
 		{/if}
 	</div>
 

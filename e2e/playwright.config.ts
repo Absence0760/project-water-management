@@ -4,6 +4,7 @@
 // ports and the database are per checkout (support/env.ts), so e2e runs in two
 // worktrees at once don't collide. See e2e/README.md.
 import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig, devices } from '@playwright/test';
 import { API_URL_STAMP, E2E_BUILD_DIR, E2E_CAPTCHA } from './support/build-site.ts';
 import { API_PORT, API_URL, APP_E2E_URL, WEB_PORT, WEB_URL } from './support/env.ts';
@@ -27,6 +28,9 @@ if (PREBUILT && !DEV_SERVER) {
 }
 // CI shards (E2E_BLOB=1) each write a blob report; the e2e-report job merges them.
 const BLOB = process.env.E2E_BLOB === '1';
+// The browser sees only the fonts in e2e/fonts (fonts.conf says why): the
+// same DejaVu everywhere, so a layout check that passes here passes in CI.
+export const E2E_FONTCONFIG = fileURLToPath(new URL('./fonts/fonts.conf', import.meta.url));
 
 export default defineConfig({
 	testDir: './tests',
@@ -51,7 +55,12 @@ export default defineConfig({
 		trace: 'retain-on-failure',
 		screenshot: 'only-on-failure'
 	},
-	projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+	projects: [
+		{
+			name: 'chromium',
+			use: { ...devices['Desktop Chrome'], launchOptions: { env: { ...process.env, FONTCONFIG_FILE: E2E_FONTCONFIG } } }
+		}
+	],
 	webServer: [
 		{
 			// Not `tsx watch`: a restart mid-run would drop requests.

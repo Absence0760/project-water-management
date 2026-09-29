@@ -27,10 +27,11 @@
 // The flags never change a stored series. They decide which days the fit's
 // objective scores (scoringDays) and what the data-quality panel (CR-22)
 // shows.
-import { toEpochDay } from '../calendar';
+import { toEpochDay, waterYearLabel, waterYearOf } from '../calendar';
 import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
+import type { CalibrationExclusion } from './provenance';
 import { ratingOf, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
 
 export * from './qualityFlagSettings';
@@ -335,3 +336,65 @@ export function flaggedDayMask(flags: Uint8Array): Uint8Array {
 	}
 	return out;
 }
+
+// Automated calibration's exclusion rule (issue #153, ./rulesSettings.ts
+// exclusions.maxFlaggedShare): the days flaggedDayMask marks, counted per water year.
+
+const sharePct = (v: number) => `${Math.round(v * 1000) / 10} %`;
+
+export interface FlaggedYearShare {
+	waterYear: number;
+	/** Observed days (any class but missing) in the calibration window, outside the stored exclusions. */
+	observedDays: number;
+	/** Of those, days flagged extrapolated, suspect or infilled. */
+	flaggedDays: number;
+	share: number;
+	excluded: boolean;
+}
+
+/** The reason an excluded year carries: it names the rule, so no one can mistake it for a person's choice. */
+export const flaggedYearReason = (y: Pick<FlaggedYearShare, 'flaggedDays' | 'observedDays' | 'share'>, maxShare: number) =>
+	`Rule (calibration rules, exclusions): ${y.flaggedDays} of ${y.observedDays} observed days flagged (${sharePct(y.share)}), more than ${sharePct(maxShare)}`;
+
+/**
+ * Each water year's flagged share over `windowDays` (run day indices inside
+ * the window and outside the stored exclusions), and the water years the
+ * rule leaves out. `flags` are the fitted record's per-day classes
+ * (flowDayFlags). maxShare null: every year kept.
+ */
+export function flaggedYearExclusions(
+	flags: Uint8Array,
+	windowDays: ArrayLike<number>,
+	startDate: string,
+	maxShare: number | null
+): { years: FlaggedYearShare[]; exclusions: CalibrationExclusion[] } {
+	const d0 = toEpochDay(startDate);
+	const byYear = new Map<number, { observed: number; flagged: number }>();
+	for (let i = 0; i < windowDays.length; i++) {
+		const t = windowDays[i]!;
+		const f = FLOW_DAY_FLAGS[flags[t]!];
+		if (f === 'missing') continue;
+		const wy = waterYearOf(d0 + t);
+		const y = byYear.get(wy) ?? { observed: 0, flagged: 0 };
+		y.observed++;
+		if (f === 'aboveRating' || f === 'belowRating' || f === 'suspect' || f === 'infilled') y.flagged++; // flaggedDayMask's days
+		byYear.set(wy, y);
+	}
+	const years = [...byYear.entries()]
+		.sort(([a], [b]) => a - b)
+		.map(([waterYear, y]) => {
+			const share = y.flagged / y.observed;
+			return { waterYear, observedDays: y.observed, flaggedDays: y.flagged, share, excluded: maxShare !== null && share > maxShare };
+		});
+	return {
+		years,
+		exclusions: years.filter((y) => y.excluded).map((y) => ({ waterYear: y.waterYear, reason: flaggedYearReason(y, maxShare!) }))
+	};
+}
+
+/** "WY 2015/16 (34 %)" for the years a rule left out. */
+export const flaggedYearsText = (years: readonly FlaggedYearShare[]) =>
+	years
+		.filter((y) => y.excluded)
+		.map((y) => `WY ${waterYearLabel(y.waterYear)} (${sharePct(y.share)})`)
+		.join(', ');

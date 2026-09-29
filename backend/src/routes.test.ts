@@ -130,6 +130,19 @@ describe('route auth inventory', () => {
 		}
 	});
 
+	// Automated calibration run by the server (issue #153, 108_auto_calibration): auth-gated like every project route.
+	it('inventories the automated calibration routes as auth-gated', () => {
+		for (const r of [
+			'POST /projects/:id/auto-calibrations',
+			'GET /projects/:id/auto-calibrations',
+			'GET /projects/:id/auto-calibrations/:cid',
+			'POST /projects/:id/auto-calibrations/:cid/apply'
+		]) {
+			expect(routes).toContain(r);
+			expect(PUBLIC.has(r)).toBe(false);
+		}
+	});
+
 	// Seasonal outlooks (issue #53 R5, 063_seasonal_outlook): auth-gated like every project route.
 	it('inventories the outlook routes as auth-gated', () => {
 		for (const r of [

@@ -11,7 +11,7 @@ export type SortKey = 'updated' | 'name' | OutcomeSortKey;
 
 /** The sort choices, in the order the Sort menu offers them. */
 export const SORT_LABELS: Record<SortKey, string> = {
-	updated: 'Recently updated',
+	updated: 'Recently edited',
 	attention: 'Needs attention first',
 	status: 'EWR status (worst first)',
 	farms: 'Hydrological units short (most first)',

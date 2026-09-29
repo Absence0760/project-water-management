@@ -60,10 +60,14 @@ test('a WUA sees every team catchment with its status, where the figures come fr
 	const pr = tableRow(page, 'Pf published A');
 	await expect(pr).toContainText(statusText(pubRow)!);
 	await expect(pr).toContainText('Published run');
-	await expect(pr).toContainText(/Figures to \d+ \w{3} 20\d\d, [\d\u202f]+ days ago/);
+	// The seeded rain ends on 28 Jan 2022: the one age wording, and dates, not "this week" (issue #162).
+	await expect(pr).toContainText(/Figures to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(pr).toContainText('Stale: over 7 days old');
 	await expect(pr).toContainText('Advisory · 15 %');
-	await expect(pr).toContainText(/\d+ of \d+ hydrological units? short this week/);
+	await expect(pr).toContainText(/\d+ of \d+ hydrological units? short in the week to 28 Jan 2022/);
+	await expect(pr).toContainText(/Rain to 28 Jan 2022 \(\d+ years ago\)/);
+	await expect(page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ })).toBeVisible();
+	await expect(page.getByText('Hydrological units short in the week to 28 Jan 2022', { exact: true })).toBeVisible();
 
 	// Run only: the EWR from the run, farms and dams honestly unknown.
 	const rr = tableRow(page, 'Pf run only A');
@@ -123,7 +127,7 @@ test('the page states which thresholds apply, and judges by the team’s once an
 // the Runs tab before issue #17): the panels render after the run's details
 // load, past the browser's own jump, so the page scrolls there itself and moves
 // focus to the table's heading.
-test('“hydrological units short this week” opens Hydrological units at the curtailment table, over the last 7 days; an old Runs link lands there too', async ({ page, owner }) => {
+test('“hydrological units short in the week to …” opens Hydrological units at the curtailment table, over the last 7 days; an old Runs link lands there too', async ({ page, owner }) => {
 	void owner;
 	// A published team catchment whose orchards are far too big for the water: its farms go short.
 	const request = page.request;
@@ -149,7 +153,7 @@ test('“hydrological units short this week” opens Hydrological units at the c
 	};
 
 	await page.goto(`/teams/${team.id}/portfolio`);
-	await tableRow(page, 'Pf short D').getByRole('link', { name: /units? short this week$/ }).click();
+	await tableRow(page, 'Pf short D').getByRole('link', { name: /units? short in the week to 28 Jan 2022$/ }).click();
 	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=supply&run=${runId}&window=last7#res-curtailment$`));
 	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();
 	await landed();
@@ -175,7 +179,8 @@ test('sorts by status (worst first) and by name, and keeps the sort in the addre
 	await page.goto(`/teams/${a.team.id}/portfolio`);
 	const heads = page.getByRole('table').getByRole('rowheader').getByRole('link');
 	await expect(heads).toHaveText(worstFirst);
-	const statusHead = page.getByRole('columnheader', { name: /EWR, last 30 days/ });
+	// Every catchment with figures ends on 28 Jan 2022: the heading names it rather than "last 30 days".
+	const statusHead = page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ });
 	await expect(statusHead).toHaveAttribute('aria-sort', 'ascending');
 
 	await page.getByRole('button', { name: /^Catchment/ }).click();
@@ -189,7 +194,7 @@ test('sorts by status (worst first) and by name, and keeps the sort in the addre
 	// A reload keeps it; the status heading flips back to worst first.
 	await page.reload();
 	await expect(heads).toHaveText(['Pf run only B', 'Pf published B', 'Pf empty B']);
-	await page.getByRole('button', { name: /EWR, last 30 days/ }).click();
+	await page.getByRole('button', { name: /^EWR, 30 days to 28 Jan 2022/ }).click();
 	await expect(heads).toHaveText(worstFirst);
 	await expect(page).not.toHaveURL(/sort=/);
 });

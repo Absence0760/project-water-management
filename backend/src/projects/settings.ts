@@ -56,6 +56,16 @@ import {
 	ratingError,
 	RATING_SOURCE_MAX,
 	ZERO_RUN_RULES,
+	calibrationRulesError,
+	resolveCalibrationRules,
+	type CalibrationRules as CalibrationRulesT,
+	RULE_CASES_MAX,
+	sameRules,
+	sameSignOff,
+	canonicalJson,
+	SELECTION_TESTS,
+	ON_NEW_DATA,
+	SIGNED_OFF_BY_MAX,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -130,7 +140,38 @@ export function remapSettingNodeIds(stored: unknown, ids: ReadonlyMap<string, st
  * areal rainfall correction (engine ≥ 1.13.0) is one set of factors with its
  * own source.
  */
-const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain']);
+const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRules']);
+
+/**
+ * settings.calibrationRules after a save (engine ≥ 1.25.0, issue #153): the
+ * revision is the server's, whatever the client sent. A save that changes a
+ * rule adds 1 to it and clears the sign-off, which covered the rules as they
+ * were, unless the same save records a new sign-off (one that differs from
+ * the stored one). A save that only signs off, or changes nothing, keeps the
+ * revision.
+ */
+export function nextCalibrationRules(stored: unknown, sent: unknown): CalibrationRulesT {
+	const before = resolveCalibrationRules(stored, []);
+	const next = resolveCalibrationRules({ ...(isObj(sent) ? sent : {}), revision: before.revision }, []);
+	if (sameRules(before, next)) return next;
+	const newSignOff = !sameSignOff(next.signedOff, before.signedOff);
+	return { ...next, revision: before.revision + 1, signedOff: newSignOff ? next.signedOff : null };
+}
+
+/**
+ * What a save does to the rules' sign-off: records a new one (its rules
+ * carry one that isn't the stored one; the route stamps today's date and
+ * audits it with the signed-in account), withdraws it (the stored one is
+ * gone and no rule changed; audited too), or neither (a rule change that
+ * clears it is in the settings history already).
+ */
+export function signOffChange(stored: unknown, next: ProjectSettings): 'signed' | 'withdrawn' | null {
+	const was = resolveCalibrationRules(stored && typeof stored === 'object' ? (stored as Record<string, unknown>).calibrationRules : undefined, []);
+	const now = next.calibrationRules;
+	if (now?.signedOff && !sameSignOff(now.signedOff, was.signedOff)) return 'signed';
+	if (was.signedOff && !now?.signedOff && now && sameRules(was, now)) return 'withdrawn';
+	return null;
+}
 
 /**
  * A settings patch applied over the stored settings: top-level keys replace,
@@ -145,8 +186,52 @@ export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 	for (const [k, v] of Object.entries(patch)) {
 		if (!REPLACED_WHOLE.has(k) && isObj(v) && isObj(current[k])) out[k] = { ...(current[k] as Json), ...v };
 	}
+	if ('calibrationRules' in patch) out.calibrationRules = nextCalibrationRules(current.calibrationRules, patch.calibrationRules);
 	out.fitRecord = resolveFitRecord(out as Partial<ProjectSettings> & Json);
 	return out as unknown as ProjectSettings;
+}
+
+/**
+ * Why a save can't store this automated fit (FitRecord.auto), or null. The
+ * server computes automated fits and writes their records itself
+ * (calibration/store.ts applyCalibration), so a save may only carry the
+ * stored record back as it was; any new or altered `auto` is refused (issue
+ * #153). `stored` is the project's settings before the save, `next` what the
+ * save produces.
+ */
+export function autoFitRecordError(stored: ProjectSettings, next: ProjectSettings): string | null {
+	const rec = next.fitRecord;
+	if (!rec?.auto) return null;
+	const was = stored.fitRecord;
+	if (was && was.fittedAt === rec.fittedAt && was.seed === rec.seed && canonicalJson(was.auto ?? null) === canonicalJson(rec.auto)) return null;
+	return 'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly';
+}
+
+/**
+ * Why an automated fit record doesn't belong with these rules, or null: it
+ * ran under another revision, or rules whose content or sign-off differ, or
+ * its parameters aren't the kept case's (a client can't claim one case and
+ * store another). The fit itself runs in the browser, so the scores it
+ * reports can't be re-checked here; the rules they were chosen by can.
+ */
+function autoRecordMismatch(rec: NonNullable<ProjectSettings['fitRecord']>, rules: ReturnType<typeof resolveCalibrationRules>, which: 'saved' | 'file’s'): string | null {
+	const auto = rec.auto!;
+	const ran = auto.rules;
+	if (ran.revision !== rules.revision)
+		return `this automated fit ran under calibration rules revision ${ran.revision}, but the ${which} rules are revision ${rules.revision}: run it again under the ${which} rules`;
+	if (!sameRules(ran, rules) || !sameSignOff(ran.signedOff, rules.signedOff))
+		return `this automated fit ran under other calibration rules than the ${which} revision ${rules.revision} (their content or sign-off differs): run it again under the ${which} rules`;
+	const kept = auto.cases[auto.chosen];
+	if (!kept?.params || rec.free.some((k) => kept.params![k] !== rec.params[k]))
+		return 'the fit record’s parameters are not those of the case the calibration rules kept';
+	return null;
+}
+
+/** Why an imported project's automated fit record doesn't match the file's own calibration rules, or null. */
+export function importedAutoFitError(settings: Record<string, unknown>): string | null {
+	const rec = settings.fitRecord as ProjectSettings['fitRecord'] | undefined;
+	if (!rec?.auto) return null;
+	return autoRecordMismatch(rec, resolveCalibrationRules(settings.calibrationRules, []), 'file’s');
 }
 
 const monthly = z.array(z.number().finite()).length(12);
@@ -525,6 +610,65 @@ const DayQuality = z
 		notes: z.array(z.string().max(2000)).max(20)
 	})
 	.strict();
+/**
+ * settings.calibrationRules (engine ≥ 1.25.0, issue #153, engine
+ * calibrate/rulesSettings.ts): replaced whole on a save. `revision` is
+ * optional in a patch and ignored (patchSettings sets it); in a fit record
+ * it is the revision the fit ran under.
+ */
+const calibrationRulesShape = {
+	revision: z.number().int().min(1).max(1_000_000),
+	exclusions: z.object({ maxFlaggedShare: z.number().gt(0).lt(1).nullable() }).strict(),
+	forcing: z.object({ pan: z.array(z.string().min(1).max(40)).min(1).max(RULE_CASES_MAX) }).strict(),
+	cases: z
+		.object({
+			bounds: z.array(z.enum(CALIBRATION_BOUNDS)).min(1).max(CALIBRATION_BOUNDS.length),
+			objectives: z.array(z.enum(OBJECTIVES)).min(1).max(OBJECTIVES.length)
+		})
+		.strict(),
+	selection: z.object({ test: z.enum(SELECTION_TESTS), score: z.enum(OBJECTIVES) }).strict(),
+	// The seed, starts and model runs per fit: bounds checked by calibrationRulesError.
+	run: z.object({ seed: z.number().int(), starts: z.number().int(), budget: z.number().int() }).strict(),
+	after: z.object({ onNewData: z.enum(ON_NEW_DATA), ensemble: z.boolean() }).strict(),
+	filters: z.object({ wr2012Mar: z.boolean(), typicalParams: z.boolean() }).strict(),
+	// The signer's typed name (a signature) and the date, which the server replaces with today's on a new sign-off (routes.ts).
+	signedOff: z.object({ by: z.string().trim().min(1).max(SIGNED_OFF_BY_MAX), on: isoDate }).strict().nullable()
+};
+const rulesChecked = (r: Parameters<typeof calibrationRulesError>[0], ctx: z.RefinementCtx) => {
+	const err = calibrationRulesError(r);
+	if (err) ctx.addIssue({ code: 'custom', message: err });
+};
+const CalibrationRulesPatch = z
+	.object({ ...calibrationRulesShape, revision: calibrationRulesShape.revision.optional() })
+	.strict()
+	.superRefine((r, ctx) => rulesChecked({ ...r, revision: r.revision ?? 1 }, ctx));
+const CalibrationRules = z.object(calibrationRulesShape).strict().superRefine(rulesChecked);
+/** FitRecord.auto (engine AutoFitRecord): how automated calibration chose the fit. */
+const AutoFitRecord = z
+	.object({
+		rules: CalibrationRules,
+		ruleExclusions: ExclusionList,
+		chosen: z.number().int().min(0).max(RULE_CASES_MAX - 1),
+		cases: z
+			.array(
+				z
+					.object({
+						label: z.string().max(300),
+						pan: z.string().max(40),
+						bounds: z.enum(CALIBRATION_BOUNDS),
+						objective: z.enum(OBJECTIVES),
+						score: z.number().finite().nullable(),
+						eligible: z.boolean(),
+						reasons: z.array(z.string().max(2000)).max(20),
+						params: params.nullable()
+					})
+					.strict()
+			)
+			.min(1)
+			.max(RULE_CASES_MAX)
+	})
+	.strict()
+	.refine((a) => a.chosen < a.cases.length && a.cases[a.chosen]!.eligible, 'the kept case must be one of the cases, and eligible');
 const ValidationTest = z.object({ params, calibration: ScoredPeriod, validation: ScoredPeriod });
 const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
 
@@ -675,7 +819,9 @@ export const FitRecord = z
 			.nullable()
 			.optional(),
 		// `useFilledDays` only on a record made on the branch before the quality flags (never deployed); never read.
-		flowGapFill: z.object({ spec: GapFillSpec.nullable(), useFilledDays: z.boolean().optional() }).strict().optional()
+		flowGapFill: z.object({ spec: GapFillSpec.nullable(), useFilledDays: z.boolean().optional() }).strict().optional(),
+		// Engine ≥ 1.25.0 (issue #153): set when automated calibration picked the fit. Optional: absent on a fit a person chose.
+		auto: AutoFitRecord.optional()
 	})
 	.strict();
 
@@ -775,6 +921,8 @@ export const SettingsPatch = z
 		flowGapFill: FlowGapFill,
 		// Per-day quality flags (engine calibrate/dayFlags.ts, CR-18/19): any subset of the group; `ratings` is replaced whole.
 		qualityFlags: QualityFlags.partial(),
+		// Automated calibration's rules (engine calibrate/rulesSettings.ts, issue #153): replaced whole; the server sets the revision.
+		calibrationRules: CalibrationRulesPatch,
 		fitRecord: FitRecord.nullable(),
 		// Data-quality limits (engine resolveDataQuality): gauge vs logger, and
 		// (engine ≥ 1.20.0, issue #66) outliers, flat-lines, zero-rain runs and

@@ -48,34 +48,67 @@ describe('engine invariants on random networks', () => {
 		expect(checkAll(randomInput(921), 921)).toBeNull();
 	});
 
-	it('seed 1774: a supply fraction short of 1 by float noise in the dam volumes is not a rise (checkDoubledCropAreas)', () => {
-		// n14's dam seeps all it holds every day and a supplemental dam-target borehole
-		// (1e9 m³/day, its cap taken off by droughtBoreholesAsSupplemental) refills it to
-		// dead storage + demand, ≈ 2.19e5 m³; the dam then gives back the demand only to an
-		// ulp of that volume (2.9e-11 m³). The shortfall is absolute, so doubling the demand
-		// halves the fraction it leaves: 0.9999999999964 → 0.9999999999984 (2 000-case soak,
-		// engine 1.3.0). The law allows a few ulps of the farm's volumes over its demand.
-		const input = droughtBoreholesAsSupplemental(randomInput(1774));
-		const base = structuredClone(input);
-		for (const n of base.model.nodes) n.lossReturnFraction = 0;
-		const doubled = structuredClone(base);
-		for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
-		const run = (x: ModelInput) => {
-			const out = runModel(x);
-			const f = out.summary.farms.find((f) => f.nodeId === 'n14')!;
-			const d = out.series.find((s) => s.nodeId === 'n14' && s.key === 'demand')!.values;
-			const g = out.series.find((s) => s.nodeId === 'n14' && s.key === 'supplied')!.values;
-			let worst = 0;
-			for (let t = 0; t < d.length; t++) worst = Math.max(worst, d[t]! - g[t]!);
-			return { fraction: f.fractionSupplied, worst };
-		};
-		const [a, b] = [run(base), run(doubled)];
-		// The noise the law has to allow: a rise, but of the order of 1e-12, from a daily shortfall under 2 ulps of 2.19e5 m³.
-		expect(b.fraction).toBeGreaterThan(a.fraction);
-		expect(b.fraction - a.fraction).toBeLessThan(1e-11);
-		expect(Math.max(a.worst, b.worst)).toBeLessThan(2 * 2 ** -35);
-		expect(checkDoubledCropAreas(input)).toBeNull();
-		expect(checkAll(randomInput(1774), 1774)).toBeNull();
+	it('engine 1.24.0: a supplemental dam-target top-up supplies the demand exactly, not an ulp of the dam short (seeds 1774, 11421)', () => {
+		// n14's dam seeps all it holds every day and a supplemental dam-target borehole (1e9 m³/day, its cap
+		// taken off by droughtBoreholesAsSupplemental) refills it to dead storage + demand. Until 1.24.0 the
+		// dam then gave back the demand only to an ulp of its volume: seed 1774 (2.19e5 m³, 2 000-case soak on
+		// 1.3.0) left the supply fraction 0.9999999999964 → 0.9999999999984 when the demand doubled, and seed
+		// 11421 (1.43e6 m³, 20 000-case soak on 1.20.0, #164) left 1e-10 m³ of a 0.011 m³ demand unmet, a day
+		// time reliability counted as failed, and more days of it in the base run than the doubled one
+		// (0.98343 → 0.98481). A unit that pumped all it was asked for now leaves the dam supplying `rem`
+		// itself (network/boreholes.ts groundwaterDay), so a top-up day is short by no more than an ulp of its demand.
+		for (const [seed, id] of [[1774, 'n14'], [11421, 'n14']] as const) {
+			const input = droughtBoreholesAsSupplemental(randomInput(seed));
+			expect(input.model.boreholes!.some((b) => b.nodeId === id && b.mode === 'supplemental' && b.target === 'dam'), `seed ${seed}`).toBe(true);
+			const base = structuredClone(input);
+			for (const n of base.model.nodes) n.lossReturnFraction = 0;
+			const doubled = structuredClone(base);
+			for (const a of doubled.model.cropAreas) a.areaM2 *= 2;
+			for (const x of [base, doubled]) {
+				const out = runModel(x);
+				const d = out.series.find((s) => s.nodeId === id && s.key === 'demand')!.values;
+				const g = out.series.find((s) => s.nodeId === id && s.key === 'supplied')!.values;
+				const gd = out.series.find((s) => s.nodeId === id && s.key === 'groundwater_to_dam')!.values;
+				let topUps = 0;
+				for (let t = 0; t < d.length; t++) {
+					if (!(gd[t]! > 0 && d[t]! > 0)) continue;
+					topUps++;
+					// What's left is the demand's own rounding (GWp + (D − GWp)), an ulp of D, not of the dam.
+					expect(d[t]! - g[t]!, `seed ${seed} day ${t}: ${g[t]} of ${d[t]}`).toBeLessThanOrEqual(4 * Number.EPSILON * d[t]!);
+				}
+				expect(topUps, `seed ${seed}`).toBeGreaterThan(0);
+			}
+			expect(checkDoubledCropAreas(input), `seed ${seed}`).toBeNull();
+			expect(checkAll(randomInput(seed), seed), `seed ${seed}`).toBeNull();
+		}
+	});
+
+	it('engine 1.24.0: a unit with river off-take water is never supplied an ulp above its demand (seed 15467)', () => {
+		// n7's supply was Xused + MIN(the rest, D − Xused), which rounds one ulp above D: 3439.3663942672592 >
+		// 3439.366394267259 on day 0, a curtailment row supplied above its demand (20 000-case soak on 1.20.0, #164).
+		const input = randomInput(15467);
+		const out = runModel(input);
+		expect(out.series.some((s) => s.key === 'offtake_in' && s.nodeId === 'n7' && s.values.some((v) => v > 0))).toBe(true);
+		const get = new Map(out.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));
+		for (const n of input.model.nodes) {
+			const d = get.get(`${n.id}|demand`);
+			const g = get.get(`${n.id}|supplied`);
+			if (d && g) for (let t = 0; t < d.length; t++) expect(g[t]! <= d[t]!, `${n.id} day ${t}: ${g[t]} > ${d[t]}`).toBe(true);
+		}
+		expect(checkAll(input, 15467)).toBeNull();
+	});
+
+	it('seed 10306: the depletion infeed worked back from a 6e9 m³ deficit is judged at that scale (checkGroundwater)', () => {
+		// u1's boreholes have two depletion factors, so checkGroundwater works each day's infeed back from the
+		// lag store and the carried deficit. With 6.18e9 m³ owed (ulp 9.5e-7) that left 1.1e-6 m³ of infeed on
+		// a day nothing was pumped, outside a tolerance sized without the deficit (20 000-case soak on 1.20.0,
+		// #164). A check harness change, no engine change; the store identity is still checked day by day.
+		const input = randomInput(10306);
+		const out = runModel(input);
+		const owed = out.series.find((s) => s.nodeId === 'u1' && s.key === 'depletion_deficit')!.values;
+		expect(Math.max(...owed)).toBeGreaterThan(1e9);
+		expect(checkInvariants(input, out)).toBeNull();
+		expect(checkAll(input, 10306)).toBeNull();
 	});
 
 	it('engine 0.21.1: doubling crop areas never raises the supply fraction below a steep, shallow dam (seeds 4197, 7686, 15979, 17277)', () => {

@@ -227,11 +227,30 @@ test.describe('desktop', () => {
 	test('the header controls stay one row, beside the title where they fit, the pair last', async ({ page, owner }) => {
 		void owner;
 		const p = await seedBig(page, 'Desktop header row');
-		// Allocations' picker and three actions don't fit beside the title at 1440: one row under it.
-		for (const [tab, beside] of [['settings', true], ['network', true], ['allocations', false]] as const) {
+		// Whether a tab's controls fit beside its title depends on its words (the seeded
+		// Network's long context line comes within a few px at 1440): measure it rather than
+		// guess, then check the header follows. Settings fits with room to spare, so the
+		// beside layout is always exercised; Allocations' picker and three actions never do.
+		for (const [tab, expected] of [['settings', true], ['network', null], ['allocations', false]] as const) {
 			await page.goto(`/projects/${p.id}?tab=${tab}`);
 			const h = header(page);
 			await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
+			// Allocations adds Download CSV once its volumes load, which moves the row: measure the settled header.
+			if (tab === 'allocations') await expect(h.getByRole('link', { name: 'Download CSV' })).toBeVisible();
+			// The title and its context on one line, the gap, then every control on one line: does it fit the row?
+			const fits = await h.evaluate((el) => {
+				const row = el.querySelector('.row') as HTMLElement;
+				const title = row.querySelector('.title') as HTMLElement;
+				const actions = row.querySelector('.actions') as HTMLElement;
+				title.style.flex = 'none';
+				actions.style.flexWrap = 'nowrap';
+				const need = title.getBoundingClientRect().width + parseFloat(getComputedStyle(row).columnGap) + actions.scrollWidth;
+				title.style.flex = '';
+				actions.style.flexWrap = '';
+				return need <= row.getBoundingClientRect().width;
+			});
+			if (expected !== null) expect(fits, tab).toBe(expected);
+			const beside = fits;
 			const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 			const pill = (await h.locator('summary', { hasText: 'Rain up to' }).boundingBox())!;
 			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;

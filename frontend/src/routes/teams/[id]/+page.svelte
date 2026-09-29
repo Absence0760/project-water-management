@@ -6,6 +6,7 @@
 	// members beside them. The name, the thresholds and leave/delete sit in the
 	// settings sheet (`?settings=1`, lib/components/teams/TeamSettings.svelte),
 	// out of the reading path.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -14,6 +15,8 @@
 		api,
 		ApiError,
 		hasTeamRole,
+		roleLabel,
+		roleTitle,
 		TEAM_ROLES,
 		type Invite,
 		type Portfolio,
@@ -37,6 +40,8 @@
 		curtailmentHref,
 		damText,
 		DEFAULT_SORT,
+		ewrWindowLabel,
+		farmsShortLabel,
 		farmsShortText,
 		farmsShortTotalText,
 		farmsUnknownText,
@@ -48,6 +53,7 @@
 	} from '$lib/components/portfolio/portfolio';
 	import TeamSettings from '$lib/components/teams/TeamSettings.svelte';
 	import { withParam, withoutParam } from '$lib/workspace/overlays';
+	import { STALE_DAYS } from '$lib/format/age';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	const teamId = $derived(page.params.id ?? '');
@@ -144,11 +150,11 @@
 			const r = await api.teams.addMember(teamId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				addToMembers(r.member);
 				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());
-				added = `${r.member.displayName} added as ${r.member.role}.`;
+				added = `${r.member.displayName} added as ${roleLabel(r.member.role)}.`;
 			}
 			email = '';
 			role = 'member';
@@ -184,14 +190,26 @@
 		const self = m.userId === me;
 		if (soleAdmin(m)) {
 			error = self
-				? 'You are the only admin. Make another member an admin before you leave, or delete the team.'
-				: 'A team must keep at least one admin.';
+				? 'You are the only owner. Make someone else an owner before you leave, or delete the team.'
+				: 'A team must keep at least one owner.';
 			return;
 		}
-		const q = self
-			? `Leave ${team?.name}? You lose access to its projects unless they're also shared with you directly.`
-			: `Remove ${m.displayName} (${m.email}) from the team? They lose access to its projects unless shared directly.`;
-		if (!confirm(q)) return;
+		const ok = await confirmDialog(
+			self
+				? {
+						title: `Leave ${team?.name}?`,
+						message: "You lose access to its projects unless they're also shared with you directly.",
+						confirmLabel: 'Leave team',
+						danger: true
+					}
+				: {
+						title: 'Remove this member?',
+						message: `Remove ${m.displayName} (${m.email}) from the team? They lose access to its projects unless shared directly.`,
+						confirmLabel: 'Remove member',
+						danger: true
+					}
+		);
+		if (!ok) return;
 		busy = m.userId;
 		error = null;
 		try {
@@ -249,7 +267,7 @@
 		<div class="p-ewr">
 			<StatusPill {p} />
 			{#if age}<span class="sub">Figures {age}</span>{/if}
-			{#if p.stale}<span class="badge badge-warn flag">Stale: over 7 days old</span>{/if}
+			{#if p.stale}<span class="badge badge-warn flag">Stale: over {STALE_DAYS} days old</span>{/if}
 		</div>
 		<dl class="p-facts">
 			<div>
@@ -284,7 +302,7 @@
 				<div class="title">
 					<div class="head">
 						<h1>{team.name}</h1>
-						<span class="badge" class:badge-owner={isAdmin}>{team.role}</span>
+						<span class="badge" class:badge-owner={isAdmin}>{roleLabel(team.role)}</span>
 					</div>
 					<p class="muted facts">
 						{plural(team.projectCount, 'project')}{#if totals && totals.catchments}{' '}({statusSummary(totals.counts)}){/if} ·
@@ -316,11 +334,11 @@
 						{:else if totals && rows.length}
 							<dl class="kpis">
 								<div class="kpi">
-									<dt>EWR, last 30 days</dt>
+									<dt>{ewrWindowLabel(rows)}</dt>
 									<dd><StatusBar counts={totals.counts} /></dd>
 								</div>
 								<div class="kpi">
-									<dt>Hydrological units short this week</dt>
+									<dt>{farmsShortLabel(rows)}</dt>
 									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
 								</div>
 								<div class="kpi">
@@ -353,7 +371,7 @@
 					<section class="panel members" aria-labelledby="members-h">
 						<div class="panel-head">
 							<h2 id="members-h">Members</h2>
-							{#if !isAdmin}<span class="muted small">Only admins can manage members.</span>{/if}
+							{#if !isAdmin}<span class="muted small">Only owners can manage members.</span>{/if}
 						</div>
 						<div class="table-wrap">
 							<table class="data">
@@ -380,11 +398,11 @@
 														onchange={(e) => setRole(m, e.currentTarget.value as TeamRole)}
 													>
 														{#each TEAM_ROLES as r (r)}
-															<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{r}</option>
+															<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{roleLabel(r)}</option>
 														{/each}
 													</select>
 												{:else}
-													<span class="badge" class:badge-owner={m.role === 'admin'}>{m.role}</span>
+													<span class="badge" class:badge-owner={m.role === 'admin'}>{roleLabel(m.role)}</span>
 												{/if}
 											</td>
 											<td class="act">
@@ -417,7 +435,7 @@
 									<div class="field">
 										<label for="tm-role">Role</label>
 										<select id="tm-role" bind:value={role}>
-											{#each TEAM_ROLES as r (r)}<option value={r}>{r}</option>{/each}
+											{#each TEAM_ROLES as r (r)}<option value={r}>{roleLabel(r)}</option>{/each}
 										</select>
 									</div>
 									<button class="btn btn-primary" type="submit" disabled={adding || !email.trim()}>
@@ -442,9 +460,9 @@
 							{/key}
 						{/if}
 						<dl class="roles">
-							<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
-							<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
-							<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
+							<div><dt>{roleTitle('viewer')}</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
+							<div><dt>{roleTitle('member')}</dt><dd>Edits every team project: model, data and runs.</dd></div>
+							<div><dt>{roleTitle('admin')}</dt><dd>Owns every team project (delete, share, move) and manages this team.</dd></div>
 						</dl>
 						<p class="muted small">Anyone without an account gets an email invitation to sign up.</p>
 					</section>

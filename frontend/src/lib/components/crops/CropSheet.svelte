@@ -4,6 +4,7 @@
 	// the URL). It edits the shared ModelEditor, the same values as the Crop
 	// factors grid. The sheet is modal, which hides the save bar, so it
 	// carries the save row (model/ModelSaveRow.svelte), as the farm drawer does.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
@@ -43,11 +44,21 @@
 		})
 	);
 
-	function remove() {
+	async function remove() {
 		if (!crop) return;
-		const used = editor.model.cropAreas.some((a) => a.cropId === crop.id);
-		if (used && !confirm(`Remove crop "${label}" and its planted areas on every hydrological unit?`)) return;
-		editor.removeCrop(crop.id);
+		const id = crop.id;
+		const used = editor.model.cropAreas.some((a) => a.cropId === id);
+		if (
+			used &&
+			!(await confirmDialog({
+				title: `Remove crop “${label}”?`,
+				message: 'Its planted areas on every hydrological unit are removed too.',
+				confirmLabel: 'Remove crop',
+				danger: true
+			}))
+		)
+			return;
+		editor.removeCrop(id);
 		open = false;
 	}
 </script>

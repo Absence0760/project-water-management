@@ -31,7 +31,8 @@
 		subtitle,
 		children,
 		footer,
-		legal = true
+		legal = true,
+		fit = false
 	}: {
 		title: string;
 		subtitle?: string;
@@ -39,10 +40,17 @@
 		footer?: Snippet;
 		/** The Privacy notice and Terms of use links under the form; the sign-up page names them in its own sentence instead. */
 		legal?: boolean;
+		/**
+		 * On a wide screen, fit the card to the window instead of letting the page
+		 * scroll: the form is a column whose `.fit-shrink` element (the sign-up
+		 * form's contained terms summary) gives up height first. Past its own
+		 * minimum the page scrolls after all. Phones scroll the page as usual.
+		 */
+		fit?: boolean;
 	} = $props();
 </script>
 
-<div class="auth">
+<div class="auth" class:fit>
 
 	<main class="side-form">
 		<div class="form-box">
@@ -114,7 +122,7 @@
 	.copy {
 		position: relative;
 		max-width: 30rem;
-		padding: clamp(2rem, 6vh, 4rem) clamp(1.5rem, 5vw, 4rem);
+		padding: clamp(1.25rem, 3vh, 4rem) clamp(1.5rem, 5vw, 4rem);
 	}
 	.kicker {
 		margin: 0 0 0.75rem;
@@ -163,12 +171,13 @@
 		display: flex;
 		align-items: flex-start;
 		justify-content: center;
-		padding: clamp(2rem, 6vh, 4rem) var(--gutter) 2.5rem;
+		padding: clamp(1.25rem, 3vh, 4rem) var(--gutter) 2.5rem;
 		background: var(--surface);
 	}
 	.form-box {
 		width: 100%;
-		max-width: 380px;
+		/* 440 px (was 380), issue #162: fewer wrapped lines, so the sign-up form fits a 1280×800 window. */
+		max-width: 440px;
 	}
 	.top {
 		display: flex;
@@ -176,7 +185,8 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem 1rem;
-		margin-bottom: 2rem;
+		/* 1rem (was 2rem) and the 3vh top (was 6vh), issue #162: room for the sign-up form on a laptop's window. */
+		margin-bottom: 1rem;
 	}
 	.lockup {
 		text-decoration: none;
@@ -262,6 +272,55 @@
 	.footer :global(a) {
 		text-decoration: underline;
 		font-weight: 500;
+	}
+	/* fit: the form's column is at most the window's height, and only the
+	   .fit-shrink element (with overflow of its own) shrinks to make it so. */
+	@media (min-width: 901px) {
+		.fit .side-form {
+			height: 100vh;
+			height: 100dvh;
+			padding-bottom: 0.5rem;
+		}
+		/* Tighter below the title (above it stays as on every sign-in page, so the title doesn't move). */
+		.fit .intro,
+		.fit h1.solo {
+			margin-bottom: 0.75rem;
+		}
+		/* A message above the form (the dead invitation's warning): its gap is the first field's. */
+		.fit .form-box > :global(.alert) {
+			margin-bottom: 0;
+		}
+		.fit .form-box > :global(form > :first-child) {
+			margin-top: 0.5rem;
+		}
+		.fit .form-box :global(.field) {
+			margin-bottom: 0.5rem;
+		}
+		.fit .footer {
+			margin-top: 0.5rem;
+			padding-top: 0.5rem;
+		}
+		.fit .form-box {
+			display: flex;
+			flex-direction: column;
+			max-height: 100%;
+		}
+		.fit .form-box > :global(*) {
+			flex: none;
+		}
+		/* The form's fields join the column itself: a nested box that shrank would
+		   let its fields spill over the footer once the window is too short even
+		   for the smallest summary, where they should push the page to scroll. */
+		.fit .form-box > :global(form) {
+			display: contents;
+		}
+		.fit .form-box > :global(form > *) {
+			flex: none;
+		}
+		.fit .form-box > :global(form > .fit-shrink) {
+			flex: 0 1 auto;
+			margin-bottom: 0.5rem;
+		}
 	}
 	@media (prefers-color-scheme: dark) {
 		.panel-brand {

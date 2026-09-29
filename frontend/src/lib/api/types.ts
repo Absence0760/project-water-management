@@ -2,6 +2,12 @@
 import type { Locale } from '@water-management/engine/languages';
 import type {
 	AppliedOp,
+	CalibrationBounds,
+	CalibrationExclusion,
+	CalibrationRules,
+	FilterResult,
+	FlaggedYearShare,
+	ObjectiveId,
 	CatchmentView,
 	EnsembleHeader,
 	EnsembleRequest,
@@ -46,8 +52,7 @@ import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 /** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
 export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
-/** A role as people read it: a `contributor` is an applicant. */
-export const ROLE_LABEL: Record<Role, string> = { farmer: 'farmer', contributor: 'applicant', viewer: 'viewer', editor: 'editor', owner: 'owner' };
+/** How a role reads (a `contributor` is an applicant, a team `admin` an owner): ./roleLabels.ts. */
 
 export interface User {
 	id: string;
@@ -316,7 +321,8 @@ export interface BulkFarmerResult {
 
 /**
  * Team roles, lowest first: on every team project a viewer is a viewer, a
- * member an editor and an admin an owner (docs/data-model.md § Teams).
+ * member an editor and an admin an owner (docs/data-model.md § Teams). The UI
+ * shows them by those project names (roleLabel, ./roleLabels.ts).
  */
 export type TeamRole = 'viewer' | 'member' | 'admin';
 export const TEAM_ROLES: readonly TeamRole[] = ['viewer', 'member', 'admin'];
@@ -1481,6 +1487,47 @@ export interface SweepRequest {
 	name: string;
 	baseRunId: string;
 	members: { name: string; ops: ScenarioOp[] }[];
+}
+
+/** One fit of a server run of the calibration rules (docs/api.md § Automated calibration, issue #153). */
+export interface AutoCalibrationCase {
+	label: string;
+	pan: { id: string; label: string; values: number[] | null };
+	bounds: CalibrationBounds;
+	objective: ObjectiveId;
+	/** The held-out score the rules keep a fit by; null when the record doesn't allow the test. */
+	score: number | null;
+	naturalMarMm3: number | null;
+	eligible: boolean;
+	reasons: string[];
+	filters: FilterResult[];
+	error: string | null;
+	/** The fitted parameters (the free ones); null when the fit failed. */
+	params: Record<string, number> | null;
+}
+
+/** A server run of the project's calibration rules (backend calibration/store.ts AutoCalibrationRow). */
+export interface AutoCalibration {
+	id: string;
+	/** manual: an editor asked; new_data: new observed or rain data queued it (calibrationRules.after.onNewData). */
+	trigger: 'manual' | 'new_data';
+	status: 'running' | 'complete' | 'failed';
+	rulesRevision: number;
+	rules: CalibrationRules;
+	plan: { flowKind: string; validationRecord: string | null; years: FlaggedYearShare[]; ruleExclusions: CalibrationExclusion[]; notes: string[]; cases: { label: string }[] };
+	cases: AutoCalibrationCase[];
+	report: { chosen: number | null; notes: string[] } | null;
+	chosen: number | null;
+	error: string | null;
+	engineVersion: string;
+	job: { id: string; status: JobMeta['status']; error: string | null; progress: number | null } | null;
+	createdBy: string | null;
+	createdAt: string;
+	completedAt: string | null;
+	appliedBy: string | null;
+	appliedAt: string | null;
+	appliedRunId: string | null;
+	uncertaintyId: string | null;
 }
 
 /** A water year an outlook left out (docs/api.md § Seasonal outlooks): the engine's reasons, or the backend's. */

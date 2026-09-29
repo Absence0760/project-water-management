@@ -72,8 +72,13 @@ describe('what an item says', () => {
 		expect(eventLine(ev('member.added', { displayName: 'Ben', role: 'viewer', via: 'invite' }))).toBe('Ben joined as viewer (accepted an invite)');
 		expect(eventLine(ev('member.removed', { displayName: 'Ben', role: 'farmer', self: true }))).toBe('Ben left the project');
 		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'editor' }))).toBe('Changed Ben’s role from viewer to editor');
+		expect(eventLine(ev('member.role', { displayName: 'Ben', from: 'viewer', to: 'contributor' }))).toBe('Changed Ben’s role from viewer to applicant');
+		expect(eventLine(ev('invite.sent', { email: 'j•••@example.com', role: 'admin' }))).toBe('Invited j•••@example.com as owner');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: null, to: 'Rooikloof Trust' }))).toBe('Put Ben in the applying party Rooikloof Trust');
 		expect(eventLine(ev('member.party', { displayName: 'Ben', from: 'Rooikloof Trust', to: null }))).toBe('Took Ben out of the applying party Rooikloof Trust');
+		// The calibration rules' sign-off and its withdrawal (issue #153).
+		expect(eventLine(ev('calibration_rules.signed_off', { revision: 3, fullName: 'Dr A. Hydrologist' }))).toBe('Signed off the calibration rules (revision 3) as Dr A. Hydrologist');
+		expect(eventLine(ev('calibration_rules.sign_off_withdrawn', { revision: 3 }))).toBe('Withdrew the sign-off of the calibration rules (revision 3)');
 		expect(eventLine(ev('signoff.created', { fullName: 'Dr A. Hydrologist', registrationBody: 'SACNASP', registrationNo: '400999/20' }))).toBe(
 			'Signed off a run as Dr A. Hydrologist (SACNASP 400999/20)'
 		);
@@ -171,12 +176,14 @@ describe('what an item says', () => {
 
 	it('writes who reaches the project through its team (072), with the role it gives here', () => {
 		const who = { team: 'Upper WUA', userId: 'u1', displayName: 'Ben' };
-		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'member', role: 'editor' }))).toBe('Added Ben to the team “Upper WUA” as member, so editor here');
+		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'member', role: 'editor' }))).toBe('Added Ben to the team “Upper WUA” as editor');
 		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'viewer', role: 'viewer', via: 'invite' }))).toBe(
-			'Ben joined the team “Upper WUA” as viewer (accepted an invite), so viewer here'
+			'Ben joined the team “Upper WUA” as viewer (accepted an invite)'
 		);
-		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from member to admin, so owner here');
-		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (admin) from the team “Upper WUA”');
+		// Team roles read by their project names (#162), so the project role is only spelled out when it differs.
+		expect(eventLine(ev('team_member.added', { ...who, teamRole: 'steward', role: 'viewer' }))).toBe('Added Ben to the team “Upper WUA” as steward, so viewer here');
+		expect(eventLine(ev('team_member.role', { ...who, from: 'member', to: 'admin', role: 'owner' }))).toBe('Changed Ben’s role in the team “Upper WUA” from editor to owner');
+		expect(eventLine(ev('team_member.removed', { ...who, teamRole: 'admin', self: false }))).toBe('Removed Ben (owner) from the team “Upper WUA”');
 		expect(eventLine(ev('team_member.removed', { ...who, self: true }))).toBe('Ben left the team “Upper WUA”');
 		expect(eventLine(ev('team.deleted', { team: 'Upper WUA', members: 3 }))).toBe('Deleted the team “Upper WUA”: its 3 members no longer reach this project through it');
 	});

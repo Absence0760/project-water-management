@@ -36,7 +36,15 @@ export function scrollRegionLabel(el: HTMLElement): string {
 	return 'Scrollable table';
 }
 
-const overflows = (el: HTMLElement) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
+/**
+ * Does the box scroll? Any overflow at all: a box whose content is one pixel
+ * wider than it still scrolls, and a pixel of slack here left the Compare
+ * summary's calibration table (309 in 308 px on a phone, in DejaVu Sans)
+ * scrollable but out of the keyboard's reach (axe scrollable-region-focusable,
+ * issue #162).
+ */
+export const overflows = (el: Pick<HTMLElement, 'scrollWidth' | 'clientWidth' | 'scrollHeight' | 'clientHeight'>) =>
+	el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight;
 
 function update(el: HTMLElement) {
 	const managed = el.hasAttribute(MANAGED);

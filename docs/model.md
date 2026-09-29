@@ -1934,6 +1934,8 @@ At the destination: `used = MIN(arrives, D)` meets the demand first (before
 its own dam, pump and boreholes, which supply the rest `D − used`, so a unit
 whose dam is at dead storage is still served); what is left goes into the dam
 for the share that came by `topUpDam` rules and flows on in U otherwise. The
+day's supply is `MIN(used + the rest, D)`: `used + (D − used)` can round one
+ulp above D (engine ≥ 1.24.0; fuzz seed 15467, issue #164). The
 destination's balance and outflow carry it: `V = H + I + J + in − out + … `,
 `U = R + S − Gr + T + returned seepage + release + passed on − depletion −
 taken by off-takes`.
@@ -2713,6 +2715,13 @@ the release left, and the farm balance also subtracts the seepage lost:
 4. supplemental, direct:   MIN(room, D − Gs − GW)                     then emergency, direct, while Q[t−1] < level × cap
 ```
 
+When a supplemental dam-target unit pumped all it was asked for, the dam holds
+exactly Dr above dead storage and step 3 takes Dr itself (engine ≥ 1.24.0).
+In floats `S0 + M + O + K + J + GWd − dead storage` gives Dr back only to an
+ulp of the dam's volume, so beside a 1.4 × 10⁶ m³ dam a 0.011 m³ demand came
+1e-10 m³ short and time reliability counted the day as failed (fuzz seeds
+1774 and 11421, issue #164).
+
 GW (`groundwater_used`) is what went straight to the crop (part of G); GWd
 (`groundwater_to_dam`) went into the dam, so P = S0 + M + O + K + J + GWd − Gs.
 Because GWd never exceeds the room in the dam, pumped water never makes the
@@ -2735,7 +2744,13 @@ the peak. `boreholes.test.ts` › "a dam-target borehole pumps nothing on a day
 with no demand …" pins both sides. Pending the hydrologist (followups.md): a
 top-up on a day with only a little demand still fills the dam by up to a
 day's capacity; a fill-to level or season per borehole is the finer control
-if a farm's practice needs it. The farm
+if a farm's practice needs it. Because the top-up is switched on by the dam
+being drawn, more demand can leave a farm downstream *better* supplied: the
+stored groundwater seeps or spills on down the river, or the refill moves to
+a wet day whose flow takes its stream depletion at once (fuzz seeds 4536 and
+10028, issue #164: 0.288 → 0.492 and 0.781 → 0.852). That is the rule
+working, like a drought trigger, so `checkDoubledCropAreas` runs these units
+as supplemental (§6). The farm
 balance gains GWd beside GW: `(H + I + J + Pd + GW + GWd) − (G − T) − E − ΔQ −
 U − Dep − seepage lost = 0`. With one combined unit this reduces exactly to WP-1.34's
 formulas (a test runs a node's combined capacity and one uncapped
@@ -5499,6 +5514,136 @@ day should be clamped to the record's maximum or to the weir's rated
 maximum, when known; and whether a filled record should ever be scored by
 default (it isn't).
 
+### 2.10j Automated calibration with pre-declared rules (engine ≥ 1.25.0, issue #153)
+
+Engine 1.25.0 brought the rules and a fit run in the browser; engine 1.26.0
+moved the run to the server and added the search (`run`) and `after` rules.
+
+Not in the workbook. Fit automatically (§2.10b) needs a person at every pass
+of calibrate → review → refit: which periods to leave out, which forcing,
+which fit to keep are chosen after the scores are seen, and choosing by the
+score overfits and is easy to game. `settings.calibrationRules`
+(`packages/engine/src/calibrate/rulesSettings.ts`) makes those choices in
+advance, and the server applies them end to end (`planAutoCalibration`,
+`runAutoCase` and `finishAutoCalibration` in `calibrate/auto.ts`, run by
+`backend/src/calibration/`), so no one steers the result. An assessor then
+challenges the rules, not the fit. Settings → Fit automatically →
+*Calibration rules* and *Automated calibration*.
+
+The rule set:
+
+1. **Exclusions** (`exclusions.maxFlaggedShare`, default **0.2**; null = none
+   by rule). Over the calibration window and outside the stored exclusions,
+   each water year's share of its observed days that carry a per-day quality
+   flag (§2.10h: above or below the gauged range, suspect or infilled; the
+   days `flaggedDayMask` marks) is counted (`flaggedYearExclusions` in
+   `calibrate/dayFlags.ts`). A year above the share is left out of every fit,
+   on top of `settings.calibrationExclusions`, with a reason that names the
+   rule ("Rule (calibration rules, exclusions): 200 of 365 observed days
+   flagged (54.8 %), more than 20 %"). The quality flags' own treatments still
+   decide the days scored inside the years kept.
+2. **Forcing** (`forcing.pan`, default the project's own pan coefficient).
+   Each listed coefficient (the project's row, or a preset,
+   `PAN_COEFFICIENT_PRESETS`) is its own set of fits. Nothing else about the
+   forcing varies. A preset needs GR4J's PE to be pan × A-pan (§2.4a): under a
+   monthly PE row it wouldn't reach GR4J, and the run is refused.
+3. **Fits** (`cases.bounds` × `cases.objectives`, default wide and typical
+   bounds on KGE′). Every forcing × bounds × objective is one full fit
+   (`calibrate`, §2.10b) with the split-sample and dry → wet tests, and with
+   the other observed record as an independent test when the project has
+   both. At most `RULE_CASES_MAX` = **8** fits.
+4. **Selection** (`selection.test` and `selection.score`, default the wet
+   years' KGE′ from the dry → wet test). The fit kept is the one with the best
+   score on that **held-out** test, the first on a tie. It is never the
+   in-sample score: a fit whose record doesn't allow the test isn't kept, and
+   the report says so, rather than falling back to the fit on the fitted days.
+5. **Search** (`run`, engine ≥ 1.26.0; default seed 1, 5 starts per fit, 1 500 model runs per
+   optimisation). The seed, starts and budget are rules too, not chosen when
+   the rules run: otherwise the same rules could be re-run with seed after
+   seed until one scored well. Another seed is a rule change, with its own
+   revision.
+6. **After** (`after`, engine ≥ 1.26.0). `onNewData` (default `off`): when new observed or
+   rain data arrives, run the rules and keep the report (`report`), or also
+   apply the kept fit (`apply`), which the server does only while the rules
+   are signed off (otherwise it reports). `ensemble` (default on): applying a
+   kept fit also runs the model with it and the uncertainty ensemble around
+   it (§2.10e, CR-1: the EWR range of the parameter sets that fit nearly as
+   well), centred on the new fit record's bounds and objective.
+7. **Filters** a kept fit must pass (both on by default). *MAR inside the
+   WR2012 band*: the simulated natural MAR with the fitted parameters (on the
+   basis the WR2012 check uses, §2.10c) inside the calibration penalty's band
+   when both ends are set, else within the check's query threshold (the flag
+   is `ok` or `note`). Without a WR2012 reference it can't be applied, and the
+   report says so rather than failing every fit. *Parameters in the typical
+   range*: every fitted parameter inside Perrin et al.'s (2003) 80 % range
+   (the `typical` bounds).
+
+If no fit passes, **none is kept**, and each fit lists why (`selectCase` in
+`calibrate/rules.ts`). The rules, not the result, are then what to change.
+
+**Run by the server.** *Run the calibration rules* (`POST
+/projects/:id/auto-calibrations`) plans a run from the **saved** settings
+only: the water years the rules leave out and the cases in order, stored in
+an `auto_calibration` row (108_auto_calibration.sql) with the rules, their
+revision and a SHA-256 of the model input. Each case is then one
+`auto_calibration` background job, which fits it, stores it and queues the
+next, so no job runs longer than one fit; the last picks the fit to keep. A
+case job that finds the input changed since the plan fails the run, saying
+so, since fits on other data wouldn't compare. Before anything is queued, one
+case's time is estimated from a model run × the model runs a case makes, and
+rules estimated past 4 minutes a fit (the job worker's limit, with room) are
+refused, asking for a smaller search. The page won't start while the form
+has unsaved rule edits. Every score is the server's own.
+
+**Applied by the server.** *Apply and save the kept fit* (`POST
+…/auto-calibrations/:cid/apply`) writes the kept case's parameters (and, for
+a preset, that pan coefficient and its source) with a fit record the server
+builds from the stored case, as a settings revision, then runs the model and
+(`after.ensemble`) queues the ensemble around the fit on that run, which a
+`uncertainty` job computes on the server. It is refused (409) when nothing
+was kept, it was applied already, the rules have changed since (revision,
+content or sign-off), or the project's inputs no longer hash as they did.
+A client can't write an automated fit record at all: a settings save may
+only carry the stored one back unchanged (`autoFitRecordError`,
+`backend/src/projects/settings.ts`). A project file import checks a file's
+automated record against the file's own rules (`importedAutoFitError`).
+`revision` is the server's: it is 1 for a project's first rule set, and a
+save that changes a rule adds 1 and clears `signedOff` (the sign-off covered
+the rules as they were), unless the same save records a new sign-off. A
+save that only signs off keeps the revision.
+
+**New data.** With `after.onNewData` on, new days of any series but the
+forecast (a person's upload or merge, a feed, an API key's ingest) queue one
+pending run of the rules per project (`app_enqueue_auto_calibration`),
+debounced like the automatic re-run (settings.autoRun's debounce, at most 2
+hours after it was first queued), as the same acting user. Its report waits
+for an editor, unless the rules say `apply` and are signed off: then the job
+applies the kept fit, runs the model (an `auto` run) and queues the ensemble,
+as above.
+
+**Record.** Applying the kept fit writes its parameters (and, for a preset,
+that pan coefficient and its source), and a normal fit record (§2.10b) with
+`auto`: the rules as they ran (revision and sign-off included), the water
+years the rule left out, the index of the kept fit, and every fit with its
+held-out score, whether it passed and why not. The seed and engine version
+are the record's own, so the same input, rules, seed and engine version give
+the same report (the seed and search are the rules' own). `fitRecordStatus` adds `rulesChanged` (the rules now decide
+differently from the record's, a sign-off alone aside) and `draftRules` (the
+fit ran under rules not signed off), each with a caveat. A run snapshots the
+rules with the settings, and run comparison lists a rule change or sign-off
+like any other setting (`calibrationRulesChanges`).
+
+**Draft defaults.** The defaults above are drafts until the hydrologist signs
+them off (#90, "Automated calibration rules": the flag threshold, the
+selection score and the filters). Until then the page, the fit record and the
+caveats say a fit they keep is **not evidence**. Record the sign-off in
+Settings once it's given: the hydrologist types their name, as a signature
+(like a run's sign-off, api.md § Sign-offs), and the server dates it and records their
+account in the project's history (`calibration_rules.signed_off`, and
+`calibration_rules.sign_off_withdrawn`), so who signed off is the account
+that did, not a name anyone could type (docs/security.md § Calibration rules
+sign-off).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it
@@ -6927,7 +7072,7 @@ text:
 | `checkEwrAttribution` | Engine ≥ 0.17.0 (Q17, §2.7b), per day: at every EWR site charged + natural = shortfall, both ≤ 0, nothing on a met day, and the farms upstream carry at least the charged part in all; every farm's charge ≤ its irrigation part ≤ 0, the irrigation part ≤ G − T. Other water users (engine ≥ 0.22.0) are contributors like farms, with e = H − U and no runoff or transfers. Every site is recomputed from H, I, J_int and U: charged = MIN(shortfall, Σ MAX(e, 0)), each farm's charge ≥ its pro-rata share, and = the largest share when all its sites can be recomputed. From engine 1.6.0 J_int comes from the stored per-rule transfer volumes (`transfer_rule@<rule id>`, §2.7b; each ≥ 0, adding up to every farm's J, stored for every rule that can move water or none), so every site can be; a run from before 1.6.0 has only J, so there a site is recomputed only where no transfer crosses its catchment boundary (always the outlet). |
 | `checkReportTotals` | The EWR grid's cells add up to the run's days, each cell has 0 ≤ not met ≤ days ≤ days in the month, and per site Σ volume = −Σ daily shortfall and Σ days not met = the summary counts. The EWR agreement (§2.9b) counts every observed day once, either scored or left out by a calibration exclusion, its 2×2 cells and its month and water-year breakdowns add up to the overall table, and its model-below days equal the outlet test's days not met on the scored observed days (before this was fixed, any run with a calibration exclusion failed this check spuriously); it is present whenever a gauge or logger record is. Farm summaries are the means of the daily series. Curtailment H, I and R are the window means of demand, supplied and the EWR charge (AB before engine 0.17.0; I ≤ H, R ≤ 0); farm EWR grids and summaries use the charge too; totals are column sums; targets redistribute the water supplied (Σ target = Σ supplied) and never exceed demand; N = M − I, l/s = m³/day ÷ 86.4; from engine 0.17.0 R_irr + R_store = R, S = N − ΔG, U = MAX(M − ΔG, 0), the cut beyond the share = MAX(ΔG − M, 0) and demand left is in 0–1 (before: S = N + R, U = M + R). |
 | `checkOrderInvariance` | Display order doesn't matter: shuffling the node array, every `sortOrder`, the crops, the crop-area rows, the land-cover patches and the EWR rule tables gives the same results. Every daily series must be **identical to the last bit** (engine ≥ 0.26.1); the summary is compared with counts exact, volumes to 10⁻⁹ of the catchment's largest volume, a fraction of a farm's demand to that volume noise divided by the demand, other ratios to 10⁻⁹ of themselves. Transfer order is shuffled too, with no exception: rules run by their priority and equal priorities share pro rata (engine ≥ 0.16.0, Q18). Why exact: see "The ordering rule" below. |
-| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). |
+| `checkDoubledCropAreas` | More irrigated land can't leave anyone better supplied: with every loss return fraction set to 0 (efficiencies kept), doubling every crop area never raises any farm's supply fraction or the catchment's Σ supplied / Σ demand (demand doubles exactly; the only slack is float noise: each fraction may move by 4ε × the farm's largest volume in either run ÷ its mean daily demand, never less than 10⁻¹², ε = 2⁻⁵², and the catchment's by 4ε × the farms' volumes summed ÷ Σ demand. The noise is absolute, a few ulps of the dam and inflow volumes the day's supply is worked out from, so doubling the demand shrinks the fraction it leaves: fuzz seed 1774, a dam topped up each day to dead storage + demand ≈ 2.19 × 10⁵ m³, went 0.9999999999964 → 0.9999999999984; a test harness change, no engine change). With return flow the fraction *can* rise legitimately: extra draw on stored water partly returns to the river and a starved farm downstream gains more than twice the water (soak seed 4660: 25.43 % → 25.72 %). Dam evaporation is *not* neutralised: a lower dam has a smaller surface and loses less, but never so much less that it ends the day with more water, so the law holds with it. It failed on seeds 4197, 7686, 15979 and 17277 (up to 0.838 → 0.870) until engine 0.21.1, because the daily step broke that order for b > 1 on very shallow dams (§2.7a, the b > 1 limiter). Drought borehole rules and emergency boreholes (§2.7d) run as supplemental for this check (`droughtBoreholesAsSupplemental`): a dam emptied sooner by more demand switches them on earlier and can raise the fraction legitimately (fuzz seed 4623). So do primary dam-target boreholes, which top the dam up only on a day it is drawn for demand, so more demand switches them on too (fuzz seeds 4536, 10028). |
 | `checkGroundwater` | Engine ≥ 0.23.0 (§2.7d), every node with boreholes: 0 ≤ groundwater ≤ supplied and GW + GWd ≤ Σ capacities; the lag store Sd = Sd[t−1] + infeed − due with due = α × (Sd[t−1] + infeed), infeed = d × (GW + GWd) with one depletion factor (between the smallest and largest share of it with several) and Sd ≥ 0; taken + unmet = due, both ≥ 0, unmet only when nothing flows out; over the run Σ infeed = Σ due + Sd at the end. From engine 0.36.0 (WP-3.9) also `groundwaterAnnualUse`: one row per water year, adding up to the daily columns and over its boreholes, no borehole over its annual cap or its capacity × days, and Σ d_i × each borehole's volume = Σ infeed. `checkBalance` and `checkWorkings` add groundwater in (to the crop and into the dam) and depletion out to the node's day, and replay the supply order per borehole with the caps. |
 | `checkLandCover` | Engine ≥ 0.24.0 (§2.5a): on a farm with land cover, runoff + reduction = natural flow × share, 0 ≤ reduction ≤ that natural runoff, and the reduction = low-flow share × MIN(I0, q) + MAR share × MAX(I0 − q, 0) with q from the run's own natural flow; the catchment `landcover_reduction` is the sum over the farms and the summary's mean and class split add up to it; nothing without land cover. |
 | `checkRunoffBalance` | GR4J runs: every day rain − AET − Q + exchange = Δ(production + routing + UH stores) from the run's own series, with Q = natural flow in mm; Q ≥ 0, 0 ≤ AET ≤ PET, stores ≥ 0 and the production store ≤ X1; `summary.runoff` equals the sums of the series and closes. |

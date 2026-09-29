@@ -159,13 +159,14 @@ export function checkOrderInvariance(input: ModelInput, out: ModelOutput, seed: 
  * its demand, so it does not double with the demand and the fraction it
  * leaves shrinks as the demand grows: the check allows each fraction a few
  * ulps of the farm's largest volume over its mean demand (`noiseOf`), like
- * order invariance's volume / demand scale. Fuzz seed 1774 (engine 1.3.0):
- * n14's dam seeps its whole content every day and a supplemental borehole
- * that pumps into it tops it up to dead storage + demand (≈ 2.19e5 m³), so
- * `avail + gd − dead` gives back the demand only to an ulp of 2.19e5
- * (2.9e-11 m³). Every short day was such a top-up, none short by more than
- * 1.49 ulp; Σ(D − G) ≈ 2.1e-9 m³ in both runs over Σ D = 639 then 1278 m³,
- * so 1 − fraction went 3.6e-12 → 1.6e-12 and the fraction "rose" 2e-12.
+ * order invariance's volume / demand scale. Fuzz seed 1774 (engine 1.3.0)
+ * found it: n14's dam seeps its whole content every day and a supplemental
+ * borehole that pumps into it tops it up to dead storage + demand (≈ 2.19e5
+ * m³), so `avail + gd − dead` gave back the demand only to an ulp of 2.19e5
+ * (2.9e-11 m³) and the fraction "rose" 2e-12. Since engine 1.24.0 such a
+ * top-up supplies the demand exactly (seed 11421 turned the same noise into
+ * failed days of time reliability, #164); the allowance stays for the noise
+ * of the other volumes.
  */
 export function checkDoubledCropAreas(input: ModelInput): string | null {
 	const base = cloneInput(input);
@@ -255,13 +256,19 @@ export function checkDoubledCropAreas(input: ModelInput): string | null {
  * the 20 000-case soak: the lagged depletion of n2's capped borehole fell on
  * the days n1's full-level dam needed topping up, and n1's time reliability
  * rose 1/70 → 3/70). The caps themselves are checked by the groundwater
- * self-check (checkGroundwater).
+ * self-check (checkGroundwater). A primary dam-target borehole runs as
+ * supplemental too: it tops the dam up to capacity only on a day the dam is
+ * drawn for demand (engine ≥ 1.8.0), so more demand switches it on like a
+ * trigger. The water it stores then seeps or spills downstream, or its stream
+ * depletion falls on a wet day instead of a dry one, and a farm below can get
+ * more (fuzz seeds 4536 and 10028, the 20 000-case soak on 1.20.0, #164:
+ * n8 0.288 → 0.492, n13 0.781 → 0.852).
  */
 export function droughtBoreholesAsSupplemental(input: ModelInput): ModelInput {
 	const x = cloneInput(input);
 	for (const n of x.model.nodes) if (n.boreholeRule === 'drought') n.boreholeRule = 'supplemental';
-	// Individual boreholes (WP-3.9): emergency mode triggers on the dam the same way.
-	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency') b.mode = 'supplemental';
+	// Individual boreholes (WP-3.9): emergency mode triggers on the dam the same way, and a primary dam-target unit on the dam being drawn.
+	for (const b of x.model.boreholes ?? []) if (b.mode === 'emergency' || (b.mode === 'primary' && b.target === 'dam')) b.mode = 'supplemental';
 	for (const n of x.model.nodes) if (n.supplyRule === 'trigger') n.supplyRule = 'riverFirst';
 	for (const b of x.model.boreholes ?? []) b.annualCapM3 = null;
 	return x;

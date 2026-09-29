@@ -3,6 +3,7 @@
 // uncertainty ensemble (issue #4 phase 9: hundreds of model runs) and its
 // paired run on another run's inputs, and the sensitivity runs (CR-21, a
 // dozen model runs). One worker for them all, so the engine ships once.
+// (Automated calibration under the rules runs on the server, issue #153.)
 // Progress is posted at most every 100 ms (after each run for the sensitivity
 // runs, which are few). Cancel = the page terminates the worker.
 import { calibrate, runEnsemble, runPairedEnsemble, sensitivityRuns, type EnsembleProgress } from '@water-management/engine';

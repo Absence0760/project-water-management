@@ -6,10 +6,10 @@
 	// Summary's first screen until 2026-09-27 and moved unchanged; the Summary
 	// links here, and its old `#…-h` links are sent here (links.ts). A
 	// reading page: it scrolls, it isn't fitted to the window.
-	import { onDestroy, onMount, untrack } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import { page } from '$app/state';
-	import { api, type Project, type RunMeta } from '$lib/api';
+	import type { Project, RunMeta } from '$lib/api';
 	import DownloadMenu from '$lib/components/export/DownloadMenu.svelte';
 	import RecentNotes from '$lib/components/notes/RecentNotes.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
@@ -17,6 +17,7 @@
 	import { fmtNum } from '$lib/format/number';
 	import { holdAnchor } from '$lib/help/anchor';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
+	import type { ProjectDetailsDraft } from './detailsDraft.svelte';
 	import FarmersPanel from './FarmersPanel.svelte';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { projectAnchor } from './links';
@@ -29,6 +30,7 @@
 	let {
 		project,
 		editor,
+		details,
 		series,
 		runs,
 		canEdit,
@@ -40,6 +42,11 @@
 	}: {
 		project: Project;
 		editor: ModelEditor;
+		/**
+		 * The details form's values (issue #162 item 12): the workspace page holds them and
+		 * saves or discards them with its save bar, with the model's edits.
+		 */
+		details: ProjectDetailsDraft;
 		/** The page's input-series list (null if it couldn't be loaded). */
 		series: SeriesMeta[] | null;
 		/** The page's runs list (null if it couldn't be loaded). */
@@ -53,13 +60,8 @@
 		onLeftProject: () => void;
 	} = $props();
 
-	// Form fields start from the loaded project and are reset after each save.
-	let name = $state(untrack(() => project.name));
-	let description = $state(untrack(() => project.description ?? ''));
-	// The project's time zone dates its downloads (issue #45); an older API sends none.
-	let timeZone = $state(untrack(() => project.timeZone ?? DEFAULT_TIME_ZONE));
-	// The WUA the farm pages' contact lines name (095_wua_name); empty = "your WUA".
-	let wuaName = $state(untrack(() => project.wuaName ?? ''));
+	// The time zone dates the project's downloads (issue #45); the WUA name is what
+	// the farm pages' contact lines name (095_wua_name), empty for "your WUA".
 	const zones = (() => {
 		try {
 			return Intl.supportedValuesOf('timeZone');
@@ -67,17 +69,6 @@
 			return [DEFAULT_TIME_ZONE];
 		}
 	})();
-	let saving = $state(false);
-	let error = $state<string | null>(null);
-	let savedAt = $state<number | null>(null);
-
-	const detailsDirty = $derived(
-		name.trim() !== project.name ||
-			description.trim() !== (project.description ?? '') ||
-			timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE) ||
-			wuaName.trim() !== (project.wuaName ?? '')
-	);
-
 	// The series and runs lists come from the page, which refreshes them after
 	// an upload or a run, so the counts are final on the first frame.
 	const seriesCount = $derived(series?.length ?? null);
@@ -140,31 +131,6 @@
 		stopWaiting();
 		releaseAnchor();
 	});
-
-	async function saveDetails(e: SubmitEvent) {
-		e.preventDefault();
-		saving = true;
-		error = null;
-		try {
-			const zoneChanged = timeZone.trim() !== (project.timeZone ?? DEFAULT_TIME_ZONE);
-			const p = await api.projects.update(project.id, {
-				name: name.trim(),
-				description: description.trim(),
-				...(zoneChanged ? { timeZone: timeZone.trim() } : {}),
-				...(wuaName.trim() !== (project.wuaName ?? '') ? { wuaName: wuaName.trim() || null } : {})
-			});
-			onProjectChange(p);
-			name = p.name;
-			description = p.description ?? '';
-			timeZone = p.timeZone ?? DEFAULT_TIME_ZONE;
-			wuaName = p.wuaName ?? '';
-			savedAt = Date.now();
-		} catch (err) {
-			error = err instanceof Error ? err.message : String(err);
-		} finally {
-			saving = false;
-		}
-	}
 </script>
 
 {#snippet headerContext()}<span data-testid="project-context">{context}</span>{/snippet}
@@ -191,34 +157,31 @@
 				<div class="panel-head">
 					<h2 id="details-h">Project details</h2>
 				</div>
-				<form onsubmit={saveDetails}>
-					{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
+				<!-- Saved or discarded with the bar at the page's foot, like the model's edits (issue #162 item 12). -->
+				<form onsubmit={(e) => e.preventDefault()}>
 					<div class="field">
 						<label for="pd-name">Name</label>
-						<input id="pd-name" required maxlength="200" readonly={!canEdit} bind:value={name} />
+						<input id="pd-name" required maxlength="200" readonly={!canEdit} bind:value={details.name} />
 					</div>
 					<div class="field">
 						<label for="pd-desc">Description</label>
-						<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={description}></textarea>
+						<textarea id="pd-desc" rows="4" readonly={!canEdit} bind:value={details.description}></textarea>
 					</div>
 					<div class="field">
 						<label for="pd-tz">Time zone</label>
-						<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={timeZone} aria-describedby="pd-tz-h" />
+						<input id="pd-tz" required maxlength="64" autocomplete="off" list="pd-tz-list" readonly={!canEdit} bind:value={details.timeZone} aria-describedby="pd-tz-h" />
 						<datalist id="pd-tz-list">{#each zones as z (z)}<option value={z}></option>{/each}</datalist>
 						<span class="hint" id="pd-tz-h">An IANA name, like Africa/Johannesburg. Downloads are dated by the day here.</span>
 					</div>
 					<div class="field">
 						<label for="pd-wua">WUA name</label>
-						<input id="pd-wua" maxlength="200" autocomplete="off" readonly={!canEdit} bind:value={wuaName} placeholder="Vaalbank WUA" aria-describedby="pd-wua-h" />
+						<input id="pd-wua" maxlength="200" autocomplete="off" readonly={!canEdit} bind:value={details.wuaName} placeholder="Vaalbank WUA" aria-describedby="pd-wua-h" />
 						<span class="hint" id="pd-wua-h">The farmer view's pages tell farmers to contact the WUA by this name. Left empty, they say “your WUA”.</span>
 					</div>
 					{#if canEdit}
-						<div class="form-row">
-							<button class="btn btn-primary" type="submit" disabled={saving || !detailsDirty || !name.trim() || !timeZone.trim()}>
-								{saving ? 'Saving…' : 'Save details'}
-							</button>
-							{#if savedAt && !detailsDirty}<span class="muted" role="status">Saved.</span>{/if}
-						</div>
+						<p class="muted save-hint" data-testid="details-save-hint">
+							{details.dirty ? 'Unsaved: Save changes at the foot of the page saves these with any model edits.' : 'Changes here are saved with Save changes at the foot of the page, as model edits are.'}
+						</p>
 					{/if}
 				</form>
 			</section>
@@ -242,6 +205,10 @@
 </div>
 
 <style>
+	.save-hint {
+		margin: 0;
+		font-size: 0.85rem;
+	}
 	/* The columns answer to the page's width, not the viewport's (the sidebar takes 240 px). */
 	.project-page {
 		container: project-page / inline-size;

@@ -143,11 +143,15 @@ that needs them.
   chunk that is really gone can't cause a reload loop. With unsaved changes
   the message says so ("save them first, or the browser will ask before the
   reload discards them"): the reload is a plain `location.reload()`, which
-  meets the page's existing `beforeunload` guard, so nothing is dropped
-  without the browser's prompt. A page reports unsaved changes to it with
+  meets the leave guard's reload prompt (`lib/nav/leaveGuard.ts`: the
+  browser's own box, the one place it shows), so nothing is dropped
+  without it. A page reports unsaved changes to it with
   `provideUnsaved()` (`common/chunkFailed.ts`, a Svelte context; nested
-  providers combine): the workspace page gives its model editor's `dirty`,
-  a scenario's override editor its own. Users: `Lazy`, the project list's
+  providers combine): the workspace page gives its model editor's and
+  project details' `dirty`, a scenario's override editor its own. (In-app
+  navigation away from unsaved work is the leave guard's, registered
+  separately with `guardUnsaved`, `lib/nav/unsaved.ts`; docs/ui.md
+  § Leaving with unsaved changes.) Users: `Lazy`, the project list's
   import dialog, the workbook reader in that dialog, Overview's alert email
   settings, the printable report's human-impact tables (it waits for them
   before it is ready), the run's workbook download (the alert sits below
@@ -591,8 +595,9 @@ path, `POST /projects/:id/jobs`, and the automatic re-run after new data,
 [§ Automatic runs](#automatic-runs)), the data feeds' `feed_fetch` /
 `feed_ingest` ([§ Data feeds](#data-feeds)) and the server-side PDF's
 `report_render` ([§ Server-side reports](#server-side-reports)) and the
-dam yield's `yield`, the scenario sweep's `sweep` and the seasonal
-outlook's `outlook` (below); step 2's
+dam yield's `yield`, the scenario sweep's `sweep`, the seasonal
+outlook's `outlook`, and automated calibration's `auto_calibration` and
+`uncertainty` (below); step 2's
 alerts plug in as a further kind.
 
 - **The `job` table is the source of truth in every environment**: status,
@@ -674,6 +679,21 @@ alerts plug in as a further kind.
   catchment). The sweep row and its members are written by the request in
   the same transaction as the job, and completed by the job. At most 2
   pending per user.
+- **`auto_calibration`** (issue #153, `jobs/handlers/auto-calibration.ts`,
+  [api.md § Automated calibration](./api.md#automated-calibration),
+  [model.md §2.10j](./model.md)): one case (a full GR4J fit with validation)
+  of a run of the calibration rules, as the editor it runs as; the job fits
+  it, appends it and queues the next case's job, so no job runs longer than
+  one fit (the request refuses rules estimated past 4 minutes a fit). The
+  last case picks the kept fit. Queued by new data (`start: 'new_data'`,
+  `app_enqueue_auto_calibration`), the first job plans the run instead, and
+  the last applies the kept fit when the rules say so and are signed off. At
+  most 1 pending per user.
+- **`uncertainty`** (issue #153, `jobs/handlers/uncertainty.ts`): the
+  server's own run of an uncertainty ensemble started on the run an applied
+  automated fit made; it computes every member and stores the row once
+  (nothing to verify: the server ran it). Refused when a run × the members
+  would take more than 4 minutes; the browser path (Runs tab) still works.
 - **`outlook`** (issue #53 R5, `jobs/handlers/outlook.ts`, [api.md § Seasonal outlooks](./api.md#seasonal-outlooks),
   [model.md §2.15](./model.md#215-seasonal-outlook-an-esp-ensemble-from-a-decision-date-issue-53-r5-engine-core)):
   a base run × a season × up to 6 demand levels over the record's analogue

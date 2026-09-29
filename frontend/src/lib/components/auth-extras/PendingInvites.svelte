@@ -3,8 +3,10 @@
 	// § Invites), under a project's or a team's member list. Owners/admins only:
 	// the list endpoint is theirs alone. The parent's add form puts new invites
 	// in via `bind:invites`; this lists, re-sends and revokes them.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import type { Invite } from '$lib/api/types';
+	import { roleLabel } from '$lib/api/roleLabels';
 	import { fmtDate } from '$lib/format/number';
 	import { expiryText, resendWasMailed, upsertInvite } from './invites';
 	import EmailText from '$lib/components/common/EmailText.svelte';
@@ -67,7 +69,7 @@
 	}
 
 	async function doRevoke(inv: Invite) {
-		if (!confirm(`Revoke the invitation to ${inv.email}? The link in their email stops working.`)) return;
+		if (!(await confirmDialog({ title: 'Revoke this invitation?', message: `Revoke the invitation to ${inv.email}? The link in their email stops working.`, confirmLabel: 'Revoke invitation', danger: true }))) return;
 		busy = inv.id;
 		message = error = null;
 		try {
@@ -97,7 +99,7 @@
 					<div class="who">
 						<span class="email"><EmailText email={inv.email} /></span>
 						<span class="meta">
-							<span class="badge">{inv.role}</span>
+							<span class="badge">{roleLabel(inv.role)}</span>
 							invited by {inv.invitedBy} ·
 							{#if inv.expired}
 								<span class="badge badge-warn">Expired</span>

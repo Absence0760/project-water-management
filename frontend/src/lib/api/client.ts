@@ -106,11 +106,9 @@ import type {
 	OutlookRequest,
 	YieldJob,
 	YieldRequest,
-	YieldResult
+	YieldResult,
+	AutoCalibration
 } from './types';
-
-/** GET /projects/:id/import-report's 404 message when the project has no report (projects/routes.ts). */
-const NO_IMPORT_REPORT = 'no import report';
 
 export class ApiError extends Error {
 	readonly status: number;
@@ -320,14 +318,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			remove: (id: string) => request<void>('DELETE', p(id)),
 			/**
 			 * What the importer flagged when the project was imported; null when it
-			 * wasn't (the server's 404 "no import report"). Any other 404 (no such
-			 * project, or not a member) still throws.
+			 * wasn't (the server's `200 { report: null }`). A 404 (no such project,
+			 * or not a member) throws, except the older backend's `404 no import
+			 * report`, which also means none: web@ and backend@ release separately,
+			 * so this frontend may be served against a backend from before #162.
 			 */
 			importReport: (id: string) =>
-				request<{ report: StoredImportReport }>('GET', `${p(id)}/import-report`).then(
+				request<{ report: StoredImportReport | null }>('GET', `${p(id)}/import-report`).then(
 					(r) => r.report,
 					(e: unknown) => {
-						if (e instanceof ApiError && e.status === 404 && e.message === NO_IMPORT_REPORT) return null;
+						if (e instanceof ApiError && e.status === 404 && e.message === 'no import report') return null;
 						throw e;
 					}
 				),
@@ -747,6 +747,20 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			/** One sweep, each member with its summary; `series: true` adds each done member's outcome series. */
 			get: (id: string, sweepId: string, q: { series?: boolean } = {}) =>
 				request<{ sweep: Sweep }>('GET', `${p(id)}/sweeps/${enc(sweepId)}${q.series ? '?series=true' : ''}`).then((r) => r.sweep)
+		},
+		/**
+		 * Automated calibration run by the server (docs/api.md § Automated
+		 * calibration, issue #153): a run of the saved calibration rules, one
+		 * background job per fit. Follow a running one with get(); apply() writes
+		 * the kept fit into the settings (with its record), makes a run with it
+		 * and, when the rules say so, queues the ensemble around it.
+		 */
+		autoCalibrations: {
+			start: (id: string) => request<{ calibration: AutoCalibration; jobId: string; job: JobMeta }>('POST', `${p(id)}/auto-calibrations`, {}),
+			list: (id: string) => request<{ calibrations: AutoCalibration[] }>('GET', `${p(id)}/auto-calibrations`).then((r) => r.calibrations),
+			get: (id: string, calibrationId: string) => request<{ calibration: AutoCalibration }>('GET', `${p(id)}/auto-calibrations/${enc(calibrationId)}`).then((r) => r.calibration),
+			apply: (id: string, calibrationId: string) =>
+				request<{ calibration: AutoCalibration; runId: string | null; uncertaintyId: string | null; runError: string | null }>('POST', `${p(id)}/auto-calibrations/${enc(calibrationId)}/apply`, {})
 		},
 		/**
 		 * Seasonal outlooks (docs/api.md § Seasonal outlooks, issue #53 R5): a base

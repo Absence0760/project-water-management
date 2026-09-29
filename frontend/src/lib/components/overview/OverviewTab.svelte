@@ -20,10 +20,9 @@
 	import { projectAnchor, projectHref } from '$lib/components/project/links';
 	import NeedsAttention from './NeedsAttention.svelte';
 	import PublishedBaseline from './PublishedBaseline.svelte';
+	import ReserveStrip from './ReserveStrip.svelte';
 	import SetupChecklist from './SetupChecklist.svelte';
 
-	// The flow chart pulls in uPlot: its own chunk, so the page's first paint doesn't wait for it.
-	const loadFlowVsReserve = () => import('./FlowVsReserve.svelte');
 	// Supply by farm waits for the run's record too: its own chunk keeps the page's first chunk under its budget.
 	const loadSupply = () => import('./SupplyByFarm.svelte');
 
@@ -125,8 +124,6 @@
 		});
 	});
 
-	// The latest run's stored series (its detail record, cached by fetchRun), for the flow chart.
-	const latestRefs = $derived(latestRun ? (detailCache.get(latestRun.id)?.series ?? []) : []);
 	/** The latest run's record, once it is the one picked (not a stale one while the next loads). */
 	const shown = $derived(latestRun && latestRun.id === pick?.latest.id ? latestRun : null);
 
@@ -197,11 +194,11 @@
 		return today ? { state: 'ready', today } : { state: 'none' };
 	});
 
-	// --- the first screen (issue #17 A1): KPIs, then the flow chart beside
-	// Needs attention and Supply by farm. On a wide, tall enough window it is
-	// exactly the height left below its own top edge (measured, not assumed, as
-	// the Network's map), the chart filling what the KPIs leave; the rest of the
-	// Summary follows below it.
+	// --- the first screen (issue #17 A1, issue #162): the KPIs, the reserve strip under them (the
+	// flow chart itself is River & reserve's), then Needs attention beside Supply by farm. On a
+	// wide, tall enough window it is exactly the height left below its own top edge (measured, not
+	// assumed, as the Network's map), the two cards filling what the KPIs and the strip leave and
+	// scrolling inside themselves; the rest of the Summary follows below it.
 	const FIT_QUERY = '(min-width: 1100px) and (min-height: 620px)';
 	let fit = $state(false);
 	$effect(() => {
@@ -274,34 +271,23 @@
 			retry={retryRuns}
 			dams={damsState}
 		/>
-		<div class="cols" class:solo={!attentionItems.length && !runFarms.length}>
-			<div class="chart-cell">
-				{#if shown}
-					<Lazy load={loadFlowVsReserve}>
-						{#snippet children(FlowVsReserve)}
-							<FlowVsReserve
-								projectId={project.id}
-								runId={shown!.id}
-								refs={latestRefs}
-								forecastFrom={shown!.summary.forecast?.from ?? null}
-								fill={fit}
-								more={{ href: riverHref(shown!.id), label: 'More on River & reserve' }}
-							/>
-						{/snippet}
+		{#if shown}
+			<ReserveStrip
+				compliance={shown.summary.ewrCompliance}
+				forecastFrom={shown.summary.forecast?.from ?? null}
+				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
+			/>
+		{/if}
+		{#if attentionItems.length || runFarms.length}
+			<div class="cols" class:solo={!attentionItems.length || !runFarms.length}>
+				<NeedsAttention items={attentionItems} />
+				{#if runFarms.length}
+					<Lazy load={loadSupply}>
+						{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
 					</Lazy>
 				{/if}
 			</div>
-			{#if attentionItems.length || runFarms.length}
-				<div class="side">
-					<NeedsAttention items={attentionItems} />
-					{#if runFarms.length}
-						<Lazy load={loadSupply}>
-							{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
-						</Lazy>
-					{/if}
-				</div>
-			{/if}
-		</div>
+		{/if}
 	</div>
 {/if}
 
@@ -339,53 +325,40 @@
 	.pre-run {
 		margin-bottom: 1rem;
 	}
+	/* Needs attention beside Supply by farm, each half the width; one alone takes it all. */
 	.cols {
 		display: grid;
-		grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 340px);
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
 	.cols.solo {
 		grid-template-columns: minmax(0, 1fr);
 	}
-	.chart-cell,
-	.side {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+	.cols > :global(.panel) {
+		margin: 0;
 		min-width: 0;
 	}
-	.chart-cell :global(.flow) {
-		margin-bottom: 0;
-	}
-	@media (max-width: 1099px) {
+	@media (max-width: 899px) {
 		.cols {
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 	/* Wide and tall enough: the first screen is the height left in the window
-	   below its top (less the save bar when it shows), the chart takes what
-	   the KPIs leave, and the side column's cards scroll inside themselves. */
+	   below its top (less the save bar when it shows); the two cards take what
+	   the KPIs and the strip leave, each scrolling inside itself. */
 	.first.fit {
 		height: max(560px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-rows: auto auto minmax(0, 1fr);
 	}
 	.fit .cols {
 		min-height: 0;
+		height: 100%;
 		align-items: stretch;
 	}
-	.fit .chart-cell,
-	.fit .side {
+	.fit .cols > :global(.attention),
+	.fit .cols > :global(.supply) {
 		min-height: 0;
-	}
-	.fit .side > :global(.attention) {
-		flex: 0 1 auto;
-		min-height: 0;
-		overflow: auto;
-	}
-	.fit .side > :global(.supply) {
-		flex: 1 1 auto;
-		min-height: 6rem;
 		overflow: auto;
 	}
 	/* The alerts beside the published baseline once the tab is wide enough for two (a container

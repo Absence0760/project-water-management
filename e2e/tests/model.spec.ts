@@ -3,6 +3,7 @@ import { addMember, createProject, createRun, putModel, sampleModel, seedRunnabl
 import { expect, test } from '../support/fixtures.ts';
 import { addCrop, openCropGrid, openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeForm, openNodeTable, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -163,7 +164,7 @@ test('a second outlet or a loop blocks saving with a message', async ({ page, ow
 	await expect(page.getByLabel('Upper farm drains into').locator('option:checked')).toHaveText('Outflow gauge');
 });
 
-test('leaving with unsaved model changes asks first', async ({ page, owner }) => {
+test('leaving with unsaved model changes asks first, in the app’s dialog', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Unsaved guard');
 	await putModel(page.request, project.id, sampleModel());
@@ -171,22 +172,15 @@ test('leaving with unsaved model changes asks first', async ({ page, owner }) =>
 	await page.getByLabel('Area of Upper farm, km²', { exact: true }).fill('99');
 	await closeModal(page);
 
-	// Answer each prompt inside its listener (a click that opens a prompt only
-	// returns once the prompt is handled), and wait for the first answer before
-	// adding the second listener, so it can't also receive the first prompt.
+	// Stay: the question names where the link goes, and the edit is still there.
 	const projectsLink = page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' });
-	let asked = '';
-	page.once('dialog', (d) => {
-		asked = d.message();
-		void d.dismiss();
-	});
 	await projectsLink.click();
-	await expect.poll(() => asked).toBe('You have unsaved model changes. Leave without saving?');
+	await answerConfirm(page, false, 'You have unsaved changes (model edits). Leave and go to All projects? They will be lost.');
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Unsaved guard' })).toBeVisible();
 	await expect(saveBar(page)).toContainText('Unsaved changes to the model');
 
-	page.once('dialog', (d) => void d.accept());
 	await projectsLink.click();
+	await answerConfirm(page, true, 'Leave without saving?');
 	await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 });
 

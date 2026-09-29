@@ -31,15 +31,16 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	// The tiles, from the run's own summary.
 	const res = await page.request.get(`${API_URL}/projects/${id}/runs/${second}`);
 	const c = ((await res.json()) as { run: { summary: { catchment: Catchment } } }).run.summary.catchment;
-	await expect(riverTiles(page).locator('dt')).toContainText(['Reserve met', 'Days below the reserve', 'Mean simulated outflow', 'Worst month']);
-	await expect(riverTile(page, 'met')).toContainText(`${((1 - c.ewrFractionDaysNotMet) * 100).toFixed(1)}%of days`);
-	await expect(riverTile(page, 'met')).toContainText(`${grouped(1096 - c.ewrDaysNotMet)} of 1\u202f096 days at the outflow gauge`);
+	// EWR not met, worded as the Summary's card is (issue #162: this tile said "Reserve met" for the same figure).
+	await expect(riverTiles(page).locator('dt')).toContainText(['EWR not met', 'Days below the reserve', 'Mean simulated outflow', 'Worst month']);
+	await expect(riverTile(page, 'ewr')).toContainText(`${(c.ewrFractionDaysNotMet * 100).toFixed(1)}%of days`);
+	await expect(riverTile(page, 'ewr')).toContainText(`${grouped(c.ewrDaysNotMet)} of 1\u202f096 days at the outflow gauge`);
 	await expect(riverTile(page, 'below').locator('dd.value')).toHaveText(`${grouped(c.ewrDaysNotMet)}days`);
 	await expect(riverTile(page, 'below')).toContainText(/\d+(\.\d)? in an average year/);
 	await expect(riverTile(page, 'outflow')).toContainText(`${Math.round((100 * c.meanSimulatedOutflowM3Day) / c.meanNaturalFlowM3Day)}% of natural`);
 	await expect(riverTile(page, 'worst').locator('dd.value')).toHaveText(/^(October|November|December|January|February|March|April|May|June|July|August|September|None)$/);
 	// Same inputs twice, so every change is zero, against the run before.
-	await expect(riverTile(page, 'met')).toContainText(/0 pp\s*no change\s*vs previous run/);
+	await expect(riverTile(page, 'ewr')).toContainText(/0 pp\s*no change\s*vs previous run/);
 	await expect(riverTile(page, 'below')).toContainText(/0\s*no change\s*a year vs previous run/);
 	await expect(page.getByText('Changes are against the previous run, Baseline.')).toBeVisible();
 
@@ -51,6 +52,12 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	await expect(years.getByTestId('reserve-years-unit')).toHaveText('days below');
 	const total = Number(/Second: (\d+) days below/.exec((await years.getByRole('img').getAttribute('aria-label'))!)![1]);
 	await expect(years.getByTestId('reserve-years-none')).toHaveCount(total === 0 ? 1 : 0);
+	// The last water year's label sits whole inside the plot, not cut off at its right edge (issue #162: "2024/2…").
+	const lastLabel = years.locator('text.x').last();
+	await expect(lastLabel).toHaveText('2021/22');
+	const svgBox = (await years.locator('svg').boundingBox())!;
+	const labelBox = (await lastLabel.boundingBox())!;
+	expect(labelBox.x + labelBox.width).toBeLessThanOrEqual(svgBox.x + svgBox.width);
 	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
 	await expect(page.getByTestId('uncertainty-panel')).toBeVisible();
 	await expect(page.getByTestId('outcome-matrix')).toBeVisible();
@@ -163,16 +170,15 @@ test('the flow chart keeps the Runs tab’s controls: m³/s ↔ m³/day, and Ear
 	await expect(move).toHaveCount(0);
 });
 
-test('the Summary’s flow chart stays as it was: no unit switch, no Earlier / Later', async ({ page, owner }) => {
+test('the flow chart is drawn once, here: the Summary shows the days below by month instead (issue #162)', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River summary chart');
 	await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
-	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
-	await expect(flow.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
-	await expect(flow.getByRole('group', { name: 'Time window' })).toBeVisible();
-	await expect(flow.getByRole('group', { name: 'Flow units' })).toHaveCount(0);
-	await expect(flow.getByRole('group', { name: 'Move through the record' })).toHaveCount(0);
+	const strip = page.getByRole('region', { name: 'Days below the reserve' });
+	await expect(strip.getByRole('listitem')).toHaveCount(12);
+	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+	await expect(page.locator('figure.chart')).toHaveCount(0);
 });
 
 test('the run picker: another run is a URL, Back returns, a reload keeps it', async ({ page, owner }) => {
@@ -189,7 +195,7 @@ test('the run picker: another run is a URL, Back returns, a reload keeps it', as
 	await expect(context).toContainText('Baseline');
 	// The oldest run: nothing before it to compare with.
 	await expect(page.getByText(/^Changes are against the previous run/)).toHaveCount(0);
-	await expect(riverTile(page, 'met')).not.toContainText('vs previous run');
+	await expect(riverTile(page, 'ewr')).not.toContainText('vs previous run');
 	await expect(page.getByRole('region', { name: 'Days below the reserve, each water year' }).getByRole('img', { name: /Baseline: \d+ days below/ })).toBeVisible();
 
 	await page.reload();
@@ -225,14 +231,14 @@ test('Runs & results links here for its run, and an old link to a moved panel la
 	await expect(heading).toBeInViewport();
 });
 
-test('the Summary links here: its flow chart and the outflow under its tiles', async ({ page, owner }) => {
+test('the Summary links here: its reserve strip and the outflow under its tiles', async ({ page, owner }) => {
 	void owner;
 	const id = await seedRiverProject(page.request, 'River from summary');
 	const run = await createRun(page.request, id, 'Baseline');
 	await page.goto(`/projects/${id}`);
 	const latest = page.getByRole('region', { name: 'Latest run', exact: true });
 	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${run}`);
-	await page.getByRole('region', { name: 'Flow vs reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
+	await page.getByRole('region', { name: 'Days below the reserve' }).getByRole('link', { name: 'More on River & reserve' }).click();
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
 	await expect(riverTiles(page)).toHaveCount(4);
 });

@@ -48,6 +48,14 @@ so it catches a change in the query's shape, not machine noise.
 4. Don't pipe e2e output into `grep`/`head`/`tail`: the web servers hold the
    pipe open and the command hangs after the tests finish. Redirect to a file.
 
+## Layout checks and fonts
+
+e2e renders with the pinned DejaVu fonts in `e2e/fonts/` on every machine
+([e2e/README.md § Fonts](../e2e/README.md#fonts-the-same-on-every-machine)),
+so a layout check that passes on a laptop passes in CI. Before the pin a laptop
+set the body text in Noto Sans and CI in the wider DejaVu Sans, and tight
+checks went red only in CI (issue #162).
+
 ## Tests that need a service or a browser
 
 A test that needs something a fresh laptop may not run (MinIO, Mailpit,

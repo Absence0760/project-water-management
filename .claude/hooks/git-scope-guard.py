@@ -23,6 +23,7 @@ Blocked:
   git rm . (or :/, *)                              (removes the whole tree)
   git clean -f                                     (deletes untracked files)
   git push to main, bare `git push`, HEAD, --all   (main only changes through a PR)
+  gh pr create/edit --title "<not conventional>"   (CI's pr-title-lint rejects it)
 
 Allowed: git add <path>, git commit -m "…" -- <path>, git commit --allow-empty,
 git commit --amend (pure reword, nothing staged), git restore -- <path>,
@@ -31,11 +32,19 @@ git stash push -- <path>, git push -u origin <branch>, and all read-only git.
 
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
 
 PATHSPEC_ALL = {".", "*", "./", ":/", ":/.", ":/*"}
+
+# The PR-title rule CI enforces (.github/workflows/pr-title-lint.yml, which
+# the test checks these against): `<type>(<optional scope>): <subject>`, the
+# subject starting lowercase and not ending with a period.
+PR_TITLE_TYPES = ("feat", "fix", "chore", "docs", "refactor", "test", "perf",
+                  "ci", "build", "revert")
+PR_SUBJECT_PATTERN = r"^[a-z].+[^\.]$"
 
 
 def _deny(reason):
@@ -323,6 +332,35 @@ def _check_push(args):
     return None
 
 
+def _check_pr_title(tokens):
+    """`gh pr create|edit --title` must pass CI's conventional-title lint."""
+    i = 0
+    while i < len(tokens) and not (tokens[i] == "gh" or tokens[i].endswith("/gh")):
+        i += 1
+    rest = tokens[i + 1:]
+    if len(rest) < 2 or rest[0] != "pr" or rest[1] not in ("create", "edit"):
+        return None
+    title = None
+    args = rest[2:]
+    for j, a in enumerate(args):
+        if a in ("--title", "-t") and j + 1 < len(args):
+            title = args[j + 1]
+        elif a.startswith("--title="):
+            title = a.split("=", 1)[1]
+    if title is None:
+        return None
+    m = re.match(r"^(\w+)(\([^)]*\))?!?: (.*)$", title)
+    ok = (m is not None and m.group(1) in PR_TITLE_TYPES
+          and re.match(PR_SUBJECT_PATTERN, m.group(3)) is not None)
+    if ok:
+        return None
+    return ("PR title %r fails CI's pr-title-lint (.github/workflows/pr-title-lint.yml). "
+            "Use `<type>(<scope>): <subject>` with type one of %s, the subject "
+            "starting lowercase and not ending with a period, e.g. "
+            "`feat(ui): add the leave guard (#162)`."
+            % (title, ", ".join(PR_TITLE_TYPES)))
+
+
 CHECKS = {
     "push": _check_push,
     "add": _check_add,
@@ -344,9 +382,12 @@ def main():
     if payload.get("tool_name") != "Bash":
         sys.exit(0)
     command = (payload.get("tool_input") or {}).get("command") or ""
-    if "git" not in command:
+    if "git" not in command and "gh" not in command:
         sys.exit(0)
     for tokens in _segments(command):
+        reason = _check_pr_title(tokens)
+        if reason:
+            _deny(reason)
         parsed = _git_subcommand(tokens)
         if not parsed:
             continue

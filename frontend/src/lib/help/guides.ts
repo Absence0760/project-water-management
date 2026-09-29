@@ -5,6 +5,7 @@
 //
 // Inline text markup, parsed by `inline()` (no HTML, so nothing is {@html}):
 //   **Save**                 a UI label, shown in bold
+//   *Outcomes*               a section or a word to stress, in italics
 //   [[ewr]]                  link to a glossary entry, labelled with its term
 //   [[ewr|the Reserve]]      the same, with its own label
 //   [[guide:add-data|label]] link to another guide
@@ -134,7 +135,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'note',
 						tone: 'tip',
-						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; the outflow against the reserve, with the days below it shaded and a **30 days / 1 year / All** switch; **Needs attention** cards (hydrological units short of water, run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed); and **Supply by hydrological unit**, where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
+						text: 'The **Summary** tab has a setup checklist that follows these steps. Each line says what is there or what to do next, and links to the tab. It also tells you when the project has changed since the last run. Once there is a run, the Summary opens on the results instead: four cards for the newest run (the reserve, irrigation supplied, how full the dams are and the calibration fit), each with its change; **Days below the reserve** in each of the run’s last twelve months, where **More on River & reserve** opens the flow chart; **Needs attention** cards (hydrological units short of water, run warnings, new or old data and hydrological units with nothing planted, each a link to where it is fixed); and **Supply by hydrological unit**, where a hydrological unit’s name opens its planted areas and **More on Hydrological units** opens that page. The **Dams today** card opens the **Dams** tab. Once the run’s last day is more than a week old, the card says so by its date (**Dams on 31 Dec 2024**), and “this week” and “last 30 days” elsewhere give way to the date the figures end on in the same way. Below them sit the active alerts beside the published baseline, links to **Dams** and **Project**, and the setup checklist, folded to one line once every step is done.'
 					}
 				]
 			},
@@ -147,7 +148,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
+						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description, time zone and WUA name, saved with **Save changes** at the foot of the page, as model edits are), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
 					},
 					{
 						type: 'p',
@@ -224,7 +225,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: 'Each row says how its catchment is doing, from its published run (or its latest run when none is published): the EWR over the last 30 days in words, the hydrological units short this week, the lowest dam, how old the rain data is and when it last ran. **Needs attention** at the top lists the catchments to look at first (a red or amber EWR, hydrological units short, alerts firing, failing feeds, newer rain than the figures, figures over a week old), each with its reasons. The chips filter by owner, and **Sort** or a column heading orders the list; both stay in the page’s address.'
+						text: 'Each row says how its catchment is doing, from its published run (or its latest run when none is published): the EWR over the last 30 days in words, the hydrological units short this week, the lowest dam, how far the rain data goes (**Rain to 31 Dec 2024 (20 months ago)**), when the project was last edited and when it last ran. Once a catchment’s figures are more than a week old, “this week” and “last 30 days” become the dates they end on (“short in the week to 31 Dec 2024”). **Needs attention** at the top lists the catchments to look at first (a red or amber EWR, hydrological units short, alerts firing, failing feeds, newer rain than the figures, figures over a week old), each with its reasons. The chips filter by owner, and **Sort** or a column heading orders the list; both stay in the page’s address.'
 					}
 				]
 			},
@@ -247,7 +248,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
+						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, each person has the same role on every team project as in the team; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
 					}
 				]
 			}
@@ -717,7 +718,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**River & reserve**, under *Outcomes* in the sections, is the river’s page for one run (the newest, or pick another from its **Run** menu; the Summary’s flow chart links there too). Four tiles: how often the reserve was met (days at the outflow gauge, and the Reserve rule months with a rule table), the days below it and how many in an average year, the mean simulated outflow and its share of natural flow, and the worst month, each with its change from the run before. Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the reserve shaded, beside the days below the reserve each water year. Below them: Reserve compliance by month (with a rule table), EWR by month, the uncertainty bands on those findings, the outcome matrix, the seasonal outlook and the water account.'
+						text: '**River & reserve**, under *Outcomes* in the sections, is the river’s page for one run (the newest, or pick another from its **Run** menu; the Summary’s **Days below the reserve** links there too). Four tiles: how often the EWR was not met (days at the outflow gauge, and the Reserve rule months with a rule table), the days below it and how many in an average year, the mean simulated outflow and its share of natural flow, and the worst month, each with its change from the run before. Then EWR against outflow with a **30 days / 1 year / All** switch and the days below the reserve shaded, beside the days below the reserve each water year. Below them: Reserve compliance by month (with a rule table), EWR by month, the uncertainty bands on those findings, the outcome matrix, the seasonal outlook and the water account.'
 					},
 					{
 						type: 'p',
@@ -1185,13 +1186,16 @@ export function sectionId(heading: string): string {
 export type InlinePart =
 	| { kind: 'text'; text: string }
 	| { kind: 'strong'; text: string }
+	| { kind: 'em'; text: string }
 	/** A glossary entry (`id`) or a guide (`guide`), with its label. */
 	| { kind: 'term'; id: string; text: string }
 	| { kind: 'guide'; id: string; text: string }
 	/** A reference that doesn't resolve: shown as plain text (and failed by the tests). */
 	| { kind: 'broken'; ref: string; text: string };
 
-const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+// *italics* only where the asterisks stand apart from a word (a space,
+// punctuation or the ends either side), so 5*3 or a*b stays as written.
+const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|(?<![\w*])\*([^*\s](?:[^*]*[^*\s])?)\*(?![\w*])/g;
 
 /**
  * A glossary term as it reads mid-sentence: an ordinary capitalised first
@@ -1203,7 +1207,7 @@ export function inSentence(term: string): string {
 	return /^[A-Z][a-z]+(?![-\w])/.test(term) ? term[0]!.toLowerCase() + term.slice(1) : term;
 }
 
-/** Splits guide text into plain text, bold UI labels and links. */
+/** Splits guide text into plain text, bold UI labels, italics and links. */
 export function inline(text: string): InlinePart[] {
 	const out: InlinePart[] = [];
 	let last = 0;
@@ -1212,6 +1216,10 @@ export function inline(text: string): InlinePart[] {
 		last = m.index + m[0].length;
 		if (m[1] !== undefined) {
 			out.push({ kind: 'strong', text: m[1] });
+			continue;
+		}
+		if (m[4] !== undefined) {
+			out.push({ kind: 'em', text: m[4] });
 			continue;
 		}
 		const ref = m[2]!.trim();

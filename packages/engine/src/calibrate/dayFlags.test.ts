@@ -9,6 +9,8 @@ import {
 	FLOW_DAY_FLAGS,
 	FLOW_FLAG_CODE,
 	flaggedDayMask,
+	flaggedYearExclusions,
+	flaggedYearsText,
 	flowDayFlags,
 	qualityFlagChanges,
 	rainDayFlags,
@@ -254,5 +256,38 @@ describe('qualityFlagChanges and ratingText', () => {
 		expect(ratingText(null)).toBe('none');
 		expect(ratingText({ gaugedMaxM3s: 12, gaugedMinM3s: null, source: '' })).toBe('up to 12 m³/s');
 		expect(ratingText({ gaugedMaxM3s: null, gaugedMinM3s: 0.05, source: '' })).toBe('from 0.05 m³/s');
+	});
+});
+
+describe('flaggedYearExclusions (automated calibration’s exclusion rule, issue #153)', () => {
+	const code = FLOW_FLAG_CODE;
+	// WY 2000/01 (Oct 2000 – Sep 2001), then WY 2001/02: 365 days each from 2000-10-01.
+	const start = '2000-10-01';
+	const flags = new Uint8Array(730).fill(code.inRange);
+	// Year 1: 100 of 300 observed days flagged, 65 missing. Year 2: 50 flagged.
+	for (let t = 0; t < 65; t++) flags[t] = code.missing;
+	for (let t = 65; t < 165; t++) flags[t] = t % 2 ? code.suspect : code.aboveRating;
+	for (let t = 365; t < 415; t++) flags[t] = code.infilled;
+	const all = Int32Array.from({ length: 730 }, (_, t) => t);
+
+	it('leaves out each water year whose flagged share is above the limit, with a reason naming the rule', () => {
+		const r = flaggedYearExclusions(flags, all, start, 0.2);
+		expect(r.years).toEqual([
+			{ waterYear: 2000, observedDays: 300, flaggedDays: 100, share: 1 / 3, excluded: true },
+			{ waterYear: 2001, observedDays: 365, flaggedDays: 50, share: 50 / 365, excluded: false }
+		]);
+		expect(r.exclusions).toEqual([{ waterYear: 2000, reason: 'Rule (calibration rules, exclusions): 100 of 300 observed days flagged (33.3 %), more than 20 %' }]);
+		expect(flaggedYearsText(r.years)).toBe('WY 2000/01 (33.3 %)');
+	});
+
+	it('counts only the window days it is given, and keeps every year with no limit', () => {
+		const secondYear = Int32Array.from({ length: 365 }, (_, i) => 365 + i);
+		expect(flaggedYearExclusions(flags, secondYear, start, 0.1).exclusions.map((x) => 'waterYear' in x && x.waterYear)).toEqual([2001]);
+		expect(flaggedYearExclusions(flags, all, start, null).exclusions).toEqual([]);
+	});
+
+	it('never counts human-use days as flagged (CR-25 is not built): the same days flaggedDayMask marks', () => {
+		const h = new Uint8Array(365).fill(code.humanUse);
+		expect(flaggedYearExclusions(h, Int32Array.from({ length: 365 }, (_, t) => t), start, 0.01).exclusions).toEqual([]);
 	});
 });

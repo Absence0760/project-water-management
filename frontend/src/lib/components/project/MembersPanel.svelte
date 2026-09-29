@@ -1,7 +1,8 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
-	import { api, ROLE_LABEL, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
+	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
 	import PendingInvites from '$lib/components/auth-extras/PendingInvites.svelte';
 	import { upsertInvite } from '$lib/components/auth-extras/invites';
@@ -70,12 +71,12 @@
 			const r = await api.members.add(projectId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${ROLE_LABEL[r.invite.role as Role] ?? r.invite.role} once they confirm this email address (signing up first if they’re new).`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				const m = r.member;
 				members = [...members.filter((x) => x.userId !== m.userId), m];
 				invites = invites.filter((x) => x.email.toLowerCase() !== m.email.toLowerCase());
-				added = `${m.displayName} added as ${ROLE_LABEL[m.role] ?? m.role}.`;
+				added = `${m.displayName} added as ${roleLabel(m.role)}.`;
 			}
 			email = '';
 		} catch (err) {
@@ -118,10 +119,12 @@
 
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
-		const q = self
-			? 'Leave this project? You will lose access unless someone adds you again.'
-			: `Remove ${m.displayName} (${m.email}) from this project?`;
-		if (!confirm(q)) return;
+		const ok = await confirmDialog(
+			self
+				? { title: 'Leave this project?', message: 'You will lose access unless someone adds you again.', confirmLabel: 'Leave project', danger: true }
+				: { title: 'Remove this member?', message: `Remove ${m.displayName} (${m.email}) from this project?`, confirmLabel: 'Remove member', danger: true }
+		);
+		if (!ok) return;
 		busy = m.userId;
 		error = null;
 		try {
@@ -145,7 +148,7 @@
 		<p class="muted small team-note">
 			Everyone in
 			{#if team.name}<a href="{base}/teams/{team.id}">{team.name}</a>{:else}the owning team{/if}
-			also has access (admins as owners, members as editors, viewers as viewers). Add people here to share outside the team.
+			also has access, with the role they hold in the team. Add people here to share outside the team.
 		</p>
 	{/if}
 	{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
@@ -185,10 +188,10 @@
 										disabled={busy === m.userId}
 										onchange={(e) => setRole(m, e.currentTarget.value as Role)}
 									>
-										{#each ROLES as r (r)}<option value={r}>{ROLE_LABEL[r]}</option>{/each}
+										{#each ROLES as r (r)}<option value={r}>{roleLabel(r)}</option>{/each}
 									</select>
 								{:else}
-									<span class="badge" class:badge-owner={m.role === 'owner'}>{ROLE_LABEL[m.role] ?? m.role}</span>
+									<span class="badge" class:badge-owner={m.role === 'owner'}>{roleLabel(m.role)}</span>
 								{/if}
 								{#if m.role === 'contributor'}
 									{#if isOwner}
@@ -235,7 +238,7 @@
 			<div class="field">
 				<label for="mem-role">Role</label>
 				<select id="mem-role" bind:value={role}>
-					{#each ROLES as r (r)}<option value={r}>{ROLE_LABEL[r]}</option>{/each}
+					{#each ROLES as r (r)}<option value={r}>{roleLabel(r)}</option>{/each}
 				</select>
 			</div>
 			<div class="field">

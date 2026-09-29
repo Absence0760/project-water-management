@@ -97,21 +97,8 @@ export function coverageBins(s: Daily): CoverageBin[] {
 	return bins;
 }
 
-/** Whole days from `iso` to `todayIso` (both YYYY-MM-DD). */
-export function daysBetween(iso: string, todayIso: string): number {
-	return toEpochDay(todayIso) - toEpochDay(iso);
-}
-
-/** 0 → "today", 1 → "yesterday", 12 → "12 days ago", 75 → "2 months ago", 800 → "2 years ago". */
-export function describeAge(days: number): string {
-	if (days < 0) return 'in the future';
-	if (days === 0) return 'today';
-	if (days === 1) return 'yesterday';
-	if (days < 60) return `${days} days ago`;
-	// At least 2: 60 days is under two 30.44-day months and 730 under two years, which read "1 months" / "1 years".
-	if (days < 730) return `${Math.max(2, Math.floor(days / 30.44))} months ago`;
-	return `${Math.max(2, Math.floor(days / 365.25))} years ago`;
-}
+/** Whole days from `iso` to `todayIso` (both YYYY-MM-DD): the one age module's. */
+export { daysBetween } from '$lib/format/age';
 
 export interface MergePreview {
 	/** Days that get a value where the stored series had none (or didn't reach). */

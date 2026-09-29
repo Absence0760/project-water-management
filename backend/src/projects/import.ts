@@ -17,7 +17,7 @@ import { modelProblems } from '../model/validate.js';
 import { runLiveModel } from '../runs/execute.js';
 import { requireTeamRole } from '../teams/access.js';
 import { ProjectFile } from './document.js';
-import { mergeSettings, remapSettingNodeIds } from './settings.js';
+import { importedAutoFitError, mergeSettings, remapSettingNodeIds } from './settings.js';
 
 /**
  * Body cap for POST /projects/import: 5 MB, the same as the export cap
@@ -43,6 +43,9 @@ export const IMPORT_RUN_LABEL = 'Initial run (import)';
 export function parseProjectFile(raw: unknown): ProjectFile {
 	const data = ProjectFile.parse(raw);
 	const problems = projectFileProblems(data);
+	// An automated fit must match the file's own calibration rules, as a save must match the saved ones (issue #153).
+	const autoError = importedAutoFitError(data.settings as Record<string, unknown>);
+	if (autoError) problems.push(`settings.fitRecord: ${autoError}`);
 	if (problems.length) throw new ApiError(400, 'invalid project file', problems.map((message) => ({ message })));
 	return data;
 }
