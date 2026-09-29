@@ -64,10 +64,12 @@ The checklist for these is issue #62; the history scrub is #63.
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $60** (`infra/variables.tf`
-      `budget_monthly_usd`; was $50). The job queue's SQS interface endpoint
-      adds ~$7.30/month per AZ; feeds and the renderer add ~$2/month idle.
-      Keep it, or set your own in tfvars (about 80 for af-south-1, below).
+- [ ] **AWS budget default is now $80** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, #126), sized for af-south-1's ~$58–63
+      idle, plus a derived $6/day budget and Cost Anomaly Detection
+      (deployment.md § Budget alerts). Set ~60 in tfvars for us-east-1.
+      Before the first apply, check for an existing anomaly monitor
+      (infra/README.md § Operator steps, step 4).
 - [ ] **Data-feed terms** (operator, roadmap D7): DWS's terms for automated
       fetching and whether the fetcher's region can reach the site (it
       answered our network with HTTP 403, so the DWS parser is untested

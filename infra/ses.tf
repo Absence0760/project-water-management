@@ -394,20 +394,22 @@ resource "aws_iam_role_policy" "lambda_ses" {
 }
 
 # --- Network: SES API interface endpoint -----------------------------------
-# The API Lambda has no route to the internet (network.tf), so SendEmail goes
-# through PrivateLink. With private DNS, the SDK's default endpoint
+# The API and worker Lambdas have no route to the internet (network.tf), so
+# SendEmail goes through PrivateLink. With private DNS, the SDK's default endpoint
 # (email.<region>.amazonaws.com) resolves to the endpoint ENIs — no app
 # change and no SES_REGION override. The SES API endpoint service
 # (`com.amazonaws.<region>.email`) launched Dec 2025 in every SES region; the
 # older `email-smtp` endpoint is SMTP-only and is not what the app uses.
 #
 # No custom endpoint policy: IAM above already pins the action, identity and
-# From address, and the role is the only principal in the VPC that can reach
-# the endpoint (security group below).
+# From address for both roles (the worker's policy, reports.tf, is the same
+# document), and the API and worker Lambdas are the only ENIs in the VPC that
+# can reach the endpoint (security group below; the worker's rules are in
+# reports.tf).
 
 resource "aws_security_group" "vpce_ses" {
   name        = "${local.project}-vpce-ses"
-  description = "SES API interface endpoint: 443 from the API Lambda only."
+  description = "SES API interface endpoint: 443 from the API and worker Lambdas only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-vpce-ses" }
 }

@@ -24,7 +24,7 @@ commit, especially for af-south-1.
 | Backups / PITR | 7 days | 14 days |
 | Database failure | ~10 min recovery, by AWS, on a new host | ~1–2 min automatic failover |
 | AZ outage | API down until the AZ recovers | API keeps serving |
-| Suggested `budget_monthly_usd` | 60 (us-east-1) / 80 (af-south-1) | 130 (us-east-1) / 170 (af-south-1) |
+| Suggested `budget_monthly_usd` (daily budget derived: `ceil(× 2.25 / 30)`) | 60 (us-east-1) / 80 (af-south-1, the default): $5 / $6 a day | 130 (us-east-1) / 170 (af-south-1): $10 / $13 a day |
 
 **Recommendation:** start on **minimal** in af-south-1. It is a complete,
 secure production deployment, not a demo: every feature, WAF, private
@@ -52,14 +52,16 @@ Terraform defaults.
 - Worker, fetcher and report-renderer Lambdas, SQS queues, the 5-minute tick.
 - SES for account, alert and report email.
 - One ENI each for the Secrets Manager, SES and SQS interface endpoints.
-- Budget alarm and the CloudWatch alarms, mailed to `budget_alert_email`.
+- Monthly and daily budgets, Cost Anomaly Detection and the CloudWatch
+  alarms, mailed to `budget_alert_email` ([deployment.md § Budget
+  alerts](./deployment.md#budget-alerts)).
 
 `terraform.tfvars` (on top of the required values in
 `infra/terraform.tfvars.example`):
 
 ```hcl
 aws_region         = "af-south-1"
-budget_monthly_usd = 80   # 60 in us-east-1
+budget_monthly_usd = 80   # the default; 60 in us-east-1
 # Everything else on defaults. Set renderer_image_tag after the first
 # backend deploy (deployment.md § Reports).
 ```
@@ -73,9 +75,9 @@ Cost, us-east-1:
 | 3 interface endpoints × 1 AZ | 21.90 |
 | WAF (ACL + 2 rules) | 7.00 |
 | CloudWatch alarms, logs, RDS log export | ~2.80 |
-| KMS key, Route 53 zone, Secrets Manager secret | 1.90 |
+| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $50** |
+| **Total** | **≈ $51** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
 **≈ $58–63**.
@@ -87,7 +89,9 @@ What you accept:
   meanwhile. Data is safe (backups + point-in-time recovery).
 - **An AZ outage takes the API down.** The database lives in one AZ. The
   endpoints each have one ENI: if that AZ fails, email sends and job
-  wake-ups fail (the 5-minute tick still runs queued jobs).
+  wake-ups fail (the 5-minute tick still runs queued jobs), and a new API or
+  worker instance can't start, since it reads its runtime secret through the
+  Secrets Manager endpoint at cold start (warm instances carry on).
 - **A `db.t4g.micro` has 1 GiB of RAM.** Ample for a few catchments and a
   handful of concurrent users; the `rds-cpu`, `rds-cpu-credits` and
   `rds-freeable-memory` alarms say when it isn't.
@@ -119,9 +123,9 @@ Cost, us-east-1:
 | 3 interface endpoints × 2 AZs | 43.80 |
 | WAF (ACL + 2 rules + requests) | ~7.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.00 |
-| KMS key, Route 53 zone, Secrets Manager secret | 1.90 |
+| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $110–115** |
+| **Total** | **≈ $111–116** |
 
 af-south-1: **≈ $135–150**.
 
@@ -172,7 +176,9 @@ The first thing to outgrow is the database instance class, not Lambda or
 bandwidth: watch the RDS CPU, memory and burst-credit alarms. The Lambda
 reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 8,
 fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job,
-and the budget alarm pages at 50%, 100% and forecast 100%.
+and the budgets page on a day over the daily amount, at 80% and 100% of the
+month and on a forecast over 100% (after ~5 weeks of history), plus Cost
+Anomaly Detection ([deployment.md § Budget alerts](./deployment.md#budget-alerts)).
 
 ## Cheaper options, and why they aren't used
 

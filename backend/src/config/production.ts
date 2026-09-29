@@ -15,7 +15,9 @@
 // process.env read in the modules it reaches, and fails on one that isn't
 // listed here, so a new setting has to be classified: checked in production
 // for the Lambdas that need it, or listed with the reason it needs no check.
-// The same test checks Terraform sets each required one (infra/*.tf).
+// The same test checks Terraform sets each required one (infra/*.tf): in the
+// function's environment, or, for a secret, in its runtime secret
+// (config/runtimeSecrets.ts, loaded into process.env before this check runs).
 //
 // Problems name the setting, never its value: the value may be a secret.
 // This module imports nothing, so every Lambda bundle can carry it.
@@ -74,6 +76,8 @@ const optional =
 	(v) =>
 		set(v) ? check(v) : null;
 
+const secretsManagerArn: Check = (v) => (!set(v) ? 'is not set' : /^arn:aws[a-z-]*:secretsmanager:/.test(v.trim()) ? null : 'is not a Secrets Manager ARN');
+
 const arn: Check = (v) => (!set(v) ? 'is not set' : /^arn:aws[a-z-]*:[a-z0-9-]+:/.test(v.trim()) ? null : 'is not an ARN');
 
 /** The RLS-bound app connection: RDS over verified TLS, with a generated password (infra/lambda.tf). */
@@ -113,7 +117,10 @@ const ALL = (check: Check): Partial<Record<Role, Check>> => Object.fromEntries(R
 
 export const SETTINGS: Record<string, Setting> = {
 	// --- The edge and the session ---------------------------------------------------------
-	CLOUDFRONT_SHARED_SECRET: { why: 'CloudFront stamps it on every /api request; unset, app.ts skips the check (local dev).', checks: { api: secret(32) } },
+	CLOUDFRONT_SHARED_SECRET: {
+		why: 'CloudFront stamps it on every /api request; unset, app.ts skips the check (local dev). In Lambda it comes from the runtime secret.',
+		checks: { api: secret(32) }
+	},
 	AUTH_JWT_SECRET: {
 		why: 'Signs sessions (the API only; the worker reaches session.ts through shared modules but never calls it), and keys the run stamps (runs/stamp.ts, 077): the API and the worker (a re-run job) store runs.',
 		checks: { api: secret(32), worker: secret(32) }
@@ -128,8 +135,18 @@ export const SETTINGS: Record<string, Setting> = {
 	VITEST: { why: 'Set by the test runner; lowers the bcrypt cost to 4.', checks: ALL(unset) },
 	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
 
+	// --- Runtime secrets (config/runtimeSecrets.ts) --------------------------------------
+	RUNTIME_SECRET_ARN: {
+		why: 'The Secrets Manager secret holding this Lambda’s secrets (RUNTIME_SECRETS), read at cold start; the secrets themselves never sit in the environment.',
+		checks: { api: secretsManagerArn, worker: secretsManagerArn, migrate: secretsManagerArn }
+	},
+	RUNTIME_SECRET_VERSION: {
+		why: 'The secret version Terraform last wrote: pins what a cold start reads, and changing it cold-starts every instance onto a rotation.',
+		checks: { api: required, worker: required, migrate: required }
+	},
+
 	// --- The database ---------------------------------------------------------------------
-	DATABASE_URL: { why: 'The water_app (RLS-bound) connection.', checks: { api: postgresUrl, worker: postgresUrl } },
+	DATABASE_URL: { why: 'The water_app (RLS-bound) connection; in Lambda, from the runtime secret (it holds the password).', checks: { api: postgresUrl, worker: postgresUrl } },
 	NODE_EXTRA_CA_CERTS: {
 		why: 'Read by Node itself: the RDS CA bundle, without which sslmode=verify-full cannot connect.',
 		checks: { api: required, worker: required, migrate: required }
@@ -139,7 +156,10 @@ export const SETTINGS: Record<string, Setting> = {
 	DB_PORT: { why: 'Defaults to 5432.', checks: { migrate: optional(port) } },
 	DB_NAME: { why: 'The database to migrate.', checks: { migrate: required } },
 	MASTER_SECRET_ARN: { why: 'The RDS-managed owner credentials in Secrets Manager.', checks: { migrate: arn } },
-	WATER_APP_PASSWORD: { why: 'The runtime role password the migrate Lambda sets (sops db_app_password).', checks: { migrate: appPassword } },
+	WATER_APP_PASSWORD: {
+		why: 'The runtime role password the migrate Lambda sets (sops db_app_password), from its runtime secret.',
+		checks: { migrate: appPassword }
+	},
 	MIGRATION_DATABASE_URL: { why: 'Read only by scripts/migrate.ts run as a CLI; the migrate Lambda passes its own URL.' },
 
 	// --- Email -----------------------------------------------------------------------------
@@ -159,7 +179,7 @@ export const SETTINGS: Record<string, Setting> = {
 	MAIL_EVENTS_QUEUE_ARN: { why: 'Only records from this queue are read as SES events (lambda-worker.ts).', checks: { worker: arn } },
 
 	// --- Alerts ----------------------------------------------------------------------------
-	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe links; only the worker signs (the API checks a link by its hash).', checks: { worker: secret(32) } },
+	ALERTS_TOKEN_SECRET: { why: 'Signs unsubscribe links; only the worker signs (the API checks a link by its hash). From the worker’s runtime secret.', checks: { worker: secret(32) } },
 	ALERTS_ENABLED: { why: 'The alert-email kill switch: the worker must be told explicitly (Terraform var.alerts_enabled).', checks: { worker: decision } },
 	ALERTS_DAILY_CAP: { why: 'Per-person immediate mails a day; the code default (5) is safe.' },
 	API_PUBLIC_URL: {
