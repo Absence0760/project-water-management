@@ -98,6 +98,7 @@ const CHARTS: Record<string, { prop: string } | { heading: true } | { svgName: R
 	'farm/DamChart.svelte': { heading: true },
 	'farm/MonthlyChart.svelte': { heading: true },
 	'share/FlowChart.svelte': { heading: true },
+	'overview/ReserveStrip.svelte': { heading: true },
 	'uncertainty/BandFdcChart.svelte': { svgName: /<title id="\{uid\}-t">/ },
 	'uncertainty/TornadoChart.svelte': { prop: 'title' },
 	'compare/ReserveYearsChart.svelte': { svgName: /aria-label="Days below the reserve per water year\./ },

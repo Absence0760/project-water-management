@@ -22,6 +22,7 @@
 	import { api, ApiError } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { cachedSeries } from '$lib/components/runs/cache';
+	import { labelX, yearLabelIndices } from './yearAxis';
 
 	// The chart fills the height its box gives it (a flex column), at least `minHeight` px.
 	let { runs, minHeight = 240 }: { runs: ChartRun[]; minHeight?: number } = $props();
@@ -70,8 +71,8 @@
 	// Bars: at most 14 px each, a 2 px gap between a group's bars.
 	const barW = $derived(Math.max(1, Math.min(14, (groupW * 0.8 - 2 * (runs.length - 1)) / runs.length)));
 	const y = (v: number) => pad.t + plotH - (top ? (v / top) * plotH : 0);
-	// About six labelled years along the axis.
-	const labelEvery = $derived(Math.max(1, Math.ceil(allYears.length / 6)));
+	// About six labelled years along the axis, the last always, each kept inside the svg (yearAxis.ts).
+	const labelled = $derived(new Set(yearLabelIndices(allYears.length)));
 
 	const summary = $derived(
 		runs
@@ -123,8 +124,9 @@
 								><title>{waterYearLabel(wy)} · {r.name}: {v.below} day{v.below === 1 ? '' : 's'} below{v.complete ? '' : ` (part year, ${v.days} days run)`}</title></rect>
 							{/if}
 						{/each}
-						{#if gi % labelEvery === 0 || gi === allYears.length - 1}
-							<text class="x" x={pad.l + gi * groupW + groupW / 2} y={height - 6} text-anchor="middle">{waterYearLabel(wy)}</text>
+						{#if labelled.has(gi)}
+							{@const label = waterYearLabel(wy)}
+							<text class="x" x={labelX(pad.l + gi * groupW + groupW / 2, label, 0, width - 2)} y={height - 6} text-anchor="middle" data-year={wy}>{label}</text>
 						{/if}
 					{/each}
 				</svg>

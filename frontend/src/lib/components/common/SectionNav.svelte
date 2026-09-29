@@ -5,15 +5,26 @@
 	free to break across them (as whole blocks, a long group pushed the next one
 	onto a row of its own: three rows at 1280 px); what doesn't fit goes, in
 	page order, into a More menu at the bar's end (navFitCount). On a phone it
-	is one strip that scrolls sideways, every link on it. Groups sit apart by a
-	wider gap; their names are for screen readers (each group is a list
-	labelled by its name), and the More menu shows them as headings. While it
+	is one strip that scrolls sideways, every link on it. Each group is a list
+	labelled by its name for screen readers, and the More menu shows the names
+	as headings. With `groupNames` the bar shows them too, each before its
+	group's first link and set off by a wider gap; without it the links are
+	evenly spaced (issue #162: a wider gap with no name read as a spacing bug). While it
 	is shown, in-page jumps and focus scrolling keep clear of it (WCAG 2.4.11).
 -->
 <script lang="ts">
 	import { activeSectionId, navFitCount, type NavGroup, type NavSection } from './sectionNav';
 
-	let { groups, label }: { groups: NavGroup[]; label: string } = $props();
+	let {
+		groups,
+		label,
+		groupNames = false
+	}: {
+		groups: NavGroup[];
+		label: string;
+		/** Show each group's name on the bar, before its first link (a small muted label). */
+		groupNames?: boolean;
+	} = $props();
 
 	/** The bar's most rows on a laptop or wider. */
 	const ROWS = 2;
@@ -23,7 +34,15 @@
 	const PHONE = '(max-width: 640px)';
 
 	const uid = $props.id();
-	const flat = $derived(groups.flatMap((g, gi) => g.sections.map((s, si) => ({ ...s, groupStart: gi > 0 && si === 0 }))));
+	const flat = $derived(
+		groups.flatMap((g, gi) =>
+			g.sections.map((s, si) => {
+				const groupName = groupNames && si === 0 ? g.label : null;
+				// The wider gap only before a group whose name is on the bar: an unnamed gap reads as a bug (issue #162).
+				return { ...s, groupStart: gi > 0 && !!groupName, groupName };
+			})
+		)
+	);
 	const ids = $derived(flat.map((s) => s.id));
 	let height = $state(0);
 	let activeSection = $state<string | null>(null);
@@ -183,7 +202,8 @@
 						{#if g.label}<span class="visually-hidden" id="{uid}-g{gi}">{g.label}</span>{/if}
 						<ul aria-labelledby={g.label ? `${uid}-g${gi}` : undefined}>
 							{#each g.bar as sec, si (sec.id)}
-								<li class="item" class:group-start={gi > 0 && si === 0}>
+								<li class="item" class:group-start={gi > 0 && si === 0 && groupNames && !!g.label}>
+									{#if groupNames && g.label && si === 0}<span class="grp-h" aria-hidden="true">{g.label}</span>{/if}
 									<a class="pill" href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{@render linkText(sec)}</a>
 								</li>
 							{/each}
@@ -228,7 +248,13 @@
 	     widest state (marked as the one being read, so bold), the More button as the real one. -->
 	<div class="measure" aria-hidden="true" inert bind:this={measureEl}>
 		<span class="nav-h">On this page</span>
-		{#each flat as sec (sec.id)}<span class="pill marked" data-m>{@render linkText(sec)}</span>{/each}
+		{#each flat as sec (sec.id)}
+			{#if sec.groupName}
+				<span class="named" data-m><span class="grp-h">{sec.groupName}</span><span class="pill marked">{@render linkText(sec)}</span></span>
+			{:else}
+				<span class="pill marked" data-m>{@render linkText(sec)}</span>
+			{/if}
+		{/each}
 		<button type="button" class="pill more-btn current" tabindex="-1" data-more>{@render moreText(true)}</button>
 	</div>
 </nav>
@@ -275,6 +301,19 @@
 	.group,
 	.group > ul {
 		display: inline;
+	}
+	/* A group's name, before its first link (groupNames): the two sit in one item, so they wrap as one. */
+	.item {
+		display: inline-flex;
+		align-items: center;
+	}
+	.grp-h {
+		margin-inline-end: var(--gap);
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 30px;
+		color: var(--text-muted);
+		white-space: nowrap;
 	}
 	/* A wider gap sets a group off from the one before it. */
 	.item.group-start {
@@ -391,6 +430,9 @@
 		}
 		.pill {
 			min-height: 36px;
+		}
+		.grp-h {
+			line-height: 36px;
 		}
 	}
 </style>

@@ -2,11 +2,11 @@
 	// River & reserve (issue #17, option A · Outcomes): one run's river, for
 	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
 	// The page header and run picker, four KPI tiles (river.ts riverKpis), then
-	// the flow against the EWR (the Summary's chart, larger, with its 30 days /
-	// 1 year / All switch and the days below the reserve shaded) beside the days
-	// below the reserve per water year; on a wide, tall enough window that
-	// first screen is the height left below its top (measured, as the Summary's
-	// is). Below it, the panels that were Runs & results' River & Reserve group,
+	// the flow against the EWR (the app's one flow vs reserve chart, with its
+	// 30 days / 1 year / All switch and the days below the reserve shaded; the
+	// Summary shows the days below by month and links here, issue #162) beside
+	// the days below the reserve per water year; on a wide, tall enough window
+	// that first screen is the height left below its top (measured). Below it, the panels that were Runs & results' River & Reserve group,
 	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
 	// the uncertainty bands (with the sensitivity runs under them), the outcome
 	// matrix, the seasonal outlook and the water account.
@@ -38,9 +38,8 @@
 
 	// The panels every run shows (the uncertainty bands, the outcome matrix, the seasonal outlook, the
 	// water account) are in this tab's chunk: only this tab uses them, and as chunks of their own they
-	// loaded on every visit anyway, paying split overhead (issue #9). The flow chart (uPlot, shared with
-	// the Summary), the water-year bars (shared with Compare runs) and Reserve compliance (only with a
-	// rule table) stay lazy.
+	// loaded on every visit anyway, paying split overhead (issue #9). The flow chart (uPlot), the
+	// water-year bars (shared with Compare runs) and Reserve compliance (only with a rule table) stay lazy.
 	const loadFlowVsReserve = () => import('$lib/components/overview/FlowVsReserve.svelte');
 	const loadReserveYears = () => import('$lib/components/compare/ReserveYearsChart.svelte');
 	const loadAssurancePanel = () => import('$lib/components/runs/EwrAssurancePanel.svelte');
@@ -241,8 +240,9 @@
 	</section>
 {:else}
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
-	     under its first screen. Above the first screen, which fits the window below it. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" />{/if}
+	     under its first screen. Above the first screen, which fits the window below it. Its group
+	     names show on the bar (issue #162), so the gaps between the groups read as groups. -->
+	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" groupNames />{/if}
 	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>

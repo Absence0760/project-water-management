@@ -578,7 +578,7 @@
 
 	<div class="detail">
 		<!-- In-page menu: sticks under the app header above the results, grouped by the question each panel answers. -->
-		{#if groups.length}<SectionNav {groups} label="Result sections" />{/if}
+		{#if groups.length}<SectionNav {groups} label="Result sections" groupNames />{/if}
 		{#if detailError && !detail}
 			<div class="alert alert-error" role="alert">
 				{detailError}

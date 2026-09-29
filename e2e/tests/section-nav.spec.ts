@@ -36,6 +36,33 @@ async function barRows(menu: Locator): Promise<number> {
 	return new Set(boxes.map((b) => Math.round(b!.y))).size;
 }
 
+/**
+ * Issue #162: a wider gap between groups with no name on the bar read as a spacing bug. Either each group's
+ * name sits just before its first link, on its row, or there are no names and every gap on a row is the same.
+ */
+async function expectNamedGroups(menu: Locator, names: string[]): Promise<void> {
+	await expect(menu.locator('.groups .grp-h')).toHaveText(names);
+	const pairs = await menu.locator('.groups .grp-h').evaluateAll((els) =>
+		els.map((el) => {
+			const n = el.getBoundingClientRect();
+			const l = el.nextElementSibling!.getBoundingClientRect();
+			return { dy: Math.abs(n.top - l.top), gap: l.left - n.right };
+		})
+	);
+	for (const p of pairs) {
+		expect(p.dy).toBeLessThan(1);
+		expect(p.gap).toBeGreaterThanOrEqual(0);
+		expect(p.gap).toBeLessThan(12);
+	}
+}
+async function expectEvenGaps(menu: Locator): Promise<void> {
+	await expect(menu.locator('.groups .grp-h')).toHaveCount(0);
+	const boxes = await menu.locator('.groups a.pill').evaluateAll((els) => els.map((el) => el.getBoundingClientRect()).map((r) => ({ top: Math.round(r.top), left: r.left, right: r.right })));
+	const gaps = boxes.slice(1).flatMap((b, i) => (b.top === boxes[i]!.top ? [b.left - boxes[i]!.right] : []));
+	expect(gaps.length).toBeGreaterThan(0);
+	expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(1);
+}
+
 /** The menu's height: two rows of 30 px links and their gaps come to about 78 px; three to 112. */
 const TWO_ROWS = 90;
 
@@ -52,6 +79,8 @@ test('Settings: at 1440 and 1280 px every link is on the bar, in at most two row
 		await expect(menu.getByRole('link')).toHaveText(SETTINGS_LINKS);
 		expect(await barRows(menu)).toBeLessThanOrEqual(2);
 		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
+		// Its group names would push links into More at 1280 px, so it has none and spaces its links evenly.
+		await expectEvenGaps(menu);
 	}
 });
 
@@ -69,6 +98,9 @@ test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most t
 		await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
 		expect(await barRows(menu)).toBeLessThanOrEqual(2);
 		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
+		// Its group names fit within the two rows, so they show.
+		expect(await menu.locator('.groups .grp-h').count()).toBeGreaterThan(1);
+		await expectNamedGroups(menu, await menu.locator('.groups .grp-h').allTextContents());
 	}
 });
 
@@ -161,6 +193,9 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	const menu = page.getByRole('navigation', { name: 'River sections' });
 	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'EWR by month', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
 	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
+	// The group names show on the bar, each just before its first link, so the gaps between groups read as groups (issue #162).
+	await expectNamedGroups(menu, ['The reserve', 'How sure, and what if', 'Water balance']);
+	await expect(menu.locator('.groups .grp-h').first().locator('+ a')).toHaveText('Flow vs reserve');
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
 	// One row at 1440, so the first screen, which fits the window below it, loses little.
 	expect(await barRows(menu)).toBe(1);
@@ -190,6 +225,7 @@ test('Hydrological units has the menu: the hydrological unit detail and each tab
 	const menu = page.getByRole('navigation', { name: 'Hydrological units sections' });
 	await expect(menu.getByRole('link')).toHaveText(['Hydrological unit detail', 'Hydrological unit results', 'Curtailment', 'Assurance of supply']);
 	expect(await barRows(menu)).toBe(1);
+	await expectNamedGroups(menu, ['Each hydrological unit', 'Tables for this run']);
 
 	await menu.getByRole('link', { name: 'Assurance of supply' }).click();
 	await expect(page).toHaveURL(/#res-assurance$/);
@@ -212,6 +248,7 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	// Rain and observed flow, no logger or CHIRPS: no agreement table and no double mass.
 	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data checks', 'Upload CSV', 'What the model uses']);
+	await expectNamedGroups(menu, ['Series', 'Checks', 'Adding data']);
 
 	await menu.getByRole('link', { name: 'What the model uses' }).click();
 	await expect(page).toHaveURL(/#data-uses$/);

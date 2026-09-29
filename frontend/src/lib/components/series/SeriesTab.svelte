@@ -484,7 +484,7 @@
 {/if}
 
 <!-- In-page menu: at the tab's top level, not in .data-page, so it sticks down the panels below the chart. -->
-{#if list.length}<SectionNav groups={navGroups} label="Data sections" />{/if}
+{#if list.length}<SectionNav groups={navGroups} label="Data sections" groupNames />{/if}
 
 <div class="data-page" bind:clientWidth={pageW}>
 <div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">

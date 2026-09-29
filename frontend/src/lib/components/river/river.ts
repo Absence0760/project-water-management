@@ -9,6 +9,7 @@ import type { RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { monthProfile } from '$lib/components/ewr/heatmap';
+import { EWR_FLAG_FRACTION, ewrNotMet } from '$lib/components/ewr/notMet';
 import { headlines } from '$lib/components/overview/latestRun';
 import { fmtNum, fmtPct } from '$lib/format/number';
 
@@ -30,7 +31,7 @@ export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | n
 	return { run: sorted[at]!, previous: sorted[at + 1] ?? null };
 }
 
-export type RiverKpiId = 'met' | 'below' | 'outflow' | 'worst';
+export type RiverKpiId = 'ewr' | 'below' | 'outflow' | 'worst';
 
 export interface RiverKpi {
 	id: RiverKpiId;
@@ -80,8 +81,9 @@ export function worstMonth(s: Pick<RunSummary, 'ewrCompliance'>): { month: numbe
 export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNotMet * YEAR) / days : 0);
 
 /**
- * The page's four tiles: the reserve met (share of days at the outflow gauge,
- * with the rule-table months when the project has one), the days below it
+ * The page's four tiles: EWR not met (share of days at the outflow gauge,
+ * worded as the Summary's card, ewr/notMet.ts, with the rule-table months
+ * when the project has one), the days below it
  * (and per average year, which is what the change compares, since runs can
  * differ in length), the mean simulated outflow (the Summary's figure,
  * overview/latestRun.ts), and the worst month. `days` is the run's length.
@@ -89,10 +91,10 @@ export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNo
 export function riverKpis(s: RunSummary, days: number, previous: { summary: RunSummary; days: number } | null): RiverKpi[] {
 	const c = s.catchment;
 	const pc = previous?.summary.catchment;
-	const met = 1 - c.ewrFractionDaysNotMet;
-	const metSub = [`${fmtNum(days - c.ewrDaysNotMet)} of ${fmtNum(days)} days at the outflow gauge`];
+	const ewr = ewrNotMet(c, days);
+	const ewrSub = [ewr.count];
 	const reserve = headlines(s, days, null).find((h) => h.id === 'reserve');
-	if (reserve) metSub.push(`Reserve rules: ${reserve.value} of months`);
+	if (reserve) ewrSub.push(`Reserve rules: ${reserve.value} of months`);
 
 	const year = perYear(c.ewrDaysNotMet, days);
 	const prevYear = pc ? perYear(pc.ewrDaysNotMet, previous!.days) : null;
@@ -111,7 +113,7 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 			: worst.pct === 0
 				? ['the EWR was met in every month']
 				: [`EWR not met on ${fmtPct(worst.pct / 100, 0)} of its days`],
-		flagged: !!worst && worst.pct / 100 > 0.05,
+		flagged: !!worst && worst.pct / 100 > EWR_FLAG_FRACTION,
 		// The same month in the run before: did it get better or worse there?
 		delta: worst && worst.pct > 0 && prevProfile ? change(prevProfile[worst.month] == null ? null : prevProfile[worst.month]! / 100, worst.pct / 100) : null,
 		spec: { format: 'fraction', better: 'lower', digits: 0 }
@@ -119,15 +121,15 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 
 	return [
 		{
-			id: 'met',
-			term: 'Reserve met',
-			help: 'catchment.ewrFractionDaysNotMet',
-			value: fmtPct(met),
-			unit: 'of days',
-			sub: metSub,
-			flagged: c.ewrFractionDaysNotMet > 0.05,
-			delta: pc ? change(1 - pc.ewrFractionDaysNotMet, met) : null,
-			spec: { format: 'fraction', better: 'higher' }
+			id: 'ewr',
+			term: ewr.term,
+			help: ewr.help,
+			value: ewr.value,
+			unit: ewr.unit,
+			sub: ewrSub,
+			flagged: ewr.flagged,
+			delta: pc ? change(pc.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
+			spec: { format: 'fraction', better: 'lower' }
 		},
 		{
 			id: 'below',
@@ -135,7 +137,7 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 			value: fmtNum(c.ewrDaysNotMet),
 			unit: 'days',
 			sub: [`${fmtNum(year, year < 10 ? 1 : 0)} in an average year`],
-			flagged: c.ewrFractionDaysNotMet > 0.05,
+			flagged: ewr.flagged,
 			delta: change(prevYear, pc ? year : null),
 			spec: { format: 'days', better: 'lower', digits: 1 }
 		},
