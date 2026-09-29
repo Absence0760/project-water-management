@@ -328,7 +328,7 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await period.getByLabel('Gaps from').selectOption('rain_reanalysis_mm');
 	await expect(section.getByRole('alert')).toBeHidden();
 
-	// The quantile map (engine ≥ 1.20.0) is opt-in, at 1 mm; a wet-day threshold outside 0.1–10 mm isn't taken.
+	// The quantile map (engine ≥ 1.21.0) is opt-in, at 1 mm; a wet-day threshold outside 0.1–10 mm isn't taken.
 	await period.getByLabel(/Quantile-map its wet days/).check();
 	await expect(period.getByLabel('Wet day from (mm)')).toHaveValue('1');
 	await period.getByLabel('Mapped onto water years from').fill('2001');

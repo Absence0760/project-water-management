@@ -1,5 +1,5 @@
 // A rain-source period's daily-intensity check and opt-in quantile map
-// (engine ≥ 1.20.0, issue #66, docs/model.md §2.4e *Daily intensity*). Every
+// (engine ≥ 1.21.0, issue #66, docs/model.md §2.4e *Daily intensity*). Every
 // record here is synthetic: a primary catchment series wet on about half the
 // days with moderate (exponential) falls over water years 1990–2004, and an
 // alternative automatic gauge from 2005 wet as often with the same mean fall

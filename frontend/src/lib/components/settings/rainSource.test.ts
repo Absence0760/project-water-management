@@ -47,7 +47,7 @@ describe('rain-source periods in the Settings form', () => {
 	});
 });
 
-describe('the quantile map of a rain-source period (engine ≥ 1.20.0)', () => {
+describe('the quantile map of a rain-source period (engine ≥ 1.21.0)', () => {
 	it('turns on over the fit’s reference era at the 1 mm default, off again, and blocks Save on a bad threshold', () => {
 		const fit = { ...newRainSourcePeriod(AT), reason: 'automatic station' };
 		const on = withQuantileMap(fit, true);

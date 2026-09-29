@@ -29,7 +29,7 @@
 // and out of the zero-run handling (§2.4c). The stored series are never
 // changed.
 //
-// Daily intensity (engine ≥ 1.20.0, issue #66): a monthly factor keeps the
+// Daily intensity (engine ≥ 1.21.0, issue #66): a monthly factor keeps the
 // series' own wet-day distribution, and a single automatic gauge has more
 // intense days than a mean of several gauges. Every period reports the share
 // of its rain on heavy days (≥ HEAVY_DAY_MM) against the primary record's in
@@ -299,7 +299,7 @@ export interface HeavyDayShare {
 	wetDays: number;
 }
 
-/** The daily-intensity check of a period (engine ≥ 1.20.0): heavy-day shares, reference vs period. */
+/** The daily-intensity check of a period (engine ≥ 1.21.0): heavy-day shares, reference vs period. */
 export interface RainSourceIntensity {
 	heavyDayMm: number;
 	band: number;
@@ -367,9 +367,9 @@ export interface RainSourcePeriodInfo {
 	seriesPresent: boolean;
 	/** The product and version the series holds (032_series_provenance; null = not recorded, absent when the caller didn't say). */
 	seriesProvenance?: SeriesProvenance | null;
-	/** The daily-intensity check (engine ≥ 1.20.0; absent before). */
+	/** The daily-intensity check (engine ≥ 1.21.0; absent before). */
 	intensity?: RainSourceIntensity;
-	/** The opt-in quantile map (engine ≥ 1.20.0): null = monthly factor alone; absent before 1.20.0. */
+	/** The opt-in quantile map (engine ≥ 1.21.0): null = monthly factor alone; absent before 1.21.0. */
 	quantileMap?: RainSourceQuantileMapInfo | null;
 	/** Run days in the period, and where their rain came from. */
 	runDays: number;
@@ -441,7 +441,7 @@ export type RainSourceQuantileMapFit = Omit<RainSourceQuantileMapInfo, 'mappedDa
 
 /** A period's fits from the whole stored record (what a warm-start snapshot pins). */
 export type RainSourcePeriodFactors = Pick<RainSourcePeriodInfo, 'factors' | 'fit' | 'fallback' | 'factorMode' | 'provenance'> & {
-	/** The daily-intensity check's reference side (engine ≥ 1.20.0; absent on a fit pinned before). */
+	/** The daily-intensity check's reference side (engine ≥ 1.21.0; absent on a fit pinned before). */
 	intensityReference?: RainSourceIntensity['reference'];
 	quantileMap?: RainSourceQuantileMapFit | null;
 };

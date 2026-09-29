@@ -526,7 +526,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       ([model.md §2.10b](./model.md)).
 - [x] **Quantile-map a replacement gauge's daily intensities
       (calibration-research.md §4, *Check daily intensity*; done, engine
-      1.20.0, issue #66).** Every rain-source period now reports the share
+      1.21.0, issue #66).** Every rain-source period now reports the share
       of its rain on heavy days (≥ 20 mm) and its wet days against the
       primary record's in a reference era, and warns when the heavy-day
       shares are more than 5 points apart; an opt-in per-period
@@ -1027,7 +1027,7 @@ the suggested order (the IDs carry the detail):
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
       uncertainty and BFI, CR-23 CHIRPS quantile mapping (the pure mapper
-      exists since engine 1.20.0, `packages/engine/src/quantileMap.ts`: fit
+      exists since engine 1.21.0, `packages/engine/src/quantileMap.ts`: fit
       CHIRPS' wet days against the catchment's over the §2.4b fit period and
       apply it to the gap days with the monthly factor as the fallback),
       CR-24 alternative

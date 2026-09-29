@@ -1338,7 +1338,7 @@ series lacks (or a month without a factor) falls through to the period's
 | `fitReference` | `{ series, fromWaterYear, toWaterYear }` | `'fit'` only: the reference series (`rain_reanalysis_mm` or `rain_chirps_mm`) and the **reference era** |
 | `fallback` | absent, or `{ series: 'rain_reanalysis_mm', fromWaterYear, toWaterYear }` | Where the series' gaps go. Absent: CHIRPS × the §2.4b factors (the fit period's), as for any blank day. Named: reanalysis × catchment ÷ reanalysis factors fitted over that era |
 | `gaugeInChirps` | boolean | The period's gauge reports to CHIRPS: CHIRPS may be neither the fit reference nor the fallback, so a fallback must be named |
-| `quantileMap` | absent, or `{ fromWaterYear, toWaterYear, wetDayMm }` | Engine ≥ 1.20.0, opt-in: quantile-map the scaled series' wet days (≥ `wetDayMm`, 0.1–10 mm) onto the primary record's over those water years, keeping every month's total (*Daily intensity* below). Absent: the factor alone |
+| `quantileMap` | absent, or `{ fromWaterYear, toWaterYear, wetDayMm }` | Engine ≥ 1.21.0, opt-in: quantile-map the scaled series' wet days (≥ `wetDayMm`, 0.1–10 mm) onto the primary record's over those water years, keeping every month's total (*Daily intensity* below). Absent: the factor alone |
 | `reason` | 1–500 characters | Why, shown in the warning, the summary CSV and run comparison |
 
 **`'fit'`.** The alternative gauge is scaled to the primary series' level in
@@ -1416,7 +1416,7 @@ timestamp is taken to close its interval, so a reading stamped exactly
 merge of days added up in the other window is refused. The engine itself
 reads only daily values.
 
-**Daily intensity (engine ≥ 1.20.0, issue #66).** A factor fixes the
+**Daily intensity (engine ≥ 1.21.0, issue #66).** A factor fixes the
 monthly volume, not how the rain falls: a single automatic gauge has more
 intense days than a mean of several gauges, the factor keeps its own
 wet-day distribution, and GR4J turns heavier days into more flow
@@ -1436,7 +1436,7 @@ wet-day distribution, and GR4J turns heavier days into more flow
   that suggests one (or carrying the runoff effect in the calibration
   band); with a map, a warning says what it did. The daily output of a
   period without a map is unchanged: the series × factor, exactly as
-  before 1.20.0.
+  before 1.21.0.
 - **The map, opt-in per period** (`quantileMap`,
   `packages/engine/src/quantileMap.ts`, a pure mapper written to serve
   CHIRPS later, CR-23). Per calendar month, the scaled series' wet days

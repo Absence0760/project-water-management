@@ -212,7 +212,7 @@ describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
 			['an unknown series', [{ ...fixed, series: 'rain_catchment_mm' }]],
 			['an extra field', [{ ...fixed, note: 'x' }]],
 			['a bad date', [{ ...fixed, end: '2019-02-30' }]],
-			['a quantile map (engine ≥ 1.20.0)', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011, wetDayMm: 1 } }]],
+			['a quantile map (engine ≥ 1.21.0)', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011, wetDayMm: 1 } }]],
 			['a quantile map without a threshold', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011 } }]],
 			['a quantile map with its era reversed', [{ ...fitNoProv, quantileMap: { fromWaterYear: 2011, toWaterYear: 1995, wetDayMm: 1 } }]],
 			['a quantile map threshold out of range', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011, wetDayMm: 25 } }]],

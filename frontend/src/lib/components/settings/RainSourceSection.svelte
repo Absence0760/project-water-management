@@ -4,7 +4,7 @@
 	monthly factors. Each period has its dates and a reason; fixed factors with
 	their provenance, or a fit against a reference series over a reference era;
 	and where its gaps fall through to; optionally a quantile map of its wet
-	days (engine ≥ 1.20.0). `error` is set while the list is
+	days (engine ≥ 1.21.0). `error` is set while the list is
 	invalid (the engine's own check, which the API uses), so the parent form
 	can block saving.
 -->

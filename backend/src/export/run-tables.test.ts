@@ -455,7 +455,7 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 		expect([...summaryCsvLines(meta, { ...summary, rainSource: { periods: [period] } })]).toContain('Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep');
 	});
 
-	it('adds the daily-intensity check and the quantile map from engine 1.20.0', () => {
+	it('adds the daily-intensity check and the quantile map from engine 1.21.0', () => {
 		const share = (x: number) => ({ share: x, totalMm: 1000, heavyDays: 10, days: 2000, wetDays: 700 });
 		const withIntensity = {
 			...period,
@@ -488,7 +488,7 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 			'2012-10-01 to 2019-09-30,20,the whole trusted primary catchment series (1990/91–2011/12),25,40,,5,yes,none: the monthly factor alone',
 			"2020-10-01 to 2021-09-30,20,the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12),25,40,30,5,yes,\"wet days (≥ 1 mm) quantile-mapped onto the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12), each month's total kept; by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun, Aug, Sep; by season: Jul\""
 		]);
-		// A run before 1.20.0 has no intensity block.
+		// A run before 1.21.0 has no intensity block.
 		expect([...rainSourceCsvLines({ periods: [period] })]).toHaveLength(5);
 	});
 

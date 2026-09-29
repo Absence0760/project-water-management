@@ -2596,7 +2596,7 @@ which checks every catchment tab).
   with the water years its factors are fitted on) and **CHIRPS ingests this
   gauge in this period**, which refuses CHIRPS as the reference and needs a
   reanalysis fallback. **Quantile-map its wet days onto the catchment
-  series** (engine ≥ 1.20.0, issue #66, off by default) adds the water
+  series** (engine ≥ 1.21.0, issue #66, off by default) adds the water
   years to map onto (the fit's reference era, or the ten water years before
   a fixed-factor period, to start with) and **Wet day from (mm)** (1 mm,
   0.1–10); a hint says what it does and that each run reports the heavy-day

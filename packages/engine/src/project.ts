@@ -87,7 +87,7 @@ export interface RainSourceReferenceEra {
 	toWaterYear: number;
 }
 
-/** A rain-source period's quantile mapping (settings.rainSource[].quantileMap, engine ≥ 1.20.0). */
+/** A rain-source period's quantile mapping (settings.rainSource[].quantileMap, engine ≥ 1.21.0). */
 export interface RainSourceQuantileMap {
 	/** Water years of the primary catchment record the series' wet days are mapped onto (the reference era). */
 	fromWaterYear: number;
@@ -122,7 +122,7 @@ export interface RainSourcePeriod {
 	/** The series' gauge reports to CHIRPS in this period: CHIRPS can be neither the fit reference nor the fallback. */
 	gaugeInChirps?: boolean;
 	/**
-	 * Opt-in (engine ≥ 1.20.0, issue #66, docs/model.md §2.4e *Daily
+	 * Opt-in (engine ≥ 1.21.0, issue #66, docs/model.md §2.4e *Daily
 	 * intensity*): after the monthly factor, quantile-map the series' wet-day
 	 * distribution onto the primary catchment record's over a reference era,
 	 * month by month, keeping every month's total. Absent = the monthly
