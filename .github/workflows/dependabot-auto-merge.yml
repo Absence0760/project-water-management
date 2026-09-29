@@ -10,6 +10,10 @@ name: Dependabot auto-merge
 #     job while it holds the AWS session, so a hijacked patch release
 #     (the tj-actions/changed-files pattern) would become the new SHA pin
 #     on main unread. The SHA pin only helps if someone reads what it moves to.
+#   - the report renderer image's contents, whatever the ecosystem: its base
+#     image (`docker`) and its npm packages (npm's `/backend/renderer-deps`
+#     entry: aws-lambda-ric, a native module compiled in the image's build
+#     stage). What goes into that image gets a human review.
 #
 # Supply-chain delay: `.github/dependabot.yml` sets a 7-day `cooldown` on
 # every ecosystem, and `pnpm-workspace.yaml` sets `minimumReleaseAge` to the
@@ -63,10 +67,17 @@ jobs:
       # from the branch name (dependabot/<ecosystem>/..., `github_actions`
       # for actions), and a name it doesn't list is left for a human.
       # `docker` (the renderer image, .github/dependabot.yml) stays off it
-      # too; scripts/guards/check_workflows.mjs (auto-merge) refuses either.
+      # too, and so does npm's `/backend/renderer-deps` entry (the renderer
+      # image's npm packages). fetch-metadata derives `directory` from the
+      # branch name (dependabot/npm_and_yarn/backend/renderer-deps/…), so the
+      # branch is checked as well: a branch naming that directory stays manual
+      # whatever fetch-metadata made of it.
+      # scripts/guards/check_workflows.mjs (auto-merge) refuses dropping any of these.
       - name: Approve + auto-merge minor / patch
         if: >-
           contains(fromJSON('["npm_and_yarn", "pip", "docker_compose", "terraform"]'), steps.meta.outputs.package-ecosystem) &&
+          !startsWith(steps.meta.outputs.directory, '/backend/renderer-deps') &&
+          !contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&
           (steps.meta.outputs.update-type == 'version-update:semver-minor' ||
           steps.meta.outputs.update-type == 'version-update:semver-patch')
         env:

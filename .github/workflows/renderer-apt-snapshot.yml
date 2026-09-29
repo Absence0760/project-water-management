@@ -1,0 +1,93 @@
+name: Renderer apt snapshot age
+
+# The report renderer image's build tools are pinned to exact versions from one
+# Ubuntu archive snapshot (APT_SNAPSHOT in backend/renderer.Dockerfile), so
+# they get no Ubuntu security update until someone moves it, and Dependabot
+# can't (it moves the base image's tag and digest, never an apt pin). This
+# weekly check opens one `renderer-apt-snapshot` issue once the snapshot is
+# more than 90 days old, with the bump procedure in its body, updates that
+# issue (never a second one) while it stays stale, and closes it once the
+# snapshot has moved. Issue #126.
+#
+# The date logic and the issue text: scripts/guards/renderer_apt_snapshot.mjs
+# (tests: renderer_apt_snapshot.test.mjs, run by `pnpm test:guards` and CI's
+# workflow-lint job). Moving the snapshot: `pnpm gen:renderer-apt`
+# (docs/deployment.md § Reports).
+
+on:
+  schedule:
+    # 06:00 UTC Monday, the same weekly tide as audit.yml and gitleaks-sweep.yml.
+    - cron: '0 6 * * 1'
+  # A merged bump closes the issue without waiting for Monday.
+  push:
+    branches: [main]
+    paths:
+      - 'backend/renderer.Dockerfile'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  age:
+    name: Apt snapshot age
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Read the snapshot's age
+        id: age
+        run: node scripts/guards/renderer_apt_snapshot.mjs age --max-days 90 --body-file "$RUNNER_TEMP/body.md"
+
+      - name: Open or update the tracking issue
+        if: steps.age.outputs.stale == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AGE_DAYS: ${{ steps.age.outputs.age_days }}
+          SNAPSHOT: ${{ steps.age.outputs.snapshot }}
+        run: |
+          set -euo pipefail
+          gh label create renderer-apt-snapshot --repo "$REPO" \
+            --color FBCA04 \
+            --description "The renderer image's apt snapshot is over 90 days old" \
+            2>/dev/null || true
+
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --label renderer-apt-snapshot --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --repo "$REPO" --body-file "$RUNNER_TEMP/body.md"
+            gh issue comment "$existing" --repo "$REPO" \
+              --body "Still stale as of $(date -u +%Y-%m-%d): APT_SNAPSHOT=$SNAPSHOT is $AGE_DAYS days old."
+          else
+            gh issue create --repo "$REPO" \
+              --title "Move the renderer image's apt snapshot ($AGE_DAYS days old)" \
+              --body-file "$RUNNER_TEMP/body.md" \
+              --label renderer-apt-snapshot
+          fi
+
+      - name: Close the tracking issue once the snapshot is fresh
+        if: steps.age.outputs.stale == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          AGE_DAYS: ${{ steps.age.outputs.age_days }}
+          SNAPSHOT: ${{ steps.age.outputs.snapshot }}
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --repo "$REPO" --state open \
+            --label renderer-apt-snapshot --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --repo "$REPO" \
+              --comment "APT_SNAPSHOT=$SNAPSHOT is $AGE_DAYS days old as of $(date -u +%Y-%m-%d); closing automatically."
+          fi

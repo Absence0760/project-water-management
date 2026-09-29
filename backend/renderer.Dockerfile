@@ -22,7 +22,8 @@
 # `npm ci` installs exactly, integrity hashes checked, and the deps stage's
 # apt packages by exact version from one Ubuntu archive snapshot (below).
 # Dependabot's docker entry (.github/dependabot.yml, never auto-merged) opens
-# the tag-and-digest PR. To move Playwright:
+# the tag-and-digest PR; on that PR, also run `pnpm gen:renderer-apt` (below).
+# To move Playwright:
 # bump the tag and digest here (both FROM lines), playwright-core in
 # renderer-deps/package.json and backend/package.json, then refresh the lock
 # with `npm install --package-lock-only` in renderer-deps/. `pnpm check:pins`
@@ -42,11 +43,21 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b7
 # Ubuntu archive snapshot (snapshot.ubuntu.com, `--snapshot`), so the
 # versions stay installable after noble-updates/-security supersede them and
 # the unpinned transitive packages are fixed by the same snapshot. The
-# versions are the snapshot's candidates, read from the digest-pinned base:
-#   docker run --rm <the FROM image> bash -c 'apt-get update --snapshot <ID> -qq &&
-#     apt-cache policy g++ make cmake autoconf automake libtool python3 unzip xz-utils libcurl4-openssl-dev'
-# Move the snapshot and the versions together (when the base digest moves, or
-# for a fix in one of them); `pnpm check:pins` refuses an unpinned package.
+# versions are the snapshot's candidates, read from the digest-pinned base
+# (`apt-cache --snapshot <ID> policy`: a bare `apt-cache policy` reads the live
+# lists `apt-get update --snapshot` also fetches, so it reports today's
+# versions, not the snapshot's).
+#
+# Nothing moves the snapshot by itself (Dependabot can't), and until it moves
+# these packages get no Ubuntu security update. Move it, and the versions with
+# it, with `pnpm gen:renderer-apt` (scripts/guards/renderer_apt_snapshot.mjs:
+# APT_SNAPSHOT to today, each version to its candidate there, read in the
+# FROM image by docker run), then `pnpm check:pins` (refuses an unpinned
+# package) and `pnpm check:renderer-image`:
+#   - whenever the base digest moves: on Dependabot's docker PR, in the same PR;
+#   - when .github/workflows/renderer-apt-snapshot.yml opens its issue (weekly
+#     check; the snapshot is over 90 days old);
+#   - for a security fix in one of them.
 ARG APT_SNAPSHOT=20260928T000000Z
 RUN apt-get update --snapshot "$APT_SNAPSHOT" \
 	&& apt-get install -y --no-install-recommends --snapshot "$APT_SNAPSHOT" \

@@ -119,11 +119,15 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   lines), its npm packages (playwright-core, aws-lambda-ric) by
   `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
   its build stage's apt packages by exact version from one Ubuntu archive
-  snapshot (`APT_SNAPSHOT`; move the snapshot and the versions together,
-  read from the base with `apt-cache policy` as the Dockerfile shows).
+  snapshot (`APT_SNAPSHOT`). Nothing moves that snapshot by itself, so
+  `pnpm gen:renderer-apt` moves it and the versions together (each read
+  from the digest-pinned base with `apt-cache --snapshot`), on every
+  Dependabot `docker` PR and whenever the weekly
+  `renderer-apt-snapshot.yml` check opens its issue (snapshot over 90 days
+  old; `pnpm check:apt-snapshot` locally).
   Dependabot's `docker` entry for `/backend` opens the tag-and-digest PR;
-  it is never auto-merged (`pnpm check:workflows` keeps `docker` off the
-  auto-merge allowlist). Moving
+  neither it nor the `/backend/renderer-deps` npm entry is ever
+  auto-merged (`pnpm check:workflows` keeps both out of auto-merge). Moving
   Playwright moves every pin at once: the Dockerfile tag and digest
   (`docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`),
   playwright-core in `backend/renderer-deps/package.json` (then
