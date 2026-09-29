@@ -17,7 +17,7 @@ import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
 import { logEvent } from './logging/logEvent.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
-import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
+import { myInviteRoutes, projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
 import { jobRoutes } from './jobs/routes.js';
 import { modelRoutes } from './model/routes.js';
@@ -167,6 +167,8 @@ export function createApp() {
 	const me = new Hono<AuthEnv>();
 	me.use('*', requireUser);
 	me.route('/', meAlertRoutes);
+	// Your own pending invitations: list, accept, decline (issue #136).
+	me.route('/', myInviteRoutes);
 	app.route('/me', me);
 
 	// One-click unsubscribe from alert emails (WP-2.13): no session, the token is the credential.

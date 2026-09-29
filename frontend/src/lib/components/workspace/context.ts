@@ -24,7 +24,9 @@ export function sectionContext(
 		case 'series':
 			if (d.seriesCount === null) return null;
 			if (!d.seriesCount) return 'No input series yet';
-			return `${count(d.seriesCount, 'input series', 'input series')}${d.behind ? ` · ${d.behind} behind` : ''}`;
+			// The Data tab's list had its own line under this ("Daily values · N series · N behind · recorded rain up to …"),
+			// repeating this and the rain pill; it was folded in here (issue #174).
+			return `${count(d.seriesCount, 'daily input series', 'daily input series')}${d.behind ? ` · ${d.behind} behind` : ''}`;
 		case 'transfers': {
 			const n = d.transfers.length;
 			if (!n) return 'No transfer rules yet';

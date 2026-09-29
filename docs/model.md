@@ -399,7 +399,9 @@ project with only a daily record runs. A run stores the series in its inputs
 (`run_input_series`, like every input series), so re-running it reproduces
 the same days. `pnpm pan-sensitivity` reads the series from a project.json
 too, so its cases vary the coefficient that multiplies the daily A-pan on the
-days it covers.
+days it covers. The one exception is the Crops & demand page's demand chart,
+a preview outside any run: it multiplies the monthly means, and with a daily
+series says so on the chart (issue #173, [ui.md](./ui.md)).
 
 **Scenarios.** `series.scale` can scale the daily series (it is in
 `SCALABLE_SERIES_KINDS`). A `settings.set` on `apanMm` reaches only the days
@@ -1017,7 +1019,7 @@ and the series explorer:
 | `chirps_factor` (engine ≥ 0.10.2) | The day's calendar-month factor (unit ×; with listed fit ranges, its range's), so each row of the daily CSV shows what its CHIRPS was multiplied by. Output with `rain_chirps_corrected` | NaN for a month without a factor |
 | `rain_catchment_missing` (engine ≥ 0.15.0) | 1 on a day whose catchment reading the run set aside as missing (§2.4c), 0 elsewhere. Only output when the run set aside at least one day | never missing |
 | `rain_catchment_spread` (engine ≥ 0.20.0) | 1 on a day whose catchment rain came from a multi-day accumulation window (§2.4d): spread by CHIRPS, or the reading day and the zeros before it when CHIRPS was dry throughout. Only output when the run took at least one day from a window | never missing |
-| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from with rain-source periods (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Only output when the settings list a period | NaN when no source has a value |
+| `rain_source` (engine ≥ 0.30.0) | Where the day's rain came from (§2.4e): 0 catchment, 1 alternative gauge, 2 CHIRPS, 3 reanalysis, 4 forecast. Output with rain-source periods from engine 0.30.0, and in every run with rain from engine 1.27.0 (`rainSourceCodes`: without periods, the same pick as `rain_final`), so a series download can say where each day's rain used came from | NaN when no source has a value |
 | `rain_areal` (engine ≥ 1.13.0) | `rain_final` × the month's areal rainfall factor (§2.4g): the rain GR4J runs on, and what the catchment's water balance reads. Only output when the settings have an areal rainfall correction | NaN where `rain_final` is |
 
 The run's **summary CSV** has a *CHIRPS bias correction* block: one row per
@@ -1393,8 +1395,9 @@ label (`seriesProvenance`, 032), and where its run days' rain came from:
 `seriesDays` (with the raw and scaled millimetres), `chirpsDays`,
 `reanalysisDays`, `forecastDays` and `noneDays`. Each period adds one run
 warning with those counts, the factors (Oct–Sep) and their origin, and names
-any month without a factor. A daily column **`rain_source`** (only with
-periods) marks where each day's rain came from: 0 catchment, 1 alternative
+any month without a factor. A daily column **`rain_source`** (with
+periods from engine 0.30.0, in every run with rain from 1.27.0, where without
+periods it is only 0, 2 or 4) marks where each day's rain came from: 0 catchment, 1 alternative
 gauge, 2 CHIRPS, 3 reanalysis, 4 forecast, blank for none. The summary CSV
 has a *Rain-source periods* block (`rainSourceCsvLines` in
 `backend/src/export/run-tables.ts`): one row per period with its reason,
@@ -1518,8 +1521,9 @@ tail and with it. Its output is
   assurance, water balance, self-checks, warnings) of the run **without**
   the tail;
 - every daily series of the run without the tail up to `forecastFrom − 1`,
-  and of the run with it from `forecastFrom` on, plus the `rain_source`
-  column when the run has none (so charts and exports can mark the days);
+  and of the run with it from `forecastFrom` on, except `rain_source`, taken
+  whole from the full input (before `forecastFrom` it equals the run without
+  the tail's), so charts and exports can mark the days;
 - `ModelOutput.forecastFrom` and `summary.forecast`: over the tail days, per
   farm the lowest dam level (storage ÷ capacity, and the first day at it),
   the days with a deficit, demand, supply and supplied ÷ demand, and at the

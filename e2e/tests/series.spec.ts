@@ -5,11 +5,13 @@ import { createProject, putSeries } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { addDataDialog, openAddData, uploadedNote } from '../support/addData.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 
+// Uploading on the Data tab is the header's Add data dialog (the page's one upload form).
 async function upload(page: Page, kindLabel: string, file: string) {
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('Kind').selectOption({ label: kindLabel });
 	await form.getByLabel('CSV file').setInputFiles(fixture(file));
 	return form;
@@ -29,9 +31,11 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(summary.nth(1)).toHaveText('92');
 	await expect(summary.nth(3)).toHaveText('0');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 92 days to “Rainfall — catchment”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 92 days to “Rainfall — catchment”.');
+	await expect(form).toBeHidden();
 
-	// Uploading selects the new series and charts it.
+	// Uploading selects the new series and charts it, through the URL as picking its row does.
+	await expect(page).toHaveURL(/[?&]series=/);
 	const rainChart = page.getByRole('img', { name: /^Rainfall — catchment: line chart/ });
 	await expect(rainChart).toBeVisible();
 	await expect(rainChart.locator('canvas')).toBeVisible();
@@ -45,7 +49,7 @@ test('upload daily rainfall and observed flow CSVs and chart them', async ({ pag
 	await expect(summary.nth(3)).toHaveText('1');
 	await form.getByLabel(/^Name/).fill('Gauge W7');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 92 days to “Gauge W7”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 92 days to “Gauge W7”.');
 	const flowChart = page.getByRole('img', { name: /^Flow — observed gauge · Gauge W7: line chart/ });
 	await expect(flowChart.locator('canvas')).toBeVisible();
 
@@ -67,7 +71,7 @@ test('a malformed CSV is rejected before upload', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Series bad file');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles({
 		name: 'broken.csv',
 		mimeType: 'text/csv',
@@ -81,12 +85,13 @@ test('a later file appends to an existing series without erasing stored days', a
 	void owner;
 	const project = await createProject(page.request, 'Series append');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	let form = await openAddData(page);
 	const csv = (name: string, body: string) => ({ name, mimeType: 'text/csv', buffer: Buffer.from(body) });
 
 	await form.getByLabel('CSV file').setInputFiles(csv('first.csv', 'date,value\n2021-10-01,1\n2021-10-02,2\n2021-10-03,3\n'));
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 3 days to “Rainfall — catchment”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 3 days to “Rainfall — catchment”.');
+	form = await openAddData(page);
 
 	// Same kind and name: append/update is the default. 10-03 is corrected,
 	// 10-04 and 10-05 are new, and 10-02 (blank in the file) keeps its value.
@@ -98,7 +103,7 @@ test('a later file appends to an existing series without erasing stored days', a
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	// 10-03 is overwritten, so the form asks first.
 	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
-	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 2 new days, 1 changed. Data now runs to 2021-10-05.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — catchment' });
 	await expect(row).toContainText('2021-10-05');
@@ -136,7 +141,7 @@ test('a US month/day CSV is read as month/day, and the summary says how dates we
 	void owner;
 	const project = await createProject(page.request, 'Series date order');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles({
 		name: 'us.csv',
 		mimeType: 'text/csv',
@@ -176,12 +181,13 @@ test('on a phone each series row is a card: every column and button fits without
 	const project = await createProject(page.request, 'Series phone');
 	await page.setViewportSize({ width: 390, height: 900 });
 
-	// Empty: the hint points at the upload form, which sits right under the series panel.
+	// Empty: the hint points at Add data, and its button, right in the series panel, opens that dialog.
 	await page.goto(`/projects/${project.id}?tab=series`);
-	await expect(page.getByText('No time series yet.')).toContainText('Upload CSV form below');
-	const upload = page.getByRole('region', { name: 'Upload CSV' });
-	const uses = page.getByRole('region', { name: 'What the model uses' });
-	expect((await upload.boundingBox())!.y).toBeLessThan((await uses.boundingBox())!.y);
+	await expect(page.getByText('No time series yet.')).toContainText('with Add data.');
+	await page.getByRole('region', { name: 'Input time series' }).getByRole('button', { name: 'Upload a CSV' }).click();
+	await expect(addDataDialog(page)).toBeVisible();
+	await page.keyboard.press('Escape');
+	await expect(addDataDialog(page)).toBeHidden();
 
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3] });
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', name: 'Gauge W7', unit: 'm3/s', startDate: '2021-10-01', values: [0.5, 0.6, 0.7] });
@@ -210,15 +216,31 @@ test('on a phone each series row is a card: every column and button fits without
 	expect(label).toContain('Data up to');
 });
 
-test('on a wide screen the upload form stays to the right of "What the model uses"', async ({ page, owner }) => {
+test('on a wide screen "What the model uses" spans the page with the kinds in columns; there is no second upload form', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Series wide');
 	await page.setViewportSize({ width: 1600, height: 1000 });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const upload = (await page.getByRole('region', { name: 'Upload CSV' }).boundingBox())!;
-	const uses = (await page.getByRole('region', { name: 'What the model uses' }).boundingBox())!;
-	expect(upload.x).toBeGreaterThanOrEqual(uses.x + uses.width);
-	expect(Math.abs(upload.y - uses.y)).toBeLessThan(2);
+	const series = (await page.getByRole('region', { name: 'Input time series' }).boundingBox())!;
+	const usesRegion = page.getByRole('region', { name: 'What the model uses' });
+	// The kinds are behind a disclosure (issue #174); the closing note shows without it.
+	const terms = usesRegion.getByRole('term');
+	await expect(terms.first()).toBeHidden();
+	await expect(usesRegion.getByText(/^A run needs at least one rainfall series/)).toBeVisible();
+	const more = usesRegion.getByText('Show what each kind of series is for', { exact: true });
+	await more.click();
+	await expect(usesRegion.getByText('Hide what each kind of series is for', { exact: true })).toBeVisible();
+	await expect(terms.first()).toBeVisible();
+	const uses = (await usesRegion.boundingBox())!;
+	expect(Math.abs(uses.x - series.x)).toBeLessThan(2);
+	expect(Math.abs(uses.width - series.width)).toBeLessThan(2);
+	const first = (await terms.nth(0).boundingBox())!;
+	const second = (await terms.nth(1).boundingBox())!;
+	expect(Math.abs(first.y - second.y)).toBeLessThan(2);
+	expect(second.x).toBeGreaterThan(first.x + first.width);
+	// Uploading is the header's Add data only: no form on the page itself.
+	await expect(page.getByLabel('CSV file')).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'Upload CSV' })).toHaveCount(0);
 });
 
 test('a flow uploaded in l/s is converted to m³/s, the unit the model reads', async ({ page, owner }) => {
@@ -229,7 +251,7 @@ test('a flow uploaded in l/s is converted to m³/s, the unit the model reads', a
 	await form.getByLabel('Unit').selectOption('l/s');
 	await expect(form.getByTestId('unit-converted')).toHaveText('Values in l/s are converted to m³/s when saved.');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toContainText('Uploaded 92 days');
+	await expect(uploadedNote(page)).toContainText('Uploaded 92 days');
 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string; unit: string }[];
 	expect(list[0]!.unit).toBe('m³/s');
@@ -244,7 +266,7 @@ test('merging an l/s file into an m³/s series compares like with like and keeps
 	const project = await createProject(page.request, 'Series l/s merge');
 	await putSeries(page.request, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: [1.2, 0.8, 0.6] });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
 	await form.getByLabel('Unit').selectOption('l/s');
 	// 10-01 repeats the stored 1.2 m³/s, 10-02 is blank, 10-03 is corrected, 10-04 is new.
@@ -257,7 +279,7 @@ test('merging an l/s file into an m³/s series compares like with like and keeps
 	await expect(summary.nth(6)).toHaveText('1'); // unchanged
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	await form.getByRole('button', { name: 'Overwrite 1 day' }).click();
-	await expect(form.getByRole('status')).toContainText('1 new day, 1 changed');
+	await expect(uploadedNote(page)).toContainText('1 new day, 1 changed');
 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
 	const values = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()).values as number[];
@@ -277,13 +299,14 @@ test('a merge that changes stored days says which and how many before it overwri
 	const project = await createProject(page.request, 'Overwrite confirm');
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, 2, 3, 4] });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	let form = await openAddData(page);
 
 	// Positive control: a file that only adds days uploads straight away.
 	await form.getByLabel('CSV file').setInputFiles(csvFile('new.csv', 'date,value\n2021-10-04,4\n2021-10-05,5\n'));
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
-	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 2021-10-05.');
-	await expect(form.getByTestId('overwrite-confirm')).toHaveCount(0);
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 1 new day, 0 changed. Data now runs to 2021-10-05.');
+	await expect(form).toBeHidden();
+	form = await openAddData(page);
 
 	// 10-02 and 10-04 change, 10-03 is the same.
 	await form.getByLabel('CSV file').setInputFiles(csvFile('fix.csv', 'date,value\n2021-10-02,20\n2021-10-03,3\n2021-10-04,40\n'));
@@ -300,7 +323,7 @@ test('a merge that changes stored days says which and how many before it overwri
 	await expect(rows.nth(2)).toHaveText(/2021-10-04\s*4\.00\s*40\.00/);
 	await expectNoViolations(page);
 
-	await confirm.getByRole('button', { name: 'Back' }).click();
+	await form.getByRole('button', { name: 'Back' }).click();
 	await expect(confirm).toHaveCount(0);
 	await expect(form.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
 	expect(await storedValues(page, project.id)).toEqual([1, 2, 3, 4, 5]);
@@ -314,7 +337,7 @@ test('a merge that changes stored days says which and how many before it overwri
 
 	await form.getByRole('button', { name: 'Upload and merge' }).click();
 	await form.getByRole('button', { name: 'Overwrite 2 days' }).click();
-	await expect(form.getByRole('status')).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 2021-10-05.');
+	await expect(uploadedNote(page)).toHaveText('Updated “Rainfall — catchment”: 0 new days, 2 changed. Data now runs to 2021-10-05.');
 	expect(await storedValues(page, project.id)).toEqual([1, 20, 3, 40, 5]);
 });
 
@@ -323,15 +346,15 @@ test('replacing a series asks first, counting every stored day it drops', async 
 	const project = await createProject(page.request, 'Replace confirm');
 	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: [1, null, 3] });
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles(csvFile('all.csv', 'date,value\n2021-11-01,7\n'));
 	await form.getByRole('radio', { name: /^Replace the whole series/ }).check();
 	await form.getByRole('button', { name: 'Upload and replace' }).click();
 	const confirm = form.getByTestId('overwrite-confirm');
 	await expect(confirm).toContainText('This replaces all 2 days stored in “Rainfall — catchment” (2021-10-01 → 2021-10-03) with the file.');
 	await expect(confirm.getByText('Show the changes')).toHaveCount(0);
-	await confirm.getByRole('button', { name: 'Replace 2 days' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 1 day to “Rainfall — catchment”.');
+	await form.getByRole('button', { name: 'Replace 2 days' }).click();
+	await expect(uploadedNote(page)).toHaveText('Uploaded 1 day to “Rainfall — catchment”.');
 	expect(await storedValues(page, project.id)).toEqual([7]);
 });
 
@@ -361,7 +384,7 @@ test('a CHIRPS upload is asked its product and version, and the series row shows
 	await expect(version).toHaveAccessibleDescription(/A b023 workbook’s CHIRPS column is usually v2\.0; the CHIRPS data feed writes v3\.0/);
 	await version.selectOption({ label: 'CHIRPS v2.0' });
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toContainText('Uploaded 92 days');
+	await expect(uploadedNote(page)).toContainText('Uploaded 92 days');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — CHIRPS' });
 	const label = row.getByRole('combobox', { name: 'Product and version of Rainfall — CHIRPS' });
@@ -383,7 +406,7 @@ test('an hourly file is added up into 08:00 days, or midnight days, and the seri
 	void owner;
 	const project = await createProject(page.request, 'Hourly rain');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('Kind').selectOption({ label: 'Rainfall — alternative catchment gauge' });
 	// 2 mm an hour from 21:00 on the 5th to 04:00 on the 6th (stamps close their hour): a storm straddling midnight.
 	const rows = ['timestamp,rain_mm'];
@@ -403,7 +426,7 @@ test('an hourly file is added up into 08:00 days, or midnight days, and the seri
 	await form.getByLabel('Product').fill('SASSCAL AWS');
 	await form.getByLabel('Version').fill('1');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 3 days to “Rainfall — alternative catchment gauge”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 3 days to “Rainfall — alternative catchment gauge”.');
 
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Rainfall — alternative catchment gauge' });
 	await expect(row.getByTestId('series-day-boundary')).toHaveText('08:00 day');
@@ -428,12 +451,12 @@ test('a daily A-pan file uploads as its own kind, and Settings says evaporation 
 	await expect(source).toHaveText('A-pan comes from these monthly means on every day. A daily A-pan record can be added on the Data tab.');
 
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles(fixture('apan-daily.csv'));
 	await expect(form.getByLabel('Kind')).toHaveValue('evap_apan_mm');
 	await expect(form.getByLabel('Unit')).toHaveValue('mm');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 30 days to “Evaporation — A-pan, daily”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 30 days to “Evaporation — A-pan, daily”.');
 	const row = page.getByRole('region', { name: 'Input time series' }).getByRole('row').filter({ hasText: 'Evaporation — A-pan, daily' });
 	await expect(row).toContainText('Daily evaporation');
 
@@ -448,7 +471,7 @@ test('a DWS export loads with its missing-data codes and -999 as gaps, and the s
 	void owner;
 	const project = await createProject(page.request, 'Series DWS export');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
 	await form.getByLabel('CSV file').setInputFiles(fileURLToPath(new URL('../../packages/engine/fixtures/dws-daily-export.txt', import.meta.url)));
 	const summary = form.getByRole('definition');
@@ -462,7 +485,7 @@ test('a DWS export loads with its missing-data codes and -999 as gaps, and the s
 	await expect(form.getByTestId('dws-quality')).toHaveText('1 × 6, 2 × 1, 60 × 1, 170 × 1, 255 × 1');
 	await form.getByLabel(/^Name/).fill('Weir X0H000');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toHaveText('Uploaded 11 days to “Weir X0H000”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 11 days to “Weir X0H000”.');
 
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
 	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()) as { startDate: string; values: (number | null)[] };
@@ -474,7 +497,7 @@ test('a semicolon file with decimal commas loads; one that mixes decimal points 
 	void owner;
 	const project = await createProject(page.request, 'Series semicolons');
 	await page.goto(`/projects/${project.id}?tab=series`);
-	const form = page.getByRole('region', { name: 'Upload CSV' });
+	const form = await openAddData(page);
 	await form.getByLabel('CSV file').setInputFiles({ name: 'mixed.csv', mimeType: 'text/csv', buffer: Buffer.from('datum;reën\n2021-10-01;12,5\n2021-10-02;3.25\n') });
 	await expect(form.getByRole('alert')).toHaveText(
 		'mixed.csv: the file mixes decimal points ("3.25", line 3) and decimal commas ("12,5", line 2); use one throughout'
@@ -484,7 +507,7 @@ test('a semicolon file with decimal commas loads; one that mixes decimal points 
 	await expect(summary.nth(0)).toHaveText('2021-10-01 → 2021-10-03');
 	await expect(summary.nth(2)).toHaveText('3');
 	await form.getByRole('button', { name: 'Upload' }).click();
-	await expect(form.getByRole('status')).toContainText('Uploaded 3 days');
+	await expect(uploadedNote(page)).toContainText('Uploaded 3 days');
 	const list = (await (await page.request.get(`${API_URL}/projects/${project.id}/series`)).json()).series as { id: string }[];
 	const stored = (await (await page.request.get(`${API_URL}/projects/${project.id}/series/${list[0]!.id}`)).json()) as { values: (number | null)[] };
 	expect(stored.values).toEqual([12.5, 1234.5, 0]);

@@ -8,7 +8,7 @@
 // there are. The full grids open from the Grids menu; nothing on the old tab
 // is lost.
 import type { Page } from '@playwright/test';
-import { addMember, putModel, seedRunnableProject } from '../support/api.ts';
+import { addMember, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid, openCropSheet } from '../support/crops.ts';
 import { API_URL } from '../support/env.ts';
@@ -151,15 +151,11 @@ test('the Grids menu and Edit areas open the full grids over the page; a farm op
 	await expectNoViolations(page);
 	await closeModal(page);
 
-	// Irrigation demand: the table and the chart, as the old tab showed them.
-	const demand = await openCropGrid(page, 'demand');
-	await expect(demand.locator('table.demand').getByRole('rowheader', { name: 'Dry farm' })).toBeVisible();
-	await closeModal(page);
-
-	// The menu closes on Escape, focus back on its button.
+	// The menu holds the two crop grids only: the demand table is on the page, behind Show table (issue #174).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a grid' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas']);
+	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
@@ -179,6 +175,20 @@ test('the Grids menu and Edit areas open the full grids over the page; a farm op
 	await expect(drawer.getByLabel('Orchard on Dry farm, ha')).toHaveValue('5');
 	await closeModal(page);
 	await expect(page).toHaveURL(/\?tab=crops$/);
+});
+
+test('an old link to the Irrigation demand grid opens the page with its demand table shown', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page demand link');
+	// The grid modal showed it over any tab (grid=demand, issue #17) until it was removed as a repeat of the page (issue #174).
+	await page.goto(`/projects/${project.id}?tab=network&grid=demand`);
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=crops#crop-demand-table$`));
+	await expect(page.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	const table = page.locator('table.demand');
+	await expect(table.getByRole('rowheader', { name: 'Dry farm' })).toBeInViewport();
+	await expect(table.getByRole('rowheader', { name: 'Catchment' })).toBeVisible();
+	await expect(page.getByText('Hide table', { exact: true })).toBeVisible();
 });
 
 test('a viewer sees the list and bars, opens a crop’s factors read-only, and adds nothing', async ({ page, owner, signIn }) => {
@@ -207,6 +217,34 @@ test('with no crops the header and an Add crop prompt show', async ({ page, owne
 	await expect(page.getByTestId('crops-summary')).toHaveText('0 crops · nothing planted yet · water year October to September');
 	await expect(page.getByRole('region', { name: 'No crops yet' }).getByRole('button', { name: 'Add crop', exact: true })).toBeVisible();
 	await expect(page.locator('details.grids-menu')).toBeVisible();
+});
+
+test('with a daily A-pan series the demand chart says it shows the monthly means, which runs replace (issue #173)', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page daily A-pan');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month/ });
+	await expect(chart).toBeVisible();
+	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);
+
+	await putSeries(page.request, project.id, { kind: 'evap_apan_mm', unit: 'mm', startDate: '2020-01-01', values: [5, 6, 7] });
+	await page.reload();
+	const note =
+		'Shows the monthly A-pan means. Runs use the daily A-pan series (Data tab) on the days it has a value and these means only on the other days, so their demand differs.';
+	await expect(page.getByTestId('crops-demand-apan')).toHaveText(note);
+	// Screen readers hear it with the chart.
+	await expect(chart).toHaveAccessibleName(/Show table holds the values\. Shows the monthly A-pan means\. .* so their demand differs\.$/);
+	await expectNoViolations(page);
+
+	// With no monthly means the preview shows no demand, but the alert says runs still take the daily series.
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
+	await page.reload();
+	const alert = page.getByRole('region', { name: /^Irrigation demand by month/ }).locator('.alert');
+	await expect(alert).toHaveText(
+		"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value. Enter the monthly A-pan values (Settings & calibration, Demand) for the other days."
+	);
+	await expect(alert.getByRole('link', { name: 'Enter the monthly A-pan values' })).toHaveAttribute('href', '?tab=settings');
+	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);
 });
 
 test.describe('phone', () => {

@@ -12,6 +12,7 @@ import {
 	RAIN_SOURCE_CODE,
 	rainSourceError,
 	rainSourceLines,
+	rainSourceCodes,
 	rainSourcePeriodError,
 	rainSourceText,
 	resolveRainSource
@@ -149,10 +150,27 @@ describe('settings.rainSource: rain from another series over a period', () => {
 		expect(w).toContain('(automatic station replaces the gauge average)');
 		expect(w).toContain('fixed, from hydrologist, issue #12 study, fitted on 1995-10-01 to 2005-09-30 by catchment ÷ ERA5 over the reference era');
 		expect(w).toContain('Oct 1.25');
-		// Without periods: no column, and summary.rainSource is null.
+		// Without periods (engine ≥ 1.27.0): the column is rain_final's own pick, never a period's code, and summary.rainSource is null.
 		const plain = runModel(input(toSeries(build())));
-		expect(plain.series.some((s) => s.key === 'rain_source')).toBe(false);
+		const plainCol = plain.series.find((s) => s.key === 'rain_source')!.values;
+		const final = plain.series.find((s) => s.key === 'rain_final')!.values;
+		expect(plainCol).toHaveLength(final.length);
+		expect(plainCol[0]).toBe(RAIN_SOURCE_CODE.catchment);
+		expect(plainCol.at(-1)).toBe(RAIN_SOURCE_CODE.catchment); // positive control: the period's `series` code, without the period
+		for (let t = 0; t < final.length; t++) {
+			expect(Number.isNaN(plainCol[t]!), `day ${t}`).toBe(Number.isNaN(final[t]!));
+			expect(plainCol[t]).not.toBe(RAIN_SOURCE_CODE.series);
+		}
 		expect(plain.summary.rainSource).toBeNull();
+	});
+
+	it('rainSourceCodes picks catchment, then CHIRPS, then forecast, a set code first, NaN when none has a value', () => {
+		const codes = rainSourceCodes([1, null, null, null, 0], [5, 2, null, null, null], [9, 9, 3, null, null], [-1, -1, -1, -1, RAIN_SOURCE_CODE.reanalysis]);
+		expect(Array.from(codes.subarray(0, 3))).toEqual([RAIN_SOURCE_CODE.catchment, RAIN_SOURCE_CODE.chirps, RAIN_SOURCE_CODE.forecast]);
+		expect(codes[3]).toBeNaN();
+		expect(codes[4]).toBe(RAIN_SOURCE_CODE.reanalysis);
+		// A zero is a reading: it blocks the fallback.
+		expect(rainSourceCodes([0], [5], [5])[0]).toBe(RAIN_SOURCE_CODE.catchment);
 	});
 
 	it("'fit' measures the series against a gauge-free reference over the reference era (within 2 %), and records both windows", () => {

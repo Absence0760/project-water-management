@@ -135,6 +135,16 @@ export function resetPasswordMail(to: string, url: string, locale?: string | nul
 export type InviteTarget = { kind: 'project' | 'team'; name: string; role: string };
 
 /**
+ * How the invitee accepts (invites/invites.ts inviteByEmail):
+ * `sign-up`: the address has no account; the link is `/register?invite=…`.
+ * `confirm`: an unverified account already has the address; the link is a
+ * verify-email link, and confirming accepts the invitation.
+ * `accept`: a verified account has the address; the link is the invitations
+ * page, where its holder signs in and accepts or declines (issue #136).
+ */
+export type InviteMode = 'sign-up' | 'confirm' | 'accept';
+
+/**
  * A role value as the email names it: the UI's names (frontend
  * lib/api/roleLabels.ts, issue #162), one set for projects and teams. A team
  * `member` is an editor on every team project and an `admin` an owner, so the
@@ -153,17 +163,13 @@ export function roleName(role: string): string {
 	return Object.hasOwn(ROLE_NAME, role) ? ROLE_NAME[role]! : role;
 }
 
-/**
- * `sign-up`: the address has no account; the link is `/register?invite=…`.
- * `confirm`: an unverified account already has the address; the link is a
- * verify-email link, and confirming accepts the invitation.
- */
+/** An invite to a project or team, in one of the three modes (InviteMode). */
 export function inviteMail(
 	to: string,
 	url: string,
 	inviterName: string,
 	target: InviteTarget,
-	mode: 'sign-up' | 'confirm' = 'sign-up'
+	mode: InviteMode = 'sign-up'
 ): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
 	const role = roleName(target.role);
@@ -173,10 +179,14 @@ export function inviteMail(
 		heading: `You're invited to ${PRODUCT}`,
 		paragraphs: confirm
 			? [invited, `There is already a ${PRODUCT} account for ${to}. Confirm that this is your email address to accept.`]
-			: [invited, `Create your ${PRODUCT} account with this email address (${to}) to accept.`],
+			: mode === 'accept'
+				? [invited, `Sign in to ${PRODUCT} as ${to} to accept or decline. You won't join until you accept.`]
+				: [invited, `Create your ${PRODUCT} account with this email address (${to}) to accept.`],
 		action: confirm
 			? { label: 'Confirm email and accept', url }
-			: { label: 'Create account and accept', url },
+			: mode === 'accept'
+				? { label: 'See the invitation', url }
+				: { label: 'Create account and accept', url },
 		// The privacy notice's address: an invitee's details are processed before they reach sign-up (POPIA s18).
 		footer: (confirm
 			? [
@@ -197,8 +207,8 @@ export function listText(items: readonly string[], and = 'and'): string {
 export type FarmerInviteFacts = { catchment: string; farms: string[] };
 
 /**
- * A farmer invite (WP-2.2): "{inviter} has given you access to {farm} in
- * {catchment}". Same two modes as `inviteMail`; `locale` (invite.locale)
+ * A farmer invite (WP-2.2): "{inviter} invited you to see {farm} in
+ * {catchment}". The same modes as `inviteMail`; `locale` (invite.locale)
  * picks the wording, English where Afrikaans has none yet.
  */
 export function farmerInviteMail(
@@ -206,7 +216,7 @@ export function farmerInviteMail(
 	url: string,
 	inviterName: string,
 	facts: FarmerInviteFacts,
-	mode: 'sign-up' | 'confirm' = 'sign-up',
+	mode: InviteMode = 'sign-up',
 	locale: Locale = 'en'
 ): Mail {
 	const tr = mailT(locale);
@@ -224,9 +234,9 @@ export function farmerInviteMail(
 				tr.t('mail.farmer.privacy'),
 				// Before the sign-up button: the farmer reads it before they can see a figure (CPA s49 research, R4).
 				tr.t('mail.farmer.estimate'),
-				tr.t(confirm ? 'mail.invite.confirm' : 'mail.invite.signUp', v)
+				tr.t(confirm ? 'mail.invite.confirm' : mode === 'accept' ? 'mail.invite.accept' : 'mail.invite.signUp', v)
 			],
-			action: { label: tr.t(confirm ? 'mail.invite.confirmAction' : 'mail.invite.signUpAction'), url },
+			action: { label: tr.t(confirm ? 'mail.invite.confirmAction' : mode === 'accept' ? 'mail.invite.acceptAction' : 'mail.invite.signUpAction'), url },
 			// The privacy notice's address: a farmer's details are processed before they reach sign-up (POPIA s18).
 			footer: [
 				...(confirm

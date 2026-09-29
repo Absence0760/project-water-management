@@ -611,9 +611,10 @@ the result change?", and put back any earlier version.
   (an accepted invite logs `member.added` in `app_accept_invites`),
   `farmer.linked/unlinked` (including unlinks a model save, a member leaving
   or a restore causes, and a farmer invite's links, cause `invite`, logged
-  in `app_accept_invites`), `invite.sent/revoked` (email masked
+  in `app_accept_invites`), `invite.sent/revoked/declined` (email masked
   `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
-  flag, which would say whether the address has an account),
+  flag, which would say whether the address has an account; `declined`,
+  109, has no actor, so the owner never learns who declined),
   `publication.published/notice_changed`, `outlook.published/unpublished`
   (106, issue #53 R5: the publication and outlook ids, the level, the
   season and the number of farms), `share_link.created/revoked`,
@@ -1758,7 +1759,8 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
 - `invite` RLS: project owners (via `app_has_role(…, 'owner')`) or team admins
   (`app_team_role(…) = 'admin'`) read, create, refresh and delete; inserts and
   updates must leave `invited_by` = the current user. `app_invite_for_token()` answers the
-  public "what is this link for?" lookup; `app_accept_invites(user)` converts
+  public "what is this link for?" lookup; `app_accept_invites(user, invite
+  DEFAULT NULL)` (109: the second argument limits it to one invite) converts
   every live invite for the user's **verified** address into
   `project_member` / `team_member` rows, links the farms of each farmer or
   applicant invite (`farm_link` from `invite_node`, only where the membership
@@ -1773,6 +1775,17 @@ secret kept in `infra-secrets` (see [security.md](./security.md)).
   (`app_purge_invites(age)`, 048, `SECURITY DEFINER`; `invites.ts`
   `purgeInvites`, `INVITE_RETENTION_DAYS`): it holds the address of someone
   who never signed up.
+- **Accepting an invitation** (109_invite_accept.sql, issue #136): every add
+  by email is an invite, and a verified account joins only by accepting.
+  Three SECURITY DEFINER functions, each keyed on the caller's own
+  **verified** address (`app_current_user_id()`), since the invitee can't
+  read the `invite` table under its RLS: `app_my_invites()` lists the
+  caller's live invites (the target's name, the role, the sender's name, a
+  farm invite's farm names) and nothing about anyone else; `app_accept_invite(id)`
+  locks one of them and runs `app_accept_invites(caller, id)`, returning the
+  project or team joined (no row: not theirs, expired or gone);
+  `app_decline_invite(id)` deletes one and records `invite.declined` on its
+  project with the masked address and no actor.
 - `invite_node` RLS mirrors `invite`: project owners only, for every
   operation. Farmers never read it (the catalogue's "farmers never read"
   list).

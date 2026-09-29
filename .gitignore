@@ -31,6 +31,8 @@ build/
 # The e2e build of the frontend (e2e/support/build-site.ts): this checkout's e2e API URL baked in.
 build-e2e/
 .svelte-kit-e2e/
+build-e2e-*/
+.svelte-kit-e2e-*/
 .next/
 .nuxt/
 .output/

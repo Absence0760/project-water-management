@@ -3,6 +3,7 @@ import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
 import { LEGACY_RUN_CSV_COMMENT, runProvenanceComment } from './csv.js';
+import { SERIES_CHANGED_COMMENT } from './routes.js';
 import { flowDurationTable } from './fdc.js';
 import { localDate } from '../projects/timeZone.js';
 import { ProjectFile, type ProjectDocument } from '../projects/document.js';
@@ -25,6 +26,8 @@ const afterDisclaimer = (csv: string) => {
 	expect(rows[0]).toBe(CSV_DISCLAIMER_COMMENT);
 	return rows.slice(1);
 };
+/** One CSV record's cells, RFC 4180 quotes read. */
+const cells = (line: string) => [...line.matchAll(/("(?:[^"]|"")*"|[^,]*)(?:,|$)/g)].slice(0, -1).map((m) => m[1]!);
 /** A daily CSV's table (header row first): its lines after the leading `#` lines (the run's provenance, and a legacy run's warning). */
 const table = (csv: string) => {
 	const rows = lines(csv);
@@ -38,6 +41,7 @@ let stranger: User;
 let projectId: string;
 let runId: string;
 let rainId: string;
+let flowId: string;
 const outlet = node('Gauge', null);
 const farm = node('Farm, "upper"', outlet.id, { damCapacityM3: 200_000 });
 const farm2 = node('Farm 2', farm.id, { damCapacityM3: 50_000 });
@@ -83,13 +87,14 @@ beforeAll(async () => {
 		values: rain
 	});
 	rainId = put.body.id;
-	await owner.call('PUT', `/projects/${projectId}/series`, {
+	const flow = await owner.call('PUT', `/projects/${projectId}/series`, {
 		kind: 'flow_observed_m3s',
 		name: 'Gauge A',
 		unit: 'm3/s',
 		startDate: '2024-02-15',
 		values: rain.map((r) => (r === null ? null : 0.01 + r / 1000))
 	});
+	flowId = flow.body.id;
 	const run = await owner.call('POST', `/projects/${projectId}/runs`, { label: 'Baseline' });
 	expect(run.status).toBe(201);
 	runId = run.body.run.id;
@@ -111,9 +116,10 @@ describe('run daily export', () => {
 		expect(rows[1]!.startsWith('2024-02-15,')).toBe(true);
 		expect(rows[15]!.startsWith('2024-02-29,')).toBe(true); // leap day
 		expect(rows[DAYS]!.startsWith('2024-03-15,')).toBe(true);
-		// every row has the header's column count
-		const n = rows[0]!.split(',').length;
-		for (const r of rows.slice(1)) expect(r.split(',').length).toBe(n);
+		// every row has the header's column count (a header with a comma is quoted, as the rain source's is)
+		const n = cells(rows[0]!).length;
+		expect(rows[0]).toContain('"Rain source (0 catchment, 1 alternative gauge'); // every run with rain has it (engine ≥ 1.27.0)
+		for (const r of rows.slice(1)) expect(cells(r).length).toBe(n);
 	});
 
 	it('exports one node, quoting its name in the file only as a slug', async () => {
@@ -321,7 +327,7 @@ describe('legacy run CSV comment (audit H1)', () => {
 	beforeAll(async () => {
 		const { body } = await owner.call('POST', '/projects', { name: 'Legacy export' });
 		legacyProjectId = body.project.id;
-		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { apanMm: monthly(150) } })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${legacyProjectId}`, { settings: { apanMm: monthly(150), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } } })).status).toBe(200);
 		const legacyOutlet = node('Outlet', null);
 		const legacyFarm = node('Farm', legacyOutlet.id);
 		expect((await owner.call('PUT', `/projects/${legacyProjectId}/model`, { nodes: [legacyOutlet, legacyFarm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
@@ -368,7 +374,7 @@ describe('all-farms export after the network changed', () => {
 		const out = node('Outlet', null);
 		const a = node('Farm A', out.id);
 		const b = node('Farm B', out.id);
-		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } } });
 		const put = (nodes: unknown[]) => owner.call('PUT', `/projects/${pid}/model`, { nodes, crops: [], cropAreas: [], transfers: [] });
 		expect((await put([out, a, b])).status).toBe(200);
 		expect((await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: rain })).status).toBe(200);
@@ -386,7 +392,7 @@ describe('land cover in the farm exports (WP-1.35)', () => {
 	it('puts the land-cover reduction beside runoff I, which adds back to natural × share, and the all-farms table accepts it', async () => {
 		const { body } = await owner.call('POST', '/projects', { name: 'Invaded' });
 		const pid = body.project.id;
-		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150) } });
+		await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } } });
 		// Equal areas, so equal shares: the clear farm's runoff is natural flow × that share.
 		const out = node('Outlet', null);
 		const invaded = node('Invaded farm', out.id, { areaKm2: 10 });
@@ -425,13 +431,107 @@ describe('land cover in the farm exports (WP-1.35)', () => {
 });
 
 describe('input series export', () => {
-	it('exports one series as date,value with empty cells for missing days', async () => {
+	it('exports a series the latest run read with its checks and how that run used it, under the run’s provenance', async () => {
 		const res = await download(viewer, `/projects/${projectId}/series/${rainId}/export.csv`);
 		expect(res.status).toBe(200);
 		expect(res.headers.get('content-disposition')).toMatch(/_rain-catchment-mm_\d{4}-\d{2}-\d{2}\.csv"$/);
-		const rows = lines(res.text);
-		expect(rows.slice(0, 5)).toEqual(['date,rain_catchment_mm (mm)', '2024-02-15,25', '2024-02-16,0', '2024-02-17,0', '2024-02-18,']);
+		const all = lines(res.text);
+		expect(all).toContain(CSV_DISCLAIMER_COMMENT);
+		expect(all.some((l) => l.startsWith('# run=Baseline;'))).toBe(true);
+		expect(all).not.toContain(SERIES_CHANGED_COMMENT);
+		const rows = table(res.text);
+		expect(rows[0]).toMatch(/^date,rain_catchment_mm \(mm\),Flags,Rain used \[run Baseline\] \(mm\),Rain source \[run Baseline\],Rain above the [\d.]+ mm threshold \[run Baseline\] \(mm\)$/);
+		// The first two columns are the file's shape before #66: date and the value as stored.
+		expect(rows.slice(1, 5)).toEqual(['2024-02-15,25,,25,catchment,25', '2024-02-16,0,,0,catchment,0', '2024-02-17,0,,0,catchment,0', '2024-02-18,,missing,,,']);
 		expect(rows).toHaveLength(DAYS + 1);
+	});
+
+	it('a flow record: m³/day, the calibration exclusion and the run’s simulated outflow', async () => {
+		const rows = table((await download(viewer, `/projects/${projectId}/series/${flowId}/export.csv`)).text);
+		expect(rows[0]!.split(',')).toEqual([
+			'date',
+			'flow_observed_m3s – Gauge A (m³/s)',
+			'Flags',
+			'flow_observed_m3s – Gauge A (m³/day)',
+			'Excluded from calibration (reason)',
+			'Simulated outflow [run Baseline] (m³/day)'
+		]);
+		const [date, value, flags, m3Day, excluded, simulated] = rows[1]!.split(',');
+		expect([date, value, flags, excluded]).toEqual(['2024-02-15', '0.035', '', '']);
+		expect(Number(m3Day)).toBeCloseTo(0.035 * 86_400, 6);
+		expect(Number.isFinite(Number(simulated)) && simulated !== '').toBe(true);
+	});
+
+	it('a gauge node’s own flow record: the flow the run simulated at that gauge, named', async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Gauge record export' });
+		const pid = body.project.id as string;
+		const out = node('Outlet', null);
+		const weir = { ...node('Upper weir', out.id), kind: 'gauge' };
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [out, weir], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } } })).status).toBe(200);
+		await owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values: [5, 0, 3] });
+		const rec = (await owner.call('PUT', `/projects/${pid}/series`, { kind: 'flow_observed_m3s', name: 'Weir', unit: 'm3/s', startDate: '2024-01-01', values: [0.1, 0.2, 0.3] })).body.id as string;
+		expect((await owner.call('PATCH', `/projects/${pid}/series/${rec}`, { siteNodeId: weir.id })).status).toBe(200);
+		const made = await owner.call('POST', `/projects/${pid}/runs`, { label: 'With gauge' });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const rows = table((await download(owner, `/projects/${pid}/series/${rec}/export.csv`)).text);
+		// A gauge's record is never the outlet's calibration record: no exclusion column, and its own simulated flow.
+		expect(rows[0]).toBe(
+			'date,flow_observed_m3s – Weir (m³/s),Flags,flow_observed_m3s – Weir (m³/day),Simulated flow at Upper weir [run With gauge] (m³/day)'
+		);
+		expect(cells(rows[1]!)[4]).toMatch(/^\d/);
+	});
+
+	it('takes its run columns from the latest run of the live model, never a newer scenario run', async () => {
+		const sc = await owner.call('POST', `/projects/${projectId}/scenarios`, {
+			name: 'Bigger dam',
+			baseRunId: runId,
+			ops: [{ op: 'node.set', nodeId: farm.id, field: 'damCapacityM3', value: 400_000 }]
+		});
+		expect(sc.status, JSON.stringify(sc.body)).toBe(201);
+		const scRun = await owner.call('POST', `/projects/${projectId}/scenarios/${sc.body.scenario.id}/runs`, { label: 'Scenario' });
+		expect(scRun.status, JSON.stringify(scRun.body)).toBe(201);
+		const all = lines((await download(viewer, `/projects/${projectId}/series/${rainId}/export.csv`)).text);
+		expect(all.some((l) => l.startsWith('# run=Baseline;'))).toBe(true);
+		expect(all.some((l) => l.includes('run=Scenario'))).toBe(false);
+		expect(table(all.join('\r\n'))[0]).toContain('[run Baseline]');
+	});
+
+	it('a farmer or contributor of the project can’t download a series (403, a member below viewer); a viewer can', async () => {
+		const low = await signUp('Low');
+		for (const role of ['farmer', 'contributor'] as const) {
+			await asOwner(
+				`INSERT INTO project_member (project_id, user_id, role) VALUES ($1, $2, $3)
+				 ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+				[projectId, low.id, role]
+			);
+			expect((await download(low, `/projects/${projectId}/series/${rainId}/export.csv`)).status, role).toBe(403);
+		}
+		expect((await download(viewer, `/projects/${projectId}/series/${rainId}/export.csv`)).status).toBe(200); // positive control
+	});
+
+	it('without a run it is date, value and flags only; a series changed since its run says so and keeps what the run read', async () => {
+		const { body } = await owner.call('POST', '/projects', { name: 'Series export' });
+		const pid = body.project.id as string;
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [node('Outlet', null)], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		expect((await owner.call('PATCH', `/projects/${pid}`, { settings: { apanMm: monthly(150), calibration: { rainThresholdMm: 2, catchmentAreaKm2: 10 } } })).status).toBe(200);
+		const put = (values: number[]) => owner.call('PUT', `/projects/${pid}/series`, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2024-01-01', values });
+		const sid = (await put([5, 0, 3])).body.id as string;
+		const url = `/projects/${pid}/series/${sid}/export.csv`;
+
+		const before = await download(owner, url);
+		expect(lines(before.text)).toEqual(['date,rain_catchment_mm (mm),Flags', '2024-01-01,5,', '2024-01-02,0,', '2024-01-03,3,']);
+
+		const made = await owner.call('POST', `/projects/${pid}/runs`, { label: '' });
+		expect(made.status, JSON.stringify(made.body)).toBe(201);
+		const read = table((await download(owner, url)).text);
+		expect(read[0]).toMatch(/Rain used \[run \d{4}-\d{2}-\d{2}\] \(mm\)/); // an unlabelled run is named by its date
+		expect(read[1]!.startsWith('2024-01-01,5,,5,catchment,')).toBe(true);
+
+		expect((await put([7, 0, 3])).body.id).toBe(sid);
+		const after = await download(owner, url);
+		expect(lines(after.text)).toContain(SERIES_CHANGED_COMMENT);
+		expect(table(after.text)[1]!.startsWith('2024-01-01,7,,5,catchment,')).toBe(true);
 	});
 });
 

@@ -3,7 +3,7 @@
 // list of every node, the existing grids one click away in a full-screen
 // modal (the node table included), and a node's full form in a sheet from its card.
 import type { Page } from '@playwright/test';
-import { addMember, createRun, seedRunnableProject } from '../support/api.ts';
+import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { waitForMapFit } from '../support/diagrams.ts';
 import { API_URL } from '../support/env.ts';
@@ -68,7 +68,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await expect(c).toContainText(/Supplied, Baseline\s*\d+%/);
 	// The dam at the end of the run (its storage series, fetched for the picked farm).
-	await expect(c).toContainText(/Dam now\s*\d+%/);
+	await expect(c).toContainText(/Dam at end of run\s*\d+%/);
 	await expect(c).toContainText(/Flow share\s*\d+(\.\d)?%/);
 	await expect(c).toContainText('Drains intoOutflow gauge');
 	await expect(c).toContainText('Dam150\u202f000 m³');
@@ -111,7 +111,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]edit=/);
 });
 
-test('colour farms by dam level (end of the latest run) or by irrigated area, each with its own words', async ({ page, owner }) => {
+test('colour farms by dam level (end of the latest run), with its own words', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours');
 	await createRun(page.request, project.id, 'Baseline');
@@ -129,31 +129,40 @@ test('colour farms by dam level (end of the latest run) or by irrigated area, ea
 	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ }).locator('.dot')).toHaveAttribute('data-band', /^(met|short|low)$/);
 	await expectNoViolations(page);
 
-	// Irrigated area, as edited: the largest farm in the top band, the words on the label.
-	await colourBy.selectOption({ label: 'Irrigated area' });
-	await expect(upper.locator('text.meta')).toHaveText('20.0 ha planted');
-	await expect(upper).toHaveAttribute('data-supply', 'area3');
-	await expect(lower.locator('text.meta')).toHaveText('12.0 ha planted');
-	await expect(lower).toHaveAttribute('data-supply', 'area2');
-	await expect(page.getByText('Hydrological units coloured by their irrigated (planted) area, as edited.')).toBeVisible();
-
-	// It follows an unsaved edit at once.
-	const grid = await (async () => {
-		await (await gridLink(page, 'Planted areas')).click();
-		return page.getByRole('dialog', { name: 'Planted areas' });
-	})();
-	await grid.getByLabel('Orchard on Lower farm, ha').fill('0');
-	await grid.getByLabel('Orchard on Lower farm, ha').press('Tab');
-	await grid.getByRole('button', { name: 'Done' }).click();
-	await expect(lower.locator('text.meta')).toHaveText('nothing planted');
-	await expect(lower).toHaveAttribute('data-supply', 'none');
+	// Irrigated area is no longer a mode (issue #174): the menu holds the run's two and Nothing.
+	await expect(colourBy.locator('option')).toHaveText(['Nothing', 'Supply, latest run', 'Dam level, end of latest run']);
 });
 
-test('without a run, only irrigated area is offered', async ({ page, owner }) => {
+test('after a dam capacity edit the card’s Dam at end of run agrees with the map’s dam colouring: both read the run’s capacity (issue #173)', async ({ page, owner }) => {
+	void owner;
+	const project = await seedRunnableProject(page.request, 'Network dam end of run');
+	await createRun(page.request, project.id, 'Baseline');
+	// Upper farm's dam halved after the run (150 000 m³ in the run, 75 000 m³ now).
+	const upperId = project.model.nodes[1]!.id;
+	await putModel(page.request, project.id, {
+		...project.model,
+		nodes: project.model.nodes.map((n) => (n.id === upperId ? { ...n, damCapacityM3: 75_000 } : n))
+	});
+	await page.goto(`/projects/${project.id}?tab=network`);
+	await page.getByLabel('Colour hydrological units by').selectOption({ label: 'Dam level, end of latest run' });
+	const meta = page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' }).locator('text.meta');
+	await expect(meta).toHaveText(/^\d+(% full|%, at its minimum)$/);
+	const mapPct = (await meta.textContent())!.match(/^(\d+)%/)![1];
+
+	await nodeList(page).getByRole('button', { name: /^Upper farm/ }).click();
+	const tile = card(page).locator('.tile').filter({ hasText: 'Dam at end of run' });
+	await expect(tile.locator('.t-v')).toHaveText(`${mapPct}%`);
+	await expect(tile.locator('.t-s')).toHaveText('of 150\u202f000 m³ in the run');
+	await expect(card(page)).toContainText('Dam75\u202f000 m³');
+});
+
+test('without a run there is nothing to colour by, so the menu isn’t offered', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours no run');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await expect(page.getByLabel('Colour hydrological units by').locator('option')).toHaveText(['Nothing', 'Irrigated area']);
+	await expect(page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' })).toBeVisible();
+	await expect(page.getByLabel('Colour hydrological units by')).toHaveCount(0);
+	await expect(page.locator('svg.schematic g.node[data-supply]')).toHaveCount(0);
 });
 
 test('a note’s link opens the map with its node picked', async ({ page, owner }) => {

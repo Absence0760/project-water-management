@@ -8,7 +8,6 @@ export const GRIDS = {
 	nodes: 'Node table',
 	'crop-factors': 'Crop factors',
 	'planted-areas': 'Planted areas',
-	demand: 'Irrigation demand preview',
 	transfers: 'Transfers'
 } as const;
 
@@ -28,9 +27,22 @@ export const GRID_TAB: Record<GridId, string | null> = {
 	nodes: null,
 	'crop-factors': null,
 	'planted-areas': null,
-	demand: null,
 	transfers: 'transfers'
 };
+
+/** The id of the Crops & demand page's in-place demand table (its Show table), for a link that opens it. */
+export const DEMAND_TABLE_ID = 'crop-demand-table';
+
+/**
+ * Where a link to a grid that left the modal goes now, or null. `grid=demand`
+ * (the Irrigation demand preview) repeated the chart and table the Crops &
+ * demand page shows in place, so it was removed (issue #174); an old link
+ * (a bookmark, over any tab) opens that page with the table shown.
+ */
+export function movedGridHref(url: URL): string | null {
+	if (url.searchParams.get('grid') !== 'demand') return null;
+	return `${url.pathname}?tab=crops#${DEMAND_TABLE_ID}`;
+}
 
 /** `?tab=<tab>&<name>=<value>`, or no `tab` over the Summary (the default tab). */
 export function overlayHref(tab: string | null, name: string, value: string): string {

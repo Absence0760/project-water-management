@@ -13,7 +13,7 @@
 // years of made-up rain, each year scaled differently so the years differ,
 // and a flat 400 m³/day pragmatic EWR, so some seasons meet it and some don't.
 import type { APIRequestContext } from '@playwright/test';
-import { acknowledgeFarmNotice, addMember, createProject, createRun, putModel, putSeries, sampleModel, syntheticRain, updateSettings } from '../support/api.ts';
+import { acceptInvites, acknowledgeFarmNotice, addMember, createProject, createRun, putModel, putSeries, sampleModel, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -271,6 +271,7 @@ test('the review triggers show for the review date, and a level published to far
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
 	const farmer = await signIn('Outlook farmer');
 	expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } })).status()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	await acknowledgeFarmNotice(farmer.page.request);
 	await farmer.page.goto(`/farm/${project.id}`);
 	const card = farmer.page.getByTestId('farm-outlook');

@@ -163,6 +163,13 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'PATCH /projects/:id': () => ({ body: { name: 'Mass renamed', teamId: null, settings: { lakeEvapFactor: 0.8 } } }),
 	'POST /projects/import': () => ({ body: ctx.exportDoc }),
 	'POST /me/alerts/resume': () => ({}),
+	// A verified account accepting its own invite (issue #136): it joins as the invite's role, whatever the body says.
+	'POST /me/invites/:inviteId/accept': async () => {
+		const invitee = await signUp('Minvitee', { acceptInvites: false });
+		await ok(ctx.owner.call('POST', `${at()}/members`, { email: invitee.email, role: 'viewer' }));
+		const mine = await ok(invitee.call('GET', '/me/invites'));
+		return { as: invitee, params: { inviteId: mine.invites[0].id as string } };
+	},
 	'POST /teams': () => ({ body: { name: `Mass team ${crypto.randomUUID().slice(0, 8)}` } }),
 	'PATCH /teams/:id': () => ({ params: { id: ctx.teamId }, body: { name: 'Mass team renamed' } }),
 	'POST /teams/:id/members': async () => ({ params: { id: ctx.teamId }, body: { email: (await freshUser('Mteam')).email, role: 'viewer' } }),

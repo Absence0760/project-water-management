@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, putModel, putSeries, register, sampleModel, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
+import { acceptInvites, createProject, createRun, putModel, putSeries, register, sampleModel, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { ANALYST, FARMER1, FARMER2, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -154,6 +154,7 @@ test('a farmer sees “Before you look at your farm” first; after I understand
 	const farmer = await register(page.context().request, 'Notice Farmer', { farmNotice: false });
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.email, project.id);
 	const current = async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { farmNoticeCurrent: boolean } }).user.farmNoticeCurrent;
 
 	const title = page.getByRole('heading', { level: 1, name: 'Before you look at your farm' });
@@ -275,6 +276,7 @@ test('“I understand” pressed without a signal shows the figures and is recor
 	const farmer = await register(page.context().request, 'Offline Notice Farmer', { farmNotice: false });
 	const upper = project.model.nodes.find((n) => n.name === 'Upper farm')!.id as string;
 	expect((await wua.page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.email, nodeIds: [upper] } })).status()).toBe(201);
+	await acceptInvites(farmer.email, project.id);
 	const current = async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { farmNoticeCurrent: boolean } }).user.farmNoticeCurrent;
 
 	await page.goto(`/farm/${project.id}`);
@@ -331,6 +333,7 @@ test('a farm whose catchment has nothing published says so', async ({ page, owne
 	const farmId = model.nodes.find((n) => n.kind === 'farm')!.id as string;
 	const add = await page.context().request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farmId] } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	expect(owner.id).toBeTruthy();
 
 	await farmer.page.setViewportSize(PHONE);
@@ -432,6 +435,7 @@ test('many farms in one catchment fold the switcher; the notice stays on the fir
 	const farmer = await signInAs('Many-farm farmer');
 	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: farms.map((f) => f.id) } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 
 	const fp = farmer.page;
 	await fp.setViewportSize(PHONE);

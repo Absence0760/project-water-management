@@ -4,7 +4,8 @@
 	// unit's years beside the list, and every unit's under it. Every modelled
 	// number is labelled "modelled, not metered", and the words describe the
 	// arithmetic, never a finding of lawfulness. In a narrow container each row
-	// is a card of label–value lines.
+	// is a card of label–value lines. The table grows with its rows (the page
+	// folds them, "Show all"), never scrolling inside its box.
 	import { fmtNum } from '$lib/format/number';
 	import { SOURCE_LABEL, STATUS_LABEL, statusSentence, waterYearLabel, type ComparisonRow } from './allocations';
 
@@ -13,13 +14,21 @@
 		tolerance,
 		caption,
 		showName = true,
-		testid
-	}: { rows: ComparisonRow[]; tolerance: number; caption: string; /** The unit column (off for one unit's years). */ showName?: boolean; testid?: string } = $props();
+		testid,
+		id
+	}: {
+		rows: ComparisonRow[];
+		tolerance: number;
+		caption: string;
+		/** The unit column (off for one unit's years). */ showName?: boolean;
+		testid?: string;
+		/** The table's id, for the "Show all" button that controls it. */ id?: string;
+	} = $props();
 </script>
 
 <div class="years">
 	<div class="table-wrap">
-		<table class="data cards" data-testid={testid}>
+		<table class="data cards" {id} data-testid={testid}>
 			<caption class="visually-hidden">{caption}</caption>
 			<thead>
 				<tr>
@@ -70,8 +79,13 @@
 	.nowrap {
 		white-space: nowrap;
 	}
-	/* Narrow (a phone, a narrow column): each row is a card, its values two to a line under their labels, instead of a wide table. */
-	@container alloc-years (max-width: 34rem) {
+	/* The page is the one scroll: no 70vh cap (app.css), so the rows never scroll inside the box; sideways still can. */
+	.table-wrap {
+		max-height: none;
+	}
+	/* Narrow (a phone, the picked unit's column at 1280 px): each row is a card, its values two to a line under their labels,
+	   instead of a wide table that would scroll sideways (the table needs about 650 px; 48rem is 672 px at 14 px). */
+	@container alloc-years (max-width: 48rem) {
 		.table-wrap {
 			border: 0;
 			background: none;

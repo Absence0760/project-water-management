@@ -272,27 +272,34 @@ describe('adding someone by email doesn’t reveal whether the address has an ac
 		return u.email;
 	}
 
-	async function compare(add: (email: string) => Promise<{ status: number; body: unknown }>, list?: (email: string) => Promise<unknown>) {
+	/**
+	 * No account, an unconfirmed one and a verified one (issue #136: it is invited too, never added at
+	 * once) all get the same answer and the same row. `add(email, other)`: `other` invites with a
+	 * different role, the positive control that shows the comparison can see a difference.
+	 */
+	async function compare(add: (email: string, other?: boolean) => Promise<{ status: number; body: unknown }>, list?: (email: string) => Promise<unknown>) {
 		const unknown = newEmail('nobody');
 		const held = await squatted();
+		const verified = (await signUp('Verified', { acceptInvites: false })).email;
 		const a = await add(unknown);
-		const b = await add(held);
 		expect(a.status).toBe(201);
-		expect(shape(b.body, held)).toEqual(shape(a.body, unknown));
-		expect(b.status).toBe(a.status);
-		if (list) expect(shape(await list(held), held)).toEqual(shape(await list(unknown), unknown));
-		// Positive control: a verified account is told apart (it is added, not invited), so the comparison can see a difference.
-		const verified = await signUp('Verified');
-		const c = await add(verified.email);
+		for (const email of [held, verified]) {
+			const b = await add(email);
+			expect(b.status, email).toBe(a.status);
+			expect(shape(b.body, email), email).toEqual(shape(a.body, unknown));
+			if (list) expect(shape(await list(email), email), email).toEqual(shape(await list(unknown), unknown));
+		}
+		const other = newEmail('other');
+		const c = await add(other, true);
 		expect(c.status).toBe(201);
-		expect(shape(c.body, verified.email)).not.toEqual(shape(a.body, unknown));
+		expect(shape(c.body, other)).not.toEqual(shape(a.body, unknown));
 	}
 
 	it('project members: the same invite, and the same row in the owner’s invite list', async () => {
 		const owner = await signUp('EnumOwner');
 		const projectId = (await owner.call('POST', '/projects', { name: 'Enum' })).body.project.id as string;
 		await compare(
-			(email) => owner.call('POST', `/projects/${projectId}/members`, { email, role: 'viewer' }),
+			(email, other) => owner.call('POST', `/projects/${projectId}/members`, { email, role: other ? 'editor' : 'viewer' }),
 			async (email) => ((await owner.call('GET', `/projects/${projectId}/invites`)).body.invites as { email: string }[]).find((i) => i.email === email)
 		);
 	});
@@ -301,7 +308,7 @@ describe('adding someone by email doesn’t reveal whether the address has an ac
 		const admin = await signUp('EnumAdmin');
 		const teamId = (await admin.call('POST', '/teams', { name: 'Enum team' })).body.team.id as string;
 		await compare(
-			(email) => admin.call('POST', `/teams/${teamId}/members`, { email, role: 'member' }),
+			(email, other) => admin.call('POST', `/teams/${teamId}/members`, { email, role: other ? 'viewer' : 'member' }),
 			async (email) => ((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites as { email: string }[]).find((i) => i.email === email)
 		);
 	});
@@ -316,20 +323,23 @@ describe('adding someone by email doesn’t reveal whether the address has an ac
 		expect((await owner.call('PUT', `/projects/${projectId}/model`, model)).status).toBe(200);
 		const farmers = async (email: string) =>
 			((await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers as { email: string }[]).find((f) => f.email === email);
-		await compare((email) => owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farm.id] }), farmers);
+		await compare((email, other) => owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farm.id], role: other ? 'contributor' : 'farmer' }), farmers);
 
 		const unknown = newEmail('bulk-nobody');
 		const held = await squatted();
+		const verified = (await signUp('BulkVerified', { acceptInvites: false })).email;
 		const bulk = await owner.call('POST', `/projects/${projectId}/farmers/bulk`, {
 			rows: [
 				{ email: unknown, farm: 'Enum Bulk Farm' },
-				{ email: held, farm: 'Enum Bulk Farm' }
+				{ email: held, farm: 'Enum Bulk Farm' },
+				{ email: verified, farm: 'Enum Bulk Farm' }
 			]
 		});
 		expect(bulk.status).toBe(200);
-		const [a, b] = bulk.body.results as { email: string; row: number }[];
+		const [a, b, c] = bulk.body.results as { email: string; row: number }[];
 		expect(a).toMatchObject({ status: 'invited' });
 		expect(shape({ ...b, row: 0 }, held)).toEqual(shape(a, unknown));
+		expect(shape({ ...c, row: 0 }, verified)).toEqual(shape(a, unknown));
 	});
 
 	// The audit trail too: an owner reads it in History (and their data
