@@ -48,9 +48,24 @@ describe('fmtCompact', () => {
 		[1.25, '1.3'],
 		[0, '0'],
 		[0.25, '0.25'],
-		[0.001, '1e-3'],
 		[-5_000_000, '-5M']
 	])('%s → %s', (v, want) => expect(fmtCompact(v)).toBe(want));
+
+	// A log axis's lower decades are written out, never as 1e-3 (issue #162).
+	it.each([
+		[0.001, '0.001'],
+		[0.0001, '0.0001'],
+		[0.00001, '0.00001'],
+		[0.000001, '0.000001'],
+		[0.005, '0.005'],
+		[0.00025, '0.00025'],
+		[0.0012345, '0.0012'],
+		[-0.001, '-0.001']
+	])('%s → %s (a decimal, not an exponent)', (v, want) => expect(fmtCompact(v)).toBe(want));
+
+	it('keeps the exponent only below 1e-6, where a value is float noise, not a flow', () => {
+		expect(fmtCompact(2e-9)).toBe('2e-9');
+	});
 });
 
 describe('isolatedIndices', () => {
