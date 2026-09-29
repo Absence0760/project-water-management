@@ -25,15 +25,65 @@ test('monthly A-pan and EWR values are saved and survive a reload', async ({ pag
 	await expect(save).toBeDisabled();
 
 	await page.reload();
-	// The EWR's bars beside its table say what they are: a caption with the span and unit.
-	await expect(page.getByTestId('monthly-bars-caption')).toHaveText('Pragmatic EWR by month, Oct–Sep, m³/day');
-	await expect(page.getByRole('img', { name: 'Pragmatic EWR by month (the table holds the values)' })).toBeVisible();
+	// Under the EWR row, its annual total (1800 × 31 + 5400 × 31 m³ = 0.223 Mm³); no chart redraws the row (issue #174).
+	await expect(page.getByTestId('ewr-annual')).toHaveText(/^0\.223 Mm³\/a in total · mean 0\.0071 m³\/s$/);
+	await expect(page.locator('#set-ewr svg[role="img"]')).toHaveCount(0);
 	await expect(apan('Oct')).toHaveValue('152');
 	await expect(apan('Jan')).toHaveValue('231.5');
 	await expect(apan('Nov')).toHaveValue('0');
 	await expect(ewr('Oct')).toHaveValue('1800');
 	await expect(ewr('Jul')).toHaveValue('5400');
 	await expect(page.getByText('Unsaved settings')).toBeHidden();
+});
+
+test('the high/low MAP split shows only while that flow-share method is chosen', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings hi/lo');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const method = page.getByLabel('Method', { exact: true });
+	const split = page.getByRole('group', { name: /^High\/low MAP split/ });
+
+	// By area (the default) and manual shares don't read the split: no dead control, no amber Sum.
+	await expect(method.locator('option:checked')).toHaveText('By catchment area');
+	await expect(split).toHaveCount(0);
+	await method.selectOption('hiLo');
+	await expect(split.getByLabel('High (%)')).toHaveValue('50');
+	await expect(split.getByLabel('Low (%)')).toHaveValue('50');
+	await expect(split).toContainText('Should add up to 100 %. Default 50 / 50');
+	await split.getByLabel('High (%)').fill('81');
+	await split.getByLabel('High (%)').press('Tab');
+	await expect(split.locator('.sum')).toHaveClass(/warn/);
+	await method.selectOption('manual');
+	await expect(split).toHaveCount(0);
+	// Back on high/low, the typed value is still there.
+	await method.selectOption('hiLo');
+	await expect(split.getByLabel('High (%)')).toHaveValue('81');
+});
+
+test('days in February is behind an advanced disclosure whose summary names its value, and says when it isn’t the default', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings February');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const advanced = page.getByTestId('feb-advanced');
+	const summary = advanced.locator('summary');
+	const feb = page.getByLabel('Days in February', { exact: true });
+
+	await expect(summary).toHaveText('Advanced: days in February, 28.25');
+	await expect(feb).toBeHidden();
+	await summary.click();
+	await feb.fill('28');
+	await feb.press('Tab');
+	await expect(summary).toHaveText('Advanced: days in February, 28 (not the default 28.25)');
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	// Closed after a reload, the changed value still shows in the summary; opened, it is editable.
+	await page.reload();
+	await expect(summary).toHaveText('Advanced: days in February, 28 (not the default 28.25)');
+	await expect(feb).toBeHidden();
+	await summary.click();
+	await expect(feb).toHaveValue('28');
+	await expect(feb).toBeEditable();
 });
 
 test('discarding settings restores the saved values', async ({ page, owner }) => {

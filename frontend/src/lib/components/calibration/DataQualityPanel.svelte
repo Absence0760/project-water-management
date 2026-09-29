@@ -1,16 +1,17 @@
 <!--
 	The data-quality panel of a fit (calibration research CR-22, engine ≥
 	1.22.0): the fitted record's days by quality flag and what the fit did with
-	each, the scored days' rain by source, how wet the scored years were, and
-	what the record can't support. Rows and words come from ./dayQuality.ts.
+	each, the scored days' rain by source, and what the record can't support.
+	How wet the scored years were is the next block's (FitPanel's "How
+	representative is the record"), not repeated here (issue #174). Rows and
+	words come from ./dayQuality.ts.
 -->
 <script lang="ts">
-	import type { DayQuality, RecordRepresentativeness } from '@water-management/engine';
+	import type { DayQuality } from '@water-management/engine';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { dayQualityGist, flowRows, rainRows, ratingLine } from './dayQuality';
-	import { representativenessGist } from './representativeness';
 
-	let { quality, representativeness = null }: { quality: DayQuality; representativeness?: RecordRepresentativeness | null } = $props();
+	let { quality }: { quality: DayQuality } = $props();
 
 	const uid = $props.id();
 	const rows = $derived(flowRows(quality));
@@ -50,9 +51,6 @@
 			</div>
 		{/if}
 	</div>
-	{#if representativeness}
-		<p class="small" data-testid="fit-data-quality-wetness">How wet the scored years were: {representativenessGist(representativeness)} (below, by year).</p>
-	{/if}
 	{#if quality.notes.length}
 		<ul class="notes small" aria-label="What the record can’t support">
 			{#each quality.notes as n (n)}<li>{n}</li>{/each}

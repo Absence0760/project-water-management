@@ -1,21 +1,19 @@
 // What the schematic colours its farms by (issue #17: the Network map's
-// "Colour farms by"): supply in the latest run, how full each dam was at the
-// end of it, or the irrigated area as edited. Pure. Each mode gives every farm
+// "Colour farms by"): supply in the latest run, or how full each dam was at
+// the end of it. Pure. (Irrigated area, banded in thirds of the largest farm,
+// was removed in issue #174: the bands were arbitrary, and Crops & demand and
+// the node card show the areas.) Each mode gives every farm
 // a band and the words for its label line, the legend entries and a caption,
 // so the drawing is never colour-only.
-import type { NetworkNode, ProjectModel, RunSummary } from '@water-management/engine';
+import type { NetworkNode, RunSummary } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 import { LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
 import { BAND_LABEL, bandsPresent, supplyByNode, type SupplyBand } from './supplyColour';
 
-export type ColourMode = 'supply' | 'dam' | 'area';
+export type ColourMode = 'supply' | 'dam';
 
-/**
- * Supply and dam level share the three good / mid / bad bands (and their
- * colours); irrigated area is a single-hue scale, since more area is neither
- * good nor bad. `none` and `absent` as for supply.
- */
-export type ColourBand = SupplyBand | 'area1' | 'area2' | 'area3';
+/** Supply and dam level share the three good / mid / bad bands (and their colours); `none` and `absent` as for supply. */
+export type ColourBand = SupplyBand;
 
 export interface NodeColour {
 	band: ColourBand;
@@ -86,34 +84,5 @@ export function damColouring(nodes: readonly NetworkNode[], levels: readonly Dam
 		legend: present(byNode, ['met', 'short', 'low', 'none', 'absent'] as const, DAM_LABEL),
 		caption: `Hydrological units coloured by how full their dam was at the end of run “${run.name}”, ran ${run.ago}.`,
 		unsaved
-	};
-}
-
-/** Farms by their planted area (ha, the model as edited): nothing, then thirds of the largest. */
-export function areaColouring(model: Pick<ProjectModel, 'nodes' | 'cropAreas'>): Colouring {
-	const ha = new Map<string, number>();
-	for (const a of model.cropAreas) ha.set(a.nodeId, (ha.get(a.nodeId) ?? 0) + (a.areaM2 || 0) / 10_000);
-	const farms = model.nodes.filter((n) => n.kind === 'farm');
-	const most = Math.max(0, ...farms.map((f) => ha.get(f.id) ?? 0));
-	const b1 = most / 3;
-	const b2 = (2 * most) / 3;
-	const byNode = new Map<string, NodeColour>();
-	for (const f of farms) {
-		const v = ha.get(f.id) ?? 0;
-		const band: ColourBand = v <= 0 ? 'none' : v <= b1 ? 'area1' : v <= b2 ? 'area2' : 'area3';
-		byNode.set(f.id, { band, text: v > 0 ? `${fmtNum(v, 1)} ha planted` : 'nothing planted' });
-	}
-	const label: Record<'area1' | 'area2' | 'area3' | 'none', string> = {
-		area1: `Up to ${fmtNum(b1, 0)} ha`,
-		area2: `${fmtNum(b1, 0)}–${fmtNum(b2, 0)} ha`,
-		area3: `Over ${fmtNum(b2, 0)} ha`,
-		none: 'Nothing planted'
-	};
-	return {
-		mode: 'area',
-		byNode,
-		legend: present(byNode, ['area3', 'area2', 'area1', 'none'] as const, label),
-		caption: 'Hydrological units coloured by their irrigated (planted) area, as edited.',
-		unsaved: false
 	};
 }

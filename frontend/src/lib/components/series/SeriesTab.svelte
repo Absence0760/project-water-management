@@ -59,12 +59,12 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
-	import { agoText, dateAge } from '$lib/format/age';
+	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
-	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
+	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
@@ -177,8 +177,13 @@
 		const r = el.getBoundingClientRect();
 		const dock = parseFloat(getComputedStyle(el).getPropertyValue('--dock-h')) || 0;
 		if (r.top >= 0 && r.bottom <= innerHeight - dock) return;
-		const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-		el.scrollIntoView({ block: r.height > innerHeight - dock ? 'start' : 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+		const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+		const room = innerHeight - dock;
+		// Below the window (it sits under the table): its foot to the window's foot less the save bar, rounded up to a
+		// whole pixel. scrollIntoView's `nearest` lands on a rounded offset, which on a fractional layout left the chart's
+		// last half pixel under the window's edge. Taller than the window, or above it: its top to the header's foot.
+		if (r.height <= room && r.top >= 0) window.scrollTo({ top: Math.ceil(scrollY + r.bottom - room), behavior });
+		else el.scrollIntoView({ block: 'start', behavior });
 	}
 	let flowLog = $state(false);
 
@@ -242,7 +247,6 @@
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
 	// Recorded rain drives a run, so it is what "up to" means (series/freshness.ts).
-	const rainUpTo = $derived(list.filter((s) => isRecordedRain(s.kind)).reduce((m, s) => (endDate(s) > m ? endDate(s) : m), ''));
 	const newerThanRun = $derived(
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
@@ -416,9 +420,6 @@
 	const fresh = $derived(freshness(list, today));
 	const behindAge = $derived(new Map((fresh?.behind ?? []).map((b) => [b.id, b.age])));
 	const rows = $derived(freshnessOrder(list, fresh?.behind ?? [], inUse));
-	const behindText = $derived(
-		behindAge.size ? `${behindAge.size} behind (more than ${STALE_DAYS} days old)` : ''
-	);
 
 	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
@@ -434,6 +435,7 @@
 
 	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
+	let usesOpen = $state(false);
 	const navGroups = $derived(
 		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
@@ -506,11 +508,6 @@
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
-		{#if list.length}
-			<span class="muted small" data-testid="series-summary"
-				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${dateAge(rainUpTo, daysBetween(rainUpTo, today))}` : ''}</span
-			>
-		{/if}
 	</div>
 	<LoadState
 		{loading}
@@ -538,7 +535,7 @@
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
 						<th scope="col" role="columnheader">Data up to</th>
-						<th scope="col" role="columnheader">Period</th>
+						<th scope="col" role="columnheader">From</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
 						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
@@ -634,7 +631,8 @@
 									>
 								{/if}
 							</td>
-							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
+							<!-- The start only: the end is Data up to's (issue #174). -->
+							<td role="cell" class="num period" data-label="From">{s.startDate}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -754,16 +752,20 @@
 
 <section class="panel uses" id="data-uses" aria-labelledby="use-h">
 	<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
-	<dl class="roles">
-		{#each KIND_OPTIONS as o (o.value)}
-			{@const r = KIND_ROLES[o.value]}
-			{@const have = list.some((s) => s.kind === o.value)}
-			<div>
-				<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
-				<dd>{r?.help}</dd>
-			</div>
-		{/each}
-	</dl>
+	<!-- Reference text for each kind of series, behind a disclosure so it doesn't fill the page's foot (issue #174). -->
+	<details class="uses-more" bind:open={usesOpen}>
+		<summary class="btn btn-sm">{usesOpen ? 'Hide' : 'Show'} what each kind of series is for</summary>
+		<dl class="roles">
+			{#each KIND_OPTIONS as o (o.value)}
+				{@const r = KIND_ROLES[o.value]}
+				{@const have = list.some((s) => s.kind === o.value)}
+				<div>
+					<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
+					<dd>{r?.help}</dd>
+				</div>
+			{/each}
+		</dl>
+	</details>
 	<p class="muted small">
 		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
 		With several series of one kind, the first by name is used.
@@ -861,10 +863,6 @@
 	}
 	.key .behind {
 		margin-left: 0.4rem;
-	}
-	.behind-text {
-		color: var(--warning);
-		font-weight: 600;
 	}
 	@media (min-width: 641px) {
 		tr.is-behind > th[scope='row'] {
@@ -1053,6 +1051,14 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
 		gap: 0.6rem 1.75rem;
+	}
+	.uses-more summary {
+		list-style: none;
+		cursor: pointer;
+		margin-bottom: 0.75rem;
+	}
+	.uses-more summary::-webkit-details-marker {
+		display: none;
 	}
 	.uses > p {
 		max-width: 44rem;

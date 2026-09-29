@@ -151,15 +151,11 @@ test('the Grids menu and Edit areas open the full grids over the page; a farm op
 	await expectNoViolations(page);
 	await closeModal(page);
 
-	// Irrigation demand: the table and the chart, as the old tab showed them.
-	const demand = await openCropGrid(page, 'demand');
-	await expect(demand.locator('table.demand').getByRole('rowheader', { name: 'Dry farm' })).toBeVisible();
-	await closeModal(page);
-
-	// The menu closes on Escape, focus back on its button.
+	// The menu holds the two crop grids only: the demand table is on the page, behind Show table (issue #174).
 	const menu = page.locator('details.grids-menu');
 	await menu.locator('summary').click();
-	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeVisible();
+	await expect(page.getByRole('group', { name: 'Open as a grid' }).getByRole('link')).toHaveText(['Crop factors', 'Planted areas']);
+	// The menu closes on Escape, focus back on its button.
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('group', { name: 'Open as a grid' })).toBeHidden();
 	await expect(menu.locator('summary')).toBeFocused();
@@ -179,6 +175,20 @@ test('the Grids menu and Edit areas open the full grids over the page; a farm op
 	await expect(drawer.getByLabel('Orchard on Dry farm, ha')).toHaveValue('5');
 	await closeModal(page);
 	await expect(page).toHaveURL(/\?tab=crops$/);
+});
+
+test('an old link to the Irrigation demand grid opens the page with its demand table shown', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page demand link');
+	// The grid modal showed it over any tab (grid=demand, issue #17) until it was removed as a repeat of the page (issue #174).
+	await page.goto(`/projects/${project.id}?tab=network&grid=demand`);
+	await expect(page).toHaveURL(new RegExp(`/projects/${project.id}\\?tab=crops#crop-demand-table$`));
+	await expect(page.getByRole('heading', { level: 1, name: 'Crops & demand' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toHaveCount(0);
+	const table = page.locator('table.demand');
+	await expect(table.getByRole('rowheader', { name: 'Dry farm' })).toBeInViewport();
+	await expect(table.getByRole('rowheader', { name: 'Catchment' })).toBeVisible();
+	await expect(page.getByText('Hide table', { exact: true })).toBeVisible();
 });
 
 test('a viewer sees the list and bars, opens a crop’s factors read-only, and adds nothing', async ({ page, owner, signIn }) => {
@@ -225,11 +235,6 @@ test('with a daily A-pan series the demand chart says it shows the monthly means
 	// Screen readers hear it with the chart.
 	await expect(chart).toHaveAccessibleName(/Show table holds the values\. Shows the monthly A-pan means\. .* so their demand differs\.$/);
 	await expectNoViolations(page);
-
-	// The grid modal's demand preview says the same.
-	const grid = await openCropGrid(page, 'demand');
-	await expect(grid.getByTestId('crops-demand-apan')).toHaveText(note);
-	await closeModal(page);
 
 	// With no monthly means the preview shows no demand, but the alert says runs still take the daily series.
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });

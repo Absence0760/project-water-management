@@ -49,6 +49,8 @@ test('the fit censors days above the highest gauging, shows its data quality, an
 	await expect(byFlag.getByRole('row', { name: /^Above the highest gauging/ })).toContainText(/14\s*11\.7 %\s*censored at the highest gauging/);
 	await expect(panel.getByRole('table', { name: 'Rain on the scored days' }).getByRole('row', { name: /^Catchment gauge reading/ })).toContainText('120');
 	await expect(panel.getByRole('list', { name: 'What the record can’t support' })).toContainText('14 days read above the highest gauging (0.3 m³/s)');
+	// How wet the scored years were is the representativeness block's heading, not repeated in this panel (issue #174).
+	await expect(panel).not.toContainText('How wet the scored years were');
 	// The fit on all days sits beside the fit on the clean days.
 	const scores = fit.getByRole('table', { name: /^Fit, and validation/ });
 	await expect(scores.getByRole('columnheader', { name: /^Fitted, all days \(flags ignored\)/ })).toBeVisible();

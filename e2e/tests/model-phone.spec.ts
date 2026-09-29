@@ -42,7 +42,8 @@ test.describe('phone', () => {
 
 		// Every month of the crop, and the last one especially, is on screen.
 		for (const m of ['Oct', 'Jan', 'Sep']) await expectOnScreen(factors.getByLabel(`Orchard crop factor, ${m}`), page);
-		await expect(factors.getByRole('cell', { name: /^Mean 0\.62$/ })).toBeVisible();
+		// No mean factor (issue #174): an unweighted average the workbook doesn't have.
+		await expect(factors.getByText(/^Mean/)).toHaveCount(0);
 		await expectOnScreen(factors.getByRole('button', { name: 'Remove Orchard' }), page);
 		await expectNoSidewaysScroll(page);
 		await closeModal(page);
@@ -125,7 +126,6 @@ test('on a desktop the crop and transfer tables keep their column headers', asyn
 	await page.goto(`/projects/${project.id}?tab=crops&grid=crop-factors`);
 	const factors = page.getByRole('dialog', { name: 'Crop factors' });
 	await expect(factors.getByRole('columnheader', { name: 'Sep', exact: true }).first()).toBeVisible();
-	await expect(factors.getByText('Mean', { exact: true }).first()).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=transfers`);
 	await expect(page.getByRole('columnheader', { name: /^Takes from/ })).toBeVisible();
 	await expect(page.getByRole('columnheader', { name: /^Max rate by month/ })).toBeVisible();

@@ -111,7 +111,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(page).toHaveURL(/[?&]edit=/);
 });
 
-test('colour farms by dam level (end of the latest run) or by irrigated area, each with its own words', async ({ page, owner }) => {
+test('colour farms by dam level (end of the latest run), with its own words', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours');
 	await createRun(page.request, project.id, 'Baseline');
@@ -129,24 +129,8 @@ test('colour farms by dam level (end of the latest run) or by irrigated area, ea
 	await expect(nodeList(page).getByRole('button', { name: /^Upper farm/ }).locator('.dot')).toHaveAttribute('data-band', /^(met|short|low)$/);
 	await expectNoViolations(page);
 
-	// Irrigated area, as edited: the largest farm in the top band, the words on the label.
-	await colourBy.selectOption({ label: 'Irrigated area' });
-	await expect(upper.locator('text.meta')).toHaveText('20.0 ha planted');
-	await expect(upper).toHaveAttribute('data-supply', 'area3');
-	await expect(lower.locator('text.meta')).toHaveText('12.0 ha planted');
-	await expect(lower).toHaveAttribute('data-supply', 'area2');
-	await expect(page.getByText('Hydrological units coloured by their irrigated (planted) area, as edited.')).toBeVisible();
-
-	// It follows an unsaved edit at once.
-	const grid = await (async () => {
-		await (await gridLink(page, 'Planted areas')).click();
-		return page.getByRole('dialog', { name: 'Planted areas' });
-	})();
-	await grid.getByLabel('Orchard on Lower farm, ha').fill('0');
-	await grid.getByLabel('Orchard on Lower farm, ha').press('Tab');
-	await grid.getByRole('button', { name: 'Done' }).click();
-	await expect(lower.locator('text.meta')).toHaveText('nothing planted');
-	await expect(lower).toHaveAttribute('data-supply', 'none');
+	// Irrigated area is no longer a mode (issue #174): the menu holds the run's two and Nothing.
+	await expect(colourBy.locator('option')).toHaveText(['Nothing', 'Supply, latest run', 'Dam level, end of latest run']);
 });
 
 test('after a dam capacity edit the card’s Dam at end of run agrees with the map’s dam colouring: both read the run’s capacity (issue #173)', async ({ page, owner }) => {
@@ -172,11 +156,13 @@ test('after a dam capacity edit the card’s Dam at end of run agrees with the m
 	await expect(card(page)).toContainText('Dam75\u202f000 m³');
 });
 
-test('without a run, only irrigated area is offered', async ({ page, owner }) => {
+test('without a run there is nothing to colour by, so the menu isn’t offered', async ({ page, owner }) => {
 	void owner;
 	const project = await seedRunnableProject(page.request, 'Network colours no run');
 	await page.goto(`/projects/${project.id}?tab=network`);
-	await expect(page.getByLabel('Colour hydrological units by').locator('option')).toHaveText(['Nothing', 'Irrigated area']);
+	await expect(page.locator('svg.schematic g.node').filter({ hasText: 'Upper farm' })).toBeVisible();
+	await expect(page.getByLabel('Colour hydrological units by')).toHaveCount(0);
+	await expect(page.locator('svg.schematic g.node[data-supply]')).toHaveCount(0);
 });
 
 test('a note’s link opens the map with its node picked', async ({ page, owner }) => {
