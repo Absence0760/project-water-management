@@ -193,6 +193,8 @@ export const af: Catalogue = {
 	'54a6fc83': 'Water wat jy elke maand nodig gehad en ontvang het',
 	// Season outlook
 	'874f0827': 'Seisoensvooruitsig',
+	// What is the season outlook?
+	'd82c623d': 'Wat is die seisoensvooruitsig?',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season

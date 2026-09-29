@@ -80,4 +80,10 @@ export const HELP_AF: Record<string, HelpTranslation> = {
 		long: '’n Watergebruikersvereniging (WGV) is ’n liggaam van die watergebruikers in ’n gebied, wat ingevolge die Nasionale Waterwet gestig is. Dit bestuur hoe water onder sy lede gedeel word, en dit reik die kennisgewings uit wat vir boere sê hulle moet minder water gebruik. Sommige gebiede het nog ’n besproeiingsraad in plaas van ’n WGV; dit doen dieselfde werk totdat dit ’n WGV word.\n\nDie syfers op die bladsy oor jou hidrologiese eenheid is dié wat jou WGV gepubliseer het. Net ’n kennisgewing van jou WGV of van die Departement van Water en Sanitasie (DWS) is ’n beperking. Vra jou WGV as enigiets op die bladsy onduidelik is.',
 		sourceHash: 'e5ee72d44b931e40ae7065ea5cc25ab12fd335fca4e7b9f33ec1e3381a3acc95'
 	},
+	'farm-season-outlook': {
+		term: 'Seisoensvooruitsig (Hierdie seisoen)',
+		short: 'Wat die besproeiingsvlak van jou WGV jou hidrologiese eenheid in vorige jare se weer gegee het. Nie ’n voorspelling of ’n belofte nie.',
+		long: 'Voor die seisoen loop die model die hele seisoen deur, van waar die opvanggebied se damme op die seisoen se eerste dag gestaan het, een keer met elke vorige jaar se reën en riviervloei. Jou WGV kyk na wat verskeie besproeiingsvlakke sou gee, besluit op een en publiseer dit; die app kies nooit ’n vlak nie.\n\nDie afdeling "Hierdie seisoen" gee wat daardie vlak jou eie hidrologiese eenheid oor daardie vorige jare gegee het: ongeveer hoeveel jy gekry het van die water wat jy nodig gehad het, die spreiding in die meeste van die jare, en hoe vol jou dam aan die einde van die seisoen was. Dit wys nooit ’n buurman se syfers nie.\n\nHierdie seisoen se weer sal sy eie gang gaan, so jou deel kan buite daardie spreiding val. Jou WGV hersien die vlak op die datum wat in daardie afdeling staan. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
+		sourceHash: '547b779099c54a5860da5afa8c73aa7aac8d9bd34fbec024c9c5c5df9bd67aaf'
+	},
 };
