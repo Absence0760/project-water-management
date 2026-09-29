@@ -229,7 +229,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -243,11 +243,38 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(5);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
+	});
+
+	it('records the quality-flag settings, summary and fit on all days, and says when the flag settings changed (CR-18/19)', () => {
+		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
+		const rating = { gaugedMaxM3s: 12, gaugedMinM3s: null, source: 'DWS gaugings' };
+		const qualityFlags = { ratings: { flow_logger_m3s: rating }, aboveRating: 'censor' as const, belowRating: 'exclude' as const, suspect: 'exclude' as const, infilled: 'exclude' as const };
+		const rec = fitRecordFromReport(report({ fitAllDays: period('2012-10-01', '2014-09-30', 0.5), dayQuality: null }), { ...ctx, settings: { ...ctx.settings, qualityFlags } });
+		expect(rec.qualityFlags).toEqual(qualityFlags);
+		expect(rec.fitAllDays).toEqual(period('2012-10-01', '2014-09-30', 0.5));
+		expect(rec.dayQuality).toBeNull();
+		// Positive control: the same flag settings are no change, and the scores are in-sample.
+		expect(fitRecordStatus({ ...s, qualityFlags }, rec).qualityFlagsChanged).toBe(false);
+		expect(calibrationFitStatus({ ...s, qualityFlags, fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
+		// Another gauged range, or another treatment: the fit used other days.
+		const moved = { ...qualityFlags, ratings: { flow_logger_m3s: { ...rating, gaugedMaxM3s: 15 } } };
+		const st = fitRecordStatus({ ...s, qualityFlags: moved }, rec);
+		expect(st.qualityFlagsChanged).toBe(true);
+		expect(fitRecordCaveats(st)).toContainEqual(expect.stringMatching(/quality-flag settings .* have changed since the fit/));
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, suspect: 'include' } }, rec).qualityFlagsChanged).toBe(true);
+		expect(calibrationFitStatus({ ...s, qualityFlags: moved, fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
+		// Settings without the field run the defaults: the same as a record made under them.
+		const plain = fitRecordFromReport(report(), ctx);
+		expect(plain.qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		expect(fitRecordStatus({ ...s, qualityFlags: undefined } as never, plain).qualityFlagsChanged).toBe(false);
+		// A record made before engine 1.22.0 has none to compare: never flagged.
+		const { qualityFlags: _q, ...old } = plain;
+		expect(fitRecordStatus({ ...s, qualityFlags: moved }, old as never).qualityFlagsChanged).toBe(false);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {
@@ -455,26 +482,30 @@ describe('fit record', () => {
 		expect(fitRecordStatus(s, before, { observedOrigin: dws }).observedOriginChanged).toBe(false);
 	});
 
-	it('records the fitted record’s gap filling, and flags a change only when filled days are read then or now (issue #66)', () => {
+	it('records the fitted record’s gap filling, and flags a spec change only while infilled days are scored then and now: one change, one flag (issue #66)', () => {
 		const spec = { interpolateMaxDays: 5, donor: null, donorMaxDays: 60, donorMinOverlapDays: 365 };
-		const fill = (useFilledDays: boolean, sp: typeof spec | null = spec) => ({ flow_observed_m3s: null, flow_logger_m3s: sp, useFilledDays });
+		const fill = (sp: typeof spec | null = spec) => ({ flow_observed_m3s: null, flow_logger_m3s: sp });
+		const qf = (infilled: 'include' | 'exclude') => ({ ratings: {}, aboveRating: 'censor' as const, belowRating: 'exclude' as const, suspect: 'exclude' as const, infilled });
 		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
-		const shown = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, flowGapFill: fill(false) } });
-		expect(shown.flowGapFill).toEqual({ spec, useFilledDays: false });
-		// Filled days not read, then or now: another spec changes nothing the fit saw.
-		expect(fitRecordStatus({ ...s, flowGapFill: fill(false, { ...spec, interpolateMaxDays: 2 }) }, shown).flowFillChanged).toBe(false);
-		expect(fitRecordStatus({ ...s, flowGapFill: fill(true) }, shown).flowFillChanged).toBe(true);
-		const read = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, flowGapFill: fill(true) } });
-		expect(fitRecordStatus({ ...s, flowGapFill: fill(true) }, read).flowFillChanged).toBe(false);
-		const other = fitRecordStatus({ ...s, flowGapFill: fill(true, { ...spec, interpolateMaxDays: 2 }) }, read);
-		expect(other.flowFillChanged).toBe(true);
+		const at = (infilled: 'include' | 'exclude', sp: typeof spec | null = spec) => ({ ...s, flowGapFill: fill(sp), qualityFlags: qf(infilled) });
+		const left = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, flowGapFill: fill(), qualityFlags: qf('exclude') } });
+		expect(left.flowGapFill).toEqual({ spec });
+		// Filled days left out, then or now: another spec changes nothing the fit scored.
+		expect(fitRecordStatus(at('exclude', { ...spec, interpolateMaxDays: 2 }), left).flowFillChanged).toBe(false);
+		// Scoring them now is a change of the quality flags, said once, not a fill change too.
+		const flipped = fitRecordStatus(at('include'), left);
+		expect(flipped).toMatchObject({ qualityFlagsChanged: true, flowFillChanged: false });
+		const scored = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, flowGapFill: fill(), qualityFlags: qf('include') } });
+		expect(fitRecordStatus(at('include'), scored)).toMatchObject({ qualityFlagsChanged: false, flowFillChanged: false });
+		const other = fitRecordStatus(at('include', { ...spec, interpolateMaxDays: 2 }), scored);
+		expect(other).toMatchObject({ qualityFlagsChanged: false, flowFillChanged: true });
 		expect(fitRecordCaveats(other).some((c) => /gap filling of the calibration record has changed/.test(c))).toBe(true);
 		// The scores are then on other days.
-		expect(calibrationFitStatus({ ...s, flowGapFill: fill(true, { ...spec, interpolateMaxDays: 2 }), fitRecord: read }, 'flow_logger_m3s')).toBe('otherPeriod');
-		// A record from before it read measured days only: flagged only once filled days are read.
-		const { flowGapFill: _gone, ...older } = shown;
-		expect(fitRecordStatus({ ...s, flowGapFill: fill(false) }, older).flowFillChanged).toBe(false);
-		expect(fitRecordStatus({ ...s, flowGapFill: fill(true) }, older).flowFillChanged).toBe(true);
+		expect(calibrationFitStatus({ ...at('include', { ...spec, interpolateMaxDays: 2 }), fitRecord: scored }, 'flow_logger_m3s')).toBe('otherPeriod');
+		// A record from before the fill spec was recorded, fitted scoring infilled days: a spec now is a change.
+		const { flowGapFill: _gone, ...older } = scored;
+		expect(fitRecordStatus(at('include'), older).flowFillChanged).toBe(true);
+		expect(fitRecordStatus(at('include', null), older).flowFillChanged).toBe(false);
 	});
 
 	it('flags CHIRPS factors that drifted beyond 2 % since the fit, with the settings and product the same (issue #51)', () => {

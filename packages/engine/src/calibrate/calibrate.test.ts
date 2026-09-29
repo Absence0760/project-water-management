@@ -580,10 +580,16 @@ describe('calibrate with an independent validation record', () => {
 		expect({ ...absent, notes: plain.notes }).toEqual(plain);
 
 		const short = structuredClone(input);
-		short.series.flow_logger_m3s = { startDate: '1991-01-01', values: new Array(20).fill(1) };
+		short.series.flow_logger_m3s = { startDate: '1991-01-01', values: Array.from({ length: 20 }, (_, i) => 1 + i / 100) };
 		const r = calibrate(short, { budget: 60, validate: false, validationRecord: 'flow_logger_m3s' });
 		expect(r.independentRecord).toBeNull();
-		expect(r.notes.join(' ')).toMatch(/logger record has only 20 observed days/);
+		expect(r.notes.join(' ')).toMatch(/logger record has only 20 observed days outside the exclusions, too few/);
+		// Long enough, but a stuck logger: the quality flags leave its flat stretch out (CR-19), and the note says so.
+		const stuck = structuredClone(input);
+		stuck.series.flow_logger_m3s = { startDate: '1991-01-01', values: [...new Array(40).fill(1), ...Array.from({ length: 20 }, (_, i) => 1 + (i + 1) / 100)] };
+		const rs = calibrate(stuck, { budget: 60, validate: false, validationRecord: 'flow_logger_m3s' });
+		expect(rs.independentRecord).toBeNull();
+		expect(rs.notes.join(' ')).toMatch(/logger record has only 20 observed days outside the exclusions once the quality flags leave out 40 extrapolated, suspect or infilled days/);
 		// A second record in the project, not asked for: the report is as without it.
 		expect(calibrate(short, { budget: 60, seed: 2 })).toEqual(plain);
 	}, 60_000);
@@ -616,4 +622,125 @@ describe('validationNotes', () => {
 		expect(validationNotes('kgePrime', test(0.8, 0.75), dsst)).toEqual([]);
 		expect(validationNotes('kgePrime', null, null)).toEqual([]);
 	});
+});
+
+describe('calibrate reads the per-day quality flags (CR-18/19, engine ≥ 1.22.0)', () => {
+	const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
+	/** Observed flow, m³/s, of the synthetic record (no nulls in it). */
+	const flowOf = (input: ModelInput) => input.series.flow_observed_m3s!.values as number[];
+	/** The q-th quantile of the observed flow. */
+	const quantile = (input: ModelInput, q: number) => {
+		const xs = [...flowOf(input)].sort((a, b) => a - b);
+		return xs[Math.floor(q * (xs.length - 1))]!;
+	};
+
+	it('leaves a flat stretch (suspect) out of the fit by default, and scores it in the fit on all days', () => {
+		const input = synthetic(truth, 3);
+		const flow = flowOf(input);
+		for (let t = 400; t < 431; t++) flow[t] = 0.5; // 31 days of one value: a stuck logger
+		const pb = prepareCalibration(input);
+		expect(pb.dayQuality!.flow.suspect).toBe(31);
+		expect(Array.from(pb.scoredDays).some((t) => t >= 400 && t < 431)).toBe(false);
+		expect(pb.allDays!.length).toBe(pb.scoredDays.length + 31);
+		const report = calibrate(input, { budget: 40, validate: false });
+		expect(report.fit.scores.days).toBe(pb.scoredDays.length);
+		expect(report.fitAllDays!.scores.days).toBe(pb.scoredDays.length + 31);
+		expect(report.dayQuality).toEqual(pb.dayQuality);
+		expect(report.dayQuality!.leftOutDays).toBe(31);
+
+		// "Score as recorded": the stretch is fitted, and the fit on all days is the fit itself.
+		input.settings.qualityFlags = { ...pb.dayQuality!.use, ratings: {}, suspect: 'include' };
+		const inc = prepareCalibration(input);
+		expect(inc.scoredDays.length).toBe(pb.allDays!.length);
+		expect(calibrate(input, { budget: 40, validate: false }).fitAllDays).toBeNull();
+	}, 30_000);
+
+	it('suspect days follow the project’s data-check limits: a lower outlier factor leaves more days out', () => {
+		const input = synthetic(truth, 3);
+		const base = prepareCalibration(input);
+		expect(base.dayQuality!.flow.suspect).toBe(0);
+		// Flows above twice the 99th percentile become outliers under a project limit of 2 (default 10).
+		input.settings.dataQuality = { outlierFactorFlow: 2 } as never;
+		const strict = prepareCalibration(input);
+		expect(strict.dayQuality!.flow.suspect).toBeGreaterThan(0);
+		expect(strict.scoredDays.length).toBe(base.scoredDays.length - strict.dayQuality!.flow.suspect);
+	});
+
+	it('with no flag set, the fit is the one before engine 1.22.0: every observed day, no fit on all days', () => {
+		const input = synthetic(truth, 3);
+		const pb = prepareCalibration(input);
+		expect(pb.scoredDays.length).toBe(pb.allDays!.length);
+		expect(pb.censor).toBeNull();
+		expect(pb.dayQuality!.flow.inRange).toBe(pb.scoredDays.length);
+		expect(pb.dayQuality!.notes).toEqual([expect.stringMatching(/No highest gauging is recorded for the gauge record/)]);
+		expect(calibrate(input, { budget: 30, validate: false }).fitAllDays).toBeNull();
+	}, 30_000);
+
+	it('censors days above the highest gauging: how far the record reads above it never changes the fit', () => {
+		const a = synthetic(truth, 4);
+		const hi = quantile(a, 0.97);
+		const rating = { gaugedMaxM3s: hi, gaugedMinM3s: null, source: 'synthetic rating table' };
+		a.settings.qualityFlags = { ratings: { flow_observed_m3s: rating }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' };
+		const b = structuredClone(a);
+		// Record B's floods read 50 % higher: an extrapolated rating that disagrees with A's.
+		flowOf(b).forEach((q, t, xs) => (xs[t] = q > hi ? q * 1.5 : q));
+		const pa = prepareCalibration(a);
+		expect(pa.dayQuality!.flow.aboveRating).toBeGreaterThan(20);
+		expect(pa.dayQuality!.censoredDays).toBe(pa.dayQuality!.flow.aboveRating);
+		const opts = { budget: 60, validate: false, seed: 3 };
+		const ra = calibrate(a, opts);
+		const rb = calibrate(b, opts);
+		expect(rb.params).toEqual(ra.params);
+		expect(rb.fit.scores).toEqual(ra.fit.scores);
+		// The fit on all days reads the record as it is, so it does see the difference.
+		expect(rb.fitAllDays!.scores).not.toEqual(ra.fitAllDays!.scores);
+		// Positive control: scored as recorded, the two records give different fits.
+		for (const x of [a, b]) x.settings.qualityFlags = { ...x.settings.qualityFlags!, aboveRating: 'include' };
+		expect(calibrate(b, opts).fit.scores).not.toEqual(calibrate(a, opts).fit.scores);
+	}, 60_000);
+
+	it('"exclude" leaves the days above the highest gauging out altogether', () => {
+		const input = synthetic(truth, 3);
+		const hi = quantile(input, 0.95);
+		input.settings.qualityFlags = { ratings: { flow_observed_m3s: { gaugedMaxM3s: hi, gaugedMinM3s: null, source: 's' } }, aboveRating: 'exclude', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' };
+		const pb = prepareCalibration(input);
+		expect(pb.censor).toBeNull();
+		expect(Array.from(pb.scoredDays).every((t) => pb.observed[t]! <= hi * 86_400)).toBe(true);
+		expect(pb.scoredDays.length).toBe(pb.allDays!.length - pb.dayQuality!.flow.aboveRating);
+	});
+
+	it('refuses, naming the flags, when they leave fewer than 30 days', () => {
+		const input = synthetic(truth, 1);
+		const lo = quantile(input, 0.99);
+		// Every day but the top 1 % is below the lowest gauging.
+		input.settings.qualityFlags = { ratings: { flow_observed_m3s: { gaugedMaxM3s: null, gaugedMinM3s: lo, source: 's' } }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' };
+		expect(() => prepareCalibration(input)).toThrow(/left once the quality flags leave out/);
+	});
+
+	it('an independent record is scored under its own gauged range', () => {
+		const input = synthetic(truth, 3);
+		input.series.flow_logger_m3s = { startDate: input.series.flow_observed_m3s!.startDate, values: [...flowOf(input)] };
+		const hi = quantile(input, 0.95);
+		input.settings.qualityFlags = { ratings: { flow_logger_m3s: { gaugedMaxM3s: hi, gaugedMinM3s: null, source: 's' } }, aboveRating: 'exclude', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' };
+		const pb = prepareCalibration(input);
+		// The gauge has no rating: nothing left out of it.
+		expect(pb.scoredDays.length).toBe(pb.allDays!.length);
+		const rec = pb.record('flow_logger_m3s')!;
+		expect(rec.scoredDays.length).toBeLessThan(pb.scoredDays.length);
+		expect(Array.from(rec.scoredDays).every((t) => rec.observed[t]! <= hi * 86_400)).toBe(true);
+	});
+
+	it('the run’s recession segments leave out days below the lowest gauging (CR-13 day mask)', () => {
+		const input = synthetic(truth, 4);
+		input.settings.gr4j = { ...truth, warmupDays: 365 };
+		const segDays = (i: ModelInput) => runModel(i).summary.plausibility!.recession!.segments.flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, k) => a + k));
+		const lo = quantile(input, 0.3);
+		const flow = flowOf(input);
+		// Positive control: without a rating, segments run through low flows.
+		expect(segDays(input).some((t) => flow[t]! < lo)).toBe(true);
+		input.settings.qualityFlags = { ratings: { flow_observed_m3s: { gaugedMaxM3s: null, gaugedMinM3s: lo, source: 's' } }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' };
+		const days = segDays(input);
+		expect(days.length).toBeGreaterThan(0);
+		expect(days.some((t) => flow[t]! < lo)).toBe(false);
+	}, 30_000);
 });

@@ -19,6 +19,7 @@ import type { EwrAssuranceSite } from './reserve/assurance';
 import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord } from './calibrate/provenance';
 import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from './seriesProvenance';
 import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
+import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
@@ -827,6 +828,8 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
+		// Engine ≥ 1.22.0: absent means the defaults (a run before them had no gauged range, and its fit's flags don't reach it).
+		qualityFlags: resolveQualityFlags(r.qualityFlags, []),
 		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) },
 		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) },
 		// Engine ≥ 1.23.0: absent means no record was filled.
@@ -853,10 +856,6 @@ function diffFlowGapFill(ra: unknown, rb: unknown): InputChange[] {
 		if (same(a[k] ?? null, b[k] ?? null)) continue;
 		const subject = `Gap filling of the ${gapFillRecordLabel(k)}`;
 		out.push({ area: 'settings', kind: 'changed', subject, text: `${subject}: ${gapFillText(a[k])} → ${gapFillText(b[k])}` });
-	}
-	if (!!a.useFilledDays !== !!b.useFilledDays) {
-		const t = (v: unknown) => (v ? 'read by the statistics' : 'shown only');
-		out.push({ area: 'settings', kind: 'changed', subject: 'Filled flow days', text: `Filled flow days: ${t(a.useFilledDays)} → ${t(b.useFilledDays)}` });
 	}
 	return out;
 }
@@ -940,6 +939,7 @@ function diffSettings(
 	out.push(...diffExclusions(za.keepReadings, zb.keepReadings, 'Keep-reading period'));
 	out.push(...diffExclusions(za.addAccumulations, zb.addAccumulations, 'Listed accumulation'));
 	out.push(...diffFlowGapFill(a.flowGapFill, b.flowGapFill));
+	for (const c of qualityFlagChanges(a.qualityFlags as QualityFlagSettings, b.qualityFlags as QualityFlagSettings)) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([
@@ -954,6 +954,7 @@ function diffSettings(
 		'calibrationExclusions',
 		'zeroRainRuns',
 		'flowGapFill',
+		'qualityFlags',
 		'fitRecord',
 		'pe',
 		'lakeEvapFactorMonthly',
@@ -1687,7 +1688,6 @@ export function settingsChangePaths(): [subject: string, path: string][] {
 	for (const [k, f] of Object.entries(CALIBRATION_FIELDS)) out.push([`Calibration ${f.label}`, `calibration.${k}`]);
 	out.push(['Flagged zero-rain runs', 'zeroRainRuns.mode'], ['Multi-day rain accumulations', 'zeroRainRuns.accumulationMode']);
 	for (const k of GAP_FILL_KINDS) out.push([`Gap filling of the ${gapFillRecordLabel(k)}`, `flowGapFill.${k}`]);
-	out.push(['Filled flow days', 'flowGapFill.useFilledDays']);
 	return out;
 }
 

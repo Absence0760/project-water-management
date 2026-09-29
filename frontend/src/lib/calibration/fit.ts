@@ -177,7 +177,7 @@ export interface ScoreColumn {
 }
 
 /** What a score table is built from: a fresh report, or a stored fit record (same shape). */
-export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample' | 'differential' | 'independentRecord'>;
+export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample' | 'differential' | 'independentRecord' | 'fitAllDays'>;
 
 /** The report's periods as table columns: before, fitted, then each test's calibration and validation part. */
 export function scoreColumns(r: ScoredFit): ScoreColumn[] {
@@ -192,6 +192,8 @@ export function scoreColumns(r: ScoredFit): ScoreColumn[] {
 		benchmarks: x.benchmarks ?? null
 	});
 	const cols: ScoreColumn[] = [col('before', 'Current parameters', p(r.before), r.before, false), col('fit', 'Fitted', p(r.fit), r.fit, false)];
+	// The fit on every observed day, flagged ones included and nothing censored (CR-19, engine ≥ 1.22.0): only when the flags changed the days.
+	if (r.fitAllDays) cols.push(col('fit-all', 'Fitted, all days (flags ignored)', p(r.fitAllDays), r.fitAllDays, false));
 	if (r.splitSample) {
 		cols.push(
 			col('split-cal', 'Split: fitted half', p(r.splitSample.calibration), r.splitSample.calibration, false),
@@ -306,7 +308,7 @@ export function seedError(seed: number | null): string | null {
 export function fitRecordFor(
 	r: CalibrationReport,
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> &
-		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'flowGapFill' | 'dataQuality'>>,
+		Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'flowGapFill' | 'dataQuality' | 'qualityFlags'>>,
 	opts: {
 		validate: boolean;
 		validationRecord: CalibrationFlowKind | null;

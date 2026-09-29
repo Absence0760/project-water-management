@@ -50,6 +50,11 @@ import {
 	GAP_FILL_DONORS,
 	GAP_FILL_LIMITS,
 	sourceError,
+	ABOVE_RATING_USES,
+	FLAG_USES,
+	FLOW_DAY_FLAGS,
+	ratingError,
+	RATING_SOURCE_MAX,
 	ZERO_RUN_RULES,
 	type ProjectSettings
 } from '@water-management/engine';
@@ -469,13 +474,57 @@ const notOwnDonor = (kind: string) => (s: z.infer<typeof GapFillSpec> | null) =>
 const FlowGapFill = z
 	.object({
 		flow_observed_m3s: GapFillSpec.nullable().refine(notOwnDonor('flow_observed_m3s'), 'a record cannot fill its own gaps: pick another record as the donor'),
-		flow_logger_m3s: GapFillSpec.nullable().refine(notOwnDonor('flow_logger_m3s'), 'a record cannot fill its own gaps: pick another record as the donor'),
-		useFilledDays: z.boolean()
+		flow_logger_m3s: GapFillSpec.nullable().refine(notOwnDonor('flow_logger_m3s'), 'a record cannot fill its own gaps: pick another record as the donor')
+		// Whether filled days are scored is qualityFlags.infilled (engine ≥ 1.23.0); the retired `useFilledDays` is refused.
 	})
 	.partial()
 	.strict();
 
 const params = z.record(z.string().max(40), z.number().finite()).refine((o) => Object.keys(o).length <= 30, 'too many parameters');
+
+/**
+ * One record's gauged range (engine dayFlags.ts GaugeRating, CR-18): the
+ * highest and lowest field gaugings in m³/s (null = not known) and a source,
+ * required once either is set. The engine's ratingError is the rule.
+ */
+const GaugeRating = z
+	.object({
+		gaugedMaxM3s: z.number().finite().gt(0).nullable(),
+		gaugedMinM3s: z.number().finite().min(0).nullable(),
+		source: z.string().max(RATING_SOURCE_MAX)
+	})
+	.strict()
+	.superRefine((r, ctx) => {
+		const err = ratingError(r);
+		if (err) ctx.addIssue({ code: 'custom', message: err });
+	});
+/** settings.qualityFlags (engine ≥ 1.22.0, CR-18/19): the gauged ranges and how the fit scores flagged days. */
+const QualityFlags = z
+	.object({
+		ratings: z.object({ flow_observed_m3s: GaugeRating.optional(), flow_logger_m3s: GaugeRating.optional() }).strict(),
+		aboveRating: z.enum(ABOVE_RATING_USES),
+		belowRating: z.enum(FLAG_USES),
+		suspect: z.enum(FLAG_USES),
+		infilled: z.enum(FLAG_USES)
+	})
+	.strict();
+const dayCount = z.number().int().min(0).max(1_000_000);
+/** A fit's quality-flag summary (engine DayQuality, CR-22), as the browser reports it. */
+const DayQuality = z
+	.object({
+		flowKind: z.enum(CALIBRATION_FLOW_KINDS),
+		rating: z.object({ gaugedMaxM3s: z.number().finite().nullable(), gaugedMinM3s: z.number().finite().nullable(), source: z.string().max(RATING_SOURCE_MAX) }).strict().nullable(),
+		use: QualityFlags.omit({ ratings: true }),
+		windowDays: dayCount,
+		flow: z.object(Object.fromEntries(FLOW_DAY_FLAGS.map((f) => [f, dayCount])) as Record<(typeof FLOW_DAY_FLAGS)[number], typeof dayCount>).strict(),
+		scoredDays: dayCount,
+		censoredDays: dayCount,
+		leftOutDays: dayCount,
+		suspectZeroDays: dayCount,
+		rain: z.object({ observed: dayCount, infilled: dayCount, missing: dayCount, zeroRunDays: dayCount }).strict().nullable(),
+		notes: z.array(z.string().max(2000)).max(20)
+	})
+	.strict();
 const ValidationTest = z.object({ params, calibration: ScoredPeriod, validation: ScoredPeriod });
 const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
 
@@ -510,6 +559,10 @@ export const FitRecord = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		exclusions: ExclusionList,
+		// Engine ≥ 1.22.0 (CR-18/19/22): the quality-flag settings, their summary and the fit on all days. Optional: absent on a record made before them.
+		qualityFlags: QualityFlags.optional(),
+		dayQuality: DayQuality.nullable().optional(),
+		fitAllDays: ScoredPeriod.nullable().optional(),
 		validate: z.boolean(),
 		validationRecord: flowKind.nullable(),
 		fit: ScoredPeriod,
@@ -621,7 +674,8 @@ export const FitRecord = z
 			.strict()
 			.nullable()
 			.optional(),
-		flowGapFill: z.object({ spec: GapFillSpec.nullable(), useFilledDays: z.boolean() }).strict().optional()
+		// `useFilledDays` only on a record made on the branch before the quality flags (never deployed); never read.
+		flowGapFill: z.object({ spec: GapFillSpec.nullable(), useFilledDays: z.boolean().optional() }).strict().optional()
 	})
 	.strict();
 
@@ -719,6 +773,8 @@ export const SettingsPatch = z
 		calibrationExclusions: ExclusionList,
 		// Gap filling of the observed flow records (engine flowGapFill.ts, issue #66): either record's spec (replaced whole) or the switch.
 		flowGapFill: FlowGapFill,
+		// Per-day quality flags (engine calibrate/dayFlags.ts, CR-18/19): any subset of the group; `ratings` is replaced whole.
+		qualityFlags: QualityFlags.partial(),
 		fitRecord: FitRecord.nullable(),
 		// Data-quality limits (engine resolveDataQuality): gauge vs logger, and
 		// (engine ≥ 1.20.0, issue #66) outliers, flat-lines, zero-rain runs and

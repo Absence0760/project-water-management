@@ -3,6 +3,7 @@
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
+import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
@@ -453,11 +454,19 @@ export interface ProjectSettings {
 	/**
 	 * Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
 	 * ./flowGapFill.ts, docs/model.md §2.10i): a spec per record, null = not
-	 * filled (the default), and whether statistics read the filled days
-	 * (default false: they are shown and exported only). Filled values never
-	 * change the stored series.
+	 * filled (the default). Filled values never change the stored series;
+	 * whether filled days are scored is qualityFlags.infilled.
 	 */
 	flowGapFill: FlowGapFillSettings;
+	/**
+	 * Per-day quality flags (engine ≥ 1.22.0, calibration research CR-18/19,
+	 * ./calibrate/dayFlags.ts): each record's gauged range, and how automatic
+	 * calibration's objective treats extrapolated, suspect and infilled days.
+	 * The run's own calibration statistics score every observed day; the one
+	 * exception (engine ≥ 1.23.0) is `infilled`, which also decides whether
+	 * days settings.flowGapFill filled count in the run's statistics.
+	 */
+	qualityFlags: QualityFlagSettings;
 	/**
 	 * The automatic fit whose parameters "Apply to form" wrote, with its
 	 * validation (./calibrate/provenance.ts). null = none: the parameters were
@@ -671,7 +680,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationFlowKind: null,
 		calibrationExclusions: [],
 		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
-		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false },
+		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null },
+		qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' },
 		fitRecord: null,
 		dataQuality: defaultDataQualitySettings(),
 		wr2012: defaultWr2012Settings()

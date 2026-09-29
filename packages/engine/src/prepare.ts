@@ -75,6 +75,7 @@ import {
 	type FlowFillSummary,
 	type GapFillKind
 } from './flowGapFill';
+import { resolveQualityFlags } from './calibrate/qualityFlagSettings';
 import { clonePlain, stableStringify } from './warmstart/plain';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
@@ -145,8 +146,8 @@ export interface PreparedRun {
 	/**
 	 * The observed flow records settings.flowGapFill fills (engine ≥ 1.23.0,
 	 * ./flowGapFill.ts), each aligned to the run: null when no record is
-	 * filled. `aligned` returns the filled record only with
-	 * settings.flowGapFill.useFilledDays; this is where every other reader
+	 * filled. `aligned` returns the filled record only when
+	 * settings.qualityFlags.infilled is 'include'; this is where every other reader
 	 * (the run's fill columns, the per-day quality flags) finds the fill.
 	 */
 	flowFill: Partial<Record<GapFillKind, WindowFill>> | null;
@@ -332,9 +333,10 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
-	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only with useFilledDays.
+	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only when settings.qualityFlags.infilled scores infilled days.
 	const flowFill = flowFillsFor(settings, series, start, days, warnings);
-	const readFilled = settings.flowGapFill.useFilledDays;
+	// One control for scoring filled days (engine ≥ 1.23.0): the quality flags' infilled treatment.
+	const readFilled = settings.qualityFlags.infilled === 'include';
 	const aligned = (kind: SeriesKind) =>
 		kind === 'rain_catchment_mm'
 			? catchment.slice()
@@ -409,7 +411,7 @@ function flowFillsFor(settings: ProjectSettings, series: ModelInput['series'], s
 		const code = new Uint8Array(days);
 		const offset = toEpochDay(f.startDate) - start;
 		for (let i = Math.max(0, -offset); i < Math.min(f.code.length, days - offset); i++) code[i + offset] = f.code[i]!;
-		const note = flowFillWarning(summary, settings.flowGapFill.useFilledDays);
+		const note = flowFillWarning(summary, settings.qualityFlags.infilled === 'include');
 		if (note) warnings.push(note);
 		(out ??= {})[kind] = {
 			code,
@@ -477,6 +479,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.zeroRainRuns = resolveZeroRain(raw?.zeroRainRuns, warnings);
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.ewrRules = resolveEwrRules(raw?.ewrRules, warnings);
+	s.qualityFlags = resolveQualityFlags(raw?.qualityFlags, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {

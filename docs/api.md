@@ -501,13 +501,31 @@ alongside teams, e.g. to give an outside client `viewer` access.
   listed twice (overlapping periods are fine). They apply to the run's
   calibration statistics and EWR test on the observed record, and to Fit
   automatically.
+  `qualityFlags` (engine ≥ 1.22.0, CR-18/19, [model.md
+  §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922))
+  is `{ ratings, aboveRating, belowRating, suspect, infilled }`, any subset
+  patched, `ratings` replaced whole: `ratings` maps `flow_observed_m3s` and
+  `flow_logger_m3s` (no other kind) to `{ gaugedMaxM3s, gaugedMinM3s, source
+  }`, the highest (> 0) and lowest (≥ 0, below the highest) field gauging in
+  m³/s or `null`, and a source of at most 200 characters, required once a
+  bound is set; `aboveRating` is `censor` (default) | `exclude` | `include`,
+  the other three `exclude` (default) | `include`. Anything else is a `400`.
+  It changes only automatic calibration and the recession diagnostics, never
+  a run's calibration statistics, with one exception from engine 1.23.0:
+  `infilled` also decides whether days that `flowGapFill` filled count in the
+  run's calibration statistics, the EWR test on the observed record and the
+  plausibility checks (they are not readings, so they aren't scored unless
+  `include`). Settings stored before it read back with
+  the defaults.
   `flowGapFill` (engine ≥ 1.23.0, issue #66) is `{ flow_observed_m3s,
-  flow_logger_m3s, useFilledDays }`: per observed record `null` (not filled,
+  flow_logger_m3s }`: per observed record `null` (not filled,
   the default) or `{ interpolateMaxDays (whole, 0–30), donor
   ('flow_observed_m3s' | 'flow_logger_m3s' | 'flow_reference_m3s' | null, never
   the record itself), donorMaxDays (whole, 1–366), donorMinOverlapDays (whole,
-  30–36 600) }`, strict, replaced whole; `useFilledDays` (default `false`) lets
-  the statistics read the filled days. A `PATCH` merges the group one level
+  30–36 600) }`, strict, replaced whole. Whether filled days are scored is
+  `qualityFlags.infilled` (above). The retired `useFilledDays` (never
+  deployed) is a `400` in a patch, and ignored with a run warning in stored
+  settings. A `PATCH` merges the group one level
   deep. Anything else is a `400`; settings stored before it read back as off.
   [model.md §2.10i](./model.md).
   `fitRecord` is the record of the automatic fit whose parameters Apply wrote
@@ -524,8 +542,12 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
   multi-start fit (absent on a record made before those, i.e. one start),
   `observedOrigin` (`{ source, unit, factor }` of the fitted record, 107, or
-  `null`) and `flowGapFill` (`{ spec, useFilledDays }`, engine ≥ 1.23.0; both
-  absent on older records), and no others. Each scored period (`fit`, `before`, a test's `calibration`
+  `null`) and `flowGapFill` (`{ spec }`, engine ≥ 1.23.0; both
+  absent on older records), and from engine 1.22.0 the optional `qualityFlags` (validated like the
+  setting), `dayQuality` (the fit's `DayQuality` summary: `flowKind, rating,
+  use, windowDays, flow, scoredDays, censoredDays, leftOutDays,
+  suspectZeroDays, rain, notes`, or `null`) and `fitAllDays` (a scored
+  period, or `null`), and no others. Each scored period (`fit`, `before`, a test's `calibration`
   and `validation`, `marPenalty.unpenalised.fit`) is `{ start, end,
   waterYears, scores, intervals?, benchmarks? }`, `scores` at most 30
   numbers-or-null by name. From engine 1.19.0 (CR-5) `intervals` is `{ level,

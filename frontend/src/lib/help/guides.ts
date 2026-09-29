@@ -562,6 +562,7 @@ export const GUIDES: Guide[] = [
 						items: [
 							'On **Settings & calibration → Calibration record**, choose the calibration flow series (gauge or logger) and the [[calibration-window]]: a period with a record you trust.',
 							'Add [[calibration-exclusions]] for periods you can’t trust, each with its reason.',
+							'Enter each record’s gauged range (its highest and lowest field gauging) under [[quality-flags|Quality flags]], so days read off the extrapolated rating curve are flagged.',
 							'The [[runoff-model]] is GR4J: its parameters are under **Flow calibration**. (The workbook’s legacy model was removed in engine 1.0.0.)'
 						]
 					}
@@ -996,7 +997,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: 'Scored days are days with an observation, inside the [[calibration-window]], and outside every [[calibration-exclusions|exclusion]]. At least 30 are needed.'
+						text: 'Scored days are days with an observation, inside the [[calibration-window]], outside every [[calibration-exclusions|exclusion]], and not left out by the [[quality-flags|quality flags]] (by default days below the lowest gauging, suspect and infilled days; days above the highest gauging are censored). At least 30 are needed.'
 					}
 				]
 			},

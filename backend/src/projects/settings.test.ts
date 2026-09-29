@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS } from '@water-management/engine';
+import { dayQuality, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
@@ -742,6 +742,18 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
+	it('accepts the quality-flag settings, summary and fit on all days (CR-18/19/22, engine ≥ 1.22.0), and a record from before them without', () => {
+		const flags = Uint8Array.from([0, 0, 4, 6]);
+		const settings = defaultProjectSettings().qualityFlags;
+		const dq = dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx: [0, 1, 2, 3], flags, scoring: scoringDays([0, 1, 2, 3], flags, settings, null, 4), observed: Float64Array.from([1, 2, 0, NaN]), rainFlags: Uint8Array.from([0, 1, 0, 2]), zeroRunMask: null });
+		const full = { ...record, qualityFlags: settings, dayQuality: dq, fitAllDays: period };
+		expect(ok(full)).toBe(true);
+		expect(ok({ ...full, dayQuality: null, fitAllDays: null })).toBe(true);
+		expect(ok(record)).toBe(true);
+		expect(ok({ ...full, dayQuality: { ...dq, extra: 1 } })).toBe(false);
+		expect(ok({ ...full, qualityFlags: { ...settings, suspect: 'drop' } })).toBe(false);
+	});
+
 	it('accepts the low/high-flow objective (CR-3, engine ≥ 1.19.0) and its score, and refuses an unknown objective', () => {
 		const scored = { ...period, scores: { ...period.scores, kgeLowHigh: 0.55 } };
 		expect(ok({ ...record, objective: 'kgeLowHigh', fit: scored, before: scored })).toBe(true);
@@ -1104,5 +1116,36 @@ describe('remapSettingNodeIds (project copy)', () => {
 		expect(remapSettingNodeIds(at('g1'), ids)).toEqual(at('new-g1'));
 		expect(remapSettingNodeIds(at(null), ids)).toEqual(at(null));
 		expect(remapSettingNodeIds(at('gone'), ids)).toEqual(at('gone'));
+	});
+});
+
+describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
+	const ok = (qualityFlags: unknown) => SettingsPatch.safeParse({ qualityFlags }).success;
+	const rating = { gaugedMaxM3s: 12.5, gaugedMinM3s: 0.02, source: 'DWS gaugings 1998–2020' };
+
+	it('accepts the defaults, any subset, and a gauged range per calibration record', () => {
+		expect(ok(defaultProjectSettings().qualityFlags)).toBe(true);
+		expect(ok({ suspect: 'include' })).toBe(true);
+		expect(ok({ aboveRating: 'exclude', belowRating: 'include', infilled: 'include' })).toBe(true);
+		expect(ok({ ratings: { flow_observed_m3s: rating, flow_logger_m3s: { gaugedMaxM3s: null, gaugedMinM3s: null, source: '' } } })).toBe(true);
+		expect(ok({ ratings: {} })).toBe(true);
+	});
+
+	it('refuses what the engine’s ratingError refuses, an unknown treatment, and a rating for another series', () => {
+		expect(ok({ aboveRating: 'drop' })).toBe(false);
+		expect(ok({ belowRating: 'censor' })).toBe(false); // censoring is for floods only
+		expect(ok({ ratings: { flow_observed_m3s: { ...rating, source: ' ' } } })).toBe(false);
+		expect(ok({ ratings: { flow_observed_m3s: { ...rating, gaugedMinM3s: 13 } } })).toBe(false);
+		expect(ok({ ratings: { flow_observed_m3s: { ...rating, gaugedMaxM3s: 0 } } })).toBe(false);
+		expect(ok({ ratings: { flow_observed_m3s: { ...rating, gaugedMinM3s: -1 } } })).toBe(false);
+		expect(ok({ ratings: { flow_reference_m3s: rating } })).toBe(false);
+		expect(ok({ ratings: { flow_observed_m3s: { ...rating, extra: 1 } } })).toBe(false);
+	});
+
+	it('fills the defaults for settings stored before it, and a patch merges field by field with the ratings replaced whole', () => {
+		expect(mergeSettings({}).qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		const stored = { qualityFlags: { suspect: 'include', ratings: { flow_logger_m3s: rating } } };
+		const s = patchSettings(stored, { qualityFlags: { ratings: { flow_observed_m3s: rating } } });
+		expect(s.qualityFlags).toEqual({ ratings: { flow_observed_m3s: rating }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'include', infilled: 'exclude' });
 	});
 });
