@@ -159,7 +159,11 @@ Tracked in issue #103.
 - [ ] **Self-service deletion.** The notice promises deletion on an emailed
   request (runbook item 7 in deployment.md), which is how it works today.
 - [ ] **Backups:** the notice says up to 35 days; keep
-  `db_backup_retention_days` at or under that.
+  `db_backup_retention_days` at or under that. The one copy kept longer is
+  the final snapshot a teardown takes (infra/README.md § Tearing down); the
+  notice says it is kept until deleted, and that the shutdown notice will
+  give its period. Decide that period when shutting down, and delete it on
+  time.
 - [ ] **Material-change emails:** Terms §16 and Privacy §12 promise an email
   before a material change. There is no bulk "notice to all account
   holders" tool yet; send it by hand until there is.

@@ -51,6 +51,9 @@ interface World {
 	sweepJobId: string;
 	outlookJobId: string;
 	yieldJobId: string;
+	/** A finished `auto_calibration` job, and a complete, unapplied run of the calibration rules with a kept fit (108). */
+	autoCalJobId: string;
+	calibrationId: string;
 	scheduleId: string;
 	scenarioId: string;
 	applicationId: string;
@@ -140,6 +143,12 @@ async function world(name: string): Promise<World> {
 			sweepJobId: await job('sweep'),
 			outlookJobId: await job('outlook'),
 			yieldJobId: await job('yield'),
+			autoCalJobId: await job('auto_calibration'),
+			calibrationId: await one(
+				`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version, created_by, status, report, chosen, completed_at)
+				 VALUES ($1, 'manual', '{}', 1, repeat('0', 64), '{}', 'x', $2, 'complete', '{}', 0, now())`,
+				[projectId, u]
+			),
 			scheduleId: await one(`INSERT INTO report_schedule (project_id, frequency, weekday, hour, timezone, acting_user_id, created_by) VALUES ($1, 'weekly', 1, 6, 'UTC', $2, $2)`, [projectId, u]),
 			scenarioId: await one(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin) VALUES ($1, 'Team scenario', $2, repeat('a', 64), $3, 'team')`, [projectId, runId, u]),
 			applicationId: await one(`INSERT INTO scenario (project_id, name, base_run_id, ops_sha256, owner_user_id, origin) VALUES ($1, 'Application', $2, repeat('a', 64), $3, 'applicant')`, [projectId, runId, u]),
@@ -403,6 +412,22 @@ const CASES: Record<string, Case> = {
 	'run_series.run_id': {
 		ref: (w) => w.runId,
 		insert: (h, ref) => [`INSERT INTO run_series (run_id, project_id, key, "values") VALUES ($1, $2, $3, '{1}')`, [ref, h.projectId, `x_${randomUUID().slice(0, 8)}`]]
+	},
+	// A run of the calibration rules (108): its job at insert and while running; the run and ensemble it applied, set once on a complete run.
+	'auto_calibration.job_id': {
+		ref: (w) => w.autoCalJobId,
+		insert: (h, ref) => [
+			`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version, job_id) VALUES ($1, 'manual', '{}', 1, repeat('0', 64), '{}', 'x', $2)`,
+			[h.projectId, ref]
+		]
+	},
+	'auto_calibration.applied_run_id': {
+		ref: (w) => w.runId,
+		insert: (h, ref) => ['UPDATE auto_calibration SET applied_at = now(), applied_run_id = $1 WHERE id = $2', [ref, h.calibrationId]]
+	},
+	'auto_calibration.uncertainty_id': {
+		ref: (w) => w.ensembleId,
+		insert: (h, ref) => ['UPDATE auto_calibration SET applied_at = now(), applied_run_id = $3, uncertainty_id = $1 WHERE id = $2', [ref, h.calibrationId, h.runId]]
 	},
 	'run_uncertainty.run_id': {
 		ref: (w) => w.runId,
@@ -756,6 +781,8 @@ const FIELDS: Record<string, string[] | string> = {
 	'scenarios/schema.ts:userId': 'a person, not a project row: scenario_member’s composite key on (project_id, user_id)',
 	'sweeps/routes.ts:baseRunId': 'a read filter within the project',
 	'sweeps/schema.ts:baseRunId': ['POST /projects/:id/sweeps baseRunId'],
+	'calibration/schema.ts:calibrationId': 'a job payload: jobs/trust.security.db.test.ts',
+	'calibration/schema.ts:uncertaintyId': 'a job payload: jobs/trust.security.db.test.ts',
 	'sweeps/schema.ts:sweepId': 'a job payload: jobs/trust.security.db.test.ts',
 	'yield/routes.ts:runId': ['POST /projects/:id/yield runId'],
 	'yield/routes.ts:scenarioId': 'a read filter within the project',

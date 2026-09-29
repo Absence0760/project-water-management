@@ -72,22 +72,18 @@ resource "aws_iam_role" "worker_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "worker_lambda_vpc" {
-  role       = aws_iam_role.worker_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs and VPC ENIs: iam.tf.
 
-# Consume the jobs queue (the event source mapping polls as this role) and
-# send to it (a handler that queues follow-up work wakes the worker too).
+# Consume the jobs queue: the event source mapping polls as this role. No
+# SendMessage: only the API's routes wake the worker (jobs/wake.ts
+# wakeWorker); a job that queues follow-up work leaves it to the insert
+# trigger locally and the 5-minute tick in production (series/newData.ts).
+# The worker has no JOB_TRANSPORT / JOBS_QUEUE_URL either, and
+# backend/src/lambda-worker.test.ts fails if its bundle reaches jobs/wake.ts.
 data "aws_iam_policy_document" "worker_lambda" {
   statement {
     sid       = "ConsumeJobsQueue"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.jobs.arn]
-  }
-  statement {
-    sid       = "WakeJobsQueue"
-    actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.jobs.arn]
   }
 }
@@ -152,6 +148,16 @@ resource "aws_lambda_function" "worker" {
   # burn receive counts into the DLQs (variables.tf, guarded by a tftest).
   reserved_concurrent_executions = var.worker_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.worker.name
+  }
+
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.worker_lambda.id]
@@ -166,8 +172,8 @@ resource "aws_lambda_function" "worker" {
       RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
       DB_POOL_MAX            = "2"
       NODE_EXTRA_CA_CERTS    = local.rds_ca_path
-      JOB_TRANSPORT          = "sqs"
-      JOBS_QUEUE_URL         = aws_sqs_queue.jobs.url
+      # No JOB_TRANSPORT / JOBS_QUEUE_URL: only the API wakes the worker; the
+      # worker never sends to the jobs queue (no sqs:SendMessage on it, above).
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
@@ -195,7 +201,8 @@ resource "aws_lambda_function" "worker" {
 
   depends_on = [
     aws_cloudwatch_log_group.worker,
-    aws_iam_role_policy_attachment.worker_lambda_vpc,
+    aws_iam_role_policy.lambda_logs["worker"],
+    aws_iam_role_policy.lambda_vpc_eni["worker"],
     aws_iam_role_policy.worker_lambda,
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
@@ -360,7 +367,13 @@ resource "aws_vpc_endpoint" "sqs" {
   tags = { Name = "${local.project}-sqs" }
 }
 
+# Only SendMessage, from the two roles whose code calls it (the only SQS
+# call in backend/src: jobs/transport.ts). Every queue the worker, fetcher
+# or renderer consumes is read by a Lambda event source mapping, whose
+# pollers run in the Lambda service and never use this endpoint, so no
+# receive, delete or visibility action is allowed through it.
 data "aws_iam_policy_document" "sqs_endpoint" {
+  # The API wakes the worker after queueing a job (jobs/wake.ts).
   statement {
     sid       = "ApiSendsWakeUps"
     actions   = ["sqs:SendMessage"]
@@ -370,16 +383,7 @@ data "aws_iam_policy_document" "sqs_endpoint" {
       identifiers = [aws_iam_role.lambda.arn]
     }
   }
-  statement {
-    sid       = "WorkerUsesJobsQueue"
-    actions   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.jobs.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # Reports (reports.tf): the worker asks the renderer and reads its answers.
+  # Reports (reports.tf): the worker asks the renderer.
   statement {
     sid       = "WorkerSendsRenderRequests"
     actions   = ["sqs:SendMessage"]
@@ -389,39 +393,11 @@ data "aws_iam_policy_document" "sqs_endpoint" {
       identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
-  statement {
-    sid       = "WorkerConsumesRenderResults"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.render_results.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # SES bounces and complaints (ses.tf): the worker reads them.
-  statement {
-    sid       = "WorkerConsumesMailEvents"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.mail_events.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # Data feeds (feeds.tf): the worker asks the fetcher and reads its answers.
+  # Data feeds (feeds.tf): the worker asks the fetcher.
   statement {
     sid       = "WorkerSendsFetchRequests"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.fetch_requests.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  statement {
-    sid       = "WorkerConsumesIngestResults"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.ingest_results.arn]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]
@@ -432,20 +408,33 @@ data "aws_iam_policy_document" "sqs_endpoint" {
 # --- Alarms --------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "jobs_dlq_depth" {
-  alarm_name          = "${local.project}-jobs-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-jobs-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A jobs-queue message was dead-lettered: the worker failed its tick 5 times (usually the database was unreachable). Jobs are safe in the job table; check the worker's logs, then redrive or purge the DLQ."
+  alarm_description   = "A jobs-queue message was dead-lettered: the worker failed its tick 5 times (usually the database was unreachable). Jobs are safe in the job table; check the worker's logs, then redrive or purge the DLQ. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.jobs_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.jobs_dlq.name
+      }
+    }
   }
 }
 
@@ -559,7 +548,7 @@ resource "aws_cloudwatch_metric_alarm" "jobs_backlog" {
 resource "aws_cloudwatch_log_metric_filter" "job_dead" {
   name           = "${local.project}-job-dead"
   log_group_name = aws_cloudwatch_log_group.worker.name
-  pattern        = "{ $.event = \"job_dead\" }"
+  pattern        = "{ $.message.event = \"job_dead\" }"
 
   metric_transformation {
     name          = "JobDead"

@@ -53,8 +53,29 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   (`/projects/<id>`). There is deliberately **no** distribution-wide
   `custom_error_response`, because that would also turn the API's own 403/404
   JSON into `index.html`.
+- **Missing files are 404, not S3 XML.** A path *with* an extension reaches
+  S3 only where the build keeps files (`_app/`, the directories and files in
+  `frontend/static`, the HTML the build writes: `STATIC_DIRS` /
+  `STATIC_FILES` in `spa_rewrite`). Anything else (`/report.pdf`,
+  `/wp-login.php`, a dot segment) gets a small `404` page from the function
+  itself, without touching S3. A missing file inside those locations reaches
+  S3, and the bucket policy's `s3:ListBucket` for this distribution makes S3
+  answer `404` (NoSuchKey) rather than `403` (AccessDenied). That grant can't
+  list the bucket through CloudFront: a listing is a GET on the bucket root,
+  every path ending in `/` goes to `/index.html`, dot segments are refused,
+  and the default behaviour forwards no query string. The private reports
+  bucket keeps `GetObject` only, so a missing report stays `403`. A new
+  top-level file or directory in `frontend/static`, or a new prerendered
+  page, must be added to those lists:
+  `infra/scripts/cloudfront-functions.test.mjs` (`pnpm test:guards`) runs the
+  function and fails until it is. `tests/edge.tftest.hcl` pins the policy and
+  the behaviours' cache and origin-request policies.
 - **Private-only VPC.** Two private subnets with no internet gateway, no NAT
-  and no public subnet. Nothing needs the internet, and Lambda log delivery
+  and no public subnet. They go in the two lowest available **zone IDs**
+  (`afs1-az1`, `afs1-az2` in af-south-1), not the first two zone names: names
+  are shuffled per account and the list's order isn't a contract, while a
+  zone ID is the same physical zone everywhere. Opt-in zones (Local,
+  Wavelength) are excluded (`network.tf`, `tests/edge.tftest.hcl`). Nothing needs the internet, and Lambda log delivery
   doesn't go through the function's ENI. The VPC reaches exactly three AWS
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert
@@ -64,10 +85,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   (the migrate Lambda's RDS master secret, and the API, worker and migrate
   Lambdas' runtime secrets; its endpoint policy lets each role read only its
   own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
-  endpoint policy, `jobs.tf`, names only those two roles and six queues: the
-  API may only send to `jobs`; the worker uses `jobs`, sends
-  `fetch-requests` and `render-requests`, and consumes `ingest-results`,
-  `render-results` and `mail-events`). Security groups only ever reference
+  endpoint policy, `jobs.tf`, allows `SendMessage` only, from those two roles
+  to three queues: the API to `jobs`, the worker to `fetch-requests` and
+  `render-requests`. Every queue a Lambda consumes is read by an event
+  source mapping, whose pollers run in the Lambda service, not through the
+  endpoint). Security groups only ever reference
   other security groups, never a CIDR: RDS takes 5432 from the API, migrate
   and worker Lambda groups and nothing else, each endpoint takes 443 from
   the Lambdas that use it, and none of RDS or the endpoints has egress. A
@@ -163,9 +185,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
-| `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
+| `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds`, and its alarm: an EventBridge rule on CloudTrail's `DisableKey` / `ScheduleKeyDeletion` / `PutKeyPolicy` / `RevokeGrant` for the key (by key ID or ARN) to the regional alerts topic (free; needs a CloudTrail trail, step 7a) |
+| `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
-| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
+| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
@@ -173,25 +196,56 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
+| `iam.tf` | Every Lambda role's logs policy (create streams and put events in its own log group only; no `logs:CreateLogGroup`, no AWS-managed policy) and the API, worker and migrate roles' VPC ENI policy (AWS's six EC2 actions, denied to the function's own code) |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
+| `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
+| `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
+| `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
+| `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
+| `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
 ## Decisions
 
 ### Database: RDS PostgreSQL 17, not Aurora Serverless v2
 
 `db.t4g.micro` (2 burstable vCPU, 1 GiB) runs single-AZ with 20 GiB gp3
-(autoscaling to 50). It is encrypted with the AWS-managed key, and has 7-day
-automated backups with PITR, deletion protection and a final snapshot.
+(autoscaling to 50). It is encrypted with a customer-managed KMS key by
+default (§ Database encryption key below), and has 7-day
+automated backups with PITR, deletion protection, `prevent_destroy` and a
+final snapshot under a per-stack unique name (§ Tearing down).
 Performance Insights and Enhanced Monitoring are off, and the PostgreSQL log
 goes to CloudWatch (30 days) with slow statements over 1 s. Minor versions
 auto-upgrade in the Sunday window.
+
+- **Recovery point (RPO):** single-AZ can lose about the last **5 minutes**
+  of writes. A point-in-time restore reaches only `LatestRestorableTime`,
+  which trails the present by about five minutes because RDS uploads the
+  transaction logs every five minutes; Multi-AZ (`db_multi_az`, the full
+  tier) covers a lost host or AZ with no loss
+  ([docs/deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)).
+- **Changes wait for the maintenance window:** `apply_immediately = false`,
+  so an instance or engine change in an apply (class, storage, a static
+  parameter, an engine version) is only scheduled and lands in the Sunday
+  01:30–02:30 UTC window; until then it shows under `PendingModifiedValues`
+  in `aws rds describe-db-instances`. Set it to `true` for a single apply
+  when a change can't wait.
+- **Events:** an RDS event subscription sends the instance's failure, low
+  storage, availability, failover, recovery, restoration, deletion,
+  maintenance, security-patching and notification events to the alerts
+  topic (whose policy lets `events.rds.amazonaws.com` publish for this
+  instance only). The routine `backup` category is left out; RDS has no
+  "backup failed" event, so the restore rehearsal is what proves backups.
+- **CPU credits:** RDS runs T4g in Unlimited mode, so an empty credit
+  balance is billed (surplus credits), not throttled. `rds-cpu-credits`
+  warns as the balance nears zero and `rds-cpu-surplus-charged` pages on any
+  charged surplus.
 
 | | RDS t4g.micro (chosen) | Aurora Serverless v2, min 0 ACU |
 | --- | --- | --- |
@@ -214,6 +268,45 @@ here.
 RDS's own. Raising a reserved concurrency means redoing this sum. RDS
 Proxy isn't used: its minimum bill (~$22/month) is more than the DB at this
 scale. An alarm fires at 60 connections.
+
+### Database encryption key: customer-managed, decided before the first apply
+
+`rds_customer_managed_key` (default `true`) encrypts the instance, its
+backups and snapshots with `alias/water-management-rds` (`kms.tf`); `false`
+uses RDS's AWS-managed `aws/rds` key. RDS fixes the key at creation, so
+flipping the variable later forces a new instance, which `prevent_destroy`
+refuses; changing keys on a live database means snapshot → copy under the
+new key → restore to a new instance.
+
+- **Why on:** only a CMK lets a snapshot be shared with another account or
+  AWS Backup copy it into another account's vault (`aws/rds`'s policy is
+  immutable). That keeps a backup account in the Organization and a
+  handover to the client's own account possible. Cost $1/month, $3 from
+  the third year of yearly rotation.
+- **Key policy:** the account administers the key (including
+  `kms:PutKeyPolicy`, so it can't be locked out) but can't use it; use and
+  `kms:CreateGrant` only through RDS in this region and account
+  (`kms:ViaService`, `kms:CallerAccount`, `kms:GrantIsForAWSResource`).
+- **Guards:** `prevent_destroy`, the 30-day maximum deletion window, yearly
+  automatic rotation. Deleting the key loses the database and every backup;
+  disabling it stops the instance within hours.
+- **Alarm:** an EventBridge rule (`rds_kms_key_change`) pages the regional
+  alerts topic on CloudTrail's `DisableKey`, `ScheduleKeyDeletion`,
+  `PutKeyPolicy` and `RevokeGrant` for this key, matched by key ID or ARN
+  (the only forms those APIs accept, so an alias can't dodge it), failed
+  attempts included. The topic admits only that rule
+  (`AllowEventBridgeKmsKeyAlarm`: `events.amazonaws.com`, `aws:SourceAccount`,
+  `aws:SourceArn` = the rule). It needs a CloudTrail trail covering the
+  region (step 7a checks). An apply that changes the key policy fires it
+  too, as expected. What to do when it fires:
+  [docs/deployment.md § Runbooks](../docs/deployment.md#runbooks).
+- **Not shared** with the secrets (they stay on `aws/secretsmanager`, so no
+  Lambda role needs `kms:Decrypt`) or the buckets (SSE-S3).
+- **Performance Insights**, if it is turned on (`local.db_performance_insights`
+  in `rds.tf`), takes the same key; its key can't change once PI is on.
+
+The tradeoffs table and the AWS sources are in
+[docs/deployment.md § Decide before the first apply](../docs/deployment.md#decide-before-the-first-apply).
 
 ### Secrets: estate pattern (private `infra-secrets` + sops), RDS-managed master
 
@@ -381,10 +474,11 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 35 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
+| KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
+| CloudWatch: 42 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.20 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $53** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
+| **Total** | **≈ $55** (the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -406,7 +500,7 @@ CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
 for a handful of users: ~250 requests). A flood just under it is 16.7 req/s =
-1.44M a day = $2.30–4.03 a day unseen, 3–5% of the $80 budget; a 1,000 req/s
+1.44M a day = $2.30–4.03 a day unseen, 3–4% of the $90 budget; a 1,000 req/s
 flood is 60× the threshold and fires in the first period. The variable is held
 to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
 `waf-blocked-requests` fires on more than 100 blocks in each of three
@@ -415,10 +509,10 @@ office NAT) stuck behind a limit. What to do: [docs/deployment.md §
 Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
-you commit to it. The default `budget_monthly_usd = 80` is set for
-af-south-1: its ACTUAL 80% alert ($64) sits just above that idle, so it
-doesn't fire every month (in us-east-1, ~60 is enough). See
+which comes to **≈ $59–64/month** (with the database's KMS key). Check the AWS pricing calculator before
+you commit to it. The default `budget_monthly_usd = 90` is set for
+af-south-1: its ACTUAL 80% alert ($72) sits above that idle, so it
+shouldn't fire every month (in us-east-1, ~60 is enough). See
 [§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
 (`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
 `sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
@@ -442,8 +536,8 @@ alarms are what bound and report a runaway while it happens.
 
 | Alert | Fires when | Notes |
 | --- | --- | --- |
-| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$6** on $80, ~3× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
-| Monthly, ACTUAL 80% | the month's spend passes $64 (on $80) | Early warning, set above the idle so it doesn't fire every month. |
+| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$7** on $90, ~3.5× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
+| Monthly, ACTUAL 80% | the month's spend passes $72 (on $90) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
 | Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
@@ -460,7 +554,13 @@ Claude does not run any of these, and none of them print a secret. Replace
 `<region>` with the chosen region (e.g. `af-south-1`).
 
 1. **Account.** Create the bootstrap config (`create_subdomain = true`) per
-   Runbook A in `~/github/project-mgmt/docs/runbooks.md`, then run it:
+   Runbook A in `~/github/project-mgmt/docs/runbooks.md`, **with
+   `region = "us-east-1"`**, whatever `aws_region` this stack will use. The
+   bootstrap creates the tfstate bucket and the sops KMS key in its `region`,
+   and this repo's backend reads state from us-east-1 only (`main.tf`,
+   `backend "s3"`); a bootstrap run with `af-south-1` puts the bucket where
+   `terraform init` can't find it. The workload region is `aws_region` in
+   `prod.tfvars` (step 6), not the bootstrap's. Then run it:
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan`
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management`
 
@@ -480,7 +580,8 @@ Claude does not run any of these, and none of them print a secret. Replace
    `-1` (unreserved) is refused by the variables' validation: it would lift
    the spend and DB-connection caps.
    `aws service-quotas request-service-quota-increase --service-code lambda --quota-code L-B99A9384 --desired-value 1000 --region <region> --profile water-management`
-   Check it with
+   Check it with `scripts/preapply-check.sh` (step 7a), which sums the
+   reservations from `variables.tf` and your tfvars, or by hand with
    `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
@@ -491,6 +592,7 @@ Claude does not run any of these, and none of them print a secret. Replace
    the SES API endpoint service exists in the region (it launched Dec 2025):
    `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
    An empty result means the apply would fail on `aws_vpc_endpoint.ses`.
+   `scripts/preapply-check.sh` (step 7a) runs this check too.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
    with `openssl rand -hex 32` (JWT, alert-token secret) and
@@ -502,9 +604,37 @@ Claude does not run any of these, and none of them print a secret. Replace
 6. **Non-secret config.** Following the estate pattern (feohledger,
    threkir), keep it in the private repo as
    `~/github/infra-secrets/water-management/prod.tfvars`, based on
-   [`terraform.tfvars.example`](./terraform.tfvars.example).
+   [`terraform.tfvars.example`](./terraform.tfvars.example). Confirm
+   `rds_customer_managed_key` there (default `true`): it can't be changed
+   after the first apply (§ Database encryption key).
 7. **Backend config:**
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
+7a. **Pre-apply check** (read-only; needs step 7's `backend.config`):
+   `cd ~/github/project-water-management/infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   PASS/FAIL per check, exit 1 on any FAIL: the Lambda concurrency quota
+   (step 3; the sum of every `*_reserved_concurrency`, `variables.tf`
+   defaults overridden by plain numbers in the tfvars, + 10; `--reserved <n>`
+   to give the sum yourself), the state bucket from `backend.config` and the
+   `alias/water-management-sops` key existing in **us-east-1**, the SES
+   endpoint service (step 4a) and the RDS instance class offering the
+   PostgreSQL major `rds.tf` pins, and `cloudtrail`: some trail covering
+   the region (multi-region, or homed there) is logging and records write
+   management events without excluding `kms.amazonaws.com` (classic or
+   advanced event selectors). The database KMS key alarm (`kms.tf`) is an
+   EventBridge rule on "AWS API Call via CloudTrail" events, which reach
+   EventBridge only through such a trail
+   ([EventBridge: events from CloudTrail](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-service-event-cloudtrail.html));
+   without one the alarm is silently dead. The stack doesn't create a trail,
+   on purpose: an **Organization trail** from the management account
+   (`personal-mgmt`) covers every member account at once, and a second trail
+   here would be a billed second copy of the management events. If the check
+   FAILs, create (or fix) the Organization trail in the management account:
+   multi-region, logging, management events Read/Write = All (or Write), KMS
+   events not excluded; its first copy of management events is free, the S3
+   storage cents a month. Only if the Organization can't have one, create a
+   multi-region trail in this account the same way. Skipped when
+   `rds_customer_managed_key = false`. The region comes from the tfvars'
+   `aws_region` (or `--region`). Plan only once it passes.
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
    - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
@@ -522,6 +652,16 @@ Claude does not run any of these, and none of them print a secret. Replace
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
    topic (the us-east-1 one carries every budget and cost-anomaly alert).
+   Then run the post-apply check (read-only):
+   `cd ~/github/project-water-management/infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars`
+   It FAILS while a subscription is still `PendingConfirmation`, and checks
+   the RDS event subscription is `active`, the renderer's ECR policy (10a),
+   SES production access (a WARN until step 8a is granted) and the edge: a
+   missing `/x.pdf` and a missing file under `/_app/` answer 404, no
+   `?list-type=2` or directory request returns an S3 `ListBucketResult`, and
+   the API's Function URL answers 403 without the CloudFront shared secret.
+   The edge checks need the site's DNS and certificate live; re-run it after
+   the first frontend release (step 10).
    `budget_alert_email` is required and must be a real mailbox; plan
    refuses an empty, malformed or reserved (`example.com` etc.) address.
    Then check that the budgets accepted the topic (no "Invalid SNS topic"
@@ -567,14 +707,51 @@ Claude does not run any of these, and none of them print a secret. Replace
     Approve each in the `production` environment. The backend deploy ends
     with a `/api/health` check through CloudFront; check the site by hand
     too: `curl -s https://water-management.jaredhoward.com/api/health`.
+
+    **Expected alarm between the apply and this deploy:** the apply creates
+    the worker and fetcher with Terraform's stub code, which throws on every
+    invocation (`jobs.tf`, `feeds.tf`). The worker's 5-minute tick invokes
+    it, so `water-management-worker-errors` goes to ALARM within minutes of
+    the apply and emails the alerts topic; the fetcher runs only on a fetch
+    request, which the stub worker never sends, so `fetcher-errors` stays
+    quiet unless something is queued by hand. `worker-heartbeat` stays OK (a
+    failed invocation still counts). Nothing is lost: no job can exist before
+    the first release (the API stub answers 503 to every request). The alarm
+    clears on the first evaluation period after the backend deploy moves the
+    worker to its real code (about 5 minutes). The stubs throw on purpose:
+    the same alarm is what should fire if a worker is ever recreated from
+    its stub and no release follows, so don't silence it; if you apply long
+    before releasing, acknowledge the email and release.
 10a. **The report renderer** (after the first backend deploy). That deploy
-    pushed the renderer image to ECR, tagged with the release version, and
-    left a notice that the function doesn't exist yet. Set
-    `renderer_image_tag = "0.1.0"` (that version) in `prod.tfvars`, then plan
-    and apply (step 8). Every later backend release moves the function to
-    its own image; the tag in `prod.tfvars` only ever creates it. Until then
-    report requests wait in `render-requests` (4 days) and show as
-    "rendering".
+    pushed the renderer image to ECR, tagged `<version>-<first 12 hex of the
+    released commit>` (e.g. `0.1.0-0123456789ab`), and left a notice naming
+    the tag and saying the function doesn't exist yet. Set
+    `renderer_image_tag` to that tag in `prod.tfvars`, then plan and apply
+    (step 8). Every later backend release moves the function to its own
+    image; the tag in `prod.tfvars` is what a (re-)created function starts
+    from, and the ECR lifecycle policy never expires the image it names
+    (`reports.tf`: a higher-priority rule selects exactly that tag, so the
+    keep-the-last-10 rule can't reach it). To move the protection to a newer
+    image, set the newer tag and apply. Until the function exists, report
+    requests wait in `render-requests` (4 days) and show as "rendering".
+
+    Then check how Lambda was given the image (issue #126). The renderer's
+    role may pull from the repository itself (`renderer_ecr_pull`), and the
+    repository policy holds the one statement Lambda looks for
+    (`renderer_ecr`, Sid `LambdaECRImageRetrievalPolicy`), so Lambda should
+    have had nothing to add; nothing holds `ecr:SetRepositoryPolicy`, so if it
+    had tried, the apply would have failed rather than widened the policy.
+    `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
+    must show exactly that one statement, with its `aws:sourceArn` condition
+    naming `water-management-renderer` (`scripts/postapply-check.sh` checks
+    the single statement as `ecr-policy`). Any other statement: note it on #126
+    and fold its shape into `renderer_ecr` rather than leaving drift.
+    **On the second backend release** (the first that moves an existing
+    renderer, as the deploy role, with `UpdateFunctionCode`): check the
+    deploy's renderer step passed and run the same command again. The deploy
+    role holds `ecr:GetRepositoryPolicy` (read) for Lambda's check, never
+    `SetRepositoryPolicy`; an `AccessDenied` naming either in the deploy log
+    goes on #126.
 10b. **SES suppression through the endpoint** (after the first backend
     deploy; issue #126). Step 4a only proves the SES API endpoint service
     exists; it doesn't prove the endpoint carries the SESv2
@@ -594,6 +771,29 @@ Claude does not run any of these, and none of them print a secret. Replace
     and record the finding in #126. The same applies if the first apply
     rejects the endpoint policy itself (the endpoint service not supporting
     custom policies): note it on #126 before removing the `policy` argument.
+10c. **RDS event delivery** (at the first deploy, before the database holds
+    client data; issue #126). The regional topic's policy lets
+    `events.rds.amazonaws.com` publish only with `aws:SourceAccount` = the
+    account and `aws:SourceArn` = the DB instance's ARN (`alarms.tf`
+    `AllowRdsEvents`), the shape AWS documents in
+    [Granting permissions to publish notifications to an Amazon SNS topic](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_Events.GrantingPermissions.html).
+    A plan can't prove RDS sends that `SourceArn`, and SNS drops a denied
+    publish silently, so prove it once. `postapply-check.sh` already checks
+    the subscription is `active` (`rds-events`). Produce one harmless event:
+    reboot the instance while it holds no client data (about a minute of API
+    downtime; the script never does this for you):
+    `aws rds reboot-db-instance --db-instance-identifier water-management --region <region> --profile water-management`
+    Within a few minutes a "DB instance restarted" email (an `availability`
+    event) should arrive at `budget_alert_email`. Then run
+    `./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars --rds-event-test`:
+    `rds-delivery` compares the instance's subscribed events of the last 24
+    hours (`rds describe-events`) with the topic's `NumberOfMessagesPublished`
+    and `NumberOfNotificationsFailed`; events with nothing published FAIL (the
+    policy is denying RDS). Alarms publish to the same topic, so a PASS is
+    not proof on its own: the email is. No email: note it on #126 and widen
+    the `aws:SourceArn` condition to the event subscription's ARN
+    (`arn:aws:rds:<region>:<account>:es:water-management-db-events`) or drop it,
+    keeping `aws:SourceAccount`, then apply and repeat.
 
 11. **Turn on Cost Anomaly Detection** (after the first apply; it needs ~10
     days of billing history before it flags anything, so nothing is lost by
@@ -687,6 +887,30 @@ The apply, for any of the sops keys:
   ~5 minutes. The runbook, the sources and the rehearse-once checklist:
   [docs/deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database).
 
+## Logs
+
+Every Lambda logs in Lambda's JSON format (`lambda.tf`,
+`local.lambda_logging`, pinned by `tests/logging.tftest.hcl`):
+
+- **System logs at `WARN`.** The platform's `START` / `END` / `REPORT`
+  lines are INFO, three per invocation and so three per API request; only
+  the platform's warnings and errors (init failure, timeout, out of memory)
+  are kept. Duration, errors and throttles still come from the Lambda
+  metrics, which don't depend on these lines.
+- **Application logs from `INFO`.** The alarm lines are WARN or ERROR, but
+  the worker's embedded metrics (`OldestDueJobAgeSeconds`, the alert-mail
+  counts behind `jobs_backlog` and the alert-storm alarm) are bare stdout
+  lines Lambda records as INFO. Raising the level would drop them silently.
+- **The shape the filters read.** Each console call becomes
+  `{"timestamp","level","requestId","message"}`, and a call with one object
+  argument puts that object under `message` as nested JSON (a JSON *string*
+  would stay an opaque string). The backend logs its events that way off
+  `backend/src/logging/logEvent.ts` (a JSON string per line off Lambda), so
+  every log metric filter matches `{ $.message.event = "…" }` and Logs
+  Insights queries read `message.event`, `message.route` and so on. The
+  worker's EMF line goes straight to stdout (`emitMetricLine`), because
+  CloudWatch reads EMF only from a top-level `_aws` key.
+
 ## Validating locally
 
 No AWS credentials are needed:
@@ -697,14 +921,36 @@ That is `bin/check-infra.sh`: `terraform fmt -check -recursive`,
 `init -backend=false`, `validate`, and `terraform test`. CI runs the same
 script (`ci.yml` job `terraform`, which calls `terraform.yml`; part of the
 `CI gate`), plus an advisory Trivy IaC scan. CI never plans against the real account;
-[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why. Terraform 1.15's
-`validate` checks the S3 backend's required `bucket`, so the script writes a
-gitignored `backend_override.tf` (local backend) for the run and deletes it
-afterwards. If you create one by hand, delete it before any real
-`terraform init -backend-config=backend.config`, or the override silently
-wins and state goes to a local file.
+[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why.
 
-The test suite (`tests/guardrails.tftest.hcl`) plans against mocked providers
+The script never runs Terraform in `infra/` itself: it copies the files git
+would commit (tracked and untracked, less gitignored ones such as
+`terraform.tfvars`, `backend.config`, state and any `*_override.tf`) to a
+private temporary directory and runs there. Terraform 1.15's `validate`
+checks the S3 backend's required `bucket`, so the copy gets a local-backend
+`backend_override.tf`; in `infra/` such an override would silently win over
+`-backend-config=backend.config` on the next real `terraform init` and send
+state to a local file, and a killed run (SIGKILL can't be trapped) used to
+leave one behind. Now there is nothing in `infra/` to leave, so parallel
+sessions and worktrees can run `check:infra` at once without racing on the
+override or `.terraform/`. Providers come from a shared plugin cache
+(`TF_PLUGIN_CACHE_DIR`, default `~/.terraform.d/plugin-cache`; `init` holds a
+`flock` on it where `flock` exists), so only the first run downloads them. A
+local-backend override in `infra/` identical to the one older versions wrote
+makes the script stop and ask you to delete it. If you create an override
+by hand, delete it before any real `terraform init
+-backend-config=backend.config`. `CHECK_INFRA_KEEP=1` keeps the copy and
+prints its path; arguments go to `terraform test`
+(`pnpm check:infra -filter=tests/logging.tftest.hcl` runs one file). `pnpm test:guards` tests the script against a fake
+`terraform` (`infra/scripts/check-infra.test.mjs`).
+
+The test suite (`tests/*.tftest.hcl`: `guardrails.tftest.hcl`, plus `observability.tftest.hcl`
+for the failures that don't fail a Lambda: every DLQ's new-arrival alarm, the
+`feed_fetch_failed` and `report_render_failed` log metric filters on the
+fetcher's and renderer's log groups and their alarms, the fetch-requests and
+render-requests message-age alarms (the latter present before the renderer
+exists) and the fetcher and renderer throttle alarms, and the other files
+in the table above) plans against mocked providers
 and pins: Lambda runtime/memory/timeout/concurrency and env; RDS durability
 and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
 (public-access block, OAC-only policy, ACLs off); TLS minimums; both
@@ -716,9 +962,9 @@ the worker timeout, the worker's runtime / size / concurrency / VPC / env and
 no owner credentials, the 5-minute tick, its invoke permission and its
 zero-retry, 300-second-maximum-age delivery (EventBridge target and Lambda
 async config), the SQS
-event source, the SQS endpoint's policy naming only the two roles and the
-six queues (jobs, fetch-requests, ingest-results, render-requests,
-render-results, mail-events), one per statement, and the deploy role's right to update the worker); the data-feed
+event source, the SQS endpoint's policy naming only the two roles and
+three queues (the API to jobs, the worker to fetch-requests and
+render-requests), `SendMessage` only, one per statement, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
 size and concurrency, an environment with no database URL, a role on the two
 feed queues only; the worker's `FEED_FETCHER=sqs` and its event source; the
@@ -741,8 +987,8 @@ single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 `log_statement = none`; the worker heartbeat (< 1 invocation in
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
-alarm; the budgets (monthly $80 with FORECASTED 100% / ACTUAL 80% / ACTUAL
-100%, the derived $6 daily ACTUAL 100%, all to the us-east-1 topic), the
+alarm; the budgets (monthly $90 with FORECASTED 100% / ACTUAL 80% / ACTUAL
+100%, the derived $7 daily ACTUAL 100%, all to the us-east-1 topic), the
 Cost Anomaly Detection monitor and subscription (off by default,
 `anomaly_detection_off_by_default`; on at a threshold, `anomaly_detection_on`), and both alert topics'
 policies (one service per statement, each pinned by `aws:SourceAccount`,
@@ -801,12 +1047,48 @@ fetcher outside the VPC (the renderer's no-VPC pin is in its reports run);
 the Function URL's `NONE` auth type with `InvokeFunction` allowed only via the
 URL; and every security group's description, verbatim and within AWS's
 character set, because changing one replaces the group.
+
+`tests/data.tftest.hcl` (same mocks) pins the data-protection controls: the
+parameter group's `rds.force_ssl = 1`, `log_statement = none`, slow-statement
+logging and no bind values; `delete_automated_backups = false`,
+`copy_tags_to_snapshot`, the final snapshot's `random_id` suffix (never a
+fixed name or `timestamp()`) and `prevent_destroy` on the instance (read from
+the source); the event subscription's topic, source and categories and the
+topic statement letting `events.rds.amazonaws.com` publish for this instance
+only; the CPU-credit alarm's Unlimited-mode description and the
+`CPUSurplusCreditsCharged` alarm; and the frontend bucket's
+`DenyInsecureTransport` statement (`s3:*` on the bucket and its objects, every
+principal, `aws:SecureTransport = false`).
+
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 
 ## Tearing down
 
-`deletion_protection` must be turned off first (set it to `false`, then
-apply). `terraform destroy` then leaves a final snapshot
-`water-management-final`. The tfstate bucket, the KMS key, the child zone and
-the deploy role belong to the bootstrap and survive.
+The database has two guards, both to be lifted on purpose, in this order:
+
+1. In `rds.tf`, set `deletion_protection = false` **and** change the
+   instance's `lifecycle { prevent_destroy = true }` to `false`, then apply
+   (the plan shows only the deletion-protection change; `prevent_destroy` is
+   Terraform-side). With `prevent_destroy` still `true`, `terraform destroy`
+   fails at plan time, before touching anything; the `data` test run pins it,
+   so don't commit the edit. With `rds_customer_managed_key` on, also set
+   the key's `prevent_destroy` in `kms.tf` to `false`. The destroy then
+   schedules the key for deletion after its 30-day window, and **the final
+   snapshot below is encrypted with that key**: restore or copy it under
+   another key within the window, or cancel the deletion
+   (`aws kms cancel-key-deletion`), if it must stay usable.
+2. `terraform destroy`. It leaves a final snapshot
+   `water-management-final-<8 hex>`: the suffix is a `random_id` made with the
+   stack, so a stack rebuilt later gets a new one and its own teardown doesn't
+   collide with this snapshot (RDS refuses an existing name). Find it with
+   `aws rds describe-db-snapshots --snapshot-type manual --query "DBSnapshots[?starts_with(DBSnapshotIdentifier, 'water-management-final-')]"`.
+3. The retained automated backups (`delete_automated_backups = false`) expire
+   with the retention period, but the final snapshot is a manual snapshot and
+   is kept until someone deletes it. It holds personal information, and the
+   privacy notice (§ 7) says it is kept until deleted: delete it once no
+   longer needed (`aws rds delete-db-snapshot --db-snapshot-identifier …`)
+   and record when in the operator log.
+
+The tfstate bucket, the KMS key, the child zone and the deploy role belong to
+the bootstrap and survive.

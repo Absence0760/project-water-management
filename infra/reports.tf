@@ -226,31 +226,70 @@ resource "aws_ecr_repository" "renderer" {
 }
 
 # Keep the last 10 images (a rollback reaches back ten releases); an untagged
-# layer left by a failed push goes after a day.
+# layer left by a failed push goes after a day; and never expire the image
+# renderer_image_tag names. That tag is the one the function is created from,
+# and it stays in the tfvars after later releases move the function on, so
+# without rule 2 it would age out after ten more releases and any later
+# re-create of the function (a replacement, a restore into a new stack) would
+# fail on a missing image.
+#
+# How ECR applies these (docs.aws.amazon.com/AmazonECR/latest/userguide/
+# LifecyclePolicies.html, "Lifecycle policy evaluation rules"): a lower
+# rulePriority wins, an image is expired by at most one rule, and "an image
+# that matches the tagging requirements of a rule cannot be expired by a rule
+# with a lower priority". Rule 2 selects only the pinned tag (a
+# tagPatternList with no wildcard matches that tag exactly; a tag carries no
+# `*`, the variable's validation guarantees it) and expires only past one
+# such image, which can't happen with one immutable tag: so it keeps the
+# pinned image forever and rule 3 can never expire it. Rule 3 still counts it
+# among its 10 (lower rules "can still identify" a higher rule's images), so
+# at worst nine other releases are kept beside it. After changing
+# renderer_image_tag, apply: the protection moves with it.
 resource "aws_ecr_lifecycle_policy" "renderer" {
   repository = aws_ecr_repository.renderer.name
   policy = jsonencode({
-    rules = [
-      {
+    rules = concat(
+      [{
         rulePriority = 1
         description  = "Expire untagged images after a day"
         selection    = { tagStatus = "untagged", countType = "sinceImagePushed", countUnit = "days", countNumber = 1 }
         action       = { type = "expire" }
-      },
-      {
+      }],
+      local.renderer_enabled ? [{
         rulePriority = 2
+        description  = "Keep the image renderer_image_tag pins (the function is created from it)"
+        selection    = { tagStatus = "tagged", tagPatternList = [var.renderer_image_tag], countType = "imageCountMoreThan", countNumber = 1 }
+        action       = { type = "expire" }
+      }] : [],
+      [{
+        rulePriority = 3
         description  = "Keep the last 10 release images"
         selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 10 }
         action       = { type = "expire" }
-      },
-    ]
+      }],
+    )
   })
 }
 
-# Lambda pulls the image as the service, for this one function only.
+# How Lambda gets the image (same account, AWS: "only one side needs to allow
+# access", https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#configuration-images-permissions):
+#
+# - The renderer's execution role may pull from this repository
+#   (renderer_ecr_pull, below). That grant alone is enough to pull.
+# - The repository policy carries the statement Lambda itself looks for, in
+#   the shape and under the Sid AWS documents, narrowed to this one function.
+#   When a CreateFunction or UpdateFunctionCode finds no such statement,
+#   Lambda tries to add one, which needs ecr:SetRepositoryPolicy on the
+#   caller. Neither the deploy role nor anything else here holds that, and
+#   none should: with the statement in place, Lambda has nothing to add.
+#   The deploy role may read the policy (oidc.tf, RendererImageLambdaCheck)
+#   so Lambda can see the statement when it updates the function.
+#
+# After the first apply, confirm nothing added a statement of its own:
+# `aws ecr get-repository-policy` shows exactly this one (docs/deployment.md).
 data "aws_iam_policy_document" "renderer_ecr" {
   statement {
-    sid     = "LambdaPullsRendererImage"
+    sid     = "LambdaECRImageRetrievalPolicy"
     actions = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
     principals {
       type        = "Service"
@@ -276,11 +315,7 @@ resource "aws_iam_role" "renderer_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs only: no VPC access, nothing else managed.
-resource "aws_iam_role_policy_attachment" "renderer_lambda_logs" {
-  role       = aws_iam_role.renderer_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
+# Logs (its own log group only) are in iam.tf; no VPC access, no managed policy.
 
 data "aws_iam_policy_document" "renderer_lambda" {
   statement {
@@ -305,6 +340,21 @@ resource "aws_iam_role_policy" "renderer_lambda" {
   name   = "render-queues-and-pdfs"
   role   = aws_iam_role.renderer_lambda.id
   policy = data.aws_iam_policy_document.renderer_lambda.json
+}
+
+# Pull its own image: this repository only, the two actions a pull uses.
+data "aws_iam_policy_document" "renderer_ecr_pull" {
+  statement {
+    sid       = "PullRendererImage"
+    actions   = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.renderer.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "renderer_ecr_pull" {
+  name   = "renderer-image-pull"
+  role   = aws_iam_role.renderer_lambda.id
+  policy = data.aws_iam_policy_document.renderer_ecr_pull.json
 }
 
 resource "aws_cloudwatch_log_group" "renderer" {
@@ -333,6 +383,16 @@ resource "aws_lambda_function" "renderer" {
   # Bounds spend and how many Chromiums run at once.
   reserved_concurrent_executions = var.renderer_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.renderer.name
+  }
+
   # Deliberately no vpc_config: it reaches the site through CloudFront.
 
   environment {
@@ -348,7 +408,8 @@ resource "aws_lambda_function" "renderer" {
 
   depends_on = [
     aws_cloudwatch_log_group.renderer,
-    aws_iam_role_policy_attachment.renderer_lambda_logs,
+    aws_iam_role_policy.lambda_logs["renderer"],
+    aws_iam_role_policy.renderer_ecr_pull,
     aws_iam_role_policy.renderer_lambda,
     aws_ecr_repository_policy.renderer,
   ]
@@ -507,38 +568,64 @@ resource "aws_cloudfront_origin_request_policy" "report_downloads" {
 # --- Alarms -----------------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "render_requests_dlq_depth" {
-  alarm_name          = "${local.project}-render-requests-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-render-requests-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A render request was dead-lettered: the renderer Lambda failed to answer it 5 times. The report shows as failed after an hour; check the renderer's logs. Its render token has expired, so a redrive can't render it: purge the DLQ."
+  alarm_description   = "A render request was dead-lettered: the renderer Lambda failed to answer it 5 times. The report shows as failed after an hour; check the renderer's logs. Its render token has expired, so a redrive can't render it: purge the DLQ. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.render_requests_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.render_requests_dlq.name
+      }
+    }
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "render_results_dlq_depth" {
-  alarm_name          = "${local.project}-render-results-dlq-depth"
+  # Fires on each new arrival, not on depth: see local.dlq_arrivals_expression (alarms.tf).
+  alarm_name          = "${local.project}-render-results-dlq-arrivals"
   comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "ApproximateNumberOfMessagesVisible"
-  namespace           = "AWS/SQS"
-  period              = 300
-  statistic           = "Maximum"
+  evaluation_periods  = local.dlq_arrivals_evaluation_periods
+  datapoints_to_alarm = 1
   threshold           = 0
-  alarm_description   = "A render result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy; the PDF is already stored."
+  alarm_description   = "A render result was dead-lettered: the worker failed 5 times to queue it (usually the database was unreachable). Redrive it once the worker is healthy; the PDF is already stored. ${local.dlq_arrivals_note}"
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
-  dimensions = {
-    QueueName = aws_sqs_queue.render_results_dlq.name
+  metric_query {
+    id          = "arrivals"
+    expression  = local.dlq_arrivals_expression
+    label       = "Messages newly dead-lettered"
+    return_data = true
+  }
+  metric_query {
+    id = "visible"
+    metric {
+      metric_name = "ApproximateNumberOfMessagesVisible"
+      namespace   = "AWS/SQS"
+      period      = 300
+      stat        = "Maximum"
+      dimensions = {
+        QueueName = aws_sqs_queue.render_results_dlq.name
+      }
+    }
   }
 }
 
@@ -560,6 +647,88 @@ resource "aws_cloudwatch_metric_alarm" "renderer_errors" {
   dimensions = {
     FunctionName = aws_lambda_function.renderer[0].function_name
   }
+}
+
+# The renderer hit its reserved concurrency: a throttled SQS poll still counts
+# a receive, so a sustained run dead-letters render requests.
+resource "aws_cloudwatch_metric_alarm" "renderer_throttles" {
+  count = local.renderer_enabled ? 1 : 0
+
+  alarm_name          = "${local.project}-renderer-throttles"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Throttles"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The renderer Lambda hit reserved_concurrent_executions (renderer_reserved_concurrency): throttled SQS messages burn receive counts toward the render-requests DLQ. Usually a burst of scheduled reports; spread the schedules or raise the limit (each render is a Chromium: check the site's WAF limits first)."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    FunctionName = aws_lambda_function.renderer[0].function_name
+  }
+}
+
+# A render request nobody is consuming. Deliberately NOT gated on
+# renderer_enabled: with an empty renderer_image_tag the function doesn't
+# exist, requests queue with no consumer, and without this they expire
+# silently after 4 days while each report shows as failed after an hour. With
+# the renderer running, 5 receives x the 12-minute visibility timeout is the
+# longest a worked message waits, and the worker has given up on the report
+# (store.ts, 1 hour) well before, so 30 minutes means nothing is rendering.
+resource "aws_cloudwatch_metric_alarm" "render_requests_age" {
+  alarm_name          = "${local.project}-render-requests-age"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 1800
+  alarm_description   = "A render request has waited over 30 minutes in render-requests: nothing is rendering reports. If renderer_image_tag is still empty the renderer Lambda doesn't exist yet (docs/deployment.md § Reports: push an image, set the tag, apply); otherwise check its SQS trigger and the renderer-throttles alarm. The waiting requests' render tokens have expired: purge the queue once the renderer runs."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.render_requests.name
+  }
+}
+
+# A render the renderer answered as failed: the Lambda succeeded, so
+# renderer_errors never sees it. lambda-renderer.ts logs one line per failed
+# answer:
+#   {"event":"report_render_failed","reportId":"…","projectId":"…","reason":"render","retry":true}
+# the ids, render or store, and whether the worker asks again, never the error
+# text or the render token. The log group exists before the function does, so
+# this filter and its alarm are not gated on renderer_enabled.
+resource "aws_cloudwatch_log_metric_filter" "report_render_failed" {
+  name           = "${local.project}-report-render-failed"
+  log_group_name = aws_cloudwatch_log_group.renderer.name
+  pattern        = "{ $.message.event = \"report_render_failed\" }"
+
+  metric_transformation {
+    name          = "ReportRenderFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "report_render_failed" {
+  alarm_name          = "${local.project}-report-render-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "The renderer answered a report render as failed (a retryable failure is asked again with backoff; the report shows failed once the attempts are used up). Logs Insights on the renderer log group: filter message.event = \"report_render_failed\" | stats count() by message.reason, message.retry. reason = store: the reports bucket refused the PDF (IAM); render with retry = false: the token was refused or the page said it can't show the report; with retry = true: a timeout, a WAF block or a browser crash. The report's own error (Reports tab) has the text. Runbook: docs/deployment.md § Reports."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
 }
 
 # A render creeping towards the 120 s limit (the app's own cap is 100 s).

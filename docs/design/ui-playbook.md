@@ -228,7 +228,12 @@ section it belongs to, with the example that taught it.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
-  Hydrological units show a default without writing it).
+  Hydrological units show a default without writing it). Don't start that
+  write while a navigation is in flight (`navigating.to`) or while the URL
+  already asks for something else (an overlay's param): the newest
+  navigation wins, so a default pick that fires as its list lands can
+  cancel the click the user made a few ms earlier (a `+ New scenario` click
+  lost its dialog this way in CI, #171).
 - **A short form starts on a fixed line; don't centre it in the height.**
   The sign-in pages centred their form, so the title sat anywhere from 230
   to 433 px down at 1440×960 depending on the page, and a wrong password's
@@ -629,6 +634,12 @@ Interaction details that bit:
   first panel after the form; the Data page's `.data-page` wrapper ends
   under the chart. Put a page's sticky menu at the tab's top level and check
   it is still in view on the last section.
+- **"Last section at the end of the page" overrides a link.** A scroll-spy
+  that marks the last section once the page can't scroll further also does
+  so after a jump to one of the last few sections of a short page: shortening
+  one glossary entry made Goodness of fit mark the wrong term. Keep a
+  just-linked section marked while its heading is on screen
+  (`lib/help/spy.ts` `currentSection`'s `linked`).
 - **Nested wrapping groups wrap as whole blocks.** The in-page menu was a
   flex row of groups, each a wrapping flex row of links: a long group took
   full rows of its own, so Runs & results' menu was three rows at 1280 px

@@ -46,11 +46,20 @@ The checklist for these is issue #62; the history scrub is #63.
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
       appear under the repo's Settings → Variables.
+- [ ] **`production` environment branch/tag policy and the release-tag
+      ruleset (#126, 2026-09-29).** The release preflight now refuses every
+      release until the `production` environment deploys only from `main`
+      and the `backend@*`/`web@*` tags, and an active tag ruleset stops those
+      tags being created (except by an admin), moved or deleted. Run the
+      one-line `gh api` commands in deployment.md § The production
+      environment's branch and tag policy (steps 1–3), then its step 4 check.
+      Also propose the same steps for the templates repo's
+      `backfill-prod-environment.sh`, which sets only the reviewer today.
 - [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
-      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to that
-      version and apply again. The image has never been built or run on
+      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to the
+      tag it printed (`<version>-<sha12>`) and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
 - [ ] **Raise the Lambda concurrent-executions quota before the first apply
@@ -59,14 +68,39 @@ The checklist for these is issue #62; the history scrub is #63.
       raised, and `-1` (unreserved) is now refused by the variables'
       validation. In af-south-1 request at least the sum of the reservations
       + 10 (33 at the defaults; ask for 1000) and wait for the grant:
-      infra/README.md § Operator steps, step 3.
+      infra/README.md § Operator steps, step 3. Then run
+      `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
+      state bucket and sops key, the SES endpoint service, the RDS class,
+      the CloudTrail trail the KMS key alarm needs) and
+      plan only once it passes.
+- [ ] **After the first apply and first release, run
+      `infra/scripts/postapply-check.sh` (#126, 2026-09-29)** and clear
+      every FAIL: unconfirmed alert subscriptions, the RDS event
+      subscription, the ECR policy, the site's 404s and bucket listing, the
+      Function URL's 403 (infra/README.md § Operator steps, step 8). At the
+      first deploy, before client data, prove RDS events reach the alerts
+      topic with the reboot and `--rds-event-test` (step 10c): the topic
+      policy's `aws:SourceArn` condition can't be proven by a plan.
+- [ ] **Confirm the database's KMS key before the first apply (#126,
+      2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
+      customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
+      sharing and AWS Backup cross-account copies possible, for $1–3 a month.
+      Keep it, or set `false` for the AWS-managed `aws/rds` key, in
+      `terraform.tfvars`. It can't be changed once the instance exists
+      (deployment.md § Decide before the first apply). Disabling the key,
+      scheduling its deletion, changing its policy or revoking a grant
+      alarms (`kms.tf`), but only through CloudTrail: **make sure a trail
+      logging write management events (KMS not excluded) covers the region
+      before the first apply**, preferably the Organization trail from the
+      management account; `preapply-check.sh`'s `cloudtrail` check FAILs
+      until one does (infra/README.md § Operator steps, step 7a).
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $80** (`infra/variables.tf`
-      `budget_monthly_usd`; was $60, #126), sized for af-south-1's ~$58–63
-      idle, plus a derived $6/day budget (deployment.md § Budget alerts).
+- [ ] **AWS budget default is now $90** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, then $80, #126), sized for af-south-1's ~$59–64
+      idle with the database's KMS key, plus a derived $7/day budget (deployment.md § Budget alerts).
       Set ~60 in tfvars for us-east-1. Cost Anomaly Detection is off by
       default so the first apply can't fail on an existing monitor: turn it
       on after the first apply (infra/README.md § Operator steps, step 11).
@@ -131,7 +165,7 @@ The checklist for these is issue #62; the history scrub is #63.
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
+      `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
 ## Hydrologist
 
@@ -1042,13 +1076,13 @@ the suggested order (the IDs carry the detail):
         from daily data beside the monthly verdict, monthly FDC overlays
         of natural, present-day and (on the compare page) scenario flow on
         the EWR curve, and the EWR as %nMAR.
-- [ ] **Automated calibration with pre-declared rules.** *Steps 1–3 and the
-      fit record built in engine 1.25.0 (issue #153, model.md §2.10j):
-      `settings.calibrationRules`, `autoCalibrate`, the server's revision and
-      stale-fit refusal, Settings → Fit automatically → Calibration rules and
-      Automated calibration. Open: step 4 (CR-1's ensemble around the kept
-      fit, run by hand from the Uncertainty bands panel today), step 5 below, and
-      the hydrologist's sign-off of the draft defaults (#90).* Today every pass
+- [x] **Automated calibration with pre-declared rules.** *Built in engine
+      1.25.0 (issue #153, model.md §2.10j): `settings.calibrationRules`, run
+      by the server one fit per job (steps 1–3), the ensemble around an
+      applied fit computed by the server (step 4), and new data re-running
+      the rules (step 5, `after.onNewData`; it applies a fit only while the
+      rules are signed off). Open elsewhere: the hydrologist's sign-off of the
+      draft defaults, and whether only a named role may sign off (#90).* Today every pass
       of the calibrate → review → adjust → refit loop needs a person, because
       the choices (exclusions, forcing, which fit to keep) are made after the
       scores are seen. Automating those choices by chasing the score would
@@ -1068,13 +1102,7 @@ the suggested order (the IDs carry the detail):
          range.
       5. New observed or rain data triggers a rerun (needs the Background
          jobs item in [planned-work.md](./planned-work.md)); the fit record's
-         stale checks already say when one is due. **Still open** (#153): the
-         rules run in the browser's worker today; the durable fix is a
-         `calibration` job on the queue (backend/src/jobs) that runs
-         `autoCalibrate` on the saved rules server-side, stores the report and
-         writes the kept fit (with its record) only once the rules are signed
-         off. Trigger: the hydrologist signs off the rules (#90), since before
-         that an unattended fit is not evidence anyway.
+         stale checks already say when one is due. *(Built: `after.onNewData`.)*
 
       The rule set, seed and engine version go in the fit record, so a run
       is reproducible and an assessor can challenge the rules rather than
@@ -1174,7 +1202,7 @@ the suggested order (the IDs carry the detail):
       imported module" against the Vite dev server (:7801). Done 2026-09-24:
       e2e now runs against a production build of the frontend
       (`vite build` into `frontend/build-e2e/` with the e2e API URL baked in,
-      served with the SPA fallback by `e2e/support/static-server.mjs`), which
+      served with the SPA fallback by `e2e/support/static-server.ts`), which
       also matches production. Measured with `tests/repeated-loads.spec.ts`
       (six `page.goto(…?tab=settings)` in a row, `--workers=1
       --repeat-each`): dev server 3 of 3 failed at the fourth load; built site
@@ -3381,6 +3409,33 @@ assume, the questions for counsel); these are the actions, with triggers.
 - [ ] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
 
+## Infrastructure edge
+
+- [ ] **Move the API origin to CloudFront OAC for Lambda if direct traffic
+      shows up (issue #126).** Today a direct call to the public Function
+      URL is refused by the app's shared-secret check (403), but it has
+      already passed the WAF by going around it and holds API concurrency
+      while refused. Decision: keep the shared secret. **Trigger:** the
+      `origin-secret-rejected` alarm (`infra/alarms.tf`, more than 20
+      refusals in an hour, from the `origin_secret_rejected` log line in
+      `backend/src/app.ts`) firing outside a secret rotation, or throttles the
+      WAF's request metrics don't explain. **Durable fix:** Function URL auth
+      type `AWS_IAM` behind an OAC of type `lambda`; the SPA then sends
+      `x-amz-content-sha256` on every PUT/POST/PATCH, and the one-click
+      unsubscribe POST (RFC 8058, sent by mail clients that can't add that
+      header) moves to a signed GET. Reasoning in docs/security.md
+      § Infrastructure.
+- [ ] **Check the 404s on the live site after the first apply (issue #126).**
+      `curl -sI https://<domain>/missing.pdf` should answer `404` with
+      `content-type: text/html` (spa_rewrite's page, not S3 XML), and
+      `curl -sI https://<domain>/_app/missing.js` `404` (S3 NoSuchKey via the
+      frontend bucket's ListBucket grant, not `403` AccessDenied);
+      `curl -s 'https://<domain>/?list-type=2'` must return the app's
+      `index.html`, never a bucket listing. Plan-only tests
+      (`infra/tests/edge.tftest.hcl`,
+      `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
+      real behaviour.
+
 ## Housekeeping
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
@@ -3390,6 +3445,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       `signUp`, `e2e/support/api.ts` `register`). Trigger: Actions
       re-enabled, or before the first release: run `test:backend:db` and
       the 14 e2e shards (or both suites locally, not beside each other).
+
+- [ ] **Make the deploy role's sops-key grant opt-in upstream** (issue #126
+      § IAM). The templates `project-baseline` module's key policy lets the
+      GitHub deploy role `kms:Decrypt` the project's sops key, which no
+      workflow here uses, and which would let an approved deploy run decrypt
+      every production secret. The proposal (a `deploy_role_sops_access`
+      variable, off here, default flipped once consumers opt in) is in
+      [upstream/templates-baseline-sops-deploy-grant.md](./upstream/templates-baseline-sops-deploy-grant.md).
+      The change belongs in the `templates` repo, not here. Trigger: before
+      the first `terraform apply`, or the next baseline change, whichever
+      comes first; then re-run the baseline stage and check the key policy.
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other

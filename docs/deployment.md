@@ -33,7 +33,17 @@ EventBridge rate(5 minutes) ──────────────► worker
   CloudFront shared-secret header, so calling the Function URL directly does
   nothing.
 - **Database:** RDS PostgreSQL 17 (`db.t4g.micro`) in private subnets. It is
-  encrypted and has automated backups + PITR and deletion protection. The API
+  encrypted and has automated backups + PITR, deletion protection and
+  Terraform's `prevent_destroy`. **Recovery point:** single-AZ (the minimal
+  tier) can lose about the last **5 minutes** of writes, since a
+  point-in-time restore reaches only as far as the transaction logs RDS
+  uploads every five minutes (§ Restoring the database); Multi-AZ (the full
+  tier) survives a lost host or AZ with no loss. **Changes wait for the
+  maintenance window:** `apply_immediately = false`, so an instance or engine
+  change in a Terraform apply (class, storage, a static parameter, an engine
+  version) is only scheduled, and lands in the Sunday 01:30–02:30 UTC window
+  (`aws rds describe-db-instances` shows it under `PendingModifiedValues`
+  until then). Set it to `true` for one apply when a change can't wait. The API
   Lambda runs in the VPC, and a migrate Lambda applies `backend/migrations`
   ([plan.md 6b](./plan.md#6b-terraform-additions-infra),
   [infra/README.md](../infra/README.md)). The backend connects as `water_app` (RLS-bound);
@@ -99,11 +109,11 @@ What was checked (September 2026):
 | API latency from SA | ~20–50 ms | ~150–200 ms | ~230+ ms |
 | SES API + VPC endpoint | Yes (no SMTP; not needed) | Yes | Yes |
 | Opt-in region | Yes: enable first (operator step 2) | No | No |
-| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $51–53/month | ≈ $50/month |
+| Idle cost (infra/README.md § Cost) | ≈ $59–64/month | ≈ $52–54/month | ≈ $51/month |
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 80` allows for them), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 90` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -122,7 +132,15 @@ covered by the Terraform tests.
 ## 1. Provision the account (one-time)
 
 Create `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
-from `example.tfvars` (`create_subdomain = true`), then from the templates repo:
+from `example.tfvars` (`create_subdomain = true`) and keep
+**`region = "us-east-1"`** in it, even though the workloads run in
+af-south-1. The bootstrap creates the tfstate bucket and the sops KMS key in
+that `region`, and this repo's Terraform backend reads state from us-east-1
+only (`infra/main.tf`, `backend "s3"`; `sops-init.sh --region us-east-1`,
+infra/README.md step 5). The example's comment offers opt-in regions such as
+af-south-1: don't take it here, or `terraform init` looks for the bucket in
+the wrong region. The workload region is `aws_region` in `prod.tfvars`
+(§ 3). Then, from the templates repo:
 
 ```bash
 cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan
@@ -132,9 +150,9 @@ cd ~/github/templates && ./scripts/new-project-account.sh water-management
 This creates, inside the org:
 
 - the sub-account (`water-management-prod`, or the tfvars `account_name`)
-- the tfstate bucket `water-management-tfstate-<account-id>`, locked with S3
+- the tfstate bucket `water-management-tfstate-<account-id>` (us-east-1), locked with S3
   conditional writes (`use_lockfile = true`; **no DynamoDB lock table**)
-- the KMS key `alias/water-management-sops`
+- the KMS key `alias/water-management-sops` (us-east-1)
 - the GitHub OIDC provider and the deploy role `water-management-deploy`. The trust
   policy is pinned to `repo:<owner>/<repo>:environment:production`, so only a
   job in the `production` environment (which needs the operator's approval) can
@@ -342,7 +360,9 @@ SES's error text, which names the recipient), and the `mail-send-failed` alarm
 emails the alerts topic on the first one. Expect it to fire while you test in
 the sandbox; after production access it means real mail is failing. To find
 which: CloudWatch Logs Insights on the API and worker log groups,
-`filter event = "mail_send_failed" | stats count() by kind, error`.
+`filter message.event = "mail_send_failed" | stats count() by message.kind, message.error`
+(the Lambdas log in JSON, so the line sits under `message`; infra/lambda.tf
+`lambda_logging`).
 `AccessDeniedException` means the IAM policy, `MessageRejected` an unverified
 recipient (sandbox) or a suppressed one, `TooManyRequestsException` the
 sending rate.
@@ -396,6 +416,17 @@ bootstrap printed), `bootstrap_slug = "water-management"`, the region, the budge
 email and the DMARC report mailbox. Both files are gitignored (the estate
 keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
+Before the first plan, run the read-only pre-apply check (the Lambda
+concurrency quota against the reservations, the state bucket and sops key in
+us-east-1, the SES endpoint service, the RDS instance class, and a logging
+CloudTrail trail recording KMS write management events in the region, which
+the database KMS key alarm needs; PASS/FAIL per check, exit 1 on any FAIL;
+infra/README.md § Operator steps, step 7a):
+
+```bash
+cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+```
+
 ```bash
 cd infra && terraform init -backend-config=backend.config && ./scripts/tf.sh plan
 ```
@@ -405,12 +436,87 @@ is not pinned to this repo's `production` environment (a postcondition in
 `oidc.tf`), or if a sops secret is malformed or missing (the variables'
 validations in `variables.tf`, and `tf.sh`, which names a missing key).
 
+### Decide before the first apply
+
+**The database's KMS key: `rds_customer_managed_key` (default `true`).**
+Confirm it, or set `false` in `terraform.tfvars`, before the first apply.
+It can't be changed on a live instance.
+
+- `true`: a customer-managed key (CMK) encrypts the database, its logs,
+  automated backups and snapshots (`infra/kms.tf`, `alias/water-management-rds`).
+- `false`: RDS's AWS-managed `aws/rds` key, as before.
+
+Why it's decided up front: RDS fixes an instance's key at creation. Changing
+it later means a manual snapshot, a copy of it under the new key, and a
+restore to a new instance with a new endpoint, plus downtime and a cut-over
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html),
+[re:Post: change the key](https://repost.aws/knowledge-center/update-encryption-key-rds)).
+Flipping the variable on a live stack would force that replacement, and the
+instance's `prevent_destroy` refuses it at plan time.
+
+Recommendation: **keep `true`.** This account is a sub-account in an AWS
+Organization and holds personal information (farm names, contacts, sign-in
+data). A CMK keeps these options open for about $1–3 a month:
+
+| | CMK (`true`, default) | `aws/rds` (`false`) |
+| --- | --- | --- |
+| Cost | $1/month, +$1 at each of the first two yearly rotations (so $3 from year 3); RDS's key requests stay inside KMS's 20,000/month free tier ([KMS pricing](https://aws.amazon.com/kms/pricing/)) | free |
+| Share a snapshot with another account (a restore test in another account, or handing the stack to the client's own AWS account) | yes, after adding that account to the key policy | no: "You can't share a snapshot that has been encrypted using the AWS managed key" ([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)); you'd first copy the snapshot under a CMK |
+| AWS Backup cross-account copy (a backup vault in another Organization account, the defence against this account being compromised or closed) | yes, once the key is shared with the destination account | no: RDS needs a CMK "because AWS managed key policies are immutable and cannot be shared cross-account" ([AWS Backup: cross-account copies](https://docs.aws.amazon.com/aws-backup/latest/devguide/create-cross-account-backup.html)) |
+| Audit and control | key policy limits use to RDS in this region and account (`kms:ViaService`, [RDS key management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.Keys.html)); every use in CloudTrail; can be revoked | AWS controls the policy |
+| Rotation | automatic, yearly (`enable_key_rotation`) | automatic, managed by AWS |
+| Performance Insights (off today) | would use the same key; the PI key can't be changed once PI is on ([PI key policy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights.access-control.cmk-policy.html)) | `aws/rds` |
+
+**The risk a CMK adds is the key itself.** If the key is disabled, RDS stops
+the instance about 2 hours later (`inaccessible-encryption-credentials-recoverable`).
+Re-enabling the key and starting the instance within 7 days recovers it.
+After that the instance is terminal, and a restore needs the key enabled
+again. If the key is deleted, the database, every automated backup and every
+snapshot are unrecoverable
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)).
+Guards in `kms.tf`: `prevent_destroy` on the key, the maximum 30-day
+deletion window (`aws kms cancel-key-deletion` undoes a scheduled deletion
+in that window), and no principal but RDS can use the key. `DisableKey`,
+`ScheduleKeyDeletion`, `PutKeyPolicy` and `RevokeGrant` on the key page the
+alerts topic (an EventBridge rule on CloudTrail events, `kms.tf`; § Runbooks
+says what to do). That rule hears nothing unless a CloudTrail trail logging
+write management events covers the region: the stack relies on the
+Organization's trail rather than creating a duplicate, and
+`preapply-check.sh` FAILs until one exists (infra/README.md § Operator
+steps, step 7a).
+
+What the key covers and what it doesn't: only the RDS instance and what RDS
+derives from it (storage, logs on the instance, backups, snapshots). The RDS
+master secret and the runtime secrets stay on `aws/secretsmanager`, so the
+Lambdas' roles need no `kms:Decrypt`, and a restore re-creates the master
+secret anyway (§ Restoring the database). The report and frontend buckets
+stay on SSE-S3 ([security.md § Accepted IaC findings](./security.md#accepted-iac-findings)).
+One key with one job means a mistake with it affects only the database.
+
+A cross-account backup copy isn't built. When it is, add a statement to
+`data.aws_iam_policy_document.rds_kms` that grants the destination account
+`kms:Decrypt`, `kms:DescribeKey` and `kms:CreateGrant`. Also add an AWS Backup
+plan and vault, and turn on cross-account backup in the Organization's
+management account.
+
 Only apply (`./scripts/tf.sh apply`) after the plan has been reviewed and the operator has
 said go. Then push the outputs to the repository's GitHub Actions variables
 and secrets:
 
 ```bash
 ~/github/templates/scripts/export-tf-vars.sh infra/
+```
+
+After the apply (and again after the first frontend release, when the
+site's edge checks can pass), run the read-only post-apply check: both alert
+topics' email subscriptions confirmed, the RDS event subscription active,
+SES production access (a warning while in the sandbox), the renderer's ECR
+policy, the site's 404s and no S3 bucket listing, and the Function URL's 403
+without the shared secret (infra/README.md § Operator steps, steps 8, 10a
+and 10c; `--rds-event-test` proves RDS events reach the topic):
+
+```bash
+cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
 ```
 
 They are **repository-level** values (`gh variable set` / `gh secret set`
@@ -477,7 +583,16 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   interface endpoint.
 - Monthly and daily budgets and Cost Anomaly Detection (§ Budget alerts
   below). Alarms: Lambda errors / throttles / p95 duration, migrate errors,
-  RDS CPU / CPU credits / free storage / connections / freeable memory, SES
+  RDS CPU / CPU credits / surplus CPU credits charged (T4g runs Unlimited:
+  an empty credit balance is billed, not throttled) / free storage /
+  connections / freeable memory, an RDS event subscription (instance failure,
+  low storage, availability, failover, recovery, restoration, deletion,
+  maintenance and patching, RDS notices; not the routine daily-backup events,
+  and RDS publishes no "backup failed" event, so the restore rehearsal in
+  § Restoring the database is what proves the backups), the database KMS
+  key being disabled, scheduled for deletion, re-policied or its grant
+  revoked (an EventBridge rule on CloudTrail events, `kms.tf`, free; needs a
+  CloudTrail trail, § Runbooks 13), SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line in both the API's
   and the worker's log group (a saved run failing one of the engine's own
@@ -487,8 +602,15 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   the API's log group (a request answered with an unhandled 500, which the
   Lambda `Errors` metric can't see, § Runbooks), one on `login_failed` in
   the API's log group (failed sign-ins across all accounts, password spraying,
-  § Runbooks), and the job queue's five (DLQ depth, worker errors and
-  throttles, backlog, dead jobs); all to the SNS topics that email `budget_alert_email`. That variable is
+  § Runbooks), the job queue's five (a new DLQ message, worker errors and
+  throttles, backlog, dead jobs), and the fetcher's and renderer's answered
+  failures, stuck request queues and throttles (§ Data feeds, § Reports);
+  every DLQ alarms on each new arrival, not on its depth (§ Background jobs);
+  all to the SNS topics that email `budget_alert_email`. The
+  log filters match `$.message.event`, the shape Lambda's JSON log format
+  gives the backend's event lines (every Lambda logs JSON, platform lines at
+  WARN, application lines from INFO; [infra/README.md
+  § Logs](../infra/README.md#logs)). `budget_alert_email` is
   required: plan refuses an empty, malformed or reserved address
   (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
   case), so a copied example tfvars can't leave the alarms paging nobody
@@ -497,8 +619,8 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
 billing access for the budget, the SES sandbox exit, and the `production`
-environment's required reviewer (the release preflight refuses to deploy
-without it; see [§ Releasing](#releasing)).
+environment's required reviewer and its branch and tag policy (the release
+preflight refuses to deploy without them; see [§ Releasing](#releasing)).
 
 ## 4. CI/CD
 
@@ -507,6 +629,14 @@ Every workflow pins its actions to a commit SHA, grants least-privilege
 `permissions:` per job, and reaches AWS only through GitHub OIDC; there are
 no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 (`scripts/guards/check_workflows.mjs`, plus actionlint when it is installed).
+Among them: a job that grants `id-token: write` (or `write-all`) must be gated
+on `environment: production` (rule `oidc-gate`; the only exception,
+`OIDC_ALLOWLIST`, is Scorecard's `analysis` job, which signs its result for
+scorecard.dev and may run no `run:` step), and a workflow triggered by
+`pull_request_target` may never check out or fetch the PR's head (rule
+`prt-head`: `ref:`/`repository:` from `github.event.pull_request.head.*`,
+`github.head_ref` or `refs/pull/*`, `gh pr checkout`, or the head passed
+through an env var), since that trigger runs with this repo's token.
 
 ### What runs on every push to `main` and every pull request
 
@@ -589,7 +719,13 @@ the real plan stays an operator step
   fonts) with a 60 s cache, and invalidates CloudFront.
 - **Migrations** run in the backend deploy *before* the new Lambda code is
   published: the workflow updates and synchronously invokes the migrate
-  Lambda, and stops if it fails. Migrations must stay backwards-compatible
+  Lambda, and stops if it fails. Just before the invoke it prints
+  `Restore point before these migrations (UTC): …`, the time to hand
+  `restore-db.sh --restore-time` if a migration damages data (§ Restoring
+  the database). There is no manual pre-migration snapshot, on purpose:
+  point-in-time restore already reaches any second in the retention window,
+  and a manual snapshot would outlive it, keeping personal information past
+  the backup period the privacy notice states (issue #126). Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
   release. The worker Lambda's code is updated right after the API's, and
   the fetcher's after the worker's. Then the renderer's image (built in the
@@ -734,10 +870,20 @@ nothing. Step by step:
    - the release is published, not a draft. Prereleases (`-rc.1`, or the
      prerelease box) are skipped and never reach production;
    - the tagged commit is on `main` and its `CI gate` passed (it waits up to
-     30 minutes while CI is still running);
+     30 minutes while CI is still running). Only a `CI gate` posted by the
+     GitHub Actions app (`github-actions`, id 15368) from a run of
+     `.github/workflows/ci.yml` on a push or manual run of that exact commit
+     counts: any app with `checks: write` can post a check by that name, and a
+     `pull_request` run executes the merge ref's `ci.yml`, which the PR can
+     rewrite. Other runs by that name are listed as ignored in the error;
    - the `production` environment exists **and has a required reviewer**. A
      job that names a missing environment creates it unprotected, so the
      preflight fails instead;
+   - that environment's deployment policy allows exactly branch `main` and
+     tags `backend@*` and `web@*`, and an active tag ruleset applies
+     `creation`, `update` and `deletion` to `refs/tags/backend@*` and
+     `refs/tags/web@*` ([§ The production environment's branch and tag
+     policy](#the-production-environments-branch-and-tag-policy));
    - every AWS variable and secret the deploy reads is set (the backend's
      include `RENDERER_FUNCTION_NAME` and `RENDERER_ECR_REPOSITORY`, from
      `export-tf-vars.sh`). Until the account
@@ -754,6 +900,56 @@ nothing. Step by step:
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
    ECR, tagged with the version.
+
+### The production environment's branch and tag policy
+
+The required reviewer decides *whether* a run deploys; these two settings
+decide *what* it can deploy. Without them, a reviewer approving a run from a
+side branch, or a release tag moved after its checks passed, ships code the
+preflight never looked at. The preflight refuses every release until both are
+in place. Set them once, as the operator (repo admin), each command on one
+line:
+
+1. Restrict the environment to custom branch and tag policies. This `PUT`
+   rewrites the environment, so it re-sends you as the required reviewer
+   (self-review allowed: there is one operator):
+
+   ```bash
+   gh api -X PUT repos/Absence0760/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
+   ```
+
+2. Allow exactly `main` and the two release tag patterns (a manual rollback
+   run is dispatched from `main`; a release event runs on its tag):
+
+   ```bash
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
+   ```
+
+3. Protect the release tags: only a repository admin (you, bypassing through
+   `gh release create`) can create them, and nobody can move or delete one:
+
+   ```bash
+   gh api -X POST repos/Absence0760/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
+   ```
+
+4. Check. The first should print `{"custom_branch_policies":true,"protected_branches":false}`
+   and a reviewer, the second exactly the three policies, the third the
+   ruleset as `active`:
+
+   ```bash
+   gh api repos/Absence0760/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
+   gh api repos/Absence0760/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+   gh api repos/Absence0760/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
+   ```
+
+The preflight reads these with the workflow's own token (`actions: read` for
+the environment and its policies; rulesets need only repository metadata), so
+a missing, broadened or disabled setting fails the release with the step to
+fix. An extra deployment policy (say `*`) is refused too: the list must be
+exactly those three. `templates/scripts/backfill-prod-environment.sh` sets
+only the reviewer; the same steps belong in it for every estate repo.
 
 ## Getting a catchment into production
 
@@ -796,6 +992,13 @@ plan-only until the first deploy):
   dropped (counted by `worker-tick-failed` or `worker-throttles`) instead of
   queueing for up to 24 hours (EventBridge's default) or 6 hours (Lambda's)
   and piling stale ticks onto a struggling worker; the next tick recovers.
+- **Only the API wakes the worker.** The worker has no `sqs:SendMessage` on
+  the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
+  settings check asks them of the API alone): a job that queues follow-up
+  work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
+  setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
@@ -819,7 +1022,23 @@ plan-only until the first deploy):
   `jobs-dlq` (14 days' retention).
   The jobs are still in the table and run on the next good tick; inspect the
   worker's logs, then redrive or purge the DLQ.
-- **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
+- **Every DLQ alarm fires on a new arrival, not on depth** (all six:
+  `jobs`, `fetch-requests`, `ingest-results`, `render-requests`,
+  `render-results`, `mail-events`; `infra/alarms.tf`
+  `local.dlq_arrivals_expression`). A depth > 0 alarm would stay in ALARM
+  while the message sits in the DLQ (up to 14 days), and SNS mails only on a
+  change of state, so a second failure in that time would be silent. Each
+  `<queue>-dlq-arrivals` alarm is `DIFF(FILL(ApproximateNumberOfMessagesVisible, 0)) > 0`
+  on 5-minute maxima, 1 of 3 datapoints: it mails once per new
+  dead-lettering and returns to OK about 15 minutes later on its own.
+  (`NumberOfMessagesSent` would be simpler but doesn't count a message the
+  redrive policy moves into a DLQ.) *Runbook:* an OK alarm doesn't mean an
+  empty DLQ. After acting on one, check the DLQ's depth in the SQS console
+  (Messages available) and redrive or purge it; after a redrive or purge,
+  check again, because a message that arrived in the same 5 minutes as one
+  left reads as no change and doesn't alarm.
+- **Alarms** (to the alerts SNS topic): `jobs-dlq-arrivals`, a new message
+  in `jobs-dlq`; worker errors > 0;
   worker throttles > 0 (it hit its reserved concurrency);
   `worker-heartbeat`, fewer than 1 worker invocation in 15 minutes (three
   ticks), with missing data treated as breaching, so a worker that has
@@ -832,8 +1051,15 @@ plan-only until the first deploy):
   (a metric filter on the worker's `job_dead` log line). A project with the
   `job_dead` alert on also emails its owners ([§ Alert emails](#alert-emails)).
   On a first deploy the worker is Terraform's stub, which throws on every
-  tick until the first backend release: `worker-errors` fires then, but
-  the heartbeat stays OK (a failed invocation still counts).
+  tick until the first backend release: `worker-errors` goes to ALARM (and
+  emails) within minutes of the apply, but the heartbeat stays OK (a failed
+  invocation still counts). The fetcher's stub throws too, but nothing
+  invokes it until a real worker queues a fetch. Expected, and harmless: no
+  job exists before the first migration. It clears about 5 minutes after the
+  first backend release moves the worker to real code. The stubs throw on
+  purpose, so a worker ever recreated from its stub alarms the same way
+  ([infra/README.md § Operator steps](../infra/README.md#operator-steps),
+  step 10).
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 
@@ -870,10 +1096,27 @@ plan-only until the first deploy):
   retry: the fetcher sends the failure back, the feed records it and shows as
   failing, and the schedule tries again (15 minutes after one failure,
   doubling up to a day).
-- **Alarms:** `fetch-requests-dlq-depth`, `ingest-results-dlq-depth` and
-  `fetcher-errors` (a crash or timeout), all > 0, to the alerts topic. A
-  stale or failing feed shows in the app, and emails the owners and editors
-  of a project with the `data_stale` or `feed_failing` alert on.
+- **Alarms** (to the alerts topic): `fetch-requests-dlq-arrivals` and
+  `ingest-results-dlq-arrivals` (a new DLQ message, § Background jobs);
+  `fetcher-errors` (a crash or timeout) and `fetcher-throttles` (it hit
+  `fetcher_reserved_concurrency`), both > 0; `fetch-requests-age`, a request
+  waiting over an hour (nothing is consuming the queue: the fetcher still the
+  stub, its trigger disabled, or throttled; the request would otherwise
+  expire unseen after 4 days); and `feed-fetch-failed`, any fetch the fetcher
+  answered as failed in an hour. That last one is invisible to
+  `fetcher-errors`, because the Lambda succeeded: it counts the fetcher's
+  `{"event":"feed_fetch_failed","feedId","source","reason"}` log line
+  (ids, the source and a reason code, never the stored message, which can
+  name a grid cell or a station). A stale or failing feed also shows in the
+  app, and emails the owners and editors of a project with the `data_stale`
+  or `feed_failing` alert on.
+  - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
+    `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason`.
+    `unavailable` or `timeout`: the source is down or slow; the feed retries
+    on its own schedule (nothing to do unless it persists; DWS from outside
+    South Africa answers 403, see Sources' terms below). `format`: the source
+    changed what it serves, a code fix. `invalid_request` or `internal`: a
+    bug; the feed's status panel has the stored message.
 - **Sources' terms.** CHIRPS is public domain (the Climate Hazards Center
   waived copyright; cite it). CHIRPS-GEFS comes from the same server without a
   separate licence notice: confirm before relying on it commercially (the
@@ -881,10 +1124,10 @@ plan-only until the first deploy):
   before a DWS feed is used in production, and the DWS site answers our
   (non-South-African) network with HTTP 403: confirm the fetcher's region can
   reach it ([followups.md](./followups.md)).
-- **Cost (idle delta ≈ +$0.70/month):** two more queues and two DLQs cost
+- **Cost (idle delta ≈ +$1.00/month):** two more queues and two DLQs cost
   nothing at rest, but each SQS event source polls continuously (~0.65 M
   receives a month each); with the `jobs` queue's that is ~1.9 M, ~0.9 M past
-  the free tier, ≈ $0.40. Three alarms ≈ $0.30. The fetcher's own compute is
+  the free tier, ≈ $0.40. Six alarms ≈ $0.60. The fetcher's own compute is
   cents: a daily CHIRPS feed is ~200 range requests (~5 MB) in ~5 s at 512 MB.
   No NAT, no new endpoint.
 
@@ -919,7 +1162,7 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   suppression list, so SES drops mail to them. The same set also publishes
   `BOUNCE` and `COMPLAINT` events to the SNS topic `ses-events`, which
   delivers them raw to the SQS queue `mail-events` (SSE, a DLQ after 5
-  receives, the `mail-events-dlq-depth` alarm), which triggers the worker.
+  receives, the `mail-events-dlq-arrivals` alarm), which triggers the worker.
   The worker (`mail/suppression.ts`) flags the person with that address
   (`app_user.mail_suppressed_at`, 057) and pauses their alert emails; the
   account and alert pages show a banner, and **Turn alert emails back on**
@@ -1003,13 +1246,34 @@ plan-only until the first deploy):
   on every PR, and `pnpm check:renderer-image` does the same locally (needs
   docker only). A full render through the handler needs the deployed site,
   bucket and queues, so it is checked after the first deploy (#92); the approved deploy job pushes it to
-  the `water-management-renderer` ECR repository (tags are immutable: the
-  release version) and moves the function to it. **Lambda can't be created
+  the `water-management-renderer` ECR repository (tags are immutable:
+  `<version>-<first 12 hex of the released commit>`, so a release recut at
+  the same version on another commit pushes and deploys its own image
+  rather than reusing the old one, and a redeploy of the same commit reuses
+  its image) and moves the function to it. **Lambda can't be created
   from an image that doesn't exist yet**, so the function is created by
-  Terraform only once `renderer_image_tag` names a pushed version: after the
-  first backend deploy, set it and apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
+  Terraform only once `renderer_image_tag` names a pushed image: after the
+  first backend deploy, set it to the tag the deploy's notice printed and
+  apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
+  The repository keeps the last 10 images and deletes untagged ones after a
+  day, but never the image `renderer_image_tag` names: a higher-priority
+  lifecycle rule selects exactly that tag, and ECR never lets a
+  lower-priority rule expire an image a higher one matched
+  (`infra/reports.tf`, `infra/tests/release.tftest.hcl`). So the tfvars
+  stays valid however many releases follow, and a re-created function always
+  finds its image; set a newer tag and apply to move the protection.
   Until then the deploy logs a notice and render requests wait in their
   queue.
+  **After that apply, and again after the second backend release** (the
+  first to move an existing renderer), confirm the repository policy still
+  holds only Terraform's statement (`infra/scripts/postapply-check.sh`,
+  its `ecr-policy` line, or by hand):
+  `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
+  (step 10a says what to look for). The renderer's role pulls the image
+  with its own grant, and the repository policy carries the statement
+  Lambda looks for, so Lambda has nothing to add; nobody holds
+  `ecr:SetRepositoryPolicy`, and the deploy role reads the policy only
+  (`ecr:GetRepositoryPolicy`, for Lambda's check on `UpdateFunctionCode`).
 - **The bucket**: `water-management-reports-<account>`, private (public
   access blocked, bucket-owner objects), SSE-S3, TLS only, and a lifecycle
   that deletes `reports/` objects after **7 days** (the tick deletes the
@@ -1035,14 +1299,40 @@ plan-only until the first deploy):
   after 2, then 4 minutes, up to 3 renders; the report shows "rendering"
   meanwhile. A render request in the DLQ can't be redriven usefully (the
   token expired after 5 minutes): purge it; a render result in the DLQ can.
-- **Alarms:** `render-requests-dlq-depth`, `render-results-dlq-depth`,
-  `renderer-errors` (a crash or timeout) and `renderer-duration` (p90 over a
-  minute).
+- **Alarms:** `render-requests-dlq-arrivals`, `render-results-dlq-arrivals`
+  (a new DLQ message, § Background jobs), `renderer-errors` (a crash or
+  timeout), `renderer-throttles` (it hit `renderer_reserved_concurrency`),
+  `renderer-duration` (p90 over a minute), `render-requests-age` (a request
+  waiting over 30 minutes) and `report-render-failed` (any render the
+  renderer answered as failed in an hour). The renderer's errors, throttles
+  and duration alarms exist only with the function; `render-requests-age`
+  and `report-render-failed` exist from the first apply, so with
+  `renderer_image_tag` still empty a requested report alarms within 30
+  minutes instead of its request expiring silently after 4 days.
+  `report-render-failed` counts the renderer's
+  `{"event":"report_render_failed","reportId","projectId","reason","retry"}`
+  log line (ids, `render` or `store`, whether the worker asks again; never
+  the error text or the token): the Lambda succeeded, so `renderer-errors`
+  never sees these.
+  - *Runbook: `render-requests-age`.* If `renderer_image_tag` is empty, the
+    renderer doesn't exist: push an image and set the tag (above). Otherwise
+    check the renderer's SQS trigger and `renderer-throttles`. The waiting
+    requests' tokens have expired (5 minutes), so purge `render-requests`
+    once the renderer runs; the reports show as failed and can be asked for
+    again.
+  - *Runbook: `report-render-failed`.* Logs Insights on the renderer's log
+    group: `filter message.event = "report_render_failed" | stats count() by
+    message.reason, message.retry`. `store`: the reports bucket refused the PDF (the renderer's
+    role, `report_store_failed` has the error name). `render` with `retry`
+    false: the token was refused or the page said it can't show the report
+    (the report's own error, on the Reports tab, has the text). With `retry`
+    true: a timeout, a WAF block or a browser crash, asked again with
+    backoff; many at once usually means the WAF (`waf-blocked-requests`).
 - **SES**: report emails go to members, so they count against the same SES
   sending limits as account email; production access (Operator step 8a) is
   needed before a schedule can mail anyone but verified addresses.
-- **Cost (idle delta ≈ +$1.00–1.20/month):** two more event sources polling
-  (~$0.50), four alarms ($0.40), the image in ECR (~$0.10–0.30); a render is
+- **Cost (idle delta ≈ +$1.30–1.50/month):** two more event sources polling
+  (~$0.50), seven alarms ($0.70), the image in ECR (~$0.10–0.30); a render is
   ~5 s at 2 GB, ≈ $0.0002, and a PDF is ~1 MB for 7 days. No NAT, no new
   endpoint.
 
@@ -1138,7 +1428,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
    the route's pattern (never the concrete path), the error's name and code
    (a Postgres SQLSTATE for a database error) and its stack frames, never its
    message. In CloudWatch Logs Insights on the API's log group,
-   `filter event = "unhandled_error" | stats count() by route, error, code`
+   `filter message.event = "unhandled_error" | stats count() by message.route, message.error, message.code`
    says which endpoint and what kind of failure; `at` points at the throwing
    line. One route with a SQLSTATE after a deploy is usually a migration the
    code got ahead of (§ A failed migration); every route at once with
@@ -1195,7 +1485,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
     Each failure logs `{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`,
     with no address, id or IP.
     1. **Look:** CloudWatch Logs Insights on the API's log group,
-       `filter event = "login_failed" | stats count() by reason, route, bin(5m)`.
+       `filter message.event = "login_failed" | stats count() by message.reason, message.route, bin(5m)`.
        Mostly `unknown_account` is a list of addresses being tried (stuffing
        from a leaked list); mostly `bad_password` spread thinly is spraying
        against real accounts; mostly `locked` is one or a few accounts being
@@ -1265,6 +1555,42 @@ Every step is an ordinary app action by an owner unless it says "operator".
        `WAF_CAPTCHA_API_KEY`), and deploy the web again: the script URL and
        key are baked into the build.
     5. Switch back to `CAPTCHA` once fixed, and record it in the operator log.
+13. **The database's KMS key** (an email "`<event>` on the database's KMS
+    key", operator; `kms.tf`, only with `rds_customer_managed_key`). Act the
+    same hour: a disabled key stops the instance about 2 hours later.
+    1. **Read the email:** the call (`DisableKey`, `ScheduleKeyDeletion`,
+       `PutKeyPolicy`, `RevokeGrant`), who made it and whether it failed
+       (an error code such as `AccessDenied` means an attempt, not a change:
+       treat it as a possible compromise:
+       [security.md § Incident playbook](./security.md#incident-playbook)).
+       If it was your own reviewed apply that changed the key policy, record it and stop.
+    2. **Check the key** (its state, deletion date and ARN; the commands
+       below take the ARN, since `EnableKey`, `CancelKeyDeletion`,
+       `GetKeyPolicy` and `ListGrants` don't accept an alias):
+       `aws kms describe-key --key-id alias/water-management-rds --region <region> --profile water-management --query 'KeyMetadata.[KeyState,DeletionDate,Arn]'`.
+    3. **`PendingDeletion`:** cancel it, then enable the key (cancelling
+       leaves it `Disabled`):
+       `aws kms cancel-key-deletion --key-id <key-arn> --region <region> --profile water-management && aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       Possible any time within the 30-day window; after it, the database
+       and every backup are gone.
+    4. **`Disabled`:** `aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       If RDS already stopped the instance (status
+       `inaccessible-encryption-credentials-recoverable`), start it within 7
+       days: `aws rds start-db-instance --db-instance-identifier water-management --region <region> --profile water-management`.
+    5. **`PutKeyPolicy`:** compare the live policy
+       (`aws kms get-key-policy --key-id <key-arn> --policy-name default --region <region> --profile water-management`)
+       with `data.aws_iam_policy_document.rds_kms`; a plan shows the drift,
+       and an apply of the reviewed code puts it back.
+    6. **`RevokeGrant`:** if it revoked RDS's grant, the instance loses the
+       key as if it were disabled, and only RDS can create its grant again
+       (the key policy's `kms:GrantIsForAWSResource`). List the grants
+       (`aws kms list-grants --key-id <key-arn> --region <region> --profile water-management`)
+       and watch the instance status; if it goes
+       `inaccessible-encryption-credentials-recoverable`, start it as in 4
+       (not yet rehearsed: if it doesn't come back, restore to a new
+       instance, § Restoring the database, and open an AWS Support case).
+    7. Find out who and why in CloudTrail (the email names the caller), and
+       record it in the operator log.
 
 ## Rollback
 
@@ -1420,8 +1746,9 @@ CloudFront, S3, Lambda and SES sending are cents. WAF is ~$8/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
-the report renderer run outside the VPC for the same reason. Total ≈ $51/month in
-us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
+the report renderer run outside the VPC for the same reason. The database's
+customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $52/month in
+us-east-1, ≈ $59–64 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
 request charges have no ceiling; the `cloudfront-requests` alarm (us-east-1)
 fires within 5 minutes of a flood, long before the budgets' billing data
@@ -1436,11 +1763,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $6/day on $80, about 3× the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $7/day on $90, about 3.5× the
   ~$2/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($64 on the default $80, just above the
+- **Monthly, ACTUAL 80%** ($72 on the default $90, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
