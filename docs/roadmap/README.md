@@ -38,7 +38,7 @@ are in each plan's **Exit criteria** section.
   decision, makes multi-tenancy and billing worth building.
 
 Before building a step, validate the need with the domain personas
-(`.claude/agents/persona-*.md`, run with `/persona …`):
+(`.claude/agents/personas/persona-*.md`, run with `/persona …`):
 - Step 2: `wua-manager`, `farmer`.
 - Step 3: `licence-applicant`, `licensing-authority`, `environmentalist`.
 - Every step: `hydrologist`.

@@ -8,11 +8,13 @@ Implement the task `$ARGUMENTS` with a project-specific code-reviewer agent in t
 ## When to use this command
 
 **Right fit:**
-- Security-sensitive changes — anything touching the <payment-processor> ITN handler, the <CMS> webhook handler, CORS config, rate limiting, the email pipeline (especially the banking-details regression test), or the SOPS-encrypted secrets files.
-- Order-flow changes — `POST /orders`, `GET /orders/:ref`, the order status state machine, the customer status emails.
-- <CMS> schema changes — `studio/schemas/*.ts` plus the matching `backend/src/cms.ts` type + helper + new route.
-- Infra changes — anything under `infra/`, especially OIDC trust policy, S3 bucket policy, KMS, CloudFront security headers, Lambda permissions.
-- Cross-workspace refactors that touch frontend + backend + studio at once.
+- Access and trust boundaries: anything touching `withUser` / `withApiKey` / `withoutUser` (`backend/src/db/tx.ts`), `requireUser` and the session (`backend/src/auth/`), render, share, API-key or email tokens, throttles, CSRF or CORS in `backend/src/app.ts`, or the public allowlist in `backend/src/routes.test.ts`.
+- RLS policies, grants or `SECURITY DEFINER` functions (with `/safe-migration` for the SQL itself).
+- Personal data: the export (`auth/export.ts`), account deletion and pseudonymisation, alert and report mail to farmers.
+- Model behaviour in `packages/engine` (a change bumps `ENGINE_VERSION` and is judged by `docs/engine-audit.md` and the invariant tests).
+- The job queue, feeds fetcher, report renderer and the Lambda entry points (dotenv and `playwright-core` bundle rules).
+- Infra under `infra/`, especially the OIDC trust policy, the `production` environment gate, bucket policies, WAF and CloudFront headers, and Lambda concurrency.
+- Cross-workspace changes that touch the engine, backend and frontend at once.
 - Anything you want a second pair of eyes on before commit.
 
 **Wrong fit — refuse and tell the user to edit directly:**
@@ -49,9 +51,9 @@ The cost of this loop is real (~2-3x tokens, ~30-60s extra latency, one or two `
    - What was changed (one-line summary, not a recap of the diff).
    - Which review round produced the clean status.
    - Any Notes or Out-of-scope observations the reviewer surfaced (worth knowing, not blocking).
-   - Ask whether to commit. **Never commit without being asked** (project rule from the root `CLAUDE.md`).
+   - Ask whether to commit, unless the task already asked for a PR.
 
-6. **On user "yes":** stage the changed files explicitly (don't `git add -A` — could pick up an unrelated SOPS plaintext sibling), draft a commit message that follows the project's style (no `Co-Authored-By`, no Claude footer, conventional-commit prefix per the recent log), commit, report success.
+6. **On user "yes":** commit path-scoped on the PR branch's worktree (`git commit -m "…" -- <paths>`; never `git add -A`, CLAUDE.md § Working alongside other Claude sessions), in the style of the recent log, with no `Co-Authored-By` or generated-by trailer. Push the branch and open a PR; never push `main`.
 
 ## Loop-termination guarantees
 

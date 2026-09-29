@@ -1,8 +1,8 @@
 ---
-description: Pre-commit gate — runs code-reviewer + test-gap-checker + doc-hygiene-checker in parallel against the working diff. Advisory output. Cheaper than /safe-edit; use it before every non-trivial commit.
+description: Pre-commit gate — runs code-reviewer + test-gap-checker + doc-hygiene-checker in parallel against the working diff (plus migration-coordinator for SQL and ui-designer review for screens). Advisory output. Cheaper than /safe-edit; use it before every non-trivial commit.
 ---
 
-Run a parallel three-agent audit on the working diff, aggregate findings, and report. Advisory only — you don't apply fixes here, the user decides which to land.
+Run a parallel agent audit on the working diff, aggregate findings, and report. Advisory only — you don't apply fixes here, the user decides which to land.
 
 ## When to use this command
 
@@ -30,19 +30,26 @@ Run `git status`. If both staged and unstaged are empty, abort: tell the user th
 
 If the diff is trivial (typo, comment, single-line dep bump, generated-file regen only, Svelte template / CSS-only), abort with a one-line "trivial — skipping `/check`" message. The agents would each independently bail on the same diff.
 
-### 3. Spawn three agents in parallel
+### 3. Spawn the agents in parallel
 
-Send a single message with three Agent tool calls:
+Send a single message with one Agent call each:
 
 - `code-reviewer` — prompt: "Review the working diff against this project's documented conventions. Output the strict format from your spec."
-- `test-gap-checker` — prompt: "Audit the working diff for missing vitest test surface per the root CLAUDE.md tests-and-docs rule. Output the format from your spec."
+- `test-gap-checker` — prompt: "Audit the working diff for missing test surface per the root CLAUDE.md tests-and-docs rule. Output the format from your spec."
 - `doc-hygiene-checker` — prompt: "Audit the working diff against the root CLAUDE.md doc-update rule. Output which docs need updating."
 
-Parallel because they're independent — all three only `git diff` + `Read` files.
+Add one more when the diff touches its surface:
+
+- `backend/migrations/*.sql` → `migration-coordinator` — prompt: "Coordinate the migration at `<file>`. Output the format from your spec."
+- A screen or component under `frontend/src/` (markup or styles, not only logic) → `ui-designer` — prompt: "review: the working diff".
+
+Parallel because they're independent: each only reads the diff and the files around it (the migration coordinator also applies the migration to the local dev database).
+
+If the diff is committed on a branch rather than in the working tree, say so in each prompt ("the diff is `git diff origin/main...HEAD`").
 
 ### 4. Aggregate
 
-When all three return, build a single short report:
+When they all return, build a single short report:
 
 ```
 ## /check report
@@ -59,9 +66,12 @@ Status: <CLEAN | NEEDS_CHANGES>
 ### Doc gaps (`doc-hygiene-checker`)
 <verbatim verdicts list, or "doc set is clean">
 
+### Migration (`migration-coordinator`) / UI review (`ui-designer`), when run
+<verbatim report>
+
 ### Recommendation
 <one of:>
-- All three came back clean — ready to commit.
+- Every agent came back clean — ready to commit.
 - Code review and docs are clean; <N> test gap(s) — the user should decide whether to land tests now or in a follow-up.
 - <N> code-review finding(s) — apply or push back before committing.
 - Multiple gaps across review / tests / docs — list and let the user pick.
@@ -74,6 +84,6 @@ Ask the user how they want to proceed. **Do not** apply any fixes automatically.
 ## Tone
 
 Don't narrate the parallel-agent fan-out in user-facing text. The user sees:
-- A one-line "Running review + test-gap + doc-hygiene checks…"
+- A one-line "Running the pre-commit checks…"
 - The aggregated report.
 - A short "Want me to apply the test gaps? Land it as-is? Add a follow-up task?" question at the end.

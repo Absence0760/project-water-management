@@ -1,65 +1,59 @@
 # Audit commands
 
-Project-curated slash commands for running security, dependency, infra, and cost-control audits across the repo. Each is read-only by default — they report findings, they don't apply fixes without explicit confirmation.
-
-Invoke from a Claude Code session as `/audit/<name>`.
+Read-only sweeps, invoked as `/audit/<name>`. Each reports findings (Critical /
+High / Medium / Low, then Clean) and applies nothing without confirmation.
+The knowledge of the app lives in the agent each one delegates to; the
+command says which area to sweep and what to look at first.
 
 ## Index
 
-### Security
+### Security (`repo-security-auditor`)
 
 | Command | What it checks |
 |---|---|
-| [/audit/secrets](secrets.md) | SOPS encryption status, plaintext-in-git history, server-only env in client paths, GitHub Actions secret hygiene |
-| [/audit/xss](xss.md) | Svelte `{@html}`, portable-text rendering, dynamic href/src, server-rendered email HTML |
+| [/audit/secrets](secrets.md) | Secrets in tracked files or history, committed env files, server config in the bundle, dotenv in Lambda bundles, workflow secrets, logs |
+| [/audit/xss](xss.md) | `{@html}`, dynamic `href`/`src`, SVG, the CSP, the report page the renderer prints, mail templates |
+| [/audit/auth](auth.md) | Route gating and the public allowlist, role checks, `withUser` discipline and RLS (runs the `auth` and `rls` areas) |
 
-### Health
+The agent's other areas (`tokens`, `ssrf`, `queues`, `ci`, `public-repo`) have no command of their own: spawn it with `Audit area: <area>.`
+
+### Infra and spend (`infra-auditor`)
 
 | Command | What it checks |
 |---|---|
-| [/audit/deps](deps.md) | `pnpm audit` per workspace, Dependabot coverage, GitHub Actions pin status, pnpm override hygiene |
-| [/audit/infra](infra.md) | Terraform under `infra/` via `infra-auditor` — IAM least privilege, network exposure, data protection and recovery, alarm coverage |
-| [/audit/cost-controls](cost-controls.md) | No runaway bill, via `infra-auditor`: Lambda worst-case ceilings, queue/job loops, retry storms, fan-out caps, growth, budget + alarms |
+| [/audit/infra](infra.md) | IAM least privilege, network exposure, data protection and recovery, alarms |
+| [/audit/cost-controls](cost-controls.md) | Worst-case monthly ceilings, queue and job loops, retry storms, fan-out caps, growth, budget and alarms |
+
+### Privacy and accessibility (`compliance-auditor`)
+
+| Command | What it checks |
+|---|---|
+| [/audit/popia](popia.md) | The personal-data record in `docs/security.md` against the code: retention, notice, sub-processors, transfers, breach procedure |
+| [/audit/data-export-completeness](data-export-completeness.md) | "Download my data" covers everything kept about the person |
+| [/audit/account-deletion-completeness](account-deletion-completeness.md) | Deleting an account reaches every row, text column and S3 object |
+| [/audit/third-party-data-flows](third-party-data-flows.md) | Every outbound call carrying personal data, as a sub-processor list |
+| [/audit/cookie-consent](cookie-consent.md) | Only strictly necessary cookies and no third-party origins, so no banner |
+| [/audit/accessibility](accessibility.md) | WCAG 2.2 AA, farmer pages and phone layouts first |
+
+### Dependencies (`general-purpose`)
+
+| Command | What it checks |
+|---|---|
+| [/audit/deps](deps.md) | `pnpm audit`, hand pins Dependabot can't see, Dependabot coverage, action pinning, overrides, Node versions |
 
 ### Dispatcher
 
 | Command | What it does |
 |---|---|
-| [/audit/all](all.md) | Spawns the full sweep in parallel + consolidated report. Optional arg: `security` / `deps` / `infra` / `cost`. |
-
-## Conventions
-
-- Every audit is **read-only by default**. The deliverable is a findings report, not a diff.
-- Findings are grouped by severity: **Critical / High / Medium / Low**.
-- Each command is a **self-contained prompt** — runnable from a fresh session with no prior context.
-- Cross-references: findings tie back to `docs/security.md § Risk <n>` whenever they map to the documented risk register, and to the per-workspace `CLAUDE.md` rules they violate.
-
-## Agent delegation
-
-- **Security** commands (`secrets`, `xss`, `auth`) delegate to `repo-security-auditor`, which knows this app's trust boundaries (CloudFront shared secret + WAF, tokens, RLS via `withUser`, fetcher SSRF, renderer, SQS message trust, OIDC, the public repo).
-- **`infra`** and **`cost-controls`** delegate to `infra-auditor`, which knows the Terraform, the Lambdas and queues, and the expected cost in `docs/deployment-tiers.md`.
-- **`deps`** uses a `general-purpose` agent with the command body as the prompt.
-
-`/audit/all` spawns one agent per area in parallel.
-
-## Diff-time enforcement (complementary)
-
-For per-PR enforcement (as opposed to periodic broad sweeps), use:
-
-- [/check](../check.md) — pre-commit gate: `code-reviewer` + `test-gap-checker` + `doc-hygiene-checker` in parallel against the working diff.
-- [/safe-edit](../safe-edit.md) — coder ↔ reviewer loop for non-trivial changes (~2-3x cost; use for security-sensitive or order-flow changes).
-- [/release-readiness](../release-readiness.md) — pre-tag gate before publishing a release (working tree, CI, per-workspace deltas, open audit signals).
-
-These are for per-PR / pre-deploy enforcement; the audit commands here are for periodic broad sweeps.
+| [/audit/all](all.md) | The core sweep in parallel (security, deps, infra, cost) with one consolidated report |
 
 ## When to run
 
-- **Before a release** — `/audit/all` once, fix Critical / High before tagging. Then `/release-readiness`.
-- **After bumping a dependency major** — `/audit/deps` + `/audit/secrets`.
-- **After editing anything under `infra/`** — `/audit/infra` before `terraform apply`.
-- **After adding a new backend route or email path** — `/audit/secrets` (catches new env-var leaks) + `/audit/xss` (catches new HTML email surfaces).
-- **Periodically (monthly)** — `/audit/all` to catch slow-moving drift. The scheduled `audit.yml` workflow covers `pnpm audit` weekly; `/audit/all` adds the other audits to the picture.
+- **Before a release**: `/audit/all`, fix Critical and High, then `/release-readiness`.
+- **After a migration that adds personal data**: `/audit/data-export-completeness` and `/audit/account-deletion-completeness`.
+- **After adding a route, role or policy**: `/audit/auth`.
+- **After editing `infra/`**: `/audit/infra` and `/audit/cost-controls` before anyone runs `terraform apply`.
+- **After a dependency major**: `/audit/deps`.
+- **Monthly**: `/audit/all`; `audit.yml` already runs `pnpm audit` weekly.
 
-## What's intentionally not here
-
-Stack-specific audits (Postgres RLS, Edge Function JWTs, mobile-twin parity, paywall gates, privacy-zone clipping, schema-codegen drift, metadata-key registries, architecture-guard tests, etc.) are deliberately omitted from this base set. Add them as your project grows in that direction — start by writing the checklist as `.claude/commands/audit/<area>.md` and delegate to `repo-security-auditor` (for security surfaces) or `compliance-auditor` (for privacy / legal surfaces).
+For per-change checks use `/check`, `/safe-edit` and `/safe-migration` instead.

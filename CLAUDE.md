@@ -40,34 +40,18 @@ Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `
 
 ## Working alongside other Claude sessions
 
-More than one Claude session may run in **this one checkout at the same time** — sharing a single working tree *and* a single git index, so a careless `git add` + `git commit` sweeps up another session's in-flight work. The `.claude/hooks/git-scope-guard.py` PreToolUse hook enforces the rules below; if a git command is denied, its message names the scoped alternative — follow it, don't work around it.
+Several Claude sessions may share this checkout, its working tree and its git index. `.claude/hooks/git-scope-guard.py` enforces these rules; if it denies a command, use the scoped alternative its message names. The full workflow and the reasons: `docs/contributing.md` § Git workflow.
 
-- **Every change reaches `main` through a pull request; never push `main`.** `main` is protected on GitHub (PRs only, for admins too) and the hook blocks any push to it. For each piece of work: make a worktree on a new branch off `origin/main` (`git fetch origin && git worktree add ../wm-<slug> -b <type>/<slug> origin/main`), commit there (path-scoped, one logical unit per commit), push the branch (`git push -u origin <type>/<slug>`), and open a PR (`gh pr create --fill` or a written title/body). Don't merge it yourself unless the operator asks; merging is their call. Keep the main checkout on `main` and only fast-forward it (`git pull --ff-only`) after a merge. Never commit on `main` itself. (No `Co-Authored-By`/generated-by trailer in commits or PR bodies; write them as a human would.)
-- **Commit path-scoped, always:** `git commit -m "…" -- path/to/file ...`. A path-scoped commit records only those paths and ignores anything else staged. Bare `git commit`, `git add -u/-A/.`, `git commit -a`, and `git commit --amend` *with staged changes* are blocked — they snapshot the shared index.
-- **Only touch what your task owns.** Don't stage, edit, delete, or `restore` files outside your task. Before committing, `git status` and confirm every path is yours.
-- **Never whole-tree:** no `git add .`, `checkout/restore .`, `reset --hard`, `git rm .`, `git stash` (without `-- <path>`), or `git clean -f` — each clobbers across the tree.
-- **HEAD moves under you.** Other sessions commit mid-task (and `origin/main` moves as PRs merge); your path-scoped commits still stack cleanly, and a PR branch that falls behind is updated by merging `origin/main` into it (not rebasing a shared branch). Don't be alarmed if `git log` shows commits you didn't make, or files you didn't change show as modified — leave those alone.
-- **Worktrees are the default, not only for large work:** a PR branch always gets its own worktree, so switching branches never disturbs another session's tree. Subagents doing parallel file edits should pass `isolation: "worktree"`; merge their branches into your PR branch, not into `main`. Remove a worktree once its PR is merged (`git worktree remove ../wm-<slug>`).
+- **Every change reaches `main` through a PR; never push or commit on `main`.** One worktree per PR branch, off `origin/main` (`git worktree add ../wm-<slug> -b <type>/<slug> origin/main`). Don't merge your own PR unless the operator asks. No `Co-Authored-By`/generated-by trailer in commits or PR bodies.
+- **Commit path-scoped, always:** `git commit -m "…" -- <paths>`. Bare `git commit`, `git add -u/-A/.`, `git commit -a` and `--amend` with staged changes are blocked.
+- **Only touch what your task owns**, and **never whole-tree:** no `git add .`, `checkout/restore .`, `reset --hard`, `git rm .`, `git stash`, `git clean -f`.
+- **HEAD moves under you.** Commits you didn't make and files you didn't change are other sessions' work; leave them. Update a PR branch that falls behind by merging `origin/main`, not rebasing.
 
 ## Code organization
 
-- **Group `src/lib` (and equivalents) by topic, not by type.** Loose modules piling up at the `lib/` root is a smell — once there are more than a handful, move them into topical subfolders (`auth/`, `billing/`, `<domain>/`, …). Keep only generated/shared type files (`database.types.ts`, `types.ts`) at the root. **Co-locate each module's test beside it**; cross-cutting guard tests may stay at the root.
-- **No preemptive abstraction.** Don't extract a shared helper or component on the *second* use — wait for the *third* caller, then extract. Three similar lines beat a premature wrapper, and a "bug fix" PR should not smuggle in a refactor.
-- **Consolidating duplicated UI is a refactor, not a feature — pin it first.** When you fold repeated markup into a shared component, add an e2e test that pins the *rendered* behaviour **before** the extraction, so before/after is provably identical, then extract.
-- **Group `.claude/agents/`, `.claude/commands/`, and `docs/` into topical subfolders** once each grows past a flat handful (e.g. `agents/auditors/`, `docs/features/`).
-- If the project keeps a structure guard (a test asserting "no loose modules at the lib root", "the unit-test glob recurses", etc.), keep it green — it's the thing that stops the organization eroding. Such a guard is stack-specific (test runner + paths), so write it against your own setup rather than copying one.
-
-## Root package.json scripts — one format, estate-wide
-
-When the repo has a root `package.json`, its `scripts` block is the single entry point for every recurring task, and it follows the format `project-running/package.json` established (that file is the canonical exemplar — read it before restructuring scripts):
-
-- **Group scripts with comment keys**: a `"//-- <group> --": "<one-line description>"` divider entry above each cluster. The description carries the load-bearing facts a session needs (ports, prerequisites, doc pointers), not filler.
-- **Namespaced, verb-first, colon-separated names**: `setup[:*]` (one-time bootstrap), `dev:*` (orchestrators like `dev:core`/`dev:full`, then `dev:db:*`, `dev:run:<app>`, per-service groups), `build:<surface>`, `check:<surface>`, `test:<surface>[:unit|:e2e]`, `gen:<what>`. Long-running services reuse the same lifecycle verbs: `up` / `down` / `status` / `logs`.
-- **JSON holds one-liners only.** Anything longer delegates to a script under `bin/` or `scripts/`; workspace delegation goes through `pnpm -C apps/<x> <script>`.
-- **New scripts join an existing group** (or add a new `//--` divider in the right place) — never append ungrouped entries at the bottom.
-- **Keep a `test:scripts` guard** that validates the root script targets (referenced files exist, delegated workspace scripts resolve). project-running's `scripts/check_root_scripts.mjs` is the reference implementation; it's layout-specific, so write yours against your own tree rather than copying it verbatim.
-
-Treat a root scripts block that drifts from this format like any other structure-guard violation: fix the format in the same change that touches it.
+- Group `src/lib`, `.claude/agents/`, `.claude/commands/` and `docs/` by topic once they pass a flat handful; co-locate each test beside its module.
+- No preemptive abstraction: extract on the third caller. Pin rendered behaviour with an e2e test before folding duplicated UI into a component.
+- The root `package.json` `scripts` block follows the estate format (grouped `//--` dividers, `verb:surface` names, one-liners only) and `pnpm test:scripts` guards it. Details: `docs/contributing.md` § Root package.json scripts.
 
 ## Every code change updates tests + docs in the same change
 
@@ -100,44 +84,20 @@ If you spot a candidate fix that fits one of those patterns: stop, surface the u
 - **Recommend the long-term solution.** When a quick patch and a durable fix diverge, name the durable fix and its tradeoffs even if you also ship the patch — don't let an expedient workaround pass as the answer.
 - **No dangling "deferred" / "out-of-scope" findings.** A real issue you surface — in a review, an audit, a code comment, or your own analysis — gets driven to resolution, not left as a passing mention. Default: fix it the same session when it's bounded and you've already diagnosed it. Only when a fix is genuinely too large or risky may you defer — and a deferral is a tracked follow-up (a GitHub issue or Jira ticket — confirm before creating), naming what's broken, the durable fix, and the trigger to do it. Surfacing starts the obligation; it doesn't end it.
 
-## Running tests: fast loop first
-
-Don't run full suites after every edit. While working use `pnpm test:changed`
-(typecheck + only the tests the change reaches) or the single failing file;
-run e2e only for the specs of the surface you touched. Before committing,
-`pnpm check && pnpm test` plus the DB test files for backend/SQL you touched.
-The full `test:backend:db` and `test:e2e` run on GitHub Actions (e2e in 14
-shards), not locally. Never pipe e2e output into `grep`/`head`: it hangs;
-redirect to a file. Timings and the why: `docs/testing.md`.
-
 ## UI verification
 
 Don't spin up the dev server to visually verify UI/frontend changes before reporting a task complete. `pnpm check` + `pnpm test` (or the stack's equivalent — see `docs/STACK.md`) are sufficient; the operator reviews visuals themselves. Only run the dev server if explicitly asked.
 
-## Available Claude tooling
+## Claude tooling
 
-Run these as slash-commands. Each delegates to a specialised agent (`.claude/agents/`).
+Agents live in `.claude/agents/` by team (`engineering/`, `design/`, `audit/`, `personas/`, `i18n/`, `legal/`); commands in `.claude/commands/`. The index is `.claude/README.md`. The ones to reach for:
 
-- `/check` — pre-commit gate: code-reviewer + test-gap-checker + doc-hygiene-checker over the working diff, in parallel (advisory).
-- `/safe-edit` — workflow for security-sensitive or load-bearing changes.
-- `/safe-migration` — DB-schema-change workflow (apply locally, verify RLS, sync types, propose smoke tests).
-- `/polish-ui` — design, build or review one screen to the app's UI standard (`ui-designer` agent; rules in `docs/design/ui-playbook.md`). Read the playbook before any UI work.
-- `/release-readiness` — go/no-go checklist before tagging.
-- `/audit/all` — runs the core sweep (secrets, xss, deps, infra, cost-controls) in parallel; `/audit/<area>` for a single sweep, including the ones `all` skips. Areas: `secrets`, `infra`, `deps`, `xss`, `cost-controls`, `auth`, `accessibility`, `gdpr`, `data-export-completeness`, `account-deletion-completeness`, `cookie-consent`, `third-party-data-flows`.
-- `/persona` — runs the bug-hunting persona auditors (`.claude/agents/persona-*.md`): real-world points of view (new user, power user, admin, international user, accessibility, integrator, adversary, data subject) that find logic / UX / domain bugs a code review misses. Each writes a living report to `reviews/<persona>.md` (git-ignored). Protocol + how to add domain personas: `.claude/personas/README.md`. Domain pack for this app (need + correctness): `hydrologist`, `environmentalist`, `licence-applicant`, `licensing-authority`, `wua-manager`, `farmer`.
-
-These ship with placeholder examples and need per-project adaptation — see `.claude/README.md`.
+- `/issue <n>` — work one GitHub issue end to end: worktree, route, `/check`, PR.
+- `/check` — pre-commit gate over the diff (review, test gaps, doc gaps; migration and UI review when those are touched).
+- `/safe-edit` — reviewer loop for security-sensitive or load-bearing changes. `/safe-migration` — any change under `backend/migrations/`.
+- `/polish-ui` — build or review one screen to `docs/design/ui-playbook.md`.
+- `/audit/<area>`, `/audit/all`, `/persona`, `/release-readiness` — periodic sweeps and the pre-release gate.
 
 ## Where to look
 
-- `docs/STACK.md` — the canonical "what is this and how do I run it" doc
-- `docs/` — additional architecture/deployment/security docs
-- `.github/workflows/gitleaks.yml` — secret scanning (base-owned)
-- `.github/workflows/audit.yml` — weekly `pnpm audit` + auto-issue (base-owned)
-- `.github/workflows/security.yml` — CodeQL static analysis + container scanning (base-owned)
-- `.github/workflows/scorecard.yml` — OSSF Scorecard (base-owned)
-- `.github/workflows/claude.yml` — Claude Code automation on PRs/issues (base-owned)
-- `.github/workflows/dependabot-auto-merge.yml` — auto-merges minor/patch Dependabot PRs (base-owned)
-- `.github/workflows/dependabot-lockfile.yml` — re-syncs pnpm lockfile on Dependabot PRs (base-owned)
-- `.github/dependabot.yml` — dependency update PRs (base-owned)
-- `SECURITY.md` — vulnerability reporting policy (base-owned)
+`docs/STACK.md` first; the rest of `docs/` from its § Where to look. Which files the `templates` repo's `base` branch owns: `docs/contributing.md` § Base-owned files.
