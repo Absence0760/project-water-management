@@ -4599,7 +4599,11 @@ exists, says so with a link to Runs & results.
   years reads *Not enough years* in every row. A note under the board says
   existing use is the baseline's as that run modelled it, and that existing
   *authorised* use needs a baseline at every holder's full registered volume
-  (a full-allocation run, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+  (a full-allocation run: Settings › Registered volumes › Allocation mode,
+  or a scenario that sets it). Against such a baseline the step reads
+  *Existing authorised use in the baseline “…”* and the note says so; a pair
+  where only one run is at full allocation gets a note under the board
+  ([model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
   The route fetches the board's three series before `data-report-ready`
   (`report/impactSeries.ts`: the baseline's `natural_flow` and
   `ewr_shortfall`, this run's `ewr_shortfall`); one that can't be read, or a

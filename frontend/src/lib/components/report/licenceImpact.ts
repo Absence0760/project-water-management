@@ -9,10 +9,10 @@
 // It reports what the runs did; it never recommends.
 //
 // The background is the run the report is "against" (its baseline). Its use
-// is labelled as that run's use: *existing authorised* use needs a
-// full-allocation background run (allocations.md § Still to build), which
-// the engine can't make yet. When it can, the board takes that run as its
-// background and only the wording changes.
+// is labelled as that run's use, or as *existing authorised* use when it is
+// a full-allocation run (settings.allocationMode, engine ≥ 1.18.0,
+// allocations.md): compare an application with such a baseline and only the
+// wording changes. A pair where only one run is at full allocation is said so.
 import {
 	describeLicenceImpact,
 	licenceImpactByYearClass,
@@ -83,13 +83,13 @@ export type BoardView =
 const m3 = (v: number) => `${fmtNum(v)} m³`;
 const signed = (n: number) => (n > 0 ? `+${fmtNum(n)}` : n < 0 ? `−${fmtNum(-n)}` : '0');
 
-function waterfallOf(c: LicenceImpactClass, background: string): WaterfallStep[] | null {
+function waterfallOf(c: LicenceImpactClass, background: string, authorised: boolean): WaterfallStep[] | null {
 	const w = c.waterfall;
 	if (!w) return null;
 	const step = (id: WaterfallStep['id'], label: string, v: number): WaterfallStep => ({ id, label, m3: v, text: id === 'natural' || id === 'left' || Math.round(v) === 0 ? m3(Math.abs(v) < 0.5 ? 0 : v) : v < 0 ? `+${m3(-v)}` : `−${m3(v)}` });
 	return [
 		step('natural', 'Natural flow', w.naturalM3),
-		step('existing', `Existing use in ${background}`, w.existingUseM3),
+		step('existing', `${authorised ? 'Existing authorised use' : 'Existing use'} in ${background}`, w.existingUseM3),
 		step('proposed', 'Proposed use (this run − baseline)', w.proposedM3),
 		step('other', 'Other: dams, storage, groundwater, land cover', w.otherM3),
 		step('left', 'Flow left at the outlet', w.leftM3)
@@ -135,6 +135,13 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 					: `The board could not be built: ${msg}`
 		};
 	}
+	// A full-allocation baseline (engine ≥ 1.18.0, settings.allocationMode, allocations.md) runs every holder at their registered volume: its use is existing *authorised* use.
+	const mode = (r: typeof a) => r.run.summary.allocations?.mode ?? 'none';
+	const authorised = mode(a) === 'fullAllocation';
+	if (authorised && mode(b) !== 'fullAllocation')
+		notes.push('The baseline runs every holder at their full registered volume, but this run doesn’t, so the proposed step also counts the other holders going back to their modelled use. Run the application with the allocation mode at full allocation too.');
+	else if (!authorised && mode(b) === 'fullAllocation')
+		notes.push('This run holds every holder at their full registered volume, but the baseline doesn’t, so the proposed step also counts the other holders going up to their registered volumes. Compare it with a full-allocation baseline.');
 	const unit = impact.metric === 'reserveMonthsMet' ? 'months' : 'days';
 	const names = { background: `the baseline ${background}`, application: 'this run' };
 	const columns: BoardColumn[] = impact.classes.map((c) => ({
@@ -143,7 +150,7 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 		bounds: boundsText(c),
 		nYears: c.nYears,
 		enoughYears: c.enoughYears,
-		waterfall: waterfallOf(c, `the baseline ${background}`),
+		waterfall: waterfallOf(c, `the baseline ${background}`, authorised),
 		below: c.below ? { background: c.below.background, application: c.below.application, change: signed(c.below.change), units: c.below.units } : null,
 		verdict: c.verdict,
 		verdictLabel: VERDICT_LABEL[impact.metric][c.verdict],
@@ -160,7 +167,9 @@ export function buildLicenceImpactBoard(input: BoardInput): BoardView {
 		nYears: classed,
 		method: impact.method,
 		columns,
-		existingNote: `Existing use is the use in the baseline ${background} as that run modelled it: irrigation and other water users, less what returns to the river. Existing authorised use needs a baseline run at every holder’s full registered volume, which the app can’t make yet.`,
+		existingNote: authorised
+			? `Existing authorised use is the use in the baseline ${background}, a full-allocation run: every holder at their full registered volume, irrigation and other water users, less what returns to the river.`
+			: `Existing use is the use in the baseline ${background} as that run modelled it: irrigation and other water users, less what returns to the river. For existing authorised use, compare with a baseline run at every holder’s full registered volume (Settings › Registered volumes › Allocation mode: full allocation, or a scenario that sets it).`,
 		notes
 	};
 }

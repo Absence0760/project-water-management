@@ -5355,13 +5355,17 @@ the **application** run. Each run is `Pick<ModelOutput, 'startDate' | 'series' |
   (9 in the baseline, 13 in this run)."; "The Reserve was met in every month
   over 3 wet years in both runs."; "Only 2 wet years both runs cover: not
   enough years to judge."
-- **Existing authorised use.** With the baseline as the background, "existing
-  use" is the use that run modelled, and the report labels it so. Existing
-  *authorised* use needs a full-allocation background run (WP-3.10
-  `allocationMode: 'fullAllocation'`, [allocations.md § Still to build](./allocations.md#still-to-build-wp-310)).
-  The view takes any background run, so when that mode lands the board
-  switches its background and its label, nothing else
-  ([followups.md § Allocations](./followups.md#allocations-wp-310)).
+- **Existing authorised use.** With an ordinary baseline as the background,
+  "existing use" is the use that run modelled, and the report labels it so.
+  When the baseline is a full-allocation run (`summary.allocations.mode` is
+  `fullAllocation`, `settings.allocationMode`, engine ≥ 1.18.0, §2.12a), its
+  use is every holder at their registered volume, and the board calls the
+  step *existing authorised use*. The view is the same either way; only the
+  label and the note change. A pair where only one run is at full
+  allocation gets a note: its "proposed" step then also counts the other
+  holders' change between modelled and registered use. Making that pair
+  (the baseline and the application both at full allocation) for an
+  assessor in one step is cumulative assessment (roadmap WP-3.11).
 - A run without a water account (engine < 0.32.0) throws; the report says to
   run the model again.
 

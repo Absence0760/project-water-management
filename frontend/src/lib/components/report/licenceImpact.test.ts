@@ -81,8 +81,29 @@ describe('buildLicenceImpactBoard', () => {
 		expect(dry.verdictLabel).toBe('More days below the EWR');
 		expect(dry.text).toBe('The pragmatic EWR was not met on 12 more days over 3 dry years (15 in the baseline “Baseline”, 27 in this run).');
 		expect(v.existingNote).toMatch(/^Existing use is the use in the baseline “Baseline” as that run modelled it/);
-		expect(v.existingNote).toMatch(/Existing authorised use needs a baseline run at every holder’s full registered volume/);
+		expect(v.existingNote).toMatch(/For existing authorised use, compare with a baseline run at every holder’s full registered volume/);
 		expect(v.notes).toEqual(['Neither run has a Reserve rule table at the outlet, so the board counts days below the pragmatic EWR.']);
+	});
+
+	it('calls the baseline’s use existing authorised use when it is a full-allocation run, and says so when only one run is', () => {
+		const full = (r: RunCompareResponse['a']) => ({ ...r, run: { ...r.run, summary: { ...r.run.summary, allocations: { mode: 'fullAllocation', tolerance: 0.1, used: 2, notMatched: 0, nodes: [] } } } }) as RunCompareResponse['a'];
+		const board = (a: RunCompareResponse['a'], b: RunCompareResponse['a']) => {
+			const v = buildLicenceImpactBoard({ data: { a, b }, series: series(() => 15, () => 15), method: 'auto' });
+			if (v.status !== 'ok') throw new Error(v.reason);
+			return v;
+		};
+		const both = board(full(side('Baseline', 100)), full(side('B', 160)));
+		expect(both.columns[0]!.waterfall![1]!.label).toBe('Existing authorised use in the baseline “Baseline”');
+		expect(both.existingNote).toMatch(/^Existing authorised use is the use in the baseline “Baseline”, a full-allocation run/);
+		expect(both.notes.filter((n) => /full registered volume/.test(n))).toEqual([]);
+		// Only the baseline: labelled authorised, and the mixed pair said.
+		const onlyBase = board(full(side('Baseline', 100)), side('B', 160));
+		expect(onlyBase.columns[0]!.waterfall![1]!.label).toBe('Existing authorised use in the baseline “Baseline”');
+		expect(onlyBase.notes).toContainEqual(expect.stringMatching(/^The baseline runs every holder at their full registered volume, but this run doesn’t/));
+		// Only the application: plain existing use, and the mixed pair said (positive control on the label above).
+		const onlyApp = board(side('Baseline', 100), full(side('B', 160)));
+		expect(onlyApp.columns[0]!.waterfall![1]!.label).toBe('Existing use in the baseline “Baseline”');
+		expect(onlyApp.notes).toContainEqual(expect.stringMatching(/^This run holds every holder at their full registered volume, but the baseline doesn’t/));
 	});
 
 	it('shows "Not enough years" cells without numbers', () => {

@@ -2667,16 +2667,13 @@ from the WP:
       comparison's band as a project setting (Settings › Registered volumes,
       default 0.1, pending the hydrologist); `?tolerance=` still overrides it
       for one request.
-- [ ] **Licence impact board on a full-allocation background** (issue #53
-      R7, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
-      Today the impact report's board uses the baseline run as its
-      background, so its "existing use" is the use that run modelled, and
-      it says so. Durable fix: make the background the baseline's
-      full-allocation run (a run of the baseline's inputs with
-      `allocationMode: 'fullAllocation'`), fetch it beside the baseline, and
-      relabel the step "existing authorised use"; `licenceImpactByYearClass`
-      already takes any background run. Trigger: PR #116 (`allocationMode`)
-      merges.
+- [x] **Licence impact board on a full-allocation background** (2026-09-29,
+      issue #53 R7, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+      With #116's allocation mode merged, a baseline that is a
+      full-allocation run makes the board's step *existing authorised use*,
+      and a pair with only one run at full allocation is said so
+      (`report/licenceImpact.ts`). Making the pair for an assessor in one
+      step is WP-3.11's cumulative assessment (roadmap step 3).
 - [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
