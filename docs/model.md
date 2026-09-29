@@ -2200,8 +2200,9 @@ series (only when the share is below 1), a sink in the balance check
 `damSeepageLostM3` line (out). The dam itself behaves the same either way.
 
 Not built here (tracked in [followups.md](./followups.md)): capacity loss to
-sediment (%/year) and the survey curve as a scenario `node.set` op (a
-scenario can add a dam with a curve, `node.add`, but not edit one).
+sediment (%/year). A scenario can add a dam with a curve (`node.add`) and,
+from engine 1.20.0, set an existing dam's curve (`node.set` of `damCurve`,
+[scenarios.md § Dam capacity](./scenarios.md)).
 
 **Checks.** The self-checks (`verify/checks.ts`) recompute the area from the
 curve, the monthly evaporation depth, the release under its rule (and that it
@@ -2239,9 +2240,11 @@ AET, S, UH, F, R, Q, with the GR4J step's equations) and
 `LEGACY_RUNOFF_COLUMNS` (the [Flow data] columns R, N, V, S, X, Y, AB, for a stored legacy run from before engine 1.0.0). The
 results' day trace reads them to show the catchment's day, and for GR4J it
 closes the day's store balance: stores the day before + P + F − AET − Q =
-stores at the end of the day, in mm over the catchment. Only the stores'
-total is recorded at the start of a run (after the warm-up), so on a run's
-first day the balance uses the total and each store's starting value is
+stores at the end of the day, in mm over the catchment. From engine 1.20.0
+the run's summary also records each store at the start of the run (after the
+warm-up, `summary.runoff.storesStartMm`, which sum to `storageStartMm`), so a
+run's first day traces store by store too; a run from before kept only their
+total, so there the balance uses the total and each store's starting value is
 unknown.
 
 ### 2.7b EWR attribution: who is charged for a shortfall (engine ≥ 0.17.0, audit Q17)
@@ -5618,8 +5621,9 @@ does: it overstated an enlarged dam's evaporating surface (and understated a
 smaller one's), so it understated yield above the dam's own capacity and
 overstated it below. The larger side still depends on the valley shape above
 today's full-supply level: a surveyed curve for the enlarged dam, entered on
-a scenario (a `node.add` with its `damCurve`; there is no `node.set` for a
-curve yet), is the durable answer. A scenario's `node.set` of `damCapacityM3`
+a scenario (a `node.add` with its `damCurve`, or from engine 1.20.0 a
+`node.set` of an existing dam's `damCurve` beside its `damCapacityM3`), is the
+durable answer. A scenario's `node.set` of `damCapacityM3`
 resizes the dam the same way (scenarios.md § Dam capacity).
 
 **Monotonicity.** Yield is non-decreasing in capacity for a lossless dam

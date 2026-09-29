@@ -22,6 +22,7 @@ import {
 } from './ops';
 import { structureIssues } from './structure';
 import { resolveDamCurve } from '../network/dam';
+import { DAM_CURVE_CAPACITY_TOLERANCE } from '../network/damCurve';
 import { resizeDamCurve, resizedFullArea } from '../network/damResize';
 import { ewrRuleListIssues, type EwrRuleTable } from '../reserve/rules';
 
@@ -315,8 +316,14 @@ function findTransfer(d: Draft, transferId: string): Transfer {
  * a power-law dam's area when full (as entered, or the capacity ÷ 3 m
  * estimate) becomes A_full × ratio^b. A later `damAreaFullM2` op on the node
  * sets the new dam's own area; one before this op described the old dam and
- * is resized with it. Nothing happens for a new dam (from capacity 0), a dam
- * removed (to 0) or an unchanged capacity. Returns the op's note.
+ * is resized with it. Likewise a `damCurve` op after it sets the new dam's own
+ * surveyed curve. From engine 1.20.0 a survey curve whose top is already
+ * within 1 % of the new capacity (DAM_CURVE_CAPACITY_TOLERANCE, the tolerance
+ * a run allows between the two) is left as it is: one a `damCurve` op before
+ * this one set describes the new dam, so the two ops mean the same in either
+ * order, and the base's own curve needs no redrawing for a change that small.
+ * Nothing happens for a new dam (from capacity 0), a dam removed (to 0) or an
+ * unchanged capacity. Returns the op's note.
  */
 function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
 	const cap = n.damCapacityM3;
@@ -325,6 +332,8 @@ function resizeDamGeometry(n: NetworkNode, oldCap: number): string | null {
 	const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
 	const survey = resolveDamCurve(n);
 	if (survey && n.damCurve) {
+		if (Math.abs(survey.volume[survey.volume.length - 1]! - cap) <= DAM_CURVE_CAPACITY_TOLERANCE * cap)
+			return `dam survey curve left as it is: its top is within ${DAM_CURVE_CAPACITY_TOLERANCE * 100} % of the new capacity`;
 		const top = survey.volume[survey.volume.length - 1]! * ratio;
 		const r = resizeDamCurve(n.damCurve, top, b);
 		if (r.rows.length >= 2) {

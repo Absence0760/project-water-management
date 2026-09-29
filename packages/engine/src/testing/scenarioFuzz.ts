@@ -52,6 +52,17 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			return g.pick(SUPPLY_RULES);
 		case 'pumpCapacityM3Day':
 			return g.pick([null, 0, g.logFloat(1, 1e5)]);
+		case 'damCurve': {
+			// None (the power law), a curve topping out near the capacity, or now and then one row (a model-rule problem).
+			if (g.bool(0.2)) return null;
+			const top = (n.damCapacityM3 > 0 ? n.damCapacityM3 : g.logFloat(10, 3e6)) * g.pick([1, g.float(0.9, 1.5)]);
+			const rows = g.bool(0.05) ? 1 : g.int(2, 8);
+			const depth = g.logFloat(0.5, 30);
+			return Array.from({ length: rows }, (_, k) => {
+				const f = rows === 1 ? 1 : k / (rows - 1);
+				return { levelM: 100 + depth * f, areaM2: (top / depth) * f, volumeM3: top * f };
+			});
+		}
 		default:
 			// Every other editable node field is a fraction 0–1.
 			return g.frac();
