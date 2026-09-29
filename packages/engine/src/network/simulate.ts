@@ -214,7 +214,7 @@ export interface NetworkPlan {
 	 */
 	lowFlowThresholdM3Day?: number;
 	/**
-	 * The run's historical days, before a forecast tail (engine ≥ 1.27.0,
+	 * The run's historical days, before a forecast tail (engine ≥ 1.28.0,
 	 * ../forecastTail.ts); absent = every day. The Q75 above reads only these.
 	 */
 	historyDays?: number;

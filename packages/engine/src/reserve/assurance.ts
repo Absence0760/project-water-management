@@ -463,7 +463,7 @@ export function assessSite(
 	 */
 	history: ArrayLike<number> = [],
 	/**
-	 * The run's historical days, before a forecast tail (engine ≥ 1.27.0,
+	 * The run's historical days, before a forecast tail (engine ≥ 1.28.0,
 	 * engine-audit.md K1; default every day). A month that straddles the
 	 * last of them isn't assessed (the history alone doesn't complete it),
 	 * and the natural duration curves rank the historical months only, so a

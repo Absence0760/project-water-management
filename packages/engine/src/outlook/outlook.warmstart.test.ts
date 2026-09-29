@@ -141,7 +141,7 @@ describe('with record-wide statistics in play (land cover, a Reserve rule table)
 		}
 		expect(months).toBe(4 * 12 * 7);
 		// 16 of the 336 level-year-months: the pinned curves rank the base run's whole record, a
-		// re-run member's the history before the decision date (engine ≥ 1.27.0: the analogue
+		// re-run member's the history before the decision date (engine ≥ 1.28.0: the analogue
 		// season is a forecast tail, which no record-wide statistic reads; 9 before, when the
 		// re-run member's curves took in the season too).
 		expect(moved).toBe(16);

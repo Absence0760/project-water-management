@@ -149,7 +149,7 @@ describe('runForecastChecked', () => {
 	});
 });
 
-describe('the model is causal across a forecast tail (engine 1.27.0, engine-audit.md K1)', () => {
+describe('the model is causal across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
 	// A 200-day record, shorter than GR4J's 365-day warm-up, so the warm-up cycles it; a wet
 	// 14-day forecast after it; land cover on every farm, so the Q75 threshold is in play.
 	const x = withRain(record(200), { startDate: '2020-07-19', values: new Array(14).fill(40) });

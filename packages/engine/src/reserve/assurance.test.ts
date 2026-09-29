@@ -104,7 +104,7 @@ describe('completeMonths', () => {
 	});
 });
 
-describe('assessSite across a forecast tail (engine 1.27.0, engine-audit.md K1)', () => {
+describe('assessSite across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
 	// Oct 2000 … Jan 2001, 'run' curves; the history ends on 15 December.
 	const start = '2000-10-01';
 	const days = daysBetween(start, '2001-01-31');

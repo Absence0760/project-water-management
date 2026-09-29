@@ -194,7 +194,7 @@ describe("allocationMode 'fullAllocation'", () => {
 		expect(f.unscaled).toEqual([2001, 2002]);
 	});
 
-	it('fits the year a forecast tail starts in on its historical days, and the tail keeps that factor (engine 1.27.0, K1)', () => {
+	it('fits the year a forecast tail starts in on its historical days, and the tail keeps that factor (engine 1.28.0, K1)', () => {
 		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
 		const start = toEpochDay('2001-10-01');
 		// Demand 1 a day for the first 100 days, then 3 a day: the tail's days would pull the factor down.

@@ -371,7 +371,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
 	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
 	const natural = new Float64Array(days);
-	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.27.0).
+	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
 	const { historyDays } = forecastTail(run);
 	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
 

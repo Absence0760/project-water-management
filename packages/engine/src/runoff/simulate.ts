@@ -97,7 +97,7 @@ export function simulateRunoff<P, S>(
 		/** Return the state at the start of this day (0 … days) as `captured`. */
 		captureAt?: number;
 		/**
-		 * Cycle only the first this many days in the warm-up (engine ≥ 1.27.0):
+		 * Cycle only the first this many days in the warm-up (engine ≥ 1.28.0):
 		 * the run's historical days, so a forecast tail after them never
 		 * changes the state the run starts from (engine-audit.md K1).
 		 */

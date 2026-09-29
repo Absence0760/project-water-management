@@ -201,7 +201,7 @@ describe('storageYieldCurve', () => {
 	});
 });
 
-describe('prepareYield across a forecast tail (engine 1.27.0, engine-audit.md K1)', () => {
+describe('prepareYield across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
 	it('builds the natural flow and the plan runModel does: the warm-up and the record-wide figures read the historical days', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 60 && checked < 10; seed++) {

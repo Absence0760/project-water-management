@@ -262,7 +262,7 @@ function runNetwork(
 	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
-	// The days before a forecast tail (engine ≥ 1.27.0, engine-audit.md K1): the record-wide
+	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
 	// statistics (GR4J's cycled warm-up, the land-cover Q75, the Reserve's assessed months and
 	// their natural duration curves) read only these, so a tail never moves a historical value.
 	const historyDays = forecastTail(prepared).historyDays;

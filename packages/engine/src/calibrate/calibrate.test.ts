@@ -126,7 +126,7 @@ describe('prepareCalibration scores what runModel produces', () => {
 		expect(checked).toBeGreaterThanOrEqual(20);
 	});
 
-	it('with a forecast tail too (engine 1.27.0: the warm-up and the land-cover threshold read the historical days, as runModel does)', () => {
+	it('with a forecast tail too (engine 1.28.0: the warm-up and the land-cover threshold read the historical days, as runModel does)', () => {
 		let checked = 0;
 		for (let seed = 1; seed <= 150 && checked < 15; seed++) {
 			const input = withForecastTail(randomInput(seed), seed, 20);

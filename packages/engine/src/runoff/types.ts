@@ -114,7 +114,7 @@ export interface RunContext {
 	/**
 	 * The run's historical days, before its forecast tail (../forecastTail.ts;
 	 * absent = every day). A warm-up that cycles the forcing cycles only
-	 * these (engine ≥ 1.27.0), so a forecast tail can't change it.
+	 * these (engine ≥ 1.28.0), so a forecast tail can't change it.
 	 */
 	historyDays?: number;
 }

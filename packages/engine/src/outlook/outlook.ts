@@ -17,7 +17,7 @@
 //
 // The older path (`warmStart: false`, outlookMemberInput + a full run per
 // member) re-runs the history in every member and refits those statistics
-// on each member's own history, up to the decision date (engine ≥ 1.27.0:
+// on each member's own history, up to the decision date (engine ≥ 1.28.0:
 // the analogue season is the run's forecast tail, which no record-wide
 // statistic reads; before, they took in the season too); it is kept for
 // comparison, and the backend reads its input problems.

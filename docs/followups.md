@@ -2151,7 +2151,7 @@ role and not before it.
 ## Features left half-way
 
 - [x] **Make the model causal, then run forecast mode once** (engine-audit.md
-      K1, found building WP-2.12, 2026-09-26; done in engine 1.27.0, issue
+      K1, found building WP-2.12, 2026-09-26; done in engine 1.28.0, issue
       #67). Every record-wide figure (GR4J's cycled warm-up, the land-cover
       Q75, the Reserve's natural curves and the months it assesses, a full
       allocation's yearly factor) reads only the days before a forecast tail

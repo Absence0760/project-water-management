@@ -121,7 +121,7 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
  * m³/day). A year with demand but nothing registered gets 0; a year with
  * registered volume but no demand can't be scaled, gets 0 and is listed in
  * `unscaled` (water years). The year a forecast tail starts in (engine ≥
- * 1.27.0) is scaled on its days before `historyDays` only, and its tail days
+ * 1.28.0) is scaled on its days before `historyDays` only, and its tail days
  * keep that factor, so the tail never changes a historical day's demand
  * (engine-audit.md K1); its registered volume is then factor × demand, as a
  * pinned year's. So a year with no demand on its historical days takes
@@ -180,7 +180,7 @@ export interface AllocationPlan {
 	byNode: Map<number, AllocationEntry[]>;
 	/** 'fullAllocation': node index → its demand's factor per day, and per water year the demand before and the volume after. */
 	scaled: Map<number, { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[] }>;
-	/** The run's historical days, when a forecast tail follows them (engine ≥ 1.27.0): full allocation fits its factors on these. */
+	/** The run's historical days, when a forecast tail follows them (engine ≥ 1.28.0): full allocation fits its factors on these. */
 	historyDays?: number;
 	/**
 	 * 'fullAllocation' in a run resumed from a snapshot (../warmstart): node

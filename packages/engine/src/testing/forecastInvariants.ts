@@ -72,7 +72,7 @@ export function summaryDifference(a: ModelOutput, b: ModelOutput): string | null
  *   (withoutForecastTail, what an ordinary run uses) equals the forecast
  *   run's up to forecastFrom − 1, to the bit, and so does an ordinary run
  *   of the input with the tail, which passes its own self-checks (the model
- *   is causal across it, engine ≥ 1.27.0, engine-audit.md K1), and every
+ *   is causal across it, engine ≥ 1.28.0, engine-audit.md K1), and every
  *   summary figure but
  *   `forecast`, `forecastRain` and `warnings` is the same (the warnings
  *   only gain the tail run's failed self-checks);
@@ -121,7 +121,7 @@ export function checkForecastPrefix(input: ModelInput): string | null {
 		const t = firstDifference(s.values, f, cut);
 		if (t >= 0) return `prefix stability: ${s.nodeId}|${s.key} on ${fromEpochDay(toEpochDay(out.startDate) + t)}: ${s.values[t]} vs ${f[t]}`;
 	}
-	// The model is causal across a forecast tail (engine ≥ 1.27.0, engine-audit.md K1): an
+	// The model is causal across a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): an
 	// ordinary run of the input with the tail has the same series on every shared day.
 	const ordinary = runModelChecked(input);
 	const failed = ordinary.summary.verification?.checks.find((c) => !c.passed);

@@ -1689,7 +1689,7 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  *   water year, and a scaled unit's demand over the run's days of a year adds
  *   up to the volume registered for it over them (none when it had no demand);
  *   the year a forecast tail starts in (summary.historyDays, engine ≥
- *   1.27.0) over its historical days, its tail days keeping that factor;
+ *   1.28.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
  * - RunSummary.allocations is there exactly when the input has allocations,
  *   with the mode the run used, and its per-source whole-year figures are
@@ -1741,7 +1741,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 		if (mode === 'fullAllocation' && KF) {
 			const D = g('demand');
 			if (!D) return `${n.id}: demand series missing`;
-			// Before a forecast tail (engine ≥ 1.27.0): the year it starts in is fitted on its historical days.
+			// Before a forecast tail (engine ≥ 1.28.0): the year it starts in is fitted on its historical days.
 			const history = out.summary.historyDays ?? out.days;
 			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
 			const span = (a: number, b: number, wy: number, reg: number): string | null => {
