@@ -330,7 +330,11 @@ buys a **render session** that can read one report and nothing else.
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes**. A used, expired, unknown or malformed token gets one
-  answer, `400`. The renderer calls it through its browser context's own
+  answer, `400`. Both refusals carry the machine-only code
+  `render_token_refused`: the renderer fails a report for good only on that
+  code, so a WAF or CloudFront `403` in front of the API (no code) is
+  retried with backoff, not mistaken for a refused token
+  (`reports/render.ts` `sessionRefusal`, `reports.test.ts`). The renderer calls it through its browser context's own
   request client, so the cookie lives only in that throwaway context, which
   is closed with the browser after the render.
 - **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
@@ -2011,9 +2015,20 @@ key there would let any read-only principal forge any user's session.
   each entry point with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
-  limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
-  default 1000 per 5 minutes) covering the whole site and `/api/*`.
+- **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+  limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
+  default 1000 per 5 minutes) scoped to `/api/*`, and a site-wide backstop
+  on every path (`waf_site_rate_limit_per_ip`, default 5000). The API's
+  limit doesn't count the SPA's cached files, so a cold visit (~150 of
+  them) or the report renderer, which loads the SPA in a fresh Chromium for
+  every PDF from a few shared Lambda addresses, doesn't eat it; the
+  backstop still caps one IP pulling the static site (a request the WAF
+  blocks isn't billed by CloudFront, one it allows is), at the
+  `cloudfront-requests` alarm's own default. Both API-path rules match the
+  decoded, normalised, lowercased path (`infra/waf.tf`,
+  `waf_rate_rules_scope`). A renderer the WAF blocks gets a plain `403`
+  without the API's `render_token_refused` code, so the render is retried
+  with backoff rather than failed (§ Render tokens).
 - **Ambiguous paths are refused by the API** (`backend/src/http/rawPath.ts`,
   issue #126). The WAF matches rules on the raw path and Hono routes on a
   decoded one (`decodeURI`), so `/api/%61uth/login` is `/auth/login` to the

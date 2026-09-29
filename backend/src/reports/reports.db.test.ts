@@ -136,7 +136,8 @@ describe('render tokens', () => {
 		const again = await exchange(token);
 		expect(again.status).toBe(400);
 		expect(again.cookie).toBeNull();
-		expect(again.body).toEqual({ error: 'this render token is invalid, used or expired' });
+		// Coded: the renderer treats only this refusal as final (reports/render.ts sessionRefusal).
+		expect(again.body).toEqual({ error: 'this render token is invalid, used or expired', code: 'render_token_refused' });
 
 		const late = await withUser(owner.id, (db) => issueRenderToken(db, projectId, runId));
 		await asOwner(`UPDATE render_token SET expires_at = now() - interval '1 second' WHERE project_id = $1`, [projectId]);
@@ -180,6 +181,61 @@ describe('render tokens', () => {
 		const res = await exchange(token);
 		expect(res.status).toBe(403);
 		expect(res.cookie).toBeNull();
+		expect(res.body).toEqual({ error: 'the requester can no longer see this report', code: 'render_token_refused' });
+	});
+});
+
+// Production (REPORT_RENDERER=sqs): the renderer Lambda's answer comes back as
+// a report_render job carrying `result`. A retryable failure (a WAF block, a
+// timeout) asks again with backoff, up to REPORT_MAX_ATTEMPTS requests; a
+// final one fails the report at once.
+describe('the renderer’s answer (production)', () => {
+	it('asks again after 2, then 4 minutes for a retryable failure, then fails; a final failure fails at once', async () => {
+		const owner = await signUp('RrRetry');
+		const { projectId } = await withRun(owner, 'Retry');
+		const queue = async () => {
+			const res = await owner.call('POST', `/projects/${projectId}/reports`, {});
+			expect(res.status).toBe(202);
+			const [{ id }] = await asOwner('SELECT id FROM report WHERE job_id = $1', [res.body.jobId]);
+			// The request went out (what the sqs branch does): the report waits for the answer.
+			await asOwner(`UPDATE report SET status = 'rendering' WHERE id = $1`, [id]);
+			await asOwner(`UPDATE job SET status = 'done', finished_at = now() WHERE id = $1`, [res.body.jobId]);
+			return id as string;
+		};
+		const answer = (reportId: string, retry: boolean) => {
+			const job = { id: crypto.randomUUID(), projectId, kind: 'report_render' as const, actingUserId: owner.id, leaseToken: crypto.randomUUID(), attempts: 1, maxAttempts: 3 };
+			const result = { ok: false as const, error: 'the render session could not start (HTTP 403)', retry };
+			return withUser(owner.id, (db) => reportRenderHandler.run({ db, job, payload: { reportId, result }, progress: async () => true }));
+		};
+		const requests = (reportId: string) =>
+			asOwner(
+				`SELECT status, round(extract(epoch FROM run_after - created_at) / 60)::int AS "delayMin", max_attempts AS "maxAttempts"
+				 FROM job WHERE project_id = $1 AND payload->>'reportId' = $2 AND NOT (payload ? 'result') ORDER BY created_at`,
+				[projectId, reportId]
+			);
+		const report = async (id: string) => (await asOwner('SELECT status, error FROM report WHERE id = $1', [id]))[0];
+
+		const r = await queue();
+		await answer(r, true);
+		expect(await requests(r)).toEqual([
+			{ status: 'done', delayMin: 0, maxAttempts: 3 },
+			{ status: 'queued', delayMin: 2, maxAttempts: 3 }
+		]);
+		expect(await report(r)).toEqual({ status: 'rendering', error: null });
+		await answer(r, true);
+		expect((await requests(r)).map((j) => j.delayMin)).toEqual([0, 2, 4]);
+		expect(await report(r)).toEqual({ status: 'rendering', error: null });
+		// Three requests made: the third retryable failure is the last.
+		await answer(r, true);
+		expect(await requests(r)).toHaveLength(3);
+		expect(await report(r)).toEqual({ status: 'failed', error: 'the renderer failed: the render session could not start (HTTP 403)' });
+
+		// A final failure (the API's coded refusal) asks nothing again.
+		const f = await queue();
+		await answer(f, false);
+		expect(await requests(f)).toHaveLength(1);
+		expect((await report(f)).status).toBe('failed');
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });
 

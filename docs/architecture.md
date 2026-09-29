@@ -1109,7 +1109,12 @@ sequenceDiagram
   (`REPORT_RENDER_TIMEOUT_MS`, 90 s locally, 100 s in the Lambda) covers the
   whole thing, and the browser is closed in `finally`. A timeout or a browser
   crash is retried (3 attempts); Playwright's own messages (URLs, call logs)
-  never reach the stored error.
+  never reach the stored error. The token exchange fails for good only on
+  the API's own coded refusal (`render_token_refused`); any other answer (a
+  WAF rate-limit `403`, a `429`, a `5xx`) is retried. In production the
+  renderer Lambda's answer carries that `retry` flag back, and the worker
+  asks again with a fresh token after 2, then 4 minutes, up to 3 renders
+  (`jobs/handlers/report-render.ts` `requestRenderAgain`).
 - **Storage** (`reports/storage.ts`, `STORAGE`): one S3 client.
   `local` (the default) is MinIO from docker-compose on :9002, bucket created
   on first use; `s3` is the private production bucket (SSE, 7-day

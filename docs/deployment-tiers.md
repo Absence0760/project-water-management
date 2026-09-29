@@ -73,7 +73,7 @@ Cost, us-east-1:
 | RDS `db.t4g.micro` single-AZ | 11.70 |
 | RDS gp3 storage, 20 GiB | 2.30 |
 | 3 interface endpoints × 1 AZ | 21.90 |
-| WAF (ACL + 2 rules) | 7.00 |
+| WAF (ACL + 3 rules) | 8.00 |
 | CloudWatch alarms, logs, RDS log export | ~2.80 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
@@ -121,7 +121,7 @@ Cost, us-east-1:
 | RDS gp3 storage, 20 GiB, Multi-AZ | 4.60 |
 | Backups beyond the free allowance (14 days) | ~1.00 |
 | 3 interface endpoints × 2 AZs | 43.80 |
-| WAF (ACL + 2 rules + requests) | ~7.60 |
+| WAF (ACL + 3 rules + requests) | ~8.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.00 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |

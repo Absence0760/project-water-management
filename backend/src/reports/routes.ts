@@ -303,9 +303,10 @@ const INVALID_TOKEN = 'this render token is invalid, used or expired';
 export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', async (c) => {
 	const body = z.object({ token: z.string().max(200) }).strict().parse(await readJson(c));
 	const hash = parseToken(body.token);
-	if (!hash) throw new ApiError(400, INVALID_TOKEN);
+	// Coded (render_token_refused): the renderer treats only this refusal as final (reports/render.ts).
+	if (!hash) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	const t = await withoutUser((db) => consumeRenderToken(db, hash));
-	if (!t) throw new ApiError(400, INVALID_TOKEN);
+	if (!t) throw ApiError.coded(400, 'render_token_refused', INVALID_TOKEN);
 	await withUser(t.userId, async (db) => {
 		// The run, and an impact report's baseline, both still readable by the requester (RLS: model_run is theirs).
 		const { rows } = await db.query<{ ok: boolean }>(
@@ -313,7 +314,7 @@ export const renderSessionRoutes = new Hono<AuthEnv>().post('/render-session', a
 				AND ($4::uuid IS NULL OR (app_has_role($3, 'viewer') AND EXISTS (SELECT 1 FROM model_run WHERE id = $4 AND project_id = $3))) AS ok`,
 			[t.projectId, t.runId, t.against?.projectId ?? null, t.against?.runId ?? null]
 		);
-		if (!rows[0]?.ok) throw new ApiError(403, 'the requester can no longer see this report');
+		if (!rows[0]?.ok) throw ApiError.coded(403, 'render_token_refused', 'the requester can no longer see this report');
 	});
 	await issueSession(c, t.userId, { projectId: t.projectId, runId: t.runId, ...(t.against ? { against: t.against } : {}) });
 	return c.json({ ok: true });

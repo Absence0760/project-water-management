@@ -32,7 +32,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
-| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
+| POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run; both carry `code: "render_token_refused"` (§ Errors, machine-only codes) (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
 
 `user = { id, email, displayName, emailVerified }`. Passwords: 8–200 chars.
 
@@ -199,6 +199,15 @@ language. A code is a contract: add new ones, never rename one
 code has no message in `apiError.ts` `CODES`). A guard (`backend/src/http/errorCodes.test.ts`)
 fails on any uncoded `ApiError` in the routes the translated pages call,
 unless it is listed there with why its status says enough.
+
+**Machine-only codes.** A code that only a machine client reads, never a
+translated page, is in `MACHINE_ERROR_CODES` instead, so it has no words in
+the frontend catalogue (same contract: add, never rename). One so far:
+`render_token_refused` (`400`/`403` from `POST /auth/render-session`: the
+render token is used, expired or unknown, or the requester lost access). The
+report renderer treats only that code as a final refusal; a `403` without it
+is a WAF or CloudFront block, and is retried with the other passing failures
+(`backend/src/reports/render.ts` `sessionRefusal`).
 
 | Code | Status | When |
 | --- | --- | --- |
@@ -2502,7 +2511,9 @@ member who asked (or, for a schedule, the editor who saved it), under RLS.
   `status` ∈ `queued` → `rendering` → `done`; `retrying` (the render failed
   and will be tried again; up to 3 attempts); `failed` (out of attempts, a
   failure no retry can fix, or, in production, no answer from the renderer
-  within an hour). `error` is the server's own text, never raw database or
+  within an hour). In production a retryable failure the renderer Lambda
+  reports (a WAF block, a timeout) is asked for again after 2, then 4
+  minutes, up to 3 renders, and the report shows `rendering` meanwhile. `error` is the server's own text, never raw database or
   browser output: e.g. `the render took longer than 90 s`, `the report page
   did not load: …` (the page's own message), `the run was deleted before its
   report was made`, `the baseline run was deleted, or its project isn't

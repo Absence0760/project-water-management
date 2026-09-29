@@ -165,7 +165,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
-| `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
+| `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
@@ -332,7 +332,7 @@ Idle to light use, on-demand, us-east-1:
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
-| WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
+| WAF: ACL + 3 rules (+ $0.60 / 1M requests) | 8.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
@@ -344,8 +344,18 @@ Idle to light use, on-demand, us-east-1:
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
 at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
 only (CloudFront doesn't bill WAF-blocked requests). The per-IP rate limits
-stop one client, not a botnet keeping each IP under them: 1,000 requests a
-second is ~$140–240 a day. Nothing can cap that without dropping the CSP (the
+(`waf.tf`: 100 on `/api/auth/*`, `waf_rate_limit_per_ip` on `/api/*`, and
+`waf_site_rate_limit_per_ip`, default 5,000, on every path) stop one client,
+not a botnet keeping each IP under them. The API's limit doesn't count the
+SPA's files, so a cold visit (~150 of them) and the report renderer (which
+loads the SPA for every PDF from a few shared Lambda addresses) don't eat
+it; the site-wide backstop is there because an unlimited static site would
+let one IP run up allowed-request charges until someone acts on the alarm
+below, and its default blocks one IP at that alarm's own threshold. A
+renderer blocked by any of them is retried with backoff (a WAF `403` has no
+`render_token_refused` code, `backend/src/reports/render.ts`), not failed.
+A botnet at 1,000 requests
+a second costs ~$140–240 a day. Nothing can cap that without dropping the CSP (the
 CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
@@ -667,7 +677,10 @@ Lambda and a worker cap below the sum of its SQS triggers'
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so
-`/api/%61uth/login` can't slip past it). The `network` run pins the
+`/api/%61uth/login` can't slip past it); `waf_rate_rules_scope` pins the API
+rule to `/api/` (same transformations), the unscoped site-wide backstop, the
+three limits and their order, and `rejects_site_rate_limit_below_the_api_limit`
+the variables' ordering. The `network` run pins the
 private-only VPC: no internet, egress-only or NAT gateway, Elastic IP,
 `aws_route`, VPN, peering or transit attachment anywhere in the module, no
 `0.0.0.0/0` or `::/0` string, no inline route on the private route table

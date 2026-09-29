@@ -711,13 +711,15 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
   }
 }
 
-# Sustained blocks. Only the two rate rules block (waf.tf has no managed rule
-# groups), so a block means one IP went over 100 auth requests, or
-# waf_rate_limit_per_ip requests, in 5 minutes. 100 blocked in a period is a
-# whole auth-rule window's worth; in each of 3 periods running (15 minutes)
-# it is someone persisting (credential stuffing, a scraper) or a real client
-# stuck behind a limit: the report renderer (<= 2 Lambda egress IPs, one
-# /api/auth/render-session call per render) or an office behind one NAT.
+# Sustained blocks. Only the three rate rules block (waf.tf has no managed
+# rule groups), so a block means one IP went over 100 auth requests,
+# waf_rate_limit_per_ip API requests, or waf_site_rate_limit_per_ip requests
+# in all, in 5 minutes. 100 blocked in a period is a whole auth-rule
+# window's worth; in each of 3 periods running (15 minutes) it is someone
+# persisting (credential stuffing, a scraper) or a real client stuck behind
+# a limit: the report renderer (<= 2 Lambda egress IPs, one
+# /api/auth/render-session call and the SPA per render; a blocked render
+# retries with backoff, reports/render.ts) or an office behind one NAT.
 # Blocked requests cost WAF's $0.60/M only, so this is the attack and
 # false-positive signal; cloudfront_requests is the cost one.
 # Dimensions: the ACL's metric name and Rule = ALL (every rule). A
@@ -734,7 +736,7 @@ resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
   period              = 300
   statistic           = "Sum"
   threshold           = 100
-  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are failing; one office IP means raise waf_rate_limit_per_ip. Runbook: docs/deployment.md, Runbooks, Request flood."
+  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are being retried and may fail; one office IP means raise waf_rate_limit_per_ip (API paths) or waf_site_rate_limit_per_ip (the rest). Runbook: docs/deployment.md, Runbooks, Request flood."
   alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
   treat_missing_data  = "notBreaching"
 

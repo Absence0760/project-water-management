@@ -840,8 +840,8 @@ run "edge_security" {
     error_message = "The WAF web ACL must be attached to the distribution (it is the API's rate limit too)."
   }
   assert {
-    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 2
-    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth + site-wide rate rules."
+    condition     = aws_wafv2_web_acl.frontend.scope == "CLOUDFRONT" && length(aws_wafv2_web_acl.frontend.rule) == 3
+    error_message = "WAF must be a CLOUDFRONT-scope ACL with the auth, API and site-wide rate rules."
   }
   assert {
     condition = alltrue([
@@ -2414,6 +2414,62 @@ run "waf_auth_rule_matches_decoded_path" {
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
   }
+}
+
+# The API's per-IP limit counts /api/* only, so the SPA's files (a cold visit
+# is ~150 requests; the report renderer loads them for every PDF) don't eat
+# it; the site-wide backstop still caps one IP on every path (waf.tf).
+run "waf_rate_rules_scope" {
+  command = plan
+
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].limit == 1000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/api/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].positional_constraint == "STARTS_WITH" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].field_to_match[0].uri_path) == 1
+    )
+    error_message = "The API rate rule must count only paths starting /api/ (the URI path), per IP, at waf_rate_limit_per_ip."
+  }
+  assert {
+    condition = toset([
+      for t in one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].text_transformation :
+      "${t.priority}:${t.type}"
+    ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
+    error_message = "The API rate rule must match the path as the API routes it (URL_DECODE, NORMALIZE_PATH, LOWERCASE), or /%61pi/… slips past it."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].limit == 5000 &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].aggregate_key_type == "IP" &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).statement[0].rate_based_statement[0].scope_down_statement) == 0 &&
+      length(one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitSitePerIP"]).action[0].block) == 1
+    )
+    error_message = "The site-wide backstop must block per IP on every path (no scope-down) at waf_site_rate_limit_per_ip."
+  }
+  assert {
+    condition = (
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].scope_down_statement[0].byte_match_statement[0].search_string == "/api/auth/" &&
+      one([for r in aws_wafv2_web_acl.frontend.rule : r if r.name == "RateLimitAuthPerIP"]).statement[0].rate_based_statement[0].limit == 100
+    )
+    error_message = "The auth rate rule stays /api/auth/ at 100 per 5 minutes."
+  }
+  assert {
+    condition     = { for r in aws_wafv2_web_acl.frontend.rule : r.name => r.priority } == { RateLimitAuthPerIP = 0, RateLimitPerIP = 1, RateLimitSitePerIP = 2 }
+    error_message = "The rate rules run tightest first: auth, API, then the site-wide backstop."
+  }
+}
+
+run "rejects_site_rate_limit_below_the_api_limit" {
+  command = plan
+
+  variables {
+    waf_rate_limit_per_ip      = 2000
+    waf_site_rate_limit_per_ip = 1999
+  }
+
+  expect_failures = [var.waf_site_rate_limit_per_ip]
 }
 
 # ---------------------------------------------------------------------------

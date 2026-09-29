@@ -127,12 +127,27 @@ variable "secretsmanager_endpoint_az_count" {
 # --- Edge + cost controls ----------------------------------------------------
 
 variable "waf_rate_limit_per_ip" {
-  description = "WAF rate-limit threshold: requests per IP per 5-minute rolling window. AWS minimum is 100."
+  description = "WAF rate limit on /api/*: requests per IP per 5-minute rolling window. AWS minimum is 100."
   type        = number
   default     = 1000
   validation {
     condition     = var.waf_rate_limit_per_ip >= 100
     error_message = "AWS WAF rate-based rule minimum is 100 per 5-minute window."
+  }
+}
+
+# The static site's backstop (waf.tf): every path, so the SPA's cached files
+# (a cold visit is ~150 requests; the report renderer loads them for every
+# PDF) don't count against the API's limit, yet one IP can't pull them
+# unthrottled. The default blocks one IP at the cloudfront-requests alarm's
+# default threshold.
+variable "waf_site_rate_limit_per_ip" {
+  description = "WAF rate limit on every path (the static site's backstop): requests per IP per 5-minute rolling window. At least waf_rate_limit_per_ip, since /api/* requests count here too."
+  type        = number
+  default     = 5000
+  validation {
+    condition     = var.waf_site_rate_limit_per_ip >= var.waf_rate_limit_per_ip
+    error_message = "waf_site_rate_limit_per_ip counts /api/* requests too, so below waf_rate_limit_per_ip it would become the API's limit."
   }
 }
 

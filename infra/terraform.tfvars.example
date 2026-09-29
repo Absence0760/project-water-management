@@ -74,9 +74,12 @@ dmarc_report_email = "you+dmarc@example.com"
 # PriceClass_100/200 serve SA users from Europe or Asia.
 # cloudfront_price_class = "PriceClass_All"
 
-# WAF: requests per IP per 5-minute window across the site (auth endpoints
-# have a fixed, tighter 100). AWS min 100.
+# WAF: requests per IP per 5-minute window on /api/* (auth endpoints have a
+# fixed, tighter 100). AWS min 100.
 waf_rate_limit_per_ip = 1000
+# ...and on every path, the static site's backstop (at least the /api/*
+# limit; waf.tf). The SPA's files don't count against the API's limit.
+# waf_site_rate_limit_per_ip = 5000
 
 # Request-flood alarm (us-east-1): CloudFront requests per 5 minutes, ~20x a
 # busy 5 minutes for a handful of users. 1000-20000; raise it only for real

@@ -899,8 +899,14 @@ plan-only until the first deploy):
   only valid while the Lambda role's temporary credentials are, which
   always outlast the minute.
 - **Retries and DLQs:** each render queue dead-letters after 5 receives. A
-  failed render is an answer (the report shows it), not a retry: its token
-  is spent. A render request in the DLQ can't be redriven usefully (the
+  failed render is an answer (the report shows it), not an SQS retry: its
+  token may be spent. The answer says whether another attempt could succeed:
+  only the API's coded refusal of the token (`render_token_refused`), the
+  report page's own "can't show this" and a page that tried to leave the
+  site are final. Anything else (a WAF block, which is a plain `403`, a
+  `429`, a `5xx`, a timeout) makes the worker ask again with a fresh token
+  after 2, then 4 minutes, up to 3 renders; the report shows "rendering"
+  meanwhile. A render request in the DLQ can't be redriven usefully (the
   token expired after 5 minutes): purge it; a render result in the DLQ can.
 - **Alarms:** `render-requests-dlq-depth`, `render-results-dlq-depth`,
   `renderer-errors` (a crash or timeout) and `renderer-duration` (p90 over a
@@ -1028,8 +1034,9 @@ Every step is an ordinary app action by an owner unless it says "operator".
        `cloudfront_requests_alarm_per_5min` (1,000–20,000) and apply.
     3. **A few IPs over the per-IP limit:** the WAF already blocks them,
        so each request costs $0.60 per million and nothing else. If they sit
-       just under the limit instead, lower `waf_rate_limit_per_ip` (AWS
-       minimum 100) and apply.
+       just under the limit instead, lower `waf_rate_limit_per_ip` (on
+       `/api/*`; AWS minimum 100) or `waf_site_rate_limit_per_ip` (every
+       path, at least the API limit) and apply.
     4. **A distributed flood** (many IPs, each under the limit): add a
        blocking rule to `infra/waf.tf` ahead of the rate rules (an IP set, a
        geo match, or a byte match on the path being hammered) and apply. In
@@ -1041,10 +1048,15 @@ Every step is an ordinary app action by an owner unless it says "operator".
     5. **Sustained blocks** (`waf-blocked-requests` alone): blocks on
        `/api/auth/` from many IPs are credential stuffing (the per-account
        sign-in lockout slows it further; expect locked-out users to ask);
-       blocks from AWS Lambda addresses
-       on `/api/auth/render-session` are the report renderer being rate
-       limited, so reports fail (§ Reports); one office or farm address is
-       people behind one NAT, so raise `waf_rate_limit_per_ip`.
+       blocks from AWS Lambda addresses (on `/api/auth/render-session`, the
+       report route and its `/_app/` files) are the report renderer being
+       rate limited. Each blocked render is retried after 2, then 4 minutes
+       (§ Reports), so a short burst of reports recovers by itself; if they
+       keep failing ("the render session could not start (HTTP 403)" on the
+       report), raise `waf_site_rate_limit_per_ip` (the SPA's files count only
+       there) or, for `/api/` blocks, `waf_rate_limit_per_ip`, and apply. One
+       office or farm address is people behind one NAT: raise the limit its
+       blocks are on (the rule is in the sampled requests).
     6. **Afterwards:** check Cost Explorer (daily, services CloudFront and
        WAF) for what it cost, and record the incident in the operator log.
 
@@ -1195,7 +1207,7 @@ Rehearsed: not yet.
 
 ## Costs (rough, idle to light use)
 
-CloudFront, S3, Lambda and SES sending are cents. WAF is ~$7/month. The DB is
+CloudFront, S3, Lambda and SES sending are cents. WAF is ~$8/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
