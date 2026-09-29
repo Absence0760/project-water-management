@@ -8,7 +8,7 @@ import type { RunMeta } from '$lib/api/types';
 import type { MetricSpec } from '$lib/components/compare/delta';
 import { headlineSite } from '$lib/components/runs/ewrAssurance';
 import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
-import { daysBetween, describeAge } from '$lib/components/series/coverage';
+import { agoText, daysBetween, windowText, type DataEnd } from '$lib/format/age';
 import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 import { calibrationSample } from '$lib/components/calibration/sample';
 import { AGO_DAYS, LOW_PCT, type DamsToday } from './damLevels';
@@ -53,7 +53,7 @@ export function ranAgo(createdAt: string, now: Date = new Date()): string {
 	const t = new Date(createdAt);
 	if (Number.isNaN(t.getTime())) return '';
 	// A clock a little ahead of the server's still reads "today", not "in the future".
-	return describeAge(Math.max(0, daysBetween(localIsoDate(t), localIsoDate(now))));
+	return agoText(Math.max(0, daysBetween(localIsoDate(t), localIsoDate(now))));
 }
 
 /** Days a run covers, both ends included (a forecast run's forecast days too: the span its header shows). */
@@ -222,19 +222,21 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 /** Where the dam figures are: still loading, failed, the run has no dams, or all dams together (damLevels.ts damsToday). */
 export type DamsState = { state: 'loading' } | { state: 'error' } | { state: 'none' } | { state: 'ready'; today: DamsToday };
 
+/** The Dams page (each dam's level and storage chart), where the Dams today card leads. */
+export const DAMS_HREF = '?tab=dams';
+
 /**
  * The "Dams today" card: all dams' storage at the end of the run as a share
  * of their capacity (capacity-weighted), and its change over the run's last
  * AGO_DAYS days (not against the previous run: the question is which way the
- * dams are heading). Flagged below LOW_PCT.
+ * dams are heading). Flagged below LOW_PCT. `runEnd` is the run's last day and
+ * its age: once that is stale the card is "Dams on 31 Dec 2024", since "today"
+ * would claim figures the run doesn't have.
  */
-/** The Dams page (each dam's level and storage chart), where the Dams today card leads. */
-export const DAMS_HREF = '?tab=dams';
-
-export function damsHeadline(d: DamsState): Headline {
+export function damsHeadline(d: DamsState, runEnd: DataEnd | null = null): Headline {
 	const base = {
 		id: 'dams' as const,
-		term: 'Dams today',
+		term: windowText(runEnd, 'Dams today', 'Dams on {date}'),
 		href: DAMS_HREF,
 		unit: '',
 		flagged: false,

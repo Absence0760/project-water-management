@@ -69,7 +69,7 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(page.getByRole('heading', { level: 1, name: /^Vaalbank/ })).toBeVisible();
 	// en-ZA dates ("26 Sept 2026", Intl may join them with non-breaking spaces); the seeded record ends in 2024, so the dates line also says how old it is.
 	const dates = page.getByText(/^Published by the WUA on /);
-	await expect(dates).toHaveText(/^Published\sby\sthe\sWUA\son\s\d{1,2}\s\w{3,4}\s\d{4}\.\sData\sup\sto\s31\sDec\s2024,\s\d+\sdays\sago\./);
+	await expect(dates).toHaveText(/^Published\sby\sthe\sWUA\son\s\d{1,2}\s\w{3,4}\s\d{4}\.\sData\sup\sto\s31\sDec\s2024\s\(\d+\s(months|years)\sago\)\./);
 
 	// The WUA's answer comes first, in its own words, marked as a notice.
 	const regions = page.getByRole('main').getByRole('region');
@@ -77,6 +77,8 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	const supply = page.getByRole('region', { name: 'Water you received this season' });
 	await expect(supply).toContainText(/this season\s*\d{1,3}\s%\s*of what you needed/);
 	await expect(supply).toContainText(/all when your dam was down to its stop level/);
+	// Stale figures: the 30 days are named by their last day, not "Last 30 days" (issue #162).
+	await expect(supply).toContainText(/30\sdays\sto\s31\sDec\s2024:/);
 	await expect(page.getByRole('region', { name: 'Your dam' })).toContainText(/\d+\s%\s*full/);
 	await expect(page.getByRole('region', { name: /^Looking back/ })).toContainText('Model:');
 

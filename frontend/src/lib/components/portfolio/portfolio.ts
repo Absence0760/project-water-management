@@ -3,7 +3,8 @@
 // colour is never the only signal; every unknown says why. Pure, so it is
 // unit-tested apart from the page.
 import type { PortfolioEwrStatus, PortfolioProject, PortfolioThresholds } from '$lib/api/types';
-import { fmtDay, fmtNum } from '$lib/format/number';
+import { dateAge, sharedWindowText, windowText, type DataEnd } from '$lib/format/age';
+import { fmtNum } from '$lib/format/number';
 
 export const STATUS_LABEL: Record<PortfolioEwrStatus, string> = { red: 'Red', amber: 'Amber', green: 'Green', unknown: 'Unknown' };
 
@@ -61,20 +62,45 @@ export function sourceText(p: Pick<PortfolioProject, 'source' | 'publishedAt' | 
 	return 'Not run yet';
 }
 
-/** How old the figures are: "to 29 Dec 2023, 1 002 days ago"; null without figures. */
+/** The figures' last day and its age on the project's today; null without figures. */
+export const figuresEnd = (p: Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDays'>): DataEnd | null =>
+	p.figuresUntil && p.figuresAgeDays != null ? { end: p.figuresUntil, age: p.figuresAgeDays } : null;
+
+/** How old the figures are: "to 29 Dec 2023 (2 years ago)"; null without figures. */
 export function ageText(p: Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDays'>): string | null {
-	if (!p.figuresUntil || p.figuresAgeDays == null) return null;
-	const d = p.figuresAgeDays;
-	const ago = d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${fmtNum(d)} days ago`;
-	return `to ${fmtDay(p.figuresUntil)}, ${ago}`;
+	const e = figuresEnd(p);
+	return e ? `to ${dateAge(e.end, Math.max(0, e.age))}` : null;
 }
 
-/** "2 of 14 farms short this week"; null when unknown (the caller says why). */
-export function farmsShortText(p: Pick<PortfolioProject, 'farmsShort7' | 'farmCount'>): string | null {
+/**
+ * "2 of 14 hydrological units short this week", or "… short in the week to
+ * 31 Dec 2024" once the figures are stale (the week is the figures' last
+ * one, not the calendar's); null when unknown (the caller says why).
+ */
+export function farmsShortText(p: Pick<PortfolioProject, 'farmsShort7' | 'farmCount' | 'figuresUntil' | 'figuresAgeDays'>): string | null {
 	if (p.farmsShort7 == null) return null;
 	if (!p.farmCount) return 'No hydrological units';
-	return `${p.farmsShort7} of ${plural(p.farmCount, 'hydrological unit')} short this week`;
+	return `${p.farmsShort7} of ${plural(p.farmCount, 'hydrological unit')} short ${windowText(figuresEnd(p), 'this week', 'in the week to {date}')}`;
 }
+
+/** "in the last 30 days", or "in the 30 days to 31 Dec 2024" once the figures are stale. */
+export const last30Text = (p: Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDays'>): string =>
+	windowText(figuresEnd(p), 'in the last 30 days', 'in the 30 days to {date}');
+
+type Ends = readonly Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDays'>[];
+
+/** The EWR column's or total's label over several catchments: "EWR, last 30 days", "EWR, 30 days to 31 Dec 2024". */
+export const ewrWindowLabel = (rows: Ends): string =>
+	sharedWindowText(rows.map(figuresEnd), 'EWR, last 30 days', 'EWR, 30 days to {date}', 'EWR, last 30 days of figures');
+
+/** The units-short total's label: "Hydrological units short this week", "… in the week to 31 Dec 2024". */
+export const farmsShortLabel = (rows: Ends): string =>
+	sharedWindowText(
+		rows.map(figuresEnd),
+		'Hydrological units short this week',
+		'Hydrological units short in the week to {date}',
+		'Hydrological units short, last week of figures'
+	);
 
 /** Why the farm counts are unknown. */
 export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
@@ -125,7 +151,7 @@ export const SORT_LABELS: Record<PortfolioSortKey, string> = {
 	status: 'EWR status (worst first)',
 	name: 'Catchment name',
 	age: 'Figures age (oldest first)',
-	farms: 'Hydrological units short this week (most first)',
+	farms: 'Hydrological units short (most first)',
 	dam: 'Lowest dam (lowest first)'
 };
 
@@ -224,7 +250,7 @@ export function statusSummary(counts: Record<PortfolioEwrStatus, number>): strin
 export interface PortfolioTotals {
 	catchments: number;
 	counts: Record<PortfolioEwrStatus, number>;
-	/** Farms short this week, over the catchments whose count is known; null when no count is known. */
+	/** Farms short in their figures' last week, over the catchments whose count is known; null when no count is known. */
 	farmsShort7: number | null;
 	/** The farms those counts are out of. */
 	farmsCounted: number;

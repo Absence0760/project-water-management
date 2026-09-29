@@ -218,7 +218,7 @@ test('the teams list shows each team’s numbers and its projects’ traffic lig
 	await page.goto('/teams');
 	const card = page.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Card Board' }) });
 	await expect(card.getByRole('definition').first()).toHaveText('2'); // projects
-	await expect(card).toContainText(/Hydrological units short this week\s*\d+ of \d+ hydrological units?/);
+	await expect(card).toContainText(/Hydrological units short in the week to 28 Jan 2022\s*\d+ of \d+ hydrological units?/);
 	await expect(card).toContainText(/1 (red|amber|unknown), 1 (unknown|green)/);
 	await expect(card.getByRole('list', { name: /^Projects of Card Board/ }).getByRole('link')).toHaveCount(2);
 	await expect(card.getByText('Unknown: no run yet')).toBeVisible();

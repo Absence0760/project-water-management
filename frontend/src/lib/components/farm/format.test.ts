@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '$lib/i18n/locale.svelte';
 import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import {
+	agoWords,
 	farmToday,
 	count,
 	DAYS,
@@ -26,6 +27,17 @@ import {
 
 /** The formatters use no-break spaces; the design's boards show plain ones. */
 const sp = (s: string | null) => s?.replace(/[\u00a0\u202f]/g, ' ');
+
+describe('agoWords: the workspace’s age count, in the reader’s words', () => {
+	it('counts days, then months, then years, as $lib/format/age does', () => {
+		expect(agoWords(0)).toBe('today');
+		expect(agoWords(-1)).toBe('today');
+		expect(agoWords(1)).toBe('yesterday');
+		expect(sp(agoWords(9))).toBe('9 days ago');
+		expect(sp(agoWords(637))).toBe('20 months ago');
+		expect(sp(agoWords(800))).toBe('2 years ago');
+	});
+});
 
 describe('volumes (§8)', () => {
 	it('m³ are whole with a space between thousands', () => {

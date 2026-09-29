@@ -14,7 +14,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
-	import { DEFAULT_SORT, farmsShortTotalText, portfolioTotals, sortPortfolio } from '$lib/components/portfolio/portfolio';
+	import { DEFAULT_SORT, ewrWindowLabel, farmsShortLabel, farmsShortTotalText, portfolioTotals, sortPortfolio } from '$lib/components/portfolio/portfolio';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	let teams = $state<Team[]>([]);
@@ -97,7 +97,7 @@
 					<div><dt>Projects</dt><dd>{t.projectCount}</dd></div>
 					<div><dt>Members</dt><dd>{t.memberCount}</dd></div>
 					<div>
-						<dt>Hydrological units short this week</dt>
+						<dt>{farmsShortLabel(pf?.projects ?? [])}</dt>
 						<dd>
 							{#if totals}{farmsShortTotalText(totals) ?? '–'}{:else if pf === null}–{:else}<span class="muted">…</span>{/if}
 						</dd>
@@ -111,7 +111,7 @@
 				</dl>
 				{#if totals}
 					<div class="ewr">
-						<span class="ewr-h">EWR, last 30 days</span>
+						<span class="ewr-h">{ewrWindowLabel(pf?.projects ?? [])}</span>
 						<StatusBar counts={totals.counts} empty="No projects yet" />
 					</div>
 				{:else if pf === null}

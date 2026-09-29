@@ -19,6 +19,7 @@ import {
 	shortLine,
 	stillFailing,
 	splitNotice,
+	staleUntil,
 	supplyCard,
 	systemName,
 	accessLine,
@@ -51,7 +52,7 @@ describe('the dates line', () => {
 	it('turns stale with its age once the data is older than a week, even if the server said fresh (a saved copy ages)', () => {
 		const d = datesLine(vaalbankFixture(), '2024-01-19');
 		expect(d.stale).toBe(true);
-		expect(sp(d.text)).toBe('Published by the WUA on 12 Jan 2024. Data up to 10 Jan 2024, 9 days ago. Ask your WUA if newer figures are coming.');
+		expect(sp(d.text)).toBe('Published by the WUA on 12 Jan 2024. Data up to 10 Jan 2024 (9 days ago). Ask your WUA if newer figures are coming.');
 	});
 
 	it('says when the next update is expected (E10)', () => {
@@ -168,6 +169,21 @@ describe('Water you received this season', () => {
 		const s = supplyCard(v.farm, 'm3');
 		expect(s.pct).toBeNull();
 		expect(txt(s.last30)).toBe('Last 30 days: very little water needed');
+		expect(txt(supplyCard(v.farm, 'm3', '2024-01-10').last30)).toBe('30 days to 10 Jan 2024: very little water needed');
+	});
+
+	it('names the day its 30 days end on once the figures are stale, not "Last 30 days" (issue #162)', () => {
+		const v = vaalbankFixture();
+		// Data up to 10 Jan 2024: a week later is still current, 8 days is stale.
+		expect(staleUntil(v, '2024-01-17')).toBeNull();
+		expect(staleUntil(v, '2024-01-18')).toBe('2024-01-10');
+		expect(staleUntil({ ...v, stale: true }, '2024-01-10')).toBe('2024-01-10');
+		expect(txt(supplyCard(v.farm, 'ML', staleUntil(v, '2024-01-18')).last30)).toBe('30 days to 10 Jan 2024: >99 % · 113.3 ML of 113.8 ML');
+		expect(txt(outletLine(v, '2024-01-10'))).toBe('River at Sandspruit Outlet: below its reserve on all of the 30 days to 10 Jan 2024.');
+		v.outlet30 = { name: 'Outlet', daysNotMet: 12, days: 30 };
+		expect(txt(outletLine(v, '2024-01-10'))).toBe('River at Outlet: below its reserve on 12 of the 30 days to 10 Jan 2024.');
+		v.outlet30 = { name: 'Outlet', daysNotMet: 0, days: 30 };
+		expect(txt(outletLine(v, '2024-01-10'))).toBe('River at Outlet: kept its reserve on every one of the 30 days to 10 Jan 2024.');
 	});
 
 	it('names the SABI 2021 irrigation system nearest the efficiency (the table the node form sets)', () => {

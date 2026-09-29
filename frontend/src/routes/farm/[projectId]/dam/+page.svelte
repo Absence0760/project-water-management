@@ -14,7 +14,7 @@
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
 	import Rich from '$lib/i18n/Rich.svelte';
-	import { datesLine } from '$lib/components/farm/cards';
+	import { datesLine, staleUntil } from '$lib/components/farm/cards';
 	import { damPage, damSource } from '$lib/components/farm/dam';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { farmHref } from '$lib/components/farm/load';
@@ -33,7 +33,7 @@
 
 <FarmPage {farm} {projectId} {asked} back={{ href: main, label: t('My hydrological unit') }}>
 	{#snippet children(view)}
-		{@const d = damPage(view.farm, unit)}
+		{@const d = damPage(view.farm, unit, staleUntil(view, farmToday(view)))}
 		<div>
 			<h1>{t('Your dam')}</h1>
 			<p class="sub">{view.farm.name}</p>

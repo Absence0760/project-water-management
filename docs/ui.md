@@ -580,16 +580,48 @@ role, freshness, Add data) and each tab's own header:
   header its context ("Baseline “…” against one what-if · …"); the
   standalone `/compare` page keeps its own `h1`.
 
+## Data age and stale wording
+
+One module, `lib/format/age.ts` (issue #162), says how old data is, the
+same way on every screen:
+
+- **The threshold** is `STALE_DAYS`, the engine's `FARM_VIEW_STALE_DAYS`
+  (7), which the backend's portfolio and farm view count stale by too.
+  `series/freshness.ts` re-exports it; nothing else defines its own.
+- **An age** is `dateAge`: "31 Dec 2024 (20 months ago)". `agoText` counts
+  "today", "yesterday", days under 60, months under 730 days, then years
+  (`ageSpan`, never "1 months"); the farmer pages count with the same
+  `ageSpan` in their own words (`farm/format.ts` `agoWords`, through the
+  catalogue). A run's "ran … ago" uses `agoText` too.
+- **Relative words** ("today", "this week", "last 30 days") are only true
+  while the data they describe reaches today. `windowText` keeps them while
+  the window's last day is at most `STALE_DAYS` old and swaps in its date
+  after: "3 of 3 hydrological units short in the week to 31 Dec 2024",
+  "Dams on 31 Dec 2024", "EWR, 30 days to 31 Dec 2024". A label over several
+  catchments (a column header, a total) uses `sharedWindowText`: the
+  relative words while none is stale, the shared date when every stale one
+  ends on the same day, else a neutral "EWR, last 30 days of figures" (each
+  row then says its own date). Where this applies: the project list (header
+  line, EWR column, units short, Needs attention), the teams list, team page
+  and portfolio, the Summary's Dams card, Hydrological units' "Short this
+  week" tile, header line and cards, and on the farmer pages and `/share`
+  the "Last 30 days" supply line, the dam's 30-day fact and the river's
+  reserve count (`farm/cards.ts` `staleUntil`, stale as the dates line is).
+  The reporting-window picker's "Last 7 days" keeps its name: its dates
+  follow it.
+- **"edited <date>"** on a project row is when the project itself last
+  changed (`updated_at`: the model, its settings, allocations), not how
+  current its data is; the **Data** column says that.
+
 ## Header: data freshness and "Add data"
 
-- **Rain up to 14 Jun 2026 · 12 days ago**: the latest end of the
+- **Rain up to 14 Jun 2026 (12 days ago)**: the latest end of the
   **recorded rain** (catchment or CHIRPS, `isRecordedRain`), which is what a
   run is driven by. A forecast runs into the future and observed flow only
   scores a run, so neither counts: either would read "up to date" while the
   rain lags. With no recorded rain it reads "No recorded rain yet". Click it
   for every series' end date. It turns amber when the recorded rain is more
-  than 7 days old (`STALE_DAYS` in
-  `series/freshness.ts`; a candidate for a project setting). Ages count
+  than 7 days old (`STALE_DAYS`, [Data age and stale wording](#data-age-and-stale-wording)). Ages count
   calendar days up to the viewer's **local** date (`localIsoDate`); the
   project list's badge (`projects/freshness.ts`) counts the same way from its
   own `daysSince`, so the two never differ by a day around midnight. Series
@@ -745,7 +777,7 @@ put the results first; its first screen follows board A1 of the redesign
   a different run, a line under the context names and links it, so the two
   can't be confused. A context line gives the label, the run period
   (`fmtDay`, e.g. "1 Oct 2021 – 28 Jan 2022"), the engine version and "ran …
-  ago" (`describeAge`, by the viewer's calendar), with badges for a legacy run
+  ago" (`agoText`, by the viewer's calendar), with badges for a legacy run
   (a stored run from before engine 1.0.0: *Workbook comparison*, plus a note
   that its figures are for workbook comparison only, not evidence, and that
   engine 1.0.0 removed the model, so it can't be re-run and a new run uses
@@ -757,7 +789,8 @@ put the results first; its first screen follows board A1 of the redesign
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
   why not, as on the Runs tab; "–" without observed flow). They show in the
-  order Reserve · Irrigation supplied · **Dams today** · NSE. *Dams today*
+  order Reserve · Irrigation supplied · **Dams today** · NSE (**Dams on
+  31 Dec 2024** once the run's last day is more than a week old). *Dams today*
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
@@ -1045,12 +1078,14 @@ well as team ones and loads beside the list (the rows show first, with
 and the list still works). The wording comes from the portfolio's helpers
 (`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same on
 both pages. Columns: **Catchment** (the name, then owner/team for *Shared
-with me*, your role and the updated date, and the description on one
-line), **EWR, last 30 days** (the pill in words and colour, and *Published*
-or *Latest run* with the figures' last day), **Hydrological units short** ("2 of 8 units
-short this week", a link to that run's curtailment on Hydrological units;
+with me*, your role and "edited <date>", when the project itself last
+changed, and the description on one line), **EWR, last 30 days** (the pill
+in words and colour, and *Published* or *Latest run* with the figures' age,
+"to 31 Dec 2024 (20 months ago)"; the header names the date instead once the
+figures are stale), **Hydrological units short** ("2 of 8 units
+short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published), **Lowest dam**, **Data** (the
-rain freshness badge, *Newer rain not in the figures*, the feeds' health)
+rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in the figures*, the feeds' health)
 and **Last run** (its age, then the date or when it was published). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
@@ -1059,7 +1094,7 @@ to your role").
 `projects/outcomes.ts` `attention`): the catchments in view to look at
 first, most urgent first: a red EWR, hydrological units short this week, alerts firing,
 an amber EWR, failing or stale feeds, newer rain than the figures, figures
-over 7 days old (the portfolio's *stale*). Up to four cards (two a row on a
+over 7 days old (the portfolio's *stale*: "Figures to 31 Dec 2024 (20 months ago)"). Up to four cards (two a row on a
 mid-width page, three stacked on a phone), each naming its reasons in words
 with the colour only repeating them; the count says "3 of 50", and **Show
 all N, most urgent first** (or **Sort the list by it**) sets
@@ -1323,15 +1358,18 @@ Portfolio](./api.md#portfolio)):
   alone: "Red: EWR not met 9 of 30 days", "Green: EWR met all 30 days", or
   "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
   run it again" (dashed outline). Under it, how old the figures are
-  ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
-- **Hydrological units short**: "2 of 8 hydrological units short this week" (a link to the
+  ("Figures to 29 Dec 2023 (2 years ago)", `dateAge`) and a *Stale* flag past 7 days.
+  The column's and the total's label is "EWR, last 30 days" only while the
+  figures are current ([Data age and stale wording](#data-age-and-stale-wording)).
+- **Hydrological units short**: "2 of 8 hydrological units short this week", or
+  "… in the week to 31 Dec 2024" once the figures are stale (a link to the
   Curtailment panel of that run on [Hydrological units](#hydrological-units), over the
   last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
   scrolls there once the run's results render and moves focus to the table's
   heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
   until a run is published" without a publication.
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
-  recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
+  recorded rain to … with its age ("Rain to 31 Dec 2024 (20 months ago)"), a *Newer data not in the figures* flag, and the feeds'
   health.
 - **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
   from `alertsFiring` ([§ Alerts](#alerts)).
@@ -2158,7 +2196,7 @@ with the table the data needs).
   to** is the column straight after the series. (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
-  (`describeAge`; those two days used to read "1 months" / "1 years").
+  (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
 - **Picking a series**: clicking a row (or its **View** button) charts it
   through the URL (`series=<id>`, `withParam`), so the link can be shared
   and Back returns to the series before. Without `series=` (or with one that
@@ -3227,7 +3265,10 @@ read it before.
   goes to `?tab=runs&run=<id>`.
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
-  unit count alone before a run.
+  unit count alone before a run. Once that week's last day is more than a
+  week old, "this week" becomes "in the week to 31 Dec 2024" here, on the
+  tile and on the cards ("Short on 2 of the 7 days to 31 Dec 2024";
+  `weekText`, [Data age and stale wording](#data-age-and-stale-wording)).
 - **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
@@ -5216,7 +5257,9 @@ published.
   minimum height, so a page that fits doesn't scroll (the confirm-your-email
   banner sits above it).
 - **Main page, top to bottom:** the name and the dates line ("Published by
-  the WUA on …. Data up to …", amber with its age when stale); the WUA's
+  the WUA on …. Data up to …", amber with its age when stale: "Data up to
+  10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
+  becomes "30 days to 10 Jan 2024"); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while

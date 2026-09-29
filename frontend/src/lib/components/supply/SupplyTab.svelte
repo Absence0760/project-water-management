@@ -29,13 +29,14 @@
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
 	import { runDamCapacity, SUPPLY_TARGET } from '$lib/components/runs/results';
 	import { runYears } from '$lib/components/runs/runList';
-	import { fmtDate, fmtNum, fmtPct, fmtQty } from '$lib/format/number';
+	import { dataEndOf } from '$lib/format/age';
+	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
 	import { supplyAnchor, supplyHref, UNIT_PARAM } from './links';
 	import UnitDetail from './UnitDetail.svelte';
 	import UnitResultsTable from './UnitResultsTable.svelte';
-	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekWindow } from './supply';
+	import { BAND_WORDS, cardFacts, daysShort, pickUnit, previousRunOf, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow } from './supply';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 
 	let {
@@ -163,6 +164,8 @@
 	const names = $derived(new Map(editor.model.nodes.map((n) => [n.id, n.name] as [string, string])));
 	const nodeOrder = $derived(new Map(editor.model.nodes.map((n, i) => [n.id, i] as [string, number])));
 	const week = $derived(run ? weekWindow(run) : null);
+	/** The week's last day and its age: "this week" only while that is current. */
+	const weekEnd = $derived(week ? dataEndOf(week.reportEnd, localIsoDate()) : null);
 	const weekShort = $derived.by(() => {
 		if (!week || !weekLoaded) return null;
 		const m = new Map<string, number>();
@@ -179,7 +182,7 @@
 	const damCapacity = $derived(run ? runDamCapacity(run.model as Parameters<typeof runDamCapacity>[0], editor.model.nodes) : new Map<string, number>());
 	const modelUnits = $derived(modelFarmIds.size);
 	const runText = $derived(meta ? `run “${runName(meta)}”, ran ${ranAgo(meta.createdAt)}` : null);
-	const headerLine = $derived(supplySummary(totals, modelUnits, runText));
+	const headerLine = $derived(supplySummary(totals, modelUnits, runText, weekEnd));
 	const target = fmtPct(SUPPLY_TARGET, 0);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 
@@ -314,7 +317,7 @@
 							<dd class="sub">{totals.below ? `got under ${target} of their demand` : `all got ${target} or more`}</dd>
 						</div>
 						<div class="stat linked" class:flagged={(totals.weekShort ?? 0) > 0} data-kpi="week">
-							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short this week</a></dt>
+							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short {weekText(weekEnd)}</a></dt>
 							<dd class="value" class:none={totals.weekShort === null}>{totals.weekShort === null ? (weekError ? '–' : '…') : fmtNum(totals.weekShort)}<small>of {fmtNum(totals.units)}</small></dd>
 							<dd class="sub">{week ? `${week.reportStart} to ${week.reportEnd}` : ''}</dd>
 							{#if totals.mustCut !== null}<dd class="sub">{totals.mustCut ? `${fmtNum(totals.mustCut)} to cut (curtailment)` : 'none to cut (curtailment)'}</dd>{/if}
@@ -327,7 +330,7 @@
 					</dl>
 					{#if weekError}
 						<p class="alert alert-error" role="alert">
-							The days short this week couldn’t be worked out: {weekError}
+							The days short {weekText(weekEnd)} couldn’t be worked out: {weekError}
 							<button type="button" class="btn btn-sm" onclick={() => weekAttempt++}>Try again</button>
 						</p>
 					{/if}
@@ -352,7 +355,7 @@
 											<span class="bar" aria-hidden="true"><span class="fill {c.band}" style:width="{Math.min(1, Math.max(0, c.fraction)) * 100}%"></span></span>
 										{/if}
 										<ul class="facts small">
-											{#each cardFacts(c, week?.days ?? 7) as line, i (i)}<li>{line}</li>{/each}
+											{#each cardFacts(c, week?.days ?? 7, weekEnd) as line, i (i)}<li>{line}</li>{/each}
 										</ul>
 										{#if c.inModel}
 											<p class="links small">

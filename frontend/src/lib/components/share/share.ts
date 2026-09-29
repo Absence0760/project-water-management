@@ -11,7 +11,9 @@
 // card, the level words, counted nouns). Call these where they render, so a
 // language switch re-words them.
 import type { SharedCatchmentView, ShareView } from '$lib/api/types';
-import { count, DAYS, FARMS, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
+import { count, DAYS, daysBetween, FARMS, fmtDay, fmtPct, fmtStampDay } from '$lib/components/farm/format';
+import { STALE_DAYS } from '$lib/format/age';
+import { localIsoDate } from '$lib/format/number';
 import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from '$lib/components/farm/notice';
 import { i18n, t } from '$lib/i18n/locale.svelte';
 
@@ -72,16 +74,29 @@ export interface ReserveRow {
 }
 
 /** The reserve at each EWR site, the outlet first, then the gauges (counts only, from catchment_view). */
-export function reserveRows(cv: SharedCatchmentView): ReserveRow[] {
+export function reserveRows(cv: SharedCatchmentView, today: string = localIsoDate()): ReserveRow[] {
+	// "The last 30 days" only while the data is current: once stale, the 30 days to its last day ($lib/format/age).
+	const date = daysBetween(cv.dataUntil, today) > STALE_DAYS ? fmtDay(cv.dataUntil) : null;
 	return cv.sites.map((s) => {
 		const n = s.daysNotMet.last30;
 		const of = cv.last30.days;
 		const days = count(DAYS, of);
+		const v = { n, days, date: date ?? '' };
 		return {
 			place: s.isOutlet || !s.name ? t('At the catchment outlet') : t('At {place}', { place: s.name }),
 			state: n <= 0 ? 'met' : n >= of ? 'missed' : 'partly',
 			// i18n-section: share.last30
-			last30: n <= 0 ? t('Kept its reserve on every one of the last {days}.', { days }) : n >= of ? t('Below its reserve on all of the last {days}.', { days }) : t('Below its reserve on {n} of the last {days}.', { n, days }),
+			last30: date
+				? n <= 0
+					? t('Kept its reserve on every one of the {days} to {date}.', v)
+					: n >= of
+						? t('Below its reserve on all of the {days} to {date}.', v)
+						: t('Below its reserve on {n} of the {days} to {date}.', v)
+				: n <= 0
+					? t('Kept its reserve on every one of the last {days}.', v)
+					: n >= of
+						? t('Below its reserve on all of the last {days}.', v)
+						: t('Below its reserve on {n} of the last {days}.', v),
 			// i18n-section: share
 			season: t('{n} of {days} below it this season (since {date}).', { n: s.daysNotMet.season, days: count(DAYS, cv.season.days), date: fmtDay(cv.season.from) })
 		};

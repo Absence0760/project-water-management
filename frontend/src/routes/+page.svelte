@@ -13,7 +13,7 @@
 	import NeedsAttention from '$lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '$lib/components/projects/outcomes';
-	import { statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
+	import { ewrWindowLabel, statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
 	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
 	import {
 		filterProjects,
@@ -280,7 +280,7 @@
 			<h1>Projects</h1>
 			<p class="muted sub" data-testid="projects-context">
 				{#if !loading && projects.length}
-					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· EWR, last 30 days: {summaryLine}{/if}
+					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· {ewrWindowLabel(inView)}: {summaryLine}{/if}
 				{:else}
 					Each project models one catchment: its river network, hydrological units, dams and data.
 				{/if}

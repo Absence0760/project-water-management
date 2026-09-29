@@ -46,7 +46,7 @@
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
-	import { describeAge } from '$lib/components/series/coverage';
+	import { agoText } from '$lib/format/age';
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
 	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
@@ -532,7 +532,7 @@
 			<summary>
 				<span class="dot" aria-hidden="true"></span>
 				{#if fresh.latest !== null && fresh.age !== null}
-					Rain up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+					Rain up to <strong>{fmtDay(fresh.latest)}</strong> ({agoText(fresh.age)}){#if fresh.stale}<span class="visually-hidden">{`, older than ${STALE_DAYS} days`}</span>{/if}
 				{:else}
 					No recorded rain yet
 				{/if}
@@ -542,7 +542,7 @@
 					<thead><tr><th scope="col">Series</th><th scope="col" class="num">Up to</th><th scope="col" class="num">Age</th></tr></thead>
 					<tbody>
 						{#each fresh.perSeries as p (p.id)}
-							<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{p.end}</td><td class="num">{describeAge(p.age)}</td></tr>
+							<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{fmtDay(p.end)}</td><td class="num">{agoText(p.age)}</td></tr>
 						{/each}
 					</tbody>
 				</table>

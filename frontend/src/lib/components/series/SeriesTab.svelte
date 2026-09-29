@@ -53,7 +53,8 @@
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
-	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
+	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
+	import { agoText, dateAge } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
@@ -492,7 +493,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small" data-testid="series-summary"
-				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${rainUpTo} (${describeAge(daysBetween(rainUpTo, today))})` : ''}</span
+				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${dateAge(rainUpTo, daysBetween(rainUpTo, today))}` : ''}</span
 			>
 		{/if}
 	</div>
@@ -605,7 +606,7 @@
 							</th>
 							<td role="cell" class="upto" data-label="Data up to">
 								<span class="num">{st?.lastValueDate ?? end}</span>
-								<span class="age">{describeAge(age)}</span>
+								<span class="age">{agoText(age)}</span>
 								{#if behind !== undefined}
 									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
 										>Behind</span

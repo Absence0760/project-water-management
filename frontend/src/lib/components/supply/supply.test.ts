@@ -4,7 +4,7 @@ import type { RunMeta } from '$lib/api/types';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
-import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekWindow, type UnitCard } from './supply';
+import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
 
 const farm = (nodeId: string, fraction: number, demand = 100): FarmSummary => ({
 	nodeId,
@@ -148,6 +148,11 @@ describe('words', () => {
 		expect(supplySummary({ units: 14, weekShort: 3 }, 14, 'run “Baseline”, ran today')).toBe('14 hydrological units · 3 short this week · run “Baseline”, ran today');
 		expect(supplySummary({ units: 1, weekShort: null }, 1, null)).toBe('1 hydrological unit');
 		expect(supplySummary(null, 4, null)).toBe('4 hydrological units');
+		// The week is the run's last one: "this week" only while that is current (issue #162).
+		expect(supplySummary({ units: 14, weekShort: 3 }, 14, null, { end: '2026-09-25', age: 3 })).toBe('14 hydrological units · 3 short this week');
+		expect(supplySummary({ units: 14, weekShort: 3 }, 14, null, { end: '2024-12-31', age: 637 })).toBe('14 hydrological units · 3 short in the week to 31 Dec 2024');
+		expect(weekText({ end: '2024-12-31', age: 637 })).toBe('in the week to 31 Dec 2024');
+		expect(weekText(null)).toBe('this week');
 	});
 	it('gives a card its lines, leaving out what the run can’t say', () => {
 		const base: UnitCard = { nodeId: 'a', name: 'A', band: 'low', fraction: 0.5, demandM3Day: 100, deficitM3Day: 50, daysShort: 10, demandDays: 30, cutM3Day: 12, weekShort: 2, inModel: true };
@@ -158,6 +163,7 @@ describe('words', () => {
 			'Curtailment: cut 12 m³/day'
 		]);
 		expect(cardFacts({ ...base, deficitM3Day: 0, daysShort: null, weekShort: 0, cutM3Day: 0 }, 7)).toEqual(['No shortfall on average']);
+		expect(cardFacts(base, 7, { end: '2024-12-31', age: 637 })).toContain('Short on 2 of the 7 days to 31 Dec 2024');
 		expect(cardFacts({ ...base, fraction: null, band: 'none' }, 7)).toEqual([]);
 	});
 });

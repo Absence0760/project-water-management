@@ -8,9 +8,9 @@ import { farmDrawerHref } from '$lib/components/crops/farmDrawer';
 import { supplyHref } from '$lib/components/supply/links';
 import { LOW_SUPPLY } from '$lib/components/network/supplyColour';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
-import { describeAge } from '$lib/components/series/coverage';
+import { dateAge } from '$lib/format/age';
 import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
-import { fmtDay, fmtNum, fmtPct } from '$lib/format/number';
+import { fmtNum, fmtPct } from '$lib/format/number';
 
 export type AttentionId = 'short-farms' | 'run-warnings' | 'new-data' | 'stale-data' | 'unplanted';
 
@@ -112,11 +112,11 @@ export function attention(input: AttentionInput): AttentionItem[] {
 		if (fresh?.stale)
 			out.push({
 				id: 'stale-data',
-				title: fresh.latest !== null && fresh.age !== null ? `Recorded rain ends ${describeAge(fresh.age)}` : 'No recorded rain yet',
+				title: fresh.latest !== null && fresh.age !== null ? `Recorded rain ends ${dateAge(fresh.latest, fresh.age)}` : 'No recorded rain yet',
 				tone: 'warning',
 				text:
 					fresh.latest !== null && fresh.age !== null
-						? `The newest recorded rain ends ${fmtDay(fresh.latest)} (${describeAge(fresh.age)}), more than ${plural(STALE_DAYS, 'day')} ago.`
+						? `The newest recorded rain ends ${dateAge(fresh.latest, fresh.age)}, more than ${plural(STALE_DAYS, 'day')} ago.`
 						: 'There is no recorded rain (catchment or CHIRPS) yet.',
 				action: 'Add data',
 				href: '?tab=series'
