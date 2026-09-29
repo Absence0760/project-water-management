@@ -1599,8 +1599,11 @@ note's link on the Summary, `notes.ts` `noteHref`).
     viewer), the node picker (‹ select ›, labelled "Node to edit") fixed in
     the dialog's sub-header above the scrolling form (so no control scrolls
     under it), then the one-node form (`NodeDetail`: every field with its help
-    text, land cover, boreholes, the farmers note, Preview as farmer, move,
-    make outflow gauge, remove) and a farm's Yield panel. The save row
+    text, land cover, boreholes, the farmers note, Preview as farmer,
+    make outflow gauge, remove) and a farm's Yield panel. It has no Move up /
+    Move down (removed, issue #174): row order is for display only and the
+    list isn't visible from the sheet; the node table reorders (drag, ↑/↓,
+    Sort by flow path). The save row
     (`ModelSaveRow`: status, reason, Discard, Done, Save changes) is pinned
     under the form. ‹ ›, the picker and a tap on the map move it to another
     node (replacing `edit=` in place); Done, Esc, the ✕ or Back close it.

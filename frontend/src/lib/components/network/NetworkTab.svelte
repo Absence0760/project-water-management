@@ -754,9 +754,6 @@
 					onremove={() => remove(editing!.id, editing!.name || 'unnamed node')}
 					farmersNote={editing.kind === 'farm' ? linkedNote(farmerCount?.[editing.id] ?? 0) : null}
 					previewHref={editing.kind === 'farm' && projectId ? `${base}/farm/${encodeURIComponent(projectId)}?node=${encodeURIComponent(editing.id)}` : null}
-					onmove={(d) => moveBy(editing.id, d)}
-					canMoveUp={editIndex > 0}
-					canMoveDown={editIndex < nodes.length - 1}
 					onmakeoutlet={() => setOutlet(editing.id)}
 					landCover={(editor.model.landCover ?? []).filter((p) => p.nodeId === editing.id)}
 					onaddcover={() => editor.addLandCover(editing.id)}

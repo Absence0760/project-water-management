@@ -303,6 +303,9 @@ test.describe('network layout', () => {
 			await expect(picker.locator('option:checked')).toHaveText('2. Upper farm · hydrological unit');
 			await expect(sheet.getByLabel('Name', { exact: true })).toHaveValue('Upper farm');
 			expect((await sheet.boundingBox())!.width).toBeGreaterThan(370);
+			// The sheet's actions: no Move up / Move down (row order is the node table's, issue #174), and Remove.
+			await expect(sheet.getByRole('button', { name: 'Remove Upper farm' })).toBeVisible();
+			await expect(sheet.getByRole('button', { name: /^Move (up|down) the list$/ })).toHaveCount(0);
 
 			// Deep in the farm form, the picker and ‹ › are still on screen, at the top of the sheet.
 			await sheet.getByLabel('Losses returning (%)').scrollIntoViewIfNeeded();
