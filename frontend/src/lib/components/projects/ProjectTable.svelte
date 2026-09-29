@@ -8,7 +8,7 @@
 	// table answers to its own width: Lowest dam and Last run fold into the
 	// line under the name at 1100 px, every outcome column at 730 px.
 	import { base } from '$app/paths';
-	import { hasRole, type PortfolioProject, type ProjectSummary } from '$lib/api';
+	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '$lib/api';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
 	import { curtailmentHref, damText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
 	import { fmtDate, fmtDay } from '$lib/format/number';
@@ -193,7 +193,7 @@
 								{#if p.team?.name}<a class="lift team" href="{base}/teams/{p.team.id}">{p.team.name}</a>{:else}<span>{teamLabel(p)}</span>{/if}
 								<span aria-hidden="true">·</span>
 							{/if}
-							<span class="role" data-testid="project-role">{p.role}</span>
+							<span class="role" data-testid="project-role">{roleLabel(p.role)}</span>
 							<span aria-hidden="true">·</span>
 							<span title={fmtDate(p.updatedAt, true)}>updated {fmtDate(p.updatedAt)}</span>
 						</span>

@@ -247,7 +247,7 @@ export const GUIDES: Guide[] = [
 				blocks: [
 					{
 						type: 'p',
-						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, a team viewer is a viewer on every team project, a member an editor and an admin an owner; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
+						text: '[[roles|Editors]] change the model, upload data and run it. Viewers see everything, can fit the runoff model to explore, and can download results, but can’t save or run. A viewer’s workspace says “View only”. In a team, each person has the same role on every team project as in the team; owners can also delete, share and move the project (sharing and moving are on its **Project** page).'
 					}
 				]
 			}

@@ -70,7 +70,7 @@
 				Belongs to a team you're not in. You have access because it was shared with you directly.
 			{/if}
 		</p>
-		<p class="muted small">Team admins are owners of this project, team members are editors and team viewers can only read it, as well as anyone listed under Members.</p>
+		<p class="muted small">Everyone in the team has the role they hold in the team on this project too, as does anyone listed under Members.</p>
 	{:else}
 		<p class="owner-line"><strong>Personal project.</strong> Only the people listed under Members can open it.</p>
 	{/if}

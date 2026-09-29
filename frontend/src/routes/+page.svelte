@@ -384,8 +384,8 @@
 								<p><strong>{selectedTeam.name}</strong> has no projects yet.</p>
 								{#if canAddTo(selectedTeam.id)}
 									<p class="muted">
-										Projects you create in a team can be edited by every member; team viewers can only read them, and team
-										admins are owners.
+										Projects you create in a team can be edited by its editors and owners; its viewers can only read
+										them.
 									</p>
 									<button type="button" class="btn btn-primary" onclick={openCreate}>New project in {selectedTeam.name}</button>
 								{:else}
@@ -449,8 +449,8 @@
 			</select>
 			<span class="hint" id="np-team-hint">
 				{#if addableTeams.length}
-					Personal: only you and people you share it with. In a team, members can edit, viewers can only read and team
-					admins are owners.
+					Personal: only you and people you share it with. In a team, its editors and owners can edit it and its
+					viewers can only read it.
 				{:else}
 					Only you and people you share it with. <a href="{base}/teams">Create a team</a> to work on catchments together.
 				{/if}

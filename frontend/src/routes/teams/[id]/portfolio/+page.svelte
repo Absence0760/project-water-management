@@ -180,7 +180,7 @@
 					</p>
 					<p class="muted intro thresholds">
 						{thresholdsSource(data.thresholds)}
-						{#if hasTeamRole(data.team.role, 'admin')}<a href="{base}/teams/{data.team.id}?settings=1">Change them on the team page</a>.{:else}A team admin can change them on the team page.{/if}
+						{#if hasTeamRole(data.team.role, 'admin')}<a href="{base}/teams/{data.team.id}?settings=1">Change them on the team page</a>.{:else}A team owner can change them on the team page.{/if}
 					</p>
 				</div>
 				<div class="head-actions">

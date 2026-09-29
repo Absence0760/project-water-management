@@ -7,3 +7,4 @@ export const api = createApi(PUBLIC_API_URL);
 export { ApiError, createApi, scenarioProblems } from './client';
 export type { Api } from './client';
 export * from './types';
+export * from './roleLabels';
