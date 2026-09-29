@@ -8,7 +8,8 @@
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
-	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
+	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month
+	// (with the EWR required vs met per site and water year under its grid),
 	// the uncertainty bands (with the sensitivity runs under them), the outcome
 	// matrix, the seasonal outlook and the water account.
 	import { onDestroy, tick, untrack } from 'svelte';
@@ -21,6 +22,7 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import { runOptionLabel } from '$lib/components/compare/picker';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import EwrRequiredMet from '$lib/components/ewr/EwrRequiredMet.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { historyDays } from '$lib/components/overview/latestRun';
@@ -294,6 +296,8 @@
 					<h3>EWR compliance by month</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
+				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
+				<EwrRequiredMet assurance={summary.supplyAssurance} />
 			</div>
 			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify, and under
 			     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->

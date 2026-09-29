@@ -3111,7 +3111,7 @@ which checks every catchment tab).
   hydrologist and both defaulting to what earlier runs did: **EWR charge
   follows** (`settings.ewrChargeSource`: *The pragmatic EWR*, the default, or
   *The rule tables*: at a site with a table the month's requirement sets the
-  EWR charge, curtailment and the water account's EWR required vs met) and
+  EWR charge, curtailment and the EWR required vs met under the EWR by month grid) and
   **Low flows judged on** (`settings.lowFlowMeasure`: *The month's total
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
@@ -3403,7 +3403,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   printable report shows every month.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
-  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
+  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`, with the
+  **EWR required vs met, each water year** table under the grid, engine ≥
+  0.32.0, `ewr/EwrRequiredMet.svelte`), the
   **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
   under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
@@ -4263,9 +4265,13 @@ read it before.
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
-  residual (to two significant figures, float noise), and the EWR required
-  vs met at each site. Runs before engine 0.32.0 show *Not computed by
-  engine x.y* in both panels.
+  residual (to two significant figures, float noise). Runs before engine
+  0.32.0 show *Not computed by engine x.y* in both panels. The **EWR required
+  vs met** table (each site's share of the required volume that passed it,
+  the volume and the days short, per water year and the whole run) closed
+  this panel until 2026-09-29; it is not part of the balance, so issue #175
+  moved it, unchanged, under the EWR by month grid (`#res-ewr-grid`,
+  `ewr/EwrRequiredMet.svelte`), where the compliance findings are.
 - **Small flows and volumes** (issue #45). Figures in m³/s, l/s and Mm³ keep
   their fixed decimals (3 for m³/s and Mm³), but a non-zero value those
   decimals would show with fewer than two significant figures is shown to two
