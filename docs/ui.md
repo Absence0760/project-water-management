@@ -5290,7 +5290,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
   heading past a line near the top, `lib/help/spy.ts`, or the last section at
-  the end of the page; nothing while the intro shows), and a link to one
+  the end of the page, unless a link jumped to a section still in the window,
+  which stays marked; nothing while the intro shows), and a link to one
   section (`/help/guides/<id>#<section>`) lands on it and focuses its heading
   (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
@@ -5335,7 +5336,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   needs a redirect), with a stable anchor per term
   (`/help/glossary/<topic>#<id>`, `glossaryPath`) that the ⓘ help tips,
   guides, search and "See also" link to. Its "On this page" rail lists the
-  topic's terms and marks the one being read (`lib/help/spy.ts`), pinned to
+  topic's terms and marks the one being read (`lib/help/spy.ts`; a term a
+  link jumped to stays marked when that scrolls the page to its end), pinned to
   the column's right edge as on a guide; it scrolls on its own when the topic
   has more terms than the window holds. Search is the way to find one term.
   An old link to the one-page glossary (`/help/glossary#<id>`), or a term
