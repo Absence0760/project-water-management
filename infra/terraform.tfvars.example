@@ -8,6 +8,9 @@
 # Primary region for VPC/RDS/Lambda/S3. af-south-1 (Cape Town) for POPIA +
 # latency — enable it on the account first (Account → AWS Regions) — or
 # us-east-1 for the lowest price. See infra/README.md § Region.
+# This is the workload region only: the tfstate bucket and the sops KMS key
+# are always in us-east-1 (main.tf's backend), so the account bootstrap runs
+# with region = "us-east-1" whatever this says (infra/README.md step 1).
 aws_region = "af-south-1"
 
 # The bootstrap's delegated child zone.

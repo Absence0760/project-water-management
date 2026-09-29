@@ -122,7 +122,15 @@ covered by the Terraform tests.
 ## 1. Provision the account (one-time)
 
 Create `~/github/templates/infra/bootstrap/projects/water-management.tfvars`
-from `example.tfvars` (`create_subdomain = true`), then from the templates repo:
+from `example.tfvars` (`create_subdomain = true`) and keep
+**`region = "us-east-1"`** in it, even though the workloads run in
+af-south-1. The bootstrap creates the tfstate bucket and the sops KMS key in
+that `region`, and this repo's Terraform backend reads state from us-east-1
+only (`infra/main.tf`, `backend "s3"`; `sops-init.sh --region us-east-1`,
+infra/README.md step 5). The example's comment offers opt-in regions such as
+af-south-1: don't take it here, or `terraform init` looks for the bucket in
+the wrong region. The workload region is `aws_region` in `prod.tfvars`
+(§ 3). Then, from the templates repo:
 
 ```bash
 cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan
@@ -132,9 +140,9 @@ cd ~/github/templates && ./scripts/new-project-account.sh water-management
 This creates, inside the org:
 
 - the sub-account (`water-management-prod`, or the tfvars `account_name`)
-- the tfstate bucket `water-management-tfstate-<account-id>`, locked with S3
+- the tfstate bucket `water-management-tfstate-<account-id>` (us-east-1), locked with S3
   conditional writes (`use_lockfile = true`; **no DynamoDB lock table**)
-- the KMS key `alias/water-management-sops`
+- the KMS key `alias/water-management-sops` (us-east-1)
 - the GitHub OIDC provider and the deploy role `water-management-deploy`. The trust
   policy is pinned to `repo:<owner>/<repo>:environment:production`, so only a
   job in the `production` environment (which needs the operator's approval) can
@@ -832,8 +840,15 @@ plan-only until the first deploy):
   (a metric filter on the worker's `job_dead` log line). A project with the
   `job_dead` alert on also emails its owners ([§ Alert emails](#alert-emails)).
   On a first deploy the worker is Terraform's stub, which throws on every
-  tick until the first backend release: `worker-errors` fires then, but
-  the heartbeat stays OK (a failed invocation still counts).
+  tick until the first backend release: `worker-errors` goes to ALARM (and
+  emails) within minutes of the apply, but the heartbeat stays OK (a failed
+  invocation still counts). The fetcher's stub throws too, but nothing
+  invokes it until a real worker queues a fetch. Expected, and harmless: no
+  job exists before the first migration. It clears about 5 minutes after the
+  first backend release moves the worker to real code. The stubs throw on
+  purpose, so a worker ever recreated from its stub alarms the same way
+  ([infra/README.md § Operator steps](../infra/README.md#operator-steps),
+  step 10).
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 
@@ -1003,11 +1018,22 @@ plan-only until the first deploy):
   on every PR, and `pnpm check:renderer-image` does the same locally (needs
   docker only). A full render through the handler needs the deployed site,
   bucket and queues, so it is checked after the first deploy (#92); the approved deploy job pushes it to
-  the `water-management-renderer` ECR repository (tags are immutable: the
-  release version) and moves the function to it. **Lambda can't be created
+  the `water-management-renderer` ECR repository (tags are immutable:
+  `<version>-<first 12 hex of the released commit>`, so a release recut at
+  the same version on another commit pushes and deploys its own image
+  rather than reusing the old one, and a redeploy of the same commit reuses
+  its image) and moves the function to it. **Lambda can't be created
   from an image that doesn't exist yet**, so the function is created by
-  Terraform only once `renderer_image_tag` names a pushed version: after the
-  first backend deploy, set it and apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
+  Terraform only once `renderer_image_tag` names a pushed image: after the
+  first backend deploy, set it to the tag the deploy's notice printed and
+  apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
+  The repository keeps the last 10 images and deletes untagged ones after a
+  day, but never the image `renderer_image_tag` names: a higher-priority
+  lifecycle rule selects exactly that tag, and ECR never lets a
+  lower-priority rule expire an image a higher one matched
+  (`infra/reports.tf`, `infra/tests/release.tftest.hcl`). So the tfvars
+  stays valid however many releases follow, and a re-created function always
+  finds its image; set a newer tag and apply to move the protection.
   Until then the deploy logs a notice and render requests wait in their
   queue.
 - **The bucket**: `water-management-reports-<account>`, private (public
