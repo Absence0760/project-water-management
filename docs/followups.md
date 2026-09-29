@@ -2022,6 +2022,34 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       the self-checks used), and the self-checks link to it; the printable
       report keeps it under the checks. `self-checks.spec.ts` and
       `runs.spec.ts` pin it.
+- [ ] **The same water balance by water year in two places, and the
+      catchment's in a third** (issue #175's overlap check, 2026-09-29).
+      Model quality's *Water balance* (`#res-water-balance`, issue #137) and
+      Dig deeper › Self-checks both draw the per-unit column-V balance by
+      water year (`runs/WaterBalanceTable.svelte`, `runs/checks.ts`
+      `BALANCE_COLUMNS`, Mm³), and River & reserve's Water account
+      (`reliability/WaterAccountPanel.svelte`, `reliability.ts`
+      `ACCOUNT_LINES`, m³) draws the catchment's for the same water years.
+      About ten of the self-check's thirteen terms are the account's too
+      (rain on dams, groundwater, transfers, consumptive use, other users,
+      dam evaporation, seepage lost, stream depletion, off-take losses,
+      outflow, change in storage, residual); the self-check starts from unit
+      runoff (after land cover and flow shares) where the account starts
+      from natural flow and lists land cover and unallocated flow as outs,
+      and only the self-check has rain (mm), the runoff coefficient and
+      start and end storage.
+      **Durable fix:** one client-facing balance. Either the Water account
+      gains rain (mm), the runoff coefficient, start and end storage and an
+      **m³ / Mm³** switch, and Model quality's Water balance becomes a link
+      to it; or the Water balance section stays the client's table and the
+      account links to it. Either way the Self-checks panel shrinks to the
+      closure check (each water year's residual, pass or fail) with a link,
+      and the summary CSV and `.xlsx` export keep both tables. Pin the
+      surviving table's rendered lines with an e2e spec first, and update
+      ui.md § Water account, § Self-checks and the help articles.
+      **Who:** operator (which table is the client's).
+      **Trigger:** the next change to the Water account, the Water balance
+      section or the Self-checks panel, or a client asking for the table.
 
 ## Roles and what each member sees
 

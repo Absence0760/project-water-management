@@ -64,6 +64,11 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	await expect(dams.getByRole('cell').nth(2)).toContainText(/^\d+\.\d%/);
 	const rowNames = await table.getByRole('rowheader').allTextContents();
 	expect(rowNames.findIndex((t) => t.startsWith('Dam storage'))).toBe(rowNames.findIndex((t) => t.startsWith('Mean outflow')) - 1);
+	// The rows the Full comparison's Headline results water balance had and this table didn't (issue #175 merged it in).
+	for (const name of ['Irrigation deficit', 'Mean natural flow', 'Runoff coefficient']) {
+		await expect(table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: new RegExp(`^${name}`) }) }).getByRole('cell')).toHaveCount(3);
+	}
+	expect(rowNames.slice(-3).map((t) => t.replace(/\s+/g, ' ').trim())).toEqual(['Mean outflow, m³/day', 'Mean natural flow, m³/day', 'Runoff coefficient (flow ÷ rain)']);
 
 	// Takeaways in plain words, from the same numbers.
 	const takeaways = page.getByTestId('takeaways');
@@ -87,6 +92,10 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	await expect(page.getByText('Baseline (run A) against What-if 2 (run B): every figure below is B − A.')).toBeVisible();
 	await expect(whatChanged(page).getByText('Upper farm: dam capacity 150\u202f000 m³ → 300\u202f000 m³')).toBeVisible();
 	await expect(page.getByRole('heading', { level: 2, name: 'Headline results' })).toBeVisible();
+	// Its water balance table is What changes' now: only the calibration (and WR2012) checks stay there.
+	await expect(page.getByRole('heading', { level: 3, name: 'Water balance' })).toHaveCount(0);
+	await expect(page.getByRole('table', { name: 'Headline water balance for both runs' })).toHaveCount(0);
+	await expect(page.getByRole('heading', { level: 3, name: 'Calibration against observed flow' })).toBeVisible();
 
 	// A card's "all N changes" opens that what-if's full list.
 	await page.getByRole('radio', { name: 'Baseline vs What-if 1' }).check();

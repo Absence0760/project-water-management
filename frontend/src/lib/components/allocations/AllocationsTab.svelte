@@ -11,7 +11,9 @@
 	// list shows its first few (the ones that matter most) with a "Show all"
 	// that opens the rest in place, and nothing scrolls inside a card. Below:
 	// every registered volume with its source file, the imported files, and
-	// every unit's water years.
+	// every unit's water years (the WUA manager's cross-unit view), folded
+	// whole behind "Show all units' water years" since issue #175: it is the
+	// picked unit's table for every unit, so the page leads with the one.
 	// Viewers see volumes but no holder names (decision D3; the API leaves them
 	// out, RLS enforces it). Farmers never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -154,7 +156,8 @@
 	const UNIT_CAP = $derived(side ? 5 : 6);
 	const VOL_CAP = 8;
 	const YEAR_CAP = 6;
-	const ROW_CAP = 12;
+	// Every unit's water years stay folded away until asked for (issue #175): none shown, as foldList with no cap.
+	const ROW_CAP = 0;
 	let unitsAll = $state(false);
 	let volsAll = $state(false);
 	let yearsAll = $state(false);
@@ -355,6 +358,11 @@
 											{yearsAll ? `Show the latest ${YEAR_CAP} water years` : `Show all ${fmtNum(yearFold.years)} water years`}
 										</button>
 									{/if}
+									<!-- Under the picked unit's years since issue #175 (it was under every unit's table, now folded away). -->
+									<p class="hint muted" data-testid="allocation-band-note">
+										“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the
+										registered volume prorated to them, and isn’t counted in the whole water years.
+									</p>
 									{#if pickedStorage && (pickedStorage.registeredM3 !== null || pickedStorage.modelledCapacityM3)}
 										<p class="small storage">
 											Registered storage {pickedStorage.registeredM3 === null ? 'not stated' : `${fmtNum(pickedStorage.registeredM3)} m³`} · dam capacity in the run
@@ -476,22 +484,22 @@
 			<div class="panel-head">
 				<h2 id="alloc-years-h">Every hydrological unit and water year</h2>
 			</div>
-			<YearTable
-				id="alloc-all-years"
-				rows={rowFold.shown}
-				tolerance={comparison.tolerance}
-				caption="Modelled use against the registered volume per hydrological unit, water source and water year"
-				testid="allocation-compare-table"
-			/>
+			<p class="muted small">Every hydrological unit's water years in one table, in the list's order: the picked unit's table above, for all of them.</p>
 			{#if rowsAll || rowFold.hidden}
 				<button type="button" class="btn btn-sm more" aria-expanded={rowsAll} aria-controls="alloc-all-years" onclick={() => (rowsAll = !rowsAll)}>
-					{rowsAll ? `Show the first ${ROW_CAP} rows` : `Show all ${fmtNum(listRows.length)} rows`}
+					{rowsAll ? "Hide all units' water years" : `Show all units' water years (${fmtNum(listRows.length)} rows)`}
 				</button>
 			{/if}
-			<p class="hint muted">
-				“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the registered
-				volume prorated to them, and isn’t counted in the whole water years above.
-			</p>
+			<div id="alloc-all-years">
+				{#if rowFold.shown.length}
+					<YearTable
+						rows={rowFold.shown}
+						tolerance={comparison.tolerance}
+						caption="Modelled use against the registered volume per hydrological unit, water source and water year"
+						testid="allocation-compare-table"
+					/>
+				{/if}
+			</div>
 		</section>
 	{/if}
 

@@ -681,7 +681,8 @@
 
 				<section class="panel" aria-labelledby="headline-h">
 					<div class="panel-head"><h2 id="headline-h">Headline results</h2></div>
-					<HeadlineDeltas comparison={data.comparison} />
+					<!-- The water balance rows are What changes' (issue #175): here only the calibration and WR2012 checks. -->
+					<HeadlineDeltas comparison={data.comparison} water={false} />
 					<FitValidationCompare
 						a={asFitRecord(data.a.run.inputs.settings?.fitRecord)}
 						b={asFitRecord(data.b.run.inputs.settings?.fitRecord)}

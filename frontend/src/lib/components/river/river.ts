@@ -1,5 +1,5 @@
 // River & reserve (issue #17, option A · Outcomes): which run the page shows,
-// the run it is compared with, its four KPI tiles and the context line. The
+// the run it is compared with, its three KPI tiles and the context line. The
 // panels themselves are the ones that were Runs &
 // results' River & Reserve group, moved here unchanged (docs/ui.md § River &
 // reserve); their `#res-…` ids moved with them, so an old
@@ -8,10 +8,9 @@ import { metricDelta, type MetricDelta, type RunSummary } from '@water-managemen
 import type { RunMeta } from '$lib/api/types';
 import type { NavGroup } from '$lib/components/common/sectionNav';
 import type { MetricSpec } from '$lib/components/compare/delta';
-import { monthProfile } from '$lib/components/ewr/heatmap';
-import { EWR_FLAG_FRACTION, ewrNotMet } from '$lib/components/ewr/notMet';
+import { ewrNotMet } from '$lib/components/ewr/notMet';
 import { headlines } from '$lib/components/overview/latestRun';
-import { fmtNum, fmtPct } from '$lib/format/number';
+import { fmtNum } from '$lib/format/number';
 
 const created = (r: RunMeta) => {
 	const t = Date.parse(r.createdAt);
@@ -31,7 +30,7 @@ export function pickRiverRun(runs: readonly RunMeta[] | null, wanted: string | n
 	return { run: sorted[at]!, previous: sorted[at + 1] ?? null };
 }
 
-export type RiverKpiId = 'ewr' | 'below' | 'outflow' | 'worst';
+export type RiverKpiId = 'ewr' | 'below' | 'outflow';
 
 export interface RiverKpi {
 	id: RiverKpiId;
@@ -48,7 +47,6 @@ export interface RiverKpi {
 	spec: MetricSpec;
 }
 
-const FULL_MONTHS = ['October', 'November', 'December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September'];
 const YEAR = 365.25;
 
 function change(prev: number | null | undefined, cur: number | null | undefined): MetricDelta | null {
@@ -56,37 +54,18 @@ function change(prev: number | null | undefined, cur: number | null | undefined)
 	return m.delta === null ? null : m;
 }
 
-/** Share of days the EWR was not met, per month of the water year (0 = Oct), at the outlet; null without the grid. */
-function profile(s: Pick<RunSummary, 'ewrCompliance'>): (number | null)[] | null {
-	return s.ewrCompliance ? monthProfile(s.ewrCompliance, s.ewrCompliance.outlet) : null;
-}
-
-/**
- * The month of the water year with the largest share of days below the EWR at
- * the outlet, over the whole run (the EWR by month grid's "typical year"). The
- * first on a tie; null when the run has no grid or no month was simulated;
- * `pct` 0 when the EWR was met every day.
- */
-export function worstMonth(s: Pick<RunSummary, 'ewrCompliance'>): { month: number; pct: number } | null {
-	const p = profile(s);
-	if (!p) return null;
-	let best: { month: number; pct: number } | null = null;
-	p.forEach((pct, month) => {
-		if (pct !== null && (!best || pct > best.pct)) best = { month, pct };
-	});
-	return best;
-}
-
 /** Days below the EWR in an average year of the run. */
 export const perYear = (daysNotMet: number, days: number) => (days > 0 ? (daysNotMet * YEAR) / days : 0);
 
 /**
- * The page's four tiles: EWR not met (share of days at the outflow gauge,
+ * The page's three tiles: EWR not met (share of days at the outflow gauge,
  * worded as the Summary's card, ewr/notMet.ts, with the rule-table months
  * when the project has one), the days below it
  * (and per average year, which is what the change compares, since runs can
  * differ in length), the mean simulated outflow (the Summary's figure,
- * overview/latestRun.ts), and the worst month. `days` is the run's length.
+ * overview/latestRun.ts). `days` is the run's length. A fourth, the worst
+ * month, restated the largest figure of the EWR by month grid's "All years"
+ * row and was removed (2026-09-29, issue #175).
  */
 export function riverKpis(s: RunSummary, days: number, previous: { summary: RunSummary; days: number } | null): RiverKpi[] {
 	const c = s.catchment;
@@ -100,24 +79,6 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 	const prevYear = pc ? perYear(pc.ewrDaysNotMet, previous!.days) : null;
 
 	const outflow = headlines(s, days, previous?.summary ?? null).find((h) => h.id === 'outflow')!;
-
-	const worst = worstMonth(s);
-	const prevProfile = previous ? profile(previous.summary) : null;
-	const worstKpi: RiverKpi = {
-		id: 'worst',
-		term: 'Worst month',
-		value: !worst ? '–' : worst.pct === 0 ? 'None' : FULL_MONTHS[worst.month]!,
-		unit: '',
-		sub: !worst
-			? ['run made before the monthly EWR grid']
-			: worst.pct === 0
-				? ['the EWR was met in every month']
-				: [`EWR not met on ${fmtPct(worst.pct / 100, 0)} of its days`],
-		flagged: !!worst && worst.pct / 100 > EWR_FLAG_FRACTION,
-		// The same month in the run before: did it get better or worse there?
-		delta: worst && worst.pct > 0 && prevProfile ? change(prevProfile[worst.month] == null ? null : prevProfile[worst.month]! / 100, worst.pct / 100) : null,
-		spec: { format: 'fraction', better: 'lower', digits: 0 }
-	};
 
 	return [
 		{
@@ -150,13 +111,12 @@ export function riverKpis(s: RunSummary, days: number, previous: { summary: RunS
 			flagged: false,
 			delta: outflow.delta,
 			spec: outflow.spec
-		},
-		worstKpi
+		}
 	];
 }
 
 /** What each tile's change is against: the per-year figure for the days below. */
-export const deltaLabel = (id: RiverKpiId) => (id === 'below' ? 'a year vs previous run' : id === 'worst' ? 'that month vs previous run' : 'vs previous run');
+export const deltaLabel = (id: RiverKpiId) => (id === 'below' ? 'a year vs previous run' : 'vs previous run');
 
 /**
  * The EWR the run was tested against, for the context line: the pragmatic

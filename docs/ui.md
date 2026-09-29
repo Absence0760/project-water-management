@@ -865,7 +865,8 @@ put the results first; its first screen follows board A1 of the redesign
   says what the bars measure ("Share of each unit's irrigation demand
   supplied, latest run"). Its own chunk (it waits for the run's record
   anyway).
-- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
+- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17),
+  and its columns into the Dams cards (2026-09-29, issue #175):
   the Summary keeps only the **Dams today** card (which links there) and the
   one-line link below the first screen. `OverviewTab` reads the card's
   levels from the run summary (`FarmSummary.dam*`, engine ≥ 1.2.0, issue
@@ -987,17 +988,26 @@ for every workspace tab. Its own chunk.
   the first and last day; the compact chart pattern, `charts/Sparkline.svelte`):
   captioned "% full over the run's last year", the window's first and last
   day under its ends, and between them the low with its day ("low 15% ·
-  19 Dec 2023", the Dam levels table's *Lowest in its last year* to the day),
+  19 Dec 2023", the chart's facts line's *lowest in its last year* to the day),
   marked by a dot; pointing at the line reads out that day instead, and so
   do the keys on its focused slider (from the low; End is the last day). In a
   narrow card (a phone's two columns) the low takes its own line under the
   dates. The line sits above the card's stretched link, and a click on it
-  picks the dam as the rest of the card does. Then links
+  picks the dam as the rest of the card does. A dam with a minimum operating
+  level says how many days of its last year it sat at or below it ("12 days at
+  its minimum (10%) in its last year", `DamLevel.daysAtMin`; none for a dam
+  without one). While the levels load, each card says "Loading dam levels
+  (N of M)…". Then links
   **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
   and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
   this page). A coloured edge repeats the band (accent, amber below 30 %, red
-  at the minimum; grey without a level). Above them, **All dams together**
-  (`damsToday`, capacity-weighted: the Summary's Dams today figure).
+  at the minimum; grey without a level).
+- **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
+  cards (`dams/DamLevels.svelte`: every column was already on the cards, their
+  sparklines or the picked dam's facts line, in the same order; the cards took
+  its *Days at minimum*), and the **All dams together: X% full** line above
+  the cards (capacity-weighted, so the biggest dam hid the empty ones, and it
+  repeated the Summary's Dams today card, which keeps it).
 - **Picking a dam**: the name is a link (`dam=<nodeId>`, `withParam`) stretched
   over the card, so a click anywhere on it picks the dam, the URL can be
   shared, and Back returns to the one before. Without `dam=` (or with one
@@ -1021,32 +1031,20 @@ for every workspace tab. Its own chunk.
   420 px (about level with the three cards) and the chart panel sticky
   (`top: --header-h + 0.75rem`), so it stays in view while an opened list is
   read down in the window's scroll. Narrower, the cards are two to a row on
-  a phone, then the chart (260 px). The Dam levels table below starts under
-  both, its top in view at 1440×960.
-- **Dam levels** (`dams/DamLevels.svelte`, moved here unchanged from the
-  Summary) below: every dam in the run, emptiest first, with its capacity,
-  its storage at the end of the run as a bar and a % (a tick marks its
-  minimum operating level, and "below 30%" or "at its minimum level" is
-  written beside the %, so colour is never the only cue), the lowest it
-  reached in the run's last 365 days with the first day of that low, and the
-  days in that year at or below the minimum. The model keeps the minimum as a
-  fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
-  one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
-  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
-  first 8 rows show, with **Show all N rows** (**Show the 8 emptiest rows**
-  back; "rows" since 2026-09-29, so it isn't named like the cards' button),
-  and **Open in Runs**. The table grows with its rows rather than scrolling
-  inside the global `.table-wrap` 70vh cap (only sideways on a narrow
-  screen). The page
-  keeps fetching every dam's series even though the run summary carries the
-  table's figures (engine ≥ 1.2.0, issue #55), because each card's sparkline
-  and the storage chart draw them.
+  a phone, then the chart (260 px).
+- **Minimum level**: the model keeps the minimum as a fraction of capacity
+  (`damMinPct` 0.1 = 10 %) and only a farm's dam has one, so `damsInRun`
+  turns it into a % (until 2026-09-26 it passed the fraction through, so a
+  10 % minimum was drawn and counted as 0.1 %). The page fetches every dam's
+  series even though the run summary carries the level figures (engine ≥
+  1.2.0, issue #55), because each card's sparkline and the storage chart draw
+  them.
 - **Empty states**: no dams in the model says how to add one, with **Open the
   Network** and **Node table** (the grid modal over this page, where a node's
   dam capacity is set or a node added; a new dam shows as a card at once).
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
-  it), with no chart or table.
+  it), with no chart.
 
 ## Project
 
@@ -2302,7 +2300,10 @@ to its own redesign.
 - **Sticks and marks.** It sticks at the top (under the phone bar on a
   phone), marks the section being read with `aria-current="location"`
   (`activeSectionId`: the last section whose top has passed under the menu,
-  or the last at the bottom of the page), and raises the page's
+  or the last at the bottom of the page, unless the section the URL's
+  fragment names still starts on the screen there: a followed link to a
+  panel whose followers are shorter than the window stays marked, issue
+  #175), and raises the page's
   `scroll-padding-top` by its height, so a jumped-to section or a focused
   control clears it. It sits at the page's top level (Settings: above the
   form), so it stays stuck to the last panel.
@@ -3170,7 +3171,7 @@ which checks every catchment tab).
   hydrologist and both defaulting to what earlier runs did: **EWR charge
   follows** (`settings.ewrChargeSource`: *The pragmatic EWR*, the default, or
   *The rule tables*: at a site with a table the month's requirement sets the
-  EWR charge, curtailment and the water account's EWR required vs met) and
+  EWR charge, curtailment and the EWR required vs met under the EWR by month grid) and
   **Low flows judged on** (`settings.lowFlowMeasure`: *The month's total
   flow*, the default, or *The month's base flow*, from the Lyne–Hollick
   filter, so a flood month can't pass its low flows). Each has a help tip;
@@ -3418,10 +3419,10 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   count, and how many in an average year; the change compares the per-year
   figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
   % of natural, the Summary's line until it was dropped there, same
-  figure as `overview/latestRun.ts`); *Worst month* (the month of the water
-  year with the largest share of days below the EWR over the run, from the
-  EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
-  EWR was met every day; its change is that same month in the previous run).
+  figure as `overview/latestRun.ts`). A fourth tile, *Worst month*, was
+  removed on 2026-09-29 (issue #175): it restated the largest figure of the
+  EWR by month grid's "All years" row. Three tiles sit in one row, and on a
+  narrow screen two over the outflow.
 - **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
@@ -3462,7 +3463,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   printable report shows every month.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
-  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
+  **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`, with the
+  **EWR required vs met, each water year** table under the grid, engine ≥
+  0.32.0, `ewr/EwrRequiredMet.svelte`), the
   **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
   under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
@@ -3519,9 +3522,11 @@ read it before.
   tile and on the cards ("Short on 2 of the 7 days to 31 Dec 2024";
   `weekText`, [Data age and stale wording](#data-age-and-stale-wording)).
 - **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
-  Summary card's figure and its change from the previous run, from
-  `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
-  under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
+  Summary card's figure, its sub-line "2 of 8 hydrological units below 95%"
+  (every unit under `SUPPLY_TARGET`; "all hydrological units ≥ 95%") and its
+  change from the previous run, all from `overview/latestRun.ts`
+  `headlines`; the units below were a tile of their own until 2026-09-29,
+  issue #175); *Short this week* (units with a
   deficit above float noise on any of the 7 days to the run's last day of
   recorded rain (on a forecast run, the 7 days before the forecast, issue
   #51), the reporting window's *Last 7 days* and the publication's own rule,
@@ -3545,12 +3550,15 @@ read it before.
   `unit=<nodeId>`, a history entry, so Back returns and the link can be
   shared; a `unit=` the run doesn't have picks the worst unit.
 - **Hydrological unit detail** (`supply/UnitDetail.svelte`, `#res-farm`): the unit detail
-  panel of Runs & results, moved. Its demand, supply, share and dam size in a
-  line, then one chart at a time: **Supply vs demand** (the days the unit was
-  short shaded, from its `deficit` series) or, for a unit with a dam, **Dam
-  storage** (% of the capacity the run had, `runDamCapacity`); the **30 days
-  / 1 year / All** switch (opening on a year), Earlier / Later, and a forecast
-  run's band.
+  panel of Runs & results, moved. Its demand, supply, share and dam size (the
+  capacity the run had, `runDamCapacity`) in a line, then **Supply vs demand**
+  (the days the unit was short shaded, from its `deficit` series), with the
+  **30 days / 1 year / All** switch (opening on a year), Earlier / Later, and
+  a forecast run's band. A unit with a dam has **Dam storage on the Dams
+  page** in the panel's head (`?tab=dams&dam=<nodeId>`), the [Dams](#dams)
+  storage chart with its capacity and minimum lines. Until 2026-09-29
+  (issue #175) the panel drew its own *Dam storage* chart behind a switch, a
+  weaker copy of that one with neither line.
 - **Layout.** The page flows in the window's one scroll; nothing on it
   scrolls inside itself. From 56rem of page width the cards are a column
   beside the chart (a fixed 420 px plot; 260 px stacked). The three least
@@ -3944,22 +3952,26 @@ read it before.
   flow invasive plants and forestry took, its share of natural flow, the
   low-flow threshold, and per class the condensed area, reduction and mm/yr
   over that area.
-- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
-  a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes. From engine 0.36.0
-  (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
-  by water year**: the GN 538 context note (area × Table 2 rate, at most
-  40 000 m³/a, in any 12 months; the ceiling only where a property's area or
-  rate isn't entered; the GA's exclusions; modelled use only, the app never
-  decides legality), the low-confidence note, then per farm or user the mean
-  pumped per year (partial years weighted by their days), the most in one
+- **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes;
+  `HumanImpactTables.svelte`, `runs/groundwater.ts`). From engine 0.36.0
+  (WP-3.9) one table, **Groundwater by water year**: the GN 538 context note
+  (area × Table 2 rate, at most 40 000 m³/a, in any 12 months; the ceiling
+  only where a property's area or rate isn't entered; the GA's exclusions;
+  modelled use only, the app never decides legality), the low-confidence
+  note, then per farm or user the mean pumped per year (partial years
+  weighted by their days), its **share of supplied** (pumped ÷ supplied over
+  the run), the **stream depletion** it causes per year (weighted the same
+  way, `depletionM3Year`), the most in one
   year, the annual caps, the **GN 538 volume** ("(ceiling only)" when
   unknown), the **most in any 12 months**, how many years were above the GN
   538 volume over the water year or any 12 months ending in it (flagged; engine
   ≥ 1.12.0, `aboveGa`) and how many reached a cap; and per node a collapsed
   table of every water year: days, pumped, into the dam, stream depletion, the
   most in the 12 months to then, and each borehole's volume (of its cap,
-  marked when reached).
+  marked when reached). Until 2026-09-29 a daily-mean table (pumped, share of
+  supplied, stream depletion, m³/day) came first; issue #175 merged its two
+  columns the annual table lacked into it. A run before engine 0.36.0, which
+  has no annual figures, still shows that daily-mean table alone.
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
   with each user's priority, demand, taken, deficit, % of demand supplied
   (flagged below 95 %), returned and EWR charge, whole-run means. Units &
@@ -4305,9 +4317,8 @@ read it before.
   segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
   points and segments per fit. The check list gains a *Recessions* line on
   those runs; an older run shows neither. The Compare page sets these checks side by side
-  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17; dam
-  storage as % of the capacity the run had, from its model snapshot, not
-  today's model, `runDamCapacity`; supply against demand), and an explorer for any
+  ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17: supply
+  against demand, and a link to the unit's dam on the Dams page), and an explorer for any
   stored series, grouped by node. The catchment's series include the final
   catchment rainfall, CHIRPS as uploaded and bias-corrected CHIRPS
   (`rain_final`, `rain_chirps`, `rain_chirps_corrected`, engine ≥ 0.10.1)
@@ -4347,9 +4358,13 @@ read it before.
   what came in and where it went or was stored, each with a labelled key;
   then a table of every term per water year and the whole run (terms a
   network doesn't have are left out), the change in dam storage and the
-  residual (to two significant figures, float noise), and the EWR required
-  vs met at each site. Runs before engine 0.32.0 show *Not computed by
-  engine x.y* in both panels.
+  residual (to two significant figures, float noise). Runs before engine
+  0.32.0 show *Not computed by engine x.y* in both panels. The **EWR required
+  vs met** table (each site's share of the required volume that passed it,
+  the volume and the days short, per water year and the whole run) closed
+  this panel until 2026-09-29; it is not part of the balance, so issue #175
+  moved it, unchanged, under the EWR by month grid (`#res-ewr-grid`,
+  `ewr/EwrRequiredMet.svelte`), where the compliance findings are.
 - **Small flows and volumes** (issue #45). Figures in m³/s, l/s and Mm³ keep
   their fixed decimals (3 for m³/s and Mm³), but a non-zero value those
   decimals would show with fewer than two significant figures is shown to two
@@ -4613,8 +4628,11 @@ gives it an `h1` and **Back to runs**). The full reference is
   share of days, worded as the Summary's card and River & reserve's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
   #162; irrigation supplied, farms below 95 %,
-  up to two most-changed farms, dam storage at the end of the run (when a
-  run has a dam), mean outflow), each what-if cell its value over its `Delta`, the unit on its own
+  the irrigation deficit, up to two most-changed farms, dam storage at the
+  end of the run (when a run has a dam), mean outflow, mean natural flow and
+  the runoff coefficient; the deficit and the last two came from the Full
+  comparison's Headline results water balance table, merged in here and
+  dropped there, issue #175), each what-if cell its value over its `Delta`, the unit on its own
   line under the outcome; then the takeaways box (the first worse, else
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).
@@ -4857,7 +4875,9 @@ registered volumes (volume, source, authorisation, registration number, the
 holder for editors only, validity), each with **Change** and **Delete** for
 editors. The bars and the table show the latest six water years (both
 sources of each) until **Show all N water years** / **Show the latest 6
-water years** (`foldYears`; a run of seven years shows whole). The table
+water years** (`foldYears`; a run of seven years shows whole), then the
+band note ("“Within band” is within ±10 % of the registered volume…", with
+how a part year compares; under every unit's table until issue #175). The table
 turns into cards below 48rem of its own width (the picked unit's column at
 1280 px), so it never scrolls sideways there. Picking a unit far down an
 opened list scrolls the page back to its detail.
@@ -4880,9 +4900,14 @@ full hash, reference, row count, who and when, and **Remove this import**.
 **Every hydrological unit and water year**: the whole comparison as one table (one row
 per unit, source and water year, in the list's order so the units to look
 into first come first, each unit's years together, `rowsInListOrder`; a
-source with neither use nor a volume is left out) with the band note under
-it. Twelve rows until **Show all N rows** / **Show the first 12 rows**; the
-table grows with the page.
+source with neither use nor a volume is left out), the WUA manager's
+cross-unit view. It is the picked unit's table for every unit, so since
+issue #175 (2026-09-29) it is folded whole behind **Show all units' water
+years (N rows)** / **Hide all units' water years** (`aria-expanded`,
+`aria-controls="alloc-all-years"`; `foldList` with no cap, so a single row
+shows whole), and its band note moved under the picked unit's table. Until
+then it showed twelve rows until **Show all N rows**. Opened, the table
+grows with the page.
 
 **Import registered volumes** (the Import sheet, `AllocationImport.svelte`):
 what the file is (WARMS extract or CSV template), a reference, the file, and
