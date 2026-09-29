@@ -1284,6 +1284,13 @@
 //             background job per fit, so the worker no longer carries
 //             autoCalibrate, the filters or the rule resolver; the panel
 //             follows the server's run instead. Headroom ~3 KB.
+// 2026-09-29  total 1186 → 1190 KB (issue #137: measured 1187 with main @
+//             3c68382c merged, against main's 1183). The Water balance
+//             section in Model quality (runs/WaterBalanceTable.svelte, now
+//             drawn on the Runs page and not only inside Self-checks), the
+//             Other uses section on Units & supply with the Summary's link to
+//             it, and the project's-date helper the data-age badges count to.
+//             No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1294,7 +1301,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1186,
+	totalCodeKb: 1190,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,
