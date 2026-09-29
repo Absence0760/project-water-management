@@ -740,6 +740,28 @@ export function applyRainSource(
 }
 
 /**
+ * The `rain_source` column's codes (RAIN_SOURCE_CODE): the period's code where
+ * `set` has one (≥ 0), else the first run-aligned source with a value, the same
+ * pick as rain used (catchment, then CHIRPS, then forecast); NaN when none has.
+ */
+export function rainSourceCodes(
+	catchment: readonly (number | null)[],
+	chirps: readonly (number | null)[],
+	forecast: readonly (number | null)[],
+	set?: ArrayLike<number>
+): Float64Array {
+	const col = new Float64Array(catchment.length);
+	for (let t = 0; t < col.length; t++) {
+		if (set && set[t]! >= 0) col[t] = set[t]!;
+		else if (catchment[t] != null) col[t] = RAIN_SOURCE_CODE.catchment;
+		else if (chirps[t] != null) col[t] = RAIN_SOURCE_CODE.chirps;
+		else if (forecast[t] != null) col[t] = RAIN_SOURCE_CODE.forecast;
+		else col[t] = NaN;
+	}
+	return col;
+}
+
+/**
  * The per-day source of the rain used, and the fall-through counts: `chirps`
  * and `forecast` are the run-aligned values that stand in on a blank day
  * (CHIRPS already corrected and blocked where it may not fill).
@@ -751,14 +773,7 @@ export function finishRainSource(
 	forecast: readonly (number | null)[],
 	start: number
 ): Float64Array {
-	const col = new Float64Array(catchment.length);
-	for (let t = 0; t < col.length; t++) {
-		if (rs.code[t]! >= 0) col[t] = rs.code[t]!;
-		else if (catchment[t] != null) col[t] = RAIN_SOURCE_CODE.catchment;
-		else if (chirps[t] != null) col[t] = RAIN_SOURCE_CODE.chirps;
-		else if (forecast[t] != null) col[t] = RAIN_SOURCE_CODE.forecast;
-		else col[t] = NaN;
-	}
+	const col = rainSourceCodes(catchment, chirps, forecast, rs.code);
 	for (const p of rs.info.periods) {
 		const from = Math.max(toEpochDay(p.start), start);
 		const to = Math.min(toEpochDay(p.end), start + col.length - 1);

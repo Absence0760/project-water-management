@@ -1763,17 +1763,18 @@ the suggested order (the IDs carry the detail):
       m³/day, per-series flags and calibration exclusions (ui.md). Its e2e
       spec `e2e/tests/series-preview.spec.ts` passes (2026-09-24); the dialog
       is now near full-screen (`Dialog` `full` size).
-- [ ] **More columns in the Data tab downloads** (the original request that
-      led to the self-checks). `GET /series/:id/export.csv` still writes only
-      `date` + the uploaded value. Add how the model used each series: for
+- [x] **More columns in the Data tab downloads** (the original request that
+      led to the self-checks; built for issue #66 once the operator confirmed
+      the columns on #93, 2026-09-29, engine 1.27.0; docs/api.md § Export).
+      `GET /series/:id/export.csv` wrote only `date` + the uploaded value. It
+      now adds how the model used each series: for
       rainfall, the rain used that day after gap-filling, which source filled
       it (catchment / corrected CHIRPS / forecast) and the rain after the
       threshold; for CHIRPS, the day's bias factor and the corrected value;
       for flow, m³/day, the data-quality flags (negative, outlier, flat),
       whether the day is excluded from calibration, and the latest run's
       simulated outflow. Model-derived columns name the run they came from;
-      without a run, raw values plus quality flags only. Waiting on the
-      operator to confirm this is what they want (2026-09-24).
+      without a run, raw values plus quality flags only.
 
 ## Farmer view (WP-2.6, #25)
 
