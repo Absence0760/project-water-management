@@ -137,9 +137,40 @@ variable "waf_rate_limit_per_ip" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Forecasted + actual notifications fire SNS at 50% / 100% / forecasted 100%. The idle baseline is ~$49 in us-east-1 and ~$58–63 in af-south-1 (infra/README.md § Cost): 60 fits us-east-1; raise it to ~80 for af-south-1 or the forecast alert fires every month. Set to 0 to skip budget creation (NOT recommended for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 80 sits above af-south-1's ~$58–63 idle (infra/README.md § Cost), so ACTUAL 80% ($64) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 60
+  default     = 80
+
+  validation {
+    condition     = var.budget_monthly_usd >= 0
+    error_message = "budget_monthly_usd must be 0 (no budgets) or a positive USD amount."
+  }
+}
+
+# The daily budget is the first-month guard: the monthly FORECASTED alert needs
+# ~5 weeks of history, and daily budgets support ACTUAL notifications only.
+variable "budget_daily_usd" {
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $6 on $80, ~3× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  type        = number
+  default     = null
+
+  validation {
+    condition = var.budget_daily_usd == null ? true : (
+      var.budget_daily_usd == 0 || (var.budget_daily_usd > 0 && var.budget_daily_usd < var.budget_monthly_usd)
+    )
+    error_message = "budget_daily_usd must be null (derived from the monthly), 0 (no daily budget), or a positive amount below budget_monthly_usd (a daily ceiling at or above the month's can never be the first to fire; with budget_monthly_usd = 0 there are no budgets at all)."
+  }
+}
+
+variable "cost_anomaly_threshold_usd" {
+  description = "Cost Anomaly Detection (free): an AWS-services monitor whose anomalies with a total cost impact of at least this many USD page the us-east-1 alerts topic. 0 skips the monitor, e.g. when the account already has its one allowed services monitor (infra/README.md § Operator steps)."
+  type        = number
+  default     = 10
+
+  validation {
+    condition     = var.cost_anomaly_threshold_usd >= 0
+    error_message = "cost_anomaly_threshold_usd must be 0 (no anomaly monitor) or a positive USD amount."
+  }
 }
 
 # The alert and report mailboxes are checked the same way: a plausible address

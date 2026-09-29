@@ -103,7 +103,7 @@ What was checked (September 2026):
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (raise `budget_monthly_usd` to ~80), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 80` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -353,7 +353,8 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 - Background jobs (`jobs.tf`, § Background jobs below): the SQS `jobs`
   queue + DLQ, the worker Lambda, its 5-minute EventBridge tick and the SQS
   interface endpoint.
-- Budget and alarms: Lambda errors / throttles / p95 duration, migrate errors,
+- Monthly and daily budgets and Cost Anomaly Detection (§ Budget alerts
+  below). Alarms: Lambda errors / throttles / p95 duration, migrate errors,
   RDS CPU / CPU credits / free storage / connections / freeable memory, SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line in both the API's
@@ -996,8 +997,35 @@ endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which i
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
 the report renderer run outside the VPC for the same reason. Total ≈ $50/month in
 us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
-[infra/README.md § Cost](../infra/README.md#cost). The Terraform budget alarm
-is set from `budget_monthly_usd` (default 60; raise it to ~80 for
-af-south-1). The minimal (defaults) and full (Multi-AZ, highly available)
-configurations, their tfvars and monthly cost are compared in
-[deployment-tiers.md](./deployment-tiers.md).
+[infra/README.md § Cost](../infra/README.md#cost). The minimal (defaults)
+and full (Multi-AZ, highly available) configurations, their tfvars and
+monthly cost are compared in [deployment-tiers.md](./deployment-tiers.md).
+
+### Budget alerts
+
+Terraform creates two budgets and a Cost Anomaly Detection monitor
+(`alarms.tf`, all free), mailed through the **us-east-1** alerts topic to
+`budget_alert_email`:
+
+- **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $6/day on $80, about 3× the
+  ~$2/day af-south-1 idle): a single day cost more than that. This is the
+  one that works in the **first month**, when the monthly forecast has no
+  history. Daily budgets support ACTUAL notifications only.
+- **Monthly, ACTUAL 80%** ($64 on the default $80, just above the
+  af-south-1 idle): spend is heading for the budget.
+- **Monthly, ACTUAL 100%**: the budget is spent.
+- **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent
+  until AWS has ~5 weeks of cost history.
+- **Cost anomaly** (`cost_anomaly_threshold_usd`, $10): one service's spend
+  jumped against its own history (needs ~10 days of it).
+
+Billing data refreshes at least daily, so every one of these lags the spend
+by up to a day; the Lambda concurrency caps and the CloudWatch alarms are
+what bound and report a runaway as it happens. On any of them: open Cost
+Explorer, group by service and usage type for the last few days, and find
+what grew. `budget_monthly_usd` defaults to 80 (af-south-1; ~60 is enough
+in us-east-1, ~170 on the full tier). Before billing access is enabled, set
+it and `cost_anomaly_threshold_usd` to 0 ([infra/README.md § Operator
+steps](../infra/README.md#operator-steps), step 4, which also covers an
+account that already has its one anomaly monitor).
