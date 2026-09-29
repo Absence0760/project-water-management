@@ -1734,11 +1734,13 @@ run "background_jobs" {
   assert {
     condition = (
       startswith(local.runtime_secrets.worker.DATABASE_URL, "postgresql://water_app:") &&
-      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full") &&
-      aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
+      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full")
     )
-    error_message = "The worker connects as the RLS-bound water_app over verified TLS, with the sqs transport."
+    error_message = "The worker connects as the RLS-bound water_app over verified TLS."
+  }
+  assert {
+    condition     = length(setintersection(keys(aws_lambda_function.worker.environment[0].variables), ["JOB_TRANSPORT", "JOBS_QUEUE_URL"])) == 0
+    error_message = "The worker never wakes itself (it may not send to the jobs queue): only the API gets JOB_TRANSPORT and JOBS_QUEUE_URL."
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.worker.environment[0].variables), "MASTER_SECRET_ARN")

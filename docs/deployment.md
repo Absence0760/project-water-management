@@ -924,6 +924,13 @@ plan-only until the first deploy):
   dropped (counted by `worker-tick-failed` or `worker-throttles`) instead of
   queueing for up to 24 hours (EventBridge's default) or 6 hours (Lambda's)
   and piling stale ticks onto a struggling worker; the next tick recovers.
+- **Only the API wakes the worker.** The worker has no `sqs:SendMessage` on
+  the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
+  settings check asks them of the API alone): a job that queues follow-up
+  work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
+  setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four

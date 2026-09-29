@@ -1,6 +1,7 @@
 // The CloudFront Functions in infra/s3_cloudfront.tf, run as code: the
 // Terraform test (guardrails.tftest.hcl) can only look for strings in them,
-// so here each function's heredoc is extracted and its handler called with
+// so here each function's heredoc is extracted (cloudfront-functions.mjs, which the
+// e2e site server also routes through) and its handler called with
 // viewer-request events. spa_rewrite's lists of where the build keeps files
 // are also checked against the real tree (frontend/static and the
 // prerendered routes), both ways: a new static file or prerendered page that
@@ -10,25 +11,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { functionCode, loadFunction } from './cloudfront-functions.mjs';
 
 const root = new URL('../..', import.meta.url).pathname;
-const tf = readFileSync(join(root, 'infra/s3_cloudfront.tf'), 'utf8');
-
-/** The code of one aws_cloudfront_function, with the heredoc's indent removed. */
-function functionCode(name, source = tf) {
-	const m = new RegExp(`resource "aws_cloudfront_function" "${name}" \\{[\\s\\S]*?code\\s*=\\s*<<-EOT\\n([\\s\\S]*?)\\n\\s*EOT`).exec(source);
-	if (!m) throw new Error(`no aws_cloudfront_function "${name}" with a <<-EOT code block`);
-	const lines = m[1].split('\n');
-	const indent = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^ */)[0].length));
-	return lines.map((l) => l.slice(indent)).join('\n');
-}
-
-/** Evaluate a function's code; returns its handler and the named top-level vars. */
-function load(name, vars = []) {
-	return new Function(`${functionCode(name)}\nreturn { handler: handler, ${vars.map((v) => `${v}: ${v}`).join(', ')} };`)();
-}
-
-const spa = load('spa_rewrite', ['STATIC_DIRS', 'STATIC_FILES']);
+const spa = loadFunction('spa_rewrite', ['STATIC_DIRS', 'STATIC_FILES']);
 const viewerRequest = (uri) => ({ request: { method: 'GET', uri, querystring: {}, headers: {}, cookies: {} }, viewer: { ip: '198.51.100.7' } });
 /** What the viewer gets: the URI sent to S3, or the function's own status. */
 const outcome = (uri) => {
@@ -111,7 +97,7 @@ test('no stale entries: each listed location is something the build writes', () 
 // --- api_strip_prefix ---------------------------------------------------------
 
 test('api_strip_prefix strips /api and overwrites the viewer address', () => {
-	const api = load('api_strip_prefix');
+	const api = loadFunction('api_strip_prefix');
 	const e = viewerRequest('/api/auth/login');
 	e.request.headers['x-viewer-address'] = { value: '203.0.113.1' }; // forged by the viewer
 	const r = api.handler(e);

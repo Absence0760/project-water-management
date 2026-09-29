@@ -51,7 +51,7 @@ import { ApiError } from '../http/errors.js';
 import { lockSeries, recordAudit, seriesSubject } from '../history/record.js';
 import { bodyOrigin, hasValues, MAX_SERIES_VALUES, mergeDaily, mergeSeries, rowProvenance, SeriesBody } from '../series/merge.js';
 import { onSeriesDaysChanged } from '../series/newData.js';
-import { replaceSeries } from '../series/routes.js';
+import { replaceSeries } from '../series/replace.js';
 import { type FeedSource, feedProvenance, feedSourceText, SOURCES } from './config.js';
 import { FetchResult, type FetchWindow, utcToday } from './fetch.js';
 import { GEFS_DAYS } from './sources/chirps.js';
