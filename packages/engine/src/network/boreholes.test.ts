@@ -249,6 +249,25 @@ describe('boreholes (WP-1.34)', () => {
 		expect(checkDoubledCropAreas(rules)).toMatch(/doubling crop areas raised n1's timeReliability/);
 		expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input))).toBeNull();
 	});
+
+	it('a primary dam-target borehole can legitimately raise a downstream farm’s supply fraction when demand grows (seeds 4536, 10028), so the law is checked with it supplemental', () => {
+		// It tops the dam up to capacity only on a day the dam is drawn for demand (engine ≥ 1.8.0), so more
+		// demand switches it on, like a drought trigger. 4536: n12's direct borehole covered the base demand
+		// on day 23, so the dam wasn't drawn; doubled, it was, the 1e9 m³/day unit refilled the dam that day
+		// and a flood took the stream depletion at once, while the base run refilled it on the dry day 24 and
+		// owed 40 000 m³ of depletion for days (n8 0.288 → 0.492). 10028: n16's dam seeps all it holds, and
+		// doubled demand kept it filled from groundwater every day, 720 000 m³/day seeping on down to n13
+		// (0.781 → 0.852). 20 000-case soak on engine 1.20.0, #164.
+		for (const [seed, id] of [[4536, 'n12'], [10028, 'n16']] as const) {
+			const input = randomInput(seed);
+			expect(input.model.boreholes!.some((b) => b.nodeId === id && b.mode === 'primary' && b.target === 'dam'), `seed ${seed}`).toBe(true);
+			// The rest of the helper, with the primary dam-target units left as they are.
+			const rules = droughtBoreholesAsSupplemental(input);
+			for (const b of rules.model.boreholes ?? []) if (input.model.boreholes!.find((x) => x.id === b.id)!.mode === 'primary') b.mode = 'primary';
+			expect(checkDoubledCropAreas(rules), `seed ${seed}`).toMatch(/doubling crop areas raised n(8|13)'s supply fraction/);
+			expect(checkDoubledCropAreas(droughtBoreholesAsSupplemental(input)), `seed ${seed}`).toBeNull();
+		}
+	});
 });
 
 describe('individual boreholes (WP-3.9)', () => {
@@ -489,4 +508,3 @@ describe('GN 538 context (engine 1.12.0, issue #46 item 7)', () => {
 		);
 	});
 });
-
