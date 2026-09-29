@@ -4538,7 +4538,9 @@ them scenarios).
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
   place (`replaceState`, so Back leaves the section rather than stopping on
-  the bare list).
+  the bare list), but only once no navigation is in flight and the URL
+  doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
+  click made while the list was loading.
 - **The list**, newest first: each scenario's name (two lines at most),
   status as a pill in words, number of changes, base run and last run.
   Empty: "No scenarios yet. A scenario changes the published baseline
