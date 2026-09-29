@@ -2073,10 +2073,14 @@ The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 results**, **River & reserve**, **Hydrological units** and **Data**. Each page
 gives it its sections in groups (a `nav` labelled "Settings sections",
 "Result sections", "River sections", "Hydrological units sections", "Data
-sections"); each group is a list named for screen readers, set apart by a
-wider gap. A page can show the names on the bar too (`groupNames`: a small
-muted label before each group's first link, in the same item, so the two
-wrap together and the fit counts both); River & reserve does (issue #162). The dashboards that fit the window (Summary, Network, Crops,
+sections"); each group is a list named for screen readers. With
+`groupNames` the bar shows the names too: a small muted label before each
+group's first link, in the same item, so the two wrap together and the fit
+counts both, and a wider gap before it. Without it the links are evenly
+spaced: a wider gap with no name on it read as a spacing bug (issue #162).
+River & reserve, Runs & results, Hydrological units and Data show their
+names; Settings & calibration doesn't, since with them its seventeen links
+no longer fit two rows at 1280 px, so its links are evenly spaced. The dashboards that fit the window (Summary, Network, Crops,
 Dams, Transfers, Scenarios) and the pages with at most two panels past their
 first screen at 1440×960 (Allocations, Project, Compare runs, Applications)
 have none (surveyed 2026-09-27 with the example catchments); History is left
@@ -2422,7 +2426,8 @@ section header, which it fills (`fillHeader`) like the other sections.
   `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
   form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
   listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
-  named for screen readers and set apart by a wider gap: **Model inputs**
+  named for screen readers only, its links evenly spaced (the names on the
+  bar would push links into More at 1280 px, issue #162): **Model inputs**
   (Demand … Simulation period), **How results are read** (Data quality,
   Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
   and reports**. It is the shared in-page menu
@@ -4269,7 +4274,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   With no second what-if the third column is a dashed **+ Add a second
   what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
   select on add, and back to the add button on remove.
-- **What changes** (left, ~55 %): the outcomes table (reserve met, days
+- **What changes** (left, ~55 %): the outcomes table (*EWR not met*, the
+  share of days, worded as the Summary's card and River & reserve's tile
+  from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
+  #162; days
   below the reserve per average year, irrigation supplied, farms below 95 %,
   up to two most-changed farms, dam storage at the end of the run (when a
   run has a dam), mean outflow, calibration NSE when there is one), each what-if cell its value over its `Delta`, the unit on its own

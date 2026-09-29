@@ -5,11 +5,11 @@
 	free to break across them (as whole blocks, a long group pushed the next one
 	onto a row of its own: three rows at 1280 px); what doesn't fit goes, in
 	page order, into a More menu at the bar's end (navFitCount). On a phone it
-	is one strip that scrolls sideways, every link on it. Groups sit apart by a
-	wider gap; each group is a list labelled by its name for screen readers,
-	and the More menu shows the names as headings. With `groupNames` the bar
-	shows them too, each before its group's first link (River & reserve,
-	issue #162: without them the wider gaps read as spacing bugs). While it
+	is one strip that scrolls sideways, every link on it. Each group is a list
+	labelled by its name for screen readers, and the More menu shows the names
+	as headings. With `groupNames` the bar shows them too, each before its
+	group's first link and set off by a wider gap; without it the links are
+	evenly spaced (issue #162: a wider gap with no name read as a spacing bug). While it
 	is shown, in-page jumps and focus scrolling keep clear of it (WCAG 2.4.11).
 -->
 <script lang="ts">
@@ -36,7 +36,11 @@
 	const uid = $props.id();
 	const flat = $derived(
 		groups.flatMap((g, gi) =>
-			g.sections.map((s, si) => ({ ...s, groupStart: gi > 0 && si === 0, groupName: groupNames && si === 0 ? g.label : null }))
+			g.sections.map((s, si) => {
+				const groupName = groupNames && si === 0 ? g.label : null;
+				// The wider gap only before a group whose name is on the bar: an unnamed gap reads as a bug (issue #162).
+				return { ...s, groupStart: gi > 0 && !!groupName, groupName };
+			})
 		)
 	);
 	const ids = $derived(flat.map((s) => s.id));
@@ -198,7 +202,7 @@
 						{#if g.label}<span class="visually-hidden" id="{uid}-g{gi}">{g.label}</span>{/if}
 						<ul aria-labelledby={g.label ? `${uid}-g${gi}` : undefined}>
 							{#each g.bar as sec, si (sec.id)}
-								<li class="item" class:group-start={gi > 0 && si === 0}>
+								<li class="item" class:group-start={gi > 0 && si === 0 && groupNames && !!g.label}>
 									{#if groupNames && g.label && si === 0}<span class="grp-h" aria-hidden="true">{g.label}</span>{/if}
 									<a class="pill" href="#{sec.id}" aria-current={sec.id === activeSection ? 'location' : undefined}>{@render linkText(sec)}</a>
 								</li>

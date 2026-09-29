@@ -299,7 +299,7 @@
 				{:else}
 					<!-- In-page menu (common/SectionNav, as on Settings and Runs): the run's tables run
 					     several screens under the cards and the unit detail. -->
-					<SectionNav groups={SUPPLY_NAV} label="Hydrological units sections" />
+					<SectionNav groups={SUPPLY_NAV} label="Hydrological units sections" groupNames />
 					<h2 class="visually-hidden">Headline figures</h2>
 					<dl class="stats kpis">
 						<div class="stat" class:flagged={totals.below > 0} data-kpi="supplied">
