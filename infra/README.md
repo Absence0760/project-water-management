@@ -163,7 +163,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
-| `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
+| `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
@@ -181,6 +181,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
+| `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -188,10 +189,34 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 
 `db.t4g.micro` (2 burstable vCPU, 1 GiB) runs single-AZ with 20 GiB gp3
 (autoscaling to 50). It is encrypted with the AWS-managed key, and has 7-day
-automated backups with PITR, deletion protection and a final snapshot.
+automated backups with PITR, deletion protection, `prevent_destroy` and a
+final snapshot under a per-stack unique name (§ Tearing down).
 Performance Insights and Enhanced Monitoring are off, and the PostgreSQL log
 goes to CloudWatch (30 days) with slow statements over 1 s. Minor versions
 auto-upgrade in the Sunday window.
+
+- **Recovery point (RPO):** single-AZ can lose about the last **5 minutes**
+  of writes. A point-in-time restore reaches only `LatestRestorableTime`,
+  which trails the present by about five minutes because RDS uploads the
+  transaction logs every five minutes; Multi-AZ (`db_multi_az`, the full
+  tier) covers a lost host or AZ with no loss
+  ([docs/deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)).
+- **Changes wait for the maintenance window:** `apply_immediately = false`,
+  so an instance or engine change in an apply (class, storage, a static
+  parameter, an engine version) is only scheduled and lands in the Sunday
+  01:30–02:30 UTC window; until then it shows under `PendingModifiedValues`
+  in `aws rds describe-db-instances`. Set it to `true` for a single apply
+  when a change can't wait.
+- **Events:** an RDS event subscription sends the instance's failure, low
+  storage, availability, failover, recovery, restoration, deletion,
+  maintenance, security-patching and notification events to the alerts
+  topic (whose policy lets `events.rds.amazonaws.com` publish for this
+  instance only). The routine `backup` category is left out; RDS has no
+  "backup failed" event, so the restore rehearsal is what proves backups.
+- **CPU credits:** RDS runs T4g in Unlimited mode, so an empty credit
+  balance is billed (surplus credits), not throttled. `rds-cpu-credits`
+  warns as the balance nears zero and `rds-cpu-surplus-charged` pages on any
+  charged surplus.
 
 | | RDS t4g.micro (chosen) | Aurora Serverless v2, min 0 ACU |
 | --- | --- | --- |
@@ -381,7 +406,7 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 35 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
+| CloudWatch: 36 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $53** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
@@ -801,12 +826,43 @@ fetcher outside the VPC (the renderer's no-VPC pin is in its reports run);
 the Function URL's `NONE` auth type with `InvokeFunction` allowed only via the
 URL; and every security group's description, verbatim and within AWS's
 character set, because changing one replaces the group.
+
+`tests/data.tftest.hcl` (same mocks) pins the data-protection controls: the
+parameter group's `rds.force_ssl = 1`, `log_statement = none`, slow-statement
+logging and no bind values; `delete_automated_backups = false`,
+`copy_tags_to_snapshot`, the final snapshot's `random_id` suffix (never a
+fixed name or `timestamp()`) and `prevent_destroy` on the instance (read from
+the source); the event subscription's topic, source and categories and the
+topic statement letting `events.rds.amazonaws.com` publish for this instance
+only; the CPU-credit alarm's Unlimited-mode description and the
+`CPUSurplusCreditsCharged` alarm; and the frontend bucket's
+`DenyInsecureTransport` statement (`s3:*` on the bucket and its objects, every
+principal, `aws:SecureTransport = false`).
+
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 
 ## Tearing down
 
-`deletion_protection` must be turned off first (set it to `false`, then
-apply). `terraform destroy` then leaves a final snapshot
-`water-management-final`. The tfstate bucket, the KMS key, the child zone and
-the deploy role belong to the bootstrap and survive.
+The database has two guards, both to be lifted on purpose, in this order:
+
+1. In `rds.tf`, set `deletion_protection = false` **and** change the
+   instance's `lifecycle { prevent_destroy = true }` to `false`, then apply
+   (the plan shows only the deletion-protection change; `prevent_destroy` is
+   Terraform-side). With `prevent_destroy` still `true`, `terraform destroy`
+   fails at plan time, before touching anything; the `data` test run pins it,
+   so don't commit the edit.
+2. `terraform destroy`. It leaves a final snapshot
+   `water-management-final-<8 hex>`: the suffix is a `random_id` made with the
+   stack, so a stack rebuilt later gets a new one and its own teardown doesn't
+   collide with this snapshot (RDS refuses an existing name). Find it with
+   `aws rds describe-db-snapshots --snapshot-type manual --query "DBSnapshots[?starts_with(DBSnapshotIdentifier, 'water-management-final-')]"`.
+3. The retained automated backups (`delete_automated_backups = false`) expire
+   with the retention period, but the final snapshot is a manual snapshot and
+   is kept until someone deletes it. It holds personal information, and the
+   privacy notice (§ 7) says it is kept until deleted: delete it once no
+   longer needed (`aws rds delete-db-snapshot --db-snapshot-identifier …`)
+   and record when in the operator log.
+
+The tfstate bucket, the KMS key, the child zone and the deploy role belong to
+the bootstrap and survive.

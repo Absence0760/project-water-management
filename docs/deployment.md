@@ -33,7 +33,17 @@ EventBridge rate(5 minutes) ──────────────► worker
   CloudFront shared-secret header, so calling the Function URL directly does
   nothing.
 - **Database:** RDS PostgreSQL 17 (`db.t4g.micro`) in private subnets. It is
-  encrypted and has automated backups + PITR and deletion protection. The API
+  encrypted and has automated backups + PITR, deletion protection and
+  Terraform's `prevent_destroy`. **Recovery point:** single-AZ (the minimal
+  tier) can lose about the last **5 minutes** of writes, since a
+  point-in-time restore reaches only as far as the transaction logs RDS
+  uploads every five minutes (§ Restoring the database); Multi-AZ (the full
+  tier) survives a lost host or AZ with no loss. **Changes wait for the
+  maintenance window:** `apply_immediately = false`, so an instance or engine
+  change in a Terraform apply (class, storage, a static parameter, an engine
+  version) is only scheduled, and lands in the Sunday 01:30–02:30 UTC window
+  (`aws rds describe-db-instances` shows it under `PendingModifiedValues`
+  until then). Set it to `true` for one apply when a change can't wait. The API
   Lambda runs in the VPC, and a migrate Lambda applies `backend/migrations`
   ([plan.md 6b](./plan.md#6b-terraform-additions-infra),
   [infra/README.md](../infra/README.md)). The backend connects as `water_app` (RLS-bound);
@@ -477,7 +487,13 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   interface endpoint.
 - Monthly and daily budgets and Cost Anomaly Detection (§ Budget alerts
   below). Alarms: Lambda errors / throttles / p95 duration, migrate errors,
-  RDS CPU / CPU credits / free storage / connections / freeable memory, SES
+  RDS CPU / CPU credits / surplus CPU credits charged (T4g runs Unlimited:
+  an empty credit balance is billed, not throttled) / free storage /
+  connections / freeable memory, an RDS event subscription (instance failure,
+  low storage, availability, failover, recovery, restoration, deletion,
+  maintenance and patching, RDS notices; not the routine daily-backup events,
+  and RDS publishes no "backup failed" event, so the restore rehearsal in
+  § Restoring the database is what proves the backups), SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line in both the API's
   and the worker's log group (a saved run failing one of the engine's own
@@ -589,7 +605,13 @@ the real plan stays an operator step
   fonts) with a 60 s cache, and invalidates CloudFront.
 - **Migrations** run in the backend deploy *before* the new Lambda code is
   published: the workflow updates and synchronously invokes the migrate
-  Lambda, and stops if it fails. Migrations must stay backwards-compatible
+  Lambda, and stops if it fails. Just before the invoke it prints
+  `Restore point before these migrations (UTC): …`, the time to hand
+  `restore-db.sh --restore-time` if a migration damages data (§ Restoring
+  the database). There is no manual pre-migration snapshot, on purpose:
+  point-in-time restore already reaches any second in the retention window,
+  and a manual snapshot would outlive it, keeping personal information past
+  the backup period the privacy notice states (issue #126). Migrations must stay backwards-compatible
   with the running code for that short window: add first, remove in a later
   release. The worker Lambda's code is updated right after the API's, and
   the fetcher's after the worker's. Then the renderer's image (built in the

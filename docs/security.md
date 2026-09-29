@@ -1954,6 +1954,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
+| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down; a manual snapshot, kept until the operator deletes it (the privacy notice says so and promises the period with the shutdown notice) | Stays in it | Stays in it |
 
 **Data-subject requests.**
 - **Access / export: self-service.** Account → Your data → **Download my
@@ -2222,7 +2223,10 @@ key there would let any read-only principal forge any user's session.
   (`infra/oidc.tf` postcondition, tested).
 - **Database** (`infra/rds.tf`, not yet applied): RDS in private subnets, no
   public endpoint, encryption at rest, TLS enforced (`rds.force_ssl`),
-  automated backups + PITR (7–35 days), deletion protection. Only the API and
+  automated backups + PITR (7–35 days; single-AZ recovery point about
+  5 minutes), deletion protection and `prevent_destroy`, a final snapshot on
+  teardown (kept until deleted), and an RDS event subscription to the alerts
+  topic. Only the API and
   migrate Lambdas' security groups can reach it (and the job worker's).
 - **The fetcher Lambda** (data feeds, `infra/feeds.tf`) is the only Lambda
   with internet access and the only one outside the VPC. It has no database

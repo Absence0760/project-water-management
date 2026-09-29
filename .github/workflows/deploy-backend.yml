@@ -248,6 +248,12 @@ jobs:
           MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
         run: |
           set -euo pipefail
+          # The point-in-time restore target if a migration damages data
+          # (docs/deployment.md § Restoring the database: restore-db.sh
+          # --restore-time). No manual snapshot: PITR already reaches any
+          # second in the retention window, and a manual snapshot would
+          # outlive it (the privacy notice's backup period).
+          echo "Restore point before these migrations (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Synchronous invoke; the function's own timeout is 300 s. No
           # --log-type Tail: this log is public (the repo is), and the
           # function's log and error text can quote SQL or data. Only names

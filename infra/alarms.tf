@@ -60,6 +60,31 @@ data "aws_iam_policy_document" "alerts_publish" {
       values   = ["arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:*"]
     }
   }
+
+  # RDS event notifications (rds.tf aws_db_event_subscription.main). A custom
+  # topic policy replaces SNS's default, which let any RDS resource in the
+  # account publish, so RDS needs its own statement: this account's database
+  # only (AWS's own example shape:
+  # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_Events.GrantingPermissions.html).
+  statement {
+    sid       = "AllowRdsEvents"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alerts.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.rds.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:db:${local.project}"]
+    }
+  }
 }
 
 resource "aws_sns_topic_policy" "alerts" {
@@ -491,8 +516,12 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   }
 }
 
-# t4g is burstable: once CPU credits run out the instance is throttled to its
-# baseline (~10% of 2 vCPUs on micro). Warn well before that.
+# t4g is burstable, and RDS runs every T4g instance in Unlimited mode: when
+# its CPU credits run out it is NOT throttled to baseline, it keeps bursting on
+# surplus credits, and those are billed if it doesn't earn them back. So an
+# empty balance means a sustained load above the micro's baseline (~10% of 2
+# vCPUs) and an extra charge from here on. This alarm is the early warning;
+# rds_cpu_surplus_charged below is the one that says money is being spent.
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
   alarm_name          = "${local.project}-rds-cpu-credits"
   comparison_operator = "LessThanThreshold"
@@ -502,7 +531,29 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
   period              = 300
   statistic           = "Minimum"
   threshold           = 20
-  alarm_description   = "RDS CPU credit balance below 20 — the burstable instance is about to be throttled. Consider db.t4g.small."
+  alarm_description   = "RDS CPU credit balance below 20. T4g runs Unlimited: past zero the instance keeps bursting on surplus credits, which are billed, not throttled. Find the load, or consider db.t4g.small."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.identifier
+  }
+}
+
+# Surplus credits actually charged (Unlimited mode, above): the instance
+# spent more CPU than it earned over 24 hours, or the balance could not pay
+# its surplus back. Any charge in an hour pages; one is a few cents, but it
+# means the instance class is too small for the load or something is spinning.
+resource "aws_cloudwatch_metric_alarm" "rds_cpu_surplus_charged" {
+  alarm_name          = "${local.project}-rds-cpu-surplus-charged"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUSurplusCreditsCharged"
+  namespace           = "AWS/RDS"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "RDS is being charged for surplus CPU credits (T4g Unlimited): sustained CPU above the burstable baseline. Find the load, or consider db.t4g.small."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 
