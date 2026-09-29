@@ -209,6 +209,30 @@ export function pickUnit(rows: readonly UnitRow[], param: string | null): string
 	return (param && rows.some((r) => r.nodeId === param) ? param : rows[0]?.nodeId) ?? null;
 }
 
+/**
+ * The comparison rows in the list's order (the units to look into first),
+ * each unit and source's water years together and in order, so the table's
+ * first rows are the ones that matter. Rows for a unit not on the list keep
+ * their place after it.
+ */
+export function rowsInListOrder(rows: readonly ComparisonRow[], units: readonly UnitRow[]): ComparisonRow[] {
+	const rank = new Map(units.map((u, i) => [u.key, i]));
+	const at = (r: ComparisonRow) => rank.get(`${r.nodeId}:${r.source}`) ?? units.length;
+	return rows.map((r, i) => ({ r, i })).sort((a, b) => at(a.r) - at(b.r) || a.i - b.i).map(({ r }) => r);
+}
+
+/**
+ * The picked unit's water years folded to the latest `cap` (both sources of
+ * each), unless `open` or there is only one more to fold away. `years` is how
+ * many water years there are in all.
+ */
+export function foldYears(rows: readonly ComparisonRow[], open: boolean, cap: number): { shown: ComparisonRow[]; years: number; folded: boolean } {
+	const all = [...new Set(rows.map((r) => r.year.waterYear))].sort((a, b) => a - b);
+	if (open || all.length <= cap + 1) return { shown: [...rows], years: all.length, folded: false };
+	const keep = new Set(all.slice(-cap));
+	return { shown: rows.filter((r) => keep.has(r.year.waterYear)), years: all.length, folded: true };
+}
+
 /** A row's status in words, with the years for "above registered": "Above registered in 2 of 3 whole years". */
 export function unitStatusText(r: UnitRow): string {
 	if (r.status === 'over' && r.wholeYears > 0) return `${STATUS_LABEL.over} in ${r.yearsOver} of ${r.wholeYears} whole year${r.wholeYears === 1 ? '' : 's'}`;
