@@ -104,8 +104,7 @@
 <section aria-labelledby="{uid}-h">
 	<h3 id="{uid}-h">Plausibility checks <HelpTip key="plausibility-checks" /></h3>
 	<p class="muted small">
-		{checks.recession === undefined ? 'Four' : 'Five'} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season:
-		{seasonText(checks.drySeason)}.
+		{checks.recession === undefined ? 'Four' : 'Five'} checks a reviewing hydrologist makes by hand. They only report and warn; none changes a result. Dry season: {seasonText(checks.drySeason)}.
 	</p>
 	<ul class="flags" aria-label="Check results">
 		{#each flags as f (f.label)}
