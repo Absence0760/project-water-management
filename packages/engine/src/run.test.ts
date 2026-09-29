@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Monthly } from './calendar';
 import type { CropArea, CropDef, ModelInput, NetworkNode, ProjectSettings, RunSeries, Transfer } from './project';
 import { DEFAULT_GAUGE_PICK_WARNING, pickObservedKind, resolveReportWindow, runModel, runModelWith, withVerification } from './run';
-import { defaultProjectSettings, OBSERVED_SERIES_LABEL } from './project';
+import { defaultProjectSettings, irrigationFromReturnFlow, OBSERVED_SERIES_LABEL } from './project';
 
 import { calibrationStats } from './network/stats';
 import { ewrCompliance } from './network/ewr';
@@ -1472,7 +1472,34 @@ describe.skipIf(!clientCatchmentFixture)(
 			}
 			return hit;
 		})();
-		const outletN1 = n1Affected.has(topo.outflow >= 0 ? project.model.nodes[topo.outflow]!.id : '');
+		// The N1 replay: the workbook abstracted F and returned r·G; with e = 1 − r
+		// and β = 1 the engine abstracts F ÷ e and returns β(1 − e)·G = r·G. A
+		// demand factor of e on those farms (NetworkNode.demandFactor scales F
+		// before the ÷ e) makes the engine abstract F again, so its supplied,
+		// return flow and everything downstream are the workbook's again, and
+		// the N1 columns are compared against this run instead of skipped. That
+		// needs β = 1, which is what migration 006 and the importer write for
+		// r > 0; the "N1 replay" test fails on any N1 farm without it.
+		// An older extract carries returnFlowPct only: take e and β as migration 006 does.
+		const irrigation = (n: NetworkNode) => {
+			const r = (n as NetworkNode & { returnFlowPct?: number }).returnFlowPct;
+			return n.irrigationEfficiency === undefined && r !== undefined
+				? irrigationFromReturnFlow(r)
+				: { irrigationEfficiency: n.irrigationEfficiency ?? 1, lossReturnFraction: n.lossReturnFraction ?? 0 };
+		};
+		const replaysN1 = (n: NetworkNode) => irrigation(n).irrigationEfficiency < 1 && irrigation(n).lossReturnFraction === 1;
+		const n1Input: ModelInput = {
+			...modelInput,
+			model: {
+				...modelInput.model,
+				nodes: modelInput.model.nodes.map((n) =>
+					replaysN1(n) ? { ...n, ...irrigation(n), demandFactor: Array<number>(12).fill(irrigation(n).irrigationEfficiency) } : n
+				)
+			}
+		};
+		const outN1 = runModelWith(n1Input, () => ({ naturalFlowM3Day: natural }));
+		const outletId = topo.outflow >= 0 ? project.model.nodes[topo.outflow]!.id : '';
+		const outletN1 = n1Affected.has(outletId);
 		const N1_KEYS = new Set(['supplied', 'deficit', 'inflow_upstream', 'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_shortfall', 'ewr_shortfall_incremental']);
 		const index = new Map(project.model.nodes.map((n, i) => [n.id, i]));
 		const farmCount = (i: number): number =>
@@ -1536,7 +1563,6 @@ describe.skipIf(!clientCatchmentFixture)(
 		function nodeRule(name: string, key: string): Rule {
 			const n = nodeByName.get(name)!;
 			const i = index.get(n.id)!;
-			if (n1Affected.has(n.id) && N1_KEYS.has(key)) return { kind: 'skip', why: 'N1' };
 			switch (key) {
 				case 'demand':
 					// R1: net ROUND(,0) 0.5 + farm ROUND(,1) 0.05 + crop mm ROUND(,2) 0.005 mm on the cropped area.
@@ -1625,12 +1651,37 @@ describe.skipIf(!clientCatchmentFixture)(
 						continue;
 					// The workbook's F is the crop requirement; the engine's `demand` is F ÷ efficiency (N1).
 					const engineKey = key === 'demand' && want.kind !== 'gauge' ? 'crop_requirement' : key;
-					const bad = compare(get(out, id, engineKey), want[key]!, nodeRule(name, key));
+					// N1: the columns F ÷ e moves come from the N1 replay (outN1) on the nodes it reaches.
+					const from = n1Affected.has(id) && N1_KEYS.has(key) ? outN1 : out;
+					const bad = compare(get(from, id, engineKey), want[key]!, nodeRule(name, key));
 					if (bad) report[key] = bad;
 				}
 				expect(report).toEqual({});
 			});
 		}
+
+		it("N1 replay: a replayed farm abstracts the workbook's F and returns r·G, as the workbook does", () => {
+			// Every farm N1 touches replays (β = 1), so no N1 column is skipped.
+			expect(modelInput.model.nodes.filter((n) => irrigation(n).irrigationEfficiency < 1 && !replaysN1(n)).map((n) => n.name)).toEqual([]);
+			const replayed = modelInput.model.nodes.filter(replaysN1);
+			const bad: string[] = [];
+			for (const n of replayed) {
+				const r = 1 - irrigation(n).irrigationEfficiency;
+				const F = get(out, n.id, 'crop_requirement');
+				const D = get(outN1, n.id, 'demand');
+				const G = get(outN1, n.id, 'supplied');
+				const T = get(outN1, n.id, 'return_flow');
+				for (let t = 0; t < D.length; t++) {
+					const tol = 1e-9 * Math.max(1, F[t]!);
+					if (Math.abs(D[t]! - F[t]!) > tol || Math.abs(T[t]! - r * G[t]!) > tol) {
+						bad.push(`${n.name} day ${t}: D ${D[t]} vs F ${F[t]}, T ${T[t]} vs r·G ${r * G[t]!}`);
+						break;
+					}
+				}
+			}
+			expect(bad).toEqual([]);
+			expect(withVerification(n1Input, outN1).summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		});
 
 		it('G1: every gauge reports its own shortfall MIN(flow − cumulative EWR, 0)', () => {
 			for (const n of project.model.nodes.filter((x) => x.kind === 'gauge')) {
@@ -1677,11 +1728,11 @@ describe.skipIf(!clientCatchmentFixture)(
 		});
 
 		it('matches the catchment simulated outflow and EWR within the deviation list', () => {
-			// N1: when farms upstream of the outlet have return flow, its flow and shortfall differ.
-			const outletRule: Rule = outletN1 ? { kind: 'skip', why: 'N1' } : { kind: 'mean' };
-			expect(compare(get(out, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, outletRule)).toBeNull(); // R1
+			// N1: when farms upstream of the outlet have return flow, its flow and shortfall come from the N1 replay.
+			const from = outletN1 ? outN1 : out;
+			expect(compare(get(from, null, 'simulated_outflow'), expected.catchment.simulated_outflow!, { kind: 'mean' })).toBeNull(); // R1
 			expect(compare(get(out, null, 'ewr'), expected.catchment.ewr!, { kind: 'exact' })).toBeNull();
-			expect(compare(get(out, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, outletRule)).toBeNull(); // R1
+			expect(compare(get(from, null, 'ewr_shortfall'), expected.catchment.ewr_not_met!, { kind: 'mean' })).toBeNull(); // R1
 		});
 
 		// RETIRED (engine 1.0.0, issue #16): the end-to-end comparison of natural
