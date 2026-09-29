@@ -1,3 +1,8 @@
+<script module lang="ts">
+	// Settings → Calibration record → Flow gaps (issue #66): its own chunk, loaded when the section draws.
+	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+</script>
+
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -59,7 +64,7 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
-	import FlowGapFillFields from './FlowGapFillFields.svelte';
+	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
@@ -813,7 +818,10 @@
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
 		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
 		{#if s.flowGapFill}
-			<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />
+			<!-- Its own chunk (issue #66): the Settings tab chunk sits at its size ceiling. -->
+			<Lazy load={loadFlowGapFill}>
+				{#snippet children(FlowGapFillFields)}<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />{/snippet}
+			</Lazy>
 		{/if}
 	</section>
 

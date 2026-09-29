@@ -1209,6 +1209,17 @@
 //             check and the opt-in quantile-map fields in Settings → Rain
 //             source periods and their run-comparison and fit-provenance
 //             lines. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1149 → 1157 KB (measured 1154 with main @ #155 merged
+//             in, which measures 1146). Issue #66's gap filling and series
+//             source (engine 1.23.0): the engine's flowGapFill module (fill,
+//             donor fit, warning), which prepareRun reads, in the pages'
+//             engine chunk; the fit record and run comparison's source and
+//             fill lines; the Data tab's fill shading and source editor; two
+//             help entries. Settings' Flow gaps fields load as their own
+//             2 KB chunk (Lazy in SettingsTab), so the Settings tab chunk
+//             stays at 59 KB under its 60 KB ceiling; the calibration worker
+//             stays 34 KB and the largest shared chunk (the help tips) 42 KB.
+//             No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1219,7 +1230,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1149,
+	totalCodeKb: 1157,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,
