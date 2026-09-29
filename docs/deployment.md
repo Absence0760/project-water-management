@@ -967,7 +967,10 @@ plan-only until the first deploy):
   check:pins` fails until all of them agree with e2e's `@playwright/test`;
   its build stage's apt packages are pinned to exact versions from one
   Ubuntu archive snapshot, `APT_SNAPSHOT`, which `check:pins` also
-  enforces, and Dependabot's `docker` entry proposes new tags and digests
+  enforces (the snapshot picks every version; the live archive, at apt
+  priority 100, is only a second place to fetch the same files, because
+  snapshot.ubuntu.com is slow and answers 500/503 now and then; the
+  Dockerfile says how), and Dependabot's `docker` entry proposes new tags and digests
   but never auto-merges them; see **Moving the apt snapshot** below), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
