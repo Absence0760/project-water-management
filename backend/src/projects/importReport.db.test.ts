@@ -95,15 +95,17 @@ describe('POST /projects/import with an import report', () => {
 		expect((await owner.call('GET', `/projects/${importedId}`)).body.project).not.toHaveProperty('importReport');
 	});
 
-	it('keeps the existing contract: a plain document imports with no report, and the report route 404s', async () => {
+	it('keeps the existing contract: a plain document imports with no report, and the report route answers null (not a 404)', async () => {
 		const res = await importWith(owner, syntheticDoc('No report'));
 		expect(res.status).toBe(201);
 		const none = await owner.call('GET', `/projects/${res.body.project.id}/import-report`);
-		expect(none.status).toBe(404);
-		expect(none.body).toEqual({ error: 'no import report' });
+		expect(none.status).toBe(200);
+		expect(none.body).toEqual({ report: null });
 		// A project made by hand has none either.
 		const made = (await owner.call('POST', '/projects', { name: 'By hand' })).body.project.id;
-		expect((await owner.call('GET', `/projects/${made}/import-report`)).status).toBe(404);
+		const byHand = await owner.call('GET', `/projects/${made}/import-report`);
+		expect(byHand.status).toBe(200);
+		expect(byHand.body).toEqual({ report: null });
 	});
 
 	it('records a project-file import with its notes', async () => {

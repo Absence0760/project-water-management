@@ -512,12 +512,12 @@ describe('teams client', () => {
 		expect(call(f, 0).body).toEqual({ ...file, importReport: report });
 	});
 
-	it('reads a project’s import report, null when it has none, and throws on any other 404', async () => {
+	it('reads a project’s import report, null when it has none, and throws on a 404', async () => {
 		const stored = { importedAt: '2026-09-25T10:00:00.000Z', importedBy: 'Owner', source: 'project-file', fileName: 'c.json', importerVersion: 'v', notes: [], unmapped: [], notesOmitted: 0, unmappedOmitted: 0 };
 		const f = mockFetch(200, { report: stored });
 		await expect(createApi('http://x', f).projects.importReport('p/1')).resolves.toEqual(stored);
 		expect(call(f, 0)).toMatchObject({ url: 'http://x/projects/p%2F1/import-report', method: 'GET' });
-		await expect(createApi('', mockFetch(404, { error: 'no import report' })).projects.importReport('p')).resolves.toBeNull();
+		await expect(createApi('', mockFetch(200, { report: null })).projects.importReport('p')).resolves.toBeNull();
 		const err = await createApi('', mockFetch(404, { error: 'not found' })).projects.importReport('p').catch((e) => e);
 		expect(err.status).toBe(404);
 	});

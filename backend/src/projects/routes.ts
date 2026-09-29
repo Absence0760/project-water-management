@@ -250,12 +250,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 		}
 	)
 	// What the importer flagged when the project was imported (017_project_import).
+	// `{ report: null }` for a project that wasn't: the Project page asks on every
+	// visit, so "none" is an answer, not an error (issue #162). No access is still 404.
 	.get('/:id/import-report', async (c) =>
 		withUser(c.get('userId'), async (db) => {
 			await requireRole(db, c.req.param('id'), 'viewer');
-			const report = await latestImportReport(db, c.req.param('id'));
-			if (!report) throw new ApiError(404, 'no import report');
-			return c.json({ report });
+			return c.json({ report: await latestImportReport(db, c.req.param('id')) });
 		})
 	)
 	.get('/:id', async (c) =>

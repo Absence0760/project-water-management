@@ -19,7 +19,12 @@ test('the page: one title, its context and Download in the header, the facts, de
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Project page');
 	await createRun(page.request, project.id, 'Baseline');
+	// A project that wasn't imported asks for its import record and gets "none", not a 404 (issue #162).
+	const importReport = page.waitForResponse((r) => r.url().endsWith(`/projects/${project.id}/import-report`));
 	await openProject(page, project.id);
+	const noReport = await importReport;
+	expect(noReport.status()).toBe(200);
+	expect(await noReport.json()).toEqual({ report: null });
 
 	// Under Review in the sections, marked as the open tab; the section header is the only page title.
 	await expect(strip(page).getByRole('group', { name: 'Review' }).getByRole('link').first()).toHaveText('Project');
