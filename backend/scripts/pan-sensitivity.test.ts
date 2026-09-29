@@ -90,7 +90,8 @@ describe('toMarkdown', () => {
 // Smoke test against the real client catchment, when present locally (never
 // in CI — the data is gitignored and never committed). Structural only: it
 // must never assert the catchment's actual figures, per the public-repo rule.
-// WBT_CLIENT_CATCHMENT_DIR overrides the path, as in the engine's client-catchment-fixture.ts (docs/run-locally.md).
+// WBT_CLIENT_CATCHMENT_DIR overrides the path, as in the engine's client-catchment-fixture.ts (docs/run-locally.md);
+// that one tests startsWith('/') since it keeps node: imports out of its static graph, here isAbsolute is free.
 const cwd = process.cwd();
 const override = process.env.WBT_CLIENT_CATCHMENT_DIR;
 const dataDir = (override ? [isAbsolute(override) ? override : `${cwd}/${override}`] : ['data/client-catchment', '../data/client-catchment', '../../data/client-catchment'].map((p) => `${cwd}/${p}`))

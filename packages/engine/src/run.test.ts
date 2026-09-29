@@ -1572,8 +1572,13 @@ describe.skipIf(!clientCatchmentFixture)(
 		//          Workbook F is compared with `crop_requirement` (daily, R1).
 		//          supplied, deficit, inflow_upstream, transfer, dam_storage,
 		//          spill, outflow, ewr_shortfall and ewr_shortfall_incremental
-		//          are skipped on the nodes n1Affected names, and the catchment
-		//          outflow and EWR-not-met series when the outlet is one.
+		//          on the nodes n1Affected names, and the catchment outflow and
+		//          EWR-not-met when the outlet is one, come from the N1 replay
+		//          (outN1: a demand factor of e, so D = F and T = r·G).
+		//   N4     (engine ≥ 0.16.0) a transfer is capped at the destination's
+		//          room. The replay can't undo it: the N1 columns are skipped on
+		//          both ends and below only one end (n4Ends, n4OneEnd), and
+		//          below the join only the day-dependent ones (n4Joined).
 		//
 		//   N2     (engine ≥ 0.16.0) dams evaporate, seep and catch the rain on
 		//          their surface. Every comparison here runs with each dam's
@@ -1690,9 +1695,12 @@ describe.skipIf(!clientCatchmentFixture)(
 		}
 
 		it("N1 replay: a replayed farm abstracts the workbook's F and returns r·G, as the workbook does", () => {
-			// Every farm N1 touches replays (β = 1), so no N1 column is skipped.
+			// The replay's demand factor applies from day one (settings.demandFactorFrom unset).
+			expect(n1Input.settings.demandFactorFrom ?? null).toBeNull();
+			// Every farm N1 touches replays (β = 1), so no N1 column is skipped for N1.
 			expect(modelInput.model.nodes.filter((n) => irrigation(n).irrigationEfficiency < 1 && !replaysN1(n)).map((n) => n.name)).toEqual([]);
 			const replayed = modelInput.model.nodes.filter(replaysN1);
+			if (n1Affected.size > 0) expect(replayed.length).toBeGreaterThan(0);
 			const bad: string[] = [];
 			for (const n of replayed) {
 				const r = 1 - irrigation(n).irrigationEfficiency;
@@ -1710,6 +1718,16 @@ describe.skipIf(!clientCatchmentFixture)(
 			}
 			expect(bad).toEqual([]);
 			expect(withVerification(n1Input, outN1).summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+		});
+
+		it('N1 replay: the N1 columns on N1 nodes are compared, not all skipped', () => {
+			// Guards the coverage the replay restored against a skip set that grows to cover everything.
+			let compared = 0;
+			for (const [name, want] of Object.entries(expected.nodes)) {
+				if (want.kind === 'gauge' || !n1Affected.has(idByName.get(name)!)) continue;
+				for (const key of N1_KEYS) if (key in want && nodeRule(name, key).kind !== 'skip') compared++;
+			}
+			if (n1Affected.size > n4Ends.size + n4OneEnd.size) expect(compared).toBeGreaterThan(0);
 		});
 
 		it('G1: every gauge reports its own shortfall MIN(flow − cumulative EWR, 0)', () => {
