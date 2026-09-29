@@ -11,6 +11,7 @@
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { CHIRPS_BIAS_OPTIONS, describeZeroRain } from '$lib/components/settings/rain';
+	import { describeRainChecks } from '$lib/components/settings/dataQuality';
 	import { peText } from '$lib/components/settings/peInput';
 	import { fmtNum } from '$lib/format/number';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
@@ -44,7 +45,7 @@
 		/** The fitted record's source and given unit now (107_series_source.sql); undefined when not known. */
 		observedOrigin?: SeriesOrigin | null;
 	} = $props();
-	// The fitted record's gap filling (engine ≥ 1.20.0), in words.
+	// The fitted record's gap filling (engine ≥ 1.23.0), in words.
 	const fillText = (f: FitRecord['flowGapFill']) => {
 		if (!f?.spec) return 'none';
 		const parts: string[] = [];
@@ -117,7 +118,7 @@
 					<dt>CHIRPS fit period <HelpTip key="settings.chirpsFitPeriod" /></dt>
 					<dd>{record.forcing.chirpsFitPeriod !== undefined ? fitPeriodText(record.forcing.chirpsFitPeriod) : 'not recorded (fit made before this was tracked)'}</dd>
 				</div>
-				<!-- Issue #66: the fitted record's source and given unit, and its gap filling (engine ≥ 1.20.0). -->
+				<!-- Issue #66: the fitted record's source and given unit, and its gap filling (engine ≥ 1.23.0). -->
 				{#if record.observedOrigin !== undefined}
 					<div data-testid="fit-observed-source">
 						<dt>Calibration record source</dt>
@@ -153,6 +154,11 @@
 				<div>
 					<dt>Zero-rain runs <HelpTip key="settings.zeroRainRuns" /></dt>
 					<dd>{record.forcing.zeroRainRuns ? describeZeroRain(record.forcing.zeroRainRuns) : 'not recorded (fit made before this was tracked)'}</dd>
+				</div>
+				<!-- Engine ≥ 1.20.0 (issue #66): the data-quality limits that decide which rain is suspect; absent = the defaults. -->
+				<div data-testid="fit-rain-checks">
+					<dt>Rain data-quality limits <HelpTip key="settings.dataQuality" /></dt>
+					<dd>{describeRainChecks(record.forcing.rainChecks)}</dd>
 				</div>
 			{:else}
 				<div><dt>Forcing</dt><dd>not recorded (fit made before this was tracked)</dd></div>

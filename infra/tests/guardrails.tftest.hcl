@@ -4,7 +4,10 @@
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
+# the private-only network (no gateway or default route, the exact security-group graph, the Function
+# URL's auth type, every security group's description), the runtime secrets (in Secrets Manager, never a Lambda
+# environment), and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -162,6 +165,7 @@ override_resource {
   override_during = plan
   values = {
     arn = "arn:aws:cloudfront::000000000000:distribution/E0000000000000"
+    id  = "E0000000000000"
   }
 }
 
@@ -221,6 +225,56 @@ override_resource {
   override_during = plan
   values = {
     id = "sg-0000000000worker"
+  }
+}
+
+# Known IDs for the rest of the security groups and the route table, so the
+# network run can assert which group a rule, Lambda or DB points at.
+override_resource {
+  target          = aws_security_group.api_lambda
+  override_during = plan
+  values = {
+    id = "sg-000000000000api"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.migrate_lambda
+  override_during = plan
+  values = {
+    id = "sg-00000000migrate"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.rds
+  override_during = plan
+  values = {
+    id = "sg-000000000000rds"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce
+  override_during = plan
+  values = {
+    id = "sg-00000000000vpce"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce_sqs
+  override_during = plan
+  values = {
+    id = "sg-000000000vpcesqs"
+  }
+}
+
+override_resource {
+  target          = aws_route_table.private
+  override_during = plan
+  values = {
+    id = "rtb-00000000private"
   }
 }
 
@@ -368,6 +422,22 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_sns_topic.alerts_us_east_1
+  override_during = plan
+  values = {
+    arn = "arn:aws:sns:us-east-1:000000000000:water-management-prod-alerts"
+  }
+}
+
+override_resource {
+  target          = aws_ce_anomaly_monitor.services
+  override_during = plan
+  values = {
+    arn = "arn:aws:ce::000000000000:anomalymonitor/00000000-0000-0000-0000-000000000000"
+  }
+}
+
 # SES bounces and complaints → the worker (ses.tf, WP-2.13 follow-up)
 override_resource {
   target          = aws_sns_topic.ses_events
@@ -392,6 +462,44 @@ override_resource {
   values = {
     arn = "arn:aws:sqs:af-south-1:000000000000:water-management-mail-events-dlq"
     url = "https://sqs.af-south-1.amazonaws.com/000000000000/water-management-mail-events-dlq"
+  }
+}
+
+# Runtime secrets (secrets.tf, issue #126): distinct known ARNs, so each
+# role's grant and each endpoint statement can be matched to its own secret.
+override_resource {
+  target          = aws_iam_role.migrate_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-migrate-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-migrate-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["api"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["worker"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["migrate"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
   }
 }
 
@@ -423,8 +531,8 @@ run "production_guardrails" {
     error_message = "API Lambda concurrency must be capped by default (spend + DB connections)."
   }
   assert {
-    condition     = startswith(aws_lambda_function.backend.environment[0].variables["DATABASE_URL"], "postgresql://water_app:") && endswith(aws_lambda_function.backend.environment[0].variables["DATABASE_URL"], "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
-    error_message = "DATABASE_URL must connect as water_app to the RDS endpoint with sslmode=verify-full."
+    condition     = startswith(local.runtime_secrets.api.DATABASE_URL, "postgresql://water_app:") && endswith(local.runtime_secrets.api.DATABASE_URL, "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
+    error_message = "DATABASE_URL (in the API's runtime secret) must connect as water_app to the RDS endpoint with sslmode=verify-full."
   }
   assert {
     condition     = aws_lambda_function.backend.environment[0].variables["ALLOWED_ORIGINS"] == "https://water-management.jaredhoward.com"
@@ -499,6 +607,18 @@ run "production_guardrails" {
     condition     = aws_db_instance.main.performance_insights_enabled == false
     error_message = "Performance Insights stays off (cost)."
   }
+  # infra/scripts/restore-db.sh restores into these, read from the outputs
+  # (the parameter group's name has a generated suffix). The two computed ones
+  # are unknown under mocks, so their wiring is read from the source.
+  assert {
+    condition = (
+      output.db_instance_identifier == "water-management"
+      && output.db_subnet_group_name == "water-management-db"
+      && can(regex("output \"db_security_group_id\" \\{[^}]*value\\s*=\\s*aws_security_group\\.rds\\.id\\s", file("outputs.tf")))
+      && can(regex("output \"db_parameter_group_name\" \\{[^}]*value\\s*=\\s*aws_db_parameter_group\\.main\\.name\\s", file("outputs.tf")))
+    )
+    error_message = "restore-db.sh needs the db_instance_identifier, db_subnet_group_name, db_security_group_id and db_parameter_group_name outputs, wired to the live instance's."
+  }
 
   # --- Edge ----------------------------------------------------------------
   assert {
@@ -516,6 +636,146 @@ run "production_guardrails" {
   assert {
     condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"
     error_message = "Certificate must cover the child-zone hostname."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Runtime secrets (secrets.tf, issue #126): Secrets Manager, never a Lambda
+# environment, which any GetFunctionConfiguration caller can read.
+# ---------------------------------------------------------------------------
+
+run "runtime_secrets" {
+  command = plan
+
+  # The denylist, across every Lambda: no secret in any environment block.
+  # (The renderer exists only with an image tag; reports_renderer_created_from_its_image
+  # checks its block the same way.)
+  assert {
+    condition = alltrue(flatten([
+      for f in [aws_lambda_function.backend, aws_lambda_function.worker, aws_lambda_function.migrate, aws_lambda_function.fetcher] : [
+        for k in keys(f.environment[0].variables) : !contains(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "ALERTS_TOKEN_SECRET", "WATER_APP_PASSWORD"], k) && !can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", k))
+      ]
+    ]))
+    error_message = "No Lambda environment block may hold a secret (the session key, DATABASE_URL, the CloudFront header, the unsubscribe key, the water_app password): they belong in the runtime secret (secrets.tf)."
+  }
+  # Positive control: the denylist would see a secret if one were there.
+  assert {
+    condition     = contains(keys(local.runtime_secrets.api), "AUTH_JWT_SECRET") && contains(keys(local.runtime_secrets.migrate), "WATER_APP_PASSWORD") && can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", "ALERTS_TOKEN_SECRET"))
+    error_message = "The runtime secrets must hold the values the denylist keeps out of the environments."
+  }
+
+  # Exactly the keys each role uses (RUNTIME_SECRETS in backend/src/config/runtimeSecrets.ts).
+  assert {
+    condition = (
+      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"]) &&
+      toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
+      toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
+    )
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+  }
+  assert {
+    condition     = local.runtime_secrets.migrate.WATER_APP_PASSWORD == local.db_app_password && local.runtime_secrets.api.AUTH_JWT_SECRET == local.auth_jwt_secret
+    error_message = "The runtime secrets carry the values from their sources (sops)."
+  }
+
+  # Each Lambda names its own secret and the version Terraform wrote (a new
+  # version changes the variable, so a rotation cold-starts every instance).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["api"].arn &&
+      aws_lambda_function.worker.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["worker"].arn &&
+      aws_lambda_function.migrate.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["migrate"].arn
+    )
+    error_message = "The API, worker and migrate Lambdas must each name their own runtime secret."
+  }
+  assert {
+    condition = alltrue([for f in [aws_lambda_function.backend, aws_lambda_function.worker, aws_lambda_function.migrate] :
+      contains(keys(f.environment[0].variables), "RUNTIME_SECRET_VERSION")
+    ])
+    error_message = "Each Lambda with a runtime secret must pin its version (RUNTIME_SECRET_VERSION), so a rotation reaches it."
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "RUNTIME_SECRET_ARN")
+    error_message = "The fetcher holds no secret."
+  }
+  assert {
+    condition     = alltrue([for k, v in aws_secretsmanager_secret.runtime : v.name == "water-management/runtime/${k}"])
+    error_message = "Runtime secrets are named water-management/runtime/<role>."
+  }
+
+  # IAM: each role reads its own secret, and only that one. (Positive control
+  # first: the overrides give the three secrets distinct ARNs, so matching a
+  # grant to "its own" secret can fail.)
+  assert {
+    condition     = length(toset([for s in aws_secretsmanager_secret.runtime : s.arn])) == 3
+    error_message = "The test's secret ARN overrides must be distinct, or the per-role checks below prove nothing."
+  }
+  assert {
+    condition = alltrue([for role, d in data.aws_iam_policy_document.runtime_secret :
+      length(d.statement) == 1 && toset(d.statement[0].actions) == toset(["secretsmanager:GetSecretValue"]) && toset(d.statement[0].resources) == toset([aws_secretsmanager_secret.runtime[role].arn])
+    ])
+    error_message = "Each runtime-secret policy grants GetSecretValue on its own secret's ARN only."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.runtime_secret["api"].role == aws_iam_role.lambda.id &&
+      aws_iam_role_policy.runtime_secret["worker"].role == aws_iam_role.worker_lambda.id &&
+      aws_iam_role_policy.runtime_secret["migrate"].role == aws_iam_role.migrate_lambda.id
+    )
+    error_message = "Each runtime-secret policy is attached to its own Lambda's role."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.migrate_lambda.statement :
+      toset(s.resources) == toset([aws_db_instance.main.master_user_secret[0].secret_arn])
+    ])
+    error_message = "The migrate role's own policy reads the RDS master secret and nothing else (its runtime secret is granted separately)."
+  }
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.github_deploy.statement : s if anytrue([for a in s.actions : startswith(a, "secretsmanager:")])]) == 0
+    error_message = "The deploy role must not read any secret (it may read function configuration, which is why secrets left it)."
+  }
+
+  # The Secrets Manager endpoint: exactly the owning role per secret.
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.secretsmanager_endpoint.statement) == 4 &&
+      alltrue([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement :
+        length(s.resources) == 1 && length(s.principals) == 1 && length(one(s.principals).identifiers) == 1 &&
+        alltrue([for a in s.actions : !strcontains(a, "*")]) &&
+        (
+          (one(s.resources) == aws_db_instance.main.master_user_secret[0].secret_arn && one(one(s.principals).identifiers) == aws_iam_role.migrate_lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["api"].arn && one(one(s.principals).identifiers) == aws_iam_role.lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["worker"].arn && one(one(s.principals).identifiers) == aws_iam_role.worker_lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["migrate"].arn && one(one(s.principals).identifiers) == aws_iam_role.migrate_lambda.arn)
+        )
+      ])
+    )
+    error_message = "The Secrets Manager endpoint policy must let each role read only its own secret: migrate the RDS master and its runtime secret, the API and worker their runtime secrets."
+  }
+  assert {
+    condition = toset(flatten([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
+      aws_iam_role.lambda.arn, aws_iam_role.worker_lambda.arn, aws_iam_role.migrate_lambda.arn,
+    ])
+    error_message = "Only the API, worker and migrate roles may use the Secrets Manager endpoint."
+  }
+
+  # Network: the API and worker reach the endpoint (443 both ways), as migrate does.
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.vpce_from_api.referenced_security_group_id == aws_security_group.api_lambda.id &&
+      aws_vpc_security_group_ingress_rule.vpce_from_worker.referenced_security_group_id == aws_security_group.worker_lambda.id &&
+      aws_vpc_security_group_egress_rule.api_to_vpce.referenced_security_group_id == aws_security_group.vpce.id &&
+      aws_vpc_security_group_egress_rule.worker_to_vpce.referenced_security_group_id == aws_security_group.vpce.id &&
+      alltrue([for r in [aws_vpc_security_group_ingress_rule.vpce_from_api, aws_vpc_security_group_ingress_rule.vpce_from_worker, aws_vpc_security_group_egress_rule.api_to_vpce, aws_vpc_security_group_egress_rule.worker_to_vpce] :
+        r.from_port == 443 && r.to_port == 443 && r.ip_protocol == "tcp"
+      ])
+    )
+    error_message = "The API and worker must reach the Secrets Manager endpoint on 443 (their runtime secrets), and nothing wider."
+  }
+  assert {
+    condition     = aws_vpc_endpoint.secretsmanager.private_dns_enabled && aws_vpc_endpoint.secretsmanager.security_group_ids == toset([aws_security_group.vpce.id])
+    error_message = "Secrets Manager is reached through its private-DNS interface endpoint, guarded by the vpce security group."
   }
 }
 
@@ -896,6 +1156,59 @@ run "alarms" {
     ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn])])
     error_message = "Every regional alarm must notify the alerts SNS topic."
   }
+  # CloudFront and CLOUDFRONT-scope WAF metrics exist only in us-east-1, and an
+  # alarm can only notify a topic in its own region.
+  assert {
+    condition = alltrue([for a in [
+      aws_cloudwatch_metric_alarm.cloudfront_5xx,
+      aws_cloudwatch_metric_alarm.cloudfront_requests,
+      aws_cloudwatch_metric_alarm.waf_blocked_requests,
+    ] : a.alarm_actions == toset([aws_sns_topic.alerts_us_east_1.arn])])
+    error_message = "Every us-east-1 alarm (CloudFront, WAF) must notify the us-east-1 alerts topic."
+  }
+
+  # --- Request-flood alarm (alarms.tf; issue #126, the audit's one High) -----
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.cloudfront_requests.namespace == "AWS/CloudFront" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.metric_name == "Requests" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.period == 300 &&
+      aws_cloudwatch_metric_alarm.cloudfront_requests.dimensions == tomap({ DistributionId = "E0000000000000", Region = "Global" })
+    )
+    error_message = "The request-flood alarm must sum this distribution's Requests (Region = Global) over 5 minutes."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.cloudfront_requests.threshold == 5000 && aws_cloudwatch_metric_alarm.cloudfront_requests.comparison_operator == "GreaterThanThreshold" && aws_cloudwatch_metric_alarm.cloudfront_requests.evaluation_periods == 1
+    error_message = "By default the request-flood alarm fires on the first 5 minutes over 5,000 requests (a flood just under it costs $2.30-4.03/day)."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.namespace == "AWS/WAFV2" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.metric_name == "BlockedRequests" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.statistic == "Sum" &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions == tomap({ WebACL = "water-management-frontend-acl", Rule = "ALL" })
+    )
+    error_message = "The WAF alarm must sum BlockedRequests across every rule (Rule = ALL) of the ACL, by its metric name, with no Region dimension (CLOUDFRONT scope)."
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.waf_blocked_requests.dimensions["WebACL"] == aws_wafv2_web_acl.frontend.visibility_config[0].metric_name
+    error_message = "The WebACL dimension is the ACL's CloudWatch metric name."
+  }
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.threshold == 100 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.period == 300 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.evaluation_periods == 3 &&
+      aws_cloudwatch_metric_alarm.waf_blocked_requests.datapoints_to_alarm == 3
+    )
+    error_message = "The WAF alarm fires on sustained blocks only: over 100 in each of three 5-minute periods."
+  }
+  assert {
+    condition     = strcontains(aws_cloudwatch_metric_alarm.cloudfront_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood") && strcontains(aws_cloudwatch_metric_alarm.waf_blocked_requests.alarm_description, "docs/deployment.md, Runbooks, Request flood")
+    error_message = "Both edge alarms must point the operator at the Request flood runbook."
+  }
+
   assert {
     condition     = aws_cloudwatch_metric_alarm.lambda_duration.threshold == 24000
     error_message = "Duration alarm fires at 80% of the 30 s timeout."
@@ -908,9 +1221,94 @@ run "alarms" {
     condition     = aws_cloudwatch_metric_alarm.ses_bounce_rate.threshold < 0.05 && aws_cloudwatch_metric_alarm.ses_complaint_rate.threshold < 0.001
     error_message = "SES alarms must fire before AWS's review thresholds (5% bounce, 0.1% complaint)."
   }
+  # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "60"
-    error_message = "A $60 monthly budget exists by default."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "80" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "An $80 monthly budget exists by default (above af-south-1's ~$58–63 idle)."
+  }
+  assert {
+    condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
+      "FORECASTED:100:PERCENTAGE:GREATER_THAN",
+      "ACTUAL:80:PERCENTAGE:GREATER_THAN",
+      "ACTUAL:100:PERCENTAGE:GREATER_THAN",
+    ])
+    error_message = "The monthly budget alerts at FORECASTED 100%, ACTUAL 80% and ACTUAL 100% (no ACTUAL 50%, which fires every month at idle)."
+  }
+  assert {
+    condition = (
+      length(aws_budgets_budget.daily) == 1 &&
+      aws_budgets_budget.daily[0].time_unit == "DAILY" &&
+      aws_budgets_budget.daily[0].budget_type == "COST" &&
+      aws_budgets_budget.daily[0].limit_amount == "6"
+    )
+    error_message = "A $6/day budget (ceil(80 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+  }
+  assert {
+    condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
+      "ACTUAL:100:PERCENTAGE:GREATER_THAN",
+    ])
+    error_message = "The daily budget has one ACTUAL 100% notification (daily budgets don't support FORECASTED)."
+  }
+  assert {
+    condition = alltrue([for n in concat(tolist(aws_budgets_budget.monthly[0].notification), tolist(aws_budgets_budget.daily[0].notification)) :
+      n.subscriber_sns_topic_arns == toset([aws_sns_topic.alerts_us_east_1.arn])
+    ])
+    error_message = "Every budget notification publishes to the us-east-1 alerts topic, not the opt-in region's."
+  }
+  assert {
+    condition = (
+      length(aws_ce_anomaly_monitor.services) == 1 &&
+      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
+      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
+      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
+      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
+    )
+    error_message = "Cost Anomaly Detection: one AWS-services monitor with an IMMEDIATE subscription by default."
+  }
+  assert {
+    condition = (
+      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
+      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
+    )
+    error_message = "Anomalies with a total impact of $10 or more page the us-east-1 alerts topic."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 1 &&
+      one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
+      toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
+      ])
+    )
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn); Budgets no longer publish there."
+  }
+  assert {
+    condition = {
+      for s in data.aws_iam_policy_document.alerts_us_east_1_publish.statement :
+      one(one(s.principals).identifiers) => toset([for c in s.condition : "${c.test}|${c.variable}|${join(",", c.values)}"])
+      } == {
+      "cloudwatch.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:cloudwatch:us-east-1:000000000000:alarm:*",
+      ])
+      "budgets.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:budgets::000000000000:*",
+      ])
+      "costalerts.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+      ])
+    }
+    error_message = "The us-east-1 topic admits CloudWatch, Budgets and Cost Anomaly Detection, each only for this account (confused-deputy conditions as AWS documents them)."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.alerts_us_east_1_publish.statement :
+      length(one(s.principals).identifiers) == 1 && s.actions == toset(["sns:Publish"])
+    ])
+    error_message = "One service per statement, publish only, so each keeps its own conditions."
   }
   assert {
     condition     = aws_sns_topic_subscription.alerts_email.endpoint == "ops@water-management.jaredhoward.com" && aws_sns_topic_subscription.alerts_us_east_1_email.endpoint == "ops@water-management.jaredhoward.com"
@@ -944,6 +1342,100 @@ run "alarms" {
     condition     = aws_cloudwatch_metric_alarm.self_check_failed.alarm_actions == toset([aws_sns_topic.alerts.arn])
     error_message = "The self-check alarm must notify the same alerts SNS topic as every other alarm."
   }
+}
+
+# --- Budget variables ---------------------------------------------------------
+# The daily budget follows the monthly unless set; it must stay below it, and
+# neither amount (nor the anomaly threshold) may be negative.
+
+run "daily_budget_follows_monthly" {
+  command = plan
+  variables {
+    budget_monthly_usd = 170
+  }
+  assert {
+    condition     = aws_budgets_budget.monthly[0].limit_amount == "170" && aws_budgets_budget.daily[0].limit_amount == "13"
+    error_message = "The derived daily budget is ceil(monthly × 2.25 / 30): $13 on the full tier's $170."
+  }
+}
+
+run "daily_budget_explicit" {
+  command = plan
+  variables {
+    budget_daily_usd = 4.5
+  }
+  assert {
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
+    error_message = "An explicit budget_daily_usd is used as given."
+  }
+}
+
+run "daily_budget_off" {
+  command = plan
+  variables {
+    budget_daily_usd           = 0
+    cost_anomaly_threshold_usd = 0
+  }
+  assert {
+    condition     = length(aws_budgets_budget.daily) == 0 && length(aws_budgets_budget.monthly) == 1
+    error_message = "budget_daily_usd = 0 skips only the daily budget."
+  }
+  assert {
+    condition     = length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "cost_anomaly_threshold_usd = 0 skips the anomaly monitor (an account holds only one services monitor)."
+  }
+}
+
+run "no_budgets_before_billing_access" {
+  command = plan
+  variables {
+    budget_monthly_usd = 0
+  }
+  assert {
+    condition     = length(aws_budgets_budget.monthly) == 0 && length(aws_budgets_budget.daily) == 0
+    error_message = "budget_monthly_usd = 0 skips both budgets (billing access not yet enabled)."
+  }
+}
+
+run "rejects_daily_budget_not_below_monthly" {
+  command = plan
+  variables {
+    budget_daily_usd = 80
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_daily_budget_without_monthly" {
+  command = plan
+  variables {
+    budget_monthly_usd = 0
+    budget_daily_usd   = 6
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_negative_daily_budget" {
+  command = plan
+  variables {
+    budget_daily_usd = -1
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_negative_monthly_budget" {
+  command = plan
+  variables {
+    budget_monthly_usd = -80
+  }
+  expect_failures = [var.budget_monthly_usd]
+}
+
+run "rejects_negative_anomaly_threshold" {
+  command = plan
+  variables {
+    cost_anomaly_threshold_usd = -10
+  }
+  expect_failures = [var.cost_anomaly_threshold_usd]
 }
 
 # ---------------------------------------------------------------------------
@@ -990,8 +1482,8 @@ run "background_jobs" {
   }
   assert {
     condition = (
-      startswith(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "postgresql://water_app:") &&
-      strcontains(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "sslmode=verify-full") &&
+      startswith(local.runtime_secrets.worker.DATABASE_URL, "postgresql://water_app:") &&
+      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full") &&
       aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
       aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
     )
@@ -1106,14 +1598,14 @@ run "background_jobs" {
   # --- Alert emails (WP-2.13) -------------------------------------------------------
   assert {
     condition = (
-      contains(keys(aws_lambda_function.worker.environment[0].variables), "ALERTS_TOKEN_SECRET") &&
+      contains(keys(local.runtime_secrets.worker), "ALERTS_TOKEN_SECRET") &&
       random_password.alerts_token_secret.length >= 32 && !random_password.alerts_token_secret.special &&
       aws_lambda_function.worker.environment[0].variables["ALERTS_ENABLED"] == "true"
     )
     error_message = "The worker signs unsubscribe links (ALERTS_TOKEN_SECRET, ≥ 32 characters) and sends alerts unless the kill switch is off."
   }
   assert {
-    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "ALERTS_TOKEN_SECRET")
+    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "ALERTS_TOKEN_SECRET") && !contains(keys(local.runtime_secrets.api), "ALERTS_TOKEN_SECRET")
     error_message = "Only the worker holds the unsubscribe-token secret: the API checks a token by its hash alone."
   }
   assert {
@@ -1370,6 +1862,29 @@ run "rejects_short_jobs_backlog_alarm" {
   expect_failures = [var.jobs_backlog_alarm_seconds]
 }
 
+# The request-flood alarm stays a cost control: above 20,000 per 5 minutes a
+# flood just under it costs $9-16/day unseen; below 1,000 one person at the
+# WAF's per-IP limit pages.
+run "rejects_loose_cloudfront_requests_alarm" {
+  command = plan
+
+  variables {
+    cloudfront_requests_alarm_per_5min = 20001
+  }
+
+  expect_failures = [var.cloudfront_requests_alarm_per_5min]
+}
+
+run "rejects_tight_cloudfront_requests_alarm" {
+  command = plan
+
+  variables {
+    cloudfront_requests_alarm_per_5min = 999
+  }
+
+  expect_failures = [var.cloudfront_requests_alarm_per_5min]
+}
+
 # ---------------------------------------------------------------------------
 # Deploy role trust pin (bootstrap-owned; checked by the postcondition in
 # oidc.tf so a drifted trust policy fails the plan)
@@ -1624,7 +2139,9 @@ run "reports_renderer_created_from_its_image" {
       aws_lambda_function.renderer[0].environment[0].variables["STORAGE"] == "s3" &&
       tonumber(aws_lambda_function.renderer[0].environment[0].variables["REPORT_RENDER_TIMEOUT_MS"]) < 120000 &&
       !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "DATABASE_URL") &&
-      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET")
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET") &&
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "RUNTIME_SECRET_ARN") &&
+      alltrue([for k in keys(aws_lambda_function.renderer[0].environment[0].variables) : !can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", k))])
     )
     error_message = "The renderer opens the public site, stores to S3, stops before Lambda's timeout, and holds no database URL or secret."
   }
@@ -1867,5 +2384,200 @@ run "waf_auth_rule_matches_decoded_path" {
       "${t.priority}:${t.type}"
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Network: the private-only VPC and the security-group graph (network.tf)
+# ---------------------------------------------------------------------------
+#
+# Terraform tests can't enumerate "every resource of a type", so the
+# whole-module invariants (no gateway or default route anywhere, the complete
+# set of security-group rules) read the source, like the parameter group's
+# lifecycle check in production_guardrails; the plan-time asserts pin the
+# same edges by resolved ID. `terraform test` refuses an assert that names no
+# configuration object, so each source-reading one is anchored to the VPC it
+# describes with `aws_vpc.main.cidr_block != ""`.
+
+run "network" {
+  command = plan
+
+  # --- No way out: no gateway, no default route, no public addresses -------
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("resource \"aws_(internet_gateway|egress_only_internet_gateway|nat_gateway|eip|route|vpn_gateway|vpc_peering_connection|ec2_transit_gateway_vpc_attachment)\"", file(f))) == 0
+    ])
+    error_message = "The VPC is private-only: no internet, egress-only or NAT gateway, Elastic IP, aws_route, VPN, peering or transit attachment. External hosts are reached by a Lambda outside the VPC (feeds.tf), AWS APIs through interface endpoints."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("\"(0\\.0\\.0\\.0/0|::/0)\"", file(f))) == 0
+    ])
+    error_message = "No 0.0.0.0/0 or ::/0 anywhere in the module: not as a route, not in a security-group rule."
+  }
+  assert {
+    condition     = aws_vpc.main.cidr_block != "" && length(regexall("\\broute\\s*\\{", regex("(?s)resource \"aws_route_table\" \"private\" \\{.*?\\n\\}", file("network.tf")))) == 0
+    error_message = "The private route table holds only the implicit local route (no inline route blocks)."
+  }
+  assert {
+    condition     = length(aws_route_table_association.private) == 2 && alltrue([for a in aws_route_table_association.private : a.route_table_id == aws_route_table.private.id])
+    error_message = "Both private subnets must be explicitly associated with the route-less private route table."
+  }
+  assert {
+    condition     = alltrue([for s in aws_subnet.private : s.map_public_ip_on_launch != true])
+    error_message = "The private subnets never hand out public IPs (map_public_ip_on_launch unset or false)."
+  }
+
+  # --- Security-group rules: SG to SG only, the exact graph ------------------
+  # Every rule references another security group (no CIDR, no prefix list),
+  # rules are standalone resources (no aws_security_group_rule, no inline
+  # blocks), and the full set of edges is exactly this.
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("\\b(cidr_ipv4|cidr_ipv6|cidr_blocks|ipv6_cidr_blocks|prefix_list_id|prefix_list_ids)\\s*=", file(f))) == 0
+      && length(regexall("resource \"aws_security_group_rule\"", file(f))) == 0
+      && length(regexall("(?m)^\\s*(ingress|egress)\\s*\\{", file(f))) == 0
+    ])
+    error_message = "Security-group rules reference security groups only (no CIDR or prefix list) and are aws_vpc_security_group_{ingress,egress}_rule resources, never inline blocks or aws_security_group_rule."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && toset(flatten([
+      for f in fileset(".", "*.tf") : [
+        for b in regexall("(?s)resource \"aws_vpc_security_group_ingress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
+        format("%s <- %s %s/%s-%s",
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
+          try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+          try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+        )
+      ]
+      ])) == toset([
+      "rds <- api_lambda tcp/5432-5432",
+      "rds <- migrate_lambda tcp/5432-5432",
+      "rds <- worker_lambda tcp/5432-5432",
+      "vpce <- api_lambda tcp/443-443",
+      "vpce <- migrate_lambda tcp/443-443",
+      "vpce <- worker_lambda tcp/443-443",
+      "vpce_sqs <- api_lambda tcp/443-443",
+      "vpce_sqs <- worker_lambda tcp/443-443",
+      "vpce_ses <- api_lambda tcp/443-443",
+      "vpce_ses <- worker_lambda tcp/443-443",
+    ])
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker. A new edge is a deliberate change to this list."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && toset(flatten([
+      for f in fileset(".", "*.tf") : [
+        for b in regexall("(?s)resource \"aws_vpc_security_group_egress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
+        format("%s -> %s %s/%s-%s",
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
+          try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+          try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+        )
+      ]
+      ])) == toset([
+      "api_lambda -> rds tcp/5432-5432",
+      "api_lambda -> vpce_sqs tcp/443-443",
+      "api_lambda -> vpce_ses tcp/443-443",
+      "api_lambda -> vpce tcp/443-443",
+      "migrate_lambda -> rds tcp/5432-5432",
+      "migrate_lambda -> vpce tcp/443-443",
+      "worker_lambda -> rds tcp/5432-5432",
+      "worker_lambda -> vpce_sqs tcp/443-443",
+      "worker_lambda -> vpce_ses tcp/443-443",
+      "worker_lambda -> vpce tcp/443-443",
+    ])
+    error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
+  }
+
+  # --- The database: only the three in-VPC Lambdas reach it ---------------
+  assert {
+    condition     = aws_db_instance.main.vpc_security_group_ids == toset([aws_security_group.rds.id]) && !aws_db_instance.main.publicly_accessible
+    error_message = "RDS sits in its own security group only, and is not publicly accessible."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.rds_from_api.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_api.referenced_security_group_id == aws_security_group.api_lambda.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_migrate.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_migrate.referenced_security_group_id == aws_security_group.migrate_lambda.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_worker.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_worker.referenced_security_group_id == aws_security_group.worker_lambda.id &&
+      alltrue([for r in [aws_vpc_security_group_ingress_rule.rds_from_api, aws_vpc_security_group_ingress_rule.rds_from_migrate, aws_vpc_security_group_ingress_rule.rds_from_worker] : r.ip_protocol == "tcp" && r.from_port == 5432 && r.to_port == 5432 && r.cidr_ipv4 == null && r.cidr_ipv6 == null])
+    )
+    error_message = "Postgres (5432/tcp) is reachable from the API, migrate and worker Lambda security groups only."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.vpc_config[0].security_group_ids == toset([aws_security_group.api_lambda.id]) &&
+      aws_lambda_function.migrate.vpc_config[0].security_group_ids == toset([aws_security_group.migrate_lambda.id]) &&
+      aws_lambda_function.worker.vpc_config[0].security_group_ids == toset([aws_security_group.worker_lambda.id]) &&
+      length(aws_lambda_function.fetcher.vpc_config) == 0
+    )
+    error_message = "The API, migrate and worker Lambdas each run in their own security group; the fetcher stays outside the VPC (the renderer's no-VPC pin is in its own run)."
+  }
+
+  # --- The Function URL ------------------------------------------------------
+  # NONE, with the CloudFront shared secret checked first in the app
+  # (backend/src/app.ts) and InvokeFunction allowed only via the URL. Moving
+  # to AWS_IAM means CloudFront OAC for Lambda plus a body-hash change in the
+  # SPA; either way, a deliberate edit here.
+  assert {
+    condition = (
+      aws_lambda_function_url.backend.authorization_type == "NONE" &&
+      aws_lambda_permission.function_url_public.function_url_auth_type == "NONE" &&
+      aws_lambda_permission.function_url_invoke.action == "lambda:InvokeFunction" &&
+      aws_lambda_permission.function_url_invoke.invoked_via_function_url == true
+    )
+    error_message = "The Function URL is authorization_type NONE (shared secret in the app), and the public InvokeFunction permission is restricted to invocations via the URL."
+  }
+
+  # --- Security-group descriptions, verbatim -------------------------------
+  # A description can't change in place: AWS replaces the group, and deleting
+  # one a Lambda ENI still holds can stall an apply for 20+ minutes. Pinning
+  # the text makes any edit a deliberate change here, made knowing that.
+  assert {
+    condition = {
+      api_lambda     = aws_security_group.api_lambda.description
+      migrate_lambda = aws_security_group.migrate_lambda.description
+      worker_lambda  = aws_security_group.worker_lambda.description
+      rds            = aws_security_group.rds.description
+      vpce           = aws_security_group.vpce.description
+      vpce_sqs       = aws_security_group.vpce_sqs.description
+      vpce_ses       = aws_security_group.vpce_ses.description
+      } == {
+      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
+      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
+      rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
+      vpce           = "Secrets Manager interface endpoint: 443 from the migrate, API and worker Lambdas only."
+      vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
+      vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
+    }
+    error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses)\"", file(f)))
+    ])
+    error_message = "A new security group needs its description pinned in the assert above."
+  }
+  assert {
+    condition = alltrue([
+      for d in [
+        aws_security_group.api_lambda.description, aws_security_group.migrate_lambda.description,
+        aws_security_group.worker_lambda.description, aws_security_group.rds.description,
+        aws_security_group.vpce.description, aws_security_group.vpce_sqs.description,
+        aws_security_group.vpce_ses.description,
+      ] : length(d) <= 255 && can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]+$", d))
+    ])
+    error_message = "Security-group descriptions are limited to 255 characters of a-zA-Z0-9. _-:/()#,@[]+=&;{}!$* (no apostrophes, no em dashes), or AWS rejects the create."
   }
 }

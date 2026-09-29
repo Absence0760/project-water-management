@@ -89,6 +89,15 @@ export interface RainSourceReferenceEra {
 	toWaterYear: number;
 }
 
+/** A rain-source period's quantile mapping (settings.rainSource[].quantileMap, engine ≥ 1.21.0). */
+export interface RainSourceQuantileMap {
+	/** Water years of the primary catchment record the series' wet days are mapped onto (the reference era). */
+	fromWaterYear: number;
+	toWaterYear: number;
+	/** Wet-day threshold, mm: a day below it is dry and keeps its scaled value. */
+	wetDayMm: number;
+}
+
 export interface RainSourcePeriod {
 	/** ISO dates, inclusive. */
 	start: string;
@@ -114,6 +123,14 @@ export interface RainSourcePeriod {
 	fallback?: { series: RainSourceFallback; fromWaterYear: number; toWaterYear: number };
 	/** The series' gauge reports to CHIRPS in this period: CHIRPS can be neither the fit reference nor the fallback. */
 	gaugeInChirps?: boolean;
+	/**
+	 * Opt-in (engine ≥ 1.21.0, issue #66, docs/model.md §2.4e *Daily
+	 * intensity*): after the monthly factor, quantile-map the series' wet-day
+	 * distribution onto the primary catchment record's over a reference era,
+	 * month by month, keeping every month's total. Absent = the monthly
+	 * factor alone (the series keeps its own wet-day distribution).
+	 */
+	quantileMap?: RainSourceQuantileMap;
 	reason: string;
 }
 
@@ -434,8 +451,8 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
-	 * Gap filling of the observed flow records (engine ≥ 1.20.0, issue #66,
-	 * ./flowGapFill.ts, docs/model.md §2.10h): a spec per record, null = not
+	 * Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
+	 * ./flowGapFill.ts, docs/model.md §2.10i): a spec per record, null = not
 	 * filled (the default), and whether statistics read the filled days
 	 * (default false: they are shown and exported only). Filled values never
 	 * change the stored series.
@@ -447,7 +464,13 @@ export interface ProjectSettings {
 	 * set by hand or imported. Never changes model results.
 	 */
 	fitRecord: FitRecord | null;
-	/** Thresholds of the input data-quality checks (./quality.ts). They never change model results. */
+	/**
+	 * Limits of the input data-quality checks (./quality.ts). The gauge-vs-logger,
+	 * outlier and flat-line limits only change what is flagged; the zero-run and
+	 * low-vs-CHIRPS limits (engine ≥ 1.20.0) change results too, because a run
+	 * treats flagged zero runs as missing (§2.4c) and leaves flagged years out
+	 * of the CHIRPS fit (§2.4b).
+	 */
 	dataQuality: DataQualitySettings;
 	/**
 	 * Optional WR2012 check (./reference/wr2012.ts): the quaternary's
@@ -457,10 +480,34 @@ export interface ProjectSettings {
 	wr2012: Wr2012Settings;
 }
 
+/** How a zero-rain run is judged long enough to flag (engine ≥ 1.20.0, docs/model.md §2.10a). */
+export const ZERO_RUN_RULES = ['wetDays', 'usualRain'] as const;
 /**
- * Gauge-vs-logger agreement thresholds (observedAgreement): a water year is
+ * 'wetDays' (the default): zeroRunMinWetDays of the run in the series' six
+ * wettest calendar months. 'usualRain': the rain the series' monthly means
+ * would put on the run's days is at least zeroRunUsualShare of its usual
+ * annual rain, and the run lasts zeroRunMinDays or more.
+ */
+export type ZeroRunRule = (typeof ZERO_RUN_RULES)[number];
+/** What each water year's catchment / CHIRPS ratio is compared with (engine ≥ 1.20.0). */
+export const LOW_VS_CHIRPS_BASELINES = ['record', 'moving'] as const;
+/** 'record' (the default): the median over the whole record. 'moving': the median of the judged years within ±5 water years. */
+export type LowVsChirpsBaseline = (typeof LOW_VS_CHIRPS_BASELINES)[number];
+/** The CHIRPS rain a water year needs before it is judged (engine ≥ 1.20.0). */
+export const LOW_VS_CHIRPS_MINIMUMS = ['fixed', 'scaled'] as const;
+/** 'fixed' (the default): 50 mm. 'scaled': the larger of 50 mm and 25 % of the median annual CHIRPS. */
+export type LowVsChirpsMinimum = (typeof LOW_VS_CHIRPS_MINIMUMS)[number];
+
+/**
+ * Limits of the input data-quality checks (./quality.ts, docs/model.md
+ * §2.10a). Gauge-vs-logger agreement (observedAgreement): a water year is
  * flagged when gauge / logger volume on shared days falls outside
- * agreementMinRatio … agreementMaxRatio, on at least agreementMinDays shared days.
+ * agreementMinRatio … agreementMaxRatio, on at least agreementMinDays shared
+ * days. The rest (engine ≥ 1.20.0, issue #66) were engine constants before;
+ * their defaults are those constants, so a project that never sets them runs
+ * as before. Sample-size floors (100 positive values for the outlier rule, 56
+ * days a month for a climatology, 180 shared days for a low-vs-CHIRPS year)
+ * stay constants.
  */
 export interface DataQualitySettings {
 	/** 0 < min ≤ 1. Default 2/3. */
@@ -469,6 +516,84 @@ export interface DataQualitySettings {
 	agreementMaxRatio: number;
 	/** Whole days, 1–366. Default 90. */
 	agreementMinDays: number;
+	/** Outliers: rain and daily A-pan values above this × the 99th percentile of the positive values. Above 1, at most 1000. Default 5. */
+	outlierFactorRain: number;
+	/** The same for flow. Above 1, at most 1000. Default 10. */
+	outlierFactorFlow: number;
+	/** Flat-lines: days of one non-zero rain value. Whole days, 2–366. Default 5. */
+	flatlineRainDays: number;
+	/** Days of one non-zero daily A-pan value. Whole days, 2–366. Default 7. */
+	flatlineEvapDays: number;
+	/** Flow flat-lines: the floor of the resolution-aware limit. Whole days, 2–366. Default 14. */
+	flatlineFlowMinDays: number;
+	/** … and its cap (the limit for zero flow). Whole days, flatlineFlowMinDays–366. Default 90. */
+	flatlineFlowMaxDays: number;
+	/** How a zero-rain run is judged. Default 'wetDays'. */
+	zeroRunRule: ZeroRunRule;
+	/** 'wetDays': days of the run in the wet half of the year. Whole days, 1–366. Default 60. */
+	zeroRunMinWetDays: number;
+	/** 'usualRain': the share of the usual annual rain the run's days would bring. 0 < share ≤ 1. Default 0.25. */
+	zeroRunUsualShare: number;
+	/** 'usualRain': the run's shortest length. Whole days, 1–366. Default 60. */
+	zeroRunMinDays: number;
+	/**
+	 * Check each zero run against CHIRPS: a run over which CHIRPS read under
+	 * half its usual rain may be a real dry spell and is not flagged. Default
+	 * false (every run the rule picks is flagged).
+	 */
+	zeroRunChirpsCheck: boolean;
+	/** Low vs CHIRPS: a year below this × the usual catchment / CHIRPS ratio is flagged. 0 < ratio < 1. Default 0.5. */
+	lowVsChirpsRatio: number;
+	/** What the usual ratio is. Default 'record'. */
+	lowVsChirpsBaseline: LowVsChirpsBaseline;
+	/** The CHIRPS rain a year needs to be judged. Default 'fixed' (50 mm). */
+	lowVsChirpsMinimum: LowVsChirpsMinimum;
+}
+
+/**
+ * The data-quality limits that change which catchment-rain days a run
+ * treats as suspect, and so change results: the zero-run and low-vs-CHIRPS
+ * limits. A fit records them (FitRecord.forcing.rainChecks) because they
+ * change the rain it ran on.
+ */
+export const RAIN_CHECK_KEYS = [
+	'zeroRunRule',
+	'zeroRunMinWetDays',
+	'zeroRunUsualShare',
+	'zeroRunMinDays',
+	'zeroRunChirpsCheck',
+	'lowVsChirpsRatio',
+	'lowVsChirpsBaseline',
+	'lowVsChirpsMinimum'
+] as const satisfies readonly (keyof DataQualitySettings)[];
+export type RainCheckLimits = Pick<DataQualitySettings, (typeof RAIN_CHECK_KEYS)[number]>;
+
+/** The rain-check limits of a data-quality setting, in RAIN_CHECK_KEYS order. */
+export function rainCheckLimits(dq: DataQualitySettings): RainCheckLimits {
+	return Object.fromEntries(RAIN_CHECK_KEYS.map((k) => [k, dq[k]])) as unknown as RainCheckLimits;
+}
+
+/** The data-quality defaults (the engine constants they replaced). */
+export function defaultDataQualitySettings(): DataQualitySettings {
+	return {
+		agreementMinRatio: 2 / 3,
+		agreementMaxRatio: 1.5,
+		agreementMinDays: 90,
+		outlierFactorRain: 5,
+		outlierFactorFlow: 10,
+		flatlineRainDays: 5,
+		flatlineEvapDays: 7,
+		flatlineFlowMinDays: 14,
+		flatlineFlowMaxDays: 90,
+		zeroRunRule: 'wetDays',
+		zeroRunMinWetDays: 60,
+		zeroRunUsualShare: 0.25,
+		zeroRunMinDays: 60,
+		zeroRunChirpsCheck: false,
+		lowVsChirpsRatio: 0.5,
+		lowVsChirpsBaseline: 'record',
+		lowVsChirpsMinimum: 'fixed'
+	};
 }
 
 /** Series that calibration statistics can compare simulated outflow with. */
@@ -548,7 +673,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
 		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false },
 		fitRecord: null,
-		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 },
+		dataQuality: defaultDataQualitySettings(),
 		wr2012: defaultWr2012Settings()
 	};
 }
@@ -795,7 +920,7 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * thing that reads it is automatic calibration's dry → wet test, which ranks
  * water years by it (engine ≥ 1.19.0, CalibrateOptions.rankYearsBy); it is
  * never scored there either. And, only when settings.flowGapFill names it
- * as a donor (engine ≥ 1.20.0, ./flowGapFill.ts), it is scaled into the
+ * as a donor (engine ≥ 1.23.0, ./flowGapFill.ts), it is scaled into the
  * gauge or logger record's gaps.
  *
  * `rain_catchment_alt_mm` (engine ≥ 0.30.0, issue #40 (b)) is a second
@@ -2153,6 +2278,13 @@ export interface RunoffBalance {
 	/** Net groundwater exchange (+ = gained); 0 when X2 = 0. */
 	exchangeMm: number;
 	storageStartMm: number;
+	/**
+	 * Each store at the start of the run's first day, after the warm-up (or
+	 * the saved state a warm start resumes from), by its series key
+	 * (production_store, routing_store, uh_store); they sum to storageStartMm.
+	 * Engine ≥ 1.20.0; absent before, when only the total was kept.
+	 */
+	storesStartMm?: Record<string, number>;
 	storageEndMm: number;
 }
 
@@ -2367,7 +2499,7 @@ export interface RunSummary {
 	 */
 	zeroRainInfill?: ZeroRainInfill | null;
 	/**
-	 * What settings.flowGapFill did to each record it fills (engine ≥ 1.20.0,
+	 * What settings.flowGapFill did to each record it fills (engine ≥ 1.23.0,
 	 * ./flowGapFill.ts): its days counted over the run, the gaps and the
 	 * donor's fit over the whole record. Absent when no record is filled.
 	 */

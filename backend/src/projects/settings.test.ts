@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { defaultProjectSettings, PE_SOURCE_MAX, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS } from '@water-management/engine';
+import { defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -32,12 +32,66 @@ describe('SettingsPatch.dataQuality', () => {
 			expect(ok(bad), JSON.stringify(bad)).toBe(false);
 		}
 	});
+
+	it('takes the limits added in engine 1.20.0 (issue #66) with the engine’s ranges', () => {
+		expect(
+			ok({
+				outlierFactorRain: 1000,
+				outlierFactorFlow: 1.5,
+				flatlineRainDays: 2,
+				flatlineEvapDays: 366,
+				flatlineFlowMinDays: 10,
+				flatlineFlowMaxDays: 40,
+				zeroRunRule: 'usualRain',
+				zeroRunMinWetDays: 1,
+				zeroRunUsualShare: 1,
+				zeroRunMinDays: 366,
+				zeroRunChirpsCheck: true,
+				lowVsChirpsRatio: 0.99,
+				lowVsChirpsBaseline: 'moving',
+				lowVsChirpsMinimum: 'scaled'
+			})
+		).toBe(true);
+		for (const bad of [
+			{ outlierFactorRain: 1 },
+			{ outlierFactorFlow: 1001 },
+			{ flatlineRainDays: 1 },
+			{ flatlineFlowMaxDays: 30.5 },
+			{ zeroRunRule: 'weekly' },
+			{ zeroRunMinWetDays: 0 },
+			{ zeroRunUsualShare: 0 },
+			{ zeroRunUsualShare: 1.1 },
+			{ zeroRunChirpsCheck: 'yes' },
+			{ lowVsChirpsRatio: 1 },
+			{ lowVsChirpsBaseline: 'decade' },
+			{ lowVsChirpsMinimum: 'none' }
+		]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('checks the flow flat-line cap against its floor on the merged settings', () => {
+		expect(dataQualityPatchError(patchSettings({}, { dataQuality: { flatlineFlowMinDays: 30 } }))).toBeNull();
+		expect(dataQualityPatchError(patchSettings({}, { dataQuality: { flatlineFlowMinDays: 100 } }))).toMatch(/flow flat-line cap \(90 days\) can't be below its floor \(100 days\)/);
+		expect(dataQualityPatchError(patchSettings({ dataQuality: { flatlineFlowMaxDays: 20 } }, { dataQuality: { flatlineFlowMinDays: 20 } }))).toBeNull();
+		expect(dataQualityPatchError(mergeSettings({}))).toBeNull();
+	});
+
+	it('records the rain-check limits in a fit record’s forcing, optionally', () => {
+		const rc = FitRecord.shape.forcing.unwrap().shape.rainChecks;
+		expect(rc.safeParse(undefined).success).toBe(true);
+		expect(rc.safeParse(rainCheckLimits(defaultDataQualitySettings())).success).toBe(true);
+		expect(rc.safeParse({ ...rainCheckLimits(defaultDataQualitySettings()), outlierFactorRain: 5 }).success).toBe(false);
+		expect(rc.safeParse({ zeroRunRule: 'usualRain' }).success).toBe(false);
+	});
 });
 
 describe('mergeSettings', () => {
 	it('fills dataQuality from the defaults for settings stored before it existed, and field by field', () => {
-		expect(mergeSettings({}).dataQuality).toEqual({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
+		expect(mergeSettings({}).dataQuality).toEqual(defaultDataQualitySettings());
+		// Stored before the engine 1.20.0 limits: they take their defaults, so the project runs as before.
 		expect(mergeSettings({ dataQuality: { agreementMinDays: 30 } }).dataQuality).toEqual({
+			...defaultDataQualitySettings(),
 			agreementMinRatio: 2 / 3,
 			agreementMaxRatio: 1.5,
 			agreementMinDays: 30
@@ -212,6 +266,10 @@ describe('SettingsPatch.rainSource (engine ≥ 0.30.0)', () => {
 			['an unknown series', [{ ...fixed, series: 'rain_catchment_mm' }]],
 			['an extra field', [{ ...fixed, note: 'x' }]],
 			['a bad date', [{ ...fixed, end: '2019-02-30' }]],
+			['a quantile map (engine ≥ 1.21.0)', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011, wetDayMm: 1 } }]],
+			['a quantile map without a threshold', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011 } }]],
+			['a quantile map with its era reversed', [{ ...fitNoProv, quantileMap: { fromWaterYear: 2011, toWaterYear: 1995, wetDayMm: 1 } }]],
+			['a quantile map threshold out of range', [{ ...fixed, quantileMap: { fromWaterYear: 1995, toWaterYear: 2011, wetDayMm: 25 } }]],
 			['not a list', { ...fixed }],
 			['101 periods', Array.from({ length: 101 }, (_, i) => ({ ...fixed, start: `${1800 + i}-01-01`, end: `${1800 + i}-06-30` }))]
 		];
@@ -493,7 +551,7 @@ describe('patchSettings', () => {
 		const stored = { gr4j: { x1: 500, x3: 40 }, dataQuality: { agreementMinDays: 30 } };
 		const s = patchSettings(stored, { gr4j: { x4: 2 }, dataQuality: { agreementMinRatio: 0.9 } });
 		expect(s.gr4j).toMatchObject({ x1: 500, x3: 40, x4: 2 });
-		expect(s.dataQuality).toEqual({ agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
+		expect(s.dataQuality).toEqual({ ...defaultDataQualitySettings(), agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
 	});
 
 	it('replaces top-level values and whole WR2012 groups (the reference is never half-merged)', () => {

@@ -352,9 +352,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - the CHIRPS check is `lowvschirps`: below 50 % of the record's *usual*
     catchment / CHIRPS share (the median), not of CHIRPS itself, so a
     systematic CHIRPS bias doesn't flag every year or hide real gaps;
-  - the thresholds are engine constants like the outlier and flat-line
-    limits, not settings; the hydrologist question on them is in
-    followups.md (*Data-quality limits*).
+  - the thresholds were engine constants like the outlier and flat-line
+    limits; since engine 1.20.0 (issue #66) all of them are
+    `settings.dataQuality`, defaults unchanged, with the hydrologist
+    review's alternatives as opt-in settings (followups.md, *Data-quality
+    limits* and *Data-quality alternatives as defaults*).
 
   The importer prints the zero-run note; the low-vs-CHIRPS check is
   engine-only. The fix itself stays with the data (issue #2 item 1).
@@ -1678,14 +1680,14 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
 
 ### WP-1.32 Gap filling for input series
 
-> **Built for the observed flow records 2026-09-28 (engine 1.20.0, issue
+> **Built for the observed flow records 2026-09-28 (engine 1.23.0, issue
 > #66), off by default.** Two decisions differ from the plan below: the fill
 > is a project setting per record (`settings.flowGapFill`, so a run's
 > snapshot reproduces it), not a `time_series.fill` column, and the donor is
 > named by kind (the other observed record or the reference gauge), not by
 > series id. Rain gaps stay with CR-20's CHIRPS infill (§2.4c).
 > Filled days are left out of every statistic unless the setting says
-> otherwise. [model.md §2.10h](../model.md).
+> otherwise. [model.md §2.10i](../model.md).
 
 - **Goal:** fill missing days in a rain or flow series in a way the
   hydrologist chooses and can see, instead of the engine treating gaps as

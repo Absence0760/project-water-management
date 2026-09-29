@@ -1,5 +1,5 @@
-// Gap filling for the observed flow records (engine ≥ 1.20.0, issue #66,
-// docs/model.md §2.10h). Opt-in per record through settings.flowGapFill:
+// Gap filling for the observed flow records (engine ≥ 1.23.0, issue #66,
+// docs/model.md §2.10i). Opt-in per record through settings.flowGapFill:
 // with no spec a run is exactly what it was before.
 //
 // Two methods, in this order, on the record's interior gaps (a run of
@@ -350,7 +350,7 @@ export function flowFillWarning(s: FlowFillSummary, useFilledDays: boolean): str
 	return `${RECORD_LABEL[s.kind]}: ${parts.length ? `gaps filled in the run, ${parts.join('; ')}.` : 'no gap filled in the run.'}${refused}${parts.length ? reads : ''} The stored record is unchanged.`;
 }
 
-/** The run's per-day columns for a filled record (engine ≥ 1.20.0): the filled values, and the method code. */
+/** The run's per-day columns for a filled record (engine ≥ 1.23.0): the filled values, and the method code. */
 export const FLOW_FILL_COLUMNS = {
 	observed_flow: {
 		values: { key: 'observed_flow_filled', label: 'Observed flow: filled gap days only (interpolated or from a donor record)' },

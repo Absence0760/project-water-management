@@ -729,7 +729,31 @@ const PE_LABEL = 'Potential evaporation (GR4J)';
 const DATA_QUALITY_FIELDS: Record<string, ScalarField> = {
 	agreementMinRatio: { label: 'gauge/logger lowest ratio', fmt: pct },
 	agreementMaxRatio: { label: 'gauge/logger highest ratio', fmt: pct },
-	agreementMinDays: { label: 'gauge/logger minimum shared days', fmt: withUnit('days') }
+	agreementMinDays: { label: 'gauge/logger minimum shared days', fmt: withUnit('days') },
+	// Engine ≥ 1.20.0 (issue #66); a snapshot without them ran the defaults (effectiveSettings merges them in).
+	outlierFactorRain: { label: 'rain outlier factor', fmt: (v) => `${fmtValue(v)}× the 99th percentile` },
+	outlierFactorFlow: { label: 'flow outlier factor', fmt: (v) => `${fmtValue(v)}× the 99th percentile` },
+	flatlineRainDays: { label: 'rain flat-line', fmt: withUnit('days') },
+	flatlineEvapDays: { label: 'A-pan flat-line', fmt: withUnit('days') },
+	flatlineFlowMinDays: { label: 'flow flat-line floor', fmt: withUnit('days') },
+	flatlineFlowMaxDays: { label: 'flow flat-line cap', fmt: withUnit('days') },
+	zeroRunRule: {
+		label: 'zero-rain run rule',
+		fmt: (v) => (v === 'wetDays' ? 'days in the wet season' : v === 'usualRain' ? 'share of the usual annual rain' : String(v))
+	},
+	zeroRunMinWetDays: { label: 'zero-rain run wet-season days', fmt: withUnit('days') },
+	zeroRunUsualShare: { label: 'zero-rain run share of usual annual rain', fmt: pct },
+	zeroRunMinDays: { label: 'zero-rain run minimum length', fmt: withUnit('days') },
+	zeroRunChirpsCheck: { label: 'zero-rain run CHIRPS check', fmt: (v) => (v === true ? 'on' : v === false ? 'off' : String(v)) },
+	lowVsChirpsRatio: { label: 'low vs CHIRPS ratio', fmt: pct },
+	lowVsChirpsBaseline: {
+		label: 'low vs CHIRPS usual ratio',
+		fmt: (v) => (v === 'record' ? 'whole-record median' : v === 'moving' ? 'moving median (±5 years)' : String(v))
+	},
+	lowVsChirpsMinimum: {
+		label: 'low vs CHIRPS minimum CHIRPS rain',
+		fmt: (v) => (v === 'fixed' ? '50 mm' : v === 'scaled' ? 'max(50 mm, 25 % of median annual CHIRPS)' : String(v))
+	}
 };
 const SETTINGS_MONTHLY: Record<string, { label: string; unit: string }> = {
 	apanMm: { label: 'A-pan evaporation', unit: 'mm' },
@@ -805,12 +829,12 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
 		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) },
 		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) },
-		// Engine ≥ 1.20.0: absent means no record was filled.
+		// Engine ≥ 1.23.0: absent means no record was filled.
 		flowGapFill: { ...defaultFlowGapFill(), ...((r.flowGapFill as object | undefined) ?? {}) }
 	};
 }
 
-/** A record's gap-fill spec in words, for the settings diff (engine ≥ 1.20.0). */
+/** A record's gap-fill spec in words, for the settings diff (engine ≥ 1.23.0). */
 function gapFillText(v: unknown): string {
 	if (!v || typeof v !== 'object') return 'not filled';
 	const s = v as Partial<FlowGapFillSpec>;
@@ -820,7 +844,7 @@ function gapFillText(v: unknown): string {
 	return parts.length ? parts.join(', ') : 'not filled';
 }
 
-/** What changed in settings.flowGapFill between two runs (engine ≥ 1.20.0). */
+/** What changed in settings.flowGapFill between two runs (engine ≥ 1.23.0). */
 function diffFlowGapFill(ra: unknown, rb: unknown): InputChange[] {
 	const a = (ra ?? {}) as Record<string, unknown>;
 	const b = (rb ?? {}) as Record<string, unknown>;

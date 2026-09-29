@@ -17,7 +17,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 import { TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
@@ -283,6 +283,8 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const before = body.settings ? await beginSettingsChange(db, id) : null;
 			const current = await getProject(db, id);
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
+			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
+			if (dqError) throw new ApiError(400, dqError);
 			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {

@@ -1,5 +1,5 @@
-// Gap filling of the observed flow records (engine ≥ 1.20.0, issue #66,
-// docs/model.md §2.10h): each method, the gap-length edges, the donor's fit
+// Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
+// docs/model.md §2.10i): each method, the gap-length edges, the donor's fit
 // and its refusals, the clamp, the stored record untouched, a record without
 // gaps unchanged, and the run: off is the same run to the bit, on without
 // useFilledDays scores the same days, and with it scores the filled days too.

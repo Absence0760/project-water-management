@@ -1,5 +1,5 @@
 <!--
-	settings.flowGapFill (engine ≥ 1.20.0, issue #66, docs/model.md §2.10h):
+	settings.flowGapFill (engine ≥ 1.23.0, issue #66, docs/model.md §2.10i):
 	whether a run fills the gaps of the observed gauge and logger records, and
 	how, and whether statistics read the filled days. Off for every record by
 	default. Each number is kept inside the engine's bounds by its input, so

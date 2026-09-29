@@ -101,21 +101,26 @@ export function diffModel(before: ModelInput, after: ProjectModel): OverrideDiff
 		const keys = new Set([...Object.keys(was), ...Object.keys(n)]);
 		// A damCapacityM3 op resizes an existing dam's area (or survey curve) along its own relation (engine
 		// ≥ 1.10.0, model.md §2.13). The table records what it shows, so the area as shown follows the capacity
-		// op; a curve dam's resized curve can't be shown, so its capacity is changed through "Add a change".
+		// op, and so does a survey curve edited with it (engine ≥ 1.20.0: the enlarged dam's own survey). A curve
+		// dam resized with its curve left as it was would be resized along it, which the table can't show, so
+		// that capacity is changed through "Add a change".
 		const resized = n.kind === 'farm' && was.damCapacityM3 > 0 && n.damCapacityM3 > 0 && n.damCapacityM3 !== was.damCapacityM3;
-		if (resized && was.damCurve?.length)
-			unsupported.push(`The capacity of ${label(n)}'s dam, which has a survey curve: a scenario resizes the curve along the dam's own relation, which the table can't show. Add it as a change instead.`);
+		const curveEdited = !same(was.damCurve ?? null, n.damCurve ?? null);
+		if (resized && was.damCurve?.length && !curveEdited)
+			unsupported.push(
+				`The capacity of ${label(n)}'s dam, which has a survey curve: a scenario resizes the curve along the dam's own relation, which the table can't show. Paste the enlarged dam's survey curve with it, or add it as a change instead.`
+			);
 		for (const k of keys) {
-			if (resized && k === 'damAreaFullM2') continue;
+			if (resized && (k === 'damAreaFullM2' || k === 'damCurve')) continue;
 			if (IGNORED_NODE_KEYS.has(k) || k === 'kind' || k === 'downstreamNodeId') continue;
 			const before = (was as unknown as Record<string, unknown>)[k];
 			const now = (n as unknown as Record<string, unknown>)[k];
 			if (same(before, now)) continue;
 			if (settable.has(k)) ops.push({ op: 'node.set', nodeId: n.id, field: k, value: plain(now ?? null) } as ScenarioOp);
-			else if (k === 'damCurve') unsupported.push(`The dam survey curve of ${label(n)}: a scenario can't change a survey curve yet.`);
 			else unsupported.push(`${NODE_FIELD_SPECS[k as NodeSetField]?.label ?? k} on ${label(n)}: a scenario can't set that on a ${n.kind}.`);
 		}
 		if (resized) ops.push({ op: 'node.set', nodeId: n.id, field: 'damAreaFullM2', value: n.damAreaFullM2 ?? null });
+		if (resized && curveEdited) ops.push({ op: 'node.set', nodeId: n.id, field: 'damCurve', value: plain(n.damCurve ?? null) } as ScenarioOp);
 	}
 
 	// --- nodes added: node.add, each after the node it drains into

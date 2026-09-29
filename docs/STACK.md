@@ -140,7 +140,7 @@ pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
 pnpm check:pins             # the Playwright pins agree (backend, e2e, the renderer image's tag and npm lock), and the renderer image's base digest and apt versions + snapshot are pinned; bump them together as backend/renderer.Dockerfile's header says
 pnpm check:renderer-image   # build the report renderer's container image and smoke-test it as Lambda runs it (docker; ~3.5 GB)
-pnpm test:guards            # node:test suites for scripts/guards, scripts/release and scripts/ingest
+pnpm test:guards            # node:test suites for scripts/guards, scripts/release, scripts/ingest and infra/scripts
 pnpm gen:help-art           # re-render the help pictures (optional: Blender 5 + ImageMagick 7; output is committed)
 pnpm gen:landing-art        # regenerate the landing page's art, screens and figures (optional tooling; docs/design/landing-art.md)
 pnpm gen:limitations        # regenerate the known-limitations list from docs/engine-audit.md (after changing an audit item's decision)

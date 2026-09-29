@@ -193,13 +193,18 @@ export function catchmentTraceRows(day: RunCatchmentDay): TraceRow[] {
 		const col = byKey.get(c.key);
 		const store = day.previousStores ? RUNOFF_STORES[c.key] : undefined;
 		if (store && col) {
+			const value = day.previousStores![c.key] ?? null;
 			rows.push({
 				key: `previous_${c.key}`,
 				letter: `${store}[t−1]`,
 				label: `${col.label}, the day before`,
 				unit: 'mm',
-				formula: 'the store at the end of the day before; only the total is recorded for the run’s first day',
-				value: day.previousStores![c.key] ?? null
+				// Null only on the first day of a run from before engine 1.20.0, which kept only the stores' total there.
+				formula:
+					value === null
+						? 'not recorded: a run from before engine 1.20.0 kept only the stores’ total on its first day'
+						: 'the store at the end of the day before (on the run’s first day, after the warm-up)',
+				value
 			});
 		}
 		if (!col) {

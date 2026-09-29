@@ -90,7 +90,7 @@ const RUN_KEYS = [
 	'river_abstraction',
 	// Land cover (engine 0.24.0, WP-1.35)
 	'landcover_reduction',
-	// Gap filling of the observed flow records (engine 1.20.0, issue #66)
+	// Gap filling of the observed flow records (engine 1.23.0, issue #66)
 	'observed_flow_fill', 'observed_flow_filled', 'observed_flow_other_fill', 'observed_flow_other_filled',
 	// GR4J (packages/engine/src/runoff/simulate.ts)
 	'pet', 'aet', 'production_store', 'routing_store', 'uh_store', 'exchange'

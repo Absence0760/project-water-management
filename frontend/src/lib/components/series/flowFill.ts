@@ -1,5 +1,5 @@
 // Which days of an observed flow record a run fills (settings.flowGapFill,
-// engine ≥ 1.20.0, docs/model.md §2.10h), for shading the Data tab's chart
+// engine ≥ 1.23.0, docs/model.md §2.10i), for shading the Data tab's chart
 // like the rain a run treats as missing (./zeroRain.ts). The engine's own
 // fillFlowGaps decides, over the whole stored record, so the chart shows
 // what a run over the full record would fill. The stored values are never

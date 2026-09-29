@@ -91,6 +91,8 @@
 
 	/** Gauge-vs-logger thresholds; null = the engine defaults. */
 	const dataQuality = $derived(settings?.dataQuality ?? null);
+	// The project's data-quality limits; resolveDataQuality falls back to the defaults for anything missing or invalid, like a run does.
+	const dq = $derived(resolveDataQuality(dataQuality));
 	const zeroRainRuns = $derived(settings?.zeroRainRuns ?? null);
 
 	let list = $state<SeriesMeta[]>(untrack(() => initial ?? []));
@@ -234,11 +236,11 @@
 		const v = values[viewing.id];
 		const h = first('rain_chirps_mm');
 		// The CHIRPS fit period too (engine ≥ 0.29.0): accumulations are judged with each range's factors, as a run judges them.
-		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []) };
+		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []), dq };
 		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly', fit) : null;
 	});
 
-	// Days a run fills in an observed flow record (settings.flowGapFill, engine ≥ 1.20.0), shaded on the record
+	// Days a run fills in an observed flow record (settings.flowGapFill, engine ≥ 1.23.0), shaded on the record
 	// a run reads (the first of its kind by name), with the filled values as a line of their own.
 	const flowShading = $derived.by(() => {
 		if (!viewing || !isGapFillKind(viewing.kind) || viewing.id !== first(viewing.kind)?.id) return null;
@@ -270,10 +272,7 @@
 		const l = first('flow_logger_m3s');
 		const vo = o && values[o.id];
 		const vl = l && values[l.id];
-		// resolveDataQuality falls back to the defaults for anything missing or invalid, like a run does.
-		return vo && vl
-			? observedAgreement({ flow_observed_m3s: vo, flow_logger_m3s: vl }, agreementOptions(resolveDataQuality(dataQuality)))
-			: null;
+		return vo && vl ? observedAgreement({ flow_observed_m3s: vo, flow_logger_m3s: vl }, agreementOptions(dq)) : null;
 	});
 
 	// Catchment rain vs CHIRPS, when both exist: water years far below CHIRPS (zeros that are really missing data?).
@@ -282,7 +281,7 @@
 		const h = first('rain_chirps_mm');
 		const vc = c && values[c.id];
 		const vh = h && values[h.id];
-		const check = vc && vh ? rainVsChirpsCheck(rainVsChirps({ rain_catchment_mm: vc, rain_chirps_mm: vh })) : null;
+		const check = vc && vh ? rainVsChirpsCheck(rainVsChirps({ rain_catchment_mm: vc, rain_chirps_mm: vh }, dq)) : null;
 		return check ? { id: `${c!.id}-${check.check}`, series: c!, check } : null;
 	});
 
@@ -292,7 +291,7 @@
 		const h = first('rain_chirps_mm');
 		const vc = c && values[c.id];
 		const vh = h && values[h.id];
-		return vc && vh ? { series: c!, result: doubleMass({ rain_catchment_mm: vc, rain_chirps_mm: vh }, resolveZeroRain(zeroRainRuns, [])) } : null;
+		return vc && vh ? { series: c!, result: doubleMass({ rain_catchment_mm: vc, rain_chirps_mm: vh }, resolveZeroRain(zeroRainRuns, []), dq) } : null;
 	});
 	const dmCheck = $derived.by(() => {
 		const fp = resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []);
@@ -305,7 +304,9 @@
 		...list.flatMap((s) => {
 			const v = values[s.id];
 			if (!v || !(SERIES_KINDS as readonly string[]).includes(s.kind)) return [];
-			return checkSeries(s.kind as SeriesKind, v).map((c) => ({ id: `${s.id}-${c.check}`, series: s, check: c }));
+			// The catchment rain's zero-run check reads CHIRPS when the CHIRPS check is on, as a run does.
+			const h = s.kind === 'rain_catchment_mm' ? first('rain_chirps_mm') : null;
+			return checkSeries(s.kind as SeriesKind, v, dq, (h && values[h.id]) || null).map((c) => ({ id: `${s.id}-${c.check}`, series: s, check: c }));
 		}),
 		...(lowVsChirps ? [lowVsChirps] : []),
 		...(dmCheck ? [dmCheck] : [])

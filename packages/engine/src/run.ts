@@ -367,7 +367,7 @@ function runNetwork(
 				aligned(otherKind).map((v) => (v === null ? NaN : v * SEC_PER_DAY))
 			);
 		}
-		// Gap filling (engine ≥ 1.20.0, ./flowGapFill.ts): each filled record's filled days and method, beside it.
+		// Gap filling (engine ≥ 1.23.0, ./flowGapFill.ts): each filled record's filled days and method, beside it.
 		for (const [col, kind] of [['observed_flow', observedKind], ['observed_flow_other', otherKind]] as const) {
 			const f = kind ? flowFill?.[kind] : undefined;
 			if (!f?.any) continue;
@@ -738,7 +738,7 @@ function runNetwork(
 	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
-	const checks = seriesChecks(series);
+	const checks = seriesChecks(series, settings.dataQuality);
 	// The double-mass check (engine ≥ 0.18.0) follows the catchment rain's own checks.
 	const dmCheck = doubleMassCheck(doubleMass, chirpsCorrection?.fitPeriod?.period);
 	if (dmCheck) {

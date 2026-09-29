@@ -55,7 +55,7 @@ export const sameProvenance = (a: SeriesProvenance | null | undefined, b: Series
 export const provenanceKey = (p: SeriesProvenance | null | undefined): string => (p ? `${p.product}/${p.version}` : '');
 
 // ---------------------------------------------------------------------------
-// Source and unit (engine ≥ 1.20.0, issue #66, 107_series_source.sql;
+// Source and unit (engine ≥ 1.23.0, issue #66, 107_series_source.sql;
 // docs/data-model.md § Series source and unit). Any series, not only
 // CHIRPS: where its values came from (a station id, an agency, a file, a
 // data feed) and the unit they were given in before the series routes

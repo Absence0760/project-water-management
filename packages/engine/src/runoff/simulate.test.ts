@@ -6,6 +6,7 @@ import { gr4j } from './gr4j';
 import { GR4J_NO_PET, hasPotentialEvaporation } from './pet';
 import { resolveParams, runoffForcing, simulateRunoff } from './simulate';
 import { GR4J_PARAMS } from './params';
+import { checkRunoffBalance } from '../verify/checks';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100]; // Oct … Sep
 
@@ -77,6 +78,20 @@ describe('GR4J warm-up', () => {
 		expect(thrice.storageStartMm).not.toBe(warm.storageStartMm);
 	});
 
+	it('records each store at the start of the first output day, summing to the starting storage (engine 1.20.0)', () => {
+		const half = simulateRunoff(gr4j, p, f, { warmupDays: 0 });
+		expect(half.storesStartMm).toEqual([100, 30, 0]);
+		const warm = simulateRunoff(gr4j, p, f, { warmupDays: 7 });
+		expect(warm.storesStartMm.reduce((a, v) => a + v, 0)).toBeCloseTo(warm.storageStartMm, 12);
+		// The same stores the first day steps from: a one-cycle warm-up is the doubled forcing's day 7 start, its day 6 end.
+		const twice = simulateRunoff(gr4j, p, { rainMm: Float64Array.from([...f.rainMm, ...f.rainMm]), petMm: Float64Array.from([...f.petMm, ...f.petMm]) }, { warmupDays: 0 });
+		expect(warm.storesStartMm).toEqual(twice.stores.map((s) => s[6]));
+		// A warm start begins from the saved state, so its stores are that state's, not a warm-up's.
+		const saved = simulateRunoff(gr4j, p, f, { warmupDays: 7, captureAt: 3 }).captured!;
+		const resumed = simulateRunoff(gr4j, p, f, { warmupDays: 7, initial: saved });
+		expect(resumed.storesStartMm).toEqual(warm.stores.map((s) => s[2]));
+	});
+
 	it('the fast path gives the same flow as the traced run', () => {
 		const a = simulateRunoff(gr4j, p, f, { warmupDays: 3 });
 		const b = simulateRunoff(gr4j, p, f, { warmupDays: 3, trace: false });
@@ -112,6 +127,25 @@ describe('runModel with GR4J', () => {
 		expect(series(out, 'base_flow')).toBeUndefined();
 		// Conservation: a closed model can't make more flow than the rain plus what it started with.
 		expect(b.flowMm).toBeLessThanOrEqual(b.rainMm + b.storageStartMm);
+		// Each store after the warm-up (engine 1.20.0), by series key, summing to the starting storage.
+		expect(Object.keys(b.storesStartMm!)).toEqual(['production_store', 'routing_store', 'uh_store']);
+		expect(Object.values(b.storesStartMm!).reduce((a, v) => a + v, 0)).toBeCloseTo(b.storageStartMm, 9);
+		// Day one closes store by store from them: the production store's change is its own.
+		expect(b.storesStartMm!.production_store).toBeLessThanOrEqual(350);
+		expect(checkRunoffBalance(catchment(rain), out)).toBeNull();
+	});
+
+	it('the runoff self-check catches starting stores that do not add up to the starting storage', () => {
+		const input = catchment(rain);
+		const out = runModel(input);
+		const b = out.summary.runoff!;
+		b.storesStartMm = { ...b.storesStartMm!, routing_store: b.storesStartMm!.routing_store! + 1 };
+		expect(checkRunoffBalance(input, out)).toMatch(/stores at the start sum to/);
+		b.storesStartMm = { production_store: b.storageStartMm, routing_store: 0 };
+		expect(checkRunoffBalance(input, out)).toMatch(/missing or outside their bounds/);
+		// A run from before engine 1.20.0 has none, and the check still closes on the total.
+		delete b.storesStartMm;
+		expect(checkRunoffBalance(input, out)).toBeNull();
 	});
 
 	it('reports groundwater exchange as a series when X2 ≠ 0', () => {

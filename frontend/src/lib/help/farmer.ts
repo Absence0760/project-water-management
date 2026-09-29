@@ -1,6 +1,6 @@
 // The farm view's words (category 'farmer'): whole entries, shown on
 // /farm/words and in the /help glossary's last topic. Their own module so a
-// farmer's words page loads these eight and not the whole glossary, and so
+// farmer's words page loads these and not the whole glossary, and so
 // scripts/guards/i18n_sheet.mjs can load them with Node's type stripping.
 // Their Afrikaans is in content.af.ts. No HelpTip points at them (they have
 // no `fields`; content.test.ts checks).
@@ -95,5 +95,15 @@ export const FARMER_HELP: HelpEntry[] = [
 		aliases: ['WGV', 'watergebruikersvereniging', 'irrigation board', 'besproeiingsraad'],
 		related: ['farm-modelled', 'farm-model-band'],
 		source: 'National Water Act (Act 36 of 1998) ch 8; s98 (irrigation boards)'
+	},
+	{
+		id: 'farm-season-outlook',
+		term: 'Season outlook (This season)',
+		short: 'What the irrigation level your WUA set gave your hydrological unit in past years’ weather. Not a forecast, and not a promise.',
+		long: 'Before the season, the model runs the whole season from where the catchment’s dams stood on its first day, once with each past year’s rain and river flows. Your WUA looks at what several irrigation levels would give, decides on one and publishes it; the app never picks a level.\n\nThe card gives what that level gave your own hydrological unit across those past years: about how much of the water you needed you got, the range in most of the years, and how full your dam ended the season. It never shows a neighbour’s figures.\n\nThe weather this season will be its own, so your share can fall outside that range. Your WUA reviews the level on the date the card gives. Only a notice from your WUA or from DWS is a restriction.',
+		category: 'farmer',
+		aliases: ['seisoensvooruitsig', 'hierdie seisoen', 'this season', 'outlook'],
+		related: ['farm-wua', 'farm-modelled', 'farm-needed'],
+		source: 'docs/design/planning-outputs.md §3.5; docs/model.md §2.15'
 	}
 ];

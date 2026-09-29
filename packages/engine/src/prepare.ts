@@ -143,7 +143,7 @@ export interface PreparedRun {
 	/** How the daily A-pan series is used (engine ≥ 0.38.0, issue #45; null without one). */
 	apanDaily: ApanDailyInfo | null;
 	/**
-	 * The observed flow records settings.flowGapFill fills (engine ≥ 1.20.0,
+	 * The observed flow records settings.flowGapFill fills (engine ≥ 1.23.0,
 	 * ./flowGapFill.ts), each aligned to the run: null when no record is
 	 * filled. `aligned` returns the filled record only with
 	 * settings.flowGapFill.useFilledDays; this is where every other reader
@@ -298,14 +298,17 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	// periods whose catchment rain comes from another series × monthly
 	// factors. Their primary reading is left out of every fit and of the
 	// zero-run handling, and replaced after the accumulations are applied.
-	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
+	// settings.dataQuality (engine ≥ 1.20.0): its zero-run and low-vs-CHIRPS limits decide which rain is suspect, everywhere below.
+	const dq = settings.dataQuality;
+	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
+	const doubleMass = doubleMassOf(series, settings.zeroRainRuns, dq);
 	const replaced = rainSourceSpans(settings.rainSource);
 	const isReplaced = (day: number) => replaced.some((w) => day >= w.from && day <= w.to);
-	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}) };
+	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}), dq };
 	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
 	const claimed = new Set<number>();
 	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
-	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced);
+	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced, checks);
 	const pinned = options.pinned;
 	// A pinned fit (a resumed run) stands in for the input's own; without a CHIRPS series there is nothing to correct.
 	const chirpsCorrection =
@@ -316,7 +319,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
 	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
-	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc)) : [];
+	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc), dq) : [];
 	const rsKeys = options.pinned || options.captureFits ? settings.rainSource.map((p) => stableStringify(p)) : [];
 	if (pinned) {
 		rsKeys.forEach((key, k) => {
@@ -329,7 +332,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	const chirpsRaw = alignSeries(series.rain_chirps_mm, start, days);
 	if (rainSource) for (let t = 0; t < days; t++) if (rainSource.blockChirps[t]) chirpsRaw[t] = null;
 	const chirpsUsed = chirpsCorrection ? applyChirpsCorrection(chirpsCorrection, catchment, chirpsRaw, month, start) : null;
-	// Gap filling of the observed flow records (engine ≥ 1.20.0, ./flowGapFill.ts): read in place of the record only with useFilledDays.
+	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): read in place of the record only with useFilledDays.
 	const flowFill = flowFillsFor(settings, series, start, days, warnings);
 	const readFilled = settings.flowGapFill.useFilledDays;
 	const aligned = (kind: SeriesKind) =>
@@ -509,7 +512,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	}
 	s.calibrationFlowKind ??= null;
 	s.calibrationExclusions = sanitizeExclusions(raw?.calibrationExclusions, warnings);
-	// Gap filling of the observed flow records (engine ≥ 1.20.0, ./flowGapFill.ts): off unless a record has a spec.
+	// Gap filling of the observed flow records (engine ≥ 1.23.0, ./flowGapFill.ts): off unless a record has a spec.
 	s.flowGapFill = resolveFlowGapFill(raw?.flowGapFill, warnings);
 	// Provenance only: never read by the model.
 	s.fitRecord = (raw?.fitRecord as ProjectSettings['fitRecord'] | undefined) ?? null;

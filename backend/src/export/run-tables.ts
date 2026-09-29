@@ -11,7 +11,9 @@ import {
 	provenanceLabel,
 	rainSourceFactorOrigin,
 	rainSourceFallbackText,
+	rainSourceIntensityReferenceText,
 	rainSourceKindName,
+	rainSourceQuantileMapText,
 	FLOW_DM_MIN_DAYS,
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
@@ -47,7 +49,7 @@ const CATCHMENT_ORDER = [
 	'simulated_outflow',
 	'observed_flow',
 	'observed_flow_other',
-	// Gap filling (engine ≥ 1.20.0, issue #66): beside the records they fill.
+	// Gap filling (engine ≥ 1.23.0, issue #66): beside the records they fill.
 	'observed_flow_fill',
 	'observed_flow_filled',
 	'observed_flow_other_fill',
@@ -561,7 +563,7 @@ export function* zeroRainLines(z: RunSummary['zeroRainInfill']): Generator<strin
 }
 
 /**
- * The observed flow records the run filled (engine ≥ 1.20.0, model.md §2.10h,
+ * The observed flow records the run filled (engine ≥ 1.23.0, model.md §2.10i,
  * issue #66), one row per record; nothing at all when no record is filled, so
  * a run that never set it exports as before.
  */
@@ -639,6 +641,35 @@ export function* rainSourceCsvLines(r: RunSummary['rainSource']): Generator<stri
 	}
 	yield csvRow(['Factor per month', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep']);
 	for (const p of r.periods) yield csvRow([`${p.start} to ${p.end}`, ...WY_CALENDAR_MONTHS.map((m) => p.factors[m - 1] ?? '')]);
+	// The daily-intensity check and the quantile map (engine ≥ 1.21.0, issue #66): absent on older runs.
+	const withIntensity = r.periods.filter((p) => p.intensity);
+	if (!withIntensity.length) return;
+	yield csvRow([
+		'Daily intensity',
+		'Heavy day (mm)',
+		'Reference',
+		'Reference heavy-day share (%)',
+		'Series × factor heavy-day share (%)',
+		'After the quantile map (%)',
+		'Band (points)',
+		'Differs by more than the band',
+		'Quantile map'
+	]);
+	const pct = (x: number | null | undefined) => (x == null ? '' : x * 100);
+	for (const p of withIntensity) {
+		const i = p.intensity!;
+		yield csvRow([
+			`${p.start} to ${p.end}`,
+			i.heavyDayMm,
+			rainSourceIntensityReferenceText(i.reference),
+			pct(i.reference.share),
+			pct(i.scaled.share),
+			pct(i.mapped?.share),
+			i.band * 100,
+			i.differs === null ? '' : i.differs ? 'yes' : 'no',
+			rainSourceQuantileMapText(p.quantileMap) ?? 'none: the monthly factor alone'
+		]);
+	}
 }
 
 const ACCUMULATION_STATUS: Record<string, string> = {
@@ -839,7 +870,7 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	yield* zeroRainLines(summary.zeroRainInfill);
 	yield '';
 
-	// Only on a run that filled a record (engine ≥ 1.20.0): other exports are unchanged.
+	// Only on a run that filled a record (engine ≥ 1.23.0): other exports are unchanged.
 	if (summary.flowGapFill?.length) {
 		yield* flowGapFillLines(summary.flowGapFill);
 		yield '';

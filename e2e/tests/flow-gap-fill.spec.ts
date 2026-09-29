@@ -2,8 +2,8 @@ import { createProject, putSeries, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 // Issue #66: a series' source and given unit (107_series_source.sql), and gap
-// filling of the observed flow records (engine ≥ 1.20.0, docs/model.md
-// §2.10h). Synthetic records only.
+// filling of the observed flow records (engine ≥ 1.23.0, docs/model.md
+// §2.10i). Synthetic records only.
 
 test('a flow record uploaded in l/s says so, and an editor records where it came from', async ({ page, owner }) => {
 	void owner;

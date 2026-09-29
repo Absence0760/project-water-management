@@ -60,6 +60,11 @@ import {
 type Check = (v: unknown) => string | null;
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+type Obj = Record<string, unknown>;
+const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+/** A survey curve row with only its three numbers (the backend's model schema is strict). */
+const isCurveRow = (r: unknown): boolean =>
+	isObj(r) && Object.keys(r).length === 3 && isNum(r.levelM) && isNum(r.areaM2) && r.areaM2 >= 0 && isNum(r.volumeM3) && r.volumeM3 >= 0;
 const range =
 	(lo: number, hi: number, opts: { loOpen?: boolean; int?: boolean } = {}): Check =>
 	(v) => {
@@ -129,8 +134,12 @@ const DAM_AND_IRRIGATION = [
 ] as const;
 /** Land and flow share: what the catchment's natural flow is split by (baseline hydrology). */
 const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
-/** A dam's releases and where its seepage goes (WP-3.5); the survey curve is a table, set with the model, not an op. */
-const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct'] as const;
+/**
+ * A dam's releases, where its seepage goes and its survey curve (WP-3.5; the
+ * curve as a node.set from engine 1.20.0, so a scenario that raises a dam can
+ * carry the enlarged dam's own surveyed curve, docs/scenarios.md § Dam capacity).
+ */
+const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct', 'damCurve'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
 /**
@@ -185,6 +194,10 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	damReleaseM3Day: nullable(monthlyOf(nonNeg)),
 	damOutletCapacityM3Day: nullable(nonNeg),
 	damSeepageReturnPct: frac,
+	// The rows, as the model form saves them; whether they make a usable curve (volume rising, some area) is a model rule (modelRules.ts damCurveProblem).
+	damCurve: nullable((v) =>
+		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every(isCurveRow) ? null : `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`
+	),
 	boreholeCapacityM3Day: nullable(nonNeg),
 	boreholeRule: oneOf(BOREHOLE_RULES),
 	boreholeTriggerPct: frac,
@@ -600,8 +613,6 @@ export const SCENARIO_OPS_MAX = 500;
 // Validator
 // ---------------------------------------------------------------------------
 
-type Obj = Record<string, unknown>;
-const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 /** Build a clean object from `fields`, collecting the errors; unknown keys are dropped. */
 function pickFields(src: Obj, fields: Record<string, Check>, optional: ReadonlySet<string>, where: string, errors: string[]): Obj {
@@ -625,12 +636,6 @@ const NODE_FIELDS: Record<string, Check> = {
 	downstreamNodeId: id,
 	sortOrder: range(-Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, { int: true }),
 	...NODE_FIELD_CHECKS,
-	// A new farm may bring its dam's survey curve (WP-3.5); runModel checks its shape.
-	damCurve: nullable((v) =>
-		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every((r) => isObj(r) && isNum(r.levelM) && isNum(r.areaM2) && isNum(r.volumeM3))
-			? null
-			: `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2, volumeM3 }`
-	),
 	// A new farm or user may bring its GN 538 property area and Table 2 rate (engine ≥ 1.12.0), context for its groundwater.
 	gaPropertyAreaHa: nullable(range(0, 10_000_000)),
 	gaRateM3HaYear: nullable((v) => (isGa538Rate(v) ? null : `must be one of the GN 538 Table 2 rates: ${GA538_GROUNDWATER_RATES.join(', ')}`))
@@ -646,7 +651,6 @@ const NODE_OPTIONAL = new Set<string>([
 	'damAreaFullM2',
 	'damAreaExponent',
 	'damSeepagePerDay',
-	'damCurve',
 	...SUPPLY,
 	...DAM_STORAGE,
 	...USER,

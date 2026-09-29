@@ -47,6 +47,7 @@
 	import { fitSummary, GR4J_FIELDS, RUNOFF_MODEL_HELP, RUNOFF_MODEL_LABEL, typicalRange } from './calibration';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { dataQualityError } from './dataQuality';
+	import DataQualitySection from './DataQualitySection.svelte';
 	import { AUTO_RUN_DEBOUNCE_MAX, AUTO_RUN_MAX_WAIT_MINUTES, autoRunError, resolveAutoRun } from '$lib/components/autorun/autoRun';
 	import type { AutoRunSettings, OutcomeSettings, OutlookSettings } from '$lib/api/types';
 	import { outcomesError, resolveOutcomes } from '$lib/components/outcomes/outcomeSettings';
@@ -789,7 +790,7 @@
 			bind:error={fitPeriodError}
 			{readonly}
 			inactive={s.chirpsBiasCorrection !== 'monthly'}
-			propose={() => proposeFitRanges(project.id, s.zeroRainRuns)}
+			propose={() => proposeFitRanges(project.id, s.zeroRainRuns, s.dataQuality)}
 		/>
 		<ZeroRainSection bind:value={s.zeroRainRuns} bind:error={zeroRainError} {readonly} />
 		<RainSourceSection bind:value={s.rainSource} bind:error={rainSourceError} {readonly} />
@@ -810,7 +811,7 @@
 			availableKinds={seriesKinds}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
-		<!-- Gap filling of the observed records (engine ≥ 1.20.0, issue #66); the server merges its default into every project's settings. -->
+		<!-- Gap filling of the observed records (engine ≥ 1.23.0, issue #66); the server merges its default into every project's settings. -->
 		{#if s.flowGapFill}
 			<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />
 		{/if}
@@ -1052,36 +1053,8 @@
 		{#if dateError}<p class="err" role="alert">{dateError}</p>{/if}
 	</section>
 
-	<!-- Data quality ------------------------------------------------------------------>
-	<section class="panel" id="set-quality" aria-labelledby="dq-h">
-		<div class="panel-head">
-			<h2 id="dq-h">Data quality <HelpTip key="settings.dataQuality" /></h2>
-			<span class="muted small">Gauge vs logger check on the Data tab and in run warnings</span>
-			<NotesDrawer projectId={project.id} target={settingTarget('quality')} />
-		</div>
-		<div class="fields">
-			<div class="field">
-				<label for="dq-min">Lowest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-min" decimals={1} min={1} max={100} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMinRatio} aria-describedby="dq-min-h" />
-				<span class="hint" id="dq-min-h">Flag a water year when the gauge reads less than this share of the logger. Default 66.7 % (two thirds).</span>
-				<FieldHistoryLine field="settings:dataQuality.agreementMinRatio" />
-			</div>
-			<div class="field">
-				<label for="dq-max">Highest gauge/logger ratio <span class="u">(%)</span></label>
-				<NumberInput id="dq-max" decimals={1} min={100} max={10_000} scale={100} disabled={readonly} bind:value={s.dataQuality.agreementMaxRatio} aria-describedby="dq-max-h" />
-				<span class="hint" id="dq-max-h">… or more than this share. Default 150 %.</span>
-				<FieldHistoryLine field="settings:dataQuality.agreementMaxRatio" />
-			</div>
-			<div class="field">
-				<label for="dq-days">Minimum shared days <span class="u">(days)</span></label>
-				<NumberInput id="dq-days" min={1} max={366} step={1} disabled={readonly} bind:value={s.dataQuality.agreementMinDays} aria-describedby="dq-days-h" />
-				<span class="hint" id="dq-days-h">Water years with fewer days on which both records have a reading are not judged. Default 90.</span>
-				<FieldHistoryLine field="settings:dataQuality.agreementMinDays" />
-			</div>
-		</div>
-		<p class="hint muted">These thresholds only decide which years are flagged; they never change the model results.</p>
-		{#if dqError}<p class="err" role="alert">{dqError}</p>{/if}
-	</section>
+	<!-- Data quality (DataQualitySection: gauge vs logger, outliers, flat stretches, zero-rain runs, low vs CHIRPS) -->
+	<DataQualitySection bind:value={s.dataQuality} projectId={project.id} {readonly} error={dqError} />
 
 	<!-- Outcome matrix (issue #53 R4): how results are read, never a model input -------------------->
 	<div id="set-outcomes">

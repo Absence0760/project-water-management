@@ -103,6 +103,15 @@ describe('buildPreviewRows: joining series with different periods', () => {
 		expect(rows[5]!.series.b).toMatchObject({ value: null, flags: ['missing'] }); // 2020-01-06, b[null]
 	});
 
+	it('flags flat stretches by the project’s data-quality limits (engine 1.20.0), not only the defaults', () => {
+		const flat = { c: { startDate: '2020-01-01', values: [1, 3, 3, 3, 3, 2] } };
+		const c = meta({ id: 'c', kind: 'rain_catchment_mm' });
+		const flags = (s: ProjectSettings) => buildPreviewRows([c], flat, s).map((r) => r.series.c!.flags.includes('flatline'));
+		expect(flags(settings)).toEqual([false, false, false, false, false, false]); // 4 days: under the default 5
+		const three = { ...settings, dataQuality: { ...settings.dataQuality, flatlineRainDays: 3 } };
+		expect(flags(three)).toEqual([false, true, true, true, true, false]);
+	});
+
 	it('adds a m³/day figure for a flow series’ value, and none for rain', () => {
 		expect(rows[3]!.series.b!.m3Day).toBeCloseTo(0.5 * 86_400, 6); // 2020-01-04
 		expect(rows[0]!.series.a!.m3Day).toBeNull();

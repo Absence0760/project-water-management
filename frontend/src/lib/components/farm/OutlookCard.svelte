@@ -3,7 +3,9 @@
 	// "This season" (issue #53 R5, E3): only while the WUA has a seasonal
 	// outlook published (the page checks outlookCard() first). Marked apart
 	// from the cards about what happened, like the forecast: an edge and
-	// "Season outlook" in words.
+	// "Season outlook" in words. Loaded lazily by the farm page (issue #122):
+	// most farms have no outlook published, and the page chunk is near its budget.
+	import { base } from '$app/paths';
 	import { t } from '$lib/i18n/locale.svelte';
 	import type { OutlookVm } from './outlookCard';
 
@@ -18,6 +20,7 @@
 	{#if vm.dam}<p>{vm.dam}</p>{/if}
 	{#if vm.review}<p>{vm.review}</p>{/if}
 	<p class="fine">{vm.fine}</p>
+	<a class="link" href="{base}/farm/words#farm-season-outlook">{t('What is the season outlook?')}</a>
 </section>
 
 <style>

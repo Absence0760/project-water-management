@@ -11,7 +11,7 @@
 //   are the fitted ones: `editedParams` lists those changed by hand since
 //   (the backend recomputes it on every save, and each run snapshots it).
 import { fromEpochDay, toEpochDay, waterYearLabel } from '../calendar';
-import { resolveArealRain, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { defaultDataQualitySettings, rainCheckLimits, resolveArealRain, resolvePe, type ArealRain, type CalibrationFitStatus, type CalibrationFlowKind, type ChirpsBiasMode, type ChirpsFitPeriod, type PeInput, type ProjectSettings, type RainCheckLimits, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { ChirpsFactorSet } from '../rain';
 import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
@@ -202,6 +202,11 @@ export interface FitRecord {
 	 * and A-pan don't reach GR4J, so a change to them alone is no GR4J
 	 * forcing change (it still changes demand and dam evaporation, which the
 	 * run records).
+	 * `rainChecks` (engine ≥ 1.20.0, issue #66) is settings.dataQuality's
+	 * zero-run and low-vs-CHIRPS limits: they decide which zero runs a run
+	 * treats as missing and which years the CHIRPS fit leaves out, so they
+	 * change the rain the fit saw. A `forcing` without it ran the defaults
+	 * (they were engine constants).
 	 */
 	forcing?: {
 		panCoefficient: number[];
@@ -228,15 +233,17 @@ export interface FitRecord {
 		 * Absent on a record made before it was tracked, which is never flagged.
 		 */
 		apanDaily?: ApanDailyFingerprint | null;
+		/** settings.dataQuality's rain-check limits (engine ≥ 1.20.0); absent = the defaults. */
+		rainChecks?: RainCheckLimits;
 	};
 	/**
 	 * Where the fitted record (flowKind) came from and the unit it was given
-	 * in (107_series_source.sql, engine ≥ 1.20.0): null = not recorded,
+	 * in (107_series_source.sql, engine ≥ 1.23.0): null = not recorded,
 	 * absent on a record made before it was tracked (never flagged).
 	 */
 	observedOrigin?: SeriesOrigin | null;
 	/**
-	 * The fitted record's gap filling (settings.flowGapFill, engine ≥ 1.20.0):
+	 * The fitted record's gap filling (settings.flowGapFill, engine ≥ 1.23.0):
 	 * its spec (null = not filled) and whether the fit read filled days.
 	 * Absent on a record made before it, which read measured days only.
 	 */
@@ -285,8 +292,10 @@ export interface FitContext {
 		/** The areal rainfall correction (engine ≥ 1.13.0); absent = none. */
 		arealRain?: ArealRain | null;
 		panCoefficientSource?: string;
-		/** Gap filling of the observed flow records (engine ≥ 1.20.0); absent = none. */
+		/** Gap filling of the observed flow records (engine ≥ 1.23.0); absent = none. */
 		flowGapFill?: FlowGapFillSettings | null;
+		/** settings.dataQuality (engine ≥ 1.20.0): its rain-check limits are recorded; absent = the defaults. */
+		dataQuality?: Partial<RainCheckLimits> | null;
 	};
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -338,7 +347,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 			pe: structuredClone(resolvePe(ctx.settings.pe, [])),
 			arealRain: resolveArealRain(ctx.settings.arealRain, []),
 			...(ctx.settings.panCoefficientSource ? { panCoefficientSource: ctx.settings.panCoefficientSource } : {}),
-			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {})
+			...(ctx.apanDaily !== undefined ? { apanDaily: ctx.apanDaily ? { ...ctx.apanDaily } : null } : {}),
+			rainChecks: rainChecksOf(ctx.settings.dataQuality)
 		},
 		...(ctx.observedOrigin !== undefined ? { observedOrigin: ctx.observedOrigin ? { ...ctx.observedOrigin } : null } : {}),
 		flowGapFill: {
@@ -402,8 +412,8 @@ export interface FitRecordStatus {
 	 * monthly row; not its source note), the pan coefficient and A-pan
 	 * evaporation (only while `pe` is `{ kind: 'pan' }`, the only time GR4J
 	 * reads them), CHIRPS bias correction, CHIRPS fit period, rain-source
-	 * periods or zero-rain run settings (the forcing GR4J runs under) have
-	 * changed since the fit. False for records made before `forcing` was recorded, and a
+	 * periods, zero-rain run settings or the data-quality rain-check limits
+	 * (engine ≥ 1.20.0; the forcing GR4J runs under) have changed since the fit. False for records made before `forcing` was recorded, and a
 	 * field added to `forcing` later (`chirpsBiasCorrection`, `zeroRainRuns`)
 	 * never flags a record made before it: there is nothing to compare
 	 * against. Also true when `chirpsSourceChanged`.
@@ -441,14 +451,14 @@ export interface FitRecordStatus {
 	/**
 	 * The fitted record now comes from another source, or was given in
 	 * another unit, than when it was fitted (107_series_source.sql, engine ≥
-	 * 1.20.0): a unit conversion error or another station changes what the
+	 * 1.23.0): a unit conversion error or another station changes what the
 	 * parameters were fitted to. False when the record or the caller doesn't
 	 * know the source.
 	 */
 	observedOriginChanged: boolean;
 	/**
 	 * The fitted record's gap filling changed in a way that changes the days
-	 * the fit read (engine ≥ 1.20.0): filled days read then or now, with
+	 * the fit read (engine ≥ 1.23.0): filled days read then or now, with
 	 * another spec or the switch flipped. False on a record made before it
 	 * when no filled day is read now.
 	 */
@@ -491,6 +501,15 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 /** Every element of two same-length numeric arrays is `close`. */
 const closeArray = (a: readonly number[] | null | undefined, b: readonly number[] | null | undefined): boolean =>
 	!!a && !!b && a.length === b.length && a.every((v, i) => close(v, b[i]));
+
+/**
+ * The rain-check limits of a stored settings.dataQuality or a forcing's
+ * `rainChecks`, over the defaults: absent (a record or settings from before
+ * engine 1.20.0) ran the defaults, when they were engine constants.
+ */
+function rainChecksOf(dq: Partial<RainCheckLimits> | undefined | null): RainCheckLimits {
+	return rainCheckLimits({ ...defaultDataQualitySettings(), ...(dq ?? {}) });
+}
 
 /** Settings without zeroRainRuns predate it (engine < 0.15.0): flagged zero runs ran as recorded. */
 const zeroRainOf = (s: Partial<ProjectSettings>) => {
@@ -538,7 +557,17 @@ const arealRainChanged = (a: ArealRain | null, b: ArealRain | null): boolean => 
 function forcingDiff(
 	settings: Partial<ProjectSettings>,
 	record: FitRecord
-): { panCoefficient: boolean; apanMm: boolean; pe: boolean; arealRain: boolean; chirpsBiasCorrection: boolean; zeroRainRuns: boolean; chirpsFitPeriod: boolean; rainSource: boolean } | null {
+): {
+	panCoefficient: boolean;
+	apanMm: boolean;
+	pe: boolean;
+	arealRain: boolean;
+	chirpsBiasCorrection: boolean;
+	zeroRainRuns: boolean;
+	chirpsFitPeriod: boolean;
+	rainSource: boolean;
+	rainChecks: boolean;
+} | null {
 	if (!record.forcing) return null;
 	const pe = resolvePe(settings.pe, []);
 	const panReachesGr4j = pe.kind === 'pan';
@@ -559,7 +588,9 @@ function forcingDiff(
 		// Engine ≥ 0.29.0; absent on an older forcing, so never flagged there.
 		chirpsFitPeriod: record.forcing.chirpsFitPeriod !== undefined && !sameJson(settings.chirpsFitPeriod ?? 'all', record.forcing.chirpsFitPeriod),
 		// Engine ≥ 0.30.0. A forcing without it predates rain-source periods, so it ran with none.
-		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? [])
+		rainSource: !sameJson(settings.rainSource ?? [], record.forcing.rainSource ?? []),
+		// Engine ≥ 1.20.0. A forcing without it ran the defaults, so a limit changed since is a change.
+		rainChecks: !sameJson(rainChecksOf(settings.dataQuality), rainChecksOf(record.forcing.rainChecks))
 	};
 }
 
@@ -584,7 +615,7 @@ function fillSpecOf(fill: FlowGapFillSettings | null | undefined, kind: string):
 	return spec ? { ...spec } : null;
 }
 
-/** Whether the days a fit of `kind` reads differ between two gap-fill states (engine ≥ 1.20.0). */
+/** Whether the days a fit of `kind` reads differ between two gap-fill states (engine ≥ 1.23.0). */
 function flowFillDiffers(then: FitRecord['flowGapFill'], now: FlowGapFillSettings | undefined, kind: string): boolean {
 	const t = then ?? { spec: null, useFilledDays: false };
 	const n = { spec: fillSpecOf(now, kind), useFilledDays: now?.useFilledDays === true };
@@ -629,7 +660,7 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 			chirpsSourceChanged ||
 			apanDailyChanged ||
 			chirpsFactorsChanged ||
-			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource)),
+			(!!forcing && (forcing.panCoefficient || forcing.apanMm || forcing.pe || forcing.arealRain || forcing.chirpsBiasCorrection || forcing.zeroRainRuns || forcing.chirpsFitPeriod || forcing.rainSource || forcing.rainChecks)),
 		chirpsSourceChanged,
 		apanDailyChanged,
 		chirpsFactorsChanged,

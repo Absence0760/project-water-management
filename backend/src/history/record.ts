@@ -172,7 +172,7 @@ export type AuditKind =
 	| 'invite.revoked'
 	| 'publication.published'
 	| 'publication.notice_changed'
-	// A seasonal outlook's level published to farmers, or withdrawn (104, issue #53 R5).
+	// A seasonal outlook's level published to farmers, or withdrawn (106, issue #53 R5).
 	| 'outlook.published'
 	| 'outlook.unpublished'
 	| 'share_link.created'

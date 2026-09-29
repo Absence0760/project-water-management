@@ -536,8 +536,8 @@ Un-cherry-pickable by privilege (the licensing assessor's concern, issue #15):
   `_insert`, `_update`).
 
 **Flow gap filling lives in `project.settings`** too (`settings.flowGapFill`,
-engine ≥ 1.20.0, issue #66; no table or migration): a spec per observed record
-and the switch that lets statistics read filled days ([model.md §2.10h](./model.md)).
+engine ≥ 1.23.0, issue #66; no table or migration): a spec per observed record
+and the switch that lets statistics read filled days ([model.md §2.10i](./model.md)).
 Filled values are derived in each run and never written to `time_series`, so
 turning it off undoes it; the run's own columns carry the filled days.
 
