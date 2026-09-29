@@ -93,7 +93,7 @@ Don't spin up the dev server to visually verify UI/frontend changes before repor
 Agents live in `.claude/agents/` by team (`engineering/`, `design/`, `audit/`, `personas/`, `i18n/`, `legal/`); commands in `.claude/commands/`. The index is `.claude/README.md`. The ones to reach for:
 
 - `/issue <n>` — work one GitHub issue end to end: worktree, route, `/check`, PR.
-- `/check` — pre-commit gate over the diff (review, test gaps, doc gaps; migration and UI review when those are touched).
+- `/check` — pre-commit gate over the diff (review, test gaps, doc gaps; engine, migration and UI review when those are touched).
 - `/safe-edit` — reviewer loop for security-sensitive or load-bearing changes. `/safe-migration` — any change under `backend/migrations/`.
 - `/polish-ui` — build or review one screen to `docs/design/ui-playbook.md`.
 - `/audit/<area>`, `/audit/all`, `/persona`, `/release-readiness` — periodic sweeps and the pre-release gate.

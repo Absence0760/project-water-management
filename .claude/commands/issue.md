@@ -42,7 +42,7 @@ the workflow by what the issue touches; more than one can apply.
 | `backend/migrations/` (a table, column, policy, grant, function) | `/safe-migration` |
 | Access, tokens, auth, RLS, personal data, the job queue, a Lambda entry point, `infra/` | `/safe-edit` (coder, reviewer, fix, re-review) |
 | A screen's layout or design | `/polish-ui <screen>` (the `ui-designer` agent, `docs/design/ui-playbook.md`) |
-| Model behaviour in `packages/engine` | bump `ENGINE_VERSION`; judge it by `docs/model.md`, `docs/engine-audit.md` and the invariant tests, not by the workbook |
+| Model behaviour in `packages/engine` | bump `ENGINE_VERSION`; judge it by `docs/model.md`, `docs/engine-audit.md` and the invariant tests, not by the workbook; `/check` runs the `engine-reviewer` agent on it |
 | Farmer-facing strings | write the English with `t()` / `msg()`; `pnpm gen:i18n:sheet`; then the `i18n-translator` and `i18n-checker` agents and `pnpm gen:i18n:apply <lang>` for each language (`docs/ui.md` § Language) |
 | A legal question (POPIA, liability, the National Water Act) | the `za-legal-researcher` agent, before building |
 | A domain question (would a hydrologist, WUA manager, farmer or assessor accept this?) | the matching `persona-*` agent, read-only |
