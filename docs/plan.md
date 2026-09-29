@@ -440,7 +440,8 @@ lives in [infra/README.md](../infra/README.md). The intent:
 **Acceptance:** `gh release create backend@X.Y.Z` (and `web@X.Y.Z`) deploys after the reviewer approves.
 The site is served at the chosen domain over HTTPS, a smoke test (register,
 import, run) passes against production, and a restore from backup has been
-rehearsed once.
+rehearsed once (`infra/scripts/restore-db.sh`, the checklist in
+[deployment.md § Restoring the database](./deployment.md#restoring-the-database)).
 
 ## Phase 7: Production hardening
 

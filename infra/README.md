@@ -162,9 +162,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
-| `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
+| `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
+| `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (40 runs; see [Validating locally](#validating-locally)) |
@@ -524,10 +525,18 @@ Claude does not run any of these, and none of them print a secret. Replace
   investigation, the least-effort option is a temporary SSM-managed EC2
   instance in a private subnet. That needs the `ssm`, `ssmmessages` and `ec2messages`
   endpoints (~$22/month while they exist), so remove them afterwards.
-- **Point-in-time restore** creates a *new* instance. Restore it with
-  `aws rds restore-db-instance-to-point-in-time`, then either `terraform import`
-  it in place of `aws_db_instance.main` (after `terraform state rm`) or swap
-  identifiers. Rehearse this once before go-live.
+- **Point-in-time restore** creates a *new* instance, and by default puts it
+  in the default subnet group, security group and parameter group with no
+  deletion protection. Use `scripts/restore-db.sh` (dry run by default,
+  `--execute` to run): it restores into this stack's groups (read from the
+  `db_*` outputs), turns RDS-managed master credentials back on (a PostgreSQL
+  restore drops them: new secret, new ARN), checks the copy, swaps
+  identifiers (old → `water-management-old-<ts>`), and moves
+  `aws_db_instance.main` in state with `state rm` + `import`, since the
+  provider tracks the instance by `DbiResourceId` and a swap alone would
+  leave state on the old one. It plans but never applies or deletes. RPO is
+  ~5 minutes. The runbook, the sources and the rehearse-once checklist:
+  [docs/deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database).
 
 ## Validating locally
 

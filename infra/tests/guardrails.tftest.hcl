@@ -568,6 +568,18 @@ run "production_guardrails" {
     condition     = aws_db_instance.main.performance_insights_enabled == false
     error_message = "Performance Insights stays off (cost)."
   }
+  # infra/scripts/restore-db.sh restores into these, read from the outputs
+  # (the parameter group's name has a generated suffix). The two computed ones
+  # are unknown under mocks, so their wiring is read from the source.
+  assert {
+    condition = (
+      output.db_instance_identifier == "water-management"
+      && output.db_subnet_group_name == "water-management-db"
+      && can(regex("output \"db_security_group_id\" \\{[^}]*value\\s*=\\s*aws_security_group\\.rds\\.id\\s", file("outputs.tf")))
+      && can(regex("output \"db_parameter_group_name\" \\{[^}]*value\\s*=\\s*aws_db_parameter_group\\.main\\.name\\s", file("outputs.tf")))
+    )
+    error_message = "restore-db.sh needs the db_instance_identifier, db_subnet_group_name, db_security_group_id and db_parameter_group_name outputs, wired to the live instance's."
+  }
 
   # --- Edge ----------------------------------------------------------------
   assert {

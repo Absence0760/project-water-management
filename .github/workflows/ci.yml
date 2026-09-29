@@ -410,9 +410,9 @@ jobs:
       - name: Playwright pins (backend, e2e, renderer image)
         run: node scripts/guards/check_playwright_pins.mjs
 
-      - name: Guard unit tests (scripts/guards, scripts/release)
+      - name: Guard unit tests (scripts/guards, scripts/release, infra/scripts)
         run: |
-          if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs; then
+          if ! node --test scripts/guards/*.test.mjs scripts/release/*.test.mjs infra/scripts/*.test.mjs; then
             echo "::error::A guard's own tests failed; its verdicts elsewhere in CI cannot be trusted until they pass. Reproduce: pnpm test:guards"
             exit 1
           fi
