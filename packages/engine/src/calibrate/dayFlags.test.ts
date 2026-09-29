@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
+import { defaultDataQualitySettings } from '../project';
 import {
 	censoredObserved,
 	dayQuality,
@@ -54,6 +55,19 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(got.slice(20, 40).every((f) => f === 'suspect')).toBe(true);
 		expect(got[19]).toBe('inRange');
 		expect(got[40]).toBe('inRange');
+	});
+
+	it('reads the project’s data-check limits (settings.dataQuality), not the defaults', () => {
+		const values: (number | null)[] = varying(100);
+		for (let i = 20; i < 30; i++) values[i] = 1.234; // 10 days of one value: under the default 14-day floor
+		const series = { startDate: start, values };
+		const at = (dataQuality?: ReturnType<typeof defaultDataQualitySettings>) =>
+			names(flowDayFlags({ kind: 'flow_observed_m3s', series, start: d0, days: 100, ...(dataQuality ? { dataQuality } : {}) })).slice(20, 30);
+		// Positive control: the defaults don't call 10 days a flat stretch.
+		expect(at().every((f) => f === 'inRange')).toBe(true);
+		expect(at(defaultDataQualitySettings()).every((f) => f === 'inRange')).toBe(true);
+		// A project that calls 7 days of one flow a flat stretch.
+		expect(at({ ...defaultDataQualitySettings(), flatlineFlowMinDays: 7 }).every((f) => f === 'suspect')).toBe(true);
 	});
 
 	it('with no rating recorded, nothing is flagged as extrapolated (positive control: the same record with one is)', () => {

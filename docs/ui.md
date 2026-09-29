@@ -2611,7 +2611,7 @@ which checks every catchment tab).
   Excluded days are left out of Fit automatically and the run's calibration
   statistics (model.md §2.10). Under them, **Quality flags for Fit
   automatically** (`settings/QualityFlagsFields.svelte`, helpers in
-  `settings/qualityFlags.ts`; engine ≥ 1.20.0, CR-18/19, model.md §2.10h): for
+  `settings/qualityFlags.ts`; engine ≥ 1.22.0, CR-18/19, model.md §2.10h): for
   each calibration record the project has (both when not known), its
   **highest gauging** and **lowest gauging** (m³/s, empty = not known) and a
   **Source**, required once either is set; and four selects for what the fit
@@ -2673,12 +2673,12 @@ which checks every catchment tab).
     that is never scored", or the fitted record's own mean flow (engine ≥
     1.19.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
     fit record's dry → wet line says the same.
-    From engine 1.20.0 (CR-19), when the quality flags left days out or
+    From engine 1.22.0 (CR-19), when the quality flags left days out or
     censored any, a **Fitted, all days (flags ignored)** column follows
     **Fitted**: the fitted parameters on every observed day, as recorded.
     Above the representativeness block, **Data quality of the scored
     record** (`calibration/DataQualityPanel.svelte`, rows in
-    `calibration/dayQuality.ts`; engine ≥ 1.20.0, CR-22, model.md §2.10h,
+    `calibration/dayQuality.ts`; engine ≥ 1.22.0, CR-22, model.md §2.10h,
     `data-testid="fit-data-quality"`): the heading's gist ("1 204 of 1 461
     observed days scored · 31 left out · 12 censored"), the record's gauged
     range and source (or that none is recorded), a table of the window's
@@ -2688,7 +2688,7 @@ which checks every catchment tab).
     when none is), a table of the scored days' rain by source (catchment
     gauge reading, infilled, missing, and zero-rain runs set aside among
     them), how wet the scored years were (the representativeness gist), and
-    a list of what the record can't support. A report from before 1.20.0 has
+    a list of what the record can't support. A report from before 1.22.0 has
     none of it.
     Under it, **How representative is the record** (engine ≥ 1.19.0, CR-34;
     `calibration/representativeness.ts`): the record's length and its mean
@@ -2755,7 +2755,7 @@ which checks every catchment tab).
     of kind or of the monthly row shows **Forcing changed since fit**; a
     reworded source doesn't, and under a monthly PE neither does a change to
     the pan coefficient or A-pan alone.
-    From engine 1.20.0 the record has a **Quality flags** row (the data
+    From engine 1.22.0 the record has a **Quality flags** row (the data
     quality gist and the gauged range), its score table adds **All days
     (flags ignored)** beside the in-sample column when the flags changed the
     days, and a change of a gauged range or of how flagged days are scored

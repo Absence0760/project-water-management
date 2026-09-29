@@ -933,7 +933,7 @@ the suggested order (the IDs carry the detail):
       CHIRPS fills them (closes the gap behind issue #2) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
-      the rain slice that CR-18 then generalises. **Done (engine 1.20.0,
+      the rain slice that CR-18 then generalises. **Done (engine 1.22.0,
       issue #66, model.md §2.10h):** CR-18 flags each day (`calibrate/dayFlags.ts`:
       in range, above / below the gauged range entered per record, suspect by
       the Data checks, infilled, missing; human use defined, not derived; rain
@@ -1043,7 +1043,7 @@ the suggested order (the IDs carry the detail):
       rules (flag thresholds, selection score, filters) before any automated
       fit is used as evidence; the question is in issue #90. Trigger: once
       the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Both
-      have (CR-18/19 in engine 1.20.0): the rule set can now read
+      have (CR-18/19 in engine 1.22.0): the rule set can now read
       `dayQuality` and the per-day flags; it still waits on the hydrologist
       signing off the default rules.
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
@@ -1054,7 +1054,7 @@ the suggested order (the IDs carry the detail):
       GR4J's simulated outflow on the same days, power-law fits compared at
       the median flow (indicative warnings with 8 or more segments, "Not
       judged" below), in the Plausibility checks panel and the summary CSV
-      (model.md §2.10d). CR-18's flags joined its day mask in engine 1.20.0.
+      (model.md §2.10d). CR-18's flags joined its day mask in engine 1.22.0.
 - [x] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which MAR estimate to trust (CR-7). CR-18 is

@@ -103,7 +103,7 @@ export interface PlausibilityInput {
 	excluded: Uint8Array;
 	/**
 	 * 1 on days the calibration record's quality flags mark extrapolated,
-	 * suspect or infilled (engine ≥ 1.20.0, CR-18, ../calibrate/dayFlags.ts
+	 * suspect or infilled (engine ≥ 1.22.0, CR-18, ../calibrate/dayFlags.ts
 	 * flaggedDayMask): the recession segments leave them out too. Absent = none.
 	 */
 	flowFlagged?: Uint8Array;

@@ -272,7 +272,7 @@ describe('fit record', () => {
 		const plain = fitRecordFromReport(report(), ctx);
 		expect(plain.qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
 		expect(fitRecordStatus({ ...s, qualityFlags: undefined } as never, plain).qualityFlagsChanged).toBe(false);
-		// A record made before engine 1.20.0 has none to compare: never flagged.
+		// A record made before engine 1.22.0 has none to compare: never flagged.
 		const { qualityFlags: _q, ...old } = plain;
 		expect(fitRecordStatus({ ...s, qualityFlags: moved }, old as never).qualityFlagsChanged).toBe(false);
 	});

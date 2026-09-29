@@ -1,5 +1,5 @@
 // The Calibration record's quality-flag fields (settings.qualityFlags, engine
-// ≥ 1.20.0, calibration research CR-18/19): each record's gauged range and
+// ≥ 1.22.0, calibration research CR-18/19): each record's gauged range and
 // how the fit scores flagged days. The form's error mirrors the backend's
 // SettingsPatch (the engine's ratingError), so Save is blocked with a
 // readable message instead of a 400. QualityFlagsFields.svelte renders it.

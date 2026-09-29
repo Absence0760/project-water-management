@@ -1,5 +1,5 @@
 // The data-quality panel of a fit (calibration research CR-22, engine ≥
-// 1.20.0): the per-day quality flags of the fitted record and its rain, as
+// 1.22.0): the per-day quality flags of the fitted record and its rain, as
 // table rows and words. Pure, so it is unit-tested; DataQualityPanel.svelte
 // renders it. No run-time engine import: the constants below mirror
 // calibrate/dayFlags.ts (FLOW_DAY_FLAGS, FLAG_USE_TEXT), so the Fit panel's

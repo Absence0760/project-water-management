@@ -1,6 +1,6 @@
 <!--
 	The data-quality panel of a fit (calibration research CR-22, engine ≥
-	1.20.0): the fitted record's days by quality flag and what the fit did with
+	1.22.0): the fitted record's days by quality flag and what the fit did with
 	each, the scored days' rain by source, how wet the scored years were, and
 	what the record can't support. Rows and words come from ./dayQuality.ts.
 -->

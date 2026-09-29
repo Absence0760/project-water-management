@@ -964,7 +964,7 @@ function runPlausibility(r: {
 	const kind = r.observedKind;
 	const flowFlagged = kind
 		? flaggedDayMask(
-				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(series[kind], start, days) })
+				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(series[kind], start, days), dataQuality: settings.dataQuality })
 			)
 		: null;
 	const catchment = r.aligned('rain_catchment_mm');

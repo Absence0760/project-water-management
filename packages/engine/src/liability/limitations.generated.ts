@@ -57,7 +57,7 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"source": "finding",
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",
 		"title": "Automatic calibration scored every observed day as recorded",
-		"status": "Fixed, engine 1.20.0 (pending the hydrologist, issue #66)"
+		"status": "Fixed, engine 1.22.0 (pending the hydrologist, issue #66)"
 	},
 	{
 		"id": "Q3",

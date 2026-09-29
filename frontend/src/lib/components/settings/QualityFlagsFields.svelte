@@ -1,5 +1,5 @@
 <!--
-	Settings fields for settings.qualityFlags (engine ≥ 1.20.0, calibration
+	Settings fields for settings.qualityFlags (engine ≥ 1.22.0, calibration
 	research CR-18/19): the gauged range of each calibration record (the
 	highest and lowest field gaugings behind its rating curve, with their
 	source), and how Fit automatically scores extrapolated, suspect and

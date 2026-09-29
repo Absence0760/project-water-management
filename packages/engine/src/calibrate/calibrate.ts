@@ -249,17 +249,17 @@ export interface CalibrationReport {
 	chirpsFactors?: ChirpsFactorSet[] | null;
 	/**
 	 * The per-day quality flags of the fitted record and its rain (engine ≥
-	 * 1.20.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
+	 * 1.22.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
 	 * days scored, left out and censored, and what the record can't support.
-	 * Absent before 1.20.0.
+	 * Absent before 1.22.0.
 	 */
 	dayQuality?: DayQuality | null;
 	/**
 	 * The fitted parameters scored on every observed day in the window
 	 * outside the exclusion periods, flagged days included and nothing
-	 * censored (engine ≥ 1.20.0, CR-19): the fit on all days, beside `fit` on
+	 * censored (engine ≥ 1.22.0, CR-19): the fit on all days, beside `fit` on
 	 * the clean days. null when the flags left nothing out and censored
-	 * nothing (it would equal `fit`); absent before 1.20.0.
+	 * nothing (it would equal `fit`); absent before 1.22.0.
 	 */
 	fitAllDays?: ScoredPeriod | null;
 	/** Model runs used, over every stage. */
@@ -294,19 +294,19 @@ export interface CalibrationProblem {
 	observed: Float64Array;
 	/**
 	 * Day indices scored: observed, inside the calibration window, outside
-	 * every exclusion, and not left out by the quality flags (engine ≥ 1.20.0,
+	 * every exclusion, and not left out by the quality flags (engine ≥ 1.22.0,
 	 * settings.qualityFlags).
 	 */
 	scoredDays: Int32Array;
 	/**
 	 * The censoring bound (m³/day) on each scored above-rating day when the
 	 * settings censor them, NaN elsewhere; null when nothing is censored
-	 * (engine ≥ 1.20.0, ./dayFlags.ts censoredObserved).
+	 * (engine ≥ 1.22.0, ./dayFlags.ts censoredObserved).
 	 */
 	censor?: Float64Array | null;
 	/** Every observed day in the window outside the exclusions, flags or not: what `fitAllDays` scores. */
 	allDays?: Int32Array;
-	/** The quality flags' summary (engine ≥ 1.20.0). */
+	/** The quality flags' summary (engine ≥ 1.22.0). */
 	dayQuality?: DayQuality | null;
 	/**
 	 * The reference gauge (flow_reference_m3s, m³/s, NaN where missing) over
@@ -383,7 +383,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Per-day quality flags (CR-18/19, ./dayFlags.ts): which observed days the objective scores, and which it censors.
 	const qf = settings.qualityFlags;
 	const flagsOf = (k: CalibrationFlowKind) =>
-		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(input.series?.[k], d0, days) });
+		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(input.series?.[k], d0, days), dataQuality: settings.dataQuality });
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;

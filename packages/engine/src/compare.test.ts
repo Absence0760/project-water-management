@@ -877,7 +877,7 @@ describe('diffInputs', () => {
 		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 
-	it('describes the quality-flag settings (CR-18/19); a run saved before engine 1.20.0 reads as the defaults', () => {
+	it('describes the quality-flag settings (CR-18/19); a run saved before engine 1.22.0 reads as the defaults', () => {
 		const a = snapshot();
 		const b = structuredClone(a);
 		b.settings.qualityFlags = {

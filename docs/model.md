@@ -3821,7 +3821,7 @@ save. `calibrate/provenance.ts` holds the helpers.
 `calibrationStats` (`network/stats.ts`) scores the days inside the window that
 have an observation and are not excluded, in m³/s. It scores every such day,
 whatever its quality flag: automatic calibration leaves flagged days out or
-censors them (engine ≥ 1.20.0, §2.10h), the run's statistics describe the
+censors them (engine ≥ 1.22.0, §2.10h), the run's statistics describe the
 record as it is.
 
 | Metric | Formula | Reads as |
@@ -4891,7 +4891,7 @@ segment is [p + `nStart`, e]: at least 6 days with the defaults. A missing
 flow or rain day, a wet day, a zero or a rise ends a run. The rain rule means
 the first step after a storm day can't count (rain the day before), so the
 peak is the day after the storm and the segment starts two days after it.
-The day mask is the run's calibration exclusions and, from engine 1.20.0,
+The day mask is the run's calibration exclusions and, from engine 1.22.0,
 every day the calibration record's quality flags mark extrapolated, infilled
 or suspect (CR-18, §2.10h). Two departures from TOSSH, both about where a run ends: a run cut off
 by the end of the record is kept like one cut off by a gap (TOSSH drops an
@@ -5200,7 +5200,7 @@ budgets 2 s).
 dam evaporation factor ±15 %) and the 0.8 threshold are defaults to confirm,
 not findings.
 
-### 2.10h Per-day quality flags and the flag-aware objective (engine ≥ 1.20.0, calibration research CR-18/19/22)
+### 2.10h Per-day quality flags and the flag-aware objective (engine ≥ 1.22.0, calibration research CR-18/19/22)
 
 A gauge measures water level; its rating curve turns level into flow, and the
 curve is only checked against field gaugings over the range they cover. South
@@ -5209,7 +5209,7 @@ or more beyond it (Wessels & Rooseboom 2009). A fit that chases peaks read
 off the extrapolated curve fits the extrapolation, not the catchment, and a
 day the Data checks call suspect (a stuck logger, a typing error) is
 disinformative data for any objective (Beven & Westerberg 2011). From engine
-1.20.0 every day of a calibration record carries one quality flag, and
+1.22.0 every day of a calibration record carries one quality flag, and
 automatic calibration's objective reads it (`packages/engine/src/calibrate/dayFlags.ts`).
 
 **The flags (CR-18).** Each day of a flow record gets the strongest class that
@@ -5219,7 +5219,7 @@ applies, in this order:
 | --- | --- | --- |
 | missing | no reading: blank, NaN or negative (as `alignFlow` reads it, §2.10) | never scored |
 | infilled | a gap-filled value, not a reading (`observedInfillMask`) | left out |
-| suspect | an outlier or inside a flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, the same rules and limits as the run warnings, §2.10a) | left out |
+| suspect | an outlier or inside a flat stretch by the Data checks (`quality.ts` `seriesRowFlags`, under the project's `settings.dataQuality` limits, the same as the run warnings, §2.10a) | left out |
 | aboveRating | above the record's highest field gauging | censored |
 | belowRating | above zero but below its lowest gauging | left out |
 | humanUse | human use dominates the flow | scored |
@@ -5283,10 +5283,10 @@ class is treated: `aboveRating` `'censor'` (default) | `'exclude'` |
   extrapolated, suspect or infilled, whatever the fit's settings
   (`flaggedDayMask`), on top of the exclusion periods: those days say
   nothing reliable about the shape of a recession. A run's plausibility
-  checks can therefore change from engine 1.20.0 when a gauged range is
+  checks can therefore change from engine 1.22.0 when a gauged range is
   recorded or the record has suspect days.
 
-**Why this default, and what it changes.** Before 1.20.0 every observed day
+**Why this default, and what it changes.** Before 1.22.0 every observed day
 was scored as recorded. With no gauged range recorded (every project until
 one is entered) the only days the default leaves out are the suspect ones,
 so fits change only on records with outliers or flat stretches, and those
@@ -5296,7 +5296,7 @@ information that the flow was high (Beven & Westerberg 2011; Kiang et al.
 2018); dropping below-rating days keeps an extrapolated low-flow tail from
 steering the low-flow parameters. One caution: a river that really stops
 trips the flat-stretch check after 90 days of zero flow
-(`FLATLINE_FLOW_MAX_DAYS`), and leaving those days out hides the dry spell
+(`settings.dataQuality.flatlineFlowMaxDays`, 90 by default), and leaving those days out hides the dry spell
 from the fit. The panel counts suspect zero-flow days and says to score
 suspect days as recorded if the river really stops. The defaults are the
 hydrologist's to confirm (issue #66 questions).
@@ -5305,12 +5305,12 @@ hydrologist's to confirm (issue #66 questions).
 time), `dayQuality` and `fitAllDays`. `fitRecordStatus.qualityFlagsChanged`
 is true when the gauged ranges or a treatment differ from the fit's
 (compared after `resolveQualityFlags`, so a stored default is no change;
-false on a record made before 1.20.0); the record then shows "Quality flags
+false on a record made before 1.22.0); the record then shows "Quality flags
 changed since fit" with a caveat, and `calibrationFitStatus` calls the
 scores `otherPeriod`, as for changed exclusions. Run comparison lists a
 changed gauged range or treatment ("Gauged range (gauge record): none → up
 to 12 m³/s", "Suspect days in the fit: left out → scored as recorded"); a
-run saved before 1.20.0 reads as the defaults.
+run saved before 1.22.0 reads as the defaults.
 
 **The data-quality panel (CR-22).** Every fit report carries `dayQuality`
 (`DayQuality`): the record and its gauged range, the treatments, the window's

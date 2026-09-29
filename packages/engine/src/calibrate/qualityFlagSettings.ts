@@ -1,4 +1,4 @@
-// settings.qualityFlags (engine ≥ 1.20.0, calibration research CR-18/19):
+// settings.qualityFlags (engine ≥ 1.22.0, calibration research CR-18/19):
 // each record's gauged range and how automatic calibration treats flagged
 // days, with their resolver, validation and run-comparison lines. Kept apart
 // from ./dayFlags.ts (the per-day flags themselves) with no import of the
@@ -22,7 +22,7 @@ export const FLAG_USES = ['exclude', 'include'] as const;
 export type FlagUse = (typeof FLAG_USES)[number];
 
 /**
- * settings.qualityFlags (engine ≥ 1.20.0): the gauged range per record and
+ * settings.qualityFlags (engine ≥ 1.22.0): the gauged range per record and
  * how the fit's objective treats each flagged class. Missing days are never
  * scored; human-use days (never set yet) are scored.
  */

@@ -624,7 +624,7 @@ describe('validationNotes', () => {
 	});
 });
 
-describe('calibrate reads the per-day quality flags (CR-18/19, engine ≥ 1.20.0)', () => {
+describe('calibrate reads the per-day quality flags (CR-18/19, engine ≥ 1.22.0)', () => {
 	const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
 	/** Observed flow, m³/s, of the synthetic record (no nulls in it). */
 	const flowOf = (input: ModelInput) => input.series.flow_observed_m3s!.values as number[];
@@ -655,7 +655,18 @@ describe('calibrate reads the per-day quality flags (CR-18/19, engine ≥ 1.20.0
 		expect(calibrate(input, { budget: 40, validate: false }).fitAllDays).toBeNull();
 	}, 30_000);
 
-	it('with no flag set, the fit is the one before engine 1.20.0: every observed day, no fit on all days', () => {
+	it('suspect days follow the project’s data-check limits: a lower outlier factor leaves more days out', () => {
+		const input = synthetic(truth, 3);
+		const base = prepareCalibration(input);
+		expect(base.dayQuality!.flow.suspect).toBe(0);
+		// Flows above twice the 99th percentile become outliers under a project limit of 2 (default 10).
+		input.settings.dataQuality = { outlierFactorFlow: 2 } as never;
+		const strict = prepareCalibration(input);
+		expect(strict.dayQuality!.flow.suspect).toBeGreaterThan(0);
+		expect(strict.scoredDays.length).toBe(base.scoredDays.length - strict.dayQuality!.flow.suspect);
+	});
+
+	it('with no flag set, the fit is the one before engine 1.22.0: every observed day, no fit on all days', () => {
 		const input = synthetic(truth, 3);
 		const pb = prepareCalibration(input);
 		expect(pb.scoredDays.length).toBe(pb.allDays!.length);

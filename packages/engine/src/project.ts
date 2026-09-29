@@ -433,7 +433,7 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
-	 * Per-day quality flags (engine ≥ 1.20.0, calibration research CR-18/19,
+	 * Per-day quality flags (engine ≥ 1.22.0, calibration research CR-18/19,
 	 * ./calibrate/dayFlags.ts): each record's gauged range, and how automatic
 	 * calibration's objective treats extrapolated, suspect and infilled days.
 	 * The run's own calibration statistics score every observed day.

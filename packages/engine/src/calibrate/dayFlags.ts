@@ -8,7 +8,8 @@
 // - infilled: a gap-filled value, not a reading (observedInfillMask: the hook
 //   for gap filling of observed flow, issue #66; nothing fills flow yet);
 // - suspect: an outlier or a flat stretch by the Data checks (quality.ts
-//   seriesRowFlags, the same rules and limits the run warnings use);
+//   seriesRowFlags, under the project's settings.dataQuality limits, the
+//   same the run warnings use);
 // - aboveRating: above the highest field gauging (settings.qualityFlags
 //   .ratings), so the flow comes from an extrapolated rating curve;
 // - belowRating: above zero but below the lowest gauging;
@@ -27,7 +28,7 @@
 // objective scores (scoringDays) and what the data-quality panel (CR-22)
 // shows.
 import { toEpochDay } from '../calendar';
-import type { CalibrationFlowKind, DailySeries } from '../project';
+import type { CalibrationFlowKind, DailySeries, DataQualitySettings } from '../project';
 import { seriesRowFlags } from '../quality';
 import { RAIN_SOURCE_CODE } from '../rainSourcePeriods';
 import { ratingOf, type AboveRatingUse, type GaugeRating, type QualityFlagSettings } from './qualityFlagSettings';
@@ -74,6 +75,8 @@ export interface FlowFlagInput {
 	rating?: GaugeRating | null;
 	/** 1 on run days whose value was gap-filled (observedInfillMask). */
 	infilled?: ArrayLike<number> | null;
+	/** The project's data-check limits (settings.dataQuality): which days are outliers or flat stretches. Absent = the defaults. */
+	dataQuality?: DataQualitySettings;
 }
 
 /** Each run day's flow class code (FLOW_FLAG_CODE). */
@@ -82,7 +85,7 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 	const s = x.series;
 	if (!s) return out;
 	const offset = toEpochDay(s.startDate) - x.start;
-	const rows = seriesRowFlags(x.kind, s);
+	const rows = x.dataQuality ? seriesRowFlags(x.kind, s, x.dataQuality) : seriesRowFlags(x.kind, s);
 	const hi = x.rating?.gaugedMaxM3s ?? null;
 	const lo = x.rating?.gaugedMinM3s ?? null;
 	const from = Math.max(0, -offset);

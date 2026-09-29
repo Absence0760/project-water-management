@@ -166,12 +166,12 @@ export interface FitRecord {
 	calibrationEnd: string | null;
 	exclusions: CalibrationExclusion[];
 	/**
-	 * settings.qualityFlags at the time (engine ≥ 1.20.0, CR-18/19): the gauged
+	 * settings.qualityFlags at the time (engine ≥ 1.22.0, CR-18/19): the gauged
 	 * ranges and how flagged days were scored, which decide the days fitted as
 	 * the window and exclusions do. Absent on a record made before it.
 	 */
 	qualityFlags?: QualityFlagSettings;
-	/** The report's quality-flag summary (CR-22) and the fit on all days (CR-19); absent before engine 1.20.0. */
+	/** The report's quality-flag summary (CR-22) and the fit on all days (CR-19); absent before engine 1.22.0. */
 	dayQuality?: DayQuality | null;
 	fitAllDays?: ScoredPeriod | null;
 	/** Whether the split-sample and dry → wet tests were asked for, and the independent record. */
@@ -282,7 +282,7 @@ export interface FitContext {
 	/** The Settings form the fit ran on. */
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
 		calibrationExclusions?: CalibrationExclusion[] | null;
-		/** Engine ≥ 1.20.0; absent = the defaults. */
+		/** Engine ≥ 1.22.0; absent = the defaults. */
 		qualityFlags?: QualityFlagSettings | null;
 		zeroRainRuns?: ZeroRainSettings;
 		chirpsFitPeriod?: ChirpsFitPeriod;
@@ -402,7 +402,7 @@ export interface FitRecordStatus {
 	exclusionsChanged: boolean;
 	/**
 	 * The quality-flag settings (a gauged range, or how extrapolated, suspect
-	 * or infilled days are scored; engine ≥ 1.20.0) differ from the fit's, so
+	 * or infilled days are scored; engine ≥ 1.22.0) differ from the fit's, so
 	 * other days would be fitted. False on a record made before them.
 	 */
 	qualityFlagsChanged: boolean;

@@ -498,8 +498,8 @@ alongside teams, e.g. to give an outside client `viewer` access.
   listed twice (overlapping periods are fine). They apply to the run's
   calibration statistics and EWR test on the observed record, and to Fit
   automatically.
-  `qualityFlags` (engine ≥ 1.20.0, CR-18/19, [model.md
-  §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1200-calibration-research-cr-181922))
+  `qualityFlags` (engine ≥ 1.22.0, CR-18/19, [model.md
+  §2.10h](./model.md#210h-per-day-quality-flags-and-the-flag-aware-objective-engine--1220-calibration-research-cr-181922))
   is `{ ratings, aboveRating, belowRating, suspect, infilled }`, any subset
   patched, `ratings` replaced whole: `ratings` maps `flow_observed_m3s` and
   `flow_logger_m3s` (no other kind) to `{ gaugedMaxM3s, gaugedMinM3s, source
@@ -523,7 +523,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
   off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
   multi-start fit (absent on a record made before those, i.e. one start),
-  and from engine 1.20.0 the optional `qualityFlags` (validated like the
+  and from engine 1.22.0 the optional `qualityFlags` (validated like the
   setting), `dayQuality` (the fit's `DayQuality` summary: `flowKind, rating,
   use, windowDays, flow, scoredDays, censoredDays, leftOutDays,
   suspectZeroDays, rain, notes`, or `null`) and `fitAllDays` (a scored

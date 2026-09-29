@@ -160,7 +160,7 @@
 				</div>
 			{/if}
 			{#if record.dayQuality}
-				<!-- Engine ≥ 1.20.0 (CR-18/19): which days the quality flags let the fit score. -->
+				<!-- Engine ≥ 1.22.0 (CR-18/19): which days the quality flags let the fit score. -->
 				<div data-testid="fit-quality-flags">
 					<dt>Quality flags <HelpTip key="settings.qualityFlags" /></dt>
 					<dd>{dayQualityGist(record.dayQuality)}. {ratingLine(record.dayQuality)}</dd>

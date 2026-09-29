@@ -821,7 +821,7 @@ function effectiveSettings(raw: RunInputsSnapshot['settings'] | undefined): Reco
 		calibration: { ...(d.calibration as object), ...((r.calibration as object | undefined) ?? {}) },
 		hiLoSplit: { ...(d.hiLoSplit as object), ...((r.hiLoSplit as object | undefined) ?? {}) },
 		dataQuality: { ...(d.dataQuality as object), ...((r.dataQuality as object | undefined) ?? {}) },
-		// Engine ≥ 1.20.0: absent means the defaults (a run before them had no gauged range, and its fit's flags don't reach it).
+		// Engine ≥ 1.22.0: absent means the defaults (a run before them had no gauged range, and its fit's flags don't reach it).
 		qualityFlags: resolveQualityFlags(r.qualityFlags, []),
 		gr4j: { ...(d.gr4j as object), ...((r.gr4j as object | undefined) ?? {}) },
 		wr2012: { ...(d.wr2012 as object), ...((r.wr2012 as object | undefined) ?? {}) }
