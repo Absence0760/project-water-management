@@ -53,6 +53,22 @@ describe('runDownloadItems', () => {
 		expect(items.slice(1).every((i) => i.workbook === undefined)).toBe(true);
 	});
 
+	it("follows each farm's daily table with its audit workbook, built in the browser; gauges and users get none", () => {
+		const items = runDownloadItems(exportUrls('/api'), P, R, [
+			{ id: N, name: 'Upper farm', kind: 'farm' },
+			{ id: 'n2', name: 'Gauge', kind: 'gauge' },
+			{ id: 'n3', name: 'Town', kind: 'user' }
+		]);
+		expect(items.slice(3).map((i) => i.label)).toEqual([
+			'Daily series — Upper farm (CSV)',
+			'Audit workbook — Upper farm (.xlsx)',
+			'Daily series — Gauge (CSV)',
+			'Daily series — Town (CSV)'
+		]);
+		expect(items[4]!.workbook).toEqual({ apiBase: '/api', projectId: P, runId: R, auditNodeId: N });
+		expect(new Set(items.map((i) => i.url)).size).toBe(items.length);
+	});
+
 	it('adds the two all-farms fragmentation tables after the catchment when the run has farms', () => {
 		const items = runDownloadItems(exportUrls('/api'), P, R, [{ id: N, name: 'Upper farm' }], {});
 		expect(items.map((i) => i.label)).toEqual([

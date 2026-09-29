@@ -17,7 +17,8 @@ import {
 	seriesChecks
 } from './quality';
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
-import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
+import { RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { aboveRainThreshold } from './rainThreshold';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
@@ -84,6 +85,8 @@ import {
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn } from './network/development';
+import { forecastTail } from './forecastTail';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -260,13 +263,17 @@ function runNetwork(
 	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
 	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
+	// The days before a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): the record-wide
+	// statistics (GR4J's cycled warm-up, the land-cover Q75, the Reserve's assessed months and
+	// their natural duration curves) read only these, so a tail never moves a historical value.
+	const historyDays = forecastTail(prepared).historyDays;
 	if (captureAt !== undefined && (captureAt < 0 || captureAt > days))
 		throw new RangeError(`capture date ${fromEpochDay(warm.captureDay!)} is outside the run (${startDate} … ${fromEpochDay(end)}, or the day after it)`);
 
 	// --- natural flow ---------------------------------------------------------
 	const runoffWarm = capturing || resume ? { ...(capturing ? { captureAt: captureAt! } : {}), ...(resume ? { resume: resume.runoff.state } : {}) } : undefined;
 	if (resume && resume.runoff.model !== settings.runoffModel) throw new ModelStateMismatchError('input', `the snapshot holds a ${resume.runoff.model} runoff model's state; the run uses ${settings.runoffModel}`);
-	const nf = naturalFlow({ settings, startDate, days, aligned, ...(runoffWarm ? { warm: runoffWarm } : {}) });
+	const nf = naturalFlow({ settings, startDate, days, aligned, historyDays, ...(runoffWarm ? { warm: runoffWarm } : {}) });
 	if (nf.naturalFlowM3Day.length !== days) {
 		throw new Error(`natural flow has ${nf.naturalFlowM3Day.length} days, expected ${days}`);
 	}
@@ -297,7 +304,7 @@ function runNetwork(
 	const built = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {
 		...(capturing ? { captureAt: captureAt! } : {}),
 		...(resume ? { soilStoreM3: resume.nodes.map((n) => n.soilStoreM3), allocationFactor: resume.nodes.map((n) => n.allocationFactor) } : {})
-	});
+	}, historyDays);
 	const { plan, topo } = built;
 	const nodes = input.model.nodes;
 	const ewr = plan.ewr;
@@ -315,6 +322,8 @@ function runNetwork(
 		if (resume.pinned.lowFlowThresholdM3Day !== null) plan.lowFlowThresholdM3Day = resume.pinned.lowFlowThresholdM3Day;
 		if (warm.continued) plan.continued = { monthBefore: monthOfEpochDay(start - 1) };
 	}
+	// Land cover's low-flow threshold over the historical days only.
+	if (plan.lowFlowThresholdM3Day === undefined && plan.nodes.some((n) => n.landCover)) plan.lowFlowThresholdM3Day = lowFlowThreshold(natural.subarray(0, historyDays));
 	const sim = simulateNetwork(plan, { workings: true, ...(capturing ? { captureAt: captureAt! } : {}) });
 
 	// --- outputs -----------------------------------------------------------------
@@ -404,6 +413,7 @@ function runNetwork(
 		simOutflow,
 		startDate,
 		days,
+		historyDays,
 		warnings,
 		{
 			...(resume ? { pinned: resume.pinned.reserveNatural, ...(warm.continued ? { carried: resume.reserveMonths } : {}) } : {}),
@@ -458,7 +468,12 @@ function runNetwork(
 	if (areal && catchmentRain) push(null, AREAL_RAIN_COLUMN.key, AREAL_RAIN_COLUMN.label, AREAL_RAIN_COLUMN.unit, catchmentRain.map((v) => v ?? NaN));
 	for (const s of chirpsColumns(series.rain_chirps_mm, chirpsCorrection, start, days, month)) push(null, s.key, s.label, s.unit, s.values);
 	if (zeroRain && zeroRain.infill.days > 0) push(null, ZERO_RAIN_COLUMN.key, ZERO_RAIN_COLUMN.label, ZERO_RAIN_COLUMN.unit, zeroRain.mask);
+	// Where each day's rain came from: with rain-source periods their column, else (engine ≥ 1.27.0) the same pick as rain_final.
 	if (rainSource) push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, rainSource.column);
+	else if (finalRain) {
+		const codes = rainSourceCodes(aligned('rain_catchment_mm'), aligned('rain_chirps_mm'), aligned('rain_forecast_mm'));
+		push(null, RAIN_SOURCE_COLUMN.key, RAIN_SOURCE_COLUMN.label, RAIN_SOURCE_COLUMN.unit, codes);
+	}
 	if (accumulation && accumulation.info.spreadDays > 0) push(null, ACCUMULATION_COLUMN.key, ACCUMULATION_COLUMN.label, ACCUMULATION_COLUMN.unit, accumulation.mask);
 
 	const farmSeries: [Exclude<keyof NodeResult, 'boreholePumped' | 'riverAbstraction' | 'storageSet' | 'objectSupplied' | 'offtakeIn' | 'offtakeOut' | 'allocationRoom'>, string, string][] = [
@@ -511,6 +526,9 @@ function runNetwork(
 			if (node.kind === 'user' && !userSeries.has(field)) continue;
 			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : withObjects ? (OBJECT_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
+		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ./network/development.ts): the day's capacity.
+		const ks = plan.nodes[i]!.capacityScale;
+		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		if (plan.nodes[i]!.borehole) {
@@ -613,7 +631,7 @@ function runNetwork(
 			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
 			...(plan.nodes[i]!.objects ? { demandObjects: objectSummaries(plan.nodes[i]!.objects!, r.objectSupplied!, input.model.demandObjects ?? [], mean) } : {}),
 			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
-			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate) ?? {})
+			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate, plan.nodes[i]!.capacityScale ? (t) => node.damCapacityM3 * plan.nodes[i]!.capacityScale![t]! : undefined) ?? {})
 		});
 	});
 
@@ -862,7 +880,7 @@ function runNetwork(
 				...(allocationFactorAt(built.allocation, i, captureAt!, days, start) ?? {})
 			})),
 			pinned: {
-				lowFlowThresholdM3Day: hasCover ? lowFlowThreshold(natural.subarray(0, days)) : null,
+				lowFlowThresholdM3Day: hasCover ? plan.lowFlowThresholdM3Day! : null,
 				reserveNatural: ewrAssurance.filter((a) => a.report.naturalSource === 'run').map((a) => ({ site: a.site, curves: a.report.byMonth.map((m) => (m.naturalCurve ? [...m.naturalCurve] : null)) })),
 				fits: prepared.fits!
 			},
@@ -878,9 +896,10 @@ function runNetwork(
 		days,
 		series: out,
 		summary: {
+			...(historyDays < days ? { historyDays } : {}),
 			farms,
 			...(users.length ? { users } : {}),
-			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, resume?.pinned.lowFlowThresholdM3Day ?? undefined) } : {}),
+			...(hasCover ? { landCover: landCoverSummary(input, natural, coverTotal, plan, sim, days, historyDays) } : {}),
 			...(gwAnnual.length ? { groundwaterAnnualUse: gwAnnual } : {}),
 			...(allocations ? { allocations } : {}),
 			catchment: {
@@ -1093,7 +1112,9 @@ export function buildNetworkPlan(
 	 * soil-water store (m³) at the start of run day `captureAt` as
 	 * soilStoreAtM3, or start each farm's store from `soilStoreM3` (node order).
 	 */
-	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[] } = {}
+	warm: { captureAt?: number; soilStoreM3?: readonly number[]; allocationFactor?: readonly (number | undefined)[] } = {},
+	/** The run's historical days, before a forecast tail (./forecastTail.ts); a full allocation's factors read only these. */
+	historyDays: number = days
 ): { plan: NetworkPlan; topo: ReturnType<typeof buildTopology>; allocation: AllocationPlan; soilStoreAtM3?: Float64Array } {
 	if (settings.demandFactorFrom != null && start === undefined) throw new Error('buildNetworkPlan: settings.demandFactorFrom needs the run start');
 	if (settings.damStorageReset != null && start === undefined) throw new Error('buildNetworkPlan: settings.damStorageReset needs the run start');
@@ -1114,6 +1135,12 @@ export function buildNetworkPlan(
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
 	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm);
+	// Development over the run (engine ≥ 1.30.0, ./network/development.ts): a unit takes nothing before
+	// its abstraction date, and a dam's capacity follows its sediment rate and in-service date.
+	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
+	if (dated && start === undefined) throw new Error('buildNetworkPlan: a dated dam or abstraction needs the run start');
+	const abstractFrom = nodes.map((n) => (start === undefined ? 0 : abstractionStartDay(n, start, days, warnings)));
+	demand.forEach((d, i) => d.net.fill(0, 0, abstractFrom[i]!));
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -1188,10 +1215,16 @@ export function buildNetworkPlan(
 	// scaled to its volume before its claim is passed down, and the rest of the mode put into the plan below.
 	const allocationMode = resolveAllocationMode(settings.allocationMode, []);
 	const allocation = matchAllocations(model.allocations, allocationMode, nodes, warnings);
+	if (historyDays < days) allocation.historyDays = historyDays;
+	// A full allocation is scaled to the volume over the days the unit abstracts on.
+	if (abstractFrom.some((s) => s > 0)) allocation.abstractFrom = new Map(abstractFrom.flatMap((s, i) => (s > 0 ? [[i, s] as [number, number]] : [])));
 	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
-	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings));
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => {
+		d.fill(0, 0, abstractFrom[i]!);
+		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
+	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
@@ -1201,7 +1234,14 @@ export function buildNetworkPlan(
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		// None before the unit's abstraction date.
+		const s = abstractFrom[indexById.get(n.id)!]!;
+		if (po && s > 0) {
+			for (const d of po.demand) d.fill(0, 0, s);
+			po.total.fill(0, 0, s);
+		}
+		return po;
 	};
 
 	// River off-takes (engine ≥ 1.14.0, ./network/offtake.ts): each destination after its source.
@@ -1209,6 +1249,7 @@ export function buildNetworkPlan(
 
 	const plan: NetworkPlan = {
 		days,
+		...(historyDays < days ? { historyDays } : {}),
 		order: offtakeOrder(topo.order, topo.upstream, offtakes),
 		...(offtakes.length ? { offtakes } : {}),
 		lakeEvapMmDay,
@@ -1225,6 +1266,7 @@ export function buildNetworkPlan(
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
 			const u = users.byNode.get(i);
+			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -1232,7 +1274,8 @@ export function buildNetworkPlan(
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
-				initialStorageM3: n.damInitialPct * cap,
+				initialStorageM3: n.damInitialPct * cap * (scale && days ? scale[0]! : 1),
+				...(scale ? { capacityScale: scale } : {}),
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings, demand[i]!.efficiency),
 				...damLosses(n, warnings),
@@ -1288,8 +1331,10 @@ function storageResetOf(
 			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
 			continue;
 		}
-		if (v < 0 || v > n.damCapacityM3) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${n.damCapacityM3} m³; clamped`);
-		byNode.set(i, Math.min(Math.max(v, 0), n.damCapacityM3));
+		// Against the capacity on the reset day (engine ≥ 1.30.0: it can change over the run).
+		const cap = damCapacityOn(n, start + day);
+		if (v < 0 || v > cap) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
+		byNode.set(i, Math.min(Math.max(v, 0), cap));
 	}
 	return byNode.size ? { day, byNode } : null;
 }
@@ -1303,9 +1348,10 @@ function storageResetOf(
  * so each class's part is its own lowFlow × MIN(I0, q) + mar × (I0 − that),
  * with I0 = the farm's runoff + its reduction (the natural runoff).
  */
-function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float64Array, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, days: number, pinnedLowFlow?: number): LandCoverSummary {
+function landCoverSummary(input: ModelInput, natural: Float64Array, total: Float64Array, plan: NetworkPlan, sim: ReturnType<typeof simulateNetwork>, days: number, historyDays: number): LandCoverSummary {
 	const cover = resolveLandCover(upgradeLegacyModel(input.model), []);
-	const qLow = pinnedLowFlow ?? lowFlowThreshold(natural);
+	// The threshold the network used: pinned from a snapshot on a resumed run, else over the historical days.
+	const qLow = plan.lowFlowThresholdM3Day ?? lowFlowThreshold(natural.subarray(0, historyDays));
 	const byClass = new Map<LandCoverClass, { condensedKm2: number; volume: number }>();
 	cover.forEach((u, i) => {
 		if (!u) return;
@@ -1765,6 +1811,8 @@ function assessEwrRules(
 	simOutflow: Float64Array,
 	startDate: string,
 	days: number,
+	/** Only complete months within the first this many days are assessed (the days before a forecast tail). */
+	historyDays: number,
 	warnings: string[],
 	/**
 	 * Capture / resume (engine ≥ 1.1.0, ./warmstart), by table site ('' = the
@@ -1825,7 +1873,8 @@ function assessEwrRules(
 			warm.pinned?.find((p) => p.site === site)?.curves,
 			carried?.carry ?? null,
 			settings.lowFlowMeasure ?? 'total',
-			carried?.history
+			carried?.history,
+			historyDays
 		);
 		warnings.push(...assuranceWarnings(a.report));
 		done.add(node);
@@ -2145,8 +2194,7 @@ function buildDemand(
 	const thr = settings.calibration.rainThresholdMm;
 	const rain = new Float64Array(days);
 	for (let t = 0; t < days; t++) {
-		const v = catchment[t] ?? chirps[t] ?? forecast[t] ?? 0;
-		rain[t] = v > thr ? v : 0;
+		rain[t] = aboveRainThreshold(catchment[t] ?? chirps[t] ?? forecast[t] ?? 0, thr);
 	}
 
 	const wy = new Uint8Array(days);

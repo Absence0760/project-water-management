@@ -9,8 +9,8 @@
 	// m³). Each card also carries what the Dam levels table (moved here from
 	// the Summary, merged into the cards 2026-09-29, issue #175) listed: the
 	// lowest level in the run's last year (the sparkline's mark) and the days
-	// at the minimum operating level. The page flows in the window's one scroll: the emptiest few cards show, the rest
-	// behind "Show all N dams" (no card list scrolls inside itself), and on a
+	// at the minimum operating level. The page flows in the window's one scroll: every dam's card shows, emptiest
+	// first (no card list scrolls inside itself, and none folds away), and on a
 	// wide page the chart sticks beside the cards as they are read down.
 	// Before a run the cards show each dam's capacity.
 	// The levels come from overview/damLevels.ts, the loader the Summary's
@@ -27,14 +27,13 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { AGO_DAYS, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
+	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
 	import { pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
-	import { foldList } from '$lib/components/common/fold';
 	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 
 	let {
@@ -158,7 +157,7 @@
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
 	const record = (s: DailySeries): DailySeries => ({ startDate: s.startDate, values: Array.from(beforeForecast(s.values, s.startDate, run?.summary.forecast?.from)) });
-	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3) : null])));
+	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3, 365, 60, c.level ? capacityOver(c.level, storage.get(c.nodeId)!.startDate) : undefined) : null])));
 	const pct = (v: number) => `${fmtNum(v, 0)}%`;
 	const BAND_WORDS = { 'at-min': 'at its minimum level', low: `below ${LOW_PCT}%`, ok: '' } as const;
 	/** Why a card has no level: before a run, while loading, or the run has no storage for it. */
@@ -186,16 +185,9 @@
 	// --- the chart of the picked dam ---
 	let unit = $state<StorageUnit>('pct');
 	const pickedSeries = $derived(picked ? (storage.get(picked.nodeId) ?? null) : null);
-	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit) : []);
+	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit, picked.level ? capacityOver(picked.level, pickedSeries.startDate) : undefined) : []);
 	// A fixed plot height: taller beside the cards, where it sits level with the first few.
 	const chartH = $derived(side ? 420 : 260);
-
-	// --- the fold: the emptiest few cards (and the picked one), the rest behind "Show all N dams" ---
-	let open = $state(false);
-	// Beside the chart, three cards sit about level with it; stacked, two rows keep the chart near the first
-	// screen; before a run the cards are small (capacity only), so more fit.
-	const cap = $derived(!latest ? 8 : side ? 3 : 4);
-	const fold = $derived(foldList(cards, (c) => c.nodeId, latest ? (picked?.nodeId ?? null) : null, open, cap));
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
@@ -234,8 +226,8 @@
 		<div class="first" class:with-chart={!!latest}>
 			<section class="list" aria-labelledby="dam-cards-h">
 				<h3 id="dam-cards-h" class="visually-hidden">Each dam</h3>
-				<ul class="cards" id="dam-cards" aria-label="Dams">
-					{#each fold.shown as c (c.nodeId)}
+				<ul class="cards" aria-label="Dams">
+					{#each cards as c (c.nodeId)}
 						{@const band = c.level ? levelBand(c.level) : null}
 						{@const chg = c.level ? changeWords(c.level, AGO_DAYS) : null}
 						{@const spark = sparks.get(c.nodeId)}
@@ -296,11 +288,6 @@
 						</li>
 					{/each}
 				</ul>
-				{#if open || fold.hidden}
-					<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="dam-cards" onclick={() => (open = !open)}>
-						{open ? `Show the ${cap} emptiest` : `Show all ${cards.length} dams`}
-					</button>
-				{/if}
 			</section>
 
 			{#if latest}
@@ -318,7 +305,7 @@
 						{:else if picked?.level && pickedSeries}
 							{@const l = picked.level}
 							<p class="facts small" data-testid="dam-facts">
-								<strong>{pct(l.endPct)} full</strong> on {fmtDay(l.endDate)} ({fmtNum((l.endPct / 100) * l.capacityM3)} of {fmtNum(l.capacityM3)} m³) ·
+								<strong>{pct(l.endPct)} full</strong> on {fmtDay(l.endDate)} ({fmtNum((l.endPct / 100) * (l.endCapacityM3 ?? l.capacityM3))} of {fmtNum(l.endCapacityM3 ?? l.capacityM3)} m³) ·
 								lowest in its last year {pct(l.lowPct)} on {fmtDay(l.lowDate)}{#if l.minPct > 0}{` · ${fmtNum(l.daysAtMin)} day${l.daysAtMin === 1 ? '' : 's'} at its minimum level (${pct(l.minPct)})`}{/if}
 							</p>
 							<LineChart
@@ -506,9 +493,6 @@
 	}
 	.small {
 		font-size: 0.85rem;
-	}
-	.more {
-		align-self: flex-start;
 	}
 	.chart-panel {
 		margin: 0;

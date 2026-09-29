@@ -19,7 +19,8 @@ type XLSX = typeof XLSXModule;
 
 const tableDays = (t: DailyTable) => Math.max(0, ...t.columns.map((c) => c.values.length));
 const withFormat = (v: number, z: string | undefined): XLSXModule.CellObject => (z ? { t: 'n', v, z } : { t: 'n', v });
-const cellObject = (c: XlsxCell | undefined): XLSXModule.CellObject | undefined => (c ? { ...c } : undefined);
+// A formula cell is SheetJS's numeric cell carrying `f` (the run workbook has none; the audit workbook isn't compared).
+const cellObject = (c: XlsxCell | undefined): XLSXModule.CellObject | undefined => (!c ? undefined : c.t === 'f' ? { ...c, t: 'n' } : { ...c });
 
 /** The stub SheetJS was given for a daily table: the header row and, with days, a probe row. */
 export function dailyStub(X: XLSX, t: DailyTable): XLSXModule.WorkSheet {

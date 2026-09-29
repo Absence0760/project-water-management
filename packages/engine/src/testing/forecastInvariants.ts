@@ -70,7 +70,10 @@ export function summaryDifference(a: ModelOutput, b: ModelOutput): string | null
  *   observed rain day;
  * - **prefix stability**: every series of the run without the tail
  *   (withoutForecastTail, what an ordinary run uses) equals the forecast
- *   run's up to forecastFrom − 1, to the bit, and every summary figure but
+ *   run's up to forecastFrom − 1, to the bit, and so does an ordinary run
+ *   of the input with the tail, which passes its own self-checks (the model
+ *   is causal across it, engine ≥ 1.28.0, engine-audit.md K1), and every
+ *   summary figure but
  *   `forecast`, `forecastRain` and `warnings` is the same (the warnings
  *   only gain the tail run's failed self-checks);
  * - summary.forecast covers exactly the tail days, its counts fit in them,
@@ -117,6 +120,18 @@ export function checkForecastPrefix(input: ModelInput): string | null {
 		if (!f) return `prefix stability: series ${s.nodeId}|${s.key} missing from the forecast run`;
 		const t = firstDifference(s.values, f, cut);
 		if (t >= 0) return `prefix stability: ${s.nodeId}|${s.key} on ${fromEpochDay(toEpochDay(out.startDate) + t)}: ${s.values[t]} vs ${f[t]}`;
+	}
+	// The model is causal across a forecast tail (engine ≥ 1.28.0, engine-audit.md K1): an
+	// ordinary run of the input with the tail has the same series on every shared day.
+	const ordinary = runModelChecked(input);
+	const failed = ordinary.summary.verification?.checks.find((c) => !c.passed);
+	if (failed) return `the ordinary run with the tail fails its self-check ${failed.id}: ${failed.detail}`;
+	const plain = new Map(ordinary.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));
+	for (const s of hist.series) {
+		const f = plain.get(`${s.nodeId}|${s.key}`);
+		if (!f) return `causality: series ${s.nodeId}|${s.key} missing from the run with the tail`;
+		const t = firstDifference(s.values, f, cut);
+		if (t >= 0) return `causality: ${s.nodeId}|${s.key} on ${fromEpochDay(toEpochDay(out.startDate) + t)}: ${s.values[t]} vs ${f[t]} with the tail`;
 	}
 	const summaryDiff = summaryDifference(out, hist);
 	if (summaryDiff) return `prefix stability: the summaries differ: ${summaryDiff}`;

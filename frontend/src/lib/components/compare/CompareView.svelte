@@ -14,14 +14,15 @@
 	// what-if picked, stays below it with nothing left out.
 	//
 	// Inside the workspace the section header is the page title: the view puts
-	// its context line and its actions (Export impact report, + New what-if)
+	// its context line and its action (Export impact report)
 	// there with fillHeader and draws no title of its own. The standalone page
 	// has no section header, so it keeps the view's own h1 with the same
-	// actions beside it.
+	// action beside it. A what-if is any run: a new one comes from running
+	// the model again or from the Scenarios tab, which the empty state names.
 	import { onMount, tick, untrack, type Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { api, ApiError, hasRole, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
+	import { api, ApiError, type ProjectSummary, type RunCompareResponse, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
@@ -350,7 +351,7 @@
 	);
 	const H = $derived(`h${level}`);
 
-	// --- the actions: Export impact report and + New what-if ------------------------
+	// --- the action: Export impact report ------------------------------------------
 	/**
 	 * A what-if's impact report: the printable report of its run
 	 * (routes/projects/[id]/report) with an "Impact against the baseline"
@@ -367,20 +368,6 @@
 			return href ? [{ side: s, href, label: cmp[s].data?.b.run.label || 'Untitled run' }] : [];
 		})
 	);
-	/**
-	 * + New what-if: the Scenarios tab's create dialog (`new=1`) in the
-	 * baseline's project, on the baseline (`base`) when it is a run of the
-	 * model (a scenario run can't be a scenario's base). For whoever can edit
-	 * that project; its run then compares here like any other.
-	 */
-	const newWhatIfProject = $derived(refA?.projectId ?? projectA);
-	const canNewWhatIf = $derived(!!newWhatIfProject && hasRole(projects.find((p) => p.id === newWhatIfProject)?.role, 'editor'));
-	const newWhatIfHref = $derived.by(() => {
-		const q = new URLSearchParams({ tab: 'scenarios', new: '1' });
-		const m = runMeta('a');
-		if (refA && m && !m.scenarioId) q.set('base', refA.runId);
-		return `${base}/projects/${newWhatIfProject}?${q}`;
-	});
 
 	// Export impact report with two what-ifs is a menu (Escape and a click outside close it, as the Network's Grids).
 	let exportEl: HTMLDetailsElement | undefined = $state();
@@ -422,7 +409,6 @@
 			</div>
 		</details>
 	{/if}
-	{#if canNewWhatIf}<a class="btn" href={newWhatIfHref}>+ New what-if</a>{/if}
 {/snippet}
 
 {#if level === 1}
@@ -518,7 +504,13 @@
 		</div>
 	{:else if !refA || !refB}
 		{#if !resolving}
-			<div class="panel empty muted" role="status">Choose a baseline and a what-if to see what changed.</div>
+			<div class="panel empty muted" role="status">
+				<p>Choose a baseline and a what-if to see what changed.</p>
+				<p>
+					A what-if is any other run: change the model and run it again, or run a scenario{#if projectA}{' '}on the
+						<a href="{base}/projects/{projectA}?tab=scenarios">Scenarios tab</a>{/if}.
+				</p>
+			</div>
 		{/if}
 	{:else}
 		{#if loaded.length}
@@ -984,6 +976,9 @@
 	.empty p {
 		max-width: 60ch;
 		margin: 0 auto 1rem;
+	}
+	.empty p:last-child {
+		margin-bottom: 0;
 	}
 	.sides {
 		display: grid;

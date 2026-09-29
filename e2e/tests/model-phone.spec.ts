@@ -83,7 +83,7 @@ test.describe('phone', () => {
 		await page.goto(`/projects/${project.id}?tab=transfers`);
 		await expect(page.getByLabel('Source of transfer 1')).toBeVisible();
 
-		await expect(page.getByRole('rowheader', { name: 'Transfer 1' })).toBeVisible();
+		await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
 		for (const label of [
 			'Source of transfer 1',
 			'Destination of transfer 1',
@@ -92,7 +92,7 @@ test.describe('phone', () => {
 			'transfer 1 enabled'
 		])
 			await expectOnScreen(page.getByLabel(label, { exact: true }), page);
-		// A rate per month (engine 1.14.0), six to a row, each field on screen and tap-sized.
+		// A rate per month (engine 1.14.0), four to a row, each field on screen and tap-sized.
 		for (const m of ['Oct', 'Mar', 'Apr', 'Sep']) await expectOnScreen(page.getByLabel(`Max rate of transfer 1 in ${m}, m³/s`, { exact: true }), page);
 		const box = await page.getByLabel('Max rate of transfer 1 in Sep, m³/s', { exact: true }).boundingBox();
 		expect(box!.height).toBeGreaterThanOrEqual(44);
@@ -104,21 +104,27 @@ test.describe('phone', () => {
 		await page.getByLabel('Where transfer 1 takes its water', { exact: true }).selectOption('river');
 		for (const label of ['Hands-off flow for transfer 1, m³/day', 'Conveyance losses of transfer 1, %', 'How much transfer 1 takes'])
 			await expectOnScreen(page.getByLabel(label, { exact: true }), page);
-		const ewr = (await page.locator('.offtake .check').first().boundingBox())!;
+		const ewr = (await page.getByTestId('transfer-rule').locator('.check').first().boundingBox())!;
 		expect(ewr.height).toBeGreaterThanOrEqual(44);
 		await page.getByLabel('Where transfer 1 takes its water', { exact: true }).selectOption('dam');
 
-		// The visible "Enabled" text is part of the toggle's tap target.
+		// The switch's visible state ("On") is part of its tap target, and says "Off" once switched.
 		const enabled = page.getByLabel('transfer 1 enabled');
 		await expect(enabled).toBeChecked();
-		await page.locator('.on-toggle').getByText('Enabled').click();
+		const sw = page.getByTestId('transfer-rule').locator('.switch');
+		const swBox = (await sw.boundingBox())!;
+		const inputBox = (await enabled.boundingBox())!;
+		expect(inputBox.width).toBeGreaterThanOrEqual(swBox.width - 1);
+		expect(inputBox.height).toBeGreaterThanOrEqual(44);
+		await sw.click({ position: { x: swBox.width - 4, y: swBox.height / 2 } });
 		await expect(enabled).not.toBeChecked();
+		await expect(page.getByTestId('transfer-rule').locator('.switch')).toHaveText('Off');
 
 		await expectNoSidewaysScroll(page);
 	});
 });
 
-test('on a desktop the crop and transfer tables keep their column headers', async ({ page, owner }) => {
+test('on a desktop the crop table keeps its column headers and a transfer card its group labels', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await createProject(page.request, 'Desktop tables');
@@ -127,7 +133,9 @@ test('on a desktop the crop and transfer tables keep their column headers', asyn
 	const factors = page.getByRole('dialog', { name: 'Crop factors' });
 	await expect(factors.getByRole('columnheader', { name: 'Sep', exact: true }).first()).toBeVisible();
 	await page.goto(`/projects/${project.id}?tab=transfers`);
-	await expect(page.getByRole('columnheader', { name: /^Takes from/ })).toBeVisible();
-	await expect(page.getByRole('columnheader', { name: /^Max rate by month/ })).toBeVisible();
-	await expect(page.getByRole('rowheader', { name: '1', exact: true })).toBeVisible();
+	const rule = page.getByTestId('transfer-rule');
+	await expect(rule.getByText('Max rate by month', { exact: true })).toBeVisible();
+	await expect(rule.getByText('Limits', { exact: true })).toBeVisible();
+	await expect(rule.getByText('Takes from', { exact: true })).toBeVisible();
+	await expect(rule.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
 });

@@ -185,7 +185,7 @@ test('a viewer sees the Dams page and its data, with no prompt to run', async ({
 	await expect(cards(v).getByTestId('dam-days-at-min')).toHaveCount(2);
 });
 
-/** The seeded catchment plus `extra` farm dams with long names (a big case: the cards fold). */
+/** The seeded catchment plus `extra` farm dams with long names (a big case: many cards). */
 async function seedManyDams(page: Page, name: string, extra: number): Promise<{ id: string; model: Model }> {
 	const project = await seedRunnableProject(page.request, name);
 	const model = project.model;
@@ -221,7 +221,7 @@ test.describe('flows in the window’s scroll, with nothing scrolling inside a c
 			await chartReady(page);
 			const list = (await page.getByRole('list', { name: 'Dams' }).boundingBox())!;
 			const box = (await chart(page).boundingBox())!;
-			// Three dams: every card shows, no fold.
+			// Three dams: every card shows.
 			await expect(cards(page)).toHaveCount(3);
 			await expect(page.getByRole('button', { name: /^Show all \d+ dams$/ })).toHaveCount(0);
 			if (label === 'desktop') {
@@ -245,7 +245,7 @@ test.describe('flows in the window’s scroll, with nothing scrolling inside a c
 	}
 });
 
-test('many dams: the emptiest few show, the rest open in place under “Show all”; the picked dam keeps its card; nothing scrolls inside itself', async ({ page, owner }) => {
+test('many dams: every card shows, emptiest first, with no “Show all” fold; the picked dam stays highlighted; nothing scrolls inside itself', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedManyDams(page, 'Dams many', 12);
@@ -254,44 +254,37 @@ test('many dams: the emptiest few show, the rest open in place under “Show all
 	await chartReady(page);
 	await expect(page.getByTestId('dams-summary')).toContainText('14 dams');
 
-	// Beside the chart: the three emptiest, then the fold.
-	const more = page.getByRole('button', { name: 'Show all 14 dams' });
-	await expect(cards(page)).toHaveCount(3);
-	await expect(more).toHaveAttribute('aria-expanded', 'false');
-	await expect(more).toHaveAttribute('aria-controls', 'dam-cards');
-	const firstThree = await cards(page).locator('a.name').allInnerTexts();
-	expect(await innerScrollers(page)).toEqual([]);
-
-	// Open: all 14 in place, emptiest first, the page (not the list) growing; the chart stays in view beside them.
-	await more.click();
+	// Beside the chart: all 14 cards at once, emptiest first; the page (not the list) grows and no button folds them.
 	await expect(cards(page)).toHaveCount(14);
-	expect((await cards(page).locator('a.name').allInnerTexts()).slice(0, 3)).toEqual(firstThree);
-	const fewer = page.getByRole('button', { name: 'Show the 3 emptiest' });
-	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+	await expect(page.getByRole('button', { name: /^Show (all|the)\b/ })).toHaveCount(0);
+	const full = (await cards(page).locator('.level .v').allInnerTexts()).map((t) => Number.parseFloat(t));
+	expect(full).toHaveLength(14);
+	expect(full).toEqual([...full].sort((a, b) => a - b));
 	expect(await innerScrollers(page)).toEqual([]);
+	// The chart stays in view beside them as the window scrolls.
 	await cards(page).nth(12).scrollIntoViewIfNeeded();
 	await expect(chart(page)).toBeInViewport();
 
-	// Pick one far down, then fold: its card stays, after the three emptiest.
+	// Pick one far down: its card is highlighted and the chart shows it; a shared link to it opens the same way.
 	const far = (await cards(page).nth(12).locator('a.name').innerText()).trim();
 	await cards(page).nth(12).locator('a.name').click();
 	await expect(chart(page).getByRole('heading')).toHaveText(`Storage: ${far}`);
-	await fewer.click();
-	await expect(cards(page)).toHaveCount(4);
-	await expect(cards(page).locator('a.name')).toHaveText([...firstThree, far]);
-	await expect(page.getByRole('button', { name: 'Show all 14 dams' })).toBeVisible();
-	// A shared link to that dam opens with its card shown too.
+	await expect(cards(page).nth(12)).toHaveClass(/\bpicked\b/);
+	await expect(cards(page).nth(12).locator('a.name')).toHaveAttribute('aria-current', 'true');
 	await page.reload();
-	await expect(cards(page)).toHaveCount(4);
-	await expect(cards(page).last().locator('a.name')).toHaveAttribute('aria-current', 'true');
+	await chartReady(page);
+	await expect(cards(page)).toHaveCount(14);
+	await expect(cards(page).nth(12).locator('a.name')).toHaveAttribute('aria-current', 'true');
 
-	// On a phone: four cards (two rows) before the chart, still no inner scroll and no sideways scroll.
+	// On a phone: still every card, no inner scroll and no sideways scroll; picking the last brings the chart into view.
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto(`/projects/${project.id}?tab=dams`);
 	await chartReady(page);
-	await expect(cards(page)).toHaveCount(4);
-	await expect(page.getByRole('button', { name: 'Show all 14 dams' })).toBeVisible();
+	await expect(cards(page)).toHaveCount(14);
+	await expect(page.getByRole('button', { name: /^Show (all|the)\b/ })).toHaveCount(0);
 	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+	await cards(page).last().locator('a.name').click();
+	await expect(chart(page)).toBeInViewport();
 	await expectNoViolations(page);
 });

@@ -139,15 +139,18 @@
 		justify-content: center;
 		padding: 0;
 	}
-	/* Some hidden: the count is a small badge on the icon's corner, so the button stays the 24 px square and
-	   the head's line ("Catchment", the role, this) doesn't wrap; beside the icon it took 41 px and did. */
+	/* Some hidden: the count is a small badge on the button's top-right corner, so the button stays the 24 px
+	   square and the head's line ("Catchment", the role, this) doesn't wrap; beside the icon it took 41 px and
+	   did. The badge stays inside the square's width (the icon moves left to make room): past it, it stuck out
+	   of the head and gave the sidebar's slot a sideways scrollbar (app-sidebar.spec.ts). */
 	.trigger.icon-only.some {
 		position: relative;
+		justify-content: flex-start;
 	}
 	.count {
 		position: absolute;
 		top: -5px;
-		right: -6px;
+		right: 0;
 		min-width: 14px;
 		padding: 0 3px;
 		border-radius: 999px;

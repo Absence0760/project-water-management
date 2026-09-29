@@ -368,6 +368,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Registered volumes and the allocation mode (engine ≥ 1.18.0), from their own stream, after everything else.
 	const allocations = randomAllocations(new Rng(seed ^ 0x510e527f), nodes, settings, start, days);
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
+	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
+	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
 	return {
 		settings,
 		model: {
@@ -641,6 +643,28 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 		}
 	}
 	return out;
+}
+
+/**
+ * Development over the run (engine ≥ 1.30.0, ../network/development.ts) in
+ * 20 % of seeds: on a farm dam, now and then a sediment rate with a survey
+ * date anywhere from a run before the start to after the end, and an
+ * in-service date inside the run; on a farm or water user, an abstraction
+ * start before, inside or after the run.
+ */
+function addDevelopment(g: Rng, nodes: NetworkNode[], start: number, days: number): void {
+	if (!g.bool(0.2)) return;
+	const day = (lo: number, hi: number) => fromEpochDay(start + g.int(lo, hi));
+	for (const n of nodes) {
+		if (n.kind === 'farm' && n.damCapacityM3 > 0) {
+			if (g.bool(0.4)) {
+				n.damSedimentPctPerYear = g.pick([0, g.float(0, 0.05), g.float(0.05, 0.2)]);
+				n.damSurveyDate = day(-days, days + 30);
+			}
+			if (g.bool(0.3)) n.damInServiceFrom = day(-30, days);
+		}
+		if (n.kind !== 'gauge' && g.bool(0.3)) n.abstractionFrom = day(-30, days + 30);
+	}
 }
 
 /**

@@ -9,6 +9,7 @@ import { beforeForecast, fdcPercentileTable, historyDayCount } from './views/fdc
 import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { randomInput } from './testing/fuzz';
+import { checkRainSource } from './verify/checks';
 import { checkForecastPrefix, summaryDifference } from './testing/forecastInvariants';
 
 const START = '2020-01-01';
@@ -133,6 +134,10 @@ describe('runForecastChecked', () => {
 		expect(source).toHaveLength(out.days);
 		expect(source[out.days - 15]).toBe(RAIN_SOURCE_CODE.catchment);
 		expect(source.slice(-14)).toEqual(new Array(14).fill(RAIN_SOURCE_CODE.forecast));
+		// One column (every run with rain has its own from engine 1.27.0), the full input's split, whole.
+		expect(out.series.filter((s) => s.nodeId === null && s.key === 'rain_source')).toHaveLength(1);
+		expect(source).toEqual(Array.from(forecastSplit(x).source));
+		expect(checkRainSource(out)).toBeNull();
 	});
 
 	it('names the forecast days in forecastRain but not in the warnings (the summaries leave them out)', () => {
@@ -141,6 +146,53 @@ describe('runForecastChecked', () => {
 		expect(out.summary.warnings.some((w) => w.includes('use forecast rain'))).toBe(false);
 		// Positive control: the ordinary run of the same input does warn.
 		expect(runModelChecked(x).summary.warnings.some((w) => w.includes('use forecast rain'))).toBe(true);
+	});
+});
+
+describe('the model is causal across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
+	// A 200-day record, shorter than GR4J's 365-day warm-up, so the warm-up cycles it; a wet
+	// 14-day forecast after it; land cover on every farm, so the Q75 threshold is in play.
+	const x = withRain(record(200), { startDate: '2020-07-19', values: new Array(14).fill(40) });
+	x.model.landCover = x.model.nodes
+		.filter((n) => n.kind === 'farm' && n.areaKm2 > 0)
+		.map((n, k) => ({ id: `lc${k}`, nodeId: n.id, coverClass: 'invasive' as const, areaKm2: n.areaKm2 / 2, densityPct: 0.8, factors: null }));
+	const cut = 200;
+
+	it('an ordinary run with the tail has the same series as the run without it on every shared day, to the bit', () => {
+		const withTail = runModelChecked(x);
+		const without = runModelChecked(withoutForecastTail(x));
+		expect(withTail.days).toBe(214);
+		expect(without.days).toBe(cut);
+		const byKey = new Map(withTail.series.map((s) => [`${s.nodeId}|${s.key}`, s.values]));
+		for (const s of without.series) expect(byKey.get(`${s.nodeId}|${s.key}`)!.slice(0, cut), `${s.nodeId}|${s.key}`).toEqual(s.values);
+		// The threshold is read over the historical days, and says so.
+		expect(withTail.summary.landCover!.lowFlowThresholdM3Day).toBe(without.summary.landCover!.lowFlowThresholdM3Day);
+		expect(withTail.summary.historyDays).toBe(cut);
+		expect(without.summary).not.toHaveProperty('historyDays');
+		expect(withTail.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+	});
+
+	it('a full allocation fits the water year the tail starts in on its historical days', () => {
+		const y = structuredClone(x);
+		const farm = y.model.nodes.find((n) => n.kind === 'farm')!;
+		y.model.allocations = [{ id: 'a1', nodeId: farm.id, waterSource: 'surface', volumeM3PerYear: 5e5 }];
+		y.settings = { ...y.settings, allocationMode: 'fullAllocation' };
+		const withTail = runModelChecked(y);
+		const without = runModelChecked(withoutForecastTail(y));
+		const col = (o: ModelOutput, key: string) => o.series.find((s) => s.nodeId === farm.id && s.key === key)!.values;
+		expect(col(withTail, 'allocation_demand_factor').slice(0, cut)).toEqual(col(without, 'allocation_demand_factor'));
+		expect(col(withTail, 'demand').slice(0, cut)).toEqual(col(without, 'demand'));
+		// The tail days keep the year's factor.
+		expect(new Set(col(withTail, 'allocation_demand_factor').slice(cut - 1))).toEqual(new Set([col(without, 'allocation_demand_factor')[cut - 1]]));
+		expect(withTail.summary.verification!.checks.filter((c) => !c.passed)).toEqual([]);
+	});
+
+	it('forecast mode takes every series from the run with the tail (positive control: the wet tail does move the forecast days)', () => {
+		const out = runForecastChecked(x);
+		const withTail = runModelChecked(x);
+		const natural = (o: ModelOutput) => o.series.find((s) => s.nodeId === null && s.key === 'natural_flow')!.values;
+		expect(natural(out)).toEqual(natural(withTail));
+		expect(Math.max(...natural(out).slice(cut))).toBeGreaterThan(Math.max(...natural(out).slice(0, cut)));
 	});
 });
 

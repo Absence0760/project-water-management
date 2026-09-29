@@ -37,7 +37,7 @@ export async function seedWhatIfs(
 	return { id: project.id, model: bigger, baseline, whatIf1, whatIf2 };
 }
 
-/** The workspace's section header (title, context line, Export impact report, + New what-if). */
+/** The workspace's section header (title, context line, Export impact report). */
 export const sectionHeader = (page: Page) => page.getByTestId('section-header');
 
 export type CompareSlot = 'Baseline' | 'What-if 1' | 'What-if 2';

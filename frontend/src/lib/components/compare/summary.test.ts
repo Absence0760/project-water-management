@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { metricDelta, type FarmDelta, type InputChange, type RunComparison } from '@water-management/engine';
+import { damCapacityOn, metricDelta, toEpochDay, type FarmDelta, type NetworkNode, type InputChange, type RunComparison } from '@water-management/engine';
 import { compareDamStorage, damStorageShare, DAYS_PER_YEAR, leadChange, outcomeRows, takeaways } from './summary';
 import type { FarmSummary } from '@water-management/engine';
 
@@ -93,6 +93,28 @@ describe('dam storage (issue #55 figures)', () => {
 			b: null,
 			delta: null
 		});
+	});
+
+	it("reads a dam whose capacity changes against its capacity on the summary's last day (issue #67)", () => {
+		// Surveyed at 90 000 m³ a year after the run ends, 10 % a year lost to sediment: on 2024-12-31 it held ~99 000 m³.
+		const dev = { id: 'big', kind: 'farm', damCapacityM3: 90_000, damSurveyDate: '2025-12-31', damSedimentPctPerYear: 0.1 };
+		const onEnd = damCapacityOn(dev as unknown as NetworkNode, toEpochDay('2024-12-31'));
+		expect(onEnd).toBeGreaterThan(90_000);
+		expect(damStorageShare([f('big', 0.95 * onEnd)], [dev], '2024-12-31')).toBeCloseTo(0.95, 12);
+		// Before the fix (and without the date) it read over 100 %.
+		expect(damStorageShare([f('big', 0.95 * onEnd)], [dev])!).toBeGreaterThan(1);
+		// A dam not yet in service at the end holds nothing and counts no capacity.
+		const later = { id: 'small', kind: 'farm', damCapacityM3: 10_000, damInServiceFrom: '2025-06-01' };
+		expect(damStorageShare([f('big', 0.95 * onEnd), f('small', 0)], [dev, later], '2024-12-31')).toBeCloseTo(0.95, 12);
+		// compareDamStorage finds the day from each run (the day before a forecast).
+		const side = (forecast?: string) => ({
+			run: { startDate: '2020-01-01', endDate: '2024-12-31', summary: { farms: [f('big', 0.95 * onEnd)], ...(forecast ? { forecast: { from: forecast } } : {}) }, inputs: { model: { nodes: [dev] } } }
+		});
+		expect(compareDamStorage({ a: side(), b: side() }).a).toBeCloseTo(0.95, 12);
+		const beforeForecast = damCapacityOn(dev as unknown as NetworkNode, toEpochDay('2024-11-30'));
+		expect(compareDamStorage({ a: side(), b: side('2024-12-01') }).b).toBeCloseTo((0.95 * onEnd) / beforeForecast, 12);
+		// Positive control: unchanged dams give exactly the figure they gave before.
+		expect(damStorageShare([f('big', 45_000), f('small', 10_000), f('none')], nodes, '2024-12-31')).toBe(damStorageShare([f('big', 45_000), f('small', 10_000), f('none')], nodes));
 	});
 
 	it('adds a row before the mean outflow only when a run has dams, shown without a verdict or a takeaway', () => {

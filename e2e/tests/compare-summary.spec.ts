@@ -5,8 +5,9 @@
 // for the what-if picked. Old two-run links keep working; the second what-if
 // is the optional `c` parameter. The extras (issue #17): a dam storage row,
 // Export impact report (the what-if's printable report with an impact
-// section, `report?run=…&against=…`) and + New what-if (the Scenarios
-// dialog on the baseline, `new=1&base=…`), both in the section header.
+// section, `report?run=…&against=…`) in the section header. There is no
+// create button: a what-if is any run, and with no pair picked the empty
+// state points to the Scenarios tab.
 import type { Page } from '@playwright/test';
 import { addMember } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -131,7 +132,6 @@ test('the standalone page opens ?project= on its default pair, takes a second wh
 	await expect(page).toHaveURL(new RegExp(`/compare\\?a=${p.id}%3A${p.whatIf1}&b=${p.id}%3A${p.whatIf2}&c=${p.id}%3A${p.baseline}$`));
 	// The page has no section header: its actions sit beside its own title.
 	await expect(exportMenu(page)).toBeVisible();
-	await expect(page.getByRole('link', { name: '+ New what-if' })).toHaveAttribute('href', `/projects/${p.id}?tab=scenarios&new=1&base=${p.whatIf1}`);
 	await expect(outcomes(page).getByRole('columnheader')).toHaveText(['Outcome', 'Baseline', 'What-if 1', 'What-if 2']);
 
 	// Picking another run for what-if 2 stays on the page.
@@ -204,43 +204,24 @@ test("Export impact report opens each what-if's report with its impact against t
 	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeEnabled();
 });
 
-test('+ New what-if opens the Scenarios dialog on the baseline, and Back returns to the comparison; a viewer has no New what-if', async ({
-	page,
-	owner,
-	signIn
-}) => {
+test('with no what-if picked, the empty state points to the Scenarios tab; a viewer can export the impact report', async ({ page, owner, signIn }) => {
 	void owner;
-	const p = await seedWhatIfs(page.request, 'New what-if valley');
-	// The baseline is not the latest run, so the dialog's default (the latest) would be wrong.
+	const p = await seedWhatIfs(page.request, 'Empty what-if valley');
+	// A baseline and no what-if: nothing to compare yet, and no create button in the header.
+	await page.goto(`/projects/${p.id}?tab=compare&a=${p.id}:${p.whatIf1}`);
+	const empty = page.getByRole('status').filter({ hasText: 'Choose a baseline and a what-if to see what changed.' });
+	await expect(empty).toContainText('A what-if is any other run: change the model and run it again, or run a scenario on the Scenarios tab.');
+	await expect(sectionHeader(page).getByTestId('header-own').getByRole('link')).toHaveCount(0);
+	await empty.getByRole('link', { name: 'Scenarios tab' }).click();
+	await expect(page).toHaveURL(new RegExp(`/projects/${p.id}\\?tab=scenarios$`));
+
+	// A viewer compares and exports like anyone else (the header's own action is there once a pair is picked).
 	const compareUrl = `/projects/${p.id}?tab=compare&a=${p.id}:${p.whatIf1}&b=${p.id}:${p.whatIf2}`;
-	await page.goto(compareUrl);
-	await expect(outcomes(page)).toBeVisible();
-	await sectionHeader(page).getByRole('link', { name: '+ New what-if' }).click();
-	await expect(page).toHaveURL(new RegExp(`\\?tab=scenarios&new=1&base=${p.whatIf1}$`));
-	const dialog = page.getByRole('dialog', { name: 'New scenario' });
-	await expect(dialog.getByLabel('Base run')).toHaveValue(p.whatIf1);
-	await expect(dialog.getByLabel('Name')).toBeFocused();
-
-	// Cancel drops both params in place; Back then leaves for the comparison.
-	await dialog.getByRole('button', { name: 'Cancel' }).click();
-	await expect(page).toHaveURL(/\?tab=scenarios$/);
-	await page.goBack();
-	await expect(runSelect(page, 'Baseline')).toHaveValue(p.whatIf1);
-
-	// Creating one opens it, with neither param left behind.
-	await sectionHeader(page).getByRole('link', { name: '+ New what-if' }).click();
-	await dialog.getByLabel('Name').fill('Upper dam +20 %');
-	await dialog.getByRole('button', { name: 'Create scenario' }).click();
-	await expect(page).toHaveURL(/\?tab=scenarios&scenario=[0-9a-f-]+$/);
-	await expect(page.getByRole('heading', { level: 2, name: /Upper dam \+20 %/ })).toBeVisible();
-
-	// A viewer can export the impact report but not start a what-if.
-	const viewer = await signIn('New what-if viewer');
+	const viewer = await signIn('Empty what-if viewer');
 	await addMember(page.request, p.id, viewer.user.email, 'viewer');
 	await viewer.page.goto(compareUrl);
 	await expect(outcomes(viewer.page)).toBeVisible();
 	await expect(sectionHeader(viewer.page).getByRole('link', { name: 'Export impact report' })).toBeVisible();
-	await expect(sectionHeader(viewer.page).getByRole('link', { name: '+ New what-if' })).toHaveCount(0);
 });
 
 for (const [label, size] of [

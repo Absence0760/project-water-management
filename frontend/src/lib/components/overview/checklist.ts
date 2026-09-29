@@ -130,3 +130,17 @@ export function progress(steps: ChecklistStep[]): { done: number; total: number;
 export function nextStep(steps: ChecklistStep[]): ChecklistStep | undefined {
 	return steps.find((s) => s.status === 'todo' || (s.status === 'partial' && !s.optional));
 }
+
+/**
+ * How the Summary shows the checklist: `complete` → a "Setup complete" pill in the section header,
+ * whose popover lists the steps (SetupPill); `open` → the full checklist on the page; `checking` →
+ * a one-line bar while series or runs load and every step known so far is done. Decided from the
+ * steps already known, so the first frame has the final shape: never open-then-collapse.
+ */
+export type ChecklistMode = 'complete' | 'checking' | 'open';
+export function checklistMode(steps: ChecklistStep[]): ChecklistMode {
+	if (progress(steps).complete) return 'complete';
+	const checking = steps.some((s) => s.status === 'unknown');
+	const knownGap = steps.some((s) => s.status !== 'unknown' && s.status !== 'done' && !(s.optional && s.status === 'partial'));
+	return checking && !knownGap ? 'checking' : 'open';
+}

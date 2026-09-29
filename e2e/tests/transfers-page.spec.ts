@@ -1,12 +1,14 @@
 // The Transfers page (?tab=transfers, issue #17 option A): the section header carries the count, Show on the map
-// and + Add transfer; under it the rules table, one card that grows with its rules while the page scrolls (never a
-// scroll box inside the card); on a phone each rule is a card. Synthetic data only.
+// and + Add transfer; under it one card per rule (a head line with its number, From → To, an On/Off switch and
+// Remove; its rates, limits and source in groups), the list growing with its rules while the page scrolls (never a
+// scroll box inside it). Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { openTransfers, rulesCard, rulesWrapBox, seedManyTransfers } from '../support/transfers.ts';
+import { answerConfirm } from '../support/confirm.ts';
+import { openTransfers, ruleCard, rulesCard, rulesListBox, seedManyTransfers } from '../support/transfers.ts';
 
 const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
 const saveBar = (page: import('@playwright/test').Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -26,7 +28,7 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	// The add button lives in the header only on the page.
 	await expect(rulesCard(page).getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 
-	// No month chart: the rules table is the page (the "When water moves" card only restated the month rates).
+	// No month chart: the rules are the page (the "When water moves" card only restated the month rates).
 	await expect(page.getByRole('region', { name: 'When water moves' })).toHaveCount(0);
 	// One rule: the card is as tall as its rule, not stretched to the window, and the page doesn't scroll.
 	const rules = (await rulesCard(page).boundingBox())!;
@@ -44,10 +46,12 @@ test('the header carries the count and the actions; + Add transfer adds a rule a
 	// Tab moves on to the next month's field.
 	await expect(page.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toBeFocused();
 	await expect(page.getByRole('group', { name: /^Max rate of transfer 2 by month/ })).toContainText('Oct, up to 0.02 m³/s');
-	// Switching the first rule off says so by its number and in the header's count.
+	// Switching the first rule off says so in its heading, beside the switch and in the header's count.
 	await page.getByLabel('transfer 1 enabled', { exact: true }).uncheck();
 	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 1 active');
-	await expect(page.getByRole('rowheader', { name: '1 off', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1 off', exact: true })).toBeVisible();
+	await expect(ruleCard(page, 1).locator('.switch')).toHaveText('Off');
+	await expect(ruleCard(page, 2).locator('.switch')).toHaveText('On');
 
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
@@ -127,22 +131,22 @@ for (const [width, height] of [
 	[1440, 960],
 	[1280, 800]
 ] as const) {
-	test(`thirty rules at ${width} × ${height}: the page scrolls, not the rules card, and every column fits`, async ({ page, owner }) => {
+	test(`thirty rules at ${width} × ${height}: the page scrolls, not the rules list, and every rule's fields fit`, async ({ page, owner }) => {
 		void owner;
 		const project = await seedManyTransfers(page.request, 'Transfers big');
 		await page.setViewportSize({ width, height });
 		await openTransfers(page, project.id);
 		await expect(page.getByLabel('Source of transfer 30', { exact: true })).toBeAttached();
 		await expect(header(page).getByTestId('section-context')).toHaveText('30 transfer rules · 25 active');
-		// One scroll: the card holds all thirty rows (nothing scrolls inside it) and the page is what scrolls.
-		const box = await rulesWrapBox(page);
+		// One scroll: the list holds all thirty cards (nothing scrolls inside it) and the page is what scrolls.
+		const box = await rulesListBox(page);
 		expect(box.sh).toBeLessThanOrEqual(box.ch);
 		expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(height);
-		// Every column fits: no scrolling the table sideways to reach Priority, On or Remove.
+		// Everything fits: nothing scrolls sideways to reach Priority, On or Remove.
 		expect(box.sw).toBeLessThanOrEqual(box.cw);
 		await expect(page.getByRole('button', { name: /^Remove transfer 1 / })).toBeInViewport();
-		// Five rules are off, each saying so by its number.
-		await expect(page.getByRole('rowheader', { name: /^\d+ off$/ })).toHaveCount(5);
+		// Five rules are off, each saying so in its heading.
+		await expect(page.getByRole('heading', { level: 3, name: /^Transfer \d+ off$/ })).toHaveCount(5);
 		// The last rule is reached by scrolling the page.
 		const last = page.getByRole('button', { name: /^Remove transfer 30 / });
 		await last.scrollIntoViewIfNeeded();
@@ -160,7 +164,7 @@ test('a dozen rules at 1280 × 800, the page scrolling: no accessibility violati
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await openTransfers(page, project.id);
 	await expect(header(page).getByTestId('section-context')).toHaveText('12 transfer rules · 10 active');
-	await expect(page.getByRole('rowheader', { name: /^\d+ off$/ })).toHaveCount(2);
+	await expect(page.getByRole('heading', { level: 3, name: /^Transfer \d+ off$/ })).toHaveCount(2);
 	// The state the scan is for: longer than the window, the page scrolling rather than the card.
 	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(800);
 	await expectNoViolations(page);
@@ -240,13 +244,135 @@ test.describe('no accessibility violations', () => {
 			await expect(page.getByLabel('Source of transfer 2', { exact: true })).toBeVisible();
 			if (label === 'phone') {
 				// Each rule a card; the page scrolls, not a box inside it, and nothing is wider than the screen.
-				await expect(page.getByRole('rowheader', { name: 'Transfer 1', exact: true })).toBeVisible();
-				await expect(page.getByRole('rowheader', { name: 'Transfer 2 off', exact: true })).toBeVisible();
-				const wrap = await rulesWrapBox(page);
+				await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
+				await expect(page.getByRole('heading', { level: 3, name: 'Transfer 2 off', exact: true })).toBeVisible();
+				const wrap = await rulesListBox(page);
 				expect(wrap.sh).toBeLessThanOrEqual(wrap.ch);
 				await expectNoSidewaysScroll(page);
 			}
 			await expectNoViolations(page);
 		});
 	}
+});
+
+/** The sample model plus a river off-take with rates of two sizes and a dam rule switched off. */
+function mixedModel() {
+	const model = sampleModel();
+	const base = model.transfers[0]!;
+	base.maxRateM3s = 0.0129;
+	model.transfers.push({
+		...base,
+		id: crypto.randomUUID(),
+		months: [10, 11, 12],
+		maxRateM3s: 12.345,
+		monthlyRateM3s: [0.0129, 12.345, 1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+		priority: 1,
+		source: 'river',
+		handsOffM3Day: 250,
+		lossPct: 0.1
+	});
+	model.transfers.push({ ...base, id: crypto.randomUUID(), months: [6, 7, 8], maxRateM3s: 0.005, dailyCapM3: 500, enabled: false, priority: 2 });
+	return model;
+}
+
+test('each rule is a card: its groups side by side and top-aligned, its rates whole, an off rule tinted and saying so', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers cards');
+	await putModel(page.request, project.id, mixedModel());
+	await openTransfers(page, project.id);
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(3);
+
+	// The head line: number, From → To, the switch and Remove on one row.
+	const card = ruleCard(page, 2);
+	const title = (await card.getByRole('heading', { level: 3 }).boundingBox())!;
+	for (const el of [card.getByLabel('Source of transfer 2', { exact: true }), card.getByLabel('Destination of transfer 2', { exact: true }), card.getByLabel('transfer 2 enabled', { exact: true }), card.getByRole('button', { name: /^Remove transfer 2 / })]) {
+		const b = (await el.boundingBox())!;
+		expect(Math.abs(b.y + b.height / 2 - (title.y + title.height / 2))).toBeLessThan(8);
+	}
+	// Rates, limits and source side by side, each group starting on the same line (nothing floats mid-card).
+	const tops = await card.locator('.grp').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+	expect(tops).toHaveLength(3);
+	expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
+	const cap = (await card.getByLabel('Daily cap of transfer 2, m³', { exact: true }).boundingBox())!;
+	const takes = (await card.getByLabel('Where transfer 2 takes its water', { exact: true }).boundingBox())!;
+	const oct = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
+	expect(cap.x).toBeGreaterThan(oct.x);
+	expect(takes.x).toBeGreaterThan(cap.x);
+	// The off-take's fields are a grid of two, not one tall column: Hands-off flow beside Losses.
+	const handsOff = (await card.getByLabel('Hands-off flow for transfer 2, m³/day', { exact: true }).boundingBox())!;
+	const losses = (await card.getByLabel('Conveyance losses of transfer 2, %', { exact: true }).boundingBox())!;
+	expect(Math.abs(handsOff.y - losses.y)).toBeLessThan(1);
+	// Every month's field shows its rate whole (0.0129 and 12.345 were clipped in the old table).
+	for (const m of ['Oct', 'Nov', 'Dec']) {
+		const f = card.getByLabel(`Max rate of transfer 2 in ${m}, m³/s`, { exact: true });
+		expect(await f.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	}
+	await expect(card.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toHaveValue('12.345');
+	// The off rule: "off" in its heading, "Off" beside its switch, and a tinted card.
+	await expect(ruleCard(page, 3).getByRole('heading', { level: 3 })).toHaveText('Transfer 3 off');
+	await expect(ruleCard(page, 3).locator('.switch')).toHaveText('Off');
+	const bg = (n: number) => ruleCard(page, n).evaluate((el) => getComputedStyle(el).backgroundColor);
+	expect(await bg(3)).not.toBe(await bg(1));
+	// The shortcut says the rate it copies (0.0129, not a rounded 0.013).
+	await expect(ruleCard(page, 1).getByRole('button', { name: '0.0129 in every month', exact: true })).toBeVisible();
+	// So does the summary under the months: the top rate to four decimals, not rounded to 0.013.
+	await expect(ruleCard(page, 1)).toContainText('up to 0.0129 m³/s');
+	await expect(card).toContainText('up to 12.345 m³/s');
+	await expectNoSidewaysScroll(page);
+});
+
+test('Remove asks first for a rule with rates, not for a blank one, and focus moves on to the next rule', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await createProject(page.request, 'Transfers remove');
+	await putModel(page.request, project.id, mixedModel());
+	await openTransfers(page, project.id);
+	const remove = (n: number) => page.getByRole('button', { name: new RegExp(`^Remove transfer ${n} \\(`) });
+	// Cancel keeps it.
+	await remove(1).click();
+	await answerConfirm(page, false, 'Remove transfer 1?');
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(3);
+	// Confirmed, it goes, the rules renumber and the next rule's heading takes the focus.
+	await remove(1).click();
+	await answerConfirm(page, true, 'Discard on the save bar');
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(2);
+	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 1 active');
+	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeFocused();
+	await expect(page.getByLabel('Where transfer 1 takes its water', { exact: true })).toHaveValue('river');
+	await expect(saveBar(page)).toBeVisible();
+	// A rule with no rate yet goes at once.
+	await header(page).getByRole('button', { name: '+ Add transfer', exact: true }).click();
+	await remove(3).click();
+	await expect(page.getByRole('alertdialog')).toHaveCount(0);
+	await expect(page.getByTestId('transfer-rule')).toHaveCount(2);
+	// The last rule gone, focus goes to the one before it.
+	await expect(page.getByRole('heading', { level: 3, name: 'Transfer 2 off', exact: true })).toBeFocused();
+});
+
+test('on a phone each card stacks: From and To full width, month rates four to a row and whole, fields tap-sized', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const project = await createProject(page.request, 'Transfers phone cards');
+	await putModel(page.request, project.id, mixedModel());
+	await openTransfers(page, project.id);
+	const card = ruleCard(page, 2);
+	const from = (await card.getByLabel('Source of transfer 2', { exact: true }).boundingBox())!;
+	const to = (await card.getByLabel('Destination of transfer 2', { exact: true }).boundingBox())!;
+	expect(to.y).toBeGreaterThan(from.y + from.height - 1);
+	// Four months to a row: Feb starts the second row, under Oct.
+	const oct = (await card.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).boundingBox())!;
+	const feb = (await card.getByLabel('Max rate of transfer 2 in Feb, m³/s', { exact: true }).boundingBox())!;
+	expect(Math.abs(feb.x - oct.x)).toBeLessThan(1);
+	expect(feb.y).toBeGreaterThan(oct.y + oct.height - 1);
+	for (const m of ['Oct', 'Nov']) {
+		const f = card.getByLabel(`Max rate of transfer 2 in ${m}, m³/s`, { exact: true });
+		expect(await f.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+		expect((await f.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	}
+	for (const el of [card.getByLabel('transfer 2 enabled', { exact: true }), card.getByRole('button', { name: /^Remove transfer 2 / }), card.getByLabel('Where transfer 2 takes its water', { exact: true })])
+		expect((await el.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	// The source's selects take the card's width, so "The river (an off-take)" shows whole.
+	expect(await card.getByLabel('Where transfer 2 takes its water', { exact: true }).evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(250);
+	await expectNoSidewaysScroll(page);
 });

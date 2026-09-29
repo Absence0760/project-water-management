@@ -20,6 +20,8 @@ import { XlsxWorkbook, type XlsxCell } from './writer';
 
 /** One daily column: the daily CSV's header and the series' unit and values. */
 export interface DailyColumn {
+	/** The run_series key, when the table came from the bulk route. */
+	key?: string;
 	header: string;
 	unit: string | null;
 	values: ArrayLike<number | null>;

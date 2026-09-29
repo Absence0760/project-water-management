@@ -79,7 +79,8 @@ export function runoffForcing(
 /**
  * Step `model` over the forcing. The stores start at `fill` of capacity, then
  * run `warmupDays` days that cycle the forcing from its first day (day k of
- * the warm-up uses day k mod n); only the days after the warm-up are output.
+ * the warm-up uses day k mod n, n the forcing's days or `cycleDays` when
+ * fewer); only the days after the warm-up are output.
  * With `trace` false only qMm is filled (the calibration fast path).
  */
 export function simulateRunoff<P, S>(
@@ -95,6 +96,12 @@ export function simulateRunoff<P, S>(
 		initial?: readonly number[];
 		/** Return the state at the start of this day (0 … days) as `captured`. */
 		captureAt?: number;
+		/**
+		 * Cycle only the first this many days in the warm-up (engine ≥ 1.28.0):
+		 * the run's historical days, so a forecast tail after them never
+		 * changes the state the run starts from (engine-audit.md K1).
+		 */
+		cycleDays?: number;
 	}
 ): RunoffTrace {
 	// The warm-up cycles the whole forcing; `days` (default all) cuts the output short.
@@ -105,8 +112,9 @@ export function simulateRunoff<P, S>(
 	if (needsState && (!model.saveState || !model.loadState)) throw new Error(`the ${model.id} runoff model can't save its state`);
 	const st = opts.initial !== undefined ? model.loadState!(p, opts.initial) : model.init(p, opts.fill);
 	const day: DayFluxes = { qMm: 0, aetMm: 0, exchangeMm: 0 };
+	const cycle = opts.cycleDays !== undefined && opts.cycleDays > 0 ? Math.min(len, Math.floor(opts.cycleDays)) : len;
 	const warm = len > 0 && opts.initial === undefined ? Math.max(0, Math.floor(opts.warmupDays)) : 0;
-	for (let k = 0; k < warm; k++) model.step(p, st, forcing.rainMm[k % len]!, forcing.petMm[k % len]!, day);
+	for (let k = 0; k < warm; k++) model.step(p, st, forcing.rainMm[k % cycle]!, forcing.petMm[k % cycle]!, day);
 	let captured: number[] | undefined;
 
 	const qMm = new Float64Array(n);
@@ -172,6 +180,7 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 	const w = ctx.warm;
 	const tr = simulateRunoff(gr4j, p, forcing, {
 		warmupDays,
+		...(ctx.historyDays !== undefined ? { cycleDays: ctx.historyDays } : {}),
 		...(w?.resume !== undefined ? { initial: w.resume } : {}),
 		...(w?.captureAt !== undefined ? { captureAt: w.captureAt } : {})
 	});

@@ -20,6 +20,7 @@
 import {
 	DAM_AREA_EXPONENT,
 	DAM_STORAGE_DEFAULTS,
+	DEVELOPMENT_DEFAULTS,
 	ENGINE_VERSION,
 	IRRIGATION_SYSTEMS,
 	NEW_FARM_IRRIGATION,
@@ -230,6 +231,7 @@ function build(spec: CatchmentSpec, opts: BuildOptions): ExampleProject {
 			...USER_DEFAULTS,
 			...BOREHOLE_DEFAULTS,
 			...DAM_STORAGE_DEFAULTS,
+			...DEVELOPMENT_DEFAULTS,
 			...SUPPLY_DEFAULTS,
 			ewrSite: true,
 			gaPropertyAreaHa: null,

@@ -281,6 +281,30 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		related: ['dam-min', 'dam-storage'],
 		source: 'docs/model.md §2.7a; roadmap WP-3.5'
 	},
+	'dam-survey-date': {
+		long: 'The day the dam’s capacity (and its survey curve, if it has one) was measured, from a basin survey or the DWS dam technical data form. On its own it changes nothing. With a sediment rate it is the day the dam holds exactly the capacity entered: before it the dam held more, after it less.\n\nEmpty = not recorded; a sediment rate needs it, and a save refuses a rate without one.',
+		aliases: ['survey date', 'basin survey date', 'capacity date'],
+		related: ['dam-sediment', 'dam-survey-curve', 'dam-capacity'],
+		source: 'docs/model.md §2.7g; issue #67'
+	},
+	'dam-sediment': {
+		long: 'Dams fill with silt, so the water they can store falls over the years. The run takes the loss as steady: the capacity on a day is the capacity entered × (1 − rate × years since the survey date), more before the survey and less after it, never below empty. Dead storage, the survey curve’s volumes and the dam-level triggers (the supply rule’s, a drought borehole’s, a transfer’s reserve) are shares of the capacity and shrink with it; the area when full doesn’t.\n\nEnter the rate as a share of the surveyed capacity lost a year, 0 to 20 %; a re-survey of the same dam gives it (the capacity lost ÷ the surveyed capacity ÷ the years between). Empty or 0 = no loss. The run carries the day’s capacity as the dam_capacity column when it changes.',
+		aliases: ['siltation', 'sedimentation', 'capacity loss', 'silting'],
+		related: ['dam-survey-date', 'dam-capacity', 'dam-in-service'],
+		source: 'docs/model.md §2.7g; issue #67'
+	},
+	'dam-in-service': {
+		long: 'For a dam built during the record: before this day the hydrological unit has no dam, so what is routed to it passes below as on a unit without one, and irrigation draws on the river alone. From this day the dam starts empty, fills from what reaches it and works as entered.\n\nEmpty = the dam is there for the whole run.',
+		aliases: ['dam built', 'commissioned', 'dam completion date'],
+		related: ['dam-capacity', 'dam-sediment', 'abstraction-start'],
+		source: 'docs/model.md §2.7g; issue #67'
+	},
+	'abstraction-start': {
+		long: 'For land developed, or a user connected, during the record: before this day the unit takes no water. A hydrological unit’s crops and demand objects, and an other water user’s own demand, are 0 until then; from this day they run as entered. Its runoff and dam (if any) are unaffected.\n\nEmpty = it abstracts for the whole run. A gauge takes no water, so it can’t have one.',
+		aliases: ['development date', 'abstraction from', 'start of use', 'new development'],
+		related: ['dam-in-service', 'irrigation-efficiency'],
+		source: 'docs/model.md §2.7g; issue #67'
+	},
 	'diversion': {
 		long: 'Each day up to this volume is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. b023 enters it in m³/s; the app stores m³/day.',
 		aliases: ['downstream diversion', 'divert capacity', 'pump back'],

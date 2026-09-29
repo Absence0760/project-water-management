@@ -1299,6 +1299,23 @@
 //             with its store) and their Afrikaans words in the af
 //             catalogue. The members, farmers and team panels lost their
 //             added-at-once branches. No new dependency. Headroom ~3 KB.
+// 2026-09-29  calibration worker 36 → 38 KB (issue #67: measured 37 with
+//             main @ 0a9cc278 merged; total unchanged). The
+//             worker bundles the engine, and the engine now runs causally
+//             across a forecast tail (engine 1.28.0), so the run it fits
+//             with grew ~1 KB. No new dependency. Headroom ~1 KB worker.
+// 2026-09-29  total 1194 → 1201 KB (issue #68: measured 1198 with main @
+//             84980243 merged, #136 and #198 included). A farm's Excel audit workbook, built
+//             in the existing export worker (10.5 → 19 KB, inside the 32 KB
+//             spreadsheet-worker budget): the engine's audit plan and
+//             formula tree (verify/audit.ts), the dam and evaporation
+//             helpers it shares with the self-checks (verify/workings.ts)
+//             and what it reads a run's model through (upgradeLegacyModel,
+//             the demand factor, the survey-curve and demand-object readers),
+//             plus the sheet layout. Trimmed first: the FarmTemplate letters
+//             are inlined rather than loading FARM_COLUMNS' formula texts,
+//             and the evaporation defaults are two constants rather than
+//             defaultProjectSettings. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1309,10 +1326,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1194,
+	totalCodeKb: 1201,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 36,
+	largestWorkerKb: 38,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,
