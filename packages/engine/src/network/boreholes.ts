@@ -201,6 +201,8 @@ export function groundwaterDay(
 	const rem = river > 0 && rule !== 3 ? Math.min(D - g, sRoom) - Math.min(river, D - g, sRoom) : Math.min(D - g, sRoom);
 	// Primary and emergency dam-target units top the dam up only on a day it is drawn for demand (engine ≥ 1.8.0).
 	const drawn = damDrawnFor(rem, D);
+	// A supplemental unit that pumped all it was asked for left the dam holding exactly `rem` above dead storage.
+	let topped = false;
 	for (let k = 0; k < units.length; k++) {
 		const u = units[k]!;
 		if (!u.toDam) continue;
@@ -209,11 +211,16 @@ export function groundwaterDay(
 		const v = Math.max(0, Math.min(unitRoom(u, used[k]!), want, head, gLeft));
 		take(k, v);
 		gd += v;
+		if (u.mode === 0 && v > 0 && v === want) topped = true;
 	}
+	// In floats (avail + gd) − dead gives `rem` back only to an ulp of the dam's volume, and a day it
+	// fell that ulp short counted as a failed demand day (fuzz seed 11421: 1e-10 m³ of a 0.011 m³
+	// demand beside a 1.4e6 m³ dam), so the dam supplies `rem` itself.
+	const damAvail = topped ? Math.max(avail + gd - dead, rem, 0) : Math.max(avail + gd - dead, 0);
 	let Gs: number;
 	let Gr = 0;
-	if (river > 0) [Gs, Gr] = surfaceSplit(rule, Math.min(D - g, sRoom), Math.max(avail + gd - dead, 0), river);
-	else Gs = Math.min(Math.max(avail + gd - dead, 0), D - g, sRoom);
+	if (river > 0) [Gs, Gr] = surfaceSplit(rule, Math.min(D - g, sRoom), damAvail, river);
+	else Gs = Math.min(damAvail, D - g, sRoom);
 	for (const pass of [0, 2] as const) {
 		for (let k = 0; k < units.length; k++) {
 			const u = units[k]!;
