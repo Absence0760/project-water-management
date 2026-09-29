@@ -429,6 +429,14 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_ce_anomaly_monitor.services
+  override_during = plan
+  values = {
+    arn = "arn:aws:ce::000000000000:anomalymonitor/00000000-0000-0000-0000-000000000000"
+  }
+}
+
 # SES bounces and complaints → the worker (ses.tf, WP-2.13 follow-up)
 override_resource {
   target          = aws_sns_topic.ses_events
@@ -1022,9 +1030,94 @@ run "alarms" {
     condition     = aws_cloudwatch_metric_alarm.ses_bounce_rate.threshold < 0.05 && aws_cloudwatch_metric_alarm.ses_complaint_rate.threshold < 0.001
     error_message = "SES alarms must fire before AWS's review thresholds (5% bounce, 0.1% complaint)."
   }
+  # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "60"
-    error_message = "A $60 monthly budget exists by default."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "80" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "An $80 monthly budget exists by default (above af-south-1's ~$58–63 idle)."
+  }
+  assert {
+    condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
+      "FORECASTED:100:PERCENTAGE:GREATER_THAN",
+      "ACTUAL:80:PERCENTAGE:GREATER_THAN",
+      "ACTUAL:100:PERCENTAGE:GREATER_THAN",
+    ])
+    error_message = "The monthly budget alerts at FORECASTED 100%, ACTUAL 80% and ACTUAL 100% (no ACTUAL 50%, which fires every month at idle)."
+  }
+  assert {
+    condition = (
+      length(aws_budgets_budget.daily) == 1 &&
+      aws_budgets_budget.daily[0].time_unit == "DAILY" &&
+      aws_budgets_budget.daily[0].budget_type == "COST" &&
+      aws_budgets_budget.daily[0].limit_amount == "6"
+    )
+    error_message = "A $6/day budget (ceil(80 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+  }
+  assert {
+    condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
+      "ACTUAL:100:PERCENTAGE:GREATER_THAN",
+    ])
+    error_message = "The daily budget has one ACTUAL 100% notification (daily budgets don't support FORECASTED)."
+  }
+  assert {
+    condition = alltrue([for n in concat(tolist(aws_budgets_budget.monthly[0].notification), tolist(aws_budgets_budget.daily[0].notification)) :
+      n.subscriber_sns_topic_arns == toset([aws_sns_topic.alerts_us_east_1.arn])
+    ])
+    error_message = "Every budget notification publishes to the us-east-1 alerts topic, not the opt-in region's."
+  }
+  assert {
+    condition = (
+      length(aws_ce_anomaly_monitor.services) == 1 &&
+      aws_ce_anomaly_monitor.services[0].monitor_type == "DIMENSIONAL" &&
+      aws_ce_anomaly_monitor.services[0].monitor_dimension == "SERVICE" &&
+      aws_ce_anomaly_subscription.services[0].frequency == "IMMEDIATE" &&
+      aws_ce_anomaly_subscription.services[0].monitor_arn_list == tolist([aws_ce_anomaly_monitor.services[0].arn])
+    )
+    error_message = "Cost Anomaly Detection: one AWS-services monitor with an IMMEDIATE subscription by default."
+  }
+  assert {
+    condition = (
+      one(aws_ce_anomaly_subscription.services[0].subscriber).type == "SNS" &&
+      one(aws_ce_anomaly_subscription.services[0].subscriber).address == aws_sns_topic.alerts_us_east_1.arn &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).key == "ANOMALY_TOTAL_IMPACT_ABSOLUTE" &&
+      one(aws_ce_anomaly_subscription.services[0].threshold_expression[0].dimension).values == toset(["10"])
+    )
+    error_message = "Anomalies with a total impact of $10 or more page the us-east-1 alerts topic."
+  }
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 1 &&
+      one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
+      toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
+      ])
+    )
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn); Budgets no longer publish there."
+  }
+  assert {
+    condition = {
+      for s in data.aws_iam_policy_document.alerts_us_east_1_publish.statement :
+      one(one(s.principals).identifiers) => toset([for c in s.condition : "${c.test}|${c.variable}|${join(",", c.values)}"])
+      } == {
+      "cloudwatch.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:cloudwatch:us-east-1:000000000000:alarm:*",
+      ])
+      "budgets.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+        "ArnLike|aws:SourceArn|arn:aws:budgets::000000000000:*",
+      ])
+      "costalerts.amazonaws.com" = toset([
+        "StringEquals|aws:SourceAccount|000000000000",
+      ])
+    }
+    error_message = "The us-east-1 topic admits CloudWatch, Budgets and Cost Anomaly Detection, each only for this account (confused-deputy conditions as AWS documents them)."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.alerts_us_east_1_publish.statement :
+      length(one(s.principals).identifiers) == 1 && s.actions == toset(["sns:Publish"])
+    ])
+    error_message = "One service per statement, publish only, so each keeps its own conditions."
   }
   assert {
     condition     = aws_sns_topic_subscription.alerts_email.endpoint == "ops@water-management.jaredhoward.com" && aws_sns_topic_subscription.alerts_us_east_1_email.endpoint == "ops@water-management.jaredhoward.com"
@@ -1058,6 +1151,100 @@ run "alarms" {
     condition     = aws_cloudwatch_metric_alarm.self_check_failed.alarm_actions == toset([aws_sns_topic.alerts.arn])
     error_message = "The self-check alarm must notify the same alerts SNS topic as every other alarm."
   }
+}
+
+# --- Budget variables ---------------------------------------------------------
+# The daily budget follows the monthly unless set; it must stay below it, and
+# neither amount (nor the anomaly threshold) may be negative.
+
+run "daily_budget_follows_monthly" {
+  command = plan
+  variables {
+    budget_monthly_usd = 170
+  }
+  assert {
+    condition     = aws_budgets_budget.monthly[0].limit_amount == "170" && aws_budgets_budget.daily[0].limit_amount == "13"
+    error_message = "The derived daily budget is ceil(monthly × 2.25 / 30): $13 on the full tier's $170."
+  }
+}
+
+run "daily_budget_explicit" {
+  command = plan
+  variables {
+    budget_daily_usd = 4.5
+  }
+  assert {
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
+    error_message = "An explicit budget_daily_usd is used as given."
+  }
+}
+
+run "daily_budget_off" {
+  command = plan
+  variables {
+    budget_daily_usd           = 0
+    cost_anomaly_threshold_usd = 0
+  }
+  assert {
+    condition     = length(aws_budgets_budget.daily) == 0 && length(aws_budgets_budget.monthly) == 1
+    error_message = "budget_daily_usd = 0 skips only the daily budget."
+  }
+  assert {
+    condition     = length(aws_ce_anomaly_monitor.services) == 0 && length(aws_ce_anomaly_subscription.services) == 0
+    error_message = "cost_anomaly_threshold_usd = 0 skips the anomaly monitor (an account holds only one services monitor)."
+  }
+}
+
+run "no_budgets_before_billing_access" {
+  command = plan
+  variables {
+    budget_monthly_usd = 0
+  }
+  assert {
+    condition     = length(aws_budgets_budget.monthly) == 0 && length(aws_budgets_budget.daily) == 0
+    error_message = "budget_monthly_usd = 0 skips both budgets (billing access not yet enabled)."
+  }
+}
+
+run "rejects_daily_budget_not_below_monthly" {
+  command = plan
+  variables {
+    budget_daily_usd = 80
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_daily_budget_without_monthly" {
+  command = plan
+  variables {
+    budget_monthly_usd = 0
+    budget_daily_usd   = 6
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_negative_daily_budget" {
+  command = plan
+  variables {
+    budget_daily_usd = -1
+  }
+  expect_failures = [var.budget_daily_usd]
+}
+
+run "rejects_negative_monthly_budget" {
+  command = plan
+  variables {
+    budget_monthly_usd = -80
+  }
+  expect_failures = [var.budget_monthly_usd]
+}
+
+run "rejects_negative_anomaly_threshold" {
+  command = plan
+  variables {
+    cost_anomaly_threshold_usd = -10
+  }
+  expect_failures = [var.cost_anomaly_threshold_usd]
 }
 
 # ---------------------------------------------------------------------------

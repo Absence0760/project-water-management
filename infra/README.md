@@ -160,7 +160,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
+| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
@@ -254,7 +254,8 @@ opt-in region and costs more (see [Cost](#cost)). SES and its DNS follow
 (`dkim.af-south-1.amazonses.com`, tested). The ACM certificate, WAF, the
 CloudFront alarm and its SNS topic are always in us-east-1, and so is the
 tfstate bucket. The two SNS topics exist because a CloudWatch alarm can only
-notify a topic in its own region.
+notify a topic in its own region; the budgets and Cost Anomaly Detection use
+the us-east-1 one ([§ Budget alerts](#budget-alerts)).
 
 ### Smaller calls
 
@@ -311,6 +312,7 @@ Idle to light use, on-demand, us-east-1:
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
+| Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
 
@@ -334,9 +336,10 @@ Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
 which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
-you commit to it. At that level the default `budget_monthly_usd = 60` sits
-right on the baseline and the forecast alert would fire every month, so
-**raise it to ~80 for af-south-1**. Main levers: the three endpoint AZ counts
+you commit to it. The default `budget_monthly_usd = 80` is set for
+af-south-1: its ACTUAL 80% alert ($64) sits just above that idle, so it
+doesn't fire every month (in us-east-1, ~60 is enough). See
+[§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
 (`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
 `sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
 recommended because it is the spend and brute-force guard for the API. A NAT
@@ -348,6 +351,28 @@ These are the minimal (default) figures. The full, highly available
 configuration (Multi-AZ `db.t4g.small`, endpoints in 2 AZs, ≈ $110–115 in
 us-east-1) is costed in
 [docs/deployment-tiers.md](../docs/deployment-tiers.md).
+
+### Budget alerts
+
+All of these publish to the **us-east-1** alerts topic (`alarms.tf`), not the
+regional one: af-south-1 is an opt-in region, and AWS documents Budgets → SNS
+only as "same account". Billing data refreshes at least daily, so each one
+lags spend by up to a day; the Lambda concurrency caps and the CloudWatch
+alarms are what bound and report a runaway while it happens.
+
+| Alert | Fires when | Notes |
+| --- | --- | --- |
+| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$6** on $80, ~3× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
+| Monthly, ACTUAL 80% | the month's spend passes $64 (on $80) | Early warning, set above the idle so it doesn't fire every month. |
+| Monthly, ACTUAL 100% | the month's spend passes the budget | |
+| Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
+| Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` ($10) | AWS-services monitor, free, needs ~10 days of history. |
+
+Each topic's policy admits only this account (`aws:SourceAccount`, plus
+`aws:SourceArn` on CloudWatch's `…:alarm:*` and Budgets' `arn:aws:budgets::<acct>:*`,
+as AWS's docs show; Cost Anomaly Detection's documented example uses
+`aws:SourceAccount` alone), so another account's alarm or budget can't
+publish through it.
 
 ## Operator steps
 
@@ -379,7 +404,15 @@ Claude does not run any of these, and none of them print a secret. Replace
    `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
-   `budget_monthly_usd = 0`.
+   `budget_monthly_usd = 0` (skips both budgets) and
+   `cost_anomaly_threshold_usd = 0`. Then check whether the account already
+   has a Cost Anomaly Detection services monitor (AWS auto-creates one for
+   some new accounts, and an account may hold only one):
+   `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorDimension,MonitorArn]'`.
+   If it lists a `SERVICE` monitor, either import it before the apply
+   (`terraform import 'aws_ce_anomaly_monitor.services[0]' <arn>`, after
+   `init` in step 8) or keep `cost_anomaly_threshold_usd = 0`; otherwise
+   the apply fails on the monitor.
 4a. **SES endpoint service check** (read-only, before the first plan): confirm
    the SES API endpoint service exists in the region (it launched Dec 2025):
    `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
@@ -411,8 +444,12 @@ Claude does not run any of these, and none of them print a secret. Replace
 
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
-   topic. `budget_alert_email` is required and must be a real mailbox; plan
+   topic (the us-east-1 one carries every budget and cost-anomaly alert).
+   `budget_alert_email` is required and must be a real mailbox; plan
    refuses an empty, malformed or reserved (`example.com` etc.) address.
+   Then check that the budgets accepted the topic (no "Invalid SNS topic"
+   in the console, or `aws budgets describe-notifications-for-budget --account-id <acct> --budget-name water-management-daily --profile water-management`
+   answering without an error).
 8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
    records are created by the apply; the identity turns `SUCCESS` once DNS
    propagates (minutes to an hour):
@@ -543,7 +580,14 @@ single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 `log_statement = none`; the worker heartbeat (< 1 invocation in
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
-alarm; the budget; the deploy policy having no
+alarm; the budgets (monthly $80 with FORECASTED 100% / ACTUAL 80% / ACTUAL
+100%, the derived $6 daily ACTUAL 100%, all to the us-east-1 topic), the
+Cost Anomaly Detection monitor and subscription, and both alert topics'
+policies (one service per statement, each pinned by `aws:SourceAccount`,
+CloudWatch and Budgets also by `aws:SourceArn`), with runs for the derived
+and explicit daily amounts and for switching each off, and five negative runs
+(a daily amount not below the monthly, a daily budget with no monthly, and a
+negative daily, monthly or anomaly threshold); the deploy policy having no
 wildcards; and the
 deploy role's trust postcondition, with negative runs for a branch subject, a
 `StringLike` wildcard and another repo (and a positive run for GitHub's

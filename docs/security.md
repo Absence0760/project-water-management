@@ -1981,9 +1981,12 @@ readable by anyone. The rules:
   URL or secret; its role can receive from `fetch-requests` and send to
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
   policy lets the worker, and only the worker, reach those two queues.
-- **Blast radius:** Lambda reserved concurrency is capped. There is a budget
-  alarm, plus alarms on Lambda errors, throttles, the API's unhandled 500s
-  (`unhandled_error`) and CloudFront 5xx.
+- **Blast radius:** Lambda reserved concurrency is capped. There are monthly
+  and daily budgets and Cost Anomaly Detection (deployment.md § Budget
+  alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
+  (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this
+  account's services (`aws:SourceAccount`, and `aws:SourceArn` for CloudWatch
+  and Budgets), so another account can't publish fake alerts through them.
 - **Model integrity:** `executeRun` (backend/src/runs/execute.ts) logs a
   structured `{ event: "self_check_failed", projectId, runId, checks }` line
   — failed check ids only, never a farm name, date or value — when a saved
@@ -2004,7 +2007,7 @@ beside the resource; a new ignore needs a line here too.
 
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
-| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
+| AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
 | AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
 
 Revisit AWS-0132 for `reports` if a client contract asks for customer-held
