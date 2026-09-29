@@ -2,7 +2,7 @@
 // 0.30.0, issue #40 (b), docs/model.md §2.4e): what a new period starts as,
 // switching between fixed and fitted factors, and the check the form blocks
 // Save on (the engine's own, which the API uses too).
-import { rainSourceError, type RainSourcePeriod } from '@water-management/engine';
+import { QM_WET_DAY_MM_DEFAULT, rainSourceError, type RainSourcePeriod } from '@water-management/engine';
 
 /** Last complete water year (each named by the calendar year its 1 October falls in). */
 export function lastWaterYear(now = new Date()): number {
@@ -48,6 +48,20 @@ export function withFallback(p: RainSourcePeriod, fallback: 'chirps' | 'rain_rea
 	if (fallback === 'chirps') return rest;
 	const era = p.fitReference ?? withFactorMode({ ...p, factors: [] }, 'fit').fitReference!;
 	return { ...rest, fallback: { series: 'rain_reanalysis_mm', fromWaterYear: era.fromWaterYear, toWaterYear: era.toWaterYear } };
+}
+
+/**
+ * Turn a period's quantile map on or off (engine ≥ 1.21.0, model.md §2.4e
+ * *Daily intensity*). On, it maps onto the catchment series over the fit's
+ * reference era (or the ten water years before the period) at the default
+ * wet-day threshold.
+ */
+export function withQuantileMap(p: RainSourcePeriod, on: boolean): RainSourcePeriod {
+	const { quantileMap: _q, ...rest } = p;
+	if (!on) return rest;
+	if (p.quantileMap) return p;
+	const era = p.fitReference ?? withFactorMode({ ...p, factors: [] }, 'fit').fitReference!;
+	return { ...rest, quantileMap: { fromWaterYear: era.fromWaterYear, toWaterYear: era.toWaterYear, wetDayMm: QM_WET_DAY_MM_DEFAULT } };
 }
 
 /** The first problem with the list, as the form shows it, or null. */

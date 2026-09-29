@@ -1204,8 +1204,13 @@
 //             (shared engine chunk 40.5 → 41.1 KB, import worker +0.5 KB),
 //             their run-comparison labels, the fit provenance line and one
 //             help entry. No new dependency. Headroom ~3 KB.
-// 2026-09-29  total 1143 → 1153 KB (measured 1150 with main @ #157 merged
-//             in, which measures 1140), largestWorkerKb 34 → 36 (calibration
+// 2026-09-29  total 1143 → 1149 KB (measured 1146 with #157 merged in).
+//             Issue #66, rain-source periods' daily intensity: the heavy-day
+//             check and the opt-in quantile-map fields in Settings → Rain
+//             source periods and their run-comparison and fit-provenance
+//             lines. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1149 → 1156 KB (measured 1153 with #157 and #155 merged
+//             in; that main measures 1146), largestWorkerKb 34 → 36 (calibration
 //             worker measured 36, was 34). Issue #66, per-day quality flags
 //             (engine 1.22.0, CR-18/19/22): the calibration worker now flags
 //             each day (calibrate/dayFlags.ts, with the Data checks'
@@ -1231,7 +1236,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1153,
+	totalCodeKb: 1156,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,
