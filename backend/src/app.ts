@@ -69,6 +69,10 @@ export function createApp() {
 			const provided = Buffer.from(c.req.header('x-cloudfront-shared-secret') ?? '');
 			const expected = Buffer.from(sharedSecret);
 			if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+				// Counted by the origin-secret-rejected alarm (infra/alarms.tf):
+				// direct traffic to the Function URL, past the WAF. The reason only,
+				// never the path, the caller's address or what was sent.
+				console.warn(JSON.stringify({ event: 'origin_secret_rejected', reason: provided.length === 0 ? 'missing' : 'mismatch' }));
 				return c.json({ error: 'forbidden' }, 403);
 			}
 			// Only now may a route trust what CloudFront stamps (the viewer address, http/clientAddress.ts).
