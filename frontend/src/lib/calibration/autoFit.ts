@@ -1,51 +1,22 @@
-// Automated calibration in the browser (issue #153): what the worker is
-// given, and how its report is shown and applied. Pure, so it is unit-tested;
-// the worker (./autocal.worker.ts) runs the engine's autoCalibrate and the
-// panel (AutoFitPanel.svelte) is thin. The rules come from the saved
-// settings only: the panel refuses to run while they have unsaved edits.
-import {
-	autoFitRecordOf,
-	FILTER_LABEL,
-	PAN_COEFFICIENT_PRESET_SOURCE,
-	ruleCaseCount,
-	SELECTION_TEST_LABEL,
-	type AutoCalibrationProgress,
-	type AutoCalibrationReport,
-	type AutoCase,
-	type CalibrationRules,
-	type FitRecord,
-	type ModelInput,
-	type ProjectSettings
-} from '@water-management/engine';
+// Automated calibration in the page (issue #153): how a server run of the
+// calibration rules (api.autoCalibrations, docs/api.md § Automated
+// calibration) is shown. Pure, so it is unit-tested; the panel
+// (AutoFitPanel.svelte) is thin. The server fits every case, one job each,
+// from the saved rules only, and applies the kept fit itself.
+import { canonicalJson, FILTER_LABEL, ruleCaseCount, SELECTION_TEST_LABEL, type CalibrationRules } from '@water-management/engine';
+import type { AutoCalibration, AutoCalibrationCase } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
-import { fitRecordFor, fmtScore, objectiveName, progressFraction, stageText, totalRuns } from './fit';
-
-/** The seed, starts and model runs are the rules' own (rules.run): the page can't choose them. */
-export interface AutoFitRequest {
-	kind: 'auto';
-	input: ModelInput;
-}
-
-export type AutoWorkerMessage =
-	| { type: 'auto-progress'; progress: AutoCalibrationProgress }
-	| { type: 'auto-done'; report: AutoCalibrationReport }
-	| { type: 'error'; message: string };
+import { fmtScore, objectiveName, totalRuns } from './fit';
 
 /** Model runs the rules make: each case is a full fit with both validation tests (and one without the WR2012 penalty when it is on). */
 export const autoRunsTotal = (rules: CalibrationRules, penalty: boolean) => ruleCaseCount(rules) * totalRuns(rules.run.budget, true, penalty, rules.run.starts);
 
-/** Overall progress 0–1: the cases before this one, then this case's own. */
-export const autoProgressFraction = (p: AutoCalibrationProgress, penalty: boolean, starts: number) =>
-	Math.min(1, (p.caseIndex + progressFraction(p.progress, true, penalty, starts)) / p.cases);
-
-/** "Fit 2 of 4 (typical bounds): Dry → wet test". */
-export const autoStageText = (p: AutoCalibrationProgress, label?: string) => `Fit ${p.caseIndex + 1} of ${p.cases}${label ? ` (${label})` : ''}: ${stageText(p.progress)}`;
-
 /**
- * The saved rules differ from the form's: the panel won't run until they are
- * saved, since a fit must run under rules fixed before its result is seen.
+ * The saved rules differ from the form's (whatever order their keys are in):
+ * the panel won't run or apply until they are saved, since a fit must run
+ * under rules fixed before its result is seen.
  */
-export const rulesUnsaved = (saved: CalibrationRules, form: CalibrationRules) => JSON.stringify(saved) !== JSON.stringify(form);
+export const rulesUnsaved = (saved: CalibrationRules, form: CalibrationRules) => canonicalJson(saved) !== canonicalJson(form);
 
 export interface AutoCaseRow {
 	label: string;
@@ -58,42 +29,53 @@ export interface AutoCaseRow {
 
 const FILTER_STATUS: Record<string, string> = { pass: 'passed', fail: 'failed', notApplicable: 'not applied' };
 
-/** One row per case: whether it was kept, its held-out score, its MAR, the filters, and why it wasn't kept. */
-export function autoCaseRows(r: AutoCalibrationReport): AutoCaseRow[] {
-	return r.cases.map((c, i) => ({
+/** "The project’s pan coefficient, typical bounds, KGE′". */
+export const caseLabel = (c: Pick<AutoCalibrationCase, 'pan' | 'bounds' | 'objective'>) => `${c.pan.label}, ${c.bounds} bounds, ${objectiveName(c.objective).replace(/ \([^()]*\)$/, '')}`;
+
+/** One row per fitted case: whether it was kept, its held-out score, its MAR, the filters, and why it wasn't kept. */
+export function autoCaseRows(a: Pick<AutoCalibration, 'cases' | 'chosen' | 'status'>): AutoCaseRow[] {
+	return a.cases.map((c, i) => ({
 		label: caseLabel(c),
-		verdict: i === r.chosen ? 'Kept' : c.eligible ? 'Passed' : 'Not kept',
+		verdict: i === a.chosen ? 'Kept' : a.status === 'complete' && c.eligible ? 'Passed' : 'Not kept',
 		score: fmtScore(c.score),
 		mar: c.naturalMarMm3 === null ? '–' : fmtNum(c.naturalMarMm3, 2),
 		filters: c.filters.length ? c.filters.map((f) => `${FILTER_LABEL[f.id]}: ${FILTER_STATUS[f.status]}`).join('; ') : 'none',
-		reasons: c.reasons
+		reasons: c.error ? [c.error] : c.reasons
 	}));
 }
 
-/** "The project’s pan coefficient, typical bounds, KGE′". */
-export const caseLabel = (c: Pick<AutoCase, 'pan' | 'bounds' | 'objective'>) => `${c.pan.label}, ${c.bounds} bounds, ${objectiveName(c.objective).replace(/ \([^()]*\)$/, '')}`;
-
-/** What the fit is chosen by, in words: "the best KGE′ on the dry → wet test (wet years)". */
+/** What keeps a fit, in words: "the best KGE′ on the dry → wet test (wet years)". */
 export const selectionText = (rules: CalibrationRules) =>
 	`the best ${objectiveName(rules.selection.score).replace(/ \([^()]*\)$/, '')} on the ${SELECTION_TEST_LABEL[rules.selection.test]}`;
 
-/** The pan coefficient the kept case was fitted under, when it isn't the project's own: Apply writes it too. */
-export function keptPan(r: AutoCalibrationReport): { values: number[]; source: string } | null {
-	const c = r.chosen === null ? null : r.cases[r.chosen]!;
-	if (!c?.pan.values) return null;
-	return { values: [...c.pan.values], source: `${c.pan.label} preset (automated calibration): ${PAN_COEFFICIENT_PRESET_SOURCE}` };
-}
+export type AutoState =
+	| { kind: 'running'; text: string; progress: number | null }
+	| { kind: 'stopped'; text: string }
+	| { kind: 'failed'; text: string }
+	| { kind: 'complete' };
 
 /**
- * The fit record Apply stores for the kept case: the case's report as a
- * normal fit record (with the forcing it ran under), plus how the rules chose
- * it (FitRecord.auto). Null when nothing was kept.
+ * Where a run of the rules stands: running (fit i of n, the job's progress),
+ * stopped (its job died, so it will never finish), failed (the run's own
+ * reason) or complete.
  */
-export function autoFitRecordFor(r: AutoCalibrationReport, settings: ProjectSettings, opts: Omit<Parameters<typeof fitRecordFor>[2], 'validate' | 'validationRecord'>): FitRecord | null {
-	if (r.chosen === null) return null;
-	const kept = r.cases[r.chosen]!;
-	if (!kept.report) return null;
-	const pan = keptPan(r);
-	const ran = pan ? { ...settings, panCoefficient: pan.values as unknown as ProjectSettings['panCoefficient'], panCoefficientSource: pan.source } : settings;
-	return fitRecordFor(kept.report, ran, { ...opts, validate: true, validationRecord: r.validationRecord, auto: autoFitRecordOf(r as AutoCalibrationReport & { chosen: number }) });
+export function autoState(a: Pick<AutoCalibration, 'status' | 'cases' | 'plan' | 'job' | 'error'>): AutoState {
+	if (a.status === 'complete') return { kind: 'complete' };
+	if (a.status === 'failed') return { kind: 'failed', text: a.error ?? 'the run of the rules failed' };
+	const n = a.plan.cases.length;
+	if (a.job && a.job.status === 'dead') return { kind: 'stopped', text: a.job.error ? `The run stopped: ${a.job.error}` : 'The run stopped.' };
+	return { kind: 'running', text: `Fitting ${Math.min(a.cases.length + 1, n)} of ${n} on the server…`, progress: n ? Math.round((100 * a.cases.length) / n) : null };
 }
+
+/** Why the kept fit can't be applied now, or null: nothing kept, applied already, unsaved rules or form edits, or a viewer. */
+export function applyBlocker(a: Pick<AutoCalibration, 'status' | 'chosen' | 'appliedAt'>, o: { rulesUnsaved: boolean; formDirty: boolean; readonly: boolean }): string | null {
+	if (o.readonly) return 'Only an editor can apply a fit.';
+	if (a.status !== 'complete' || a.chosen === null) return null;
+	if (a.appliedAt) return null;
+	if (o.rulesUnsaved) return 'Save the calibration rules first.';
+	if (o.formDirty) return 'Save or discard the other changes to the settings first: applying saves the kept fit at once.';
+	return null;
+}
+
+/** "Started by A. User" / "Queued by new data". */
+export const triggerText = (a: Pick<AutoCalibration, 'trigger' | 'createdBy'>) => (a.trigger === 'new_data' ? 'Queued by new data' : `Started by ${a.createdBy ?? 'a former member'}`);

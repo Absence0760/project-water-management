@@ -3002,30 +3002,36 @@ which checks every catchment tab).
     coefficients to fit under** (the project's own, the presets), **Bounds**,
     **Objectives**, the two **filters** a kept fit must pass, the search
     (**Model runs per fit**, **Starts per fit**, **Seed**: part of the rules,
-    so another seed is a rule change), and "*n* fits,
-    each with the split-sample and dry → wet tests (at most 8)". An empty
-    list or more than 8 fits shows an alert and blocks Save (the save bar
-    links to *Fit automatically*). **Signed off by** and **On** with **Record
-    the sign-off**, or **Withdraw the sign-off**, record the hydrologist's
-    agreement; saving a rule change raises the revision and withdraws it
-    (the server's rule). Viewers see the rules, disabled, with no sign-off
-    controls.
-    The run (`calibration/AutoFitPanel.svelte`, helpers in
+    so another seed is a rule change), **When new observed or rain data
+    arrives** (nothing, run the rules and keep the report, or also apply the
+    kept fit while signed off), **After a kept fit is applied, run the model
+    and the uncertainty ensemble around it**, and "*n* fits, each with the
+    split-sample and dry → wet tests (at most 8)". An empty list or more than
+    8 fits shows an alert and blocks Save (the save bar links to *Fit
+    automatically*). **Your name, as a signature** with **Sign off these
+    rules**, or **Withdraw the sign-off**, records the hydrologist's
+    agreement: saving dates it and records their account in the History tab
+    ("Signed off the calibration rules (revision *n*) as …"), and saving a rule
+    change raises the revision and withdraws it (the server's rules). Viewers
+    see the rules, disabled, with no sign-off controls.
+    The panel (`calibration/AutoFitPanel.svelte`, helpers in
     `lib/calibration/autoFit.ts`) lists the **saved** rules, warns while they
-    are drafts, and says how many model runs the rules' search makes; it
-    offers no seed or budget of its own. While the form's rules differ from
-    the saved ones it says to save them first, and **Run the calibration
-    rules** and **Apply the kept fit to form** are disabled. The run shows
-    "Fit *i* of *n* (…)" progress, then the notes (drafts, a filter that
-    couldn't apply, why nothing was kept), the water years left out by rule,
-    a **Fits the rules tried** table (fit, *Kept* / *Passed* / *Not kept*, the
-    held-out score, natural MAR, the filters, why not kept) and the kept
-    fit's parameters. **Apply the kept fit to form** fills them in (and the
-    pan coefficient it was fitted under, for a preset) with a fit record
-    carrying the rules; it never saves. The fit record then shows an
-    **Automated** badge, **Picked by** (the rules' revision and sign-off, the
-    kept fit of *n*) and **Left out by rule**, a caveat while the rules were
-    drafts, and **Rules changed since fit** once they change.
+    are drafts and says how many model runs their search makes. **Run the
+    calibration rules** asks the server (disabled while the rules have unsaved
+    edits, and for viewers); the latest run, whoever or whatever started it
+    ("Started by …" / "Queued by new data"), shows "Fitting *i* of *n* on the
+    server…" while its jobs run (followed every 1.5 s), then the notes, the
+    water years left out by rule, a **Fits the rules tried** table (fit,
+    *Kept* / *Passed* / *Not kept*, the held-out score, natural MAR, the
+    filters, why not kept) and the kept fit's parameters. A run whose job
+    stopped, or that failed, says why. **Apply and save the kept fit** asks
+    the server to save it (disabled, with the reason, while the rules or any
+    other setting have unsaved edits); the form then reloads the settings and
+    the panel says who applied it and whether a run and an ensemble followed.
+    The fit record then shows an **Automated** badge, **Picked by** (the
+    rules' revision and sign-off, the kept fit of *n*) and **Left out by
+    rule**, a caveat while the rules were drafts, and **Rules changed since
+    fit** once they change.
 - **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
   `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
   naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,
@@ -4569,7 +4575,9 @@ them scenarios).
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
   place (`replaceState`, so Back leaves the section rather than stopping on
-  the bare list).
+  the bare list), but only once no navigation is in flight and the URL
+  doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
+  click made while the list was loading.
 - **The list**, newest first: each scenario's name (two lines at most),
   status as a pill in words, number of changes, base run and last run.
   Empty: "No scenarios yet. A scenario changes the published baseline
@@ -5381,7 +5389,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
   heading past a line near the top, `lib/help/spy.ts`, or the last section at
-  the end of the page; nothing while the intro shows), and a link to one
+  the end of the page, unless a link jumped to a section still in the window,
+  which stays marked; nothing while the intro shows), and a link to one
   section (`/help/guides/<id>#<section>`) lands on it and focuses its heading
   (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
@@ -5426,7 +5435,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   needs a redirect), with a stable anchor per term
   (`/help/glossary/<topic>#<id>`, `glossaryPath`) that the ⓘ help tips,
   guides, search and "See also" link to. Its "On this page" rail lists the
-  topic's terms and marks the one being read (`lib/help/spy.ts`), pinned to
+  topic's terms and marks the one being read (`lib/help/spy.ts`; a term a
+  link jumped to stays marked when that scrolls the page to its end), pinned to
   the column's right edge as on a guide; it scrolls on its own when the topic
   has more terms than the window holds. Search is the way to find one term.
   An old link to the one-page glossary (`/help/glossary#<id>`), or a term

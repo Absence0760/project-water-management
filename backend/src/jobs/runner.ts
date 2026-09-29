@@ -17,6 +17,7 @@ import { describeFailure, JobError, LeaseLostError } from './errors.js';
 import { handlers as builtInHandlers } from './handlers/index.js';
 import { claimJobs, finishJob, type JobStatus, purgeJobs, queueStats, type QueueStats } from './queue.js';
 import type { ClaimedJob, HandlerRegistry } from './registry.js';
+import { logEvent } from '../logging/logEvent.js';
 
 /** Default lease: longer than any job may run (the worker Lambda's timeout is 300 s). */
 export const DEFAULT_LEASE_SECONDS = 360;
@@ -46,18 +47,18 @@ export async function runJob(job: ClaimedJob, registry: HandlerRegistry = builtI
 		});
 	} catch (err) {
 		if (err instanceof LeaseLostError) {
-			console.warn(JSON.stringify({ event: 'job_lease_lost', jobId: job.id, kind: job.kind }));
+			logEvent('warn', { event: 'job_lease_lost', jobId: job.id, kind: job.kind });
 			return 'lost';
 		}
 		const failure = describeFailure(err);
 		// Name, code and stack frames only: an error's text can carry personal
 		// data (a pg error's detail holds row values, SES's names the recipient).
-		if (!failure.expected) console.error(JSON.stringify({ event: 'job_failed', jobId: job.id, kind: job.kind, ...safeError(err), at: stackFrames(err) }));
+		if (!failure.expected) logEvent('error', { event: 'job_failed', jobId: job.id, kind: job.kind, ...safeError(err), at: stackFrames(err) });
 		const status = await withoutUser((db) => finishJob(db, job, { ok: false, error: failure.message, retry: failure.retry }));
 		if (status === 'dead') {
 			// The alarm hook (infra/jobs.tf metric filter), and the owners' job_dead alert
 			// when the project has it on (a check queued now; never for a dead alert check).
-			console.error(JSON.stringify({ event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts }));
+			logEvent('error', { event: 'job_dead', jobId: job.id, projectId: job.projectId, kind: job.kind, attempts: job.attempts });
 			if (job.kind !== 'alert_eval') await scheduleAlertCheck(job.projectId);
 		}
 		return status === 'failed' || status === 'dead' ? status : 'lost';
@@ -75,7 +76,7 @@ async function reportProgress(job: ClaimedJob, pct: number): Promise<boolean> {
 		const { rows } = await withoutUser((db) => db.query<{ go: boolean }>('SELECT app_job_progress($1, $2, $3) AS go', [job.id, job.leaseToken, v]));
 		return rows[0]?.go !== false;
 	} catch (err) {
-		console.warn(JSON.stringify({ event: 'job_progress_failed', jobId: job.id, error: (err as Error).message }));
+		logEvent('warn', { event: 'job_progress_failed', jobId: job.id, error: (err as Error).message });
 		return true;
 	}
 }
@@ -90,7 +91,7 @@ async function scheduleAlertCheck(projectId: string): Promise<void> {
 	try {
 		await withoutUser((db) => db.query("SELECT app_alert_schedule($1, interval '0', 1)", [projectId]));
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_schedule_failed', projectId, error: (err as Error).message }));
+		logEvent('error', { event: 'alert_schedule_failed', projectId, error: (err as Error).message });
 	}
 }
 

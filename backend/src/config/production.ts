@@ -145,6 +145,9 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	VITEST: { why: 'Set by the test runner; lowers the bcrypt cost to 4.', checks: ALL(unset) },
 	AWS_LAMBDA_FUNCTION_NAME: { why: 'Set by the Lambda runtime (reserved, Terraform cannot override it): the signal that this is production.' },
+	AWS_LAMBDA_LOG_FORMAT: {
+		why: 'Set by the Lambda runtime from the function\'s logging_config (reserved; infra/lambda.tf local.lambda_logging): JSON makes logging/logEvent.ts log an object, so every alarm\'s filter ($.message.event) matches. Pinned to JSON on every Lambda by infra/tests/logging.tftest.hcl, not here: Terraform sets it through logging_config, not an environment block.'
+	},
 
 	// --- Runtime secrets (config/runtimeSecrets.ts) --------------------------------------
 	RUNTIME_SECRET_ARN: {
@@ -199,8 +202,10 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 
 	// --- Background jobs -------------------------------------------------------------------
-	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs'), worker: oneOf('sqs') } },
-	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps, worker: publicHttps } },
+	// The API only: wakeWorker (jobs/wake.ts) is the one reader, and the worker
+	// never wakes itself (no send on the jobs queue, infra/jobs.tf; lambda-worker.test.ts).
+	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs') } },
+	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps } },
 	JOB_LEASE_SECONDS: { why: 'Tick tuning; the code default is safe.' },
 	JOB_MAX_PER_TICK: { why: 'Tick tuning; the code default is safe.' },
 	RUNS_KEPT_PER_PROJECT: { why: 'Run retention; the code default is safe.' },

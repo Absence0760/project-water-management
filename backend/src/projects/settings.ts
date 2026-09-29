@@ -58,9 +58,13 @@ import {
 	ZERO_RUN_RULES,
 	calibrationRulesError,
 	resolveCalibrationRules,
+	type CalibrationRules as CalibrationRulesT,
 	RULE_CASES_MAX,
 	sameRules,
+	sameSignOff,
+	canonicalJson,
 	SELECTION_TESTS,
+	ON_NEW_DATA,
 	SIGNED_OFF_BY_MAX,
 	type ProjectSettings
 } from '@water-management/engine';
@@ -146,12 +150,27 @@ const REPLACED_WHOLE = new Set(['fitRecord', 'pe', 'arealRain', 'calibrationRule
  * the stored one). A save that only signs off, or changes nothing, keeps the
  * revision.
  */
-export function nextCalibrationRules(stored: unknown, sent: unknown) {
+export function nextCalibrationRules(stored: unknown, sent: unknown): CalibrationRulesT {
 	const before = resolveCalibrationRules(stored, []);
 	const next = resolveCalibrationRules({ ...(isObj(sent) ? sent : {}), revision: before.revision }, []);
 	if (sameRules(before, next)) return next;
-	const newSignOff = JSON.stringify(next.signedOff) !== JSON.stringify(before.signedOff);
+	const newSignOff = !sameSignOff(next.signedOff, before.signedOff);
 	return { ...next, revision: before.revision + 1, signedOff: newSignOff ? next.signedOff : null };
+}
+
+/**
+ * What a save does to the rules' sign-off: records a new one (its rules
+ * carry one that isn't the stored one; the route stamps today's date and
+ * audits it with the signed-in account), withdraws it (the stored one is
+ * gone and no rule changed; audited too), or neither (a rule change that
+ * clears it is in the settings history already).
+ */
+export function signOffChange(stored: unknown, next: ProjectSettings): 'signed' | 'withdrawn' | null {
+	const was = resolveCalibrationRules(stored && typeof stored === 'object' ? (stored as Record<string, unknown>).calibrationRules : undefined, []);
+	const now = next.calibrationRules;
+	if (now?.signedOff && !sameSignOff(now.signedOff, was.signedOff)) return 'signed';
+	if (was.signedOff && !now?.signedOff && now && sameRules(was, now)) return 'withdrawn';
+	return null;
 }
 
 /**
@@ -173,24 +192,19 @@ export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 }
 
 /**
- * Why a save can't store this automated fit (FitRecord.auto), or null: its
- * rules must be the ones saved before it ran (the same revision and
- * content), and they can't change in the same save, so a rule can never be
- * tuned after its result was seen and still claim the fit (issue #153). A
- * record the save leaves as it was is never refused. `stored` is the
- * project's settings before the save, `next` what the save produces.
+ * Why a save can't store this automated fit (FitRecord.auto), or null. The
+ * server computes automated fits and writes their records itself
+ * (calibration/store.ts applyCalibration), so a save may only carry the
+ * stored record back as it was; any new or altered `auto` is refused (issue
+ * #153). `stored` is the project's settings before the save, `next` what the
+ * save produces.
  */
 export function autoFitRecordError(stored: ProjectSettings, next: ProjectSettings): string | null {
 	const rec = next.fitRecord;
 	if (!rec?.auto) return null;
 	const was = stored.fitRecord;
-	if (was && was.fittedAt === rec.fittedAt && was.seed === rec.seed && JSON.stringify(was.auto ?? null) === JSON.stringify(rec.auto)) return null;
-	const saved = resolveCalibrationRules(stored.calibrationRules, []);
-	const mismatch = autoRecordMismatch(rec, saved, 'saved');
-	if (mismatch) return mismatch;
-	if (!sameRules(resolveCalibrationRules(next.calibrationRules, []), saved))
-		return 'save the calibration rule change first, then run the automated fit under it: a fit and a change to the rules that picked it can’t be saved together';
-	return null;
+	if (was && was.fittedAt === rec.fittedAt && was.seed === rec.seed && canonicalJson(was.auto ?? null) === canonicalJson(rec.auto)) return null;
+	return 'an automated fit is applied by the server from its own run of the calibration rules (POST /projects/:id/auto-calibrations/:calibrationId/apply), never written directly';
 }
 
 /**
@@ -205,7 +219,7 @@ function autoRecordMismatch(rec: NonNullable<ProjectSettings['fitRecord']>, rule
 	const ran = auto.rules;
 	if (ran.revision !== rules.revision)
 		return `this automated fit ran under calibration rules revision ${ran.revision}, but the ${which} rules are revision ${rules.revision}: run it again under the ${which} rules`;
-	if (!sameRules(ran, rules) || JSON.stringify(ran.signedOff) !== JSON.stringify(rules.signedOff))
+	if (!sameRules(ran, rules) || !sameSignOff(ran.signedOff, rules.signedOff))
 		return `this automated fit ran under other calibration rules than the ${which} revision ${rules.revision} (their content or sign-off differs): run it again under the ${which} rules`;
 	const kept = auto.cases[auto.chosen];
 	if (!kept?.params || rec.free.some((k) => kept.params![k] !== rec.params[k]))
@@ -615,7 +629,9 @@ const calibrationRulesShape = {
 	selection: z.object({ test: z.enum(SELECTION_TESTS), score: z.enum(OBJECTIVES) }).strict(),
 	// The seed, starts and model runs per fit: bounds checked by calibrationRulesError.
 	run: z.object({ seed: z.number().int(), starts: z.number().int(), budget: z.number().int() }).strict(),
+	after: z.object({ onNewData: z.enum(ON_NEW_DATA), ensemble: z.boolean() }).strict(),
 	filters: z.object({ wr2012Mar: z.boolean(), typicalParams: z.boolean() }).strict(),
+	// The signer's typed name (a signature) and the date, which the server replaces with today's on a new sign-off (routes.ts).
 	signedOff: z.object({ by: z.string().trim().min(1).max(SIGNED_OFF_BY_MAX), on: isoDate }).strict().nullable()
 };
 const rulesChecked = (r: Parameters<typeof calibrationRulesError>[0], ctx: z.RefinementCtx) => {

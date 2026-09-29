@@ -1278,6 +1278,12 @@
 //             with Settings → Fit automatically; the glossary article; and the
 //             rule helpers run comparison and the fit record read. Headroom
 //             ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1199 → 1186 KB (down), calibration worker 44 → 36 KB
+//             (down; issue #153's follow-ups: measured 1183 / 36 on main @
+//             89482bf0). The server now runs the calibration rules, one
+//             background job per fit, so the worker no longer carries
+//             autoCalibrate, the filters or the rule resolver; the panel
+//             follows the server's run instead. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1288,10 +1294,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1199,
+	totalCodeKb: 1186,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 44,
+	largestWorkerKb: 36,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

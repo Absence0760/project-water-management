@@ -100,7 +100,7 @@ export default defineConfig({
 			: {
 					command: [
 						...(PREBUILT ? [] : ['node support/build-site.ts']),
-						`node support/static-server.mjs ../frontend/${E2E_BUILD_DIR} ${WEB_PORT}`
+						`node support/static-server.ts ../frontend/${E2E_BUILD_DIR} ${WEB_PORT}`
 					].join(' && '),
 					url: WEB_URL,
 					reuseExistingServer: false,

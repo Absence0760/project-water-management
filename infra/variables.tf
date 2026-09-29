@@ -175,6 +175,12 @@ variable "db_multi_az" {
   default     = false
 }
 
+variable "rds_customer_managed_key" {
+  description = "Encrypt the database, its backups and snapshots with a customer-managed KMS key (kms.tf) instead of the AWS-managed aws/rds key. Decide before the first apply: flipping it on a live stack forces a new DB instance, which prevent_destroy refuses. On by default: ~$1-3/month, and only a CMK allows cross-account snapshot sharing and AWS Backup cross-account copies (docs/deployment.md § Decide before the first apply)."
+  type        = bool
+  default     = true
+}
+
 variable "db_log_retention_days" {
   description = "CloudWatch retention for the exported PostgreSQL logs."
   type        = number
@@ -222,8 +228,8 @@ variable "waf_site_rate_limit_per_ip" {
 # just under it goes unseen, so the ceiling is set by what that costs: every
 # allowed request is billed by WAF ($0.60/M) and CloudFront ($1.00/M at
 # US/EU edges, ~$2.20/M at Africa's), $1.60–2.80/M in all. At the 20,000
-# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 12–20%
-# of the $80 budget a day; above it the alarm stops being a cost control.
+# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 10–18%
+# of the $90 budget a day; above it the alarm stops being a cost control.
 # The 1,000 floor is one person at the WAF's per-IP limit, which must not
 # page. The default's arithmetic is at the alarm in alarms.tf.
 variable "cloudfront_requests_alarm_per_5min" {
@@ -279,9 +285,9 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 80 sits above af-south-1's ~$58–63 idle (infra/README.md § Cost), so ACTUAL 80% ($64) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 90 sits above af-south-1's ~$59–64 idle (infra/README.md § Cost), so ACTUAL 80% ($72) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 80
+  default     = 90
 
   validation {
     condition     = var.budget_monthly_usd >= 0
@@ -292,7 +298,7 @@ variable "budget_monthly_usd" {
 # The daily budget is the first-month guard: the monthly FORECASTED alert needs
 # ~5 weeks of history, and daily budgets support ACTUAL notifications only.
 variable "budget_daily_usd" {
-  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $6 on $80, ~3× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $7 on $90, ~3.5× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
   type        = number
   default     = null
 
@@ -435,12 +441,12 @@ variable "fetcher_reserved_concurrency" {
 # --- Server-side reports (reports.tf) --------------------------------------------
 
 variable "renderer_image_tag" {
-  description = "Tag of the renderer image in its ECR repository (a release version, e.g. 0.4.0) that the renderer Lambda is created from. Empty (the default) creates the bucket, queues and repository but not the function, because Lambda can't be created before its image exists: push one with deploy-backend.yml first (docs/deployment.md § Reports). Later releases move the function's image themselves; this is only its first."
+  description = "Tag of the renderer image in its ECR repository that the renderer Lambda is created from: <release version>-<first 12 hex of its commit>, e.g. 0.4.0-0123456789ab, as deploy-backend.yml pushes it and prints it. Empty (the default) creates the bucket, queues and repository but not the function, because Lambda can't be created before its image exists: push one with deploy-backend.yml first (docs/deployment.md § Reports). Later releases move the function's image themselves; this is the image a (re-)created function starts from, and the ECR lifecycle policy never expires it (reports.tf)."
   type        = string
   default     = ""
   validation {
-    condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.renderer_image_tag))
-    error_message = "renderer_image_tag must be empty or a release version like 0.4.0."
+    condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9a-f]{12}$", var.renderer_image_tag))
+    error_message = "renderer_image_tag must be empty or the tag deploy-backend.yml pushed, <version>-<12 hex of the commit>, like 0.4.0-0123456789ab."
   }
 }
 
