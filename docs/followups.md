@@ -1950,7 +1950,7 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       year (value and first day) and the days at the minimum level in
       `FarmSummary` (`damEndM3`, `damAgoM3`, `damLowM3`, `damLowDate`,
       `damDaysAtMin`). The Summary's Dams today card and the Network's colour
-      by dam level and *Dam now* read them, and fetch the daily `dam_storage`
+      by dam level and *Dam at end of run* read them, and fetch the daily `dam_storage`
       series only for a run from before 1.2.0. The Dams page still fetches
       every dam's series, because its sparklines and storage chart draw them.
 - [x] **Exports carry unrounded values** now that the engine doesn't round.

@@ -9,7 +9,7 @@ describe('SETTINGS_SECTIONS', () => {
 		// Data feeds sits after the form: it saves on its own, never through the save bar.
 		expect(ids.at(-1)).toBe('set-feeds');
 		expect(ids.at(-2)).toBe('set-auto');
-		// The outcome matrix's reading of a sweep and the seasonal outlook's season: after the model's inputs, like data quality they change no result.
+		// The outcome matrix's reading of a sweep and the seasonal outlook's season: after the model's inputs (data quality last), they change no result.
 		expect(ids.at(-3)).toBe('set-outlook');
 		expect(ids.at(-4)).toBe('set-outcomes');
 		expect(ids.at(-5)).toBe('set-quality');
@@ -21,8 +21,9 @@ describe('settingsNavGroups', () => {
 		const owner = settingsNavGroups(true);
 		expect(owner.map((g) => g.label)).toEqual(['Model inputs', 'How results are read', 'Runs, feeds and reports']);
 		expect(owner.flatMap((g) => g.ids)).toEqual([...SETTINGS_SECTIONS.map((s) => s.id), 'set-api-keys', 'set-report-schedules']);
-		expect(owner[0]!.ids.at(-1)).toBe('set-period');
-		expect(owner[1]!.ids).toEqual(['set-quality', 'set-outcomes', 'set-outlook']);
+		// Data quality is a model input: its zero-rain and low-vs-CHIRPS limits change results (issue #173).
+		expect(owner[0]!.ids.at(-1)).toBe('set-quality');
+		expect(owner[1]!.ids).toEqual(['set-outcomes', 'set-outlook']);
 		for (const id of ['set-api-keys', 'set-report-schedules']) expect(AFTER_FORM_LABELS[id]).toBeTruthy();
 	});
 

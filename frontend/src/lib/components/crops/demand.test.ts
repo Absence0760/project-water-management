@@ -1,6 +1,6 @@
 import type { ProjectModel } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { annualMm3, catchmentDemand, cropStacks, farmDemands, highCropFactors, joinNames, noPlantedAreaNote } from './demand';
+import { annualMm3, catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, highCropFactors, joinNames, noPlantedAreaNote } from './demand';
 
 const apan = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100];
 
@@ -156,5 +156,16 @@ describe('noPlantedAreaNote', () => {
 		expect(noPlantedAreaNote(names.slice(0, 5))).toBe(
 			'F1, F2, F3, F4 and F5 have no planted area, so their irrigation demand counts as zero.'
 		);
+	});
+});
+
+describe('demandApanNote (issue #173)', () => {
+	it('says the chart shows the monthly means only when a daily A-pan series exists, which runs use instead', () => {
+		expect(demandApanNote(false)).toBeNull();
+		expect(demandApanNote(true)).toMatch(/^Shows the monthly A-pan means\. Runs use the daily A-pan series/);
+	});
+
+	it('the alert with no monthly means but a daily series says runs still take the series', () => {
+		expect(DAILY_APAN_NO_MEANS).toMatch(/^The monthly A-pan means aren't set, so this preview shows no demand\. Runs use the daily A-pan series/);
 	});
 });

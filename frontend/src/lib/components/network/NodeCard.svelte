@@ -8,13 +8,14 @@
 	import NotesDrawer from '$lib/components/notes/NotesDrawer.svelte';
 	import type { FarmSupply } from './supplyColour';
 	import { describeUser } from './users';
+	import { damEndTile, type DamEnd } from '$lib/components/overview/damLevels';
 
 	let {
 		node,
 		nodes,
 		share,
 		supply,
-		damNowPct = null,
+		damEnd = null,
 		planting,
 		runName,
 		readonly,
@@ -29,8 +30,8 @@
 		share: number | null;
 		/** The farm's supply in the latest run; null when there is no run (or not loaded). */
 		supply: FarmSupply | null;
-		/** The farm's dam at the end of the latest run, % of capacity (null: no dam, no run, or loading). */
-		damNowPct?: number | null;
+		/** The farm's dam at the end of the latest run (null: no run, or loading). */
+		damEnd?: DamEnd | null;
 		planting: FarmPlanting | null;
 		/** The latest run's label, for the supply tile. */
 		runName: string | null;
@@ -47,6 +48,7 @@
 	const isOutlet = $derived(node.downstreamNodeId === null);
 	const downstream = $derived(nodes.find((n) => n.id === node.downstreamNodeId)?.name || '(unnamed)');
 	const name = $derived(node.name || '(unnamed)');
+	const dam = $derived(damEndTile(damEnd, node.damCapacityM3));
 </script>
 
 <section class="card" aria-labelledby="node-card-h" data-testid="node-card">
@@ -71,8 +73,9 @@
 				{#if supply && supply.fraction == null}<span class="t-s">{supply.text}</span>{/if}
 			</div>
 			<div class="tile">
-				<span class="t-l">Dam now</span>
-				<span class="t-v">{node.damCapacityM3 >= 1 ? (damNowPct === null ? '–' : `${fmtNum(damNowPct, 0)}%`) : 'No dam'}</span>
+				<span class="t-l">Dam at end of run</span>
+				<span class="t-v">{dam.value}</span>
+				{#if dam.sub}<span class="t-s">{dam.sub}</span>{/if}
 			</div>
 		</div>
 	{/if}

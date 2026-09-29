@@ -68,7 +68,7 @@ test('the map is the default: pick a node in the list, read its card, Edit opens
 	await expect(c.getByRole('heading', { name: 'Upper farm' })).toBeVisible();
 	await expect(c).toContainText(/Supplied, Baseline\s*\d+%/);
 	// The dam at the end of the run (its storage series, fetched for the picked farm).
-	await expect(c).toContainText(/Dam now\s*\d+%/);
+	await expect(c).toContainText(/Dam at end of run\s*\d+%/);
 	await expect(c).toContainText(/Flow share\s*\d+(\.\d)?%/);
 	await expect(c).toContainText('Drains intoOutflow gauge');
 	await expect(c).toContainText('Dam150\u202f000 m³');

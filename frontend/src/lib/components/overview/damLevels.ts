@@ -8,6 +8,7 @@
 // On a forecast run the figures are the record's (issue #51): the summary's
 // are, and damLevel() stops the series at `forecastFrom`, so "at the end" is
 // the day before the forecast, never a forecast day.
+import { fmtNum } from '$lib/format/number';
 import { beforeForecast, fromEpochDay, toEpochDay, type DailySeries, type FarmSummary } from '@water-management/engine';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
@@ -142,6 +143,62 @@ export function damsInRun(
 			minPct: n.kind === undefined || n.kind === 'farm' ? num(n.damMinPct) * 100 : 0
 		}))
 		.filter((d) => d.capacityM3 >= 1 && refs.some((r) => r.key === 'dam_storage' && r.nodeId === d.nodeId));
+}
+
+/**
+ * One dam as a run saw it (damsInRun): its capacity and minimum level from the
+ * run's own model, or null when the run stored no storage for it. The
+ * Network's node card reads its end-of-run level against this capacity, as the
+ * map's colour by dam level does, so a capacity edited since the run doesn't
+ * make the two disagree (issue #173).
+ */
+export function damInRun(
+	runNodes: readonly DamNode[] | undefined,
+	liveNodes: readonly DamNode[],
+	refs: readonly { key: string; nodeId: string | null }[],
+	nodeId: string
+): { nodeId: string; name: string; capacityM3: number; minPct: number } | null {
+	return damsInRun(runNodes, liveNodes, refs).find((d) => d.nodeId === nodeId) ?? null;
+}
+
+/**
+ * A dam's storage at the end of the run, % of the run's capacity, from the run
+ * summary (engine ≥ 1.2.0, issue #55); undefined when the summary lacks the
+ * figure (a run saved before it), so the caller reads the series (damLevel).
+ */
+export function damEndPctFromSummary(dam: { nodeId: string; capacityM3: number }, farms: readonly FarmSummary[]): number | undefined {
+	const end = farms.find((f) => f.nodeId === dam.nodeId)?.damEndM3;
+	return end === undefined ? undefined : (end / dam.capacityM3) * 100;
+}
+
+/**
+ * The Network card's "Dam at end of run" for one farm (issue #173): whether
+ * the run modelled a dam there, and if so its capacity in the run and its
+ * storage on the run's last day, % of that capacity (null while loading, or
+ * when the series had no value).
+ */
+export interface DamEnd {
+	nodeId: string;
+	inRun: boolean;
+	pct: number | null;
+	capacityM3: number;
+}
+
+/**
+ * The tile's value and its small line. The run decides whether there was a
+ * dam, as the map's colour by dam level does: a dam removed since still shows
+ * its %, one added since reads "not in this run" under a dash, as the Supplied tile writes it. When the capacity has been
+ * edited since the run, the line says what the % is a share of.
+ * `liveCapacityM3` is the model's capacity now.
+ */
+export function damEndTile(end: DamEnd | null, liveCapacityM3: number): { value: string; sub: string | null } {
+	if (end && !end.inRun) return { value: '–', sub: 'not in this run' };
+	if (!end) return { value: liveCapacityM3 >= 1 ? '–' : 'No dam', sub: null };
+	const edited = Math.abs(end.capacityM3 - liveCapacityM3) >= 1;
+	return {
+		value: end.pct === null ? '–' : `${fmtNum(end.pct, 0)}%`,
+		sub: edited ? `of ${fmtNum(end.capacityM3)} m³ in the run` : null
+	};
 }
 
 /**
