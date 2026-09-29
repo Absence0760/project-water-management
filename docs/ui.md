@@ -4237,12 +4237,15 @@ read it before.
   `reliability/AssurancePanel.svelte`, helpers in
   `reliability/reliability.ts`, in the Hydrological units chunk; engine ≥ 0.32.0, WP-3.4,
   [model.md §2.11a](./model.md)): per farm and other water user over the
-  reporting window, the % of demand days fully met, the % of demand
-  supplied, complete water years met against the annual threshold (Settings;
+  reporting window, the % of demand days fully met, complete water years met against the annual threshold (Settings;
   from engine 1.11.0 a part year at either end of the window is left out, and
   the note under the table says how many), the
   failures and their mean and longest length, and the mean and largest
-  deficit per failure. Below it the **stress classes by month**: a heat map
+  deficit per failure. The volumetric reliability (Σ supplied ÷ Σ demand) isn't
+  a column: it is the curtailment table's *Supplied %* over the project
+  window, and a column here claiming to equal it was wrong whenever the
+  table was re-windowed; it stays in the engine and the CSV export. Below it
+  the **stress classes by month**: a heat map
   in the EWR grid's pattern (water-year rows × Oct … Sep, arrow keys move
   between cells), for all farms and users together or one of them (a *Show*
   picker), each cell carrying the class name (Low, Mod, High, Sev, Crit) so
