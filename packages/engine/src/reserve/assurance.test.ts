@@ -104,6 +104,30 @@ describe('completeMonths', () => {
 	});
 });
 
+describe('assessSite across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
+	// Oct 2000 … Jan 2001, 'run' curves; the history ends on 15 December.
+	const start = '2000-10-01';
+	const days = daysBetween(start, '2001-01-31');
+	const historyDays = daysBetween(start, '2000-12-15');
+	const natural = daily(start, days, (y, m) => (m === 1 ? 4e6 : m * 1e5));
+	const site = { table: table({ naturalSource: 'run', natural: null }), nodeId: null, name: 'Outlet', isOutlet: true, natural, impacted: natural };
+
+	it('leaves out the month the history ends inside, and assesses one wholly in the tail', () => {
+		const { report, requiredM3Day } = assessSite(start, days, site, undefined, null, 'total', [], historyDays);
+		expect(report.months.map((m) => m.month)).toEqual([10, 11, 1]);
+		expect(requiredM3Day.slice(historyDays - 15, historyDays).every(Number.isNaN)).toBe(true);
+		// Positive control: without a tail December is assessed.
+		expect(assessSite(start, days, site).report.months.map((m) => m.month)).toEqual([10, 11, 12, 1]);
+	});
+
+	it('gives the historical months the requirement of the run without the tail, to the bit', () => {
+		const withTail = assessSite(start, days, site, undefined, null, 'total', [], historyDays);
+		const without = assessSite(start, historyDays, { ...site, natural: natural.subarray(0, historyDays), impacted: natural.subarray(0, historyDays) });
+		expect(withTail.report.months.slice(0, 2)).toEqual(without.report.months);
+		expect(Array.from(withTail.requiredM3Day.subarray(0, historyDays))).toEqual(Array.from(without.requiredM3Day));
+	});
+});
+
 describe('assessSite: worked examples', () => {
 	it('reads the requirement off the entered natural curve and charges the deficit in m³', () => {
 		// One October of 1.5 Mm³ natural flow: 70 % on the natural curve, so 0.75 Mm³ is required; 0.7 Mm³ flowed.

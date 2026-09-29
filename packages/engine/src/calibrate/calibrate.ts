@@ -41,6 +41,7 @@ import { excludedDayMask, exclusionRanges } from './provenance';
 import { bootstrapIntervals, scoreBenchmarks, type ScoreBenchmarks, type ScoreIntervals } from './bootstrap';
 import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
+import { forecastTail } from '../forecastTail';
 import { prepareRun } from '../prepare';
 import { recordRepresentativeness, type RecordRepresentativeness } from './representativeness';
 import { censoredObserved, dayQuality, flowDayFlags, observedInfillMask, rainDayFlags, ratingOf, scoringDays, type DayQuality } from './dayFlags';
@@ -370,7 +371,9 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const area = requireCatchmentAreaKm2(settings.calibration, input);
 	const startParams: ParamSet = { ...resolveParams<Gr4jParams>(GR4J_PARAMS, settings.gr4j, 'GR4J', warnings) };
 	const natural = new Float64Array(days);
-	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start);
+	// The days before a forecast tail, which runModel's record-wide statistics read (engine ≥ 1.28.0).
+	const { historyDays } = forecastTail(run);
+	const { plan, topo } = buildNetworkPlan(input, settings, days, month, aligned, natural, warnings, start, {}, historyDays);
 
 	const kind = pickObservedKind(settings.calibrationFlowKind, input.series ?? {}, warnings);
 	if (!kind) throw new Error('no observed flow series to calibrate against: upload a gauge or logger record');
@@ -412,16 +415,16 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
 	const usedRain = runRain(aligned, hasRain, days);
 	const rainFlags = usedRain ? rainDayFlags(aligned('rain_catchment_mm'), usedRain, run.rainSource?.column ?? null) : null;
-	// The warm-up cycles the *full* forcing, as runModel's does, so a
-	// scored day sees exactly the state a normal run would give it.
+	// The warm-up cycles the full forcing's historical days, as runModel's does,
+	// so a scored day sees exactly the state a normal run would give it.
 	const runoff = (p: ParamSet, n: number) => {
-		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n });
+		const tr = simulateRunoff(gr4j, p as unknown as Gr4jParams, forcing, { warmupDays, trace: false, days: n, cycleDays: historyDays });
 		for (let t = 0; t < n; t++) natural[t] = tr.qMm[t]! * toM3;
 	};
 	/** The series a record is scored against, simulated for days 0 … n − 1. */
 	// Land cover (WP-1.35) reads the whole run's natural flow (its low-flow
-	// threshold is the flow exceeded 75 % of the days), so a run with land
-	// cover can't stop at the last scored day.
+	// threshold is the flow exceeded 75 % of the historical days), so a run
+	// with land cover can't stop at the last scored day.
 	const wholeRun = plan.nodes.some((nd) => nd.landCover);
 	const simulator = (scoredTo: number) => {
 		const n = wholeRun ? days : scoredTo;

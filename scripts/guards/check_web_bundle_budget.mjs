@@ -1299,6 +1299,11 @@
 //             with its store) and their Afrikaans words in the af
 //             catalogue. The members, farmers and team panels lost their
 //             added-at-once branches. No new dependency. Headroom ~3 KB.
+// 2026-09-29  calibration worker 36 → 38 KB (issue #67: measured 37 with
+//             main @ 0a9cc278 merged; total unchanged). The
+//             worker bundles the engine, and the engine now runs causally
+//             across a forecast tail (engine 1.28.0), so the run it fits
+//             with grew ~1 KB. No new dependency. Headroom ~1 KB worker.
 // 2026-09-29  total 1194 → 1197 KB (issue #68: measured 1194 with main @
 //             35b17c02 merged, #136 included). A farm's Excel audit workbook, built
 //             in the existing export worker (10.5 → 19 KB, inside the 32 KB
@@ -1324,7 +1329,7 @@ export const BUDGET = Object.freeze({
 	totalCodeKb: 1197,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 36,
+	largestWorkerKb: 38,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

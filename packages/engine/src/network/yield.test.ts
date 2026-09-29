@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Monthly } from '../calendar';
+import { toEpochDay, type Monthly } from '../calendar';
+import { forecastSplit } from '../forecast';
+import { runModel } from '../run';
+import { randomInput } from '../testing/fuzz';
+import { withForecastTail } from '../testing/forecastInvariants';
 import type { ModelInput, NetworkNode } from '../project';
 import { firmYield, prepareYield, storageYieldCapacities, storageYieldCurve, yieldPatternDaily } from './yield';
 
@@ -194,5 +198,27 @@ describe('storageYieldCurve', () => {
 	it('refuses a node with no dam', () => {
 		const { input, natural } = singleDam(40, 0, 50);
 		expect(() => storageYieldCurve(prepareYield(input, () => ({ naturalFlowM3Day: natural })), 'dam')).toThrow(/capacity above 0/);
+	});
+});
+
+describe('prepareYield across a forecast tail (engine 1.28.0, engine-audit.md K1)', () => {
+	it('builds the natural flow and the plan runModel does: the warm-up and the record-wide figures read the historical days', () => {
+		let checked = 0;
+		for (let seed = 1; seed <= 60 && checked < 10; seed++) {
+			const input = withForecastTail(randomInput(seed), seed, 20);
+			const split = forecastSplit(input);
+			if (split.forecastFrom === null) continue;
+			let p;
+			try {
+				p = prepareYield(input);
+			} catch {
+				continue;
+			}
+			const want = runModel(input).series.find((s) => s.nodeId === null && s.key === 'natural_flow')!.values;
+			expect(Array.from(p.plan.naturalFlow), `seed ${seed}`).toEqual(want);
+			expect(p.plan.historyDays, `seed ${seed}`).toBe(toEpochDay(split.forecastFrom) - toEpochDay(p.startDate));
+			checked++;
+		}
+		expect(checked).toBeGreaterThanOrEqual(5);
 	});
 });

@@ -210,9 +210,14 @@ export interface NetworkPlan {
 	/**
 	 * The land-cover low-flow threshold to use (m³/day), pinned from the run a
 	 * snapshot was captured from (engine ≥ 1.1.0, ../warmstart); absent = the
-	 * natural flow's own Q75 over this run.
+	 * natural flow's own Q75 over this run's historical days.
 	 */
 	lowFlowThresholdM3Day?: number;
+	/**
+	 * The run's historical days, before a forecast tail (engine ≥ 1.28.0,
+	 * ../forecastTail.ts); absent = every day. The Q75 above reads only these.
+	 */
+	historyDays?: number;
 	/**
 	 * A run resumed part-way through a record (engine ≥ 1.1.0): the calendar
 	 * month of the day before its first day, so day 0 starts a water year (and
@@ -583,7 +588,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const freeBy = new Float64Array(nodes.length);
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
-	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, days));
+	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
 
 	for (let t = 0; t < days; t++) {
 		if (t === opts.captureAt) captured = capture(t);
