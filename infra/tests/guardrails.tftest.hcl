@@ -4,7 +4,7 @@
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
+# the report bucket / renderer image and Lambda / render queues, report downloads through CloudFront signed URLs, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
 # the private-only network (no gateway or default route, the exact security-group graph, the Function
 # URL's auth type, every security group's description), the runtime secrets (in Secrets Manager, never a Lambda
 # environment), and the plan-time rejection of
@@ -65,6 +65,8 @@ mock_provider "sops" {
 
 mock_provider "archive" {}
 mock_provider "random" {}
+# The report-download key pair (reports.tf): mocked, so no key is generated.
+mock_provider "tls" {}
 
 # Mocked RDS has no provider logic, so the computed master secret and
 # endpoint would stay unknown/empty. Supply what RDS really returns.
@@ -385,6 +387,52 @@ override_resource {
   values = {
     arn    = "arn:aws:s3:::water-management-reports-000000000000"
     bucket = "water-management-reports-000000000000"
+    # The /reports/* origin (s3_cloudfront.tf).
+    bucket_regional_domain_name = "water-management-reports-000000000000.s3.af-south-1.amazonaws.com"
+  }
+}
+
+# Report downloads through CloudFront (reports.tf): known values so the key
+# pair, key group, OAC and origin request policy can be matched by equality.
+# Placeholder text, not a key: nothing is generated in a test.
+override_resource {
+  target          = tls_private_key.report_downloads
+  override_during = plan
+  values = {
+    private_key_pem = "test-only-private-key-pem"
+    public_key_pem  = "test-only-public-key-pem"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_public_key.report_downloads
+  override_during = plan
+  values = {
+    id = "K2JCJMDEHXQW5F"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_key_group.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-key-group-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_access_control.reports
+  override_during = plan
+  values = {
+    id = "reports-oac-id"
+  }
+}
+
+override_resource {
+  target          = aws_cloudfront_origin_request_policy.report_downloads
+  override_during = plan
+  values = {
+    id = "report-downloads-origin-request-policy-id"
   }
 }
 
@@ -668,15 +716,19 @@ run "runtime_secrets" {
   assert {
     condition = (
       toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
-      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "CLOUDFRONT_PRIVATE_KEY"]) &&
       toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
       toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
     )
-    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret and the download signing key for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
     condition     = local.runtime_secrets.migrate.WATER_APP_PASSWORD == local.db_app_password && local.runtime_secrets.api.AUTH_JWT_SECRET == local.auth_jwt_secret
     error_message = "The runtime secrets carry the values from their sources (sops)."
+  }
+  assert {
+    condition     = local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY == tls_private_key.report_downloads.private_key_pem
+    error_message = "The API's runtime secret carries the report-download signing key Terraform generates (reports.tf)."
   }
 
   # Each Lambda names its own secret and the version Terraform wrote (a new
@@ -2067,10 +2119,10 @@ run "reports" {
   }
   assert {
     condition = (
-      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.actions])) == toset(["s3:GetObject"]) &&
-      toset(flatten([for s in data.aws_iam_policy_document.lambda_reports.statement : s.resources])) == toset(["${aws_s3_bucket.reports.arn}/reports/*"])
+      length([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s if s.effect != "Deny"]) == 1 &&
+      one([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s.sid if s.effect != "Deny"]) == "AllowCloudFrontReadReportPdfs"
     )
-    error_message = "The API may only read PDFs (it pre-signs downloads)."
+    error_message = "The bucket policy's only grant is CloudFront's read of PDFs (run report_downloads pins it); the API never reads the bucket, it signs CloudFront URLs."
   }
   assert {
     condition     = toset(flatten([for s in data.aws_iam_policy_document.worker_reports.statement : s.resources])) == toset([aws_sqs_queue.render_requests.arn, aws_sqs_queue.render_results.arn])
@@ -2092,9 +2144,10 @@ run "reports" {
       aws_lambda_function.worker.environment[0].variables["RENDER_REQUESTS_QUEUE_URL"] == aws_sqs_queue.render_requests.url &&
       aws_lambda_function.worker.environment[0].variables["MAIL_TRANSPORT"] == "ses" &&
       aws_lambda_function.backend.environment[0].variables["STORAGE"] == "s3" &&
-      aws_lambda_function.backend.environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket
+      aws_lambda_function.backend.environment[0].variables["REPORTS_BUCKET"] == aws_s3_bucket.reports.bucket &&
+      aws_lambda_function.backend.environment[0].variables["REPORT_DOWNLOADS"] == "cloudfront"
     )
-    error_message = "The worker hands renders to the renderer and mails through SES; the API signs downloads from the reports bucket."
+    error_message = "The worker hands renders to the renderer and mails through SES; the API signs downloads as CloudFront URLs."
   }
   assert {
     condition     = aws_lambda_event_source_mapping.worker_render_results.event_source_arn == aws_sqs_queue.render_results.arn && aws_lambda_event_source_mapping.worker_render_results.function_name == aws_lambda_function.worker.arn
@@ -2108,6 +2161,114 @@ run "reports" {
       aws_cloudwatch_metric_alarm.render_results_dlq_depth.threshold == 0
     )
     error_message = "Each render DLQ must alarm on depth > 0."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Report downloads through CloudFront (reports.tf, s3_cloudfront.tf; issue
+# #126): /reports/* serves the private bucket through its own OAC to signed
+# URLs only, behind the WAF, and nothing else can read a PDF.
+# ---------------------------------------------------------------------------
+
+run "report_downloads" {
+  command = plan
+
+  # --- The behaviour: signed URLs only, uncached, GET/HEAD, https ----------------------
+  assert {
+    condition     = length([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : b if b.path_pattern == "/reports/*"]) == 1
+    error_message = "The distribution must have exactly one /reports/* behaviour (report PDF downloads)."
+  }
+  assert {
+    condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior : (
+      b.target_origin_id == "s3-reports" &&
+      b.trusted_key_groups == tolist([aws_cloudfront_key_group.report_downloads.id]) &&
+      b.viewer_protocol_policy == "https-only" &&
+      toset(b.allowed_methods) == toset(["GET", "HEAD"]) &&
+      b.cache_policy_id == "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" &&
+      b.origin_request_policy_id == aws_cloudfront_origin_request_policy.report_downloads.id &&
+      b.response_headers_policy_id == "api-headers-policy-id"
+    ) if b.path_pattern == "/reports/*"])
+    error_message = "/reports/* must serve the reports bucket only to CloudFront signed URLs from the download key group, uncached (CachingDisabled), GET/HEAD over https, with the API's security headers."
+  }
+  # Positive control for the signer check: no other behaviour trusts a key
+  # group, and only /reports/* reaches the reports origin.
+  assert {
+    condition = alltrue([for b in aws_cloudfront_distribution.frontend.ordered_cache_behavior :
+      (b.path_pattern == "/reports/*") == (b.target_origin_id == "s3-reports") &&
+      (b.path_pattern == "/reports/*") == (length(coalesce(b.trusted_key_groups, [])) > 0)
+    ]) && length(coalesce(aws_cloudfront_distribution.frontend.default_cache_behavior[0].trusted_key_groups, [])) == 0
+    error_message = "Only the /reports/* behaviour reaches the reports bucket, and it alone requires signed URLs."
+  }
+  assert {
+    condition     = aws_cloudfront_distribution.frontend.ordered_cache_behavior[0].path_pattern == "/api/*"
+    error_message = "/api/* stays the first ordered behaviour (edge_security indexes it)."
+  }
+  assert {
+    condition     = aws_cloudfront_distribution.frontend.web_acl_id == aws_wafv2_web_acl.frontend.arn
+    error_message = "Downloads pass the distribution's WAF (the per-IP rate rule covers every path)."
+  }
+
+  # --- The origin: the reports bucket through its own OAC ----------------------------------
+  assert {
+    condition = alltrue([for o in aws_cloudfront_distribution.frontend.origin :
+      o.domain_name == aws_s3_bucket.reports.bucket_regional_domain_name && o.origin_access_control_id == aws_cloudfront_origin_access_control.reports.id
+    if o.origin_id == "s3-reports"]) && length([for o in aws_cloudfront_distribution.frontend.origin : o if o.origin_id == "s3-reports"]) == 1
+    error_message = "The s3-reports origin must be the reports bucket, read through its OAC."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_origin_access_control.reports.origin_access_control_origin_type == "s3" &&
+      aws_cloudfront_origin_access_control.reports.signing_behavior == "always" &&
+      aws_cloudfront_origin_access_control.reports.signing_protocol == "sigv4"
+    )
+    error_message = "The reports OAC must sign every origin request (sigv4)."
+  }
+  assert {
+    condition = (
+      one(aws_cloudfront_origin_request_policy.report_downloads.cookies_config).cookie_behavior == "none" &&
+      one(aws_cloudfront_origin_request_policy.report_downloads.headers_config).header_behavior == "none" &&
+      one(aws_cloudfront_origin_request_policy.report_downloads.query_strings_config).query_string_behavior == "whitelist" &&
+      one(one(aws_cloudfront_origin_request_policy.report_downloads.query_strings_config).query_strings).items == toset(["response-content-disposition"])
+    )
+    error_message = "Only the download file name (response-content-disposition) may reach the bucket: no cookies, no viewer headers, no other query."
+  }
+
+  # --- The bucket policy: this distribution, GetObject on reports/ only ---------------------
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : (
+      s.effect == null || s.effect == "Allow"
+      ) ? (
+      s.sid == "AllowCloudFrontReadReportPdfs" &&
+      toset(s.actions) == toset(["s3:GetObject"]) &&
+      toset(s.resources) == toset(["${aws_s3_bucket.reports.arn}/reports/*"]) &&
+      one(s.principals).type == "Service" &&
+      one(s.principals).identifiers == toset(["cloudfront.amazonaws.com"]) &&
+      one(s.condition).test == "StringEquals" &&
+      one(s.condition).variable == "AWS:SourceArn" &&
+      one(s.condition).values == tolist([aws_cloudfront_distribution.frontend.arn])
+    ) : true])
+    error_message = "The reports bucket grants CloudFront s3:GetObject on reports/* for this distribution (AWS:SourceArn) only."
+  }
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.reports_bucket_policy.statement : s if s.sid == "AllowCloudFrontReadReportPdfs"]) == 1
+    error_message = "The CloudFront read grant must be present (positive control for the check above)."
+  }
+
+  # --- The key pair: generated, public half trusted, private half in the API's secret ---------
+  assert {
+    condition     = tls_private_key.report_downloads.algorithm == "RSA" && tls_private_key.report_downloads.rsa_bits == 2048
+    error_message = "The download signing key is RSA 2048 (a CloudFront-supported key type)."
+  }
+  assert {
+    condition = (
+      aws_cloudfront_public_key.report_downloads.encoded_key == tls_private_key.report_downloads.public_key_pem &&
+      aws_cloudfront_key_group.report_downloads.items == toset([aws_cloudfront_public_key.report_downloads.id])
+    )
+    error_message = "The key group trusts exactly the generated key's public half."
+  }
+  assert {
+    condition     = aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads.id
+    error_message = "The API names the trusted public key (Key-Pair-Id) it signs for."
   }
 }
 

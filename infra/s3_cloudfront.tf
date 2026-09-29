@@ -188,8 +188,10 @@ resource "aws_cloudfront_function" "api_strip_prefix" {
 # CloudFront Origin Access Control + distribution
 #
 # One origin for the browser: water-management.jaredhoward.com.
-#   - default  → S3 bucket via OAC (signed sigv4)
-#   - /api/*   → Lambda Function URL (custom origin + shared secret header)
+#   - default    → S3 frontend bucket via OAC (signed sigv4)
+#   - /api/*     → Lambda Function URL (custom origin + shared secret header)
+#   - /reports/* → S3 reports bucket via its own OAC, CloudFront signed URLs
+#                  only (reports.tf)
 #
 # The browser never calls the Function URL. CloudFront stamps every /api/*
 # request with X-CloudFront-Shared-Secret (random_password below, also in
@@ -230,6 +232,14 @@ resource "aws_cloudfront_distribution" "frontend" {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"
     origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
+  }
+
+  # Report PDFs (reports.tf): the private reports bucket, read only through
+  # this OAC, for requests carrying a CloudFront signed URL.
+  origin {
+    domain_name              = aws_s3_bucket.reports.bucket_regional_domain_name
+    origin_id                = "s3-reports"
+    origin_access_control_id = aws_cloudfront_origin_access_control.reports.id
   }
 
   origin {
@@ -289,6 +299,26 @@ resource "aws_cloudfront_distribution" "frontend" {
       event_type   = "viewer-request"
       function_arn = aws_cloudfront_function.api_strip_prefix.arn
     }
+  }
+
+  # /reports/* -> the reports bucket, for signed URLs only (trusted_key_groups:
+  # CloudFront refuses an unsigned, expired or altered request with 403 before
+  # the origin). The object keys are reports/<project>/<report>.pdf, so the
+  # path needs no rewrite; the SPA has no top-level /reports route (its report
+  # pages live under /projects/:id/). CachingDisabled: a PDF is private to a
+  # project's members, and every link is a fresh URL anyway. The API's header
+  # policy (default-src 'none', nosniff, no-referrer) suits a download too.
+  ordered_cache_behavior {
+    path_pattern               = "/reports/*"
+    target_origin_id           = "s3-reports"
+    viewer_protocol_policy     = "https-only"
+    allowed_methods            = ["GET", "HEAD"]
+    cached_methods             = ["GET", "HEAD"]
+    compress                   = false                                  # PDFs are compressed already
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.report_downloads.id
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.api.id
+    trusted_key_groups         = [aws_cloudfront_key_group.report_downloads.id]
   }
 
   viewer_certificate {

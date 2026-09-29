@@ -36,6 +36,13 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    # The key pair that signs report downloads (reports.tf), generated like
+    # the random_password secrets: its private half lives in state and in the
+    # API's runtime secret (secrets.tf).
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
     # carlpett/sops — decrypts infra-secrets/water-management/prod.sops.yaml
     # in memory at plan/apply (secrets.tf). Community provider: pinned and
     # hash-locked in .terraform.lock.hcl.

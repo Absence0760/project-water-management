@@ -141,9 +141,13 @@ resource "aws_lambda_function" "backend" {
       JOB_TRANSPORT  = "sqs"
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
 
-      # Server-side reports (reports.tf): the API pre-signs PDF downloads.
-      STORAGE        = "s3"
-      REPORTS_BUCKET = aws_s3_bucket.reports.bucket
+      # Server-side reports (reports.tf): the API signs PDF downloads as
+      # CloudFront signed URLs on the site's /reports/* path; the private key
+      # is in the runtime secret, this names its public half.
+      STORAGE                = "s3"
+      REPORTS_BUCKET         = aws_s3_bucket.reports.bucket
+      REPORT_DOWNLOADS       = "cloudfront"
+      CLOUDFRONT_KEY_PAIR_ID = aws_cloudfront_public_key.report_downloads.id
     }
   }
 

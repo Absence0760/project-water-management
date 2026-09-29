@@ -11,7 +11,8 @@
 # Honest scope (same as the rest of the estate): sops protects the secrets in
 # git, NOT in Terraform state. The values below end up in state (as the data
 # source result and in the runtime secrets below), exactly like
-# random_password.cloudfront_shared_secret. The state bucket is SSE-encrypted
+# random_password.cloudfront_shared_secret and the report-download signing
+# key (tls_private_key.report_downloads, reports.tf). The state bucket is SSE-encrypted
 # and private to this account. The one credential that never touches state is
 # the RDS master password — RDS manages it in Secrets Manager (rds.tf).
 # ----------------------------------------------------------------------------
@@ -78,6 +79,8 @@ locals {
       AUTH_JWT_SECRET          = local.auth_jwt_secret
       DATABASE_URL             = local.database_url
       CLOUDFRONT_SHARED_SECRET = random_password.cloudfront_shared_secret.result
+      # Signs report download links (reports.tf); generated, like the above.
+      CLOUDFRONT_PRIVATE_KEY = tls_private_key.report_downloads.private_key_pem
     }
     worker = {
       # A re-run job stores a run, stamped under a key derived from the

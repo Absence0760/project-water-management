@@ -20,10 +20,15 @@
 # render-requests, send render-results and put objects under reports/ in the
 # bucket: no database, no secrets, no read of any PDF.
 #
-# The API hands out downloads as pre-signed GETs (60 s, one per click, behind
-# a 302 from GET /projects/:id/reports/:jobId/pdf), so it alone may
-# read reports/. The bucket is private (public access blocked, bucket-owner
-# objects, TLS only), SSE-S3 encrypted, and deletes every PDF after 7 days.
+# Downloads go through the site's own CloudFront distribution, behind the WAF
+# (issue #126): GET /projects/:id/reports/:jobId/pdf checks membership and
+# 302s to a CloudFront signed URL (60 s, one per click) on /reports/<project>/
+# <report>.pdf, which CloudFront serves from this bucket through its origin
+# access control. Only the distribution may read reports/ (the bucket policy
+# pins its ARN); the API signs with a key pair Terraform generates and never
+# touches the bucket. The bucket is private (public access blocked,
+# bucket-owner objects, TLS only), SSE-S3 encrypted, and deletes every PDF
+# after 7 days.
 #
 # The function is created only once its first image is in ECR
 # (renderer_image_tag, docs/deployment.md § Reports): Lambda can't be created
@@ -56,9 +61,10 @@ resource "aws_s3_bucket_public_access_block" "reports" {
 }
 
 # SSE-S3, not a customer-managed key: the bucket is private (public access
-# blocked, reached only by the API and renderer roles and short presigned
-# URLs), and a CMK would add a key and kms grants to both roles for no change
-# in who can read a PDF. docs/security.md § Accepted IaC findings.
+# blocked, written only by the renderer role and read only by CloudFront's
+# origin access control for short signed URLs), and a CMK would need a key
+# policy for CloudFront and a grant for the renderer for no change in who can
+# read a PDF. docs/security.md § Accepted IaC findings.
 #trivy:ignore:AWS-0132
 resource "aws_s3_bucket_server_side_encryption_configuration" "reports" {
   bucket = aws_s3_bucket.reports.id
@@ -102,6 +108,25 @@ resource "aws_s3_bucket_lifecycle_configuration" "reports" {
 }
 
 data "aws_iam_policy_document" "reports_bucket_policy" {
+  # Only this distribution (through the report-download behaviour's OAC) reads
+  # PDFs; CloudFront itself refuses any request without a valid signature.
+  statement {
+    sid       = "AllowCloudFrontReadReportPdfs"
+    actions   = ["s3:GetObject"]
+    resources = ["${aws_s3_bucket.reports.arn}/reports/*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend.arn]
+    }
+  }
+
   statement {
     sid     = "DenyInsecureTransport"
     effect  = "Deny"
@@ -410,22 +435,73 @@ resource "aws_lambda_event_source_mapping" "worker_render_results" {
   depends_on = [aws_iam_role_policy.worker_reports]
 }
 
-# --- The API's side: pre-signed downloads ---------------------------------------------------
+# --- Downloads: CloudFront signed URLs ------------------------------------------------------
+#
+# The distribution's /reports/* behaviour (s3_cloudfront.tf) reads this bucket
+# through its own OAC and serves a request only when it carries a CloudFront
+# signed URL from a key in this key group: the WAF and its per-IP rate limit
+# see every transfer, and the API never reads the bucket (no s3: grant at
+# all). The API signs with the private half, from its runtime secret
+# (secrets.tf); CLOUDFRONT_KEY_PAIR_ID in its environment names the public
+# key (lambda.tf).
+#
+# The key pair is generated here, like random_password.cloudfront_shared_secret:
+# the private key sits in state (SSE-encrypted, private to this account) and in
+# the API's runtime secret, never in git. Rotate with
+#   terraform apply -replace=tls_private_key.report_downloads
+# which creates the new public key first (create_before_destroy), moves the
+# key group and the API onto it, then deletes the old one. A download link
+# signed in the seconds between the key group moving and the API's cold start
+# fails; asking again works (docs/deployment.md § Rotating a secret).
 
-# A pre-signed GET carries the signer's rights, so the API may read PDFs, and
-# nothing else in the bucket. Signing is local: no network path is needed.
-data "aws_iam_policy_document" "lambda_reports" {
-  statement {
-    sid       = "ReadReportPdfs"
-    actions   = ["s3:GetObject"]
-    resources = ["${aws_s3_bucket.reports.arn}/reports/*"]
+resource "tls_private_key" "report_downloads" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "aws_cloudfront_public_key" "report_downloads" {
+  name_prefix = "${local.project}-report-downloads-"
+  comment     = "Verifies report download links the API signs (backend/src/reports/cloudfrontSign.ts)"
+  encoded_key = tls_private_key.report_downloads.public_key_pem
+
+  lifecycle {
+    create_before_destroy = true
   }
 }
 
-resource "aws_iam_role_policy" "lambda_reports" {
-  name   = "reports-read"
-  role   = aws_iam_role.lambda.id
-  policy = data.aws_iam_policy_document.lambda_reports.json
+resource "aws_cloudfront_key_group" "report_downloads" {
+  name    = "${local.project}-report-downloads"
+  comment = "Trusted signers for /reports/* (report PDF downloads)"
+  items   = [aws_cloudfront_public_key.report_downloads.id]
+}
+
+resource "aws_cloudfront_origin_access_control" "reports" {
+  name                              = "${local.project}-reports-oac"
+  description                       = "OAC for the ${local.project} report PDFs bucket"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
+# S3 names the download from response-content-disposition (the signed URL
+# covers it, so it can't be changed); nothing else reaches the bucket: no
+# cookies, no viewer headers, not CloudFront's own signing parameters.
+resource "aws_cloudfront_origin_request_policy" "report_downloads" {
+  name    = "${local.project}-report-downloads"
+  comment = "Report PDFs: forward only the download file name"
+
+  cookies_config {
+    cookie_behavior = "none"
+  }
+  headers_config {
+    header_behavior = "none"
+  }
+  query_strings_config {
+    query_string_behavior = "whitelist"
+    query_strings {
+      items = ["response-content-disposition"]
+    }
+  }
 }
 
 # --- Alarms -----------------------------------------------------------------------------------
