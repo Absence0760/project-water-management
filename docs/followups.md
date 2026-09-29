@@ -3346,6 +3346,33 @@ assume, the questions for counsel); these are the actions, with triggers.
 - [ ] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
 
+## Infrastructure edge
+
+- [ ] **Move the API origin to CloudFront OAC for Lambda if direct traffic
+      shows up (issue #126).** Today a direct call to the public Function
+      URL is refused by the app's shared-secret check (403), but it has
+      already passed the WAF by going around it and holds API concurrency
+      while refused. Decision: keep the shared secret. **Trigger:** the
+      `origin-secret-rejected` alarm (`infra/alarms.tf`, more than 20
+      refusals in an hour, from the `origin_secret_rejected` log line in
+      `backend/src/app.ts`) firing outside a secret rotation, or throttles the
+      WAF's request metrics don't explain. **Durable fix:** Function URL auth
+      type `AWS_IAM` behind an OAC of type `lambda`; the SPA then sends
+      `x-amz-content-sha256` on every PUT/POST/PATCH, and the one-click
+      unsubscribe POST (RFC 8058, sent by mail clients that can't add that
+      header) moves to a signed GET. Reasoning in docs/security.md
+      § Infrastructure.
+- [ ] **Check the 404s on the live site after the first apply (issue #126).**
+      `curl -sI https://<domain>/missing.pdf` should answer `404` with
+      `content-type: text/html` (spa_rewrite's page, not S3 XML), and
+      `curl -sI https://<domain>/_app/missing.js` `404` (S3 NoSuchKey via the
+      frontend bucket's ListBucket grant, not `403` AccessDenied);
+      `curl -s 'https://<domain>/?list-type=2'` must return the app's
+      `index.html`, never a bucket listing. Plan-only tests
+      (`infra/tests/edge.tftest.hcl`,
+      `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
+      real behaviour.
+
 ## Housekeeping
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
