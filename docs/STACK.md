@@ -130,7 +130,7 @@ pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file
                              # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
                              # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
 pnpm test:scripts           # guard: root scripts point at real targets
-pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
+pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds; runs in a private copy of infra/, so parallel runs are safe)
 
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack

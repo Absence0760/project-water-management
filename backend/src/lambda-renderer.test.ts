@@ -33,7 +33,7 @@ const record = (messageId: string, body: unknown) => ({ messageId, body: typeof 
 describe('renderer Lambda', () => {
 	it('renders, stores under the derived key, and answers with the outcome only (never the token)', async () => {
 		vi.stubEnv('RENDER_RESULTS_QUEUE_URL', 'https://sqs.example/render-results');
-		const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+		const log = vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF-1.7 x'), pages: 9, ms: 4200 });
 		const res = await handler({ Records: [record('m1', request)] } as never);
 		expect(res).toEqual({ batchItemFailures: [] });
@@ -46,7 +46,7 @@ describe('renderer Lambda', () => {
 	});
 
 	it('answers a failed render as a failure (its token is spent: no SQS retry)', async () => {
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockRejectedValueOnce(new RenderError('the render took longer than 90 s'));
 		const res = await handler({ Records: [record('m1', request)] } as never);
 		expect(res).toEqual({ batchItemFailures: [] });
@@ -55,7 +55,7 @@ describe('renderer Lambda', () => {
 	});
 
 	it('says only "could not be stored" when storage fails', async () => {
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValueOnce({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
 		putPdf.mockRejectedValueOnce(new Error('AccessDenied: arn:aws:s3:::bucket/key'));
@@ -100,7 +100,7 @@ describe('renderer Lambda', () => {
 	it('drops a request it cannot parse, and retries only a failed answer', async () => {
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		vi.spyOn(console, 'error').mockImplementation(() => {});
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		renderReportPdf.mockResolvedValue({ pdf: Buffer.from('%PDF'), pages: 1, ms: 1 });
 		sendToQueue.mockRejectedValueOnce(new Error('RENDER_RESULTS_QUEUE_URL is not set'));
 		const res = await handler({ Records: [record('m0', 'garbage'), record('m1', { ...request, token: 'short' }), record('m2', request), record('m3', request)] } as never);

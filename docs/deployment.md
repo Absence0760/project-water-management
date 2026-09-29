@@ -360,7 +360,9 @@ SES's error text, which names the recipient), and the `mail-send-failed` alarm
 emails the alerts topic on the first one. Expect it to fire while you test in
 the sandbox; after production access it means real mail is failing. To find
 which: CloudWatch Logs Insights on the API and worker log groups,
-`filter event = "mail_send_failed" | stats count() by kind, error`.
+`filter message.event = "mail_send_failed" | stats count() by message.kind, message.error`
+(the Lambdas log in JSON, so the line sits under `message`; infra/lambda.tf
+`lambda_logging`).
 `AccessDeniedException` means the IAM policy, `MessageRejected` an unverified
 recipient (sandbox) or a suppressed one, `TooManyRequestsException` the
 sending rate.
@@ -515,7 +517,11 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   throttles, backlog, dead jobs), and the fetcher's and renderer's answered
   failures, stuck request queues and throttles (§ Data feeds, § Reports);
   every DLQ alarms on each new arrival, not on its depth (§ Background jobs);
-  all to the SNS topics that email `budget_alert_email`. That variable is
+  all to the SNS topics that email `budget_alert_email`. The
+  log filters match `$.message.event`, the shape Lambda's JSON log format
+  gives the backend's event lines (every Lambda logs JSON, platform lines at
+  WARN, application lines from INFO; [infra/README.md
+  § Logs](../infra/README.md#logs)). `budget_alert_email` is
   required: plan refuses an empty, malformed or reserved address
   (example.com/.org/.net, `.example`, `.test`, `.invalid`, `.localhost`, any
   case), so a copied example tfvars can't leave the alarms paging nobody
@@ -1316,7 +1322,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
    the route's pattern (never the concrete path), the error's name and code
    (a Postgres SQLSTATE for a database error) and its stack frames, never its
    message. In CloudWatch Logs Insights on the API's log group,
-   `filter event = "unhandled_error" | stats count() by route, error, code`
+   `filter message.event = "unhandled_error" | stats count() by message.route, message.error, message.code`
    says which endpoint and what kind of failure; `at` points at the throwing
    line. One route with a SQLSTATE after a deploy is usually a migration the
    code got ahead of (§ A failed migration); every route at once with
@@ -1373,7 +1379,7 @@ Every step is an ordinary app action by an owner unless it says "operator".
     Each failure logs `{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`,
     with no address, id or IP.
     1. **Look:** CloudWatch Logs Insights on the API's log group,
-       `filter event = "login_failed" | stats count() by reason, route, bin(5m)`.
+       `filter message.event = "login_failed" | stats count() by message.reason, message.route, bin(5m)`.
        Mostly `unknown_account` is a list of addresses being tried (stuffing
        from a leaked list); mostly `bad_password` spread thinly is spraying
        against real accounts; mostly `locked` is one or a few accounts being

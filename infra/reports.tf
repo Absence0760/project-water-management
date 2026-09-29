@@ -357,6 +357,16 @@ resource "aws_lambda_function" "renderer" {
   # Bounds spend and how many Chromiums run at once.
   reserved_concurrent_executions = var.renderer_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.renderer.name
+  }
+
   # Deliberately no vpc_config: it reaches the site through CloudFront.
 
   environment {
@@ -669,7 +679,7 @@ resource "aws_cloudwatch_metric_alarm" "render_requests_age" {
 resource "aws_cloudwatch_log_metric_filter" "report_render_failed" {
   name           = "${local.project}-report-render-failed"
   log_group_name = aws_cloudwatch_log_group.renderer.name
-  pattern        = "{ $.event = \"report_render_failed\" }"
+  pattern        = "{ $.message.event = \"report_render_failed\" }"
 
   metric_transformation {
     name          = "ReportRenderFailed"

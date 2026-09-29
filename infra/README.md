@@ -182,6 +182,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
 | `tests/data.tftest.hcl` | The database's and frontend bucket's data-protection controls (5 runs; [Validating locally](#validating-locally)) |
+| `tests/logging.tftest.hcl` | Plan-only: every Lambda's JSON log format and levels, and every log metric filter matching `$.message.event` (see [Logs](#logs)) |
 
 ## Decisions
 
@@ -737,6 +738,30 @@ The apply, for any of the sops keys:
   ~5 minutes. The runbook, the sources and the rehearse-once checklist:
   [docs/deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database).
 
+## Logs
+
+Every Lambda logs in Lambda's JSON format (`lambda.tf`,
+`local.lambda_logging`, pinned by `tests/logging.tftest.hcl`):
+
+- **System logs at `WARN`.** The platform's `START` / `END` / `REPORT`
+  lines are INFO, three per invocation and so three per API request; only
+  the platform's warnings and errors (init failure, timeout, out of memory)
+  are kept. Duration, errors and throttles still come from the Lambda
+  metrics, which don't depend on these lines.
+- **Application logs from `INFO`.** The alarm lines are WARN or ERROR, but
+  the worker's embedded metrics (`OldestDueJobAgeSeconds`, the alert-mail
+  counts behind `jobs_backlog` and the alert-storm alarm) are bare stdout
+  lines Lambda records as INFO. Raising the level would drop them silently.
+- **The shape the filters read.** Each console call becomes
+  `{"timestamp","level","requestId","message"}`, and a call with one object
+  argument puts that object under `message` as nested JSON (a JSON *string*
+  would stay an opaque string). The backend logs its events that way off
+  `backend/src/logging/logEvent.ts` (a JSON string per line off Lambda), so
+  every log metric filter matches `{ $.message.event = "…" }` and Logs
+  Insights queries read `message.event`, `message.route` and so on. The
+  worker's EMF line goes straight to stdout (`emitMetricLine`), because
+  CloudWatch reads EMF only from a top-level `_aws` key.
+
 ## Validating locally
 
 No AWS credentials are needed:
@@ -747,19 +772,36 @@ That is `bin/check-infra.sh`: `terraform fmt -check -recursive`,
 `init -backend=false`, `validate`, and `terraform test`. CI runs the same
 script (`ci.yml` job `terraform`, which calls `terraform.yml`; part of the
 `CI gate`), plus an advisory Trivy IaC scan. CI never plans against the real account;
-[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why. Terraform 1.15's
-`validate` checks the S3 backend's required `bucket`, so the script writes a
-gitignored `backend_override.tf` (local backend) for the run and deletes it
-afterwards. If you create one by hand, delete it before any real
-`terraform init -backend-config=backend.config`, or the override silently
-wins and state goes to a local file.
+[docs/deployment.md § 4](../docs/deployment.md#4-cicd) says why.
 
-The test suite (`tests/guardrails.tftest.hcl`, plus `tests/observability.tftest.hcl`
+The script never runs Terraform in `infra/` itself: it copies the files git
+would commit (tracked and untracked, less gitignored ones such as
+`terraform.tfvars`, `backend.config`, state and any `*_override.tf`) to a
+private temporary directory and runs there. Terraform 1.15's `validate`
+checks the S3 backend's required `bucket`, so the copy gets a local-backend
+`backend_override.tf`; in `infra/` such an override would silently win over
+`-backend-config=backend.config` on the next real `terraform init` and send
+state to a local file, and a killed run (SIGKILL can't be trapped) used to
+leave one behind. Now there is nothing in `infra/` to leave, so parallel
+sessions and worktrees can run `check:infra` at once without racing on the
+override or `.terraform/`. Providers come from a shared plugin cache
+(`TF_PLUGIN_CACHE_DIR`, default `~/.terraform.d/plugin-cache`; `init` holds a
+`flock` on it where `flock` exists), so only the first run downloads them. A
+local-backend override in `infra/` identical to the one older versions wrote
+makes the script stop and ask you to delete it. If you create an override
+by hand, delete it before any real `terraform init
+-backend-config=backend.config`. `CHECK_INFRA_KEEP=1` keeps the copy and
+prints its path; arguments go to `terraform test`
+(`pnpm check:infra -filter=tests/logging.tftest.hcl` runs one file). `pnpm test:guards` tests the script against a fake
+`terraform` (`infra/scripts/check-infra.test.mjs`).
+
+The test suite (`tests/*.tftest.hcl`: `guardrails.tftest.hcl`, plus `observability.tftest.hcl`
 for the failures that don't fail a Lambda: every DLQ's new-arrival alarm, the
 `feed_fetch_failed` and `report_render_failed` log metric filters on the
 fetcher's and renderer's log groups and their alarms, the fetch-requests and
 render-requests message-age alarms (the latter present before the renderer
-exists) and the fetcher and renderer throttle alarms) plans against mocked providers
+exists) and the fetcher and renderer throttle alarms, and the other files
+in the table above) plans against mocked providers
 and pins: Lambda runtime/memory/timeout/concurrency and env; RDS durability
 and privacy; the single-origin CloudFront wiring; WAF attached; S3 private
 (public-access block, OAC-only policy, ACLs off); TLS minimums; both

@@ -152,6 +152,16 @@ resource "aws_lambda_function" "worker" {
   # burn receive counts into the DLQs (variables.tf, guarded by a tftest).
   reserved_concurrent_executions = var.worker_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.worker.name
+  }
+
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.worker_lambda.id]
@@ -572,7 +582,7 @@ resource "aws_cloudwatch_metric_alarm" "jobs_backlog" {
 resource "aws_cloudwatch_log_metric_filter" "job_dead" {
   name           = "${local.project}-job-dead"
   log_group_name = aws_cloudwatch_log_group.worker.name
-  pattern        = "{ $.event = \"job_dead\" }"
+  pattern        = "{ $.message.event = \"job_dead\" }"
 
   metric_transformation {
     name          = "JobDead"

@@ -1,13 +1,18 @@
-# Plan-only tests for the observability of the failures that don't fail a
-# Lambda (issue #126 § Alarms and spend): the DLQ alarms fire on each new
-# arrival rather than on depth (alarms.tf local.dlq_arrivals_expression), and
-# the fetcher's and renderer's answered failures, stuck queues and throttles
-# alarm (feeds.tf, reports.tf).
-#
-# Same mocked providers, overrides and variables as guardrails.tftest.hcl
-# (copied, since a test file can't share them): no AWS credentials, no state.
+# Plan-only tests (mocked providers, no AWS credentials) for how the Lambdas
+# log and how the alarms read those logs (issue #126):
+#   * every Lambda uses Lambda's JSON log format, with the platform's
+#     per-invocation START / END / REPORT lines dropped (system level WARN)
+#     and the code's own lines kept from INFO up (the worker's embedded
+#     metrics are INFO: lambda.tf, local.lambda_logging);
+#   * every log metric filter matches the event under `message`, the shape
+#     the JSON format gives a one-object console call
+#     (backend/src/logging/logEvent.ts), never the top-level `$.event` a
+#     plain-text line would have had.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
+#
+# The mocks, overrides and variables are guardrails.tftest.hcl's, copied so
+# this file plans on its own.
 
 mock_provider "aws" {
   # A mocked policy document renders a random string, which IAM/SNS/S3 policy
@@ -601,137 +606,116 @@ variables {
   budget_alert_email = "ops@water-management.jaredhoward.com"
 }
 
-run "dlq_alarms_fire_on_new_arrivals" {
+run "lambda_json_logs" {
   command = plan
 
-  # Every DLQ in infra/, with the queue its alarm must watch.
-  assert {
-    condition = alltrue([for pair in [
-      [aws_cloudwatch_metric_alarm.jobs_dlq_depth, aws_sqs_queue.jobs_dlq.name],
-      [aws_cloudwatch_metric_alarm.fetch_requests_dlq_depth, aws_sqs_queue.fetch_requests_dlq.name],
-      [aws_cloudwatch_metric_alarm.ingest_results_dlq_depth, aws_sqs_queue.ingest_results_dlq.name],
-      [aws_cloudwatch_metric_alarm.render_requests_dlq_depth, aws_sqs_queue.render_requests_dlq.name],
-      [aws_cloudwatch_metric_alarm.render_results_dlq_depth, aws_sqs_queue.render_results_dlq.name],
-      [aws_cloudwatch_metric_alarm.mail_events_dlq_depth, aws_sqs_queue.mail_events_dlq.name],
-      ] : (
-      # Metric math, not the raw depth: a depth alarm stays in ALARM for the
-      # DLQ's 14-day retention and a second failure never notifies.
-      pair[0].metric_name == null &&
-      one([for q in pair[0].metric_query : q.expression if q.return_data == true]) == "DIFF(FILL(visible, 0))" &&
-      one([for q in pair[0].metric_query : q.id if q.return_data == true]) == "arrivals" &&
-      one([for q in pair[0].metric_query : q.metric[0].metric_name if q.id == "visible"]) == "ApproximateNumberOfMessagesVisible" &&
-      one([for q in pair[0].metric_query : q.metric[0].namespace if q.id == "visible"]) == "AWS/SQS" &&
-      one([for q in pair[0].metric_query : q.metric[0].stat if q.id == "visible"]) == "Maximum" &&
-      one([for q in pair[0].metric_query : q.metric[0].period if q.id == "visible"]) == 300 &&
-      one([for q in pair[0].metric_query : q.metric[0].dimensions["QueueName"] if q.id == "visible"]) == pair[1] &&
-      pair[0].comparison_operator == "GreaterThanThreshold" &&
-      pair[0].threshold == 0 &&
-      pair[0].evaluation_periods == 3 &&
-      pair[0].datapoints_to_alarm == 1 &&
-      endswith(pair[0].alarm_name, "-dlq-arrivals") &&
-      pair[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
-    )])
-    error_message = "Every DLQ must alarm on a rise in ApproximateNumberOfMessagesVisible (DIFF(FILL(visible, 0)) > 0, 1 of 3 five-minute datapoints; NumberOfMessagesSent misses redrive moves), to the alerts topic."
-  }
-}
-
-run "fetcher_and_renderer_failures_alarm" {
-  command = plan
-
-  # --- Answered failures: a structured log line, a metric, an alarm -------------
-  assert {
-    condition = (
-      aws_cloudwatch_log_metric_filter.feed_fetch_failed.log_group_name == aws_cloudwatch_log_group.fetcher.name &&
-      aws_cloudwatch_log_metric_filter.feed_fetch_failed.pattern == "{ $.message.event = \"feed_fetch_failed\" }" &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.metric_name == aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.namespace == aws_cloudwatch_log_metric_filter.feed_fetch_failed.metric_transformation[0].namespace &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.feed_fetch_failed.comparison_operator == "GreaterThanThreshold"
-    )
-    error_message = "A fetch the fetcher answers as failed (lambda-fetcher.ts logs feed_fetch_failed) must alarm: its Errors metric never sees it."
-  }
-  assert {
-    condition = (
-      aws_cloudwatch_log_metric_filter.report_render_failed.log_group_name == aws_cloudwatch_log_group.renderer.name &&
-      aws_cloudwatch_log_metric_filter.report_render_failed.pattern == "{ $.message.event = \"report_render_failed\" }" &&
-      aws_cloudwatch_metric_alarm.report_render_failed.metric_name == aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].name &&
-      aws_cloudwatch_metric_alarm.report_render_failed.namespace == aws_cloudwatch_log_metric_filter.report_render_failed.metric_transformation[0].namespace &&
-      aws_cloudwatch_metric_alarm.report_render_failed.statistic == "Sum" &&
-      aws_cloudwatch_metric_alarm.report_render_failed.threshold == 0 &&
-      aws_cloudwatch_metric_alarm.report_render_failed.comparison_operator == "GreaterThanThreshold"
-    )
-    error_message = "A render the renderer answers as failed (lambda-renderer.ts logs report_render_failed) must alarm: its Errors metric never sees it."
-  }
-
-  # --- Stuck queues ------------------------------------------------------------------
-  assert {
-    condition = (
-      aws_cloudwatch_metric_alarm.fetch_requests_age.metric_name == "ApproximateAgeOfOldestMessage" &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.dimensions["QueueName"] == aws_sqs_queue.fetch_requests.name &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.statistic == "Maximum" &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.threshold == 3600 &&
-      aws_cloudwatch_metric_alarm.fetch_requests_age.threshold < aws_sqs_queue.fetch_requests.message_retention_seconds
-    )
-    error_message = "A fetch request waiting over an hour must alarm, well before it expires."
-  }
-  # Without renderer_image_tag (this run) the function doesn't exist and render
-  # requests have no consumer: the age alarm is exactly what sees that.
-  assert {
-    condition = (
-      length(aws_lambda_function.renderer) == 0 &&
-      aws_cloudwatch_metric_alarm.render_requests_age.metric_name == "ApproximateAgeOfOldestMessage" &&
-      aws_cloudwatch_metric_alarm.render_requests_age.dimensions["QueueName"] == aws_sqs_queue.render_requests.name &&
-      aws_cloudwatch_metric_alarm.render_requests_age.statistic == "Maximum" &&
-      aws_cloudwatch_metric_alarm.render_requests_age.threshold == 1800 &&
-      aws_cloudwatch_metric_alarm.render_requests_age.threshold < aws_sqs_queue.render_requests.message_retention_seconds
-    )
-    error_message = "The render-requests age alarm must exist even before the renderer does (an empty renderer_image_tag otherwise lets requests expire silently after 4 days)."
-  }
-
-  # --- Throttles ------------------------------------------------------------------------
-  assert {
-    condition = (
-      aws_cloudwatch_metric_alarm.fetcher_throttles.metric_name == "Throttles" &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.namespace == "AWS/Lambda" &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.dimensions["FunctionName"] == aws_lambda_function.fetcher.function_name &&
-      aws_cloudwatch_metric_alarm.fetcher_throttles.threshold == 0
-    )
-    error_message = "Fetcher throttles must alarm: a throttled SQS poll burns a receive toward the DLQ."
-  }
-  assert {
-    condition     = length(aws_cloudwatch_metric_alarm.renderer_throttles) == 0
-    error_message = "No renderer, no renderer throttle alarm (its dimension would name a function that doesn't exist)."
-  }
-
-  # --- All of them notify the alerts topic ------------------------------------------------
-  assert {
-    condition = alltrue([for a in [
-      aws_cloudwatch_metric_alarm.feed_fetch_failed,
-      aws_cloudwatch_metric_alarm.report_render_failed,
-      aws_cloudwatch_metric_alarm.fetch_requests_age,
-      aws_cloudwatch_metric_alarm.render_requests_age,
-      aws_cloudwatch_metric_alarm.fetcher_throttles,
-    ] : a.alarm_actions == toset([aws_sns_topic.alerts.arn]) && a.treat_missing_data == "notBreaching"])
-    error_message = "Each new alarm notifies the alerts SNS topic, and treats no data (an idle queue or Lambda) as OK."
-  }
-}
-
-run "renderer_throttles_alarm_once_it_exists" {
-  command = plan
-
+  # The renderer exists only once its image is tagged (reports.tf).
   variables {
     renderer_image_tag = "0.4.0"
   }
 
   assert {
+    condition = alltrue([
+      for f in [
+        aws_lambda_function.backend,
+        aws_lambda_function.migrate,
+        aws_lambda_function.worker,
+        aws_lambda_function.fetcher,
+        aws_lambda_function.renderer[0],
+      ] : length(f.logging_config) == 1 && f.logging_config[0].log_format == "JSON"
+    ])
+    error_message = "Every Lambda logs in JSON (the metric filters read $.message.event, which only the JSON format produces)."
+  }
+
+  assert {
+    condition = alltrue([
+      for f in [
+        aws_lambda_function.backend,
+        aws_lambda_function.migrate,
+        aws_lambda_function.worker,
+        aws_lambda_function.fetcher,
+        aws_lambda_function.renderer[0],
+      ] : f.logging_config[0].system_log_level == "WARN"
+    ])
+    error_message = "System logs at WARN: the START / END / REPORT lines (three per API request) are INFO and are not kept."
+  }
+
+  assert {
+    condition = alltrue([
+      for f in [
+        aws_lambda_function.backend,
+        aws_lambda_function.migrate,
+        aws_lambda_function.worker,
+        aws_lambda_function.fetcher,
+        aws_lambda_function.renderer[0],
+      ] : f.logging_config[0].application_log_level == "INFO"
+    ])
+    error_message = "Application logs from INFO: the worker's EMF lines (jobs_backlog, alert mail metrics) are recorded as INFO, and a higher level drops them silently."
+  }
+
+  # Each writes to the group Terraform creates with its retention (and, for
+  # the API and worker, the metric filters), named as Lambda's default.
+  assert {
     condition = (
-      aws_cloudwatch_metric_alarm.renderer_throttles[0].metric_name == "Throttles" &&
-      aws_cloudwatch_metric_alarm.renderer_throttles[0].namespace == "AWS/Lambda" &&
-      aws_cloudwatch_metric_alarm.renderer_throttles[0].dimensions["FunctionName"] == aws_lambda_function.renderer[0].function_name &&
-      aws_cloudwatch_metric_alarm.renderer_throttles[0].threshold == 0 &&
-      aws_cloudwatch_metric_alarm.renderer_throttles[0].alarm_actions == toset([aws_sns_topic.alerts.arn])
+      aws_lambda_function.backend.logging_config[0].log_group == aws_cloudwatch_log_group.lambda.name &&
+      aws_lambda_function.migrate.logging_config[0].log_group == aws_cloudwatch_log_group.migrate.name &&
+      aws_lambda_function.worker.logging_config[0].log_group == aws_cloudwatch_log_group.worker.name &&
+      aws_lambda_function.fetcher.logging_config[0].log_group == aws_cloudwatch_log_group.fetcher.name &&
+      aws_lambda_function.renderer[0].logging_config[0].log_group == aws_cloudwatch_log_group.renderer.name &&
+      alltrue([
+        for f in [
+          aws_lambda_function.backend,
+          aws_lambda_function.migrate,
+          aws_lambda_function.worker,
+          aws_lambda_function.fetcher,
+          aws_lambda_function.renderer[0],
+        ] : f.logging_config[0].log_group == "/aws/lambda/${f.function_name}"
+      ])
     )
-    error_message = "Renderer throttles must alarm once the renderer exists."
+    error_message = "Each Lambda logs to its own /aws/lambda/<name> group, the one with the retention and the metric filters."
+  }
+}
+
+run "metric_filters_read_json_logs" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for p in concat(
+        [
+          aws_cloudwatch_log_metric_filter.self_check_failed.pattern,
+          aws_cloudwatch_log_metric_filter.self_check_failed_worker.pattern,
+          aws_cloudwatch_log_metric_filter.unhandled_error.pattern,
+          aws_cloudwatch_log_metric_filter.login_failed.pattern,
+          aws_cloudwatch_log_metric_filter.job_dead.pattern,
+        ],
+        [for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern],
+      ) : can(regex("^\\{ \\$\\.message\\.event = \"[a-z_]+\" \\}$", p))
+    ])
+    error_message = "Every log metric filter matches $.message.event (Lambda's JSON log format nests a one-object console call under message)."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.message.event = \"self_check_failed\" }" &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.pattern == "{ $.message.event = \"self_check_failed\" }" &&
+      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.message.event = \"unhandled_error\" }" &&
+      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.message.event = \"login_failed\" }" &&
+      aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.message.event = \"job_dead\" }" &&
+      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.message.event = \"mail_send_failed\" }"])
+    )
+    error_message = "Each filter matches the event name its backend line logs (logEvent callers in backend/src)."
+  }
+
+  # Each filter reads the log group of a function that logs its event.
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.self_check_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.self_check_failed_worker.log_group_name == aws_cloudwatch_log_group.worker.name &&
+      aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
+      aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name
+    )
+    error_message = "A metric filter reads the wrong log group."
   }
 }
