@@ -79,7 +79,6 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
 	href: { why: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too', in: ['lib/components/farm/DamCard.svelte', 'lib/components/farm/LookingBack.svelte', 'lib/components/notes/RecentNotes.svelte', 'routes/farm/[projectId]/+page.svelte'] },
-	newWhatIfHref: { why: 'CompareView: `${base}/projects/<project id>?` + URLSearchParams (tab, new, base)', in: ['lib/components/compare/CompareView.svelte'] },
 	reports: { why: 'CompareView: reportHref(), `${base}/projects/<project id>/report?` + URLSearchParams (run, against)', in: ['lib/components/compare/CompareView.svelte'] },
 	'step.href': { why: 'HelpCrumbs: its `trail` prop; the help pages pass `${base}/help` and help-guide paths built from guide ids', in: ['lib/components/help/HelpCrumbs.svelte'] },
 	fieldHistoryHref: { why: 'BUILDER: history/fieldLine.ts "?" + URLSearchParams (tab, kind, unit, q)', in: ['lib/components/history/FieldHistoryLine.svelte'] },

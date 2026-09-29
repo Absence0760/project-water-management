@@ -56,18 +56,18 @@ If a project has fewer than two runs, the page explains what to do: run the
 model, change something, and run it again, or pick a run from another project
 as what-if 1.
 
-### Export impact report and New what-if
+### Export impact report
 
-Two actions sit in the section header (beside **Back to runs** on the
+One action sits in the section header (beside **Back to runs** on the
 standalone page). **Export impact report** opens a what-if's printable
 report with its impact against the baseline as the first section
 (`/projects/<id>/report?run=<what-if>&against=<baseline ref>`, [ui.md §
 Report](./ui.md#report)): the same outcomes, takeaways and input changes as
 this page, for printing or saving as a PDF. With two what-ifs it is a menu,
-one entry per what-if. **+ New what-if**, for owners and editors of the
-baseline's project, opens the Scenarios tab's create dialog on the baseline
-(`?tab=scenarios&new=1&base=<run>`); a scenario's run is then picked here
-like any other run.
+one entry per what-if. There is no create button here: a what-if is any
+run, so a new one comes from running the model again or from the Scenarios
+tab, and is then picked here like any other run. With no pair chosen yet,
+the empty state says so and links the project's Scenarios tab.
 
 ### The summary (board A4)
 

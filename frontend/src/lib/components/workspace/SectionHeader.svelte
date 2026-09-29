@@ -1,7 +1,8 @@
 <script lang="ts">
 	// One header per workspace section (issue #17, option A · the boards'
 	// header): the section's title, a one-line context under it, and on the
-	// right, in this order, the page's rain-freshness pill (`status`), the
+	// right, in this order, the page's rain-freshness pill (`status`, after the
+	// Summary's "Setup complete" pill), the
 	// tab's own actions (`actions`, headerSlot.svelte.ts) and the page's pair,
 	// Add data and Run model or the tab's main action in its place (`main`).
 	// Under them, one slim line of notices (view only, new data) instead of
@@ -137,6 +138,8 @@
 		.status {
 			display: flex;
 			flex: 1 1 100%;
+			flex-wrap: wrap;
+			gap: 0.5rem;
 		}
 		/* Every control grows to fill its row, so no row ends in a ragged gap. */
 		.own > :global(*) {

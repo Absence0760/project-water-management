@@ -9,8 +9,8 @@
 	// m³). Each card also carries what the Dam levels table (moved here from
 	// the Summary, merged into the cards 2026-09-29, issue #175) listed: the
 	// lowest level in the run's last year (the sparkline's mark) and the days
-	// at the minimum operating level. The page flows in the window's one scroll: the emptiest few cards show, the rest
-	// behind "Show all N dams" (no card list scrolls inside itself), and on a
+	// at the minimum operating level. The page flows in the window's one scroll: every dam's card shows, emptiest
+	// first (no card list scrolls inside itself, and none folds away), and on a
 	// wide page the chart sticks beside the cards as they are read down.
 	// Before a run the cards show each dam's capacity.
 	// The levels come from overview/damLevels.ts, the loader the Summary's
@@ -34,7 +34,6 @@
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
-	import { foldList } from '$lib/components/common/fold';
 	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 
 	let {
@@ -189,13 +188,6 @@
 	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit, picked.level ? capacityOver(picked.level, pickedSeries.startDate) : undefined) : []);
 	// A fixed plot height: taller beside the cards, where it sits level with the first few.
 	const chartH = $derived(side ? 420 : 260);
-
-	// --- the fold: the emptiest few cards (and the picked one), the rest behind "Show all N dams" ---
-	let open = $state(false);
-	// Beside the chart, three cards sit about level with it; stacked, two rows keep the chart near the first
-	// screen; before a run the cards are small (capacity only), so more fit.
-	const cap = $derived(!latest ? 8 : side ? 3 : 4);
-	const fold = $derived(foldList(cards, (c) => c.nodeId, latest ? (picked?.nodeId ?? null) : null, open, cap));
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
@@ -234,8 +226,8 @@
 		<div class="first" class:with-chart={!!latest}>
 			<section class="list" aria-labelledby="dam-cards-h">
 				<h3 id="dam-cards-h" class="visually-hidden">Each dam</h3>
-				<ul class="cards" id="dam-cards" aria-label="Dams">
-					{#each fold.shown as c (c.nodeId)}
+				<ul class="cards" aria-label="Dams">
+					{#each cards as c (c.nodeId)}
 						{@const band = c.level ? levelBand(c.level) : null}
 						{@const chg = c.level ? changeWords(c.level, AGO_DAYS) : null}
 						{@const spark = sparks.get(c.nodeId)}
@@ -296,11 +288,6 @@
 						</li>
 					{/each}
 				</ul>
-				{#if open || fold.hidden}
-					<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="dam-cards" onclick={() => (open = !open)}>
-						{open ? `Show the ${cap} emptiest` : `Show all ${cards.length} dams`}
-					</button>
-				{/if}
 			</section>
 
 			{#if latest}
@@ -506,9 +493,6 @@
 	}
 	.small {
 		font-size: 0.85rem;
-	}
-	.more {
-		align-self: flex-start;
 	}
 	.chart-panel {
 		margin: 0;

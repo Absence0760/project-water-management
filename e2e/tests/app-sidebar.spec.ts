@@ -3,10 +3,13 @@
 // with the account block at the foot in view and room for one more row. On a
 // shorter window the project's sections scroll inside the sidebar on their
 // own, so the account block still never leaves the screen, and the open
-// section is scrolled into view. Synthetic data only.
+// section is scrolled into view. The slot never scrolls sideways (the
+// hidden-sections count badge once stuck out of it), and the model save bar
+// starts at the sidebar's edge instead of covering its foot. Synthetic data only.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, seedRunnableProject } from '../support/api.ts';
+import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 
 // Long enough to wrap to two lines in the sidebar (the name is clamped to two).
@@ -37,7 +40,7 @@ const sidebar = (page: Page) => page.locator('aside.app-sidebar');
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const account = (page: Page) => sidebar(page).getByRole('button', { name: /^Account menu for / });
 
-/** The sidebar and its project slot, measured: overflow in each, and the gap above the foot. */
+/** The sidebar and its project slot, measured: overflow in each (down, and sideways in the slot), and the gap above the foot. */
 function measure(page: Page) {
 	return page.evaluate(() => {
 		const aside = document.querySelector('aside.app-sidebar') as HTMLElement;
@@ -47,6 +50,7 @@ function measure(page: Page) {
 		return {
 			asideOverflow: aside.scrollHeight - aside.clientHeight,
 			slotOverflow: slot.scrollHeight - slot.clientHeight,
+			slotOverflowX: slot.scrollWidth - slot.clientWidth,
 			spare: foot.getBoundingClientRect().top - last.getBoundingClientRect().bottom
 		};
 	});
@@ -73,6 +77,7 @@ test.describe('1440×960', () => {
 		const m = await measure(page);
 		expect(m.asideOverflow).toBeLessThanOrEqual(0);
 		expect(m.slotOverflow).toBeLessThanOrEqual(0);
+		expect(m.slotOverflowX).toBeLessThanOrEqual(0);
 		expect(m.spare).toBeGreaterThanOrEqual(ROW);
 		await expectNoViolations(page);
 
@@ -80,6 +85,43 @@ test.describe('1440×960', () => {
 		await account(page).click();
 		await expect(sidebar(page).getByRole('link', { name: /^Account/ })).toBeInViewport({ ratio: 1 });
 		await page.keyboard.press('Escape');
+	});
+
+	test('with sections hidden, the count badge keeps the slot from scrolling sideways', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, LONG_NAME);
+		const res = await page.request.patch(`${API_URL}/auth/me`, { data: { preferences: { hiddenTabs: ['crops', 'history'] } } });
+		expect(res.status()).toBe(200);
+		await page.goto(`/projects/${project.id}`);
+		const trigger = page.getByRole('button', { name: 'Choose sections: Hidden (2)' });
+		await expect(trigger).toBeVisible();
+		const m = await measure(page);
+		expect(m.slotOverflowX).toBeLessThanOrEqual(0);
+		expect(m.slotOverflow).toBeLessThanOrEqual(0);
+		// The count stays within its 24 px button, and the button on the head's line beside the role.
+		const b = (await trigger.boundingBox())!;
+		const c = (await trigger.locator('.count').boundingBox())!;
+		expect(c.x + c.width).toBeLessThanOrEqual(b.x + b.width);
+		const role = (await page.getByTestId('project-role').boundingBox())!;
+		expect(Math.abs(b.y + b.height / 2 - (role.y + role.height / 2))).toBeLessThanOrEqual(2);
+	});
+
+	test('unsaved changes: the save bar starts at the sidebar edge and leaves the account menu usable', async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, LONG_NAME);
+		await page.goto(`/projects/${project.id}?tab=project`);
+		await page.getByLabel('Name', { exact: true }).fill('Renamed, not saved');
+		const bar = page.getByRole('region', { name: 'Unsaved project details' });
+		await expect(bar).toBeVisible();
+		const barBox = (await bar.boundingBox())!;
+		const side = (await sidebar(page).boundingBox())!;
+		expect(barBox.x).toBeGreaterThanOrEqual(side.x + side.width);
+		// The account menu at the sidebar's foot is in view and takes the click (nothing lies over it).
+		await expect(account(page)).toBeInViewport({ ratio: 1 });
+		await account(page).click();
+		await expect(sidebar(page).getByRole('link', { name: /^Account/ })).toBeInViewport({ ratio: 1 });
+		await page.keyboard.press('Escape');
+		await expect(bar.getByRole('button', { name: 'Discard' })).toBeInViewport({ ratio: 1 });
 	});
 
 	test('a viewer with the model inputs shown: still fits', async ({ page, owner, signIn }) => {

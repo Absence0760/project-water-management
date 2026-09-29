@@ -488,7 +488,8 @@ Project page's headline facts still link to their tabs (a deep link, as above).
 `e2e/tests/own-sections.spec.ts`). Within what the role shows, each person
 hides the sections they don't use. The **Choose sections** button (icon only
 on the sidebar's "Catchment" line, in words at the foot of the phone's
-Sections menu; once some are hidden, a count beside the sidebar's icon and
+Sections menu; once some are hidden, a count on the corner of the sidebar's
+icon, kept within its 24 px button so the slot never scrolls sideways, and
 "Hidden (n)" in the phone's words) opens a dialog with a
 checkbox per section the role shows here, opening right beside the button
 (centred on a phone), grouped as the sidebar is (the groups side by side,
@@ -507,7 +508,8 @@ gets the role's tabs, not yours).
 
 The model tabs (Network, Crops, Transfers) edit one in-memory model
 (`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom
-(`model/SaveBar.svelte`). The Project page's details (name, description,
+(`model/SaveBar.svelte`), which starts at the sidebar's edge (`--sidebar-w`,
+from `AppShell`) so the account menu at the sidebar's foot stays usable. The Project page's details (name, description,
 time zone, WUA name; issue #162 item 12) go through the same bar: the page
 holds them (`project/detailsDraft.svelte.ts`), so they survive a tab change,
 and **Save changes** saves whatever is unsaved (the details, then the
@@ -796,8 +798,9 @@ put the results first; its first screen follows board A1 of the redesign
    (four cards, the mean outflow in the line under them), the **Days below
    the reserve** strip across the page under it, then **Needs attention**
    with the **Active alerts** ([§ Alerts](#alerts)) under it, beside
-   **Supply by farm** (two columns from 900 px, one alone takes the width;
-   stacked below 900 px, Needs attention and the alerts first). On a phone
+   **Supply by farm** with the **published baseline** and the links under it
+   (two columns from 900 px; stacked below 900 px, Needs attention and the
+   alerts first). On a phone
    the KPIs are 2 × 2. The Summary is a reading page: it flows with one
    scroll, the window's, and no card scrolls inside itself; each card is as
    tall as its content, so the columns may end at different heights. Until
@@ -816,14 +819,20 @@ put the results first; its first screen follows board A1 of the redesign
    filling what the KPIs left; River & reserve draws the same chart, larger
    and with more controls, so the Summary now shows the strip and links
    there instead: the flow chart is drawn once, on River & reserve.
-3. **Below the first screen**, compact: the published baseline across the
-   tab (before the first run, when there is no first screen, the active
-   alerts sit beside it, two columns once the tab is 56rem wide, a container
-   query; stacked below that), each panel unchanged; one line of links,
-   **Dam levels for each dam → Dams** (once the latest run has dams; the
-   table moved to the [Dams](#dams) page) and **Model facts, details, team
-   and sharing → Project**; then the setup
-   checklist, the one-line "Setup complete" once every step is done. The
+3. **The published baseline and the links**: once there is a run, in the
+   right-hand column under Supply by farm, which is usually shorter than
+   Needs attention and the alerts, so a typical catchment (the example
+   Droëvlei one) fits a 1440 × 960 window with no page scroll; a bigger one
+   (Sandspruit, eight units and a two-language notice) still scrolls about
+   135 px, since fitting it would mean hiding content (Droëvlei was 1173 px tall
+   with the baseline, links and a folded checklist across the page below
+   the columns; `overview.spec.ts` checks the seeded catchment fits). Before
+   the first run, when there is no first screen, the active alerts sit
+   beside the baseline, two columns once the tab is 56rem wide (a container
+   query; stacked below that). The links are **Dam levels for each dam →
+   Dams** (once the latest run has dams; the table moved to the
+   [Dams](#dams) page) and **Model facts, details, team and sharing →
+   Project**. The
    model's headline facts, project details, import record, recent notes,
    team, members, farmers and share links moved to the [Project](#project)
    page (2026-09-27, issue #17). A link to one of their panels' old
@@ -831,6 +840,20 @@ put the results first; its first screen follows board A1 of the redesign
    `#recent-notes-h`, `#team-h`, `#members-h`, `#farmers-h`, `#share-h`,
    and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
    sent there, replacing the history entry so Back skips it.
+4. **Setup.** While a step still needs work (or the lists are loading and
+   nothing known is missing: a one-line "Checking data and runs…" bar) the
+   checklist is on the page: first before a run, under the columns after
+   one. Once every step is done (`checklistMode`, `overview/checklist.ts`)
+   it leaves the page for a **Setup complete ✓** pill in the section header,
+   before the rain pill (the Summary fills `headerSlot.status`). The pill is
+   a button (`aria-expanded`) that opens the five steps as a compact list in
+   a popover over the page (`overview/SetupPill.svelte`, the rain pill's
+   pattern: Escape closes it and returns focus to the pill, a click outside
+   closes it), so opening it never makes the page taller; it opens leftwards
+   beside the title and rightwards when the header wraps, nudged to stay
+   inside the window at any width. Until 2026-09-29 the complete checklist
+   was a one-line `<details>` at the foot of the page that grew it by 125 px
+   when opened.
 
 - **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
   `overview/reserveStrip.ts`), once the latest run's record is in: the days
@@ -1025,13 +1048,14 @@ for every workspace tab. Its own chunk.
   shared, and Back returns to the one before. Without `dam=` (or with one
   that has no card) the first, emptiest, card is charted. When the layout is
   stacked the chart scrolls into view after a pick.
-- **Show all N dams**: the emptiest few cards show (`common/fold.ts` `foldList`: three
-  beside the chart, four, two rows, stacked on a phone, eight before a run,
-  when the cards are small), then a **Show all 14 dams** button
-  (`aria-expanded`, `aria-controls="dam-cards"`) that opens the rest in place;
-  **Show the 3 emptiest** folds them again. The picked dam keeps its card
-  when it is further down (after the emptiest, so `dam=` always shows its
-  card), and a list only one longer than the fold shows whole.
+- **Every dam's card shows**, always, emptiest first, so a `dam=` link always
+  has its card. Until 2026-09-29 the list folded (`common/fold.ts` `foldList`:
+  three beside the chart, four stacked, eight before a run) behind a **Show
+  all N dams** button; at 1440×960 with eight dams that left three cards and
+  the lower third of the window empty, so the fold was dropped. The page
+  flows in the window's one scroll with the chart sticky beside the cards.
+  Stacked on a phone, many dams put the chart well below the first screen;
+  picking a dam scrolls the chart into view, which is the way to it there.
 - **Storage chart** of the picked dam: its storage, a dashed capacity line
   and (a farm with one) its dashed minimum operating level
   (`storageChartSeries`), as **% full** (default) or **m³**, with the
@@ -1040,9 +1064,8 @@ for every workspace tab. Its own chunk.
   in the last year and the days at the minimum level.
 - **Layout**: the cards column sits beside the chart once the page is 56rem
   wide (a container query on the page, not the viewport), the plot a fixed
-  420 px (about level with the three cards) and the chart panel sticky
-  (`top: --header-h + 0.75rem`), so it stays in view while an opened list is
-  read down in the window's scroll. Narrower, the cards are two to a row on
+  420 px and the chart panel sticky (`top: --header-h + 0.75rem`), so it
+  stays in view while the cards are read down in the window's scroll. Narrower, the cards are two to a row on
   a phone, then the chart (260 px).
 - **Minimum level**: the model keeps the minimum as a fraction of capacity
   (`damMinPct` 0.1 = 10 %) and only a farm's dam has one, so `damsInRun`
@@ -2232,39 +2255,60 @@ node table above).
 
 ## Transfers
 
-One card under the section header, which counts the rules ("3
+The rules under the section header, which counts them ("3
 transfer rules · 2 active", `workspace/context.ts`) and carries **Show on the
 map** (the Network, where transfers are dashed arrows) and **+ Add transfer**
 (editors, with at least two units). A new rule starts after the existing ones
 (the highest priority + 1), and the cursor lands in its **From**, scrolled into
 view.
 
-**Transfer rules** is one row per rule: its number (with **off** under it when
-the rule is switched off, and a tinted row), **From → To** (side by side from
-an 80rem-wide container, stacked below that), its **max rate by month**
-(engine ≥ 1.14.0, `transfers/MonthRates.svelte`: twelve m³/s fields in
-water-year order, six to a row, all twelve in one row where the cell is 40rem
-wide; a blank month is off; under them the months in words with the largest
-rate, and **… in every month**, which puts the largest rate in all twelve). A
-workbook rule with one rate in its ticked months shows that rate in each of
-them and runs as before; the first edit gives it its own rate per month
-(`monthlyRateM3s`, with `months` and `maxRateM3s` kept in step), then an
-optional daily cap (m³), **Takes from** (engine ≥ 1.14.0): *The source’s
-dam*, with the minimum source-dam storage (%) below which it stops, or *The
-river (an off-take)* ([model.md §2.6a](./model.md)), whose fields replace the
-minimum there: a hands-off flow (m³/day, blank = none), the losses on the way
-(%), how much it takes (*What the destination needs* or *Up to capacity*, like a canal that runs full),
-and switches for leaving the EWR in the river and topping up the
-destination’s dam; then a **Priority**, an **On** switch
-(named "transfer N enabled") and remove. Priority is a whole number, lower
-moves first; equal priorities share a source dam pro rata to their limits
-([engine-audit Q18](./engine-audit.md)). The help explains the destination's
-room cap (N4). Thirty rules fit at 1280 × 800 without scrolling the table
-sideways.
+**Transfer rules** is one card per rule (`transfers/TransfersTab.svelte`),
+in a list that grows with its rules. Each card's **head line** holds its
+number ("Transfer N", a heading, with an **off** pill when the rule is
+switched off), **From → To** (two selects), an **On / Off** switch (a
+checkbox with `role="switch"`, named "transfer N enabled", its state in words
+beside it and part of the tap target) and **Remove** (named "Remove transfer
+N (From → To)"). Remove asks first (the app's confirm dialog) once the rule
+has a rate in any month, since its rates and limits go with it, and says
+Discard on the save bar still brings it back until the model is saved; a blank
+rule goes at once. Focus moves to the next rule's heading (the previous one's
+for the last). An off rule's card is tinted, with a neutral edge instead of
+the accent one, and says **off** in words (not faded text).
 
-The page is a reading page, not a window-sized dashboard: the rules card
-grows with its rules and the page scrolls as one, with no scroll box inside
-the card (the table still scrolls sideways if a column ever can't fit). Two
+The card's body holds three top-aligned groups:
+
+- **Max rate by month** (engine ≥ 1.14.0, `transfers/MonthRates.svelte`):
+  twelve m³/s fields in water-year order, six to a row (four in a phone's
+  card, all twelve in one row where the group is 58rem wide), each wide
+  enough to show 0.0129 or 12.345 whole, with tabular figures; a blank month
+  is off. Under them the months in words with the largest rate, and **… in
+  every month**, which puts the largest rate in all twelve (both to four
+  decimals, so the button names the rate it copies). A workbook rule with one
+  rate in its ticked months shows that rate in each of them and runs as
+  before; the first edit gives it its own rate per month (`monthlyRateM3s`,
+  with `months` and `maxRateM3s` kept in step).
+- **Limits**: an optional daily cap (m³, blank = none) and the **Priority**, a
+  whole number, lower moves first; equal priorities share a source dam pro
+  rata to their limits ([engine-audit Q18](./engine-audit.md)). The help
+  explains the destination's room cap (N4).
+- **Source**: **Takes from** (engine ≥ 1.14.0): *The source’s dam*, with the
+  minimum source-dam storage (%) below which it stops, or *The river (an
+  off-take)* ([model.md §2.6a](./model.md)), whose fields replace the minimum:
+  how much it takes (*What the destination needs* or *Up to capacity*, like a
+  canal that runs full), a hands-off flow (m³/day, blank = none), the losses on
+  the way (%), and switches for leaving the EWR in the river and topping up
+  the destination’s dam. The fields sit two to a row, not one tall column.
+
+Every field keeps its visible label and its ⓘ tip. The groups sit side by
+side where the card is 70rem wide (1280 and 1440 windows); from 46rem the
+rates sit beside the limits with the source across under them (the grid
+modal, narrow windows); below that (a phone) everything stacks, From and To
+each take a full row with their word, the source's selects take the card's
+width, and the fields, switches and buttons are 44 px tall. Thirty rules fit
+at 1280 × 800 with nothing scrolling sideways.
+
+The page is a reading page, not a window-sized dashboard: the list grows with
+its rules and the page scrolls as one, with no scroll box inside it. Two
 rules make a short page; thirty make a long one. There is no month chart: the
 old **When water moves** card summed each month's rate × 86 400 across the
 enabled rules, which restated the rate fields in the row above it, added up
@@ -2274,16 +2318,15 @@ before the dams' own limits, so it looked like a result without being one
 transfer is (most catchments have none) and has its own **Add transfer**; with
 fewer than two units it links to the Network tab.
 
-In a container up to 64rem (a phone, a narrow window) each rule becomes a card,
-two to a row where there is room: "Transfer N" with its remove button on top,
-From and To side by side, the month rates six to a row at tap size (44 px), the daily cap
-and priority side by side, Takes from across the card (its selects and switches 44 px), then the
-numbers and an **Enabled** switch whose label is part of the tap target. The
-column headers and their ⓘ tips move into each card's field labels, the page
-scrolls rather than a box inside it.
+The rules were a wide table until 2026-09-29: its **Takes from** cell stacked
+a river off-take's six fields in one column, so that row stood ~330 px tall
+with every other cell floating in its middle, and the month fields clipped
+0.0129 to "0.012". Cards with grouped fields replaced it
+(`transfers-page.spec.ts` pins the groups' shared top line, whole rates, the
+off state and Remove).
 
 The Network's **Transfers** grid (`grid=transfers`) and scenario override mode
-show the same table, with **+ Add transfer** under it.
+show the same cards, with **+ Add transfer** under them.
 
 ## On this page menu
 
@@ -2302,7 +2345,7 @@ Hydrological units and Data show their names. Settings & calibration, Runs
 names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
 last links went into More and River's bar took a second row at 1440 px (in
 CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Network, Crops,
-Scenarios), the Summary and Dams (short once their lists fold, 2026-09-29) and the pages with at most two panels past their
+Scenarios), the Summary (short once its lists fold, 2026-09-29), Dams (one card list beside a sticky chart) and the pages with at most two panels past their
 first screen at 1440×960 (Transfers, one card; Allocations, Project, Compare
 runs, Applications) have none (surveyed 2026-09-27 with the example catchments); History is left
 to its own redesign.
@@ -3605,7 +3648,7 @@ read it before.
   (`aria-expanded`, `aria-controls="unit-cards"`) opens the rest in place and
   becomes **Show the 3 least supplied**; four units show whole. A picked unit
   further down keeps its card after the three when the list is folded, so a
-  shared `unit=` link shows its card (`foldList`, the Dams page's rule). On a
+  shared `unit=` link shows its card (`foldList`). On a
   wide window at least 700 px tall the chart is `position: sticky` just under
   the *On this page* menu (its height measured into `--nav-h`), so it stays
   beside an opened list as it is read down. Narrower, one column: three
@@ -4638,21 +4681,19 @@ gives it an `h1` and **Back to runs**). The full reference is
 
 - **Header:** in the workspace, the section header (the page's only title)
   carries the view's context line ("Baseline “…” against 2 what-ifs · same
-  period, 2021–2024 · engine 0.45.0") and its actions, filled with
+  period, 2021–2024 · engine 0.45.0") and its action, filled with
   `fillHeader`; the view draws no title of its own there. The standalone
   page has no section header, so the view draws its `h1`, the context line
-  and the same actions beside **Back to runs**. The actions:
+  and the same action beside **Back to runs**. The action:
   - **Export impact report:** the what-if's printable report with an
     *Impact against the baseline* section first
     (`/projects/<what-if's project>/report?run=<what-if>&against=<baseline ref>`,
     § Report). A plain link with one what-if; with two, a menu naming each
     ("What-if 1: <label>", its colour key beside it), which Escape or a
     click outside closes.
-  - **+ New what-if** (owner and editor of the baseline's project only):
-    the Scenarios tab's create dialog, `?tab=scenarios&new=1&base=<baseline
-    run>`, with the baseline as its base run (left to the dialog's default
-    when the baseline is itself a scenario run). Its run then compares here
-    like any other.
+  - No create button: a what-if is any run (run the model again, or run a
+    scenario on the Scenarios tab). With no pair chosen, the empty state
+    says that and links the project's Scenarios tab.
 - **Run cards** in three columns (one on a phone): Baseline, What-if 1 and
   What-if 2, each a fieldset (legend = its name) with a coloured top edge
   (baseline grey `--text-muted`, what-if 1 `--series-2`, what-if 2
@@ -4723,10 +4764,8 @@ them scenarios).
   `&scenario=<id>` in the URL.
 - **New scenario** (`&new=1`, a dialog; Back, Esc, Cancel and the ✕ close
   it, dropping `new` in place): a name and a base run, the published run by
-  default, else the latest, or the run named by `&base=<runId>` (Compare
-  runs' **+ New what-if** opens it on its baseline) when that run can be a
-  base; scenario runs aren't offered (a scenario run can't be a base).
-  Closing drops `base` with `new`. **Create scenario** picks the new one and
+  default, else the latest; scenario runs aren't offered (a scenario run
+  can't be a base). **Create scenario** picks the new one and
   replaces the dialog's history entry. `new=1` opens nothing for a viewer or
   with no run.
 - **The banner**: "Based on run *X* (run date, published)", and that the base
@@ -4778,8 +4817,8 @@ them scenarios).
   change the scenario: an editor on a team scenario, only its owner on an
   application; an applicant edits the applicant projection, with a note that
   other farms' values are blank;
-  `OverrideEditor.svelte`, loaded when opened): the Network, Crops and
-  Transfers tables, switched with a **Network / Crops / Transfers** control,
+  `OverrideEditor.svelte`, loaded when opened): the Network and Crops
+  tables and the Transfers rule cards, switched with a **Network / Crops / Transfers** control,
   on the scenario's model (its base run with its changes applied), under a
   banner in the warning colour, scrolled to the top of the window as it
   opens (below a long scenario the sticky record bar would otherwise cover

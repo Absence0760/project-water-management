@@ -4,6 +4,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { addCrop, openCropGrid, openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeForm, openNodeTable, saveModelChanges } from '../support/network.ts';
 import { answerConfirm } from '../support/confirm.ts';
+import { ruleCard } from '../support/transfers.ts';
 
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
 const saveBar = (page: Page) => page.getByRole('region', { name: 'Unsaved model changes' });
@@ -78,7 +79,7 @@ test('build a network with farms, crops and a transfer, save, reload', async ({ 
 	await page.getByLabel('Max rate of transfer 1 in Dec, m³/s').fill('0.02');
 	await page.getByLabel('Max rate of transfer 1 in Jan, m³/s').fill('0.02');
 	await page.getByLabel('Max rate of transfer 1 in Jan, m³/s').press('Tab');
-	await expect(page.getByRole('row', { name: /^1/ })).toContainText('Dec, Jan, up to 0.02 m³/s');
+	await expect(ruleCard(page, 1)).toContainText('Dec, Jan, up to 0.02 m³/s');
 
 	// --- save -----------------------------------------------------------------
 	const saved = page.waitForResponse((r) => r.request().method() === 'PUT' && r.url().endsWith(`/projects/${project.id}/model`));

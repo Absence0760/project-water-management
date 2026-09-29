@@ -9,8 +9,7 @@
 	//
 	// Layout (issue #17, option A): the section header carries the counts
 	// (summary.ts) and + New scenario, which opens the create dialog at
-	// `new=1` (Back closes it; Compare runs' + New what-if adds `base=<runId>`
-	// to start it on that run). The list is a rail beside the scenario, as tall
+	// `new=1` (Back closes it). The list is a rail beside the scenario, as tall
 	// as the window from where it starts and scrolling inside itself; the
 	// scenario is an editing page and scrolls with the page. With none picked
 	// the first (newest) opens, in place (replaceState), so there's no empty
@@ -211,17 +210,11 @@
 	$effect(() => {
 		// Closed (Cancel, Esc, the ✕): drop `new` in place.
 		if (!createOpen && untrack(() => newParam)) {
-			const u = new URL(page.url);
-			u.searchParams.delete('base');
-			void goto(withoutParam(u, 'new'), { replaceState: true, noScroll: true, keepFocus: true });
+			void goto(withoutParam(page.url, 'new'), { replaceState: true, noScroll: true, keepFocus: true });
 		}
 	});
-	// `base=<runId>` (Compare runs' + New what-if) picks the base run, when it is one a scenario can start from.
-	const baseParam = $derived(page.url.searchParams.get('base'));
 	$effect(() => {
 		if (!createOpen) return;
-		const want = untrack(() => baseParam);
-		if (want && untrack(() => bases).some((r) => r.id === want)) newBase = want;
 		createError = null;
 		void tick().then(() => document.getElementById('new-scenario-name')?.focus());
 	});

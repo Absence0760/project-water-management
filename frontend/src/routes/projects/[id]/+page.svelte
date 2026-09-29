@@ -570,6 +570,8 @@
 {/snippet}
 {#snippet pageContext()}{contextText}{/snippet}
 {#snippet headerStatus()}
+	<!-- The tab's own status first (the Summary's "Setup complete" pill), then the rain pill. -->
+	{@render headerSlot.status?.()}
 	{#if fresh}
 		<!-- Escape closes it (freshKeydown), as the other disclosures. -->
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -711,7 +713,7 @@
 				title={LABEL[tab]}
 				badge={unsavedBadge}
 				context={headerSlot.context ?? (contextText ? pageContext : null)}
-				status={fresh || series ? headerStatus : null}
+				status={fresh || series || headerSlot.status ? headerStatus : null}
 				actions={headerSlot.actions}
 				main={canEdit || headerSlot.main ? headerMain : null}
 				notices={headerNotices}
