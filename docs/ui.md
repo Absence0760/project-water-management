@@ -5520,7 +5520,8 @@ published.
   (hidden without one) with the days-left line, or the no-stop-level
   wording; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
-  notice; the last 12 months (inline SVG bars at the rendered width, a
+  notice and when the river asked for no cut, since its % would only repeat
+  the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers"); last
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name

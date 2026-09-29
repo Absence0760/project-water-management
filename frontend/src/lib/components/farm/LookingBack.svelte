@@ -1,8 +1,8 @@
 <script lang="ts">
 	// "Looking back" (design §3 Q2, §6.2): the model's card, neutral and dashed,
-	// with the "Model: …" chip that never uses the notice's fills. Under a
-	// `restricted` notice it collapses to one link line, so only the WUA's
-	// percentage competes for attention.
+	// with the "Model: …" chip that never uses the notice's fills. It collapses
+	// to one link line under a `restricted` notice and when the river asked
+	// for no cut (cards.ts lookingBackFolds).
 	import type { FarmProjection } from '@water-management/engine';
 	import { lookingBack, lookingBackShort, notOfficial } from './cards';
 	import Rich from '$lib/i18n/Rich.svelte';

@@ -313,8 +313,6 @@ export const af: Catalogue = {
 	'7915a193': 'Hoekom? Wat kan ek doen?',
 	// If you had pumped less on the days the river needed it, you would have had about **{pct}** of the water you needed.
 	'0d0fa754': 'As jy minder gepomp het op die dae toe die rivier dit nodig gehad het, sou jy ongeveer **{pct}** gehad het van die water wat jy nodig gehad het.',
-	// The river didn't need you to pump less this season. You had about **{pct}** of the water you needed.
-	'd69891d7': 'Die rivier het nie hierdie seisoen nodig gehad dat jy minder pomp nie. Jy het ongeveer **{pct}** gehad van die water wat jy nodig gehad het.',
 	// Why {pct}? What can I do?
 	'3ea4ad58': 'Hoekom {pct}? Wat kan ek doen?',
 	// The model’s look back and what you can do
