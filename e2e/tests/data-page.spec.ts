@@ -45,7 +45,9 @@ test('the series behind come first and are marked, the same count as the sidebar
 	await expect(page.getByText('Behind a series a run reads, more than 7 days old.')).toBeVisible();
 
 	// Freshness first in the columns too: Data up to comes straight after the series.
-	await expect(seriesTable(page).getByRole('columnheader')).toHaveText(['Series', 'Data up to', 'Period', /^Missing/, /^Typical/, 'Coverage by year', 'Actions']);
+	await expect(seriesTable(page).getByRole('columnheader')).toHaveText(['Series', 'Data up to', 'From', /^Missing/, /^Typical/, 'Coverage by year', 'Actions']);
+	// From is the start date only: the end is Data up to's (issue #174).
+	await expect(seriesRows(page).nth(0).getByRole('cell').nth(1)).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('picking a series charts it through the URL: Back returns to the one before, a shared link opens it, a stale one falls back', async ({ page, owner }) => {

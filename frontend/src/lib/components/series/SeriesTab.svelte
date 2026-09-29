@@ -431,6 +431,7 @@
 
 	// The in-page menu (common/SectionNav): only the panels drawn, as each one's condition below.
 	const hasChecks = $derived(list.length > 0 && Object.keys(values).length > 0);
+	let usesOpen = $state(false);
 	const navGroups = $derived(
 		dataNavGroups({ chart: !!viewing, agreement: !!agreement, doubleMass: !!dm?.result, checks: hasChecks })
 	);
@@ -530,7 +531,7 @@
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
 						<th scope="col" role="columnheader">Data up to</th>
-						<th scope="col" role="columnheader">Period</th>
+						<th scope="col" role="columnheader">From</th>
 						<th scope="col" role="columnheader" class="num">Missing<br /><span class="u">% of days</span></th>
 						<th scope="col" role="columnheader" class="num">Typical<br /><span class="u">mean</span></th>
 						<th scope="col" role="columnheader" class="cov">Coverage by year</th>
@@ -626,7 +627,8 @@
 									>
 								{/if}
 							</td>
-							<td role="cell" class="num period" data-label="Period">{s.startDate} →<br />{end}</td>
+							<!-- The start only: the end is Data up to's (issue #174). -->
+							<td role="cell" class="num period" data-label="From">{s.startDate}</td>
 							<td role="cell" class="num missing" class:warn={st && st.missingPct >= 5} data-label="Missing (% of days)">{st ? fmtNum(st.missingPct, 1) : '…'}</td>
 							<td role="cell" class="num typical" data-label="Typical (mean)">{typical(s)}</td>
 							<td role="cell" class="cov" data-label="Coverage by year">
@@ -746,16 +748,20 @@
 
 <section class="panel uses" id="data-uses" aria-labelledby="use-h">
 	<div class="panel-head"><h2 id="use-h">What the model uses</h2></div>
-	<dl class="roles">
-		{#each KIND_OPTIONS as o (o.value)}
-			{@const r = KIND_ROLES[o.value]}
-			{@const have = list.some((s) => s.kind === o.value)}
-			<div>
-				<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
-				<dd>{r?.help}</dd>
-			</div>
-		{/each}
-	</dl>
+	<!-- Reference text for each kind of series, behind a disclosure so it doesn't fill the page's foot (issue #174). -->
+	<details class="uses-more" bind:open={usesOpen}>
+		<summary class="btn btn-sm">{usesOpen ? 'Hide' : 'Show'} what each kind of series is for</summary>
+		<dl class="roles">
+			{#each KIND_OPTIONS as o (o.value)}
+				{@const r = KIND_ROLES[o.value]}
+				{@const have = list.some((s) => s.kind === o.value)}
+				<div>
+					<dt>{o.label} <HelpTip key={`series.${o.value}`} /> {#if have}<span class="have">✓ loaded</span>{/if}</dt>
+					<dd>{r?.help}</dd>
+				</div>
+			{/each}
+		</dl>
+	</details>
 	<p class="muted small">
 		A run needs at least one rainfall series; its period is the span of those series unless Settings sets one.
 		With several series of one kind, the first by name is used.
@@ -1041,6 +1047,14 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
 		gap: 0.6rem 1.75rem;
+	}
+	.uses-more summary {
+		list-style: none;
+		cursor: pointer;
+		margin-bottom: 0.75rem;
+	}
+	.uses-more summary::-webkit-details-marker {
+		display: none;
 	}
 	.uses > p {
 		max-width: 44rem;

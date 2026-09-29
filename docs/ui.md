@@ -2312,10 +2312,11 @@ with the table the data needs).
   driven by (recorded rain, daily A-pan) ending more than 7 days
   (`STALE_DAYS`) before the viewer's date; a forecast runs ahead and observed
   flow only scores a run, so neither is. Each such row carries a **Behind**
-  pill beside its age and an amber edge, the key line says what it means,
-  and the panel head repeats "2 behind (more than 7 days old)", so the
-  table, the header and the badge always give the same count. **Data up
-  to** is the column straight after the series. (Until 2026-09-26 any row
+  pill beside its age and an amber edge and the key line says what it means,
+  so the table, the header's "2 behind" and the badge always give the same
+  count. **Data up to** is the column straight after the series; **From**
+  after it gives only the first date (it was a *Period* start → end, whose
+  end repeated Data up to, issue #174). (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
   (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
@@ -2345,9 +2346,10 @@ with the table the data needs).
   box and the chart filled the rest, so the panels below went unseen
   (`data-page.spec.ts` pins the flow, the fold and no inner scroller on
   desktop and phone). The gauge-vs-logger table, the double mass panel, Data checks and
-  *What the model uses* follow below. *What the model uses* spans the page
-  with the kinds in columns (at least 22rem each, one column on a phone) and
-  its closing note at a reading measure.
+  *What the model uses* follow below. *What the model uses* spans the page;
+  its kinds (at least 22rem each, one column on a phone) are behind **Show
+  what each kind of series is for** (a `<details>`, closed by default, issue
+  #174), and its closing note, at a reading measure, shows either way.
 - **On this page.** Once there is a series, a **Data sections** menu
   ([§ On this page menu](#on-this-page-menu)) sits under the header, above the
   table, and sticks down the whole page as it scrolls: **Series** (`#data-series`), **Chart**
@@ -2426,7 +2428,7 @@ timestamp closes its interval. The series records the choice
 (`dayBoundary`), shown as an *08:00 day* tag on its row, and a merge of the
 other window into it is refused ([model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
 Below 640px wide each row becomes a card
-(series and role on top, then labelled Data up to / Period / Missing (% of
+(series and role on top, then labelled Data up to / From / Missing (% of
 days) / Typical (mean), the coverage strip, and the buttons wrapping underneath), so a phone
 never has to scroll the table sideways; explicit table roles keep it a table
 to screen readers, and the card labels are silent to them. Uploads (the
