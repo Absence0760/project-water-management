@@ -2910,9 +2910,10 @@ which checks every catchment tab).
     flagged (no gauged range recorded)" in place of "In the gauged range"
     when none is), a table of the scored days' rain by source (catchment
     gauge reading, infilled, missing, and zero-rain runs set aside among
-    them), how wet the scored years were (the representativeness gist), and
-    a list of what the record can't support. A report from before 1.22.0 has
-    none of it.
+    them), and a list of what the record can't support. How wet the scored
+    years were is left to the block under it, whose heading carries the same
+    gist (a line here repeating it was removed, issue #174). A report from
+    before 1.22.0 has none of it.
     Under it, **How representative is the record** (engine ≥ 1.19.0, CR-34;
     `calibration/representativeness.ts`): the record's length and its mean
     rain as a share of the long-term mean in the heading, the engine's

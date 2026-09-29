@@ -404,7 +404,7 @@
 				{/if}
 				{#if report.dayQuality}
 					<!-- Calibration research CR-22: the per-day quality flags of the fitted record and its rain. -->
-					<DataQualityPanel quality={report.dayQuality} representativeness={report.representativeness ?? null} />
+					<DataQualityPanel quality={report.dayQuality} />
 				{/if}
 				{#if report.representativeness}
 					{@const rep = report.representativeness}
