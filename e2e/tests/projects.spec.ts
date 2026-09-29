@@ -228,7 +228,9 @@ test.describe('data age under a skewed time zone', () => {
 		const end = day(-10);
 		const start = day(-129);
 		await putSeries(page.request, p.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start.toISOString().slice(0, 10), values: Array(120).fill(1) });
-		const shown = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(end);
+		// As the app writes a day (fmtDay): its own month names, never ICU's (which writes "Sept" on some builds).
+		const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const shown = `${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
 
 		await page.goto('/');
 		// The row carries the badge twice (wide and narrow layouts); one is shown.
