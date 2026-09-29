@@ -229,7 +229,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -243,11 +243,38 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(5);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
+	});
+
+	it('records the quality-flag settings, summary and fit on all days, and says when the flag settings changed (CR-18/19)', () => {
+		const s = { ...gr4jSettings(), calibrationStart: '2012-10-01', calibrationExclusions: [{ waterYear: 2015, reason: 'suspect rain' }] };
+		const rating = { gaugedMaxM3s: 12, gaugedMinM3s: null, source: 'DWS gaugings' };
+		const qualityFlags = { ratings: { flow_logger_m3s: rating }, aboveRating: 'censor' as const, belowRating: 'exclude' as const, suspect: 'exclude' as const, infilled: 'exclude' as const };
+		const rec = fitRecordFromReport(report({ fitAllDays: period('2012-10-01', '2014-09-30', 0.5), dayQuality: null }), { ...ctx, settings: { ...ctx.settings, qualityFlags } });
+		expect(rec.qualityFlags).toEqual(qualityFlags);
+		expect(rec.fitAllDays).toEqual(period('2012-10-01', '2014-09-30', 0.5));
+		expect(rec.dayQuality).toBeNull();
+		// Positive control: the same flag settings are no change, and the scores are in-sample.
+		expect(fitRecordStatus({ ...s, qualityFlags }, rec).qualityFlagsChanged).toBe(false);
+		expect(calibrationFitStatus({ ...s, qualityFlags, fitRecord: rec }, 'flow_logger_m3s')).toBe('fitted');
+		// Another gauged range, or another treatment: the fit used other days.
+		const moved = { ...qualityFlags, ratings: { flow_logger_m3s: { ...rating, gaugedMaxM3s: 15 } } };
+		const st = fitRecordStatus({ ...s, qualityFlags: moved }, rec);
+		expect(st.qualityFlagsChanged).toBe(true);
+		expect(fitRecordCaveats(st)).toContainEqual(expect.stringMatching(/quality-flag settings .* have changed since the fit/));
+		expect(fitRecordStatus({ ...s, qualityFlags: { ...qualityFlags, suspect: 'include' } }, rec).qualityFlagsChanged).toBe(true);
+		expect(calibrationFitStatus({ ...s, qualityFlags: moved, fitRecord: rec }, 'flow_logger_m3s')).toBe('otherPeriod');
+		// Settings without the field run the defaults: the same as a record made under them.
+		const plain = fitRecordFromReport(report(), ctx);
+		expect(plain.qualityFlags).toEqual({ ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' });
+		expect(fitRecordStatus({ ...s, qualityFlags: undefined } as never, plain).qualityFlagsChanged).toBe(false);
+		// A record made before engine 1.22.0 has none to compare: never flagged.
+		const { qualityFlags: _q, ...old } = plain;
+		expect(fitRecordStatus({ ...s, qualityFlags: moved }, old as never).qualityFlagsChanged).toBe(false);
 	});
 
 	it('forcingChanged is tolerant of float noise, true only when the recorded forcing differs, and false when there is none to compare', () => {

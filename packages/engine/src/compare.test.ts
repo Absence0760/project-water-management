@@ -877,6 +877,20 @@ describe('diffInputs', () => {
 		expect(diffInputs(old, recorded)).toEqual([]);
 	});
 
+	it('describes the quality-flag settings (CR-18/19); a run saved before engine 1.22.0 reads as the defaults', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.qualityFlags = {
+			...defaultProjectSettings().qualityFlags,
+			suspect: 'include',
+			ratings: { flow_observed_m3s: { gaugedMaxM3s: 12, gaugedMinM3s: null, source: 'DWS gaugings' } }
+		};
+		expect(texts(a, b)).toEqual(['Gauged range (gauge record): none → up to 12 m³/s', 'Suspect days in the fit: left out → scored as recorded']);
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).qualityFlags;
+		expect(diffInputs(old, a)).toEqual([]);
+	});
+
 	it('describes the multi-day accumulation settings (B4); a run saved before 0.20.0 ran them as recorded', () => {
 		const a = snapshot();
 		const b = structuredClone(a);

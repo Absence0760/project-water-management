@@ -31,6 +31,7 @@
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
 	import CalibrationExclusions from '$lib/components/calibration/CalibrationExclusions.svelte';
+	import QualityFlagsFields from './QualityFlagsFields.svelte';
 	import FitPanel from '$lib/components/calibration/FitPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import { api, type Project } from '$lib/api';
@@ -168,15 +169,17 @@
 	const outError = $derived(outcomesError(s.outcomes));
 	const outlookErr = $derived(outlookError(s.outlook));
 	let wr2012Error = $state<string | null>(null);
+	let qualityFlagsErr = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || !!calWindowError || !!exclusionsError || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
 		saveBlockers([
 			{ id: 'set-record', message: calWindowError },
 			{ id: 'set-record', message: exclusionsError },
+			{ id: 'set-record', message: qualityFlagsErr },
 			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-rain', message: rainSourceError },
@@ -805,6 +808,7 @@
 			availableKinds={seriesKinds}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
+		<QualityFlagsFields bind:value={s.qualityFlags} bind:error={qualityFlagsErr} {readonly} {seriesKinds} />
 	</section>
 
 	<div class="panel" id="set-fit">

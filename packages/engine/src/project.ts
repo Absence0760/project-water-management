@@ -3,6 +3,7 @@
 // field maps onto the b023 workbook.
 import type { ForecastSummary } from './forecast';
 import type { CalibrationExclusion, ExclusionRange, FitRecord } from './calibrate/provenance';
+import type { QualityFlagSettings } from './calibrate/qualityFlagSettings';
 import type { Monthly } from './calendar';
 import type { AreaMismatch, ObservedAgreement, SeriesCheck } from './quality';
 import type { DoubleMass } from './doublemass';
@@ -449,6 +450,13 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
+	 * Per-day quality flags (engine ≥ 1.22.0, calibration research CR-18/19,
+	 * ./calibrate/dayFlags.ts): each record's gauged range, and how automatic
+	 * calibration's objective treats extrapolated, suspect and infilled days.
+	 * The run's own calibration statistics score every observed day.
+	 */
+	qualityFlags: QualityFlagSettings;
+	/**
 	 * The automatic fit whose parameters "Apply to form" wrote, with its
 	 * validation (./calibrate/provenance.ts). null = none: the parameters were
 	 * set by hand or imported. Never changes model results.
@@ -660,6 +668,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationEnd: null,
 		calibrationFlowKind: null,
 		calibrationExclusions: [],
+		qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' },
 		fitRecord: null,
 		dataQuality: defaultDataQualitySettings(),
 		wr2012: defaultWr2012Settings()

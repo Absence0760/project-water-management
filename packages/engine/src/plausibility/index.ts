@@ -101,6 +101,12 @@ export interface PlausibilityInput {
 	calibrationKind: CalibrationFlowKind | null;
 	/** 1 on days the calibration exclusions leave out. */
 	excluded: Uint8Array;
+	/**
+	 * 1 on days the calibration record's quality flags mark extrapolated,
+	 * suspect or infilled (engine ≥ 1.22.0, CR-18, ../calibrate/dayFlags.ts
+	 * flaggedDayMask): the recession segments leave them out too. Absent = none.
+	 */
+	flowFlagged?: Uint8Array;
 	/** The dams' daily storage gain + evaporation − rain on them, m³. */
 	damsM3Day: ArrayLike<number>;
 	/** The land-cover reduction per day, m³ (empty without land cover). */
@@ -117,6 +123,12 @@ export interface PlausibilityInput {
 	gauges?: readonly GaugePlausibilityInput[];
 	/** Warnings about gauge records the run can't place (a node gone, or no longer a gauge), in order. */
 	gaugeRecordWarnings?: readonly string[];
+}
+
+/** 1 where either mask is; `a` itself without `b`. */
+function orMask(a: Uint8Array, b: Uint8Array | undefined): Uint8Array {
+	if (!b) return a;
+	return Uint8Array.from(a, (v, t) => (v || b[t] ? 1 : 0));
 }
 
 /** Run the four checks; returns the summary block and the run warnings (in check order). */
@@ -162,7 +174,7 @@ export function plausibilityChecks(x: PlausibilityInput): { checks: Plausibility
 	});
 	const recession =
 		cal && obs && x.rainMm
-			? recessionCheck({ flowKind: cal, observedM3s: obs, simulatedM3Day: x.simulatedM3Day, rainMm: x.rainMm, excluded: x.excluded })
+			? recessionCheck({ flowKind: cal, observedM3s: obs, simulatedM3Day: x.simulatedM3Day, rainMm: x.rainMm, excluded: orMask(x.excluded, x.flowFlagged) })
 			: null;
 	const gauges = (x.gauges ?? []).map((g) => gaugeChecks(g, x, season, inSeason));
 	const atGauges = gauges.flatMap((g) => [naturalisedWarning(g.naturalised), lowFlowWarning(g.lowFlow)].flatMap((w) => (w ? [atGauge(g.name, w)] : [])));

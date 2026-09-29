@@ -1209,6 +1209,23 @@
 //             check and the opt-in quantile-map fields in Settings → Rain
 //             source periods and their run-comparison and fit-provenance
 //             lines. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1149 → 1156 KB (measured 1153 with #157 and #155 merged
+//             in; that main measures 1146), largestWorkerKb 34 → 36 (calibration
+//             worker measured 36, was 34). Issue #66, per-day quality flags
+//             (engine 1.22.0, CR-18/19/22): the calibration worker now flags
+//             each day (calibrate/dayFlags.ts, with the Data checks'
+//             flat-stretch and outlier rules from quality.ts under the
+//             project's dataQuality limits), censors or leaves out flagged
+//             days and writes the data-quality summary and its notes; that
+//             code has to run where the fit runs. On the main thread: the
+//             data-quality panel (DataQualityPanel), the gauged-range fields
+//             (QualityFlagsFields, in the Settings tab chunk, now at its
+//             60 KB ceiling), the fit record's quality-flag row and the help
+//             article. The settings resolver and run-comparison lines sit in
+//             calibrate/qualityFlagSettings.ts, which imports none of the
+//             checks, so provenance and comparison chunks don't carry them.
+//             No new dependency. Headroom ~3 KB; #155's quantile map adds its
+//             own growth on top when it lands.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1219,10 +1236,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1149,
+	totalCodeKb: 1156,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 34,
+	largestWorkerKb: 36,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

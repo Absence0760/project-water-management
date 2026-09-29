@@ -43,6 +43,7 @@ import { fitScores, objectiveLoss, type FitScores } from './objective';
 import { OBJECTIVE_LABELS, type ObjectiveId } from './objectives';
 import { prepareRun } from '../prepare';
 import { recordRepresentativeness, type RecordRepresentativeness } from './representativeness';
+import { censoredObserved, dayQuality, flowDayFlags, observedInfillMask, rainDayFlags, ratingOf, scoringDays, type DayQuality } from './dayFlags';
 
 /** The run's rain × the areal factor of each day's water-year month (engine ≥ 1.13.0), as runModel's WR2012 check reads it. */
 const arealRainOn = (rain: (number | null)[] | null, areal: readonly number[] | null, month: ArrayLike<number>) =>
@@ -246,6 +247,21 @@ export interface CalibrationReport {
 	representativeness?: RecordRepresentativeness | null;
 	/** The CHIRPS factors the fit's rain used, per fit range (engine ≥ 0.29.0; absent before, null without CHIRPS or in mode 'none'). */
 	chirpsFactors?: ChirpsFactorSet[] | null;
+	/**
+	 * The per-day quality flags of the fitted record and its rain (engine ≥
+	 * 1.22.0, calibration research CR-18/22, ./dayFlags.ts): days by class,
+	 * days scored, left out and censored, and what the record can't support.
+	 * Absent before 1.22.0.
+	 */
+	dayQuality?: DayQuality | null;
+	/**
+	 * The fitted parameters scored on every observed day in the window
+	 * outside the exclusion periods, flagged days included and nothing
+	 * censored (engine ≥ 1.22.0, CR-19): the fit on all days, beside `fit` on
+	 * the clean days. null when the flags left nothing out and censored
+	 * nothing (it would equal `fit`); absent before 1.22.0.
+	 */
+	fitAllDays?: ScoredPeriod | null;
 	/** Model runs used, over every stage. */
 	evaluations: number;
 	cancelled: boolean;
@@ -276,8 +292,22 @@ export interface CalibrationProblem {
 	flowKind: string;
 	/** Observed flow (m³/day), NaN where missing. */
 	observed: Float64Array;
-	/** Day indices scored: observed, inside the calibration window, outside every exclusion. */
+	/**
+	 * Day indices scored: observed, inside the calibration window, outside
+	 * every exclusion, and not left out by the quality flags (engine ≥ 1.22.0,
+	 * settings.qualityFlags).
+	 */
 	scoredDays: Int32Array;
+	/**
+	 * The censoring bound (m³/day) on each scored above-rating day when the
+	 * settings censor them, NaN elsewhere; null when nothing is censored
+	 * (engine ≥ 1.22.0, ./dayFlags.ts censoredObserved).
+	 */
+	censor?: Float64Array | null;
+	/** Every observed day in the window outside the exclusions, flags or not: what `fitAllDays` scores. */
+	allDays?: Int32Array;
+	/** The quality flags' summary (engine ≥ 1.22.0). */
+	dayQuality?: DayQuality | null;
 	/**
 	 * The reference gauge (flow_reference_m3s, m³/s, NaN where missing) over
 	 * the whole run, or null without one: only ever used to rank water years
@@ -315,6 +345,10 @@ export interface RecordProblem {
 	/** Observed flow (m³/day), NaN where missing. */
 	observed: Float64Array;
 	scoredDays: Int32Array;
+	/** As CalibrationProblem.censor, for this record's own rating. */
+	censor?: Float64Array | null;
+	/** Observed days outside the exclusions before the quality flags left any out. */
+	observedDays?: number;
 	simulate(p: ParamSet): Float64Array;
 }
 
@@ -340,10 +374,24 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const hi = settings.calibrationEnd ? toEpochDay(settings.calibrationEnd) - d0 : days - 1;
 	const allExclusions: DateRange[] = [...exclusionRanges(settings.calibrationExclusions).map(({ start, end }) => ({ start, end })), ...exclusions];
 	const excluded = excludedDayMask(allExclusions, startDate, days);
-	const idx: number[] = [];
-	for (let t = Math.max(0, lo); t <= Math.min(days - 1, hi); t++) if (Number.isFinite(observed[t]!) && !excluded[t]) idx.push(t);
+	const windowIdx: number[] = [];
+	for (let t = Math.max(0, lo); t <= Math.min(days - 1, hi); t++) if (!excluded[t]) windowIdx.push(t);
+	const allIdx = windowIdx.filter((t) => Number.isFinite(observed[t]!));
+	if (allIdx.length < 30) {
+		throw new Error(`only ${allIdx.length} observed days inside the calibration window (outside exclusions); at least 30 are needed`);
+	}
+	// Per-day quality flags (CR-18/19, ./dayFlags.ts): which observed days the objective scores, and which it censors.
+	const qf = settings.qualityFlags;
+	const flagsOf = (k: CalibrationFlowKind) =>
+		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(input.series?.[k], d0, days), dataQuality: settings.dataQuality });
+	const flags = flagsOf(kind);
+	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
+	const idx = scoring.idx;
 	if (idx.length < 30) {
-		throw new Error(`only ${idx.length} observed days inside the calibration window (outside exclusions); at least 30 are needed`);
+		throw new Error(
+			`only ${idx.length} of the ${allIdx.length} observed days inside the calibration window are left once the quality flags leave out extrapolated, suspect or infilled days; ` +
+				'at least 30 are needed: check the gauged range and how flagged days are treated (Settings → Calibration record)'
+		);
 	}
 
 	// The network is causal: nothing after the last scored day changes a
@@ -354,6 +402,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	const areal = arealRainFactors(settings.arealRain);
 	const warmupDays = resolveWarmupDays(settings.gr4j?.warmupDays, warnings);
 	const forcing = runoffForcing(settings, { startDate, days, aligned });
+	const usedRain = runRain(aligned, hasRain, days);
+	const rainFlags = usedRain ? rainDayFlags(aligned('rain_catchment_mm'), usedRain, run.rainSource?.column ?? null) : null;
 	// The warm-up cycles the *full* forcing, as runModel's does, so a
 	// scored day sees exactly the state a normal run would give it.
 	const runoff = (p: ParamSet, n: number) => {
@@ -374,6 +424,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 			return simulateNetwork(shortPlan).nodes[topo.outflow]!.outflow;
 		};
 	};
+	const lastAll = allIdx[allIdx.length - 1]!;
 	return {
 		model: modelId,
 		startDate,
@@ -382,7 +433,19 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		startParams,
 		flowKind: kind,
 		observed,
-		scoredDays: Int32Array.from(idx),
+		scoredDays: idx,
+		censor: scoring.censor,
+		allDays: Int32Array.from(allIdx),
+		dayQuality: dayQuality({
+			flowKind: kind,
+			settings: qf,
+			windowIdx,
+			flags,
+			scoring,
+			observed,
+			rainFlags,
+			zeroRunMask: run.zeroRain?.mask ?? null
+		}),
 		reference: input.series?.flow_reference_m3s ? Float64Array.from(aligned('flow_reference_m3s'), (v) => (v === null ? NaN : v)) : null,
 		natural,
 		// On natural flow, never the outflow: WR2012 flows are naturalised.
@@ -399,15 +462,19 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		),
 		exclusions: allExclusions,
 		chirpsFactors: chirpsFactorSets(run.chirpsCorrection),
-		rain: arealRainOn(runRain(aligned, hasRain, days), areal, month),
-		simulate: simulator(idx[idx.length - 1]! + 1),
+		rain: arealRainOn(usedRain, areal, month),
+		// Up to the last observed day, flagged or not: `fitAllDays` scores those too.
+		simulate: simulator(Math.max(idx[idx.length - 1]!, lastAll) + 1),
 		record(k) {
 			if (!input.series?.[k]) return null;
 			const obs = k === kind ? observed : observedOf(k);
 			const on: number[] = [];
-			for (let t = 0; t < days; t++) if (Number.isFinite(obs[t]!) && !excluded[t]) on.push(t);
-			const n = on.length ? on[on.length - 1]! + 1 : 0;
-			return { kind: k, observed: obs, scoredDays: Int32Array.from(on), simulate: simulator(n) };
+			for (let t = 0; t < days; t++) if (!excluded[t]) on.push(t);
+			const sc = scoringDays(on, k === kind ? flags : flagsOf(k), qf, ratingOf(qf, k), days);
+			const n = sc.idx.length ? sc.idx[sc.idx.length - 1]! + 1 : 0;
+			let observedDays = 0;
+			for (const t of on) if (Number.isFinite(obs[t]!)) observedDays++;
+			return { kind: k, observed: obs, scoredDays: sc.idx, censor: sc.censor, observedDays, simulate: simulator(n) };
 		}
 	};
 }
@@ -434,9 +501,17 @@ function yearsOf(pb: CalibrationProblem, idx: Int32Array): Int32Array {
  * record by default), with the scores' bootstrap intervals and benchmarks
  * unless `bare` (a start's score, where only the objective is read).
  */
-function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<RecordProblem, 'observed' | 'simulate'> = pb, bare = false): ScoredPeriod {
+function scored(
+	pb: CalibrationProblem,
+	p: ParamSet,
+	idx: Int32Array,
+	rec: Pick<RecordProblem, 'observed' | 'simulate' | 'censor'> = pb,
+	bare = false
+): ScoredPeriod {
 	const sim = rec.simulate(p);
-	const [o, s] = pair(rec.observed, sim, idx);
+	// Censored above-rating days count as met once the simulation reaches the highest gauging (CR-19).
+	const observed = censoredObserved(rec.observed, sim, idx, rec.censor ?? null);
+	const [o, s] = pair(observed, sim, idx);
 	const d0 = toEpochDay(pb.startDate);
 	const years = yearsOf(pb, idx);
 	const out: ScoredPeriod = {
@@ -444,7 +519,7 @@ function scored(pb: CalibrationProblem, p: ParamSet, idx: Int32Array, rec: Pick<
 		end: fromEpochDay(d0 + idx[idx.length - 1]!),
 		waterYears: [...new Set(years)].sort((a, b) => a - b),
 		scores: fitScores(o, s, years),
-		wr2012Fit: wr2012FitStats(d0, rec.observed, sim, idx)
+		wr2012Fit: wr2012FitStats(d0, observed, sim, idx)
 	};
 	if (bare) return out;
 	out.intervals = bootstrapIntervals(o, s, years);
@@ -534,10 +609,17 @@ function fit(
 	for (let i = 0; i < idx.length; i++) obs[i] = pb.observed[idx[i]!]!;
 	const sim = new Float64Array(idx.length);
 	const years = yearsOf(pb, idx);
+	// Censored days (CR-19): positions and bounds, so each evaluation sets the observation the objective reads.
+	const cen: number[] = [];
+	if (pb.censor) for (let i = 0; i < idx.length; i++) if (!Number.isNaN(pb.censor[idx[i]!]!)) cen.push(i);
 	const loss = (x: Float64Array) => {
 		for (let j = 0; j < specs.length; j++) p[specs[j]!.key] = x[j]!;
 		const full = pb.simulate(p);
 		for (let i = 0; i < idx.length; i++) sim[i] = full[idx[i]!]!;
+		for (const i of cen) {
+			const c = pb.censor![idx[i]!]!;
+			obs[i] = sim[i]! >= c ? sim[i]! : c;
+		}
 		const l = objectiveLoss(objective, obs, sim, years);
 		return penalty ? l + penalty.penalty(pb.natural) : l;
 	};
@@ -781,8 +863,11 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		if (!rec) {
 			notes.push(`The project has no ${RECORD_NAME[want]}, so the fit was not validated against one.`);
 		} else if (rec.scoredDays.length < MIN_RECORD_DAYS) {
+			const flagged = (rec.observedDays ?? rec.scoredDays.length) - rec.scoredDays.length;
 			notes.push(
-				`The ${RECORD_NAME[want]} has only ${rec.scoredDays.length} observed days outside the exclusions, too few to validate against (at least ${MIN_RECORD_DAYS}).`
+				`The ${RECORD_NAME[want]} has only ${rec.scoredDays.length} observed days outside the exclusions` +
+					(flagged > 0 ? ` once the quality flags leave out ${flagged} extrapolated, suspect or infilled days` : '') +
+					`, too few to validate against (at least ${MIN_RECORD_DAYS}).`
 			);
 		} else {
 			const fitted = new Set(all);
@@ -834,6 +919,11 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 	);
 	if (cancelled) notes.push('Calibration was cancelled: the parameters are the best found before it stopped.');
 
+	const fitClean = scored(pb, params, all);
+	// The fit on every observed day, flagged ones included and nothing censored (CR-19), when the flags changed anything.
+	const allDays = pb.allDays ?? all;
+	const fitAllDays =
+		allDays.length !== all.length || (pb.dayQuality?.censoredDays ?? 0) > 0 ? scored(pb, params, allDays, { observed: pb.observed, simulate: pb.simulate, censor: null }) : null;
 	return {
 		model: pb.model,
 		objective,
@@ -847,7 +937,7 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		startParams: pb.startParams,
 		flowKind: pb.flowKind,
 		simulatedKey: 'simulated_outflow',
-		fit: scored(pb, params, all),
+		fit: fitClean,
 		before: scored(pb, pb.startParams, all),
 		splitSample,
 		differential,
@@ -857,6 +947,8 @@ export function calibrate(input: ModelInput, opts: CalibrateOptions = {}): Calib
 		exclusions: pb.exclusions,
 		representativeness,
 		chirpsFactors: pb.chirpsFactors ?? null,
+		dayQuality: pb.dayQuality ?? null,
+		fitAllDays,
 		evaluations,
 		cancelled
 	};

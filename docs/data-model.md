@@ -504,7 +504,10 @@ Un-cherry-pickable by privilege (the licensing assessor's concern, issue #15):
 **Calibration provenance lives in `project.settings`** (no table, column or
 migration; issue #4). `settings.calibrationExclusions` is the list of periods
 left out of every calibration score, each a whole water year or a date range
-with a required reason. `settings.fitRecord` is the record of the automatic fit
+with a required reason. `settings.qualityFlags` (engine ≥ 1.22.0, CR-18/19)
+holds each calibration record's gauged range (highest and lowest field
+gauging with a source) and how automatic calibration treats extrapolated,
+suspect and infilled days; still no migration (model.md §2.10h). `settings.fitRecord` is the record of the automatic fit
 whose parameters Apply wrote: objective, seed, budget, window, exclusions, the
 in-sample and validation scores, notes, engine version and time, and the pan
 coefficient / A-pan evaporation and (engine ≥ 0.31.0) GR4J's PE input,

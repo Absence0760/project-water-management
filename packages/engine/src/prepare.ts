@@ -65,6 +65,7 @@ import {
 	type SeriesKind
 } from './project';
 import { resolveWr2012 } from './reference/wr2012Resolve';
+import { resolveQualityFlags } from './calibrate/qualityFlagSettings';
 import { clonePlain, stableStringify } from './warmstart/plain';
 
 /** One rain-source period's fitted factors (rainSourceFactors), keyed by the period's stable JSON. */
@@ -414,6 +415,7 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	s.zeroRainRuns = resolveZeroRain(raw?.zeroRainRuns, warnings);
 	s.wr2012 = resolveWr2012(raw?.wr2012, warnings);
 	s.ewrRules = resolveEwrRules(raw?.ewrRules, warnings);
+	s.qualityFlags = resolveQualityFlags(raw?.qualityFlags, warnings);
 	s.apanMm = monthly(s.apanMm, 'A-pan evaporation', warnings);
 	s.ewrPragmaticM3PerDay = monthly(s.ewrPragmaticM3PerDay, 'pragmatic EWR', warnings);
 	if (typeof s.lakeEvapFactor !== 'number' || !Number.isFinite(s.lakeEvapFactor) || s.lakeEvapFactor < 0) {
