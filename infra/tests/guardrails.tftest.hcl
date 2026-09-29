@@ -1,5 +1,6 @@
 # Plan-only tests against mocked providers — no AWS credentials, no state, no
-# sops key. They pin the production guardrails that `terraform validate` can't
+# sops key (the runtime secrets are ephemeral variables, set to synthetic
+# values below). They pin the production guardrails that `terraform validate` can't
 # see: runtime/sizing of the Lambdas, the DB's durability + privacy settings,
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
@@ -48,17 +49,6 @@ mock_provider "aws" {
   mock_data "aws_iam_policy_document" {
     defaults = {
       json = "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
-    }
-  }
-}
-
-mock_provider "sops" {
-  mock_data "sops_file" {
-    defaults = {
-      data = {
-        auth_jwt_secret = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        db_app_password = "abcdef0123456789abcdef0123456789abcdef01234567"
-      }
     }
   }
 }
@@ -503,11 +493,49 @@ override_resource {
   }
 }
 
+# Distinct version IDs, so matching each Lambda's RUNTIME_SECRET_VERSION to its
+# own secret's version can fail.
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["api"]
+  override_during = plan
+  values = {
+    version_id = "aaaaaaaa-0000-0000-0000-000000000001"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["worker"]
+  override_during = plan
+  values = {
+    version_id = "bbbbbbbb-0000-0000-0000-000000000002"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret_version.runtime["migrate"]
+  override_during = plan
+  values = {
+    version_id = "cccccccc-0000-0000-0000-000000000003"
+  }
+}
+
+# A known CloudFront header, for the ephemerality check's positive control.
+override_resource {
+  target          = random_password.cloudfront_shared_secret
+  override_during = plan
+  values = {
+    result = "synthetic0cloudfront0header0000000000000000000000"
+  }
+}
+
 variables {
   aws_region      = "af-south-1"
   route53_zone_id = "Z0000000000000000000"
   github_repo     = "Absence0760/project-water-management"
-  secrets_file    = "/dev/null"
+  # Synthetic runtime secrets (ephemeral variables, secrets.tf).
+  auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
+  db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
+  alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
   # Required and validated. Not an example.* (or other RFC 2606) address,
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
@@ -675,12 +703,59 @@ run "runtime_secrets" {
     error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
   }
   assert {
-    condition     = local.runtime_secrets.migrate.WATER_APP_PASSWORD == local.db_app_password && local.runtime_secrets.api.AUTH_JWT_SECRET == local.auth_jwt_secret
-    error_message = "The runtime secrets carry the values from their sources (sops)."
+    condition = (
+      local.runtime_secrets.migrate.WATER_APP_PASSWORD == var.db_app_password &&
+      local.runtime_secrets.api.AUTH_JWT_SECRET == var.auth_jwt_secret &&
+      local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret
+    )
+    error_message = "The runtime secrets carry the values from their sources (the sops-fed variables)."
+  }
+
+  # Out of state (issue #126). Every version is written write-only: the plan
+  # holds no secret_string (a plain one would put the JSON in state), the
+  # write-only argument reads back null (Terraform keeps no copy), and the
+  # counter is the one thing that says when to write again.
+  assert {
+    condition = alltrue([for k, v in aws_secretsmanager_secret_version.runtime :
+      v.secret_string == null && v.secret_string_wo == null && v.secret_string_wo_version == var.runtime_secret_version
+    ])
+    error_message = "Every runtime secret version must use secret_string_wo + secret_string_wo_version (var.runtime_secret_version), never secret_string: a plain secret_string puts the values in state."
+  }
+  assert {
+    condition     = toset(keys(aws_secretsmanager_secret_version.runtime)) == toset(["api", "migrate", "worker"])
+    error_message = "Each runtime secret has one write-only version (the check above ranges over them all)."
+  }
+  # The values are ephemeral, so Terraform refuses to store them anywhere:
+  # ephemeralasnull() turns an ephemeral value into null and leaves any other
+  # alone. Positive control: the CloudFront header is not ephemeral (its
+  # custom_header argument is not write-only, so it stays in state by design;
+  # secrets.tf), and ephemeralasnull keeps it.
+  assert {
+    condition = alltrue([
+      ephemeralasnull(var.auth_jwt_secret) == null,
+      ephemeralasnull(var.db_app_password) == null,
+      ephemeralasnull(var.alerts_token_secret) == null,
+      ephemeralasnull(local.runtime_secrets.api.DATABASE_URL) == null,
+      ephemeralasnull(local.runtime_secrets.worker.DATABASE_URL) == null,
+      ephemeralasnull(local.runtime_secrets.migrate.WATER_APP_PASSWORD) == null,
+    ])
+    error_message = "The sops values, and DATABASE_URL built from one, must be ephemeral, so no state or plan can hold them."
+  }
+  assert {
+    condition     = ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_SHARED_SECRET) != null
+    error_message = "Positive control: ephemeralasnull keeps a non-ephemeral value (the CloudFront header, the one runtime value left in state)."
   }
 
   # Each Lambda names its own secret and the version Terraform wrote (a new
   # version changes the variable, so a rotation cold-starts every instance).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["api"].version_id &&
+      aws_lambda_function.worker.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["worker"].version_id &&
+      aws_lambda_function.migrate.environment[0].variables["RUNTIME_SECRET_VERSION"] == aws_secretsmanager_secret_version.runtime["migrate"].version_id
+    )
+    error_message = "RUNTIME_SECRET_VERSION must be the version_id of the Lambda's own runtime secret version, which changes whenever runtime_secret_version is raised."
+  }
   assert {
     condition = (
       aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["api"].arn &&
@@ -782,50 +857,79 @@ run "runtime_secrets" {
 run "rejects_short_jwt_secret" {
   command = plan
 
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "too-short"
-        db_app_password = "abcdef0123456789abcdef0123456789abcdef01234567"
-      }
-    }
+  variables {
+    auth_jwt_secret = "too-short"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.auth_jwt_secret]
 }
 
 run "rejects_dev_placeholder_jwt_secret" {
   command = plan
 
   # Long enough, so only the placeholder check can refuse it.
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
-        db_app_password = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-      }
-    }
+  variables {
+    auth_jwt_secret = "dev-only-jwt-secret-change-me-0000000000"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.auth_jwt_secret]
 }
 
 run "rejects_non_alphanumeric_db_password" {
   command = plan
 
-  override_data {
-    target = data.sops_file.prod
-    values = {
-      data = {
-        auth_jwt_secret = "0123456789abcdef0123456789abcdef0123456789abcdef"
-        db_app_password = "has@special/chars-and-is-long-enough"
-      }
-    }
+  variables {
+    db_app_password = "has@special/chars-and-is-long-enough"
   }
 
-  expect_failures = [aws_lambda_function.backend]
+  expect_failures = [var.db_app_password]
+}
+
+run "rejects_short_alerts_token_secret" {
+  command = plan
+
+  variables {
+    alerts_token_secret = "0123456789abcdef"
+  }
+
+  expect_failures = [var.alerts_token_secret]
+}
+
+run "rejects_fractional_runtime_secret_version" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 1.5
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+run "rejects_zero_runtime_secret_version" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 0
+  }
+
+  expect_failures = [var.runtime_secret_version]
+}
+
+# Rotation: a raised counter reaches every runtime secret version (the AWS
+# provider replaces a version whose secret_string_wo_version changed, so its
+# version_id, and each Lambda's RUNTIME_SECRET_VERSION with it, changes; the
+# mocks can't show the replacement itself, runtime_secrets checks the wiring).
+run "rotation_counter_reaches_every_secret" {
+  command = plan
+
+  variables {
+    runtime_secret_version = 2
+  }
+
+  assert {
+    condition     = alltrue([for k, v in aws_secretsmanager_secret_version.runtime : v.secret_string_wo_version == 2])
+    error_message = "A raised runtime_secret_version must reach every runtime secret version."
+  }
 }
 
 # ---------------------------------------------------------------------------
@@ -1599,7 +1703,7 @@ run "background_jobs" {
   assert {
     condition = (
       contains(keys(local.runtime_secrets.worker), "ALERTS_TOKEN_SECRET") &&
-      random_password.alerts_token_secret.length >= 32 && !random_password.alerts_token_secret.special &&
+      local.runtime_secrets.worker.ALERTS_TOKEN_SECRET == var.alerts_token_secret &&
       aws_lambda_function.worker.environment[0].variables["ALERTS_ENABLED"] == "true"
     )
     error_message = "The worker signs unsubscribe links (ALERTS_TOKEN_SECRET, ≥ 32 characters) and sends alerts unless the kill switch is off."

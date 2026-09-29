@@ -193,7 +193,7 @@ resource "aws_cloudfront_function" "api_strip_prefix" {
 #
 # The browser never calls the Function URL. CloudFront stamps every /api/*
 # request with X-CloudFront-Shared-Secret (random_password below, also in
-# the Lambda env) and the app rejects requests without it. Direct hits to the
+# the API's runtime secret) and the app rejects requests without it. Direct hits to the
 # Function URL — publicly reachable by AWS design — therefore get 403, so the
 # WAF + per-IP rate limit on this distribution covers the API too.
 # ----------------------------------------------------------------------------
@@ -207,9 +207,15 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 }
 
 # Shared secret — generated once, fed to both the origin custom_header (below)
-# and the Lambda env (lambda.tf). Rotate with
-# `terraform apply -replace=random_password.cloudfront_shared_secret`
+# and the API's runtime secret (secrets.tf, which rewrites it in the same
+# apply through replace_triggered_by). Rotate with
+# `scripts/tf.sh apply -var-file=… -replace=random_password.cloudfront_shared_secret`
 # (a few seconds of 403s while CloudFront and Lambda converge).
+#
+# This is the one runtime value still in Terraform state: custom_header's
+# value is not a write-only argument, so an ephemeral source couldn't reach it.
+# A state reader could call the Function URL directly (past the WAF), not
+# forge a session.
 resource "random_password" "cloudfront_shared_secret" {
   length  = 48
   special = false
