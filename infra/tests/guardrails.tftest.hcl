@@ -4,7 +4,9 @@
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
+# the private-only network (no gateway or default route, the exact security-group graph, the Function
+# URL's auth type, every security group's description), and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -221,6 +223,56 @@ override_resource {
   override_during = plan
   values = {
     id = "sg-0000000000worker"
+  }
+}
+
+# Known IDs for the rest of the security groups and the route table, so the
+# network run can assert which group a rule, Lambda or DB points at.
+override_resource {
+  target          = aws_security_group.api_lambda
+  override_during = plan
+  values = {
+    id = "sg-000000000000api"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.migrate_lambda
+  override_during = plan
+  values = {
+    id = "sg-00000000migrate"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.rds
+  override_during = plan
+  values = {
+    id = "sg-000000000000rds"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce
+  override_during = plan
+  values = {
+    id = "sg-00000000000vpce"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce_sqs
+  override_during = plan
+  values = {
+    id = "sg-000000000vpcesqs"
+  }
+}
+
+override_resource {
+  target          = aws_route_table.private
+  override_during = plan
+  values = {
+    id = "rtb-00000000private"
   }
 }
 
@@ -1867,5 +1919,196 @@ run "waf_auth_rule_matches_decoded_path" {
       "${t.priority}:${t.type}"
     ]) == toset(["0:URL_DECODE", "1:NORMALIZE_PATH", "2:LOWERCASE"])
     error_message = "The auth rate limit's path transformations must be URL_DECODE, then NORMALIZE_PATH, then LOWERCASE."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Network: the private-only VPC and the security-group graph (network.tf)
+# ---------------------------------------------------------------------------
+#
+# Terraform tests can't enumerate "every resource of a type", so the
+# whole-module invariants (no gateway or default route anywhere, the complete
+# set of security-group rules) read the source, like the parameter group's
+# lifecycle check in production_guardrails; the plan-time asserts pin the
+# same edges by resolved ID. `terraform test` refuses an assert that names no
+# configuration object, so each source-reading one is anchored to the VPC it
+# describes with `aws_vpc.main.cidr_block != ""`.
+
+run "network" {
+  command = plan
+
+  # --- No way out: no gateway, no default route, no public addresses -------
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("resource \"aws_(internet_gateway|egress_only_internet_gateway|nat_gateway|eip|route|vpn_gateway|vpc_peering_connection|ec2_transit_gateway_vpc_attachment)\"", file(f))) == 0
+    ])
+    error_message = "The VPC is private-only: no internet, egress-only or NAT gateway, Elastic IP, aws_route, VPN, peering or transit attachment. External hosts are reached by a Lambda outside the VPC (feeds.tf), AWS APIs through interface endpoints."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("\"(0\\.0\\.0\\.0/0|::/0)\"", file(f))) == 0
+    ])
+    error_message = "No 0.0.0.0/0 or ::/0 anywhere in the module: not as a route, not in a security-group rule."
+  }
+  assert {
+    condition     = aws_vpc.main.cidr_block != "" && length(regexall("\\broute\\s*\\{", regex("(?s)resource \"aws_route_table\" \"private\" \\{.*?\\n\\}", file("network.tf")))) == 0
+    error_message = "The private route table holds only the implicit local route (no inline route blocks)."
+  }
+  assert {
+    condition     = length(aws_route_table_association.private) == 2 && alltrue([for a in aws_route_table_association.private : a.route_table_id == aws_route_table.private.id])
+    error_message = "Both private subnets must be explicitly associated with the route-less private route table."
+  }
+  assert {
+    condition     = alltrue([for s in aws_subnet.private : s.map_public_ip_on_launch != true])
+    error_message = "The private subnets never hand out public IPs (map_public_ip_on_launch unset or false)."
+  }
+
+  # --- Security-group rules: SG to SG only, the exact graph ------------------
+  # Every rule references another security group (no CIDR, no prefix list),
+  # rules are standalone resources (no aws_security_group_rule, no inline
+  # blocks), and the full set of edges is exactly this.
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("\\b(cidr_ipv4|cidr_ipv6|cidr_blocks|ipv6_cidr_blocks|prefix_list_id|prefix_list_ids)\\s*=", file(f))) == 0
+      && length(regexall("resource \"aws_security_group_rule\"", file(f))) == 0
+      && length(regexall("(?m)^\\s*(ingress|egress)\\s*\\{", file(f))) == 0
+    ])
+    error_message = "Security-group rules reference security groups only (no CIDR or prefix list) and are aws_vpc_security_group_{ingress,egress}_rule resources, never inline blocks or aws_security_group_rule."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && toset(flatten([
+      for f in fileset(".", "*.tf") : [
+        for b in regexall("(?s)resource \"aws_vpc_security_group_ingress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
+        format("%s <- %s %s/%s-%s",
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
+          try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+          try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+        )
+      ]
+      ])) == toset([
+      "rds <- api_lambda tcp/5432-5432",
+      "rds <- migrate_lambda tcp/5432-5432",
+      "rds <- worker_lambda tcp/5432-5432",
+      "vpce <- migrate_lambda tcp/443-443",
+      "vpce_sqs <- api_lambda tcp/443-443",
+      "vpce_sqs <- worker_lambda tcp/443-443",
+      "vpce_ses <- api_lambda tcp/443-443",
+      "vpce_ses <- worker_lambda tcp/443-443",
+    ])
+    error_message = "Ingress rules must be exactly: Postgres from the API, migrate and worker Lambdas; Secrets Manager endpoint from migrate; SQS and SES endpoints from the API and worker. A new edge is a deliberate change to this list."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && toset(flatten([
+      for f in fileset(".", "*.tf") : [
+        for b in regexall("(?s)resource \"aws_vpc_security_group_egress_rule\" \"[A-Za-z0-9_-]+\" \\{.*?\\n\\}", file(f)) :
+        format("%s -> %s %s/%s-%s",
+          try(regex("\\n\\s*security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "?"),
+          try(regex("\\n\\s*referenced_security_group_id\\s*=\\s*aws_security_group\\.([A-Za-z0-9_-]+)\\.id", b)[0], "NOT-A-SECURITY-GROUP"),
+          try(regex("\\n\\s*ip_protocol\\s*=\\s*\"([^\"]+)\"", b)[0], "?"),
+          try(regex("\\n\\s*from_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+          try(regex("\\n\\s*to_port\\s*=\\s*([0-9]+)", b)[0], "?"),
+        )
+      ]
+      ])) == toset([
+      "api_lambda -> rds tcp/5432-5432",
+      "api_lambda -> vpce_sqs tcp/443-443",
+      "api_lambda -> vpce_ses tcp/443-443",
+      "migrate_lambda -> rds tcp/5432-5432",
+      "migrate_lambda -> vpce tcp/443-443",
+      "worker_lambda -> rds tcp/5432-5432",
+      "worker_lambda -> vpce_sqs tcp/443-443",
+      "worker_lambda -> vpce_ses tcp/443-443",
+    ])
+    error_message = "Egress rules must be exactly the Lambdas' paths to Postgres and their endpoints; RDS and the endpoints have no egress."
+  }
+
+  # --- The database: only the three in-VPC Lambdas reach it ---------------
+  assert {
+    condition     = aws_db_instance.main.vpc_security_group_ids == toset([aws_security_group.rds.id]) && !aws_db_instance.main.publicly_accessible
+    error_message = "RDS sits in its own security group only, and is not publicly accessible."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.rds_from_api.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_api.referenced_security_group_id == aws_security_group.api_lambda.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_migrate.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_migrate.referenced_security_group_id == aws_security_group.migrate_lambda.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_worker.security_group_id == aws_security_group.rds.id &&
+      aws_vpc_security_group_ingress_rule.rds_from_worker.referenced_security_group_id == aws_security_group.worker_lambda.id &&
+      alltrue([for r in [aws_vpc_security_group_ingress_rule.rds_from_api, aws_vpc_security_group_ingress_rule.rds_from_migrate, aws_vpc_security_group_ingress_rule.rds_from_worker] : r.ip_protocol == "tcp" && r.from_port == 5432 && r.to_port == 5432 && r.cidr_ipv4 == null && r.cidr_ipv6 == null])
+    )
+    error_message = "Postgres (5432/tcp) is reachable from the API, migrate and worker Lambda security groups only."
+  }
+  assert {
+    condition = (
+      aws_lambda_function.backend.vpc_config[0].security_group_ids == toset([aws_security_group.api_lambda.id]) &&
+      aws_lambda_function.migrate.vpc_config[0].security_group_ids == toset([aws_security_group.migrate_lambda.id]) &&
+      aws_lambda_function.worker.vpc_config[0].security_group_ids == toset([aws_security_group.worker_lambda.id]) &&
+      length(aws_lambda_function.fetcher.vpc_config) == 0
+    )
+    error_message = "The API, migrate and worker Lambdas each run in their own security group; the fetcher stays outside the VPC (the renderer's no-VPC pin is in its own run)."
+  }
+
+  # --- The Function URL ------------------------------------------------------
+  # NONE, with the CloudFront shared secret checked first in the app
+  # (backend/src/app.ts) and InvokeFunction allowed only via the URL. Moving
+  # to AWS_IAM means CloudFront OAC for Lambda plus a body-hash change in the
+  # SPA; either way, a deliberate edit here.
+  assert {
+    condition = (
+      aws_lambda_function_url.backend.authorization_type == "NONE" &&
+      aws_lambda_permission.function_url_public.function_url_auth_type == "NONE" &&
+      aws_lambda_permission.function_url_invoke.action == "lambda:InvokeFunction" &&
+      aws_lambda_permission.function_url_invoke.invoked_via_function_url == true
+    )
+    error_message = "The Function URL is authorization_type NONE (shared secret in the app), and the public InvokeFunction permission is restricted to invocations via the URL."
+  }
+
+  # --- Security-group descriptions, verbatim -------------------------------
+  # A description can't change in place: AWS replaces the group, and deleting
+  # one a Lambda ENI still holds can stall an apply for 20+ minutes. Pinning
+  # the text makes any edit a deliberate change here, made knowing that.
+  assert {
+    condition = {
+      api_lambda     = aws_security_group.api_lambda.description
+      migrate_lambda = aws_security_group.migrate_lambda.description
+      worker_lambda  = aws_security_group.worker_lambda.description
+      rds            = aws_security_group.rds.description
+      vpce           = aws_security_group.vpce.description
+      vpce_sqs       = aws_security_group.vpce_sqs.description
+      vpce_ses       = aws_security_group.vpce_ses.description
+      } == {
+      api_lambda     = "API Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
+      migrate_lambda = "Migrate Lambda ENIs: egress to Postgres and the Secrets Manager endpoint only."
+      worker_lambda  = "Worker Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
+      rds            = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
+      vpce           = "Secrets Manager interface endpoint: 443 from the migrate Lambda only."
+      vpce_sqs       = "SQS interface endpoint: 443 from the API and worker Lambdas only."
+      vpce_ses       = "SES API interface endpoint: 443 from the API and worker Lambdas only."
+    }
+    error_message = "A security-group description changed. That replaces the group on the next apply (see the comment above); update this pin only if you mean it."
+  }
+  assert {
+    condition = aws_vpc.main.cidr_block != "" && alltrue([
+      for f in fileset(".", "*.tf") :
+      length(regexall("resource \"aws_security_group\"", file(f))) == length(regexall("resource \"aws_security_group\" \"(api_lambda|migrate_lambda|worker_lambda|rds|vpce|vpce_sqs|vpce_ses)\"", file(f)))
+    ])
+    error_message = "A new security group needs its description pinned in the assert above."
+  }
+  assert {
+    condition = alltrue([
+      for d in [
+        aws_security_group.api_lambda.description, aws_security_group.migrate_lambda.description,
+        aws_security_group.worker_lambda.description, aws_security_group.rds.description,
+        aws_security_group.vpce.description, aws_security_group.vpce_sqs.description,
+        aws_security_group.vpce_ses.description,
+      ] : length(d) <= 255 && can(regex("^[a-zA-Z0-9. _:/()#,@\\[\\]+=&;{}!$*-]+$", d))
+    ])
+    error_message = "Security-group descriptions are limited to 255 characters of a-zA-Z0-9. _-:/()#,@[]+=&;{}!$* (no apostrophes, no em dashes), or AWS rejects the create."
   }
 }

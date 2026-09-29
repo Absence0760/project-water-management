@@ -53,17 +53,24 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   and no public subnet. Nothing needs the internet, and Lambda log delivery
   doesn't go through the function's ENI. The VPC reaches exactly three AWS
   APIs, each through its own interface endpoint and security group: **SES**
-  (the API Lambda's `SendEmail`; `ses.tf`), **Secrets Manager** (the migrate
-  Lambda only; its endpoint policy allows reading the RDS master secret and
-  nothing else) and **SQS** (the API sends job wake-ups, the worker uses the
-  `jobs` queue and the data feeds' `fetch-requests` / `ingest-results`; its
-  endpoint policy names only those two roles and those three queues, the API
-  on `jobs` alone; `jobs.tf`; the render queues joined them, reports.tf).
-  The worker also sends report emails through the SES endpoint. If a future
-  feature needs egress, add the
-  matching VPC endpoint for an AWS service. Genuinely external hosts are
-  reached by a Lambda **outside** the VPC with no database access, as the
-  data feeds' fetcher does (`feeds.tf`), rather than a NAT (~$33/month).
+  (`SendEmail` from the API and the worker, which sends report and alert
+  emails; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
+  (the migrate Lambda only; its endpoint policy allows reading the RDS master
+  secret and nothing else) and **SQS** (from the API and the worker; its
+  endpoint policy, `jobs.tf`, names only those two roles and six queues: the
+  API may only send to `jobs`; the worker uses `jobs`, sends
+  `fetch-requests` and `render-requests`, and consumes `ingest-results`,
+  `render-results` and `mail-events`). Security groups only ever reference
+  other security groups, never a CIDR: RDS takes 5432 from the API, migrate
+  and worker Lambda groups and nothing else, each endpoint takes 443 from
+  the Lambdas that use it, and none of RDS or the endpoints has egress. A
+  security group's description can't change in place (AWS replaces the
+  group, which can stall an apply for 20+ minutes while Lambda ENIs let go),
+  so the network test pins each one verbatim. If a future feature needs
+  egress, add the matching VPC endpoint for an AWS service. Genuinely
+  external hosts are reached by a Lambda **outside** the VPC with no
+  database access, as the data feeds' fetcher (`feeds.tf`) and the report
+  renderer (`reports.tf`) do, rather than a NAT (~$33/month).
 - **Email (SES).** Domain identity for the site hostname with Easy DKIM
   (2048-bit), custom MAIL FROM `mail.<domain>` (MX + SPF), DMARC at `p=none`,
   and a configuration set that requires TLS to the receiving server, puts
@@ -143,10 +150,10 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
 | `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`) |
-| `network.tf` | VPC, 2 private subnets, security groups, Secrets Manager endpoint |
+| `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
-| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint (policy: two roles, one queue), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
+| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
@@ -160,7 +167,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (38 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (39 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -497,7 +504,8 @@ no owner credentials, the 5-minute tick, its invoke permission and its
 zero-retry, 300-second-maximum-age delivery (EventBridge target and Lambda
 async config), the SQS
 event source, the SQS endpoint's policy naming only the two roles and the
-jobs queue, and the deploy role's right to update the worker); the data-feed
+six queues (jobs, fetch-requests, ingest-results, render-requests,
+render-results, mail-events), one per statement, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
 size and concurrency, an environment with no database URL, a role on the two
 feed queues only; the worker's `FEED_FETCHER=sqs` and its event source; the
@@ -533,7 +541,20 @@ Lambda and a worker cap below the sum of its SQS triggers'
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so
-`/api/%61uth/login` can't slip past it).
+`/api/%61uth/login` can't slip past it). The `network` run pins the
+private-only VPC: no internet, egress-only or NAT gateway, Elastic IP,
+`aws_route`, VPN, peering or transit attachment anywhere in the module, no
+`0.0.0.0/0` or `::/0` string, no inline route on the private route table
+(both subnets associated with it) and no public IPs on launch; security-group
+rules that reference security groups only (no CIDR, prefix list, inline block
+or `aws_security_group_rule`) and form exactly the expected graph, ingress and
+egress, ports included (read from the source, since a test can't enumerate
+resources); the DB in its own group, reachable on 5432 only from the API,
+migrate and worker Lambda groups; each in-VPC Lambda in its own group and the
+fetcher outside the VPC (the renderer's no-VPC pin is in its reports run);
+the Function URL's `NONE` auth type with `InvokeFunction` allowed only via the
+URL; and every security group's description, verbatim and within AWS's
+character set, because changing one replaces the group.
 Terraform is pinned in `.terraform-version` (tfenv) and providers are pinned in
 the committed `.terraform.lock.hcl` (linux_amd64, linux_arm64, darwin_arm64).
 
