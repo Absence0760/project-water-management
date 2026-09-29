@@ -201,17 +201,20 @@ the form until it is ticked. The points sit in their own scroll box under the
 box's heading, with **Read the full terms** beside it (issue #162;
 `TermsSummary` `contained`): on a window 901 px wide or more the sign-up card
 (`AuthCard` `fit`) is a column the window's height, and the box gives up
-height until the form fits, so the page doesn't scroll at 1440×900 (in
-English and Afrikaans, a dead invitation's warning included; at 1280×800 in
-English) and the box, the tick and the button are on screen together. It
-shows the whole list whenever the window has room, and never less than its
-heading and about three lines; below that the page scrolls after all. On a
+height until the form fits, so the page doesn't scroll at 1440×900 or
+1280×800 (in English and Afrikaans, a dead invitation's warning included)
+and the box, the tick and the button are on screen together. It shows the
+whole list whenever the window has room, and never less than its heading and
+two lines of points (the floor follows the heading's height, one line or two
+where the link wraps under it); below that the page scrolls after all. On a
 phone the page scrolls and the box is at most 12rem. While the points overflow
 the box is a focusable group named by its heading (the scroll-region watcher,
 `lib/a11y/scrollRegions.ts`), so Tab reaches it and the arrow keys scroll it,
 and a fade at its foot says there is more below (`auth-pages.spec.ts`). The
-sign-in pages' space above the title is 4vh and 1.5rem (was 6vh and 2rem) to
-make that room; the title still sits in the same place on every one of them.
+sign-in pages' space above the title is 3vh and 1rem (was 6vh and 2rem), and
+their form 440 px wide (was 380), to make that room; the title still sits in
+the same place on every one of them. On the sign-up card only, the gaps under
+the title and between the fields are tighter (0.5rem).
 
 **Re-acceptance notice.** When the terms change (`LEGAL_VERSION`), a
 signed-in account whose `termsCurrent` is false (it accepted an older
@@ -255,7 +258,7 @@ closes a finding a reader would care about, update `departures.ts`. The
 `/verify-email` and `/alerts/unsubscribe` share one frame,
 `lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
 brand panel with the catchment drawing on the left (55 %), the form on the
-right, 380 px wide. They are forms, not dashboards: each fits a 1280 × 800
+right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
 window with no page scroll, in every state (the longest is the sign-up form
 under a dead-invitation warning).
 

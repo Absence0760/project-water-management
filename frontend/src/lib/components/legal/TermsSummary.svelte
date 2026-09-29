@@ -9,7 +9,8 @@
 	// scroll box under the heading, so the form fits the window instead of the
 	// page scrolling. It gives up height only when it has to: on a wide screen
 	// the sign-up card (AuthCard `fit`) lets it grow to its full height when the
-	// window has room, and shrinks it to fit when it hasn't; on a phone it is at
+	// window has room, and shrinks it to fit when it hasn't, never below the
+	// heading and two lines of points; on a phone it is at
 	// most 12rem. While the points overflow, the box is a focusable, named group
 	// (the app's scroll-region watcher, $lib/a11y/scrollRegions), so the arrow
 	// keys scroll it; a fade at its foot says there is more below, and a
@@ -29,6 +30,8 @@
 	} = $props();
 
 	let scroller: HTMLDivElement | undefined = $state();
+	/** The heading row's height (one line, or two where the link wraps under it): the box's floor is it plus two lines of points. */
+	let headHeight = $state(0);
 	/** Points below the box's foot: shows the fade. */
 	let more = $state(false);
 	const measure = () => {
@@ -51,9 +54,16 @@
 	{#if i18n.locale !== 'en'}<p class="lang">{t(SUMMARY_LANGUAGE_NOTE)}</p>{/if}
 {/snippet}
 
-<section class="summary" class:contained class:fit-shrink={contained} aria-labelledby="{id}-h" data-terms-summary>
+<section
+	class="summary"
+	class:contained
+	class:fit-shrink={contained}
+	aria-labelledby="{id}-h"
+	data-terms-summary
+	style:min-height={contained && headHeight ? `calc(${headHeight}px + 4.9rem)` : null}
+>
 	{#if contained}
-		<div class="head">
+		<div class="head" bind:clientHeight={headHeight}>
 			<h2 id="{id}-h">{t(SUMMARY_TITLE)}</h2>
 			<a class="full" href={termsHref}>{t('Read the full terms')}</a>
 		</div>
@@ -101,7 +111,7 @@
 	.contained {
 		display: flex;
 		flex-direction: column;
-		/* Never shorter than the heading and about three lines of points: they stay readable in place. */
+		/* Never shorter than the heading and two lines of points (set from the heading's height once it is on the page; this until then). */
 		min-height: 7.5rem;
 	}
 	.head {
