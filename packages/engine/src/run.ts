@@ -19,6 +19,7 @@ import {
 import { ACCUMULATION_COLUMN, type AccumulationRun } from './accumulation';
 import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
+import { FLOW_FILL_COLUMNS } from './flowGapFill';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
@@ -256,7 +257,7 @@ function runNetwork(
 	const capturing = warm.captureDay !== undefined;
 	const resume = warm.resume;
 	const prepared = prepareRun(input, { ...(resume ? { pinned: resume.pinned.fits } : {}), ...(capturing ? { captureFits: true } : {}) });
-	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily } = prepared;
+	const { warnings, settings, series, start, end, days, startDate, aligned, month, chirpsCorrection, zeroRain, accumulation, doubleMass, rainSource, apanDaily, flowFill } = prepared;
 	const captureAt = capturing ? warm.captureDay! - start : undefined;
 	if (captureAt !== undefined && (captureAt < 0 || captureAt > days))
 		throw new RangeError(`capture date ${fromEpochDay(warm.captureDay!)} is outside the run (${startDate} … ${fromEpochDay(end)}, or the day after it)`);
@@ -365,6 +366,14 @@ function runNetwork(
 				'm³/day',
 				aligned(otherKind).map((v) => (v === null ? NaN : v * SEC_PER_DAY))
 			);
+		}
+		// Gap filling (engine ≥ 1.20.0, ./flowGapFill.ts): each filled record's filled days and method, beside it.
+		for (const [col, kind] of [['observed_flow', observedKind], ['observed_flow_other', otherKind]] as const) {
+			const f = kind ? flowFill?.[kind] : undefined;
+			if (!f?.any) continue;
+			const c = FLOW_FILL_COLUMNS[col];
+			push(null, c.values.key, c.values.label, 'm³/day', f.values.map((v, t) => (f.code[t] && v !== null ? v * SEC_PER_DAY : NaN)));
+			push(null, c.code.key, c.code.label, '', f.code);
 		}
 	}
 	push(null, 'ewr', 'Pragmatic EWR', 'm³/day', ewr);
@@ -891,6 +900,7 @@ function runNetwork(
 			chirpsCorrection,
 			...(forecastRain !== undefined ? { forecastRain } : {}),
 			zeroRainInfill: zeroRain?.infill ?? null,
+			...(flowFill ? { flowGapFill: Object.values(flowFill).map((f) => f.summary) } : {}),
 			rainSource: rainSource?.info ?? null,
 			rainAccumulation: accumulation?.info ?? null,
 			...(apanDaily ? { apanDaily } : {}),

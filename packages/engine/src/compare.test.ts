@@ -1097,6 +1097,30 @@ describe('diffInputs', () => {
 		expect(texts(rain(null), rain(v3))).toEqual(['Rainfall (catchment) is now CHIRPS v3.0 (was an unrecorded version)']);
 	});
 
+	it('notes a change of a series’ source or given unit (issue #66), only when both runs recorded it', () => {
+		const s = (origin?: { source: string | null; unit: string | null; factor: number | null } | null) =>
+			snapshot({ series: { flow_observed_m3s: { startDate: '2000-01-01', length: 366, valuesSha256: 'aa', ...(origin !== undefined ? { origin } : {}) } } });
+		const dws = { source: 'DWS X1H001', unit: 'm³/s', factor: 1 };
+		expect(texts(s(dws), s({ ...dws, unit: 'l/s', factor: 0.001 }))).toEqual([
+			'Observed flow now comes from DWS X1H001 · given in l/s (× 0.001) (was DWS X1H001 · given in m³/s)'
+		]);
+		expect(texts(s(null), s(dws))).toEqual(['Observed flow now comes from DWS X1H001 · given in m³/s (was source not recorded)']);
+		expect(texts(s(dws), s({ ...dws }))).toEqual([]);
+		// A run from before the source was recorded: nothing to compare.
+		expect(texts(s(), s(dws))).toEqual([]);
+	});
+
+	it('notes a change of the flow gap filling, and nothing between a run from before it and one with it off (issue #66)', () => {
+		const spec = { interpolateMaxDays: 5, donor: 'flow_logger_m3s', donorMaxDays: 60, donorMinOverlapDays: 365 };
+		const fill = (f: unknown) => snapshot({ settings: { ...snapshot().settings, flowGapFill: f } as never });
+		const off = { flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false };
+		expect(texts(snapshot(), fill(off))).toEqual([]);
+		expect(texts(fill(off), fill({ ...off, flow_observed_m3s: spec, useFilledDays: true }))).toEqual([
+			'Gap filling of the observed gauge flow: not filled → interpolate gaps up to 5 days, fill gaps up to 60 days from the logger flow (365 shared days at least)',
+			'Filled flow days: shown only → read by the statistics'
+		]);
+	});
+
 	it('compares the days both runs cover from their stored values, so an edit cannot hide behind a date change', () => {
 		// The licensing-authority finding: rain cut 15 % and one day added read only "series extended".
 		const rain = Array.from({ length: 366 }, (_, i) => (i % 7 === 0 ? 20 : 0));

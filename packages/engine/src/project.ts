@@ -10,6 +10,8 @@ import type { PlausibilityChecks } from './plausibility';
 import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
+import type { FlowFillSummary, FlowGapFillSettings } from './flowGapFill';
+import type { SeriesOrigin } from './seriesProvenance';
 import type { RainAccumulationInfo } from './accumulation';
 import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
@@ -432,6 +434,14 @@ export interface ProjectSettings {
 	 */
 	calibrationExclusions: CalibrationExclusion[];
 	/**
+	 * Gap filling of the observed flow records (engine ≥ 1.20.0, issue #66,
+	 * ./flowGapFill.ts, docs/model.md §2.10h): a spec per record, null = not
+	 * filled (the default), and whether statistics read the filled days
+	 * (default false: they are shown and exported only). Filled values never
+	 * change the stored series.
+	 */
+	flowGapFill: FlowGapFillSettings;
+	/**
 	 * The automatic fit whose parameters "Apply to form" wrote, with its
 	 * validation (./calibrate/provenance.ts). null = none: the parameters were
 	 * set by hand or imported. Never changes model results.
@@ -535,6 +545,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationEnd: null,
 		calibrationFlowKind: null,
 		calibrationExclusions: [],
+		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
+		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false },
 		fitRecord: null,
 		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 },
 		wr2012: defaultWr2012Settings()
@@ -782,7 +794,9 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10). The one
  * thing that reads it is automatic calibration's dry → wet test, which ranks
  * water years by it (engine ≥ 1.19.0, CalibrateOptions.rankYearsBy); it is
- * never scored there either.
+ * never scored there either. And, only when settings.flowGapFill names it
+ * as a donor (engine ≥ 1.20.0, ./flowGapFill.ts), it is scaled into the
+ * gauge or logger record's gaps.
  *
  * `rain_catchment_alt_mm` (engine ≥ 0.30.0, issue #40 (b)) is a second
  * catchment-rain record, e.g. an in-catchment automatic station. The engine
@@ -1589,6 +1603,14 @@ export interface DailySeries {
 	 * snapshot, for the run comparison and the fit record's forcing.
 	 */
 	provenance?: SeriesProvenance | null;
+	/**
+	 * Where the values came from and the unit they were given in
+	 * (time_series.source / source_unit / source_unit_factor,
+	 * 107_series_source.sql); null = none recorded, absent = not known here.
+	 * The model never reads it: a run records it in its input snapshot, for
+	 * the run comparison and the fit record.
+	 */
+	origin?: SeriesOrigin | null;
 }
 
 export interface SeriesMeta {
@@ -1611,6 +1633,11 @@ export interface SeriesMeta {
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
 	product?: string | null;
 	productVersion?: string | null;
+	/** Where the values came from: a station, agency, file or feed (107_series_source.sql); null = not recorded. */
+	source?: string | null;
+	/** The unit the values were given in and the factor that converted them to `unit` (107); both null = not recorded. */
+	sourceUnit?: string | null;
+	sourceUnitFactor?: number | null;
 	/** A data feed is backfilling a confirmed replacement of this series; its values stay as they are until it swaps in (feed_stage, 032). */
 	rebuilding?: boolean;
 	/**
@@ -2339,6 +2366,12 @@ export interface RunSummary {
 	 * the project has no catchment rain; absent on older runs.
 	 */
 	zeroRainInfill?: ZeroRainInfill | null;
+	/**
+	 * What settings.flowGapFill did to each record it fills (engine ≥ 1.20.0,
+	 * ./flowGapFill.ts): its days counted over the run, the gaps and the
+	 * donor's fit over the whole record. Absent when no record is filled.
+	 */
+	flowGapFill?: FlowFillSummary[];
 	/** What settings.rainSource did (engine ≥ 0.30.0, ./rainSourcePeriods.ts); null without periods, absent before 0.30.0. */
 	rainSource?: RainSourceInfo | null;
 	/**
