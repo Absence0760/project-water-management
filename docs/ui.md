@@ -3718,16 +3718,15 @@ read it before.
   server refuses with `409`); the run header repeats the badge as a link to
   the section. Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
-- **Summary** (the "Run summary" region): it opens with one to three plain
+- **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve
   rules met in X % of months at the headline site when there is a rule table,
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every hydrological unit got at least 95 %"; left out when the run has no farms), then,
-  only when the run was scored against observed flow, the NSE and PBIAS with
-  PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
-  parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
+  "Every hydrological unit got at least 95 %"; left out when the run has no farms). The
+  calibration fit is left to the NSE and PBIAS cards (a sentence repeating
+  them was dropped, issue #177; the printable report draws the same cards). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
