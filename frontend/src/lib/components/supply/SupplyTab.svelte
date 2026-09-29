@@ -329,7 +329,6 @@
 							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short {weekText(weekEnd)}</a></dt>
 							<dd class="value" class:none={totals.weekShort === null}>{totals.weekShort === null ? (weekError ? '–' : '…') : fmtNum(totals.weekShort)}<small>of {fmtNum(totals.units)}</small></dd>
 							<dd class="sub">{week ? `${week.reportStart} to ${week.reportEnd}` : ''}</dd>
-							{#if totals.mustCut !== null}<dd class="sub">{totals.mustCut ? `${fmtNum(totals.mustCut)} to cut (curtailment)` : 'none to cut (curtailment)'}</dd>{/if}
 						</div>
 						<div class="stat" class:flagged={totals.shortfallM3Day > 0.5} data-kpi="shortfall">
 							<dt>Total shortfall</dt>

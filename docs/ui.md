@@ -3473,8 +3473,9 @@ read it before.
   recorded rain (on a forecast run, the 7 days before the forecast, issue
   #51), the reporting window's *Last 7 days* and the publication's own rule,
   so the portfolio's count and this page agree,
-  `backend/src/publish/recent.ts`; with the number the curtailment table asks
-  to cut; the tile links to the curtailment over those days); *Total
+  `backend/src/publish/recent.ts`; the tile links to the curtailment over
+  those days, and carries no curtailment count of its own, since the table's
+  default window is the project's, not the week); *Total
   shortfall* (Mm³/a and mean m³/day of demand not supplied). The week needs
   each unit's `deficit` series: fetched four at a time through the Runs
   cache; "…" until they are in, with a Try again if one fails.
