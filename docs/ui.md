@@ -3555,9 +3555,10 @@ read it before.
   rows on a laptop (three at 1280 px until its groups could break across rows; [§ On this page
   menu](#on-this-page-menu)), and on phones is one sideways strip.
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
-  Plausibility (the panel's *Plausibility checks*, one word in the menu so it
-  still fits two rows at 1280 px beside the runs rail with the Water balance
-  entry, issue #137) only on a run made by engine 0.25.0 or later. The
+  Plausibility only on a run made by engine 0.25.0 or later. Plausibility
+  and Outputs are one word in the menu (the panels' headings say
+  *Plausibility checks* and *Explore outputs*) so it still fits two rows at
+  1280 px beside the runs rail with the Water balance entry (issue #137). The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to
   section, or a focused control, clears both the phone bar and the menu.
 - **Page order.** The results are grouped by the question they answer

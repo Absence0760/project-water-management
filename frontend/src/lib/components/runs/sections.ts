@@ -65,7 +65,9 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			label: 'Dig deeper',
 			sections: [
 				{ id: 'res-checks', label: 'Self-checks' },
-				{ id: 'res-explore', label: 'Explore outputs' }
+				// "Outputs", the panel's Explore outputs: with Water balance added, the longer word pushed the last link
+				// into More at 1280 px beside the runs rail (issue #137).
+				{ id: 'res-explore', label: 'Outputs' }
 			]
 		}
 	];

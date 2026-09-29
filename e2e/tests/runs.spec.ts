@@ -252,7 +252,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 		'Validation',
 		'Publication',
 		'Self-checks',
-		'Explore outputs'
+		'Outputs'
 	]);
 	// The panels are grouped by the question they answer, in the menu and on the page alike.
 	const groups = ['Model quality', 'Record', 'Dig deeper'];
@@ -261,7 +261,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	await expect(menu.getByRole('list', { name: 'River & Reserve' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Units & users' })).toHaveCount(0);
 	await expect(menu.getByRole('list', { name: 'Model quality' }).getByRole('link').first()).toHaveText('Hydrograph');
-	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Explore outputs']);
+	await expect(menu.getByRole('list', { name: 'Dig deeper' }).getByRole('link')).toHaveText(['Self-checks', 'Outputs']);
 	// The summary opens with the model checks, each linking to its panel.
 	const checks = page.getByRole('list', { name: 'Model checks' });
 	await expect(checks.getByRole('link', { name: /^Self-checks all \d+ passed$/ })).toHaveAttribute('href', '#res-checks');
@@ -285,7 +285,7 @@ test('the results menu jumps to each section below the sticky header', async ({ 
 	expect(menuBox!.y).toBeGreaterThanOrEqual(-1);
 	expect(top!.y).toBeGreaterThanOrEqual(menuBox!.y + menuBox!.height);
 
-	await menu.getByRole('link', { name: 'Explore outputs' }).click();
+	await menu.getByRole('link', { name: 'Outputs', exact: true }).click();
 	await expect(page.getByRole('region', { name: 'Explore any output' })).toBeInViewport();
 	await expect(page).toHaveURL(/#res-explore$/);
 
@@ -365,7 +365,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	await page.goto(`/projects/${project.id}?tab=runs`);
 
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
 	// The list scrolls inside its own panel rather than running off the rail.
 	const runs = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('list');
 	expect(await runs.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
@@ -378,7 +378,7 @@ test('with a long runs list the runs rail and the whole results menu stay in vie
 	// The runs rail (the app sidebar is a complementary landmark too, since issue #17's shell).
 	const rail = page.getByRole('region', { name: 'Runs & results' }).getByRole('complementary');
 	await expect.poll(() => rail.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(0);
-	for (const name of ['Summary', 'Explore outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
+	for (const name of ['Summary', 'Outputs']) await expect(menu.getByRole('link', { name })).toBeInViewport({ ratio: 1 });
 
 	// A long list gets a filter over the labels.
 	const filter = page.getByRole('searchbox', { name: 'Filter runs by label' });
