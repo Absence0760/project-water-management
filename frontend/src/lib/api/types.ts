@@ -113,6 +113,8 @@ export interface ProjectSummary {
 	updatedAt: string;
 	/** Last day any of the project's time series covers (YYYY-MM-DD), or null with no data. */
 	dataUntil: string | null;
+	/** The project's calendar date (YYYY-MM-DD, in its time zone): what the list counts dataUntil's age to. */
+	today: string;
 	/** ISO timestamp of the newest run, or null. */
 	lastRunAt: string | null;
 	/** ISO timestamp of the current publication (022_publication), or null before any. Every member sees it, farmers included. */

@@ -1715,8 +1715,9 @@ the suggested order (the IDs carry the detail):
       start a formula (`backend/src/export/csv.ts` `runProvenanceComment`);
       `lib/export/dailyTable.ts` reads every leading `#` line; api.md § Export
       (`pandas.read_csv(…, comment='#')`). The farmer's own
-      `…/farm/:nodeId/export.csv` is left as it was: it serves the published
-      figures, and the farm view carries no run label, only the publication
+      `…/farm/:nodeId/export.csv` carries no provenance line (since #124 it
+      is the last year in whole m³, its columns named by the farm page in
+      the reader's language): it serves the published figures, and the farm view carries no run label, only the publication
       and its engine version. Original entry: The
       farm and catchment daily CSVs (`daily.csv`, `farms.csv`) carry the run
       only in the file name, which is lost the moment the file is renamed or
@@ -2002,29 +2003,25 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       back for every window. A view over a saved run, so no
       `ENGINE_VERSION` bump; `curtailmentOverWindow.test.ts` checks it
       against `runModel` on seeded networks.
-- [ ] **Human-impact tables sit inside the Summary with no menu entry, and
-      Other water users is shown twice** (hydrologist persona, issue #51,
-      2026-09-28; remainder of F4). `runs/RunSummaryView.svelte` renders
-      `HumanImpactTables` (land cover, groundwater, demand objects, other
-      water users) under the run summary, where the section menu can't reach
-      it, and Units & supply's curtailment table lists the other users again.
-      **Durable fix:** move `HumanImpactTables` to the Units & supply page as
-      its own section with a rail entry (`supply/supply.ts` `SUPPLY_NAV`),
-      keep one copy of Other water users there, and leave a link in the
-      Summary. A layout move, so per the UI playbook it needs an e2e spec
-      pinning the rendered tables before the move and the ui.md page-order
-      update. **Trigger:** the next Units & supply or Summary layout change
-      (UI batch #76).
-- [ ] **The water balance by water year is reachable only under Dig deeper ›
-      Self-checks** (hydrologist persona, issue #51, 2026-09-28; remainder of
-      F13). It is the first table a hydrologist hands a client, and
-      `runs/SelfChecksPanel.svelte` (line ~117) is the only place it shows.
-      **Durable fix:** a *Water balance* section in Model quality
-      (`runs/sections.ts`) showing the same table, from the component the
-      self-check uses, with the self-check line linking to it; pin the table
-      with an e2e spec first, as the playbook asks for moved UI.
-      **Trigger:** with the item above, or the next Model quality change
-      (UI batch #76).
+- [x] **Human-impact tables sat inside the Summary with no menu entry, and
+      Other water users was shown twice** (hydrologist persona, issue #51;
+      done 2026-09-29, issue #137). They are **Other uses** on Units &
+      supply (`#res-other-uses`, a `supplyNav` entry when the run has any),
+      the Summary ends with a line naming what the run has and linking
+      there (`runs/humanImpacts.ts` `otherUsesLink`), and the page keeps one
+      copy of Other water users: the curtailment table's, which gained the
+      % of demand supplied (`usersTableOnSupply` draws the other table only
+      for a run whose curtailment doesn't list them). The printable report
+      keeps the tables under its summary. Pinned by `land-cover.spec.ts`,
+      `demand-objects.spec.ts`, `demand-object-schedule.spec.ts`,
+      `other-users.spec.ts`; `humanImpacts.test.ts`, `supply.test.ts`.
+- [x] **The water balance by water year was reachable only under Dig deeper
+      › Self-checks** (hydrologist persona, issue #51; done 2026-09-29,
+      issue #137). It is a *Water balance* section in Model quality
+      (`#res-water-balance`, `runs/WaterBalanceTable.svelte`, the component
+      the self-checks used), and the self-checks link to it; the printable
+      report keeps it under the checks. `self-checks.spec.ts` and
+      `runs.spec.ts` pin it.
 
 ## Roles and what each member sees
 
@@ -2428,9 +2425,11 @@ role and not before it.
       the formula audit workbook is the separate item in § Verification).
   - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
     plus a local MinIO equivalent). **Now a real limit, not a hypothetical
-    one** (measured 2026-09-25 for WP-1.28): a farm's daily CSV has ~32
+    one** (measured 2026-09-25 for WP-1.28): the workspace's farm daily CSV has ~32
     full-precision columns, ≈ 400 KB a year, so a multi-decade record gets
-    the `413`. The
+    the `413` (the farmer's own CSV, six columns in whole m³ and the last
+    365 days by default since #124, reaches it only with a `?from=` decades
+    back). The
     workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
     bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
     response streaming with a 50 MB cap (roadmap step 1). Trigger: before the
@@ -3121,16 +3120,14 @@ from the WP:
 
 ## Portfolio dashboard (WP-2.14)
 
-- [ ] **The project list's data age counts to the viewer's day, not the
-      project's** (WUA-manager persona, #51, Low). `projects/freshness.ts`
-      `daysSince` uses the browser's calendar date, while the portfolio's and
-      the outcome columns' `figuresAgeDays` / `stale` count to the project's
-      `today` (`project.time_zone`). The same `ProjectTable` row shows both,
-      so outside SAST they disagree by a day for part of each day. Durable
-      fix: pass the project's `today` (the outcomes row already carries it)
-      into `dataFreshness` and count to it, with a TZ-skewed unit test (rule
-      7). Do it with the next change to the project list.
-
+- [x] **The project list's data age counted to the viewer's day, not the
+      project's** (WUA-manager persona, #51; done 2026-09-29, issue #137).
+      `GET /projects` rows carry the project's `today` (its time zone) and
+      `dataFreshness` counts to it, as the portfolio and the outcome columns
+      do; the workspace header, the Data tab and the Overview count to the
+      project's date too (`projects/freshness.ts` `projectToday`), so no two
+      of them differ by a day. Tests: `freshness.test.ts` under skewed `TZ`,
+      `projects.db.test.ts` (two zones 25 hours apart).
 - [x] **Traffic-light thresholds per team (D11)** (2026-09-26).
       `055_team_settings` adds `team.settings` with a validated
       `portfolio.thresholds` (green and amber cut-offs, 0–100 %, green <

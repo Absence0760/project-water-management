@@ -184,7 +184,12 @@ section it belongs to, with the example that taught it.
 - **Pick a default rather than show an empty half.** With nothing in the
   URL, open the first item and write it with `replaceState`, so Back leaves
   the section instead of stopping on the bare list (Scenarios; Dams and
-  Hydrological units show a default without writing it).
+  Hydrological units show a default without writing it). Don't start that
+  write while a navigation is in flight (`navigating.to`) or while the URL
+  already asks for something else (an overlay's param): the newest
+  navigation wins, so a default pick that fires as its list lands can
+  cancel the click the user made a few ms earlier (a `+ New scenario` click
+  lost its dialog this way in CI, #171).
 - **A short form starts on a fixed line; don't centre it in the height.**
   The sign-in pages centred their form, so the title sat anywhere from 230
   to 433 px down at 1440×960 depending on the page, and a wrong password's
