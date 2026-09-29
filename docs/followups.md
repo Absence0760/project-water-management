@@ -799,8 +799,10 @@ the reports):
   for the hydrologist. Still do WP-1.21 (dam evaporation) and WP-1.33 (other water
   users) before a final calibration, because they are real modelled
   processes.
-  - [ ] **Gap:** development (dams, abstraction) can't vary over time within
-        a run.
+  - [x] **Gap:** development (dams, abstraction) can't vary over time within
+        a run. Done (engine 1.27.0, issue #67, model.md §2.7g): a dam in
+        service from a date, abstraction from a date, and capacity lost to
+        sediment from a survey date.
 - **Q4: pan and lake factors.** These are two separate settings. PET uses a
   monthly A-pan coefficient (FAO-56 range 0.35–0.85), or from engine 0.31.0
   a monthly PE row entered directly (`settings.pe`, model.md §2.4a). Dams use WR90 lake
@@ -2148,11 +2150,11 @@ role and not before it.
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
-      - *Capacity loss to sediment* (WP item 5, optional %/year for long
-        records): scale the capacity (and the curve's volumes) down by the
-        rate × years since a survey date. Needs a survey year per dam, so a
-        field and a migration. Trigger: a licence run over more than ~20
-        years, or the hydrologist asks.
+      - ~~*Capacity loss to sediment*~~: done (engine 1.27.0, issue #67,
+        migration 110, model.md §2.7g): `damSurveyDate` and
+        `damSedimentPctPerYear`, linear both ways from the survey; dead
+        storage, the curve's volumes and the dam-level triggers scale with
+        the capacity. Pending the hydrologist (#90).
       - ~~*The survey curve as a scenario op*~~: done (engine 1.20.0, issue
         #67): `damCurve` is in `NODE_SET_FIELDS.farm`, the "Add a change"
         form takes pasted rows (`curve` ValueSpec reusing `parseDamCurve`),

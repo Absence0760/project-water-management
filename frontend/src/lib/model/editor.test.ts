@@ -30,6 +30,16 @@ describe('ModelEditor', () => {
 		expect(ed.savedNodeIds.has(outlet.id)).toBe(true);
 	});
 
+	it('starts a new node with no development over the run (engine 1.27.0): every field null, the model valid', () => {
+		const ed = new ModelEditor();
+		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
+		ed.addNode();
+		const farm = ed.addNode();
+		const user = ed.addUser();
+		for (const n of [farm, user]) expect(n).toMatchObject({ damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null });
+		expect(validateModel(ed.model)).toEqual([]);
+	});
+
 	it('starts a new farm with all upstream inflow entering its dam (Q1: 1 = on-river dam)', () => {
 		// Since engine 0.9.0 the share means water INTO the dam; 0 would make a
 		// new farm's dam an off-channel one that only the diversion fills.

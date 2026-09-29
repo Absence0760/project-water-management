@@ -8,7 +8,8 @@ import { ApiError } from '../http/errors.js';
 // round trip is what queues when the API is busy (issue #41). Every column is
 // float8, float8[], smallint[], jsonb, text or uuid, all of which JSON carries
 // exactly (float8 prints its shortest round-trip form, which pg's own parser
-// would read as the same number).
+// would read as the same number); the node's dates (migration 110) go out as
+// YYYY-MM-DD text through to_char, the engine's date form.
 const MODEL_JSON = `json_build_object(
 	'nodes', coalesce((SELECT json_agg(r ORDER BY r."sortOrder", r.name) FROM (
 		SELECT id, name, kind, downstream_node_id AS "downstreamNodeId", sort_order AS "sortOrder",
@@ -25,6 +26,8 @@ const MODEL_JSON = `json_build_object(
 			stream_depletion_lag_days AS "streamDepletionLagDays",
 			dam_curve AS "damCurve", dam_release_rule AS "damReleaseRule", dam_release_m3_day AS "damReleaseM3Day",
 			dam_outlet_capacity_m3_day AS "damOutletCapacityM3Day", dam_seepage_return_pct AS "damSeepageReturnPct",
+			to_char(dam_survey_date, 'YYYY-MM-DD') AS "damSurveyDate", dam_sediment_pct_per_year AS "damSedimentPctPerYear",
+			to_char(dam_in_service_from, 'YYYY-MM-DD') AS "damInServiceFrom", to_char(abstraction_from, 'YYYY-MM-DD') AS "abstractionFrom",
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
 			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct", ewr_site AS "ewrSite",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
@@ -134,6 +137,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
+			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
@@ -141,6 +145,7 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_area_full_m2, dam_area_exponent, dam_seepage_per_day, user_demand_m3_day, user_return_pct, user_priority,
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
+			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
 			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
@@ -157,7 +162,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			stream_depletion_frac = EXCLUDED.stream_depletion_frac, stream_depletion_lag_days = EXCLUDED.stream_depletion_lag_days,
 			dam_curve = EXCLUDED.dam_curve, dam_release_rule = EXCLUDED.dam_release_rule,
 			dam_release_m3_day = EXCLUDED.dam_release_m3_day, dam_outlet_capacity_m3_day = EXCLUDED.dam_outlet_capacity_m3_day,
-			dam_seepage_return_pct = EXCLUDED.dam_seepage_return_pct, supply_rule = EXCLUDED.supply_rule,
+			dam_seepage_return_pct = EXCLUDED.dam_seepage_return_pct,
+			dam_survey_date = EXCLUDED.dam_survey_date, dam_sediment_pct_per_year = EXCLUDED.dam_sediment_pct_per_year,
+			dam_in_service_from = EXCLUDED.dam_in_service_from, abstraction_from = EXCLUDED.abstraction_from,
+			supply_rule = EXCLUDED.supply_rule,
 			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
 			supply_stop_pct = EXCLUDED.supply_stop_pct, ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year
@@ -195,6 +203,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_release_m3_day: n.damReleaseM3Day ?? null,
 			dam_outlet_capacity_m3_day: n.damOutletCapacityM3Day ?? null,
 			dam_seepage_return_pct: n.damSeepageReturnPct ?? 1,
+			dam_survey_date: n.damSurveyDate ?? null,
+			dam_sediment_pct_per_year: n.damSedimentPctPerYear ?? null,
+			dam_in_service_from: n.damInServiceFrom ?? null,
+			abstraction_from: n.abstractionFrom ?? null,
 			supply_rule: n.supplyRule ?? 'damFirst',
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,

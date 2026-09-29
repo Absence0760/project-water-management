@@ -186,6 +186,34 @@ describe('dam storage (WP-3.5)', () => {
 	});
 });
 
+describe('development over the run (engine 1.27.0, issue #67)', () => {
+	const out = node('Gauge', null);
+	const farm = node('A', out.id, { damCapacityM3: 20_000 });
+	const town = node('Town', out.id, { kind: 'user', damCapacityM3: 0 });
+	const parse = (...nodes: object[]) => ModelBody.parse({ nodes, crops: [], cropAreas: [], transfers: [] });
+
+	it('fills null, and accepts a survey date with a sediment rate, an in-service date and an abstraction start', () => {
+		expect(parse(out, farm).nodes[1]).toMatchObject({ damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null });
+		const dev = { damSurveyDate: '2012-02-29', damSedimentPctPerYear: 0.2, damInServiceFrom: '2000-10-01', abstractionFrom: '2001-01-01' };
+		const ok = parse(out, { ...farm, ...dev }, { ...town, abstractionFrom: '2005-07-15' });
+		expect(ok.nodes[1]).toMatchObject(dev);
+		expect(ok.nodes[2]).toMatchObject({ abstractionFrom: '2005-07-15' });
+		expect(modelProblems(ok as never)).toEqual([]);
+		// A rate of 0 needs no survey date.
+		expect(modelProblems(parse(out, { ...farm, damSedimentPctPerYear: 0 }) as never)).toEqual([]);
+	});
+
+	it('refuses a field of the wrong shape, and one that breaks a model rule', () => {
+		for (const bad of [{ damSurveyDate: '2012-2-1' }, { damInServiceFrom: 20_120_201 }, { abstractionFrom: '1 Oct 2001' }, { damSedimentPctPerYear: 0.21 }, { damSedimentPctPerYear: -0.01 }, { damSedimentPctPerYear: '0.1' }])
+			expect(ModelBody.safeParse({ nodes: [out, { ...farm, ...bad }], crops: [], cropAreas: [], transfers: [] }).success, JSON.stringify(bad)).toBe(false);
+		const problems = (...nodes: object[]) => modelProblems(parse(...nodes) as never).join();
+		expect(problems(out, { ...farm, damSurveyDate: '2021-02-30' })).toMatch(/"A": the survey date must be a date/);
+		expect(problems(out, { ...farm, damSedimentPctPerYear: 0.01 })).toMatch(/"A": a sediment rate needs the date the capacity was surveyed/);
+		expect(problems(out, farm, { ...town, damInServiceFrom: '2001-01-01' })).toMatch(/"Town": only a farm has a dam/);
+		expect(problems({ ...out, abstractionFrom: '2001-01-01' }, farm)).toMatch(/"Gauge": a gauge takes no water/);
+	});
+});
+
 describe('land cover (WP-1.35)', () => {
 	it('defaults to none, accepts a patch on a farm, and refuses one on a gauge or an unknown node', () => {
 		const out = node('Gauge', null);

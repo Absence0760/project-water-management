@@ -22,6 +22,7 @@
 // the review date (model.md §2.15a, §2.16).
 //
 // Pure: no I/O. Deterministic.
+import { damCapacityOn } from '../network/development';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput } from '../project';
 import { runModelFrom, runModelWithoutChecks } from '../run';
@@ -178,14 +179,21 @@ export type TriggerRepresentative = 'lowerEdge' | 'midpoint';
  * no per-dam level on the review date, the same fill everywhere is the
  * plain reading of "the dams hold x m³".
  */
-export function bandStartStorage(input: ModelInput, band: StorageBand, representative: TriggerRepresentative = 'lowerEdge'): { totalM3: number; storageM3ByDam: Record<string, number> } {
+export function bandStartStorage(
+	input: ModelInput,
+	band: StorageBand,
+	representative: TriggerRepresentative = 'lowerEdge',
+	/** The review date (epoch day): each dam's capacity is that day's (engine ≥ 1.27.0: sediment, an in-service date); absent = as entered. */
+	day?: number
+): { totalM3: number; storageM3ByDam: Record<string, number> } {
 	const dams = farmDams(input);
-	const cap = dams.reduce((a, n) => a + n.damCapacityM3, 0);
+	const capOf = (n: ModelInput['model']['nodes'][number]) => (day === undefined ? n.damCapacityM3 : damCapacityOn(n, day));
+	const cap = dams.reduce((a, n) => a + capOf(n), 0);
 	const want = representative === 'midpoint' ? (band.fromM3 + band.toM3) / 2 : band.fromM3;
 	const total = Math.min(Math.max(want, 0), cap);
 	const f = cap > 0 ? total / cap : 0;
 	const storageM3ByDam: Record<string, number> = {};
-	for (const n of dams) storageM3ByDam[n.id] = f * n.damCapacityM3;
+	for (const n of dams) storageM3ByDam[n.id] = f * capOf(n);
 	return { totalM3: total, storageM3ByDam };
 }
 
@@ -434,7 +442,9 @@ function checkReview(input: ModelInput, options: ReviewTriggerBandOptions): void
  */
 export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
 	checkReview(input, options);
-	const capacity = farmDams(input).reduce((a, n) => a + n.damCapacityM3, 0);
+	// The dams' capacity on the review date (engine ≥ 1.27.0: it can change over the run).
+	const reviewDay = toEpochDay(options.reviewDate);
+	const capacity = farmDams(input).reduce((a, n) => a + damCapacityOn(n, reviewDay), 0);
 	const representative = options.representative ?? 'lowerEdge';
 	const bandWarnings: string[] = [];
 	let history: ReviewStorageSample[] = [];
@@ -457,7 +467,7 @@ export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, o
 	if (floor.warning) bandWarnings.push(floor.warning);
 	const bands = drawn.bands.map((band, i) => {
 		const fromRecord = i === 0 && floor.fromRecord;
-		const start = bandStartStorage(input, fromRecord ? { fromM3: floor.floorM3, toM3: band.toM3 } : band, representative);
+		const start = bandStartStorage(input, fromRecord ? { fromM3: floor.floorM3, toM3: band.toM3 } : band, representative, reviewDay);
 		return { band, startStorageM3: start.totalM3, storageM3ByDam: start.storageM3ByDam, ...(fromRecord ? { startFrom: 'lowestOnRecord' as const } : {}) };
 	});
 	return { capacityM3: capacity, bands, representative, bandSource, history, lowestOnRecordM3: floor.fromRecord ? floor.floorM3 : null, bandWarnings };

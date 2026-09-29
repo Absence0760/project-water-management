@@ -1,9 +1,11 @@
-import { BOREHOLE_MODES, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
+import { BOREHOLE_MODES, DAM_SEDIMENT_MAX_PER_YEAR, BOREHOLE_RULES, BOREHOLE_TARGETS, DAM_CURVE_MAX_ROWS, DEMAND_OBJECT_CATEGORIES, DEMAND_OBJECT_DESTINATIONS, DEMAND_OBJECT_PRIORITIES, DEMAND_OBJECT_SIZINGS, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, DEMAND_SCHEDULE_SPANS, DAM_RELEASE_RULES, GA538_GROUNDWATER_RATES, isGa538Rate, LAND_COVER_CLASSES, modelRuleProblems, SUPPLY_RULES, TRANSFER_SIZINGS, TRANSFER_SOURCES, upgradeLegacyModel, USER_PRIORITIES, type LandCoverClass, type ProjectModel } from '@water-management/engine';
 import { z } from 'zod';
 
 const uuid = z.string().uuid();
 const frac = z.number().min(0).max(1);
 const nonNeg = z.number().finite().min(0);
+/** A day as YYYY-MM-DD; whether it is a real date is a model rule (developmentProblem). */
+const isoDay = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'must be a date (YYYY-MM-DD)');
 
 /**
  * A project model as PUT /model and a project document carry it. A model from
@@ -60,6 +62,13 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				damReleaseM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				damOutletCapacityM3Day: nonNeg.nullable().default(null),
 				damSeepageReturnPct: frac.default(1),
+				// Development over the run (engine ≥ 1.27.0, issue #67): the survey date and sediment rate, the
+				// in-service date (farms), the abstraction start (farms and users). Which kinds and a rate
+				// needing its survey date are model rules (developmentProblem, via modelRuleProblems).
+				damSurveyDate: isoDay.nullable().default(null),
+				damSedimentPctPerYear: z.number().min(0).max(DAM_SEDIMENT_MAX_PER_YEAR).nullable().default(null),
+				damInServiceFrom: isoDay.nullable().default(null),
+				abstractionFrom: isoDay.nullable().default(null),
 				// Supply rule and river pump (WP-3.8), farms only (a model rule); pump null = no limit.
 				supplyRule: z.enum(SUPPLY_RULES).default('damFirst'),
 				pumpCapacityM3Day: nonNeg.nullable().default(null),

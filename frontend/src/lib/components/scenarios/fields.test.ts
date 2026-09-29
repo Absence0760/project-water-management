@@ -97,9 +97,39 @@ describe('field specs cover the engine’s op catalogue', () => {
 			}
 		};
 		// The GR4J bounds are the engine's own (GR4J_PARAMS).
-		check(NODE_FIELD_SPECS, nodeFieldError);
+		// The sediment rate's range is 0–20 % (the sample's 35 % is out of it): its own case below.
+		check(NODE_FIELD_SPECS, nodeFieldError, ['damSedimentPctPerYear']);
 		check(TRANSFER_FIELD_SPECS, transferFieldError);
 		check(SETTINGS_SPECS, settingsValueError, ['gr4j.x1', 'gr4j.x2', 'gr4j.x3', 'gr4j.x4']);
+	});
+});
+
+describe('development over the run (engine 1.27.0, issue #67)', () => {
+	it('offers the dam fields on a farm, the abstraction start on a farm and a user, and none on a gauge', () => {
+		const dev = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom', 'abstractionFrom'];
+		expect(nodeFields('farm').filter((f) => dev.includes(f.field))).toEqual([
+			{ field: 'damSurveyDate', label: 'Dam survey date' },
+			{ field: 'damSedimentPctPerYear', label: 'Dam capacity lost to sediment a year' },
+			{ field: 'damInServiceFrom', label: 'Dam in service from' },
+			{ field: 'abstractionFrom', label: 'Abstraction starts' }
+		]);
+		expect(nodeFields('user').filter((f) => dev.includes(f.field))).toEqual([{ field: 'abstractionFrom', label: 'Abstraction starts' }]);
+		expect(nodeFields('gauge').some((f) => dev.includes(f.field))).toBe(false);
+	});
+
+	it('reads a sediment rate as a percentage within 0–20 %, and a date as the engine checks it', () => {
+		const rate = NODE_FIELD_SPECS.damSedimentPctPerYear.spec;
+		expect(parseValue(rate, '1.5')).toEqual({ ok: true, value: 0.015 });
+		expect(parseValue(rate, '')).toEqual({ ok: true, value: null });
+		expect(formatValue(rate, 0.015)).toBe('1.5 %');
+		expect(formatValue(rate, null)).toBe('none');
+		expect(nodeFieldError('damSedimentPctPerYear', 0.015)).toBeNull();
+		expect(nodeFieldError('damSedimentPctPerYear', 0.25)).not.toBeNull();
+		const date = NODE_FIELD_SPECS.damInServiceFrom.spec;
+		expect(parseValue(date, '2004-10-01')).toEqual({ ok: true, value: '2004-10-01' });
+		expect(parseValue(date, '')).toEqual({ ok: true, value: null });
+		expect(formatValue(date, null)).toBe('the whole run');
+		expect(nodeFieldError('abstractionFrom', '2004-02-30')).not.toBeNull();
 	});
 });
 

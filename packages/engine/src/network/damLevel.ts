@@ -28,8 +28,11 @@ export interface DamFigures {
  * One dam's figures from its daily storage (m³, day 0 = `startDate`), or null
  * when the dam has no capacity or the storage no finite value. `minFrac` is
  * the minimum operating level as a fraction of capacity (NetworkNode.damMinPct).
+ * `capacityOn` (engine ≥ 1.27.0): the capacity on run day i when it changes
+ * over the run (sediment, an in-service date; network/development.ts), so
+ * the minimum level is a share of the day's capacity.
  */
-export function damFigures(storage: ArrayLike<number | null>, capacityM3: number, minFrac: number, startDate: string): DamFigures | null {
+export function damFigures(storage: ArrayLike<number | null>, capacityM3: number, minFrac: number, startDate: string, capacityOn?: (i: number) => number): DamFigures | null {
 	if (!(capacityM3 >= 1)) return null;
 	const finite = (x: number | null | undefined): x is number => x != null && Number.isFinite(x);
 	let last = -1;
@@ -50,7 +53,8 @@ export function damFigures(storage: ArrayLike<number | null>, capacityM3: number
 		if (!finite(x)) continue;
 		if (low < 0 || x < (storage[low] as number)) low = i;
 		// A small tolerance (in % of capacity): the engine holds a dam at its minimum as a float.
-		if (minPct > 0 && (x / capacityM3) * 100 <= minPct + 1e-6) daysAtMin++;
+		const cap = capacityOn ? capacityOn(i) : capacityM3;
+		if (minPct > 0 && cap > 0 && (x / cap) * 100 <= minPct + 1e-6) daysAtMin++;
 	}
 	const ago = last - DAM_AGO_DAYS >= 0 ? storage[last - DAM_AGO_DAYS] : null;
 	const start = toEpochDay(startDate);

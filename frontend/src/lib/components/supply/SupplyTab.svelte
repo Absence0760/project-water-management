@@ -31,7 +31,8 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
-	import { runDamCapacity, SUPPLY_TARGET } from '$lib/components/runs/results';
+	import type { DamDev } from '$lib/components/overview/damLevels';
+	import { runDamCapacity, runDamDev, SUPPLY_TARGET } from '$lib/components/runs/results';
 	import { runYears } from '$lib/components/runs/runList';
 	import { dataEndOf } from '$lib/format/age';
 	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
@@ -190,6 +191,7 @@
 	const picked = $derived(pickUnit(cards, unitParam));
 	const pickedFarm = $derived(picked ? (summary?.farms.find((f) => f.nodeId === picked.nodeId) ?? null) : null);
 	const damCapacity = $derived(run ? runDamCapacity(run.model as Parameters<typeof runDamCapacity>[0], editor.model.nodes) : new Map<string, number>());
+	const damDev = $derived(run ? runDamDev(run.model as Parameters<typeof runDamDev>[0], editor.model.nodes) : new Map<string, DamDev>());
 	const modelUnits = $derived(modelFarmIds.size);
 	const runText = $derived(meta ? `run “${runName(meta)}”, ran ${ranAgo(meta.createdAt)}` : null);
 	const headerLine = $derived(supplySummary(totals, modelUnits, runText, weekEnd));
@@ -397,6 +399,7 @@
 										farm={pickedFarm}
 										name={picked.name}
 										capacity={damCapacity.get(picked.nodeId) ?? 0}
+										dev={damDev.get(picked.nodeId)}
 										deficit={deficits.get(picked.nodeId) ?? null}
 										forecastFrom={summary.forecast?.from ?? null}
 										height={chartH}

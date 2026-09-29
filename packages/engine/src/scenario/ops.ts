@@ -2,6 +2,7 @@
 // of overrides a scenario applies to a base run's input, the per-field value
 // checks, and a zod-free runtime validator the backend can call on a request
 // body (or mirror in zod). Pure: no I/O.
+import { DAM_SEDIMENT_MAX_PER_YEAR } from '../network/development';
 import { ALLOCATION_MODES, type AllocationMode } from '../allocations/mode';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import {
@@ -140,6 +141,8 @@ const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
  * carry the enlarged dam's own surveyed curve, docs/scenarios.md § Dam capacity).
  */
 const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct', 'damCurve'] as const;
+/** Development over the run (engine ≥ 1.27.0, docs/model.md §2.7g): a dam's sediment and in-service date, a unit's abstraction start. */
+const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
 /**
@@ -159,8 +162,8 @@ const SUPPLY = ['supplyRule', 'pumpCapacityM3Day', 'supplyTriggerPct', 'supplySt
  * model rule).
  */
 export const NODE_SET_FIELDS = {
-	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...BOREHOLES, ...SUPPLY],
-	user: ['name', ...USER, ...BOREHOLES],
+	farm: ['name', ...LAND, ...DAM_AND_IRRIGATION, ...DAM_STORAGE, ...DEVELOPMENT, 'abstractionFrom', ...BOREHOLES, ...SUPPLY],
+	user: ['name', ...USER, 'abstractionFrom', ...BOREHOLES],
 	gauge: ['name', 'ewrSite']
 } as const satisfies Record<NodeKind, readonly (keyof NetworkNode)[]>;
 
@@ -169,9 +172,10 @@ export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
 /**
  * node.set fields that are baseline assumptions even on the applicant's own
  * node (classifyOp): land and flow share split the catchment's natural
- * runoff, and where the EWR is assessed is the Reserve's, never a proposal.
+ * runoff, where the EWR is assessed is the Reserve's, and a dam's survey and
+ * sediment rate (engine ≥ 1.27.0) describe the dam as it is, never a proposal.
  */
-export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite'];
+export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear'];
 
 const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	name,
@@ -194,6 +198,10 @@ const NODE_FIELD_CHECKS: Record<NodeSetField, Check> = {
 	damReleaseM3Day: nullable(monthlyOf(nonNeg)),
 	damOutletCapacityM3Day: nullable(nonNeg),
 	damSeepageReturnPct: frac,
+	damSurveyDate: nullable(isoDate),
+	damSedimentPctPerYear: nullable(range(0, DAM_SEDIMENT_MAX_PER_YEAR)),
+	damInServiceFrom: nullable(isoDate),
+	abstractionFrom: nullable(isoDate),
 	// The rows, as the model form saves them; whether they make a usable curve (volume rising, some area) is a model rule (modelRules.ts damCurveProblem).
 	damCurve: nullable((v) =>
 		Array.isArray(v) && v.length <= DAM_CURVE_MAX_ROWS && v.every(isCurveRow) ? null : `must be up to ${DAM_CURVE_MAX_ROWS} rows of { levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`
@@ -653,6 +661,9 @@ const NODE_OPTIONAL = new Set<string>([
 	'damSeepagePerDay',
 	...SUPPLY,
 	...DAM_STORAGE,
+	// Development over the run (engine ≥ 1.27.0): the node's entered dam and demand throughout unless given.
+	...DEVELOPMENT,
+	'abstractionFrom',
 	...USER,
 	...BOREHOLES,
 	// A new gauge is an EWR site unless it says otherwise (engine ≥ 1.5.0).

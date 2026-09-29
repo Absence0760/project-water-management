@@ -7,6 +7,7 @@
 // accept as a save, and a rule added here reaches both.
 import { SUPPLY_DEFAULTS, type ProjectModel } from './project';
 import { damCurveProblem } from './network/damCurve';
+import { developmentProblem } from './network/development';
 import { monthlyRatesMismatch } from './network/transferRates';
 import { isRiverOfftake } from './network/offtake';
 import { DEMAND_SCHEDULE_MAX_WINDOWS, scheduleWindowProblem } from './network/demandSchedule';
@@ -102,6 +103,9 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
 			if (bad) add(`damCurve:${n.id}`, `"${n.name}": dam survey curve: ${bad}`);
 		}
+		// Development over the run (engine ≥ 1.27.0): the sediment rate, its survey date and the dates read.
+		const dev = developmentProblem(n);
+		if (dev) add(`development:${n.id}`, `"${n.name}": ${dev}`);
 	}
 	for (const a of m.cropAreas) {
 		const n = byId.get(a.nodeId);

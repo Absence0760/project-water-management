@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NEW_FARM_IRRIGATION } from '@water-management/engine';
-import { cardLabel, damHints, fmtVolume, hasDam, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
+import { cardLabel, damHints, fmtVolume, hasDam, hasDamDevelopment, isVolume, NODE_FIELDS, systemOf, TABLE_FIELDS } from './fields';
 
 describe('node fields', () => {
 	it('keeps the table accessible names the editor and tests rely on', () => {
@@ -115,5 +115,17 @@ describe('TABLE_FIELDS', () => {
 describe('isVolume', () => {
 	it('marks the m³ and m³/day fields, whose columns need room for large values', () => {
 		expect(NODE_FIELDS.filter(isVolume).map((f) => f.key)).toEqual(['damCapacityM3', 'damOutletCapacityM3Day', 'divertCapacityM3Day', 'boreholeCapacityM3Day']);
+	});
+});
+
+describe('hasDamDevelopment', () => {
+	it('is true while any of a dam’s development fields is set (engine 1.27.0), so the form keeps them in reach', () => {
+		const none = { damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null };
+		expect(hasDamDevelopment(none)).toBe(false);
+		expect(hasDamDevelopment({})).toBe(false);
+		expect(hasDamDevelopment({ ...none, damSurveyDate: '2015-06-30' })).toBe(true);
+		// A rate of 0 is still an entry the form should show.
+		expect(hasDamDevelopment({ ...none, damSedimentPctPerYear: 0 })).toBe(true);
+		expect(hasDamDevelopment({ ...none, damInServiceFrom: '2003-10-01' })).toBe(true);
 	});
 });

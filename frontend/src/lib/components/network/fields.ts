@@ -319,6 +319,15 @@ export function systemOf(efficiency: number): IrrigationSystemId | null {
 	return IRRIGATION_SYSTEMS.find((s) => Math.abs(s.efficiency - efficiency) < 1e-9)?.id ?? null;
 }
 
+/**
+ * Whether a node carries any of a dam's development fields (engine ≥ 1.27.0:
+ * survey date, sediment rate, in-service date), so the one-node form still
+ * shows them on a node without a dam, or one turned into a gauge or user,
+ * where they can be cleared (the save refuses them off a farm).
+ */
+export const hasDamDevelopment = (n: Pick<NetworkNode, 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom'>) =>
+	!!n.damSurveyDate || (n.damSedimentPctPerYear !== null && n.damSedimentPctPerYear !== undefined) || !!n.damInServiceFrom;
+
 /** Treat a dam under 1 m³ as no dam (the workbook uses tiny placeholders under 1 m³ such as 0.5). */
 export const hasDam = (n: Pick<NetworkNode, 'kind' | 'damCapacityM3'>) => n.kind === 'farm' && n.damCapacityM3 >= 1;
 

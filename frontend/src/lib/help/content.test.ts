@@ -32,7 +32,8 @@ const NODE: Record<keyof NetworkNode, true> = {
 	boreholeCapacityM3Day: true, boreholeRule: true, boreholeTriggerPct: true, streamDepletionFrac: true, streamDepletionLagDays: true,
 	damCurve: true, damReleaseRule: true, damReleaseM3Day: true, damOutletCapacityM3Day: true, damSeepageReturnPct: true,
 	demandFactor: true, supplyRule: true, pumpCapacityM3Day: true, supplyTriggerPct: true, supplyStopPct: true, ewrSite: true,
-	gaPropertyAreaHa: true, gaRateM3HaYear: true
+	gaPropertyAreaHa: true, gaRateM3HaYear: true,
+	damSurveyDate: true, damSedimentPctPerYear: true, damInServiceFrom: true, abstractionFrom: true
 };
 const CROP: Record<keyof CropDef, true> = { id: true, name: true, sortOrder: true, cropFactor: true, irrigationEfficiency: true };
 const CROP_AREA: Record<keyof CropArea, true> = { nodeId: true, cropId: true, areaM2: true };
@@ -66,6 +67,8 @@ const RUN_KEYS = [
 	'natural_flow', 'simulated_outflow', 'observed_flow', 'observed_flow_other', 'ewr', 'ewr_shortfall', 'rain_used', 'is_summer', 'rain_flow',
 	'base_flow', 'response_flow', 'resultant_flow', 'rain_final', 'rain_areal', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'rain_catchment_missing', 'rain_catchment_spread', 'rain_source', 'crop_requirement', 'demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff',
 	'transfer', 'dam_storage', 'spill', 'outflow', 'ewr_cumulative', 'ewr_shortfall_incremental',
+	// A dam's capacity on the day, when sediment or an in-service date changes it (engine 1.27.0, issue #67)
+	'dam_capacity',
 	// EWR attribution (engine 0.17.0, audit Q17)
 	'ewr_charged', 'ewr_natural', 'ewr_charge', 'ewr_charge_irrigation',
 	// The EWR site that set a farm's charge each day (engine 1.5.0)

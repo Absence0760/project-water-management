@@ -386,7 +386,7 @@
 	);
 
 	// The picked farm's dam at the end of the latest run (the "Dam at end of run" tile), as a % of the
-	// run's own capacity, as the map's colour by dam level reads it (damInRun, issue #173): from the run
+	// run's own capacity on that day (issue #67: sediment, an in-service date), as the map's colour by dam level reads it (damInRun, issue #173): from the run
 	// summary, or its dam_storage series through the Runs cache (overview/damLevels.ts). As on the map, a
 	// farm with no dam now is "No dam" and one whose dam the run didn't model is "not in this run"
 	// (damEndTile). pct null: loading, or the series had no value.
@@ -407,7 +407,7 @@
 			return;
 		}
 		// From the run summary when it has the figure (engine ≥ 1.2.0, issue #55), else the series.
-		const pct = damEndPctFromSummary(dam, supplyRun!.summary.farms);
+		const pct = latestRun ? damEndPctFromSummary(dam, supplyRun!.summary.farms, historyEnd(latestRun)) : undefined;
 		damEnd = { nodeId: id, inRun: true, pct: pct ?? null, capacityM3: dam.capacityM3 };
 		if (pct !== undefined) return;
 		cachedSeries(run, 'dam_storage', id, () => api.runs.series(projectId, run, 'dam_storage', id))

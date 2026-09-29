@@ -2,6 +2,7 @@
 // flags, grouping of output series for the pickers, and unit conversion.
 import type { FarmSummary } from '@water-management/engine';
 import type { RunSeriesRef } from '$lib/api/types';
+import { damDevOf, pctOfCapacity, type DamDev } from '$lib/components/overview/damLevels';
 
 export const SUPPLY_TARGET = 0.95;
 export const SEC_PER_DAY = 86_400;
@@ -95,8 +96,35 @@ export function runDamCapacity(
 	return new Map(liveNodes.map((n) => [n.id, n.damCapacityM3]));
 }
 
-/** Dam storage (m³) as % of capacity; null when there is no dam. */
-export function storagePct(values: readonly (number | null)[], capacityM3: number): (number | null)[] | null {
+type DevNode = Parameters<typeof damDevOf>[0] & { id: string };
+
+/**
+ * What changes each dam's capacity over the shown run (a sediment rate, an
+ * in-service date; engine ≥ 1.27.0, issue #67), from the run's own model
+ * snapshot as runDamCapacity reads it; a dam whose capacity doesn't change
+ * has no entry.
+ */
+export function runDamDev(runModel: { nodes?: readonly DevNode[] } | undefined, liveNodes: readonly DevNode[]): Map<string, DamDev> {
+	const nodes = runModel?.nodes?.length ? runModel.nodes : liveNodes;
+	const out = new Map<string, DamDev>();
+	for (const n of nodes) {
+		const dev = damDevOf(n);
+		if (dev) out.set(n.id, dev);
+	}
+	return out;
+}
+
+/**
+ * Dam storage (m³) as % of capacity; null when there is no dam. With
+ * `capacityOn` (the capacity on index i, overview/damLevels.ts capacityOver)
+ * each day is a share of that day's capacity, none before the dam is in service.
+ */
+export function storagePct(values: readonly (number | null)[], capacityM3: number, capacityOn?: (i: number) => number): (number | null)[] | null {
 	if (!(capacityM3 >= 1)) return null;
+	if (capacityOn)
+		return values.map((v, i) => {
+			const c = capacityOn(i);
+			return v == null || !Number.isFinite(v) || !(c > 0) ? null : pctOfCapacity(v, c);
+		});
 	return values.map((v) => (v == null || !Number.isFinite(v) ? null : (v / capacityM3) * 100));
 }

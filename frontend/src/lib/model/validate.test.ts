@@ -190,6 +190,19 @@ describe('validateModel', () => {
 		]);
 	});
 
+	it('checks the development fields as the API does (engine 1.27.0, issue #67)', () => {
+		const g = node('g', 'Gauge', null);
+		const a = { ...node('a', 'A', 'g'), damCapacityM3: 20_000 };
+		const u = { ...node('u', 'Town', 'g'), kind: 'user' as const, damCapacityM3: 0 };
+		const dev = { damSurveyDate: '2012-02-29', damSedimentPctPerYear: 0.01, damInServiceFrom: '2000-10-01', abstractionFrom: '2001-01-01' };
+		expect(messages(model([g, { ...a, ...dev }, { ...u, abstractionFrom: '2005-01-01' }]))).toEqual([]);
+		expect(messages(model([g, { ...a, damSedimentPctPerYear: 0.01 }]))).toEqual(['"A": a sediment rate needs the date the capacity was surveyed.']);
+		expect(messages(model([g, { ...a, ...dev, damSedimentPctPerYear: 0.3 }]))).toEqual(['"A": the sediment rate must be 0 to 20 % of the capacity a year.']);
+		expect(messages(model([g, { ...a, damInServiceFrom: '2001-02-29' }]))).toEqual(['"A": the in-service date must be a date (YYYY-MM-DD).']);
+		expect(messages(model([g, a, { ...u, damSurveyDate: '2001-01-01' }]))).toEqual(['"Town": only a hydrological unit has a dam; clear its dam dates and sediment rate.']);
+		expect(messages(model([{ ...g, abstractionFrom: '2001-01-01' }, a]))).toEqual(['"Gauge": a gauge takes no water.']);
+	});
+
 	it('checks land cover as the API does (WP-1.35)', () => {
 		const g = node('g', 'Gauge', null);
 		const p = { id: 'p', nodeId: 'a', coverClass: 'pine' as const, areaKm2: 1, densityPct: 0.5, factors: null };

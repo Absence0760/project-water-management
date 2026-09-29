@@ -25,7 +25,7 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { AGO_DAYS, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
+	import { AGO_DAYS, capacityOver, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
 	import { pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
@@ -158,7 +158,7 @@
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
 	const record = (s: DailySeries): DailySeries => ({ startDate: s.startDate, values: Array.from(beforeForecast(s.values, s.startDate, run?.summary.forecast?.from)) });
-	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3) : null])));
+	const sparks = $derived(new Map(cards.map((c) => [c.nodeId, storage.has(c.nodeId) ? storageSpark(record(storage.get(c.nodeId)!), c.capacityM3, 365, 60, c.level ? capacityOver(c.level, storage.get(c.nodeId)!.startDate) : undefined) : null])));
 	const pct = (v: number) => `${fmtNum(v, 0)}%`;
 	const BAND_WORDS = { 'at-min': 'at its minimum level', low: `below ${LOW_PCT}%`, ok: '' } as const;
 	/** Why a card has no level: before a run, while loading, or the run has no storage for it. */
@@ -185,7 +185,7 @@
 	// --- the chart of the picked dam ---
 	let unit = $state<StorageUnit>('pct');
 	const pickedSeries = $derived(picked ? (storage.get(picked.nodeId) ?? null) : null);
-	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit) : []);
+	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit, picked.level ? capacityOver(picked.level, pickedSeries.startDate) : undefined) : []);
 	// A fixed plot height: taller beside the cards, where it sits level with the first few.
 	const chartH = $derived(side ? 420 : 260);
 
@@ -317,7 +317,7 @@
 						{:else if picked?.level && pickedSeries}
 							{@const l = picked.level}
 							<p class="facts small" data-testid="dam-facts">
-								<strong>{pct(l.endPct)} full</strong> on {fmtDay(l.endDate)} ({fmtNum((l.endPct / 100) * l.capacityM3)} of {fmtNum(l.capacityM3)} m³) ·
+								<strong>{pct(l.endPct)} full</strong> on {fmtDay(l.endDate)} ({fmtNum((l.endPct / 100) * (l.endCapacityM3 ?? l.capacityM3))} of {fmtNum(l.endCapacityM3 ?? l.capacityM3)} m³) ·
 								lowest in its last year {pct(l.lowPct)} on {fmtDay(l.lowDate)}{#if l.minPct > 0}{` · ${fmtNum(l.daysAtMin)} day${l.daysAtMin === 1 ? '' : 's'} at its minimum level (${pct(l.minPct)})`}{/if}
 							</p>
 							<LineChart

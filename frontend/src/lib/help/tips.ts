@@ -366,6 +366,38 @@ export const TIPS: HelpTipText[] = [
 		fields: ['node.damReleaseRule', 'node.damReleaseM3Day', 'node.damOutletCapacityM3Day', 'run.dam_release']
 	},
 	{
+		id: 'dam-survey-date',
+		term: 'Dam survey date',
+		short: 'The day the capacity above was measured. With a sediment rate, the dam holds more before this date and less after it.',
+		units: 'date (YYYY-MM-DD)',
+		category: 'farm',
+		fields: ['node.damSurveyDate']
+	},
+	{
+		id: 'dam-sediment',
+		term: 'Dam sediment rate (siltation)',
+		short: 'Share of the surveyed capacity a dam loses to silt each year. Its capacity shrinks steadily through the run, never below empty.',
+		units: 'fraction of capacity per year, 0–0.2 (shown as %)',
+		category: 'farm',
+		fields: ['node.damSedimentPctPerYear', 'run.dam_capacity']
+	},
+	{
+		id: 'dam-in-service',
+		term: 'Dam in service from',
+		short: 'The first day the dam holds water. Before it the unit has no dam, and what would flow into it passes on down the river.',
+		units: 'date (YYYY-MM-DD)',
+		category: 'farm',
+		fields: ['node.damInServiceFrom']
+	},
+	{
+		id: 'abstraction-start',
+		term: 'Abstraction starts',
+		short: 'The first day this unit takes water. Before it its crops, demand objects and own demand take nothing, as before it was developed.',
+		units: 'date (YYYY-MM-DD)',
+		category: 'farm',
+		fields: ['node.abstractionFrom']
+	},
+	{
 		id: 'diversion',
 		term: 'Diversion back to dam',
 		short: 'Daily capacity to pump or channel water from the river below the dam back into it, in m³/day.',

@@ -1,7 +1,7 @@
 import type { FarmSummary } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { RunSeriesRef } from '$lib/api/types';
-import { m3DayToMm3a, runDamCapacity, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
+import { m3DayToMm3a, runDamCapacity, runDamDev, seriesGroups, sortFarms, storagePct, supplyBarFraction, toDisplayUnit } from './results';
 
 const farm = (nodeId: string, name: string, fractionSupplied: number, avgDeficitM3Day: number): FarmSummary => ({
 	nodeId,
@@ -97,5 +97,30 @@ describe('runDamCapacity', () => {
 	it('falls back to the live model for a run without a model snapshot', () => {
 		expect(runDamCapacity(undefined, live).get('a')).toBe(50_000);
 		expect(runDamCapacity({ nodes: [] }, live).get('a')).toBe(50_000);
+	});
+});
+
+describe("storagePct and runDamDev: a dam whose capacity changes (issue #67)", () => {
+	it("reads each day against that day's capacity, none before the dam is in service", () => {
+		const cap = [0, 1200, 1100];
+		expect(storagePct([0, 1080, 990], 1000, (i) => cap[i]!)).toEqual([null, 90, 90]);
+		// Against the entered 1 000 m³ the second day read 108 %.
+		expect(storagePct([0, 1080, 990], 1000)).toEqual([0, 108, 99]);
+	});
+
+	it("takes the fields from the run's own model and leaves a dam that doesn't change out", () => {
+		const run = {
+			nodes: [
+				{ id: 'a', kind: 'farm', damCapacityM3: 1000, damSurveyDate: '2025-01-01', damSedimentPctPerYear: 0.02 },
+				{ id: 'b', kind: 'farm', damCapacityM3: 1000, damInServiceFrom: '2020-06-01' },
+				{ id: 'c', kind: 'farm', damCapacityM3: 1000, damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null }
+			]
+		};
+		const dev = runDamDev(run, []);
+		expect([...dev.keys()]).toEqual(['a', 'b']);
+		expect(dev.get('b')).toEqual({ damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: '2020-06-01' });
+		// Positive control: a run of unchanged dams has none, so its chart reads as before.
+		expect(runDamDev({ nodes: [run.nodes[2]!] }, []).size).toBe(0);
+		expect(runDamDev(undefined, [run.nodes[0]!]).has('a')).toBe(true);
 	});
 });

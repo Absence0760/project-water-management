@@ -2,7 +2,7 @@
 // through withUser like every other project route. Bodies are built in memory
 // and size-capped (MAX_EXPORT_BYTES) because Lambda's buffered responses stop
 // at 6 MB.
-import { fromEpochDay, toEpochDay, type RunSummary } from '@water-management/engine';
+import { damCapacityOn, fromEpochDay, toEpochDay, type NetworkNode, type RunSummary } from '@water-management/engine';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { AuthEnv } from '../auth/middleware.js';
@@ -109,6 +109,37 @@ async function loadDamCapacities(db: import('../db/tx.js').Db, runId: string): P
 	return Object.fromEntries(rows.map((r) => [r.id, r.capacity]));
 }
 
+/**
+ * The capacity on `date` of each dam whose capacity changes over the run
+ * (a sediment rate, an in-service date; engine ≥ 1.27.0, docs/model.md
+ * §2.7g), m³ by node id; a dam whose capacity that day is the entered one is
+ * left out, so a run without such dams has none.
+ */
+async function loadDamCapacitiesOn(db: import('../db/tx.js').Db, runId: string, date: string): Promise<Record<string, number>> {
+	const { rows } = await db.query<{ node: NetworkNode }>(
+		`SELECT n AS node
+		 FROM model_run, jsonb_array_elements(COALESCE(inputs->'model'->'nodes', '[]'::jsonb)) n
+		 WHERE model_run.id = $1 AND n->>'kind' = 'farm' AND jsonb_typeof(n->'damCapacityM3') = 'number'
+		   AND (jsonb_typeof(n->'damSedimentPctPerYear') = 'number' OR jsonb_typeof(n->'damInServiceFrom') = 'string')`,
+		[runId]
+	);
+	const day = toEpochDay(date);
+	const out: Record<string, number> = {};
+	for (const { node } of rows) {
+		const cap = damCapacityOn(node, day);
+		if (cap !== node.damCapacityM3) out[node.id] = cap;
+	}
+	return out;
+}
+
+/** The last day a run's summary covers: its end, or on a forecast run the day before the forecast. */
+function summaryEnd(run: { endDate: string; summary: RunSummary }): string {
+	const from = run.summary.forecast?.from;
+	if (!from) return run.endDate;
+	const before = fromEpochDay(toEpochDay(from) - 1);
+	return before < run.endDate ? before : run.endDate;
+}
+
 /** The daily CSVs' `#` provenance line (csv.ts runProvenanceComment); `damCapacityM3` only on a farm's file. */
 function provenance(run: RunRow, damCapacityM3?: number | null): RunProvenance {
 	return {
@@ -203,7 +234,8 @@ export const exportRoutes = new Hono<AuthEnv>()
 					evidence: runEvidence(await listNominations(db, id), runId),
 					flowDuration: await loadFlowDuration(db, runId, { startDate: run.startDate, forecastFrom: run.summary.forecast?.from ?? null }),
 					runoffModel: run.runoffModel,
-					damCapacityM3: await loadDamCapacities(db, runId)
+					damCapacityM3: await loadDamCapacities(db, runId),
+					damCapacityEndM3: await loadDamCapacitiesOn(db, runId, summaryEnd(run))
 				},
 				run.summary
 			);

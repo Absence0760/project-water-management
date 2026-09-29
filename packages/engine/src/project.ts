@@ -1046,6 +1046,31 @@ export interface NetworkNode {
 	 */
 	damSeepageReturnPct?: number;
 	/**
+	 * The day the dam's capacity (and its survey curve) was surveyed (ISO;
+	 * engine ≥ 1.27.0, issue #67, docs/model.md §2.7g). null / absent = no
+	 * date; a sediment rate needs one.
+	 */
+	damSurveyDate?: string | null;
+	/**
+	 * Capacity lost to sediment per year, as a share (0–0.2) of the surveyed
+	 * capacity (engine ≥ 1.27.0): the capacity on a day is the entered one
+	 * × (1 − rate × years since damSurveyDate), more before the survey and
+	 * less after it, never below 0. null / absent / 0 = none.
+	 */
+	damSedimentPctPerYear?: number | null;
+	/**
+	 * The first day the dam holds water (ISO; engine ≥ 1.27.0): before it the
+	 * farm has no dam, and what is routed to it passes. null / absent = the
+	 * whole run.
+	 */
+	damInServiceFrom?: string | null;
+	/**
+	 * The first day the unit abstracts (ISO; farms and water users, engine ≥
+	 * 1.27.0): before it its crops', demand objects' and own demand are 0.
+	 * null / absent = the whole run.
+	 */
+	abstractionFrom?: string | null;
+	/**
 	 * kind 'user' only (engine ≥ 0.22.0, WP-1.33): demand from the river, m³/day
 	 * per water-year month (Oct–Sep). null / absent = no demand.
 	 */
@@ -1200,6 +1225,14 @@ export const DAM_STORAGE_DEFAULTS = {
 	damSeepageReturnPct: 1
 } as const;
 
+/** What a node without the development fields (engine ≥ 1.27.0, docs/model.md §2.7g) runs as: its entered dam and demand throughout. */
+export const DEVELOPMENT_DEFAULTS = {
+	damSurveyDate: null,
+	damSedimentPctPerYear: null,
+	damInServiceFrom: null,
+	abstractionFrom: null
+} as const;
+
 /** Most rows a dam survey curve may have. */
 export const DAM_CURVE_MAX_ROWS = 200;
 
@@ -1314,6 +1347,8 @@ export function upgradeLegacyModel<M extends { nodes?: unknown; transfers?: unkn
 				if (n.damReleaseM3Day === undefined) n.damReleaseM3Day = DAM_STORAGE_DEFAULTS.damReleaseM3Day;
 				if (n.damOutletCapacityM3Day === undefined) n.damOutletCapacityM3Day = DAM_STORAGE_DEFAULTS.damOutletCapacityM3Day;
 				n.damSeepageReturnPct ??= DAM_STORAGE_DEFAULTS.damSeepageReturnPct;
+				// Development over the run (engine ≥ 1.27.0): off unless set.
+				for (const k of Object.keys(DEVELOPMENT_DEFAULTS) as (keyof typeof DEVELOPMENT_DEFAULTS)[]) if (n[k] === undefined) n[k] = DEVELOPMENT_DEFAULTS[k];
 				// Supply rule and river pump (WP-3.8): the dam only unless set.
 				n.supplyRule ??= SUPPLY_DEFAULTS.supplyRule;
 				if (n.pumpCapacityM3Day === undefined) n.pumpCapacityM3Day = SUPPLY_DEFAULTS.pumpCapacityM3Day;

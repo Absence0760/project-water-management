@@ -13,6 +13,7 @@ import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibra
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
 import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
@@ -151,7 +152,9 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const [F, G, W, H, I, J, Q, R, AA, Z, ABs] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff', 'transfer', 'dam_storage', 'spill', 'ewr_shortfall', 'ewr_cumulative', 'ewr_shortfall_incremental'].map(g) as number[][];
 		// The engine keeps full precision (docs/engine-audit.md R1): no rounding here either.
 		const cap = n.damCapacityM3;
-		let qPrev = n.damInitialPct * cap;
+		// A dam whose capacity changes (engine ≥ 1.27.0) starts at its share of the first day's capacity.
+		const ks = capacityScaleOf(n, toEpochDay(out.startDate), out.days, []);
+		let qPrev = n.damInitialPct * cap * (ks?.[0] ?? 1);
 		totIn += qPrev;
 		// Return flow: the share β of the application losses (1 − e)·G (audit N1),
 		// of the crops' part when the unit has demand objects, which return their own shares (engine ≥ 1.7.0).
@@ -193,8 +196,9 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 			if (Math.abs(lhs - rhs) > tol(lhs)) return `${where}: farm balance ${lhs} ≠ ${rhs}`;
 			if (spl < 0 || spl > (Sp?.[t] ?? 0) + tol(spl)) return `${where}: seepage lost ${spl} outside [0, seepage ${Sp?.[t]}]`;
 			if (pd < 0 || ev < 0 || (Sp?.[t] ?? 0) < 0) return `${where}: rain on dam ${pd}, evaporation ${ev} and seepage ${Sp?.[t]} must be ≥ 0`;
-			if (Q![t]! < -1e-9 || Q![t]! > cap + 1e-9) return `${where}: storage ${Q![t]} outside [0, ${cap}]`;
-			if (R![t]! < 0 || (R![t]! > 0 && Math.abs(Q![t]! - cap) > 1e-9)) return `${where}: spill ${R![t]} with storage ${Q![t]}/${cap}`;
+			const capT = ks ? cap * ks[t]! : cap;
+			if (Q![t]! < -1e-9 || Q![t]! > capT + 1e-9) return `${where}: storage ${Q![t]} outside [0, ${capT}]`;
+			if (R![t]! < 0 || (R![t]! > 0 && Math.abs(Q![t]! - capT) > 1e-9)) return `${where}: spill ${R![t]} with storage ${Q![t]}/${capT}`;
 			if (G![t]! > F![t]! + 1e-9) return `${where}: supplied ${G![t]} > demand ${F![t]}`;
 			if (G![t]! < -1e-9) return `${where}: supplied ${G![t]} < 0`;
 			if (Math.abs(W![t]! - (F![t]! - G![t]!)) > 1e-9) return `${where}: deficit ≠ demand − supplied`;
@@ -352,6 +356,7 @@ interface Rule {
 	on: Uint8Array;
 	/** The most it may move in a day, by calendar month (the month's rate × 86 400, capped by the daily cap). */
 	limit: Float64Array;
+	/** The share of the source dam's capacity (the day's, engine ≥ 1.27.0) it keeps. */
 	reserve: number;
 	priority: number;
 }
@@ -387,16 +392,18 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 		if (!tr.enabled || !a || !b || a.kind !== 'farm' || b.kind !== 'farm' || isRiverOfftake(tr)) continue;
 		// The month's own rate (engine ≥ 1.14.0), or the one max rate in the listed months.
 		// The source keeps the rule's minimum or its dam's minimum operating level, whichever is higher (audit Q5).
-		rules.push({ from: a.id, to: b.id, on: transferActiveMonths(tr), limit: transferDailyLimit(tr), reserve: a.damCapacityM3 * Math.max(tr.minStoragePct, a.damMinPct), priority: tr.priority ?? 0 });
+		rules.push({ from: a.id, to: b.id, on: transferActiveMonths(tr), limit: transferDailyLimit(tr), reserve: Math.max(tr.minStoragePct, a.damMinPct), priority: tr.priority ?? 0 });
 	}
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
+	// A dam whose capacity changes over the run (engine ≥ 1.27.0): its dam_capacity column, else the entered capacity.
+	const capOn = (id: string, t: number) => get.get(`${id}|${DAM_CAPACITY_SERIES.key}`)?.[t] ?? byId.get(id)!.damCapacityM3;
 	const storage = (id: string, t: number) => {
 		// The storage reset's step (engine ≥ 0.46.0) starts its day.
 		const set = get.get(`${id}|dam_storage_set`)?.[t] ?? 0;
 		if (t > 0) return get.get(`${id}|dam_storage`)![t - 1]! + set;
 		const n = byId.get(id)!;
-		return n.damInitialPct * n.damCapacityM3 + set;
+		return n.damInitialPct * capOn(id, 0) + set;
 	};
 	// Per calendar month, the active rules and each farm's incoming and outgoing
 	// ones, worked out once rather than every day.
@@ -419,7 +426,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	 */
 	const roomOf = (fi: number, t: number) => {
 		const [pd, e, sp] = farmLoss[fi]!.map((v) => v?.[t] ?? 0);
-		return farms[fi]!.damCapacityM3 - (storage(farms[fi]!.id, t) + pd! - e! - sp!) + farmD[fi]![t]!;
+		return capOn(farms[fi]!.id, t) - (storage(farms[fi]!.id, t) + pd! - e! - sp!) + farmD[fi]![t]!;
 	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
@@ -437,7 +444,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 			const outMax = outs.reduce((s, r) => s + r.maxDaily, 0);
 			if (J > inMax + tol(inMax)) return `${where}: received ${J} > the rules' limit ${inMax}`;
 			const prev = storage(f.id, t);
-			const avail = outs.length ? Math.max(prev - Math.min(...outs.map((r) => r.reserve)), 0) : 0;
+			const avail = outs.length ? Math.max(prev - capOn(f.id, t) * Math.min(...outs.map((r) => r.reserve)), 0) : 0;
 			const outCap = Math.min(outMax, avail);
 			if (-J > outCap + tol(outCap)) return `${where}: sent ${-J} > MIN(limit ${outMax}, storage ${prev} − reserve) = ${outCap}`;
 			if (outs.length === 0 && J > 0) {
@@ -465,7 +472,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 					Math.max(0, roomOf(di, t))
 				);
 			}
-			const floor = Math.min(limit, Math.max(prev - Math.max(...outs.map((r) => r.reserve)), 0));
+			const floor = Math.min(limit, Math.max(prev - capOn(f.id, t) * Math.max(...outs.map((r) => r.reserve)), 0));
 			if (sent < floor - tol(Math.max(floor, prev))) return `${where}: sent only ${sent}; the rules and the destinations' room allowed ${floor} (storage ${prev})`;
 		}
 	}
@@ -932,9 +939,15 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
-		const cap = n.damCapacityM3;
-		const dead = n.damMinPct * cap;
-		let qPrev = n.damInitialPct * cap;
+		// A dam whose capacity changes over the run (engine ≥ 1.27.0, ../network/development.ts): the
+		// day's factor k, as runModel resolves it, and the dam_capacity column it reports.
+		const ks = capacityScaleOf(n, day0, out.days, []);
+		const abstractFrom = abstractionStartDay(n, day0, out.days, []);
+		const CAPS = g(DAM_CAPACITY_SERIES.key);
+		if (!!ks !== !!CAPS) return `${n.id}: ${CAPS ? 'a dam_capacity column for a dam whose capacity doesn\'t change' : 'no dam_capacity column for a dam whose capacity changes'}`;
+		const cap0 = n.damCapacityM3;
+		const dead0 = n.damMinPct * cap0;
+		let qPrev = n.damInitialPct * cap0 * (ks && out.days ? ks[0]! : 1);
 		const near = (a: number, b: number, scale: number) => Math.abs(a - b) <= tol(Math.max(Math.abs(a), Math.abs(b), scale));
 		// The storage reset (engine ≥ 0.46.0): its step starts the day.
 		const SET = g('dam_storage_set');
@@ -952,7 +965,14 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			const gr = gross![t]!, ef = eff![t]!, f = F![t]!, d = D![t]!, gg = G![t]!, h = H![t]!, i = I![t]!, j = J![t]!, k = K![t]!, l = L![t]!, m = M![t]!;
 			const nn = N![t]!, o = O![t]!, p = P![t]!, q = Q![t]!, r = R![t]!, ss = S![t]!, tt = T![t]!, u = U![t]!, v = V![t]!;
 			const where = `${n.id} day ${t}`;
-			const df = (factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (KF ? KF[t]! : 1);
+			const kd = ks ? ks[t]! : 1;
+			const cap = cap0 * kd;
+			const dead = kd === 1 ? dead0 : dead0 * kd;
+			// The dam-level triggers read the storage at the entered capacity's scale.
+			const qLevel = kd === 1 ? qPrev : kd > 0 ? qPrev / kd : 0;
+			if (CAPS && !near(CAPS[t]!, cap, cap0)) return `${where}: dam_capacity ${CAPS[t]} ≠ the capacity ${cap0} × ${kd}`;
+			// Nothing before the unit's abstraction date (engine ≥ 1.27.0).
+			const df = t < abstractFrom ? 0 : (factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (KF ? KF[t]! : 1);
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${factor || KF ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor || KF ? ')' : ''}`;
 			if (objs) {
@@ -966,7 +986,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			if (!near(m + nn, i, 0) || m < 0 || m > i * n.pctRunoffToDam + tol(i)) return `${where}: runoff split M ${m} + N ${nn} ≠ I ${i}`;
 			if (o < 0 || o > Math.min(n.divertCapacityM3Day, l + nn) + tol(l + nn)) return `${where}: diverted ${o} outside [0, MIN(capacity, L + N)]`;
 			const area = AREA![t]!, pd = PD![t]!, ev = EV![t]!, sp = SP![t]!;
-			const onCurve = curve && cap > 0 && qPrev > 0 ? curveAreaAt(curve, qPrev) : null;
+			const c = curve && cap > 0 && qPrev > 0 ? curveAreaAt(curve, kd === 1 ? qPrev : qPrev / kd) : null;
+			const onCurve = c && kd !== 1 ? { area: c.area, slope: c.slope / kd } : c;
 			const a = !(cap > 0 && qPrev > 0) ? 0 : onCurve ? onCurve.area : areaFull * Math.pow(Math.min(qPrev / cap, 1), b);
 			if (!near(area, a, a)) return `${where}: dam area ${area} ≠ ${onCurve ? 'the survey curve at' : `A_full ${areaFull} × (`}Q[t−1] ${qPrev}${onCurve ? '' : ` / capacity ${cap})^${b}`}`;
 			const pdWant = (damRain(t) * a) / 1000;
@@ -980,7 +1001,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					? Math.min(evRaw, ((1 - seep) * qPrev) / b)
 					: evRaw;
 			const evWant = Math.min(limited, there);
-			const spWant = Math.min(seep * qPrev, there - evWant);
+			// A dam with no capacity today (engine ≥ 1.27.0: filled with sediment, or not in service yet) holds
+			// nothing to seep: yesterday's water spills.
+			const spWant = cap > 0 ? Math.min(seep * qPrev, there - evWant) : 0;
 			if (!near(pd, pdWant, qPrev) || !near(ev, evWant, qPrev) || !near(sp, spWant, qPrev))
 				return `${where}: rain on dam ${pd} / evaporation ${ev} / seepage ${sp} ≠ ${pdWant} / ${evWant} / ${spWant}`;
 			const s0 = qPrev + pd - ev - sp;
@@ -1031,7 +1054,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			let keep = 0;
 			if (sup) {
 				if (sup.rule === 3 && (k !== 0 || m !== 0 || o !== 0)) return `${where}: run of river has no dam, but K ${k}, M ${m}, O ${o} went into it`;
-				onRiver = sup.rule !== 2 || (onRiver ? qPrev < sup.stopM3 : qPrev < sup.triggerM3);
+				onRiver = sup.rule !== 2 || (onRiver ? qLevel < sup.stopM3 : qLevel < sup.triggerM3);
 				const month = monthOfEpochDay(day0 + t);
 				keep = Math.max(ZS?.[t] ?? 0, rel && rel.rule === 1 ? (rel.m3DayByMonth ? rel.m3DayByMonth[month]! : Zc[t]!) : 0);
 				if (onRiver) room = Math.max(0, Math.min(sup.pumpM3Day, ss - keep));
@@ -1041,7 +1064,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// Boreholes: primary pump first, dam-target ones into the dam, supplemental (and emergency, while the dam is below its trigger) top up what the dam leaves.
 			// The surface's room under an allocation cap, after the off-take water used (Infinity without one).
 			const sLeft = (RS?.[t] ?? Infinity) - xused;
-			const rp = replay(t, dl, qPrev, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity);
+			const rp = replay(t, dl, qLevel, avail, dead, cap, room, sup?.rule ?? 1, sLeft, RG?.[t] ?? Infinity);
 			let wantGs: number;
 			let wantGr = 0;
 			const dsl = Math.min(dl, sLeft);

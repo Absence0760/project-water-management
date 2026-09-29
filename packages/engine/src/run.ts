@@ -84,6 +84,7 @@ import {
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from './network/development';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -511,6 +512,9 @@ function runNetwork(
 			if (node.kind === 'user' && !userSeries.has(field)) continue;
 			push(node.id, key, node.kind === 'user' ? (USER_LABELS[key] ?? label) : withObjects ? (OBJECT_LABELS[key] ?? label) : label, key === 'dam_storage' ? 'm³' : 'm³/day', r[field]);
 		}
+		// A dam whose capacity changes over the run (engine ≥ 1.27.0, ./network/development.ts): the day's capacity.
+		const ks = plan.nodes[i]!.capacityScale;
+		if (ks) push(node.id, DAM_CAPACITY_SERIES.key, DAM_CAPACITY_SERIES.label, DAM_CAPACITY_SERIES.unit, Float64Array.from(ks, (k) => k * node.damCapacityM3));
 		if (hasSenior) push(node.id, 'senior_requirement', 'Senior users’ demand still to pass below this node', 'm³/day', r.seniorRequirement);
 		if (plan.nodes[i]!.landCover) push(node.id, 'landcover_reduction', 'Runoff removed by land cover (invasive plants, forestry)', 'm³/day', r.landCoverReduction);
 		if (plan.nodes[i]!.borehole) {
@@ -613,7 +617,7 @@ function runNetwork(
 			...(r.riverAbstraction ? { avgRiverAbstractionM3Day: mean(r.riverAbstraction) } : {}),
 			...(plan.nodes[i]!.objects ? { demandObjects: objectSummaries(plan.nodes[i]!.objects!, r.objectSupplied!, input.model.demandObjects ?? [], mean) } : {}),
 			// Its dam's storage figures (engine ≥ 1.2.0, issue #55): for the Summary's Dams today without the daily series.
-			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate) ?? {})
+			...(damFigures(r.storage, node.damCapacityM3, node.damMinPct, startDate, plan.nodes[i]!.capacityScale ? (t) => node.damCapacityM3 * plan.nodes[i]!.capacityScale![t]! : undefined) ?? {})
 		});
 	});
 
@@ -1114,6 +1118,12 @@ export function buildNetworkPlan(
 	for (let t = 0; t < days; t++) ewr[t] = ewrWy[waterYearIndex(month[t]!)]!;
 
 	const demand = buildDemand({ ...input, model }, settings, days, month, aligned, warnings, factorFrom, warm);
+	// Development over the run (engine ≥ 1.27.0, ./network/development.ts): a unit takes nothing before
+	// its abstraction date, and a dam's capacity follows its sediment rate and in-service date.
+	const dated = nodes.some((n) => n.abstractionFrom != null || n.damInServiceFrom != null || (n.damSedimentPctPerYear ?? 0) > 0);
+	if (dated && start === undefined) throw new Error('buildNetworkPlan: a dated dam or abstraction needs the run start');
+	const abstractFrom = nodes.map((n) => (start === undefined ? 0 : abstractionStartDay(n, start, days, warnings)));
+	demand.forEach((d, i) => d.net.fill(0, 0, abstractFrom[i]!));
 
 	const indexById = new Map(nodes.map((n, i) => [n.id, i]));
 	const transfers: PlanTransfer[] = [];
@@ -1191,7 +1201,10 @@ export function buildNetworkPlan(
 	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
-	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings));
+	const users = otherUsers(nodes, topo, shares.share, days, month, warnings, factorFrom, (i, d) => {
+		d.fill(0, 0, abstractFrom[i]!);
+		scaleDemandToAllocation(allocation, i, d, start!, days, nodes[i]!.name, warnings);
+	});
 	const reset = start === undefined ? null : storageResetOf(settings.damStorageReset, nodes, start, days, warnings);
 	const cover = resolveLandCover(model, warnings);
 	const bores = boreholesByNode(model, warnings);
@@ -1201,7 +1214,14 @@ export function buildNetworkPlan(
 	const objectsOf = (n: NetworkNode): PlanObjects | undefined => {
 		const list = objectsBy.get(n.id);
 		// The node's demand factor scales them as it scales the crop requirement (buildDemand warns about a bad one).
-		return list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		const po = list && wyOfDay ? planObjects(list, days, wyOfDay, demandFactorOf(n, []), factorFrom, warnings, start) : undefined;
+		// None before the unit's abstraction date.
+		const s = abstractFrom[indexById.get(n.id)!]!;
+		if (po && s > 0) {
+			for (const d of po.demand) d.fill(0, 0, s);
+			po.total.fill(0, 0, s);
+		}
+		return po;
 	};
 
 	// River off-takes (engine ≥ 1.14.0, ./network/offtake.ts): each destination after its source.
@@ -1225,6 +1245,7 @@ export function buildNetworkPlan(
 			// The workbook rounds capacity and initial storage to whole m³ (a 0.4 m³ dam became 0); the engine doesn't.
 			const cap = n.kind === 'user' ? 0 : n.damCapacityM3;
 			const u = users.byNode.get(i);
+			const scale = start === undefined ? undefined : capacityScaleOf(n, start, days, warnings);
 			return {
 				kind: n.kind,
 				share: shares.share[i]!,
@@ -1232,7 +1253,8 @@ export function buildNetworkPlan(
 				pctRunoffToDam: n.pctRunoffToDam,
 				divertCapacityM3Day: n.divertCapacityM3Day,
 				damCapacityM3: cap,
-				initialStorageM3: n.damInitialPct * cap,
+				initialStorageM3: n.damInitialPct * cap * (scale && days ? scale[0]! : 1),
+				...(scale ? { capacityScale: scale } : {}),
 				deadStorageM3: n.kind === 'farm' ? n.damMinPct * cap : 0,
 				...irrigation(n, warnings, demand[i]!.efficiency),
 				...damLosses(n, warnings),

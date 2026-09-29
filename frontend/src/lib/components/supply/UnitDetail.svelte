@@ -12,6 +12,7 @@
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries } from '$lib/components/runs/cache';
+	import { capacityOver, type DamDev } from '$lib/components/overview/damLevels';
 	import { storagePct } from '$lib/components/runs/results';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { shortRanges } from './supply';
@@ -23,6 +24,7 @@
 		farm,
 		name,
 		capacity,
+		dev = undefined,
 		deficit = null,
 		forecastFrom = null,
 		height = 260
@@ -36,6 +38,8 @@
 		name: string;
 		/** The unit's dam capacity in the run (m³); under 1 = no dam. */
 		capacity: number;
+		/** What changes the dam's capacity over the run (issue #67): the storage chart is then a share of each day's capacity. */
+		dev?: DamDev;
 		/** Its daily deficit, when the page has fetched it: the days short are shaded. */
 		deficit?: DailySeries | null;
 		forecastFrom?: string | null;
@@ -86,7 +90,7 @@
 	});
 	const storageSeries = $derived.by<ChartSeries[]>(() => {
 		const s = data.storage;
-		const pct = s ? storagePct(s.values, capacity) : null;
+		const pct = s ? storagePct(s.values, capacity, capacityOver({ capacityM3: capacity, dev }, s.startDate)) : null;
 		return s && pct ? [{ label: 'Dam storage', startDate: s.startDate, values: pct, color: '--series-1' }] : [];
 	});
 	const shade = $derived(deficit ? shortRanges(deficit) : []);

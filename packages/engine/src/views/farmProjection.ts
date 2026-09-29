@@ -25,6 +25,7 @@
 // The same recompute over any window, other water users included, is
 // curtailmentOverWindow (below): the Runs tab's reporting-window picker
 // (issue #44) and the season here share it.
+import { damCapacityOn } from '../network/development';
 import { fromEpochDay, monthOfEpochDay, toEpochDay } from '../calendar';
 import { attributeEwrShortfall, bindingSite, type AttributionResult } from '../network/attribution';
 import { bindingFromCharge, EWR_BINDING_SERIES } from '../network/bindingSeries';
@@ -709,10 +710,15 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	const spill = need(run, nodeId, 'spill', days);
 	const charge = need(run, nodeId, 'ewr_charge', days);
 	const { season: sw, last30: lw } = analysis;
-	const cap = node.damCapacityM3;
-	const hasDam = cap > 0;
-	const stop = cap * node.damMinPct;
-	const pctAt = (t: number) => storage[t]! / cap;
+	// A dam's capacity and stop level on a run day (engine ≥ 1.27.0: sediment, an in-service date;
+	// ../network/development.ts), so a level is a share of what the dam could hold that day.
+	const capOn = (t: number) => damCapacityOn(node, d0 + t);
+	const hasDam = node.damCapacityM3 > 0;
+	const stopOn = (t: number) => capOn(t) * node.damMinPct;
+	const pctAt = (t: number) => {
+		const c = capOn(t);
+		return c > 0 ? storage[t]! / c : 0;
+	};
 
 	// The season's short days, and how many had the dam at its stop level (the
 	// engine only lets irrigation draw above it, so a dam farm is short only there).
@@ -723,7 +729,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 		if (!(deficit[t]! > NOISE_M3)) continue;
 		shortDays++;
 		shortMonths.add(fromEpochDay(d0 + t).slice(0, 7));
-		if (hasDam && storage[t]! <= stop + 1e-3) atStop++;
+		if (hasDam && capOn(t) > 0 && storage[t]! <= stopOn(t) + 1e-3) atStop++;
 	}
 	const seasonTotals = totals(demand, supplied, run.startDate, sw.fromDate, sw.toDate);
 	const season: SeasonTotals = { ...seasonTotals, shortDays, shortMonths: [...shortMonths].sort(), shortDaysAtStopLevel: atStop };
@@ -732,7 +738,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	let dam: DamState | null = null;
 	if (hasDam) {
 		const e = sw.to;
-		const usableM3 = node.damMinPct > 0 ? Math.max(storage[e]! - stop, 0) : null;
+		const usableM3 = node.damMinPct > 0 ? Math.max(storage[e]! - stopOn(e), 0) : null;
 		const use14 = windowSummary(supplied, run.startDate, fromEpochDay(d0 + Math.max(0, e - 13)), analysis.dataUntil)!.mean;
 		let lastSpill: string | null = null;
 		for (let t = e; t >= 0; t--) {
@@ -746,6 +752,7 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 			storageM3: storage[e]!,
 			usableM3,
 			pct30dAgo: pctAt(Math.max(0, e - 30)),
+			storage30dAgoM3: storage[Math.max(0, e - 30)]!,
 			lastSpill,
 			use14M3Day: use14,
 			usableDays: usableM3 !== null && use14 > 0 ? usableM3 / use14 : null
@@ -811,7 +818,8 @@ export function farmProjection(run: ProjectionRun, nodeId: string, analysis: Sea
 	return {
 		nodeId,
 		name: node.name,
-		damCapacityM3: cap,
+		// The capacity on the projection's last day (sw.to): what "x of y m³" reads against.
+		damCapacityM3: hasDam ? capOn(sw.to) : 0,
 		damMinPct: node.damMinPct,
 		irrigationEfficiency: runEfficiency(node, run),
 		dataFrom: run.startDate,

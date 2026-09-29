@@ -7,7 +7,7 @@
 // Pure, so the page stays markup and the numbers are unit-tested.
 import { fromEpochDay, toEpochDay, type DailySeries } from '@water-management/engine';
 import type { ChartSeries } from '$lib/components/charts/series';
-import type { DamLevel } from '$lib/components/overview/damLevels';
+import { pctOfCapacity, type DamLevel } from '$lib/components/overview/damLevels';
 import { fmtDay, fmtNum } from '$lib/format/number';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
@@ -117,9 +117,11 @@ export interface StorageSpark {
  * dam's "lowest in its last year" (damLevels.ts: the first day of the lowest
  * level); the first and last days are always points, so the line spans the
  * window and ends on the card's % full. Gaps are skipped. null with fewer
- * than two values.
+ * than two values. `capacityOn` (overview/damLevels.ts capacityOver): the
+ * capacity on series index i when it changes over the run (issue #67), so
+ * each point is a share of that day's capacity.
  */
-export function storageSpark(series: DailySeries, capacityM3: number, days = 365, points = 60): StorageSpark | null {
+export function storageSpark(series: DailySeries, capacityM3: number, days = 365, points = 60, capacityOn?: (i: number) => number): StorageSpark | null {
 	if (!(capacityM3 >= 1)) return null;
 	const v = series.values;
 	const ok = (i: number) => v[i] != null && Number.isFinite(v[i]);
@@ -144,7 +146,7 @@ export function storageSpark(series: DailySeries, capacityM3: number, days = 365
 	if (picked.length < 2) return null;
 	const day = (i: number) => fmtDay(addDays(series.startDate, i));
 	return {
-		values: picked.map((i) => (v[i]! / capacityM3) * 100),
+		values: picked.map((i) => (capacityOn ? pctOfCapacity(v[i]!, capacityOn(i)) : (v[i]! / capacityM3) * 100)),
 		x: picked.map((i) => (i - from) / (n - 1)),
 		labels: picked.map(day),
 		ends: [day(from), day(last)]
@@ -157,8 +159,28 @@ export type StorageUnit = 'pct' | 'm3';
  * The storage chart's lines: the dam's storage, its capacity and (when it has
  * one) its minimum operating level, in m³ or as % of capacity. Every line
  * spans the storage series' days, so the window switch trims them together.
+ * With `capacityOn` (the capacity on series index i, when it changes over the
+ * run: sediment, an in-service date, issue #67) the capacity and minimum lines
+ * follow the day's capacity in m³, and % is a share of it; a day with no dam
+ * (before it is in service) has no % point.
  */
-export function storageChartSeries(series: DailySeries, capacityM3: number, minPct: number, unit: StorageUnit): ChartSeries[] {
+export function storageChartSeries(series: DailySeries, capacityM3: number, minPct: number, unit: StorageUnit, capacityOn?: (i: number) => number): ChartSeries[] {
+	if (capacityOn) {
+		const cap = series.values.map((_, i) => capacityOn(i));
+		const pctMode = unit === 'pct';
+		const line = (share: number) => cap.map((c) => (pctMode ? (c > 0 ? share * 100 : null) : share * c));
+		const out: ChartSeries[] = [
+			{
+				label: 'Storage',
+				startDate: series.startDate,
+				values: series.values.map((x, i) => (x == null || !Number.isFinite(x) ? null : pctMode ? (cap[i]! > 0 ? (x / cap[i]!) * 100 : null) : x)),
+				color: '--series-1'
+			},
+			{ label: 'Capacity', startDate: series.startDate, values: line(1), style: 'dashed', color: '--text-muted' }
+		];
+		if (minPct > 0) out.push({ label: 'Minimum level', startDate: series.startDate, values: line(minPct / 100), style: 'dashed', color: '--series-2' });
+		return out;
+	}
 	const k = unit === 'pct' ? 100 / capacityM3 : 1;
 	const flat = (x: number) => series.values.map(() => x);
 	const out: ChartSeries[] = [

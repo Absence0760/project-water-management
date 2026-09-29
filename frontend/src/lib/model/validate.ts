@@ -1,6 +1,6 @@
 // Client-side mirror of the PUT /projects/:id/model validation in docs/api.md,
 // so the editor can flag problems before a save round-trip.
-import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
+import { damCurveProblem, DEMAND_SCHEDULE_MAX_WINDOWS, developmentProblem, GA538_GROUNDWATER_RATES, isGa538Rate, isRiverOfftake, monthlyRatesMismatch, scheduleWindowProblem, SUPPLY_DEFAULTS, type NetworkNode, type ProjectModel } from '@water-management/engine';
 
 export interface ModelIssue {
 	/** Which editor tab the issue belongs to. */
@@ -45,6 +45,17 @@ export function ewrSiteIssue(n: Pick<NetworkNode, 'kind' | 'downstreamNodeId' | 
 	if (n.downstreamNodeId === null) return 'the outlet is always an EWR site; tick “EWR site”.';
 	if (n.kind !== 'gauge') return 'only a gauge can be taken off the EWR sites; tick “EWR site”.';
 	return null;
+}
+
+/**
+ * Why a node's development fields (engine ≥ 1.27.0, issue #67: the dam's
+ * survey date, sediment rate and in-service date, the abstraction start)
+ * can't be saved, as the API refuses them (engine developmentProblem, through
+ * modelRules), in the editor's words, or null.
+ */
+export function developmentIssue(n: Pick<NetworkNode, 'kind' | 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom' | 'abstractionFrom'>): string | null {
+	const p = developmentProblem(n);
+	return p === null ? null : `${p.replace('only a farm has a dam', 'only a hydrological unit has a dam; clear its dam dates and sediment rate')}.`;
 }
 
 export function validateModel(model: ProjectModel): ModelIssue[] {
@@ -117,6 +128,9 @@ export function validateModel(model: ProjectModel): ModelIssue[] {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : 'only a hydrological unit has a dam';
 			if (bad) issues.push({ area: 'network', message: `${label}: dam survey curve: ${bad}.` });
 		}
+		// Development over the run (engine ≥ 1.27.0), as the API checks it.
+		const development = developmentIssue(n);
+		if (development) issues.push({ area: 'network', message: `${label}: ${development}` });
 		// Supply rule and river pump (WP-3.8), as the API checks them.
 		for (const m of supplyIssues(n)) issues.push({ area: 'network', message: `${label}: ${m}` });
 		// EWR site flag (engine ≥ 1.5.0), as the API checks it.

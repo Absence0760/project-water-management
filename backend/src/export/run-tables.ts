@@ -123,6 +123,13 @@ export interface SummaryMeta {
 	runoffModel?: string;
 	/** Each farm's dam capacity as the run's model had it, m³ by node id, so storage can be checked against it; absent = no column. */
 	damCapacityM3?: Record<string, number>;
+	/**
+	 * The capacity on the summary's last day of each dam whose capacity changes
+	 * over the run (sediment, an in-service date; engine ≥ 1.27.0), m³ by node
+	 * id: the dam's end-of-run storage is bounded by it, not by the entered
+	 * capacity. Absent or empty = no such dam, no column.
+	 */
+	damCapacityEndM3?: Record<string, number>;
 }
 
 /**
@@ -816,12 +823,22 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 	);
 	// The dam's capacity beside its storage figures, so "storage stays within the dam" can be checked from this sheet.
 	const capacity = meta.damCapacityM3;
-	yield csvRow(['Farm', ...FARM_COLUMNS.map(([, h]) => h), ...(capacity ? ['Dam capacity (m³)'] : []), ...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)]);
+	// A dam whose capacity changes over the run (sediment, an in-service date) is bounded by the day's capacity.
+	const endCapacity = capacity && meta.damCapacityEndM3 && Object.keys(meta.damCapacityEndM3).length ? meta.damCapacityEndM3 : null;
+	yield csvRow([
+		'Farm',
+		...FARM_COLUMNS.map(([, h]) => h),
+		...(capacity ? ['Dam capacity (m³)'] : []),
+		...(endCapacity ? ['Dam capacity on the last day (m³)'] : []),
+		...extra.map((k) => OPTIONAL_FARM_LABELS[k] ?? k)
+	]);
 	for (const f of farms) {
+		const id = String(f.nodeId);
 		yield csvRow([
 			String(f.name ?? ''),
 			...FARM_COLUMNS.map(([k]) => scalar(PERCENT_KEYS.has(k) ? pct(f[k]) : f[k]) ?? null),
-			...(capacity ? [capacity[String(f.nodeId)] ?? null] : []),
+			...(capacity ? [capacity[id] ?? null] : []),
+			...(endCapacity ? [endCapacity[id] ?? capacity![id] ?? null] : []),
 			...extra.map((k) => scalar(f[k]) ?? null)
 		]);
 	}

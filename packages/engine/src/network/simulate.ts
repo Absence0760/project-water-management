@@ -40,8 +40,14 @@ export interface PlanNode {
 	pctUpstreamToDam: number;
 	pctRunoffToDam: number;
 	divertCapacityM3Day: number;
-	/** Dam capacity (m³). */
+	/** Dam capacity (m³), as entered. */
 	damCapacityM3: number;
+	/**
+	 * The day's capacity ÷ damCapacityM3 (engine ≥ 1.27.0, ./development.ts:
+	 * sediment, an in-service date); absent = 1 every day. Dead storage, the
+	 * survey curve's volumes and the dam-level triggers scale with it.
+	 */
+	capacityScale?: Float64Array;
 	/** Storage on the day before the first simulated day. */
 	initialStorageM3: number;
 	/**
@@ -434,6 +440,9 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
 	};
 }
 
+/** A dam's capacity factor on day t (./development.ts); 1 for a dam whose capacity doesn't change. */
+const capacityK = (n: PlanNode, t: number): number => (n.capacityScale ? n.capacityScale[t]! : 1);
+
 /**
  * A dam's surface area, rain on it, open-water evaporation and seepage today
  * (audit N2), all from yesterday's storage and before any cap: the routing
@@ -453,13 +462,17 @@ function allocWorkings(node: PlanNode, days: number): FarmWorkings {
  * it (docs/model.md §2.7a).
  */
 function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64Array | undefined, damRainMm: Float64Array | undefined): { A: number; Pd: number; E: number; Sp: number } {
-	const cap = node.damCapacityM3;
+	const k = capacityK(node, t);
+	const cap = node.damCapacityM3 * k;
 	if (!(cap > 0 && qPrev > 0)) return { A: 0, Pd: 0, E: 0, Sp: 0 };
 	if (node.damCurve) {
 		// Survey curve (WP-3.5): area linear in volume between rows. The limiter
 		// above generalises to the curve's local exponent b = Q·A′/A: while it
-		// exceeds 1, evaporation is at most (1 − seepage) × A / A′.
-		const { area: A, slope } = curveAreaAt(node.damCurve, qPrev);
+		// exceeds 1, evaporation is at most (1 − seepage) × A / A′. A dam whose
+		// capacity changes (engine ≥ 1.27.0) reads the curve with its volumes × k.
+		const c = curveAreaAt(node.damCurve, k === 1 ? qPrev : qPrev / k);
+		const A = c.area;
+		const slope = k === 1 ? c.slope : c.slope / k;
 		const s = node.damSeepagePerDay;
 		const E = lakeEvapMmDay ? (lakeEvapMmDay[t]! * A) / 1000 : 0;
 		return {
@@ -516,7 +529,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	/** Node i's storage at the start of day t: the day before's, or on the reset day the storage set. */
 	const startStorage = (i: number, t: number): number => {
 		const n = nodes[i]!;
-		if (t === resetDay && n.storageResetM3 !== undefined) return Math.min(Math.max(n.storageResetM3, 0), n.damCapacityM3);
+		if (t === resetDay && n.storageResetM3 !== undefined) return Math.min(Math.max(n.storageResetM3, 0), n.damCapacityM3 * capacityK(n, t));
 		return t === 0 ? n.initialStorageM3 : res[i]!.storage[t - 1]!;
 	};
 	// Whether each farm under the trigger rule (WP-3.8) pumped from the river yesterday.
@@ -623,7 +636,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 					want[k] = 0;
 					continue;
 				}
-				const free = prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3;
+				const free = prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3 * capacityK(nodes[tr.from]!, t);
 				want[k] = Math.max(0, Math.min(free, tr.maxDailyM3[month[t]!]!));
 			}
 			// 2. Rules into one destination share its room, pro rata to their limits.
@@ -637,7 +650,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
 				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
-				const room = Math.max(0, dst.damCapacityM3 - (q + loss.Pd - loss.E - loss.Sp) + dstD - intoToday[tr.to]!);
+				const room = Math.max(0, dst.damCapacityM3 * capacityK(dst, t) - (q + loss.Pd - loss.E - loss.Sp) + dstD - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
 			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
@@ -646,7 +659,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			for (const k of level) {
 				const tr = transfers[k]!;
 				sumBy[tr.from]! += want[k]!;
-				if (tr.activeMonth[month[t]!]) freeBy[tr.from] = Math.max(freeBy[tr.from]!, prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3);
+				if (tr.activeMonth[month[t]!]) freeBy[tr.from] = Math.max(freeBy[tr.from]!, prevQ(tr.from) - drawnToday[tr.from]! - tr.reserveM3 * capacityK(nodes[tr.from]!, t));
 			}
 			for (const k of level) {
 				const tr = transfers[k]!;
@@ -683,10 +696,11 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				}
 				const dst = nodes[o.to]!;
 				let need = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
-				if (o.topUpDam && dst.damCapacityM3 > 0) {
+				const dstCap = dst.damCapacityM3 * capacityK(dst, t);
+				if (o.topUpDam && dstCap > 0) {
 					const q = prevQ(o.to);
 					const g = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
-					need += Math.max(0, dst.damCapacityM3 - (q + g.Pd - g.E - g.Sp));
+					need += Math.max(0, dstCap - (q + g.Pd - g.E - g.Sp));
 				}
 				otShare[k] = (need * cap) / otCapInto[o.to]!;
 			}
@@ -837,7 +851,12 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Evaporation takes at most what is there (yesterday's storage, the
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
-			const cap = node.damCapacityM3;
+			// The day's capacity and dead storage (engine ≥ 1.27.0: sediment, an in-service date), and the
+			// storage the dam-level triggers read, at the entered capacity's scale.
+			const k = capacityK(node, t);
+			const cap = node.damCapacityM3 * k;
+			const dead = k === 1 ? node.deadStorageM3 : node.deadStorageM3 * k;
+			const qLevel = k === 1 ? qPrev : k > 0 ? qPrev / k : 0;
 			const day = damDay(node, qPrev, t, lakeEvapMmDay, damRainMm);
 			const A = day.A;
 			const Pd = day.Pd;
@@ -873,7 +892,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// release left and an emergency one sees the dam after it.
 			let Rel = 0;
 			if (node.release) {
-				Rel = releaseToday(node.release, month[t]!, K + M + O, Z, S, Math.max(avail0, 0), node.deadStorageM3);
+				Rel = releaseToday(node.release, month[t]!, K + M + O, Z, S, Math.max(avail0, 0), dead);
 				avail0 -= Rel;
 			}
 			// Irrigation draws only what is above the dam's minimum operating
@@ -888,7 +907,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// capacity. Under the trigger rule only while switched to the river.
 			let room = 0;
 			if (sup) {
-				const river = pumpsRiverToday(sup, onRiver[i] === 1, qPrev);
+				const river = pumpsRiverToday(sup, onRiver[i] === 1, qLevel);
 				onRiver[i] = river ? 1 : 0;
 				if (river) {
 					const rel = node.release;
@@ -904,9 +923,9 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// What the unit's own sources still have to supply once the off-take water is used.
 			const Dl = Xused > 0 ? D - Xused : D;
 			const sLeft = Xused > 0 ? sRoom - Xused : sRoom;
-			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qPrev, avail0, node.deadStorageM3, cap, room, sup?.rule ?? 1, sLeft, gRoom);
-			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - node.deadStorageM3, 0), room);
-			else Gs = Math.min(Math.max(avail0 - node.deadStorageM3, 0), Dl, sLeft);
+			if (node.borehole) [Gs, Ggw, Gd, dGw, Gr] = groundwaterDay(node.borehole, bhUsed[i]!, r.boreholePumped!, t, Dl, qLevel, avail0, dead, cap, room, sup?.rule ?? 1, sLeft, gRoom);
+			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - dead, 0), room);
+			else Gs = Math.min(Math.max(avail0 - dead, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;
 			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
 			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), D) : Math.min(Gs + Ggw + Gr, D);

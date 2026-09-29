@@ -2259,8 +2259,7 @@ series (only when the share is below 1), a sink in the balance check
 (`V = … − U − Dep − seepage lost`), and the water balance's
 `damSeepageLostM3` line (out). The dam itself behaves the same either way.
 
-Not built here (tracked in [followups.md](./followups.md)): capacity loss to
-sediment (%/year). A scenario can add a dam with a curve (`node.add`) and,
+Capacity loss to sediment (%/year) is §2.7g (engine ≥ 1.27.0). A scenario can add a dam with a curve (`node.add`) and,
 from engine 1.20.0, set an existing dam's curve (`node.set` of `damCurve`,
 [scenarios.md § Dam capacity](./scenarios.md)).
 
@@ -3099,6 +3098,61 @@ fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction. Hand examples: `run.demandObjects.test.ts`,
 `network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
 dates, the year-end wrap, 29 February, overlap order).
+
+### 2.7g Development that changes during a run (engine ≥ 1.27.0, issue #67)
+
+Four optional node fields let the dams and the abstraction change over a
+run instead of standing as they are today for the whole record
+(`packages/engine/src/network/development.ts`). Each is off unless set, so a
+model without them runs as before, to the bit.
+
+| Field | On | Meaning |
+| --- | --- | --- |
+| `damSurveyDate` | a farm with a dam | the day the capacity (and the survey curve, §2.7a) was measured |
+| `damSedimentPctPerYear` | a farm with a dam | the share of the surveyed capacity lost to sediment a year, 0–0.2; needs `damSurveyDate` |
+| `damInServiceFrom` | a farm with a dam | the first day the dam holds water |
+| `abstractionFrom` | a farm or a water user | the first day the unit takes water |
+
+**The dam's capacity on day t** is the entered capacity × k(t), with
+
+```
+k(t) = MAX(0, 1 − rate × (t − survey date) ÷ 365.25) × [t ≥ in service from]
+```
+
+so the rate runs linearly **both ways** from the survey: before it the dam
+held more than surveyed (less sediment had settled), after it less, never
+below empty. A long record with a recent survey therefore starts with a dam
+somewhat larger than its entered capacity. The dam's dead storage (the
+minimum operating level × capacity), its survey curve (volumes × k at the
+same areas: sediment fills the bottom, the full-supply area stays) and every
+level set as a share of the capacity (the supply rule's trigger and stop
+levels §2.7e, a drought borehole's trigger §2.7d, a transfer's reserve §2.6)
+scale with k; the power law's full-supply area doesn't. Storage above the
+day's capacity spills that day, so a shrinking dam spills what it can no
+longer hold. With no capacity (before the in-service date, or once sediment
+has filled it) the unit has no dam: nothing enters or stays in it, nothing
+evaporates or seeps from it, and what is routed to it passes on, as on a
+unit without a dam. The dam's starting storage is its initial level × the
+first day's capacity.
+
+A run with such a dam carries its `dam_capacity` column (m³, the day's
+capacity); the self-checks recompute k from the node and hold every
+capacity-dependent step to it. Every dam level the app shows (% full, the
+lowest level, days at the minimum level, the seasonal outlook's and review
+triggers' storage bands, the farmer view) is a share of **that day's**
+capacity, so a dam is never more than 100 % full.
+
+**Abstraction from a date.** Before `abstractionFrom` the unit's demand is
+0: its crops' abstraction, its demand objects' and a water user's own
+demand (so a senior user's claim passed to the farms upstream starts then
+too, §2.7c). The soil-water store and the rain the crops would have used run
+as usual (they set the demand's shape, not its size). Boreholes and the
+river pump follow the demand, so they take nothing before it either.
+
+Scenarios can set all four (`node.set`, [scenarios.md](./scenarios.md)), so
+a proposal can add a dam from a future date. Pending the hydrologist
+(issue #90): the linear rate and the choice to scale dead storage and the
+triggers with the capacity.
 
 ### 2.8 Outputs
 
@@ -4867,10 +4921,11 @@ change) ÷ (1 + simulated change) − 1. Then a **hint**, not a verdict:
 | `gauge` | a fall the wet season takes more of, or any rise | a weir bypassed or drowned in floods under-reads high flows; a rise can't come from new use (a rating change, or use that stopped) |
 | `unclear` | anything else, or no dry season | |
 
-Every break with a hint other than `rain` warns. The model keeps development
-fixed over a run (followups: *development can't vary over time*), so a real
-change in use biases the fit before or after it; confirm with the gauge's
-records and the development history.
+Every break with a hint other than `rain` warns. Unless a dam or a unit
+carries a date (§2.7g: an in-service date, an abstraction start, a sediment
+rate), the model keeps development fixed over a run, so a real change in use
+biases the fit before or after it; confirm with the gauge's records and the
+development history, and enter the dates the development came in.
 
 **4. Dry-season low-flow duration curves** (`lowFlow.ts`). The flow duration
 curve of the dry-season days only (Weibull positions, as §2.9c), in m³/s at

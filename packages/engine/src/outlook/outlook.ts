@@ -33,6 +33,7 @@
 // settings.demandFactorFrom (engine 0.44.0), so a level's demand factors
 // start on the decision date. Pure: no I/O. Deterministic.
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
+import { damCapacityOn } from '../network/development';
 import type { DailySeries, ModelInput, ModelOutput, SeriesKind } from '../project';
 import { captureModelState, runModelCapturing, runModelFrom, runModelWithoutChecks } from '../run';
 import type { ModelStateSnapshot } from '../warmstart/snapshot';
@@ -653,7 +654,7 @@ export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
 			userDemandMet: stat(years.map((y) => y.userDemandMet), enoughYears),
 			ewr: stat(years.map((y) => y.ewr.share), enoughYears),
 			yearsEwrMet: years.filter((y) => y.ewr.met).length,
-			storageByDam: dams.map((n) => ({ nodeId: n.id, name: n.name, capacityM3: n.damCapacityM3, stat: stat(years.map((y) => y.storageM3ByDam[n.id] ?? null), enoughYears) })),
+			storageByDam: dams.map((n) => ({ nodeId: n.id, name: n.name, capacityM3: damCapacityOn(n, s.to), stat: stat(years.map((y) => y.storageM3ByDam[n.id] ?? null), enoughYears) })),
 			demandMetByFarm: farmNodes.flatMap((n) => {
 				const got = years.flatMap((y) => {
 					const f = y.farms[n.id];
@@ -681,7 +682,8 @@ export function summariseOutlook(x: OutlookSummaryInput): SeasonalOutlook {
 		metric,
 		siteNodeId: metric === 'reserveMonthsMet' ? siteNodeId : null,
 		startStorageM3: x.startStorageM3,
-		capacityM3: dams.reduce((a, n) => a + n.damCapacityM3, 0),
+		// On the season's last day, which the season-end storage is (engine ≥ 1.27.0: a dam's capacity can change).
+		capacityM3: dams.reduce((a, n) => a + damCapacityOn(n, s.to), 0),
 		analogues: x.analogues,
 		excluded: x.excluded,
 		nYears,

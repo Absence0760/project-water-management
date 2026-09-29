@@ -89,12 +89,17 @@ describe('model store', () => {
 			supplyRule: 'trigger',
 			pumpCapacityM3Day: 1234.5,
 			supplyTriggerPct: 0.35,
-			supplyStopPct: 0.65
+			supplyStopPct: 0.65,
+			// Development over the run (engine 1.27.0, 110_node_development): a leap day survives as a date.
+			damSurveyDate: '2012-02-29',
+			damSedimentPctPerYear: 0.0125,
+			damInServiceFrom: '1999-10-01',
+			abstractionFrom: '2001-01-01'
 		});
 		// A gauge taken off the EWR sites (engine 1.5.0, 086_ewr_site).
 		const weir = node('Weir', outlet.id, { sortOrder: 4, kind: 'gauge', areaKm2: 0, damCapacityM3: 0, ewrSite: false });
 		// The town carries the GN 538 property area and Table 2 rate (engine 1.12.0, 089_ga538_property).
-		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45 });
+		const town = node('Town', outlet.id, { sortOrder: 1, kind: 'user', areaKm2: 0, damCapacityM3: 0, userDemandM3Day: monthly(1 / 3), userReturnPct: 0.4, userPriority: 'junior', gaPropertyAreaHa: 62.5, gaRateM3HaYear: 45, abstractionFrom: '2005-07-15' });
 		// A canal head, the river off-take's destination (engine 1.14.0, 091).
 		const canal = node('Canal', outlet.id, { sortOrder: 6, areaKm2: 0, damCapacityM3: 0 });
 		const beans = { id: crypto.randomUUID(), name: 'Beans', sortOrder: 2, cropFactor: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1, 1.1, 1.2] };
@@ -183,6 +188,10 @@ describe('model store', () => {
 			ewrSite: true,
 			gaPropertyAreaHa: null,
 			gaRateM3HaYear: null,
+			damSurveyDate: null,
+			damSedimentPctPerYear: null,
+			damInServiceFrom: null,
+			abstractionFrom: null,
 			...n
 		});
 		// Farm and Town share sortOrder 1, so by name: Town before Upper.
@@ -253,6 +262,53 @@ describe('model store', () => {
 		expect(await stored()).toEqual(weekends);
 		// The column's own guard, past the API: not an empty list, not an object.
 		for (const bad of ['[]', '{}']) await expect(withUser(u.id, (db) => db.query('UPDATE demand_object SET schedule = $2::jsonb WHERE id = $1', [town.id, bad]))).rejects.toThrow(/demand_object_schedule_shape/);
+	});
+
+	it('stores the development fields (engine 1.27.0, 110): null clears them, a field that breaks a rule is refused', async () => {
+		const u = await signUp('Development');
+		const projectId = await newProject(u, 'Development over time');
+		const outlet = node('Outlet', null);
+		const farm = node('Farm', outlet.id, { sortOrder: 1 });
+		const town = node('Town', outlet.id, { sortOrder: 2, kind: 'user', areaKm2: 0, damCapacityM3: 0 });
+		const put = (f: Record<string, unknown>, t: Record<string, unknown> = {}, o: Record<string, unknown> = {}) =>
+			u.call('PUT', `/projects/${projectId}/model`, { nodes: [{ ...outlet, ...o }, { ...farm, ...f }, { ...town, ...t }], crops: [], cropAreas: [], transfers: [] });
+		const stored = async () => {
+			const got = (await withUser(u.id, (db) => loadModel(db, projectId))).nodes;
+			const pick = (id: string) => {
+				const n = got.find((x) => x.id === id)!;
+				return { damSurveyDate: n.damSurveyDate, damSedimentPctPerYear: n.damSedimentPctPerYear, damInServiceFrom: n.damInServiceFrom, abstractionFrom: n.abstractionFrom };
+			};
+			return { farm: pick(farm.id), town: pick(town.id) };
+		};
+		const dev = { damSurveyDate: '2015-06-30', damSedimentPctPerYear: 0.01, damInServiceFrom: '2003-10-01', abstractionFrom: '2004-01-01' };
+		expect((await put(dev, { abstractionFrom: '2010-10-01' })).status).toBe(200);
+		expect(await stored()).toEqual({ farm: dev, town: { damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: '2010-10-01' } });
+
+		// Each refused with the API's 400, the stored fields untouched.
+		const refused: [Record<string, unknown>, Record<string, unknown>?, Record<string, unknown>?][] = [
+			[{ ...dev, damSurveyDate: '2015-02-30' }],
+			[{ ...dev, damInServiceFrom: '1 Oct 2003' }],
+			[{ ...dev, damSedimentPctPerYear: 0.25 }],
+			[{ ...dev, damSedimentPctPerYear: -0.01 }],
+			[{ ...dev, damSurveyDate: null }],
+			[dev, { damInServiceFrom: '2010-10-01' }],
+			[dev, { damSurveyDate: '2010-10-01' }],
+			[dev, {}, { abstractionFrom: '2010-10-01' }]
+		];
+		for (const [f, t, o] of refused) expect((await put(f, t, o)).status, JSON.stringify([f, t, o])).toBe(400);
+		expect((await stored()).farm).toEqual(dev);
+
+		// null (or absent) clears each.
+		expect((await put({ damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null })).status).toBe(200);
+		expect(await stored()).toEqual({
+			farm: { damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null },
+			town: { damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: null, abstractionFrom: null }
+		});
+
+		// The columns' own guards, past the API: the rate's range, and a positive rate needs its survey date.
+		const raw = (sql: string) => withUser(u.id, (db) => db.query(sql, [farm.id]));
+		await expect(raw('UPDATE node SET dam_sediment_pct_per_year = 0.3, dam_survey_date = DATE \'2015-06-30\' WHERE id = $1')).rejects.toThrow(/dam_sediment_pct_per_year_check/);
+		await expect(raw('UPDATE node SET dam_sediment_pct_per_year = 0.01, dam_survey_date = NULL WHERE id = $1')).rejects.toThrow(/node_sediment_needs_survey/);
 	});
 
 	it('loads an empty model as empty lists, and settings with the model in one call', async () => {

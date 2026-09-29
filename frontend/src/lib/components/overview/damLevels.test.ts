@@ -1,7 +1,7 @@
-import { damFigures, type FarmSummary, type NetworkNode } from '@water-management/engine';
+import { damCapacityOn, damFigures, fromEpochDay, toEpochDay, type FarmSummary, type NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { damColouring } from '$lib/components/network/farmColour';
-import { AGO_DAYS, damEndPctFromSummary, damEndTile, damInRun, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
+import { AGO_DAYS, capacityOnDate, damEndPctFromSummary, damEndTile, damInRun, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
 const series = (startDate: string, values: (number | null)[]) => ({ startDate, values });
@@ -179,7 +179,7 @@ describe('damInRun and damEndPctFromSummary: the Network card’s Dam at end of 
 		const live = [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 500, damMinPct: 0 }];
 		const dam = damInRun(run, live, refs, 'a')!;
 		expect(dam.capacityM3).toBe(1000);
-		expect(damEndPctFromSummary(dam, summary)).toBe(40);
+		expect(damEndPctFromSummary(dam, summary, '2025-01-01')).toBe(40);
 		// The map's colouring reads the same figure (damLevelsFromSummary over damsInRun).
 		expect(damLevelsFromSummary(damsInRun(run, live, refs), summary, '2025-01-01')![0]!.endPct).toBe(40);
 	});
@@ -188,8 +188,8 @@ describe('damInRun and damEndPctFromSummary: the Network card’s Dam at end of 
 		const run = [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3: 1000 }];
 		expect(damInRun(run, [], [], 'a')).toBeNull();
 		expect(damInRun(run, [], refs, 'b')).toBeNull();
-		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [{ nodeId: 'a', name: 'A' } as FarmSummary])).toBeUndefined();
-		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [])).toBeUndefined();
+		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [{ nodeId: 'a', name: 'A' } as FarmSummary], '2025-01-01')).toBeUndefined();
+		expect(damEndPctFromSummary({ nodeId: 'a', capacityM3: 1000 }, [], '2025-01-01')).toBeUndefined();
 	});
 });
 
@@ -265,5 +265,83 @@ describe('damLevelsFromSummary (engine ≥ 1.2.0, issue #55)', () => {
 			const fromSummary = damLevelsFromSummary([d], [farm('n', fig)], damLevel(d, series)!.endDate)![0];
 			expect(fromSummary).toEqual(damLevel(d, series));
 		}
+	});
+});
+
+describe("levels against the day's capacity (issue #67: sediment, an in-service date)", () => {
+	// 60 days from 2020-01-01; the dam was surveyed in 2025 at 1 000 m³ and loses 5 % a year, so in 2020 it held ~1 250 m³.
+	const start = '2020-01-01';
+	const DAYS = 60;
+	const node = (over: Partial<NetworkNode> = {}) => ({ id: 'f1', name: 'Upper farm', kind: 'farm', damCapacityM3: 1000, damMinPct: 0.1, ...over });
+	const sediment = { damSurveyDate: '2025-01-01', damSedimentPctPerYear: 0.05 };
+	const refs = [{ key: 'dam_storage', nodeId: 'f1' }];
+	const capOn = (n: ReturnType<typeof node>, i: number) => damCapacityOn(n as NetworkNode, toEpochDay(start) + i);
+	// Storage just under the day's capacity on every day: the dam was nearly full throughout.
+	const nearlyFull = (n: ReturnType<typeof node>) => series(start, Array.from({ length: DAYS }, (_, i) => 0.98 * capOn(n, i)));
+
+	it('keeps a long record surveyed later within 0–100 %, a share of each day’s capacity', () => {
+		const n = node(sediment);
+		const [d] = damsInRun([n], [], refs);
+		expect(d!.dev).toEqual({ damSurveyDate: '2025-01-01', damSedimentPctPerYear: 0.05, damInServiceFrom: null });
+		const s = nearlyFull(n);
+		expect(s.values[DAYS - 1]!).toBeGreaterThan(1000); // above the entered capacity: the old reading was over 100 %
+		const l = damLevel(d!, s)!;
+		expect(l.endPct).toBeCloseTo(98, 9);
+		expect(l.agoPct).toBeCloseTo(98, 9);
+		expect(l.lowPct).toBeCloseTo(98, 9);
+		expect(l.endCapacityM3).toBe(capOn(n, DAYS - 1));
+		expect(l.agoCapacityM3).toBe(capOn(n, DAYS - 1 - AGO_DAYS));
+		expect(capacityOnDate(d!, l.endDate)).toBe(l.endCapacityM3);
+		// All dams together: a share of the capacities on those days, so also 98 % with no change.
+		// The map's colour by dam level reads the same share, not "over 100 %".
+		expect(damColouring([n as NetworkNode], [l], { name: 'R', ago: 'today' }, false).byNode.get('f1')!.text).toBe('98% full');
+		const today = damsToday([l])!;
+		expect(today.pct).toBeCloseTo(98, 9);
+		expect(today.change).toBeCloseTo(0, 9);
+		// The summary's figures (engine damFigures with the day's capacity) read the same.
+		const fig = damFigures(s.values, 1000, 0.1, start, (i) => capOn(n, i))!;
+		const fromSummary = damLevelsFromSummary([d!], [{ nodeId: 'f1', name: 'Upper farm', ...fig } as FarmSummary], l.endDate)![0]!;
+		expect(fromSummary.endPct).toBeCloseTo(l.endPct, 9);
+		expect(fromSummary.agoPct).toBeCloseTo(l.agoPct!, 9);
+		expect(fromSummary.lowPct).toBeCloseTo(l.lowPct, 9);
+		expect(damEndPctFromSummary(d!, [{ nodeId: 'f1', name: 'Upper farm', ...fig } as FarmSummary], l.endDate)).toBeCloseTo(98, 9);
+	});
+
+	it('counts the days at the minimum against the day’s capacity', () => {
+		const n = node(sediment);
+		const [d] = damsInRun([n], [], refs);
+		// Held at 10 % of the day's capacity: every day is at the minimum (against 1 000 m³ it read 12.5 %, none).
+		const s = series(start, Array.from({ length: DAYS }, (_, i) => 0.1 * capOn(n, i)));
+		expect(damLevel(d!, s)!.daysAtMin).toBe(DAYS);
+		expect(damLevel(d!, s)!.endPct).toBeCloseTo(10, 9);
+	});
+
+	it('reads a dam before it is in service as empty, and a share of its capacity after', () => {
+		// In service from day 40: capacity 0 before it, 1 000 m³ from it.
+		const inService = fromEpochDay(toEpochDay(start) + 40);
+		const n = node({ damInServiceFrom: inService });
+		const [d] = damsInRun([n], [], refs);
+		const s = series(start, Array.from({ length: DAYS }, (_, i) => (i < 40 ? 0 : 500)));
+		const l = damLevel(d!, s)!;
+		expect(l.endPct).toBe(50);
+		expect(l.agoPct).toBe(0); // 30 days before the end, no dam yet
+		expect(l.agoCapacityM3).toBe(0);
+		expect(l.daysAtMin).toBe(0); // the days without a dam aren't "at its minimum"
+		for (const x of [l.endPct, l.agoPct!, l.lowPct]) expect(x >= 0 && x <= 100).toBe(true);
+		// No capacity 30 days back across all dams: no change to show rather than a division by 0.
+		expect(damsToday([l])).toMatchObject({ pct: 50, change: null });
+	});
+
+	it('positive control: a dam whose fields change nothing reads exactly as before', () => {
+		const plain = node();
+		const [d] = damsInRun([plain], [], refs);
+		expect(d).toEqual({ nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 });
+		// A sediment rate without a survey date, or an in-service date on no farm, changes nothing either.
+		expect(damsInRun([node({ damSedimentPctPerYear: 0.05 })], [], refs)[0]).toEqual(d);
+		const s = series(start, Array.from({ length: DAYS }, (_, i) => 400 + i));
+		const l = damLevel(d!, s)!;
+		expect(l).toEqual(damLevel(dam, s));
+		expect(l.endCapacityM3).toBeUndefined();
+		expect(l.endPct).toBe(((400 + DAYS - 1) / 1000) * 100);
 	});
 });

@@ -5,8 +5,9 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtPct } from '$lib/format/number';
-	import { damHints, GROUPS, hasDam, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
+	import { damHints, GROUPS, hasDam, hasDamDevelopment, isPct, NODE_FIELDS, setNodeField, systemOf, type NodeField } from './fields';
 	import DamStorageFields from './DamStorageFields.svelte';
+	import DevelopmentFields from './DevelopmentFields.svelte';
 	import UserFields from './UserFields.svelte';
 	import LandCoverFields from './LandCoverFields.svelte';
 	import BoreholeFields from './BoreholeFields.svelte';
@@ -158,6 +159,8 @@
 		<p class="hint gauge-note">
 			A gauge passes all upstream flow through; it has no dam, demand or flow share of its own.
 		</p>
+		<!-- A gauge takes no water: an abstraction start left from another kind is shown so it can be cleared (the save refuses it). -->
+		{#if node.abstractionFrom}<DevelopmentFields {node} {readonly} part="abstraction" />{/if}
 	{:else if node.kind === 'user'}
 		<p class="hint gauge-note">
 			An other water user takes its demand from the river where it sits, with no land, dam or crops of its own.
@@ -165,6 +168,7 @@
 		<fieldset>
 			<legend>Other water user</legend>
 			<UserFields {node} {readonly} />
+			<DevelopmentFields {node} {readonly} part="abstraction" />
 		</fieldset>
 	{/if}
 
@@ -239,6 +243,9 @@
 						<FieldHistoryLine field="node:{node.id}:gaRateM3HaYear" {unit} />
 					</div>
 				{/if}
+				{#if g === 'irrigation'}
+					<DevelopmentFields {node} {readonly} part="abstraction" />
+				{/if}
 				{#if g === 'dam'}
 					{#each hints as h (h)}
 						<p class="hint dam-hint" role="note">{h}</p>
@@ -271,10 +278,12 @@
 		</fieldset>
 	{/if}
 
-	{#if hasDam(node)}
+	<!-- A dam's development fields (engine ≥ 1.27.0) also show on a node without a dam that still carries them, so they can be cleared. -->
+	{#if hasDam(node) || hasDamDevelopment(node)}
 		<fieldset>
 			<legend>Dam survey and releases</legend>
-			<DamStorageFields {node} {readonly} />
+			{#if hasDam(node)}<DamStorageFields {node} {readonly} />{/if}
+			<DevelopmentFields {node} {readonly} part="dam" />
 		</fieldset>
 	{/if}
 
