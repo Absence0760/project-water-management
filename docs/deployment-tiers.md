@@ -73,9 +73,9 @@ Cost, us-east-1:
 | 3 interface endpoints × 1 AZ | 21.90 |
 | WAF (ACL + 2 rules) | 7.00 |
 | CloudWatch alarms, logs, RDS log export | ~2.80 |
-| KMS key, Route 53 zone, Secrets Manager secret | 1.90 |
+| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $50** |
+| **Total** | **≈ $51** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
 **≈ $58–63**.
@@ -87,7 +87,9 @@ What you accept:
   meanwhile. Data is safe (backups + point-in-time recovery).
 - **An AZ outage takes the API down.** The database lives in one AZ. The
   endpoints each have one ENI: if that AZ fails, email sends and job
-  wake-ups fail (the 5-minute tick still runs queued jobs).
+  wake-ups fail (the 5-minute tick still runs queued jobs), and a new API or
+  worker instance can't start, since it reads its runtime secret through the
+  Secrets Manager endpoint at cold start (warm instances carry on).
 - **A `db.t4g.micro` has 1 GiB of RAM.** Ample for a few catchments and a
   handful of concurrent users; the `rds-cpu`, `rds-cpu-credits` and
   `rds-freeable-memory` alarms say when it isn't.
@@ -119,9 +121,9 @@ Cost, us-east-1:
 | 3 interface endpoints × 2 AZs | 43.80 |
 | WAF (ACL + 2 rules + requests) | ~7.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.00 |
-| KMS key, Route 53 zone, Secrets Manager secret | 1.90 |
+| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $110–115** |
+| **Total** | **≈ $111–116** |
 
 af-south-1: **≈ $135–150**.
 
