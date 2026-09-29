@@ -18,8 +18,9 @@
 // cumulative EWR Z. A farm with a feature whose rules the formulas don't
 // carry yet (boreholes, a release rule, a river pump, off-takes, demand
 // objects, senior users downstream, an allocation cap, a storage reset, a
-// survey curve, a daily A-pan series on a dam) gets `unsupported` instead,
-// naming each, rather than a workbook whose numbers would disagree.
+// survey curve, a daily A-pan series on a dam, a dam capacity that changes
+// over the run) gets `unsupported` instead, naming each, rather than a
+// workbook whose numbers would disagree.
 import { toEpochDay } from '../calendar';
 import { ALLOCATION_SERIES } from '../allocations/mode';
 import { resolveDamCurve } from '../network/dam';
@@ -177,7 +178,8 @@ export const AUDIT_UNSUPPORTED_SERIES: [key: string, feature: string][] = [
 	['dam_storage_set', 'a dam storage reset'],
 	[ALLOCATION_SERIES.surfaceRoom.key, 'an allocation cap'],
 	[ALLOCATION_SERIES.groundwaterRoom.key, 'an allocation cap'],
-	['senior_requirement', 'senior water users downstream']
+	['senior_requirement', 'senior water users downstream'],
+	['dam_capacity', 'a dam capacity that changes over the run (sediment or an in-service date)']
 ];
 
 /** The farm series the formulas compare against (and the inputs they read). */
@@ -240,7 +242,8 @@ export function farmAuditPlan(run: AuditRun, nodeId: string): { plan: FarmAuditP
 	const lostShare = seepReturn < 1;
 
 	// The demand factor on each day, as runModel applies it to F: the demand.scale factor from
-	// settings.demandFactorFrom on, × a full allocation's factor (engine ≥ 1.18.0).
+	// settings.demandFactorFrom on, × a full allocation's factor (engine ≥ 1.18.0); 0 before the
+	// unit's abstraction date (engine ≥ 1.30.0).
 	const df = Array.from(dailyDemandFactor(run.settings, n, day0, days, run.farm.get(ALLOCATION_SERIES.demandFactor.key)).perDay);
 	const evap = lakeEvaporationMmDay({ settings: run.settings }, run.startDate, days);
 	const cell = (v: number | null | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : null);

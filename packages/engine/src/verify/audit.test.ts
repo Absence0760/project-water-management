@@ -268,6 +268,23 @@ describe('farmAuditPlan + evaluateAudit', () => {
 		expect(disagreement(input, out, 'low')).toBeNull();
 	});
 
+	it('carries an abstraction date as a demand factor of 0 before it, and refuses a dam whose capacity changes', () => {
+		const input = handBuilt();
+		input.model.nodes[1]!.abstractionFrom = '2020-06-01';
+		const out = runModel(input);
+		const r = farmAuditPlan(auditRun(input, out, 'low'), 'low');
+		if (!('plan' in r)) throw new Error('unsupported');
+		const factor = r.plan.columns.find((c) => c.key === 'demand_factor')!.values!;
+		// 1 June 2020 is day 244 of a run from 1 October 2019.
+		expect(new Set(factor.slice(0, 244))).toEqual(new Set([0]));
+		expect(factor[244]).toBe(0.8);
+		expect(disagreement(input, out, 'low')).toBeNull();
+		input.model.nodes[2]!.damSedimentPctPerYear = 0.02;
+		input.model.nodes[2]!.damSurveyDate = '2020-10-01';
+		const silted = runModel(input);
+		expect(farmAuditPlan(auditRun(input, silted, 'up'), 'up')).toEqual({ unsupported: ['a dam capacity that changes over the run (sediment or an in-service date)'] });
+	});
+
 	it('names what it cannot recompute instead of building a workbook that disagrees', () => {
 		const input = handBuilt();
 		input.model.nodes[2]!.damCurve = [

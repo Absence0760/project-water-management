@@ -2653,7 +2653,8 @@ a column with each day's largest difference ([api.md § Export](./api.md#export)
 It runs in the same worker, with the same progress line and Cancel. A unit
 whose rules the formulas don't carry yet (boreholes, a release rule, a river
 pump, off-takes, demand objects, senior users below, an allocation cap, a
-storage reset, a survey curve, a daily A-pan series on a dam) gets "Workbook
+storage reset, a survey curve, a daily A-pan series on a dam, a dam capacity
+that changes over the run) gets "Workbook
 failed: The audit workbook can't recompute *unit* yet: …" naming each, never a
 file whose numbers disagree.
 

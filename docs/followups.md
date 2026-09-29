@@ -1659,8 +1659,9 @@ the suggested order (the IDs carry the detail):
 - [ ] **Audit workbook: the farms it refuses today** (from issue #68). The
       workbook names and refuses a farm with boreholes, a release rule, a
       river pump, river off-takes, demand objects, senior users downstream,
-      an allocation cap, a storage reset, a survey curve, or a daily A-pan
-      series on a dam, since its formulas carry the b023 core only. It also
+      an allocation cap, a storage reset, a survey curve, a daily A-pan
+      series on a dam, or a dam capacity that changes over the run (sediment,
+      an in-service date), since its formulas carry the b023 core only. It also
       takes gross demand, the effective rain used and the open-water
       evaporation depth as values (headed "From the run"). Durable fix:
       grow `farmAuditPlan` feature by feature (the checkWorkings replay is the
