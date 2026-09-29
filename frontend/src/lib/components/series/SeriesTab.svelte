@@ -58,12 +58,12 @@
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
 	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
-	import { agoText, dateAge } from '$lib/format/age';
+	import { agoText } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
 	import { gaugeRecordsInUse, isPeriodOnly, KIND_ROLES, rainSourceKinds, seriesInUse, SITED_KINDS } from './roles';
-	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
+	import { freshness, freshnessOrder, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
@@ -173,8 +173,13 @@
 		const r = el.getBoundingClientRect();
 		const dock = parseFloat(getComputedStyle(el).getPropertyValue('--dock-h')) || 0;
 		if (r.top >= 0 && r.bottom <= innerHeight - dock) return;
-		const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
-		el.scrollIntoView({ block: r.height > innerHeight - dock ? 'start' : 'nearest', behavior: smooth ? 'smooth' : 'auto' });
+		const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+		const room = innerHeight - dock;
+		// Below the window (it sits under the table): its foot to the window's foot less the save bar, rounded up to a
+		// whole pixel. scrollIntoView's `nearest` lands on a rounded offset, which on a fractional layout left the chart's
+		// last half pixel under the window's edge. Taller than the window, or above it: its top to the header's foot.
+		if (r.height <= room && r.top >= 0) window.scrollTo({ top: Math.ceil(scrollY + r.bottom - room), behavior });
+		else el.scrollIntoView({ block: 'start', behavior });
 	}
 	let flowLog = $state(false);
 
@@ -238,7 +243,6 @@
 	);
 	const bins = $derived(Object.fromEntries(list.map((s) => [s.id, values[s.id] ? coverageBins(values[s.id]!) : []])));
 	// Recorded rain drives a run, so it is what "up to" means (series/freshness.ts).
-	const rainUpTo = $derived(list.filter((s) => isRecordedRain(s.kind)).reduce((m, s) => (endDate(s) > m ? endDate(s) : m), ''));
 	const newerThanRun = $derived(
 		latestRun ? list.filter((s) => KIND_ROLES[s.kind]?.driver !== false && inUse.has(s.id) && endDate(s) > latestRun.endDate) : []
 	);
@@ -412,9 +416,6 @@
 	const fresh = $derived(freshness(list, today));
 	const behindAge = $derived(new Map((fresh?.behind ?? []).map((b) => [b.id, b.age])));
 	const rows = $derived(freshnessOrder(list, fresh?.behind ?? [], inUse));
-	const behindText = $derived(
-		behindAge.size ? `${behindAge.size} behind (more than ${STALE_DAYS} days old)` : ''
-	);
 
 	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
@@ -502,11 +503,6 @@
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
-		{#if list.length}
-			<span class="muted small" data-testid="series-summary"
-				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${dateAge(rainUpTo, daysBetween(rainUpTo, today))}` : ''}</span
-			>
-		{/if}
 	</div>
 	<LoadState
 		{loading}
@@ -857,10 +853,6 @@
 	}
 	.key .behind {
 		margin-left: 0.4rem;
-	}
-	.behind-text {
-		color: var(--warning);
-		font-weight: 600;
 	}
 	@media (min-width: 641px) {
 		tr.is-behind > th[scope='row'] {

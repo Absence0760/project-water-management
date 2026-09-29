@@ -608,7 +608,7 @@ role, freshness, Add data) and each tab's own header:
   period, engine, the EWR rule); Hydrological units, Dams, Scenarios,
   Allocations, Project and Applications a summary of what they hold; History
   the latest change, by whom and when. The others count what they hold (`workspace/context.ts`):
-  "2 runs" on Compare runs, "4 input series · 1 behind",
+  "2 runs" on Compare runs, "4 daily input series · 1 behind",
   "3 transfer rules · 2 active", "No runs yet" on a Summary before the
   first run.
 - **The actions on the right**, in this order: the **Rain up to** pill
@@ -2290,13 +2290,17 @@ no board of its own, so it follows the Dams page's list-and-chart layout
 with the table the data needs).
 
 - **Header**: the section header titled "Data", its context line counting
-  the series and those behind ("5 input series · 2 behind",
+  the series and those behind ("5 daily input series · 2 behind",
   `workspace/context.ts`), then the Rain up to pill, **Preview all data**
   (filled through `fillHeader`; absent with no series) and **Add data**, the
   main (primary) action for editors. The tab's own notices (new data since
   the latest run with its *Re-run the model* link, a feed rebuilding a
   series, a failed delete or relabel) are slim lines under the header, like
-  the page's.
+  the page's. The series table's panel has no summary line of its own: one
+  that read "Daily values · 5 series · 2 behind (more than 7 days old) ·
+  recorded rain up to …" repeated the context line and the pill, and was
+  folded into the context (issue #174); the table's key says what *behind*
+  means.
 - **Freshness first**: the table lists the series **behind** first, most
   days behind first, then the series a run reads, then the rest (another
   series of that kind is read, reference only), keeping the list's order
