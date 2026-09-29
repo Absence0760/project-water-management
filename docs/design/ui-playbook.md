@@ -99,6 +99,14 @@ section it belongs to, with the example that taught it.
   result. It was removed (2026-09-29). Before drawing a chart, name the user
   and the decision it serves, and check it shows something the inputs beside
   it don't.
+- **A page's first row is its own answer, not a digest of other tabs.**
+  The Project page opened with eight "The model" tiles, each repeating the
+  context line of the tab it links to, above the details and the team the
+  page is for. They moved to a panel at the foot of the left column
+  (2026-09-29, issue #176), still in the page's flow rather than behind a
+  disclosure: a fixed set of eight facts isn't a long list to fold, and the
+  Summary's old `#model-h` link still lands on them without opening
+  anything.
 - **Don't fit a first screen that has more below it.** The Summary was a
   fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
   unit) with the alerts, published baseline, links and setup checklist
