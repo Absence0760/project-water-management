@@ -75,7 +75,7 @@ test('the legal pages pass an a11y scan in the dark theme, on a desktop and a ph
 	}
 });
 
-test('the contents list shows on a desktop and folds on a phone, and the header opens the app', async ({ page }) => {
+test('the contents list shows on a desktop and folds on a phone', async ({ page }) => {
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await page.goto('/privacy');
 	const toc = page.getByRole('navigation', { name: 'Contents' });
@@ -92,12 +92,59 @@ test('the contents list shows on a desktop and folds on a phone, and the header 
 	await fold.click();
 	await toc.getByRole('link', { name: '10. Your rights' }).click();
 	await expect(page).toHaveURL('/privacy#rights');
+});
 
-	// The page can't know the session: its header button opens the app (sign-in, or on to the projects when signed in).
-	const open = page.getByRole('banner').getByRole('link', { name: 'Open the app' });
-	expect((await open.boundingBox())!.height).toBeGreaterThanOrEqual(44);
-	await open.click();
-	await expect(page).toHaveURL('/login');
+// Issue #162: the Help shell's layout. Wide, the contents are a column on the
+// left that stays in view, the text beside it at a reading measure, and the
+// footer's links start where the text does; on a phone the contents sit above
+// the text and the footer still lines up with it.
+test('the legal pages use the Help layout: contents on the left in view, text at a reading width, footer in line', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/terms');
+	const toc = page.getByRole('navigation', { name: 'Contents' });
+	const h1 = page.getByRole('heading', { level: 1, name: 'Terms of use' });
+	const footLink = page.getByRole('contentinfo').getByRole('link').first();
+	const tocBox = (await toc.boundingBox())!;
+	const h1Box = (await h1.boundingBox())!;
+	expect(tocBox.x + tocBox.width).toBeLessThan(h1Box.x);
+	expect(tocBox.y).toBeLessThanOrEqual(h1Box.y + h1Box.height);
+	// The Help shell's 1480 px frame, not the old ~830 px column.
+	const para = page.locator('main p').filter({ hasText: 'The rest of this page is the full text' });
+	const paraBox = (await para.boundingBox())!;
+	expect(paraBox.width).toBeLessThanOrEqual(760);
+	expect(Math.abs((await footLink.boundingBox())!.x - h1Box.x)).toBeLessThanOrEqual(1);
+	// In view while reading: far down the page the contents are still on screen.
+	await page.getByRole('heading', { level: 2, name: '17. General' }).scrollIntoViewIfNeeded();
+	await expect(toc.getByRole('link', { name: '19. Contact' })).toBeInViewport();
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/terms');
+	const phoneToc = (await toc.boundingBox())!;
+	const phoneH1 = (await h1.boundingBox())!;
+	expect(phoneToc.y).toBeGreaterThan(phoneH1.y);
+	expect(Math.abs(phoneToc.x - phoneH1.x)).toBeLessThanOrEqual(1);
+	expect(Math.abs((await footLink.boundingBox())!.x - phoneH1.x)).toBeLessThanOrEqual(1);
+	await expectNoSidewaysScroll(page);
+});
+
+// Issue #162: the logo is the one way home (no "Open the app" beside it), and
+// the footer's Contact goes to the terms' contact section, where the address
+// is written once, rather than being a second mailto.
+test('the header has only the logo, and the footer’s Contact opens the terms’ contact section', async ({ page }) => {
+	await page.goto('/privacy');
+	const banner = page.getByRole('banner');
+	await expect(banner.getByRole('link')).toHaveCount(1);
+	const home = banner.getByRole('link', { name: 'Water Management, home' });
+	expect((await home.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+	const contact = page.getByRole('contentinfo').getByRole('link', { name: 'Contact' });
+	await expect(contact).toHaveAttribute('href', /\/terms#contact$/);
+	await expect(page.locator('footer a[href^="mailto:"]')).toHaveCount(0);
+	await contact.click();
+	await expect(page).toHaveURL('/terms#contact');
+	await expect(page.getByRole('heading', { level: 2, name: '19. Contact' })).toBeInViewport();
+	await expect(page.locator('#contact').locator('xpath=following-sibling::p[1]')).toContainText('jared@jaredhoward.com');
+	await home.click();
+	await expect(page).toHaveURL('/');
 });
 
 test('the landing footer, the sign-in pages and the sign-up form link both pages', async ({ page }) => {

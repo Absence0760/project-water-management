@@ -825,8 +825,6 @@ export const af: Catalogue = {
 	'f8c0f358': 'jaar se daaglikse waterbalans',
 	// days in one run
 	'e4291d84': 'dae in een lopie',
-	// fit to the weir’s measured flow (NSE, where 1 is perfect)
-	'32f438d7': 'ooreenstemming met die meetstuwal se gemete vloei (NSE, waar 1 perfek is)',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
@@ -837,8 +835,6 @@ export const af: Catalogue = {
 	'49027b5c': 'Elke projek is privaat vir sy lede, afgedwing deur die databasis self (row-level security).',
 	// Daily data from CHIRPS rainfall and the DWS gauges.
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
-	// In the example catchment
-	'fb86138c': 'In die voorbeeld-opvanggebied',
 	// This is the hydrological unit as it is today. Move a slider to change it.
 	'be75f214': 'Dit is die hidrologiese eenheid soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve

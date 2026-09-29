@@ -1,15 +1,17 @@
 <script lang="ts">
 	// The frame of the legal pages (/privacy, /terms) and the methods page
 	// (/methods, the engine audit's public summary): outside the app shell,
-	// like the landing page. A slim header with the way home and into the app,
-	// a readable column, a contents list (folded on a phone, where thirteen
-	// entries took the whole first screen), and the footer links. The header's
-	// button says "Open the app", not "Sign in": the page is static and can't
-	// know the session, and /login sends a signed-in reader on to their
-	// projects (routeAccess 'leave'). Prerendered (their
-	// +page.ts), so they read before any script runs and for anyone, signed in
-	// or not. English only: the English text is the binding version
-	// (docs/legal-status.md).
+	// like the landing page. A slim header whose logo is the way home (no
+	// second button: issue #162), then the Help shell's layout at its width
+	// (1480 px): from 900 px the contents list is a column on the left that
+	// stays in view while reading, the text beside it. The extra width goes to
+	// the contents, not to longer lines: paragraphs keep a ~68ch measure; only
+	// tables use the column's width. Below 900 px the contents sit above the
+	// text, folded on a phone (thirteen entries took the whole first screen).
+	// The footer's links line up with the text column. Pure CSS, no script:
+	// prerendered (their +page.ts), so they read before any script runs and
+	// for anyone, signed in or not. English only: the English text is the
+	// binding version (docs/legal-status.md).
 	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
 	import BrandMark from '$lib/components/layout/BrandMark.svelte';
@@ -34,15 +36,17 @@
 			<BrandMark size={28} />
 			<span>Water Management</span>
 		</a>
-		<a class="btn" href="{base}/login">Open the app</a>
 	</header>
 
 	<main class="doc">
-		<h1>{title}</h1>
-		<p class="effective">{effective}</p>
+		<div class="head">
+			<h1>{title}</h1>
+			<p class="effective">{effective}</p>
+		</div>
 		<!-- A disclosure on a phone; above 600 px the list shows and the toggle
 		     doesn't, where the browser can style the details' content (the
-		     @supports below); elsewhere it stays a working disclosure. -->
+		     @supports below); elsewhere it stays a working disclosure. From
+		     900 px it is the sticky column beside the text. -->
 		<nav class="toc" aria-label="Contents">
 			<details>
 				<summary>Contents <span class="count">({sections.length} sections)</span></summary>
@@ -51,7 +55,9 @@
 				</ol>
 			</details>
 		</nav>
-		{@render children()}
+		<div class="body">
+			{@render children()}
+		</div>
 	</main>
 
 	<footer class="foot">
@@ -60,7 +66,8 @@
 			<a href="{base}/privacy">Privacy notice</a>
 			<a href="{base}/terms">Terms of use</a>
 			<a href="{base}/methods">How the model is checked</a>
-			<a href="mailto:jared@jaredhoward.com">Contact</a>
+			<!-- The address is written once, in the terms' contact section. -->
+			<a href="{base}/terms#contact">Contact</a>
 		</nav>
 	</footer>
 </div>
@@ -69,24 +76,36 @@
 	:global(html:has(.legal)) {
 		background: var(--bg);
 	}
+	/* The Help shell's width and contents column (help/+layout.svelte). The
+	   header, the text and the footer share one frame, so the logo, the
+	   contents and the footer's links start on one line, and the footer's
+	   links line up with the text column above them. */
 	.legal {
+		--frame: 1480px;
+		--toc-w: 14rem;
+		--toc-gap: 3rem;
 		min-height: 100vh;
 		background: var(--bg);
 		color: var(--text);
 	}
+	.top,
+	.doc,
+	.foot nav {
+		max-width: var(--frame);
+		margin-inline: auto;
+		padding-inline: var(--gutter);
+	}
 	.top {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
 		gap: 1rem;
-		max-width: 52rem;
-		margin-inline: auto;
-		padding: 1rem var(--gutter);
+		padding-block: 1rem;
 	}
 	.lockup {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.55rem;
+		min-height: var(--tap);
 		color: var(--text);
 		font-family: var(--font-display);
 		font-weight: 600;
@@ -95,9 +114,7 @@
 	}
 	.doc {
 		display: block;
-		max-width: 52rem;
-		margin-inline: auto;
-		padding: 1.5rem var(--gutter) 3rem;
+		padding-block: 1.5rem 3rem;
 		line-height: 1.65;
 	}
 	h1 {
@@ -156,6 +173,44 @@
 		min-height: 24px;
 		padding-block: 0.1rem;
 	}
+	/* Wide: the contents column on the left, in view while reading (like the
+	   Help menu); it scrolls on its own only when taller than the window. The
+	   title and the text share the column beside it. */
+	@media (min-width: 900px) {
+		.doc {
+			display: grid;
+			grid-template-columns: var(--toc-w) minmax(0, 1fr);
+			column-gap: var(--toc-gap);
+			align-items: start;
+		}
+		.head,
+		.body {
+			grid-column: 2;
+		}
+		.toc {
+			grid-column: 1;
+			grid-row: 1 / span 2;
+			position: sticky;
+			top: 1.25rem;
+			max-height: calc(100vh - 2.5rem);
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			scrollbar-width: thin;
+			margin: 0;
+			padding: 0.25rem 0 0.25rem 0.9rem;
+			border: none;
+			border-left: 1px solid var(--border);
+			border-radius: 0;
+			background: none;
+			line-height: 1.4;
+		}
+		.toc ol {
+			columns: auto;
+		}
+		.toc li + li {
+			margin-top: 0.3rem;
+		}
+	}
 	.doc :global(h2) {
 		margin: 2.25rem 0 0.5rem;
 		font-family: var(--font-display);
@@ -169,6 +224,10 @@
 	.doc :global(p),
 	.doc :global(li) {
 		max-width: 68ch;
+	}
+	/* The contents' items aren't lines of text: no measure there. */
+	.doc .toc li {
+		max-width: none;
 	}
 	.doc :global(table) {
 		width: 100%;
@@ -191,13 +250,22 @@
 	}
 	.foot {
 		border-top: 1px solid var(--border);
-		padding: 1.5rem var(--gutter) 2.5rem;
+		padding-block: 1.5rem 2.5rem;
 	}
 	.foot nav {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem 1.5rem;
-		max-width: 52rem;
-		margin-inline: auto;
+	}
+	/* 24 px targets (WCAG 2.5.8). */
+	.foot a {
+		display: inline-block;
+		min-height: 24px;
+		padding-block: 0.1rem;
+	}
+	@media (min-width: 900px) {
+		.foot nav {
+			padding-left: calc(var(--gutter) + var(--toc-w) + var(--toc-gap));
+		}
 	}
 </style>
