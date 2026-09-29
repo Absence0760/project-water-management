@@ -117,6 +117,8 @@ describe('GET /auth/me/export', () => {
 		const { doc } = await download(farmer);
 		const kinds = (doc.auditEvents as Doc[]).map((e) => e.kind);
 		expect(kinds).toEqual(expect.arrayContaining(['member.added', 'farmer.linked']));
+		// Made by accepting the invite, so theirs (issue #136).
+		expect((doc.auditEvents as Doc[]).filter((e) => e.kind === 'farmer.linked').every((e) => e.byYou)).toBe(true);
 		for (const e of doc.auditEvents as Doc[]) {
 			expect(e.byYou || e.subject?.userId === farmer.id || e.subject?.authorId === farmer.id).toBe(true);
 		}
@@ -158,7 +160,9 @@ describe('GET /auth/me/export', () => {
 	it('gives the owner their memberships and the events they made', async () => {
 		const { doc } = await download(owner);
 		expect(doc.projectMemberships.map((m: Doc) => m.projectName).sort()).toEqual(['Export catchment', 'Invited catchment']);
-		expect((doc.auditEvents as Doc[]).some((e) => e.byYou && e.kind === 'farmer.linked')).toBe(true);
+		// The owner invited the farmers; the farm links are the farmers' own, made by accepting (issue #136).
+		expect((doc.auditEvents as Doc[]).some((e) => e.byYou && e.kind === 'invite.sent')).toBe(true);
+		expect((doc.auditEvents as Doc[]).some((e) => e.byYou && e.kind === 'farmer.linked')).toBe(false);
 		expect(doc.farms).toEqual([]);
 		expect(doc.invites).toEqual([]);
 	});

@@ -256,10 +256,11 @@ describe('members in the log', () => {
 		const leaver = await signUp('Hleaver');
 		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email: leaver.email, nodeIds: [other.id] })).status).toBe(201);
 		expect((await leaver.call('DELETE', `/projects/${projectId}/members/${leaver.id}`)).status).toBe(204);
+		// Joining is theirs too: a verified account joins by accepting the invite (issue #136).
 		const mine = (await events(projectId)).filter((e) => e.actor_user_id === leaver.id);
-		expect(mine.map((e) => e.kind)).toEqual(['farmer.unlinked', 'member.removed']);
-		expect(mine[0]).toMatchObject({ subject: { nodeId: other.id, cause: 'member_removed' } });
-		expect(mine[1]).toMatchObject({ subject: { role: 'farmer', self: true } });
+		expect(mine.map((e) => e.kind)).toEqual(['member.added', 'farmer.linked', 'farmer.unlinked', 'member.removed']);
+		expect(mine[2]).toMatchObject({ subject: { nodeId: other.id, cause: 'member_removed' } });
+		expect(mine[3]).toMatchObject({ subject: { role: 'farmer', self: true } });
 		expect(mine[0].change_set).toBe(mine[1].change_set);
 	});
 });

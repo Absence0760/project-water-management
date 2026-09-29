@@ -38,9 +38,9 @@ export const en = {
 	'mail.exists.ignore': "If it wasn't you, you can ignore this email — nothing has changed on your account.",
 
 	// The farmer invite (WP-2.2).
-	'mail.farmer.subject': '{inviter} has given you access to {farms} in {catchment}',
+	'mail.farmer.subject': '{inviter} invited you to see {farms} in {catchment}',
 	'mail.farmer.heading': 'Your hydrological unit on {product}',
-	'mail.farmer.body': '{inviter} has given you access to {farms} in {catchment}.',
+	'mail.farmer.body': '{inviter} invited you to see {farms} in {catchment}.',
 	'mail.farmer.privacy': "You will see your own hydrological unit's water, dam and any restriction notice, and nothing about your neighbours' hydrological units.",
 	'mail.farmer.estimate':
 		'The figures you will see are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.',

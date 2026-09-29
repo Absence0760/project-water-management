@@ -53,7 +53,7 @@ describe('POST /farmers for an address with no verified account', () => {
 			invite: expect.objectContaining({ status: 'invited', email, nodeIds: [farmA.id, farmB.id].sort(), invitedBy: 'Iowner', locale: 'en' })
 		});
 		const mail = lastMailTo(email)!;
-		expect(mail.subject).toBe('Iowner has given you access to Farm A and Rustenvrede in Invite <Kloof>');
+		expect(mail.subject).toBe('Iowner invited you to see Farm A and Rustenvrede in Invite <Kloof>');
 		expect(mail.html).toContain('Invite &lt;Kloof&gt;');
 		expect(mail.text).toMatch(/\/register\?invite=[A-Za-z0-9_-]{43}/);
 
@@ -71,7 +71,7 @@ describe('POST /farmers for an address with no verified account', () => {
 		expect(res.body.invite.locale).toBe('af');
 		// The invite email goes out in the invite's language (WP-2.5; auth/locale.db.test.ts covers the switch).
 		const mail = lastMailTo(email)!;
-		expect(mail.subject).toBe('Iowner het jou toegang gegee tot Hoek in Invite <Kloof>');
+		expect(mail.subject).toBe('Iowner het jou uitgenooi om Hoek in Invite <Kloof> te sien');
 		expect(mail.html).toContain('<html lang="af">');
 		expect((await owner.call('POST', `/projects/${projectId}/farmers`, { email, nodeIds: [farmC.id], locale: 'fr' })).status).toBe(400);
 	});
@@ -257,7 +257,7 @@ describe('POST /farmers/bulk', () => {
 		// Linked once they accepted (helpers.ts signUp accepts at once).
 		expect(await farmNodesOf(verified.id)).toEqual([farmA.id]);
 		expect(mailCount(twice)).toBe(1);
-		expect(lastMailTo(twice)!.subject).toBe('Iowner has given you access to Farm A and Hoek in Invite <Kloof>');
+		expect(lastMailTo(twice)!.subject).toBe('Iowner invited you to see Farm A and Hoek in Invite <Kloof>');
 		expect(mailCount(fresh)).toBe(1);
 		expect(lastMailTo(unverified.email)!.text).toContain('Confirm email and accept');
 		const listed = (await owner.call('GET', `/projects/${projectId}/farmers`)).body.farmers;
@@ -333,7 +333,7 @@ describe('inviting an applicant with farms', () => {
 		expect(res.body.invite).toEqual(expect.objectContaining({ status: 'invited', email, role: 'contributor', nodeIds: [farmB.id] }));
 		// Not the farmer email: it speaks of the role, not of the farms given to a farmer.
 		const mail = lastMailTo(email)!;
-		expect(mail.subject).not.toBe('Iowner has given you access to Rustenvrede in Invite <Kloof>');
+		expect(mail.subject).not.toBe('Iowner invited you to see Rustenvrede in Invite <Kloof>');
 		expect(mail.text).toMatch(/\/register\?invite=[A-Za-z0-9_-]{43}/);
 		const uid = await register(email, tokenIn(mail));
 		expect(await asOwner('SELECT role::text AS role FROM project_member WHERE project_id = $1 AND user_id = $2', [projectId, uid])).toEqual([{ role: 'contributor' }]);

@@ -119,16 +119,11 @@
 		error = message = null;
 		try {
 			const r = await api.farmers.add(projectId, inv.email, inv.nodeIds.filter((id) => farms.some((f) => f.id === id)), inv.locale, inv.role ?? 'farmer');
-			if (r.invited) {
-				upsert(r.invite);
-				message =
-					r.invite.expiresAt !== inv.expiresAt
-						? `Invitation re-sent to ${inv.email}. The earlier link no longer works.`
-						: `An invitation went to ${inv.email} less than a minute ago: wait a moment before re-sending.`;
-			} else {
-				upsert(r.farmer);
-				message = `${inv.email} has an account now and was added as ${inv.role === 'contributor' ? 'an applicant' : 'a farmer'}.`;
-			}
+			upsert(r.invite);
+			message =
+				r.invite.expiresAt !== inv.expiresAt
+					? `Invitation re-sent to ${inv.email}. The earlier link no longer works.`
+					: `An invitation went to ${inv.email} less than a minute ago: wait a moment before re-sending.`;
 		} catch (err) {
 			error = msg(err);
 		} finally {

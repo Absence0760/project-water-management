@@ -396,7 +396,7 @@ describe('an existing account is invited and must accept (109_invite_accept, iss
 		expect((await known.call('GET', `/projects/${pid}`)).status).toBe(404);
 		// Their email points at the invitations page, with no token in it.
 		const mail = lastMailTo(known.email)!;
-		expect(mail.text).toContain('/invitations');
+		expect(mail.text).toContain('/account/invitations');
 		expect(mail.text).not.toMatch(/[?&](token|invite)=/);
 		expect(mail.text).toContain('accept or decline');
 		// The history says only that an invite went out, as for the unknown address.
@@ -444,6 +444,36 @@ describe('an existing account is invited and must accept (109_invite_accept, iss
 		expect((await known.call('DELETE', `/me/invites/${invite.id}`)).status).toBe(404);
 		// The owner may invite them again.
 		expect((await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).status).toBe(201);
+	});
+
+	// app_accept_invite locks the invite (FOR UPDATE) before joining, and a decline's DELETE waits on that
+	// lock, so the holder's parallel requests settle to exactly one outcome.
+	it('accepting the same invite several times at once joins once, and the rest find nothing', async () => {
+		const owner = await signUp('RaceOwner');
+		const known = await holder('Racer');
+		const pid = await projectOf(owner);
+		const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'editor' })).body.invite;
+		const statuses = (await Promise.all(Array.from({ length: 4 }, () => known.call('POST', `/me/invites/${invite.id}/accept`)))).map((r) => r.status);
+		expect(statuses.sort()).toEqual([200, 404, 404, 404]);
+		expect(await events(pid, 'member.added')).toHaveLength(1);
+		expect((await known.call('GET', `/projects/${pid}`)).body.project.role).toBe('editor');
+	});
+
+	it('an accept racing a decline of the same invite: exactly one wins, and the log says which', async () => {
+		for (let i = 0; i < 3; i++) {
+			const owner = await signUp('DuelOwner');
+			const known = await holder('Dueller');
+			const pid = await projectOf(owner);
+			const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).body.invite;
+			const [acc, dec] = await Promise.all([known.call('POST', `/me/invites/${invite.id}/accept`), known.call('DELETE', `/me/invites/${invite.id}`)]);
+			const joined = acc.status === 200;
+			// One wins, the other finds nothing: never both, never neither.
+			expect([acc.status, dec.status].sort()).toEqual(joined ? [200, 404] : [204, 404]);
+			expect(await events(pid, 'member.added')).toHaveLength(joined ? 1 : 0);
+			expect(await events(pid, 'invite.declined')).toHaveLength(joined ? 0 : 1);
+			expect((await known.call('GET', `/projects/${pid}`)).status).toBe(joined ? 200 : 404);
+			expect(await mine(known)).toEqual([]);
+		}
 	});
 
 	it('only the invited address sees, accepts or declines an invite (positive control: its holder sees it)', async () => {

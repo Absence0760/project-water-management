@@ -2092,34 +2092,35 @@ the first non-modeller user is invited (WUA staff, a client reviewer), and
 with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
 role and not before it.
 
-- [ ] **Adding someone by email tells the adder whether they have an
-      account, and adds a verified account without asking it** (issue #51,
-      adversary finding 3). `POST /projects/:id/members`, `/farmers`,
-      `/farmers/bulk` and `POST /teams/:id/members` add a verified account
-      at once (`201 { member }` with its display name, bulk `status:
-      'added'`) and invite any other address (`201 { invited: true }`,
-      `'invited'`). Any registered user can create a project and so own
-      one, so this probes which addresses have verified accounts, learns
-      their display names, and makes a stranger a member (with the alert
-      mails that brings) without their consent. Built now: the daily cap on
-      adding by email, 300 a person and 300 a project or team, counted
-      before the lookup (`101_invite_throttle.sql`, `invites/invites.ts`
-      `INVITE_CAP`), which bounds both the probing and the invite mail.
-      **Not built, and one change:** every add by email becomes an invite,
-      and a verified account joins only when its holder accepts (a link in
-      the invite mail opening an accept page while signed in, or a pending
-      invitation on their project list), so every answer is the same
-      `{ invited: true, invite }` / `'invited'` and no display name is shown
-      before acceptance. Changing the response shape alone would not close
-      the leak: `GET /projects/:id/members` (and the farmers list) shows an
-      added account, with its name and address, at once, so the shape and
-      acceptance have to land together. Size: the invite routes, an accept
-      endpoint and page, the members and farmers panels' wording, and the
-      tests that add verified members directly (about 200 call sites use
-      `POST …/members` as setup and would need an accept step or a test
-      helper). Who: operator (product call: WUA staff lose "added at once").
-      Trigger: before public registration opens, or before the first
-      catchment with members outside the operator's own team.
+- [x] **Adding someone by email told the adder whether they have an
+      account, and added a verified account without asking it** (issue #51,
+      adversary finding 3; done 2026-09-29, issue #136). Every add by email
+      (`POST /projects/:id/members`, `/farmers`, `/farmers/bulk`, `POST
+      /teams/:id/members`) is an invite, answered `201 { invited: true,
+      invite }` / bulk `'invited'` whether or not the address has an
+      account, and a verified account joins only when its holder accepts on
+      `/account/invitations` (`GET /me/invites`, `POST
+      /me/invites/:id/accept`, `DELETE /me/invites/:id`;
+      `109_invite_accept.sql`). The members and farmers lists show nobody
+      before they accept, and a decline reaches the owner's History as
+      `invite.declined` with the masked address only. An existing farmer's
+      bulk rows still add farms at once (`'added'`): they are on the list
+      already. The daily cap (`101_invite_throttle.sql`) stays. Tests:
+      `auth/account-tokens.security.db.test.ts` (unknown, unconfirmed and
+      verified addresses get the same answer and row, with a positive
+      control), `invites/invites.db.test.ts`, `sharing.spec.ts`.
+- [ ] **An invite outlives its sender's right to send it** (review of
+      issue #136, 2026-09-29). `invite` RLS checks owner/admin only when the
+      invite is written, so if the owner who sent it is removed or demoted
+      before it is accepted, the invitee still joins with the invited role
+      (`owner` included), through the invitations page or, as before #136,
+      a sign-up or confirmation link. **Durable fix:** in 109's functions
+      and `app_accept_invites`, accept (and list) an invite only while its
+      `invited_by` still holds owner on the project (directly or as team
+      admin) or admin on the team, or delete a person's sent invites when
+      they lose that role (a trigger on `project_member`/`team_member`),
+      with a DB test for each path. **Trigger:** before a catchment has more
+      than one owner outside the operator's own team.
 
 ## Features left half-way
 

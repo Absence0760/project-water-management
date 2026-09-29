@@ -3,30 +3,53 @@ import { addMember, createProject, LEGAL_VERSION, PASSWORD, putModel, register, 
 import { plantEmailToken, plantInviteToken, userIdByEmail } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { expectNoViolations } from '../support/a11y.ts';
 import { openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
 import { answerConfirm } from '../support/confirm.ts';
 
-test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
-	void owner;
+const PHONE = { width: 360, height: 740 };
+
+test('an owner shares a project read-only with a viewer, who joins by accepting the invitation', async ({ page, owner, signIn }) => {
 	const project = await createProject(page.request, 'Shared catchment', 'Shared with the consultant');
 	await putModel(page.request, project.id, sampleModel());
 	const secret = await createProject(page.request, 'Private catchment');
 	const viewer = await signIn('Consultant');
 
-	// Owner adds the viewer from the Project page's Members panel.
+	// Owner invites the viewer from the Project page's Members panel. The address has an account, but
+	// adding it is only an invitation (issue #136): the owner sees a pending invite, not the account.
 	await page.goto(`/projects/${project.id}?tab=project`);
 	const members = page.getByRole('region', { name: 'Members' });
 	await members.getByLabel('Add member by email').fill(viewer.user.email);
 	await members.getByLabel('Role', { exact: true }).selectOption('viewer');
 	await members.getByRole('button', { name: 'Add' }).click();
+	await expect(members.getByRole('status').filter({ hasText: 'Invitation sent' })).toHaveText(`Invitation sent to ${viewer.user.email}. They’ll join as viewer once they accept it.`);
+	await expect(members.getByRole('row').filter({ hasText: viewer.user.email })).toHaveCount(0);
+	await expect(members.getByText('Consultant', { exact: true })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: /^Pending invitations/ }).getByText(viewer.user.email)).toBeVisible();
+
+	// The viewer hasn't joined yet: the banner offers the invitation, and they accept it.
+	const v = viewer.page;
+	await v.goto('/');
+	await expect(v.getByRole('rowheader', { name: 'Shared catchment' })).toHaveCount(0);
+	const banner = v.getByRole('region', { name: 'Invitations' });
+	await expect(banner).toContainText('You have 1 invitation waiting.');
+	await banner.getByRole('link', { name: 'See invitations' }).click();
+	await expect(v).toHaveURL(/\/account\/invitations$/);
+	const card = v.getByRole('listitem').filter({ has: v.getByRole('heading', { name: 'Shared catchment' }) });
+	await expect(card).toContainText(`${owner.displayName} invited you to this catchment as a viewer.`);
+	await card.getByRole('button', { name: 'Accept' }).click();
+	await expect(v.getByRole('status').filter({ hasText: 'You joined' })).toHaveText('You joined Shared catchment. Open it');
+	await expect(v.getByText('You have no invitations waiting.')).toBeVisible();
+	await expect(banner).toHaveCount(0);
+
+	// Now a member, as the viewer the owner chose.
+	await page.reload();
 	const memberRow = members.getByRole('row').filter({ hasText: viewer.user.email });
-	await expect(memberRow).toBeVisible();
 	await expect(memberRow.getByLabel('Role for Consultant')).toHaveValue('viewer');
 
 	// The viewer sees it in their list, as a viewer.
-	const v = viewer.page;
 	await v.goto('/');
 	const listRow = v.getByRole('row').filter({ has: v.getByRole('rowheader', { name: 'Shared catchment' }) });
 	await expect(listRow).toContainText('viewer');
@@ -144,6 +167,31 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	await page.reload();
 	await expect(page.getByTestId('project-name').filter({ hasText: 'Invite catchment' })).toBeVisible();
 	await expect(page.getByRole('region', { name: /Pending invitations/ })).toHaveCount(0);
+});
+
+test('an account that declines an invitation never joins, and the owner never sees who it was (issue #136)', async ({ page, owner, signIn }) => {
+	void owner;
+	const project = await createProject(page.request, 'Declined catchment');
+	const stranger = await signIn('Declining stranger');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/members`, { data: { email: stranger.user.email, role: 'editor' } })).status()).toBe(201);
+
+	const s = stranger.page;
+	await s.setViewportSize(PHONE);
+	await s.goto('/account/invitations');
+	const card = s.getByRole('listitem').filter({ has: s.getByRole('heading', { name: 'Declined catchment' }) });
+	await expect(card).toContainText('invited you to this catchment as an editor.');
+	await expectNoViolations(s);
+	await card.getByRole('button', { name: 'Decline' }).click();
+	await expect(s.getByRole('status').filter({ hasText: 'You declined' })).toHaveText('You declined the invitation to Declined catchment.');
+	await expect(s.getByText('You have no invitations waiting.')).toBeVisible();
+	// Not a member: the project isn't theirs to open.
+	expect((await s.request.get(`${API_URL}/projects/${project.id}`)).status()).toBe(404);
+
+	// The owner's pending invite is gone; the members list never showed the account.
+	await page.goto(`/projects/${project.id}?tab=project`);
+	await expect(page.getByTestId('project-name').filter({ hasText: 'Declined catchment' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Pending invitations/ })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Members' }).getByText('Declining stranger', { exact: true })).toHaveCount(0);
 });
 
 test('adding an account that never confirmed its email invites it until the address is confirmed', async ({ page, owner, playwright }) => {

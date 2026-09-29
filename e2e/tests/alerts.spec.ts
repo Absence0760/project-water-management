@@ -10,7 +10,7 @@
 // the account and alert pages, which turns them back on. An editor sets a
 // staleness level per data feed on Overview's rule editor.
 import { expectNoViolations } from '../support/a11y.ts';
-import { addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
+import { acceptInvites, addMember, createProject, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { words } from '../support/lang.ts';
 import { plantAlertSubscription } from '../support/db.ts';
 import { API_URL } from '../support/env.ts';
@@ -28,6 +28,7 @@ test('a farmer chooses how often they get their dam alerts, and the choice is ke
 	const farmer = await signIn('Alert farmer');
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 	// The WUA switches dam alerts on for that farm (restriction notices stay off).
 	const rules = await page.request.put(`${API_URL}/projects/${project.id}/alert-rules`, { data: { rules: [{ kind: 'dam_below', nodeId: farm.id, threshold: 0.3, enabled: true }] } });
 	expect(rules.status(), await rules.text()).toBe(200);
@@ -89,6 +90,7 @@ test('a farmer-only user’s account pages sit in the farm frame, in their langu
 	const farmer = await signIn('Frame farmer');
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [farm.id] } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 
 	const p = farmer.page;
 	for (const viewport of [PHONE, { width: 1440, height: 960 }]) {
@@ -207,6 +209,7 @@ test('thirty farms’ dam alerts read as two columns of rows in one wide card', 
 	const farms = model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id);
 	const add = await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: farms } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
 
 	const p = farmer.page;
 	await p.setViewportSize({ width: 1440, height: 960 });

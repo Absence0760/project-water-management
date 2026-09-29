@@ -1099,8 +1099,8 @@ it scrolls, and isn't fitted to the window.
   `project/farmers.ts`). A CSV is previewed first: a table of every row's
   line, email, farm and what will happen (added, invited, or the row's
   error), from a server dry run that sends nothing; **Send** then does it and
-  the table shows the results. A verified account is added at once; anyone
-  else is invited and listed under **Pending farmer invitations** (owners
+  the table shows the results. Everyone is invited, account or not (issue
+  #136: a farmer already here gains the rows' farms at once), and listed under **Pending farmer invitations** (owners
   only) with their farms, who sent it and when it expires, with Resend and
   Revoke. Empty state: "No farmers yet: invite them to see their own farm."
   Farmer invites stay out of the Members panel's pending list.
@@ -5782,6 +5782,36 @@ only in the tests.
    file — make sure it (and `language.spec.ts`) passes. From the third
    language the switch is a `<select>`: check it at 360 px in the headers
    and on the account page.
+
+## Invitations
+
+Adding someone by email is always an invitation (issue #136; [api.md § Your
+invitations](./api.md#your-invitations)): an account that already exists
+joins a catchment or team only when its holder accepts, so nobody is made a
+member unasked, and the person adding never learns whether the address has
+an account. The Members, Farmers and team panels say "Invitation sent to …
+They'll join as … once they accept it." and list the invite as pending until
+then.
+
+- **`/account/invitations`** (`routes/account/invitations/+page.svelte`, in
+  the account pages' frame, so a farmer sees it in the farm view's): one card
+  per invitation with the catchment's or team's name, who sent it, the role
+  in words ("as a farmer"), a farm invite's farms, the date it closes, and
+  **Accept** / **Decline**. Accepting says "You joined …" with a link to it
+  (a farmer's to their farm), declining "You declined the invitation to …";
+  one that went meanwhile (revoked, expired) reloads the list with the error.
+  Empty state: "You have no invitations waiting." Its words are translated
+  (section `invitations`). Linked from the account page's **Your
+  invitations**, the invite email, and the banner.
+- **The invitations banner** (`auth-extras/InvitesBanner.svelte`, in
+  `routes/+layout.svelte` under the confirm-email banner's place, for a
+  confirmed address only): "You have N invitations waiting." with **See
+  invitations**, on every signed-in page but the invitations page, while any
+  wait. The count is read once per account, again after an accept or
+  decline, and when the tab comes back into view (`auth-extras/pendingInvites.svelte.ts`).
+- The register page, opened from an invite link by an account that is
+  signed in and confirmed, points to the invitations page instead of saying
+  it should have access already.
 
 ## Alerts
 

@@ -1284,6 +1284,14 @@
 //             background job per fit, so the worker no longer carries
 //             autoCalibrate, the filters or the rule resolver; the panel
 //             follows the server's run instead. Headroom ~3 KB.
+// 2026-09-29  total 1186 → 1192 KB (issue #136: measured 1189 with main @
+//             3c68382c merged, against main's 1183). Every add by email is
+//             an invite that an existing account accepts: the invitations
+//             page (routes/account/invitations, its own chunk), the banner
+//             that counts waiting invitations (auth-extras/InvitesBanner,
+//             lazy, with its store) and their Afrikaans words in the af
+//             catalogue. The members, farmers and team panels lost their
+//             added-at-once branches. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1294,7 +1302,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1186,
+	totalCodeKb: 1192,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

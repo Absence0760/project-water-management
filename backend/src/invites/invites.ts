@@ -7,7 +7,7 @@
 //   - no account: a sign-up link (`/register?invite=…`);
 //   - an unverified account: a confirm-your-email link (someone may have
 //     registered a colleague's address to be added in their place);
-//   - a verified account: a link to the invitations page (/invitations).
+//   - a verified account: a link to the invitations page (/account/invitations).
 // The first two join once the address is verified — by the verify-email link,
 // a password-reset link, or signing up through the invite link itself
 // (app_accept_invites, from markVerified, only when that call is the one that
@@ -186,7 +186,7 @@ export async function inviteByEmail(
 	let mode: InviteMode = 'sign-up';
 	if (account?.verified) {
 		// Signed in as the address, its holder accepts or declines there (app_my_invites).
-		link = sitePage('/invitations');
+		link = sitePage('/account/invitations');
 		mode = 'accept';
 	} else if (account) {
 		// On the address's shared count (078): the inviter's browser is no device of theirs.

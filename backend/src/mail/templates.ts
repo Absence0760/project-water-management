@@ -207,8 +207,8 @@ export function listText(items: readonly string[], and = 'and'): string {
 export type FarmerInviteFacts = { catchment: string; farms: string[] };
 
 /**
- * A farmer invite (WP-2.2): "{inviter} has given you access to {farm} in
- * {catchment}". Same three modes as `inviteMail`; `locale` (invite.locale)
+ * A farmer invite (WP-2.2): "{inviter} invited you to see {farm} in
+ * {catchment}". The same modes as `inviteMail`; `locale` (invite.locale)
  * picks the wording, English where Afrikaans has none yet.
  */
 export function farmerInviteMail(
