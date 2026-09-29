@@ -1715,8 +1715,9 @@ the suggested order (the IDs carry the detail):
       start a formula (`backend/src/export/csv.ts` `runProvenanceComment`);
       `lib/export/dailyTable.ts` reads every leading `#` line; api.md § Export
       (`pandas.read_csv(…, comment='#')`). The farmer's own
-      `…/farm/:nodeId/export.csv` is left as it was: it serves the published
-      figures, and the farm view carries no run label, only the publication
+      `…/farm/:nodeId/export.csv` carries no provenance line (since #124 it
+      is the last year in whole m³, its columns named by the farm page in
+      the reader's language): it serves the published figures, and the farm view carries no run label, only the publication
       and its engine version. Original entry: The
       farm and catchment daily CSVs (`daily.csv`, `farms.csv`) carry the run
       only in the file name, which is lost the moment the file is renamed or
@@ -2428,9 +2429,11 @@ role and not before it.
       the formula audit workbook is the separate item in § Verification).
   - a path for exports over 5 MB (Lambda streaming or an S3 pre-signed URL,
     plus a local MinIO equivalent). **Now a real limit, not a hypothetical
-    one** (measured 2026-09-25 for WP-1.28): a farm's daily CSV has ~32
+    one** (measured 2026-09-25 for WP-1.28): the workspace's farm daily CSV has ~32
     full-precision columns, ≈ 400 KB a year, so a multi-decade record gets
-    the `413`. The
+    the `413` (the farmer's own CSV, six columns in whole m³ and the last
+    365 days by default since #124, reaches it only with a `?from=` decades
+    back). The
     workaround today is a `from`/`to` window or the `.xlsx` workbook, whose
     bulk fetch pages under the cap. Durable fix: WP-1.29 option (a), Lambda
     response streaming with a 50 MB cap (roadmap step 1). Trigger: before the

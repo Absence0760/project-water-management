@@ -946,7 +946,7 @@ the farmer's own units and language.
 | GET | `/projects/:id/farm/:nodeId` | `FarmView` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `{ startDate, values }`: farm allowlist keys only, from the **published** run, `from` defaulting to 365 days back (a multi-decade array is hundreds of KB of JSON; too much for a phone) | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: { publishedAt, season: {…}, curtailment: {…} }[] }` (the last 12) | farmer |
-| GET | `/projects/:id/farm/:nodeId/export.csv` | Own farm daily CSV (the published run, farm keys, `from`/`to`), the same CSV rules as `export/csv.ts` | farmer |
+| GET | `/projects/:id/farm/:nodeId/export.csv` | Own farm daily CSV (the published run, farm keys, whole m³, the last 365 days unless `from`/`to` say otherwise; issue #124), the same CSV rules as `export/csv.ts` | farmer |
 
 ```ts
 FarmView = {
@@ -2428,7 +2428,7 @@ accessibility) judged each bar again. The full reports are the gitignored
 | `hydrologist` | Adopt if…: need met, CHIRPS documented; forecast days leaked into the FDC, the automatic fit and firm yield | #127; the re-check found the same leak in days below the Reserve per water year, the allocations comparison, the Dams page and the report window's whole record, all fixed here | **Adopt if…** → met with this PR | ✅ |
 | `adversary` | No cross-farm read, share-link overreach or unsubscribe abuse; key escalation failed on a High: an ingest key could create a series that became the model input, unheld | #135 (`100_key_series_kind`, `heldFor`) | Met for creation. A key's pushes into a series with fewer than 100 non-zero days are checked for negatives only (a documented limit, security.md § API keys); the 409 no longer tells people to seed a series with one day (fixed here); whether to hold those pushes too is an operator decision, [#93](https://github.com/Absence0760/project-water-management/issues/93) | ✅ (limit documented, decision open) |
 | `accessibility-user` | Not yet: no Critical or High, axe clean in both languages at 360 and 320 px; 5 Mediums (2.2.2, 2.4.2, 1.4.11, 2.4.3, 1.4.10) | #130 | **Met once #130 merges**: all five fixed and pinned by e2e; none left | ✅ with #130 |
-| `international-user` | Mostly met: af-ZA formats correct; a notice date in UTC, an English "a former member", the farmer CSV | #129; the CSV is [#124](https://github.com/Absence0760/project-water-management/issues/124) | **Met**; the CSV stays #124 (trigger: before farmers are invited) | ✅ |
+| `international-user` | Mostly met: af-ZA formats correct; a notice date in UTC, an English "a former member", the farmer CSV | #129; the CSV is [#124](https://github.com/Absence0760/project-water-management/issues/124) | **Met**; the CSV fixed by #124 (plain column names in the reader's language, `;` and a decimal comma in Afrikaans, whole m³, the last 365 days) | ✅ |
 
 Carried, not blocking a bar (followups.md § POPIA and the Step 2 release):
 the Afrikaans needs a native speaker's review (Q5 below); the WUA's % is
