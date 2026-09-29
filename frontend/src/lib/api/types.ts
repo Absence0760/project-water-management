@@ -18,6 +18,8 @@ import type {
 	ProjectSettings,
 	RecordCoverage,
 	ResolvedEnsembleOptions,
+	ReviewTriggerRow,
+	ReviewTriggers,
 	RestrictionLevel,
 	RunComparison,
 	RunInputsSnapshot,
@@ -151,11 +153,13 @@ export interface OutlookSeasonSetting {
 /**
  * settings.outlook (issue #53 R5, backend projects/outlookSettings.ts): how a
  * seasonal outlook is set up. null = the engine's defaults, pending the
- * client (O3, O6). Not a model input; the API always sends both fields.
+ * client (O3, O6). Not a model input; the API always sends every field (an older one no `review`).
  */
 export interface OutlookSettings {
 	season: OutlookSeasonSetting | null;
 	planningShare: number | null;
+	/** The review date's month and day (issue #53 R6); null = the engine's defaultReviewDate (1 January for the default season). */
+	review?: { month: number; day: number } | null;
 }
 
 export interface Project extends ProjectSummary {
@@ -1488,6 +1492,37 @@ export type OutlookResult = Omit<SeasonalOutlook, 'excluded'> & {
 	failures: { levelId: string; label: string; waterYear: number; message: string }[];
 };
 
+/** A trigger table as stored (backend outlooks/store.ts StoredTriggerTable): the engine's ReviewTriggers without each band's whole outlook. */
+export type OutlookTriggerTable = Omit<ReviewTriggers, 'rows'> & { rows: Omit<ReviewTriggerRow, 'outlook'>[] };
+
+/**
+ * An outlook's review triggers (issue #53 R6, backend StoredTriggers): the
+ * season's review date, and the table drawn on the latest review date the
+ * base run's record holds (null with `problem` when it couldn't be).
+ */
+export interface OutlookTriggers {
+	reviewDate: string;
+	table: OutlookTriggerTable | null;
+	problem: string | null;
+	excluded: OutlookExcludedYear[];
+	failures: { levelId: string; label: string; waterYear: number; message: string; bandFromM3: number }[];
+}
+
+/** An outlook published to farmers (issue #53 R5, backend outlooks/publication.ts OutlookPublicationRow). */
+export interface OutlookPublication {
+	id: string;
+	outlookId: string | null;
+	level: { id: string; label: string };
+	decisionDate: string;
+	seasonEnd: string;
+	reviewDate: string | null;
+	engineVersion: string;
+	publishedBy: string | null;
+	publishedAt: string;
+	endedAt: string | null;
+	farms: number;
+}
+
 /** A seasonal outlook (issue #53 R5, docs/api.md § Seasonal outlooks, backend outlooks/store.ts OutlookRow). */
 export interface Outlook {
 	id: string;
@@ -1496,6 +1531,8 @@ export interface Outlook {
 	baseRun: { id: string; label: string; createdAt: string };
 	decisionDate: string;
 	seasonEnd: string;
+	/** The season's review date (R6); null = no trigger table. Absent from an older API. */
+	reviewDate?: string | null;
 	/** null = the engine's default share (O6). */
 	planningShare: number | null;
 	levels: { id: string; label: string; ops: ScenarioOp[] }[];
@@ -1508,6 +1545,8 @@ export interface Outlook {
 	completedAt: string | null;
 	/** Only on GET …/outlooks/:outlookId; null while pending. */
 	result?: OutlookResult | null;
+	/** Likewise; null without a review date. */
+	triggers?: OutlookTriggers | null;
 }
 
 /** POST /projects/:id/outlooks. Season and share absent: the project's settings. */
@@ -1518,6 +1557,8 @@ export interface OutlookRequest {
 	decisionDate?: string;
 	seasonEnd?: string;
 	planningShare?: number;
+	/** Absent: the project's setting; null: no trigger table. */
+	reviewDate?: string | null;
 	analogueYears?: number[];
 }
 

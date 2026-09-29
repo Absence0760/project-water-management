@@ -61,6 +61,13 @@ export const CreateOutlookBody = z
 		seasonEnd: IsoDate.optional(),
 		/** (0, 1]; absent: the project's setting, else the engine's default (O6). */
 		planningShare: z.number().finite().gt(0, 'the planning share must be more than 0').max(1, 'the planning share is at most 1 (every year)').optional(),
+		/**
+		 * The season's review date, for the review triggers (R6): after the
+		 * decision date, on or before the season end. Absent: the project's
+		 * setting (settings.outlook.review), else the engine's defaultReviewDate;
+		 * null: no trigger table.
+		 */
+		reviewDate: IsoDate.nullable().optional(),
 		/** Analogue water years; absent: every one the record holds but the season's own. */
 		analogueYears: z.array(z.number().int().min(1800).max(2200)).min(1).max(200).optional()
 	})
@@ -82,11 +89,23 @@ export const CreateOutlookBody = z
 				ctx.addIssue({ code: 'custom', path: ['seasonEnd'], message: (err as Error).message });
 			}
 		}
+		if (typeof b.reviewDate === 'string' && b.decisionDate !== undefined && b.seasonEnd !== undefined && (b.reviewDate <= b.decisionDate || b.reviewDate > b.seasonEnd)) {
+			ctx.addIssue({ code: 'custom', path: ['reviewDate'], message: 'the review date must fall after the decision date and on or before the season end' });
+		}
 		if (b.analogueYears && new Set(b.analogueYears).size !== b.analogueYears.length) {
 			ctx.addIssue({ code: 'custom', path: ['analogueYears'], message: 'names a water year more than once' });
 		}
 	});
 export type CreateOutlookBody = z.infer<typeof CreateOutlookBody>;
+
+/**
+ * Most storage bands a trigger table has: the default terciles make three
+ * (the engine's tercileEdges). With OUTLOOK_LEVELS_MAX and OUTLOOK_YEARS_MAX
+ * the table adds at most 720 member runs of the rest of the season to the
+ * outlook's 240, still inside the worker's 300 s on the test catchments
+ * (docs/model.md §2.15a: 3 × 12 × 4 in 53 ms).
+ */
+export const TRIGGER_BANDS_MAX = 3;
 
 /** The `outlook` job's payload: which outlook to compute (its levels and season are in the row). */
 export const OutlookPayload = z.object({ outlookId: z.string().uuid() }).strict();

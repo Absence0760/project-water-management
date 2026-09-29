@@ -95,6 +95,22 @@ describe('scopeAllows, for an impact report (082)', () => {
 		expect(scopeAllows(impact, 'GET', '/compare/runs', q(query))).toBe(false);
 	});
 
+	it('allows the board’s two baseline series by key (positive control), and no other read of the baseline’s series', () => {
+		const series = `/projects/${BP}/runs/${BR}/series`;
+		expect(scopeAllows(impact, 'GET', series, q('key=natural_flow'))).toBe(true);
+		expect(scopeAllows(impact, 'GET', series, q('key=ewr_shortfall'))).toBe(true);
+		expect(scopeAllows(impact, 'GET', `/projects/${BP.toUpperCase()}/runs/${BR.toUpperCase()}/series`, q('key=natural_flow'))).toBe(true);
+		for (const query of ['key=simulated_outflow', 'key=supplied', 'key=natural_flow&nodeId=x', 'key=natural_flow&key=ewr_shortfall', '', 'nodeId=x']) {
+			expect(scopeAllows(impact, 'GET', series, q(query))).toBe(false);
+		}
+		expect(scopeAllows(impact, 'GET', `/projects/${BP}/runs/${BR}/day`, q('key=natural_flow'))).toBe(false);
+		expect(scopeAllows(impact, 'GET', `/projects/${BP}/runs/${OTHER}/series`, q('key=natural_flow'))).toBe(false);
+		expect(scopeAllows(impact, 'GET', `/projects/${BP}/series`, q('key=natural_flow'))).toBe(false);
+		expect(scopeAllows(impact, 'POST', series, q('key=natural_flow'))).toBe(false);
+		// A plain report's session has no baseline to read.
+		expect(scopeAllows(scope, 'GET', series, q('key=natural_flow'))).toBe(false);
+	});
+
 	it('never reads the baseline’s project or run directly, and a plain report never compares', () => {
 		expect(scopeAllows(impact, 'GET', `/projects/${BP}`)).toBe(false);
 		expect(scopeAllows(impact, 'GET', `/projects/${BP}/runs/${BR}`)).toBe(false);

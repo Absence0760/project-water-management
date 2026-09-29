@@ -10,7 +10,10 @@
 //
 // A PDF's key is derived from its ids (reportKey), never stored or taken from
 // a message, so nothing can point a download at another project's file.
-// Downloads are pre-signed GET URLs that expire after an hour.
+// Downloads are pre-signed GET URLs that expire after a minute, minted per
+// click by the auth-checked GET /projects/:id/reports/:jobId/pdf (a 302), so
+// the only lasting handle on a PDF is that route, behind the session, the
+// WAF and the project's membership (docs/security.md § Reports).
 //
 // The AWS SDK is imported lazily, like the mail and queue transports.
 import type { S3Client } from '@aws-sdk/client-s3';
@@ -24,8 +27,13 @@ export function storageKind(value: string | undefined = process.env.STORAGE): St
 	return v as Storage;
 }
 
-/** Pre-signed download links last this long (seconds). */
-export const DOWNLOAD_URL_TTL_SECONDS = 3600;
+/**
+ * Pre-signed download links last this long (seconds): long enough for the
+ * browser to follow the API's redirect and start the download (S3 checks the
+ * expiry when the GET starts, not while it streams), short enough that a
+ * leaked or logged link is useless almost at once.
+ */
+export const DOWNLOAD_URL_TTL_SECONDS = 60;
 /** The bucket's lifecycle deletes PDFs after this many days (infra/reports.tf); rows go a day later. */
 export const REPORT_RETENTION_DAYS = 7;
 
