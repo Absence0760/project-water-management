@@ -91,11 +91,11 @@ test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most t
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto(`/projects/${project.id}?tab=runs`);
 	const menu = page.getByRole('navigation', { name: 'Result sections' });
-	await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
+	await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
 	for (const width of [1440, 1280]) {
 		await page.setViewportSize({ width, height: 900 });
 		await expect(moreButton(menu)).toHaveCount(0);
-		await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
+		await expect(menu.getByRole('link', { name: 'Outputs', exact: true })).toBeVisible();
 		expect(await barRows(menu)).toBeLessThanOrEqual(2);
 		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
 		// Its group names would push links into More (they did in CI's fonts), so it has none and spaces its links evenly.

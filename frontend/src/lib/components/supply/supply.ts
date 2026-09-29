@@ -3,7 +3,8 @@
 // banded as the Summary's Supply by unit and the Network's supply colours
 // (network/supplyColour.ts), four headline tiles, and the links into the
 // page, including the old Runs & results links to the panels that moved here
-// (the unit results table, curtailment, assurance of supply, unit detail).
+// (the unit results table, curtailment, assurance of supply, unit detail),
+// and the run's other uses of water, once under the run Summary (issue #137).
 // Pure, so the page stays markup and the numbers are unit-tested.
 import { fromEpochDay, toEpochDay, type RunSummary } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
@@ -212,16 +213,21 @@ export function cardFacts(c: UnitCard, weekDays: number, weekEnd: DataEnd | null
 /**
  * The page's "On this page" menu (common/SectionNav): the unit detail beside
  * the cards, then the tables for the run, each by its `#res-…` id
- * (links.ts SUPPLY_ANCHORS), in page order.
+ * (links.ts SUPPLY_ANCHORS), in page order. `otherUses`: the run has land
+ * cover, boreholes, demand objects or other users to show (runs/humanImpacts.ts
+ * hasHumanImpacts), their section last (issue #137).
  */
-export const SUPPLY_NAV: NavGroup[] = [
-	{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
-	{
-		label: 'Tables for this run',
-		sections: [
-			{ id: 'res-farms', label: 'Hydrological unit results' },
-			{ id: 'res-curtailment', label: 'Curtailment' },
-			{ id: 'res-assurance', label: 'Assurance of supply' }
-		]
-	}
-];
+export function supplyNav(otherUses: boolean): NavGroup[] {
+	return [
+		{ label: 'Each hydrological unit', sections: [{ id: 'res-farm', label: 'Hydrological unit detail' }] },
+		{
+			label: 'Tables for this run',
+			sections: [
+				{ id: 'res-farms', label: 'Hydrological unit results' },
+				{ id: 'res-curtailment', label: 'Curtailment' },
+				{ id: 'res-assurance', label: 'Assurance of supply' },
+				...(otherUses ? [{ id: 'res-other-uses', label: 'Other uses' }] : [])
+			]
+		}
+	];
+}

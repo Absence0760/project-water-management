@@ -52,7 +52,8 @@
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
 	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
+	import { projectToday } from '$lib/components/projects/freshness';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { fetchProjectPage, takeProjectPage } from '$lib/workspace/firstLoad';
@@ -155,8 +156,8 @@
 	let saveReason = $state('');
 
 	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
-	// The viewer's calendar date, as on the project list (projects/freshness.ts).
-	const today = localIsoDate();
+	// The project's calendar date (its time zone), as on the project list and the portfolio (issue #137).
+	const today = $derived(projectToday(project?.timeZone));
 	const fresh = $derived(freshness(series ?? [], today));
 
 	// The "Data up to" dropdown closes on Escape (focus back on its summary)
@@ -740,6 +741,7 @@
 								initial={series}
 								{runs}
 								settings={project!.settings}
+								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								onSeriesChange={(l) => (series = l)}
 							/>

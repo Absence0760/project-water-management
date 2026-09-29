@@ -7,7 +7,7 @@ describe('resultGroups', () => {
 		const farm = { nodeId: 'f' } as FarmSummary;
 		expect(resultGroups({ farms: [farm] }).map((g) => [g.label, g.sections.map((s) => s.id)])).toEqual([
 			[null, ['res-summary']],
-			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-ewr-agreement']],
+			['Model quality', ['res-hydrograph', 'res-fdc', 'res-calibration', 'res-water-balance', 'res-ewr-agreement']],
 			['Record', ['res-notes', 'res-validation', 'res-publication']],
 			['Dig deeper', ['res-checks', 'res-explore']]
 		]);
@@ -25,7 +25,7 @@ describe('resultGroups', () => {
 		}
 	});
 
-	it('adds the optional model-quality panels in order: runoff model (GR4J), WR2012, then plausibility after EWR vs observed', () => {
+	it('adds the optional model-quality panels in order: runoff model (GR4J) after the water balance, WR2012, then plausibility after EWR vs observed', () => {
 		const model = (summary: Parameters<typeof resultGroups>[0]) => resultGroups(summary).find((g) => g.label === 'Model quality')!.sections.map((s) => s.id);
 		expect(model({ farms: [] })).not.toContain('res-runoff');
 		expect(model({ farms: [] })).not.toContain('res-wr2012');
@@ -37,7 +37,7 @@ describe('resultGroups', () => {
 				wr2012: {} as RunSummary['wr2012'],
 				plausibility: {} as RunSummary['plausibility']
 			})
-		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
+		).toEqual(['res-hydrograph', 'res-fdc', 'res-calibration', 'res-water-balance', 'res-runoff', 'res-wr2012', 'res-ewr-agreement', 'res-plausibility']);
 	});
 
 	it('puts the flow-duration curve with the hydrograph', () => {

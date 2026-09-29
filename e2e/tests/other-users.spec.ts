@@ -42,13 +42,21 @@ test('add a town as an other water user, save, run, and see what it took', async
 	await page.getByLabel(/^Run label/).fill('With town');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With town' })).toBeVisible();
-	const usersTable = page.locator('table.users');
-	const row = usersTable.getByRole('row', { name: /^Town/ });
-	await expect(row).toBeVisible();
-	await expect(row.getByRole('cell').first()).toHaveText('senior');
-	await expect(row.getByRole('cell').nth(1)).toHaveText('800');
-	// The curtailment report, on Units & supply since issue #17, lists it apart from the units, not curtailed (senior).
-	await page.getByRole('link', { name: 'Hydrological units for this run' }).click();
+	// Other water users are listed once (issue #137), in the curtailment report on Units & supply (since
+	// issue #17): the Summary no longer draws its own table, and links there.
+	await expect(page.locator('table.users')).toHaveCount(0);
+	const toUsers = page.getByTestId('other-uses-link');
+	await expect(toUsers).toHaveText('Other water users: the curtailment targets on Units & supply.');
+	await toUsers.getByRole('link').click();
+	await expect(page).toHaveURL(/[?&]tab=supply\b.*#res-curtailment$/);
+	// Apart from the units, not curtailed (senior), with its demand and the share of it supplied.
 	const other = page.getByRole('table', { name: 'Other water users' });
-	await expect(other.getByRole('row', { name: /^Town/ })).toContainText('senior (not curtailed)');
+	await expect(other).toHaveCount(1);
+	const row = other.getByRole('row', { name: /^Town/ });
+	await expect(row).toContainText('senior (not curtailed)');
+	await expect(row.getByRole('cell').nth(1)).toHaveText('800');
+	await expect(row.getByRole('cell').nth(3)).toHaveText(/^\d+(\.\d)?%$/);
+	// No Other uses section: the curtailment table is the page's one copy.
+	await expect(page.getByRole('region', { name: 'Other uses of water' })).toHaveCount(0);
+	await expect(page.locator('table.users')).toHaveCount(0);
 });

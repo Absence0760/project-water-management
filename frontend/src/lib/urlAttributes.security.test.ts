@@ -74,6 +74,8 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	panelHref: { why: 'PublishedBaseline: runHref(…) + "#res-publication" or "?tab=runs"', in: ['lib/components/overview/PublishedBaseline.svelte'] },
 	compareHref: { why: 'PublishedBaseline / ScenarioCompare: compareTabHref(…) or "?…"', in: ['lib/components/overview/PublishedBaseline.svelte', 'lib/components/scenarios/ScenarioCompare.svelte'] },
 	reserveHref: { why: 'RunSummaryView: riverHref(…)', in: ['lib/components/runs/RunSummaryView.svelte'] },
+	otherUsesHref: { why: 'RunSummaryView: supplyHref(run id, a fixed #res-… anchor from otherUsesLink), a `?tab=` query', in: ['lib/components/runs/RunSummaryView.svelte'] },
+	balanceHref: { why: 'SelfChecksPanel: the literal "#res-water-balance" RunsTab passes', in: ['lib/components/runs/SelfChecksPanel.svelte'] },
 	previewHref: { why: 'NodeDetail: farmHref(…)', in: ['lib/components/network/NodeDetail.svelte'] },
 	main: { why: 'farm why/dam pages: farmHref(…)', in: ['routes/farm/[projectId]/dam/+page.svelte', 'routes/farm/[projectId]/why/+page.svelte'] },
 	href: { why: 'the farm page’s href(sub) = farmHref(…), RecentNotes’ noteHref(…), and DamCard/LookingBack’s `href` prop, whose callers are checked here too', in: ['lib/components/farm/DamCard.svelte', 'lib/components/farm/LookingBack.svelte', 'lib/components/notes/RecentNotes.svelte', 'routes/farm/[projectId]/+page.svelte'] },
