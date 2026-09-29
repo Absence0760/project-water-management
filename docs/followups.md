@@ -1364,7 +1364,15 @@ the suggested order (the IDs carry the detail):
       annual borehole caps off, since more demand uses a cap up earlier and
       moves the lagged stream depletion in time (the cap working, present
       on main before #16; `checkGroundwater` still checks the caps).
-      **Owed for engines 1.1.0 and 1.2.0** (2026-09-27): no 20 000-case soak
+      **20 000-case soak on engine 1.20.0 (2026-09-28, issue #68,
+      `FUZZ_MAX_FAILURES=100`, seeds 1–20 000, 13.5 min): failed on 5 seeds**,
+      tracked in issue #164: the doubled-crop-area law on 4536, 10028 and 11421
+      (rises up to 0.29 → 0.49, too large to be noise) and ulp-scale noise on
+      10306 (a depletion infeed of 1e-6 with nothing pumped) and 15467
+      (supplied 1 ulp above demand). No soak since 1.0.0 had scanned
+      seeds above 2 000, so any engine from 1.1.0 to 1.20.0 may have introduced them.
+      **Owed for engines 1.1.0 and 1.2.0** (2026-09-27, superseded by the
+      1.20.0 soak above): no 20 000-case soak
       is recorded since 1.0.0. Machine time only (15–20 min);
       run it on its own, not beside e2e or another session's tests.
       **Engine 1.3.0 (issue #64, 2026-09-27): a 2 000-case soak** (the new
