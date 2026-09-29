@@ -17,11 +17,13 @@ import { GR4J_PARAMS } from '../runoff/params';
 import type { RunoffModelId } from '../runoff/types';
 import { sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '../seriesProvenance';
 import type { FlowGapFillSettings, FlowGapFillSpec } from '../flowGapFill';
+import type { AutoCalibrationReport } from './auto';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { CalibrationBounds, ParamSet } from './params';
 import type { DayQuality } from './dayFlags';
 import { resolveQualityFlags, type QualityFlagSettings } from './qualityFlagSettings';
 import type { ObjectiveId } from './objectives';
+import { resolveCalibrationRules, sameRules, type CalibrationRules } from './rulesSettings';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
 export type CalibrationExclusion = { waterYear: number; reason: string } | { start: string; end: string; reason: string };
@@ -272,11 +274,64 @@ export interface FitRecord {
 	/** The report's notes (limits of the validation, cancellation). */
 	notes: string[];
 	/**
+	 * Set when automated calibration (engine ≥ 1.25.0, issue #153, ./auto.ts)
+	 * picked this fit, rather than a person: the rules it ran under, the water
+	 * years they left out and every case it fitted, with why each was or wasn't
+	 * kept. The seed and engine version are the record's own. Absent on a fit a
+	 * person chose.
+	 */
+	auto?: AutoFitRecord;
+	/**
 	 * Fitted parameters whose value in the settings no longer matches the fit
 	 * (edited by hand since). Empty = the settings hold the fitted values. Set
 	 * by the server on save and by each run; a client can't clear it.
 	 */
 	editedParams: string[];
+}
+
+/** How automated calibration chose a fit (FitRecord.auto). */
+export interface AutoFitRecord {
+	/** settings.calibrationRules as the fit ran, revision and sign-off included. */
+	rules: CalibrationRules;
+	/** The water years the exclusion rule left out, on top of `exclusions`, each with the rule's reason. */
+	ruleExclusions: CalibrationExclusion[];
+	/** Index of the kept case in `cases`. */
+	chosen: number;
+	cases: AutoFitCase[];
+}
+
+/** One case of an automated fit, as the record keeps it: enough to see why the kept one won. */
+export interface AutoFitCase {
+	label: string;
+	/** 'project' or a pan coefficient preset id. */
+	pan: string;
+	bounds: CalibrationBounds;
+	objective: ObjectiveId;
+	/** The held-out score the rules select by; null when there was none. */
+	score: number | null;
+	eligible: boolean;
+	reasons: string[];
+	/** The case's fitted parameters; null when it failed. */
+	params: ParamSet | null;
+}
+
+/** What the fit record keeps of a report whose `chosen` case was applied (FitRecord.auto). */
+export function autoFitRecordOf(r: AutoCalibrationReport & { chosen: number }): AutoFitRecord {
+	return {
+		rules: resolveCalibrationRules(r.rules, []),
+		ruleExclusions: r.ruleExclusions.map((x) => ({ ...x })),
+		chosen: r.chosen,
+		cases: r.cases.map((c) => ({
+			label: c.label,
+			pan: c.pan.id,
+			bounds: c.bounds,
+			objective: c.objective,
+			score: c.score,
+			eligible: c.eligible,
+			reasons: [...c.reasons],
+			params: c.report ? { ...c.report.params } : null
+		}))
+	};
 }
 
 /**
@@ -322,6 +377,8 @@ export interface FitContext {
 	apanDaily?: ApanDailyFingerprint | null;
 	/** The fitted record's source and unit (null = not recorded); omit when not known. */
 	observedOrigin?: SeriesOrigin | null;
+	/** How automated calibration chose the fit; omit for a fit a person chose. */
+	auto?: AutoFitRecord;
 }
 
 /** The fit record for a report, as Apply stores it. */
@@ -375,6 +432,8 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		independentRecord: r.independentRecord,
 		marPenalty: r.marPenalty ?? null,
 		notes: [...r.notes],
+		// JSON, not structuredClone: a page may hand in a reactive proxy.
+		...(ctx.auto ? { auto: JSON.parse(JSON.stringify(ctx.auto)) as AutoFitRecord } : {}),
 		editedParams: []
 	};
 }
@@ -484,6 +543,14 @@ export interface FitRecordStatus {
 	 * itself is qualityFlagsChanged, never this too.
 	 */
 	flowFillChanged: boolean;
+	/**
+	 * An automated fit's calibration rules (FitRecord.auto) no longer match
+	 * settings.calibrationRules: the rules would now pick another way. False
+	 * on a fit a person chose. A sign-off alone is no change.
+	 */
+	rulesChanged: boolean;
+	/** An automated fit ran under draft rules, not signed off (#90): not evidence. False on a fit a person chose. */
+	draftRules: boolean;
 }
 
 /**
@@ -692,7 +759,9 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		apanDailyChanged,
 		chirpsFactorsChanged,
 		observedOriginChanged: record.observedOrigin !== undefined && now.observedOrigin !== undefined && !sameOrigin(record.observedOrigin, now.observedOrigin),
-		flowFillChanged: flowFillDiffers(record, settings, record.flowKind)
+		flowFillChanged: flowFillDiffers(record, settings, record.flowKind),
+		rulesChanged: !!record.auto && !sameRules(resolveCalibrationRules(settings.calibrationRules, []), resolveCalibrationRules(record.auto.rules, [])),
+		draftRules: !!record.auto && !record.auto.rules?.signedOff
 	};
 }
 
@@ -747,6 +816,10 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	if (status.flowFillChanged) {
 		out.push('The gap filling of the calibration record has changed since the fit, so the filled days the fit read are not the ones a run reads now (Settings → Flow gaps). Refit before relying on the parameters.');
 	}
+	if (status.draftRules) {
+		out.push('Automated calibration picked this fit under draft rules, not yet signed off by the hydrologist, so it is not evidence until they are (Settings → Calibration rules).');
+	}
+	if (status.rulesChanged) out.push('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
 	if (status.forcingChanged && !status.chirpsSourceChanged && !status.apanDailyChanged && !status.chirpsFactorsChanged) {
 		out.push(
 			'The potential evaporation GR4J runs on (the PE input, or the pan coefficient or A-pan evaporation it is taken from), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit. GR4J’s parameters trade off against evaporation, and the areal, CHIRPS and rain-source settings change the rain fed to it, so refit before relying on them.'

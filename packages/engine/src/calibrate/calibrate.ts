@@ -306,6 +306,14 @@ export interface CalibrationProblem {
 	censor?: Float64Array | null;
 	/** Every observed day in the window outside the exclusions, flags or not: what `fitAllDays` scores. */
 	allDays?: Int32Array;
+	/**
+	 * Every run day inside the calibration window and outside the exclusions,
+	 * observed or not, and the fitted record's per-day class on every run day
+	 * (./dayFlags.ts flowDayFlags): what automated calibration's exclusion
+	 * rule reads (./rules.ts flaggedYearExclusions, issue #153).
+	 */
+	windowDays?: Int32Array;
+	flowFlags?: Uint8Array;
 	/** The quality flags' summary (engine ≥ 1.22.0). */
 	dayQuality?: DayQuality | null;
 	/**
@@ -436,6 +444,8 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 		scoredDays: idx,
 		censor: scoring.censor,
 		allDays: Int32Array.from(allIdx),
+		windowDays: Int32Array.from(windowIdx),
+		flowFlags: flags,
 		dayQuality: dayQuality({
 			flowKind: kind,
 			settings: qf,

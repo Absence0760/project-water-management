@@ -25,6 +25,7 @@ import type { SupplyAssurance } from './network/reliability';
 import type { AllocationEntry, AllocationWaterSource } from './allocations/compare';
 import type { AllocationMode } from './allocations/mode';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
+import { defaultCalibrationRules, type CalibrationRules } from './calibrate/rulesSettings';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
 export type FlowShareMethod = 'area' | 'hiLo' | 'manual';
@@ -468,6 +469,13 @@ export interface ProjectSettings {
 	 */
 	qualityFlags: QualityFlagSettings;
 	/**
+	 * Automated calibration's pre-declared rules (engine ≥ 1.25.0, issue #153,
+	 * ./calibrate/rulesSettings.ts): the exclusions, forcing, fits and the
+	 * selection that pick a fit with no one choosing after the scores. Never
+	 * changes model results; a fit record made under them keeps a copy.
+	 */
+	calibrationRules: CalibrationRules;
+	/**
 	 * The automatic fit whose parameters "Apply to form" wrote, with its
 	 * validation (./calibrate/provenance.ts). null = none: the parameters were
 	 * set by hand or imported. Never changes model results.
@@ -682,6 +690,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		// Off: no record is filled (./flowGapFill.ts defaultFlowGapFill).
 		flowGapFill: { flow_observed_m3s: null, flow_logger_m3s: null },
 		qualityFlags: { ratings: {}, aboveRating: 'censor', belowRating: 'exclude', suspect: 'exclude', infilled: 'exclude' },
+		calibrationRules: defaultCalibrationRules(),
 		fitRecord: null,
 		dataQuality: defaultDataQualitySettings(),
 		wr2012: defaultWr2012Settings()
