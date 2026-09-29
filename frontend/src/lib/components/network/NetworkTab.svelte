@@ -7,6 +7,7 @@
 	import { api, type RunMeta } from '$lib/api';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { damLevel, damLevelsFromSummary, damsInRun, loadDamLevels, type DamLevel } from '$lib/components/overview/damLevels';
+	import { historyEnd } from '$lib/components/overview/latestRun';
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
@@ -126,7 +127,8 @@
 			// The run's own capacities and minimum levels (a fraction in the model, a % here), as the Summary's.
 			const dams = damsInRun(detail?.run.model?.nodes, nodes, refs);
 			// A run from engine ≥ 1.2.0 carries the figures in its summary (issue #55): no series to fetch.
-			const fromSummary = supplyRun && latestRun ? damLevelsFromSummary(dams, supplyRun.summary.farms, latestRun.endDate) : null;
+			// A forecast run's figures are its record's: dated the day before the forecast (issue #51).
+			const fromSummary = supplyRun && latestRun ? damLevelsFromSummary(dams, supplyRun.summary.farms, historyEnd(latestRun)) : null;
 			if (fromSummary) {
 				damError = false;
 				damLevels = { runId: run, levels: fromSummary };
@@ -134,9 +136,15 @@
 			}
 			damError = false;
 			damLoading = { done: 0, of: dams.length };
-			loadDamLevels(dams, (nodeId) => cachedSeries(run, 'dam_storage', nodeId, () => api.runs.series(projectId, run, 'dam_storage', nodeId)), 4, (n) => {
-				if (damLoading) damLoading = { done: n, of: dams.length };
-			})
+			loadDamLevels(
+				dams,
+				(nodeId) => cachedSeries(run, 'dam_storage', nodeId, () => api.runs.series(projectId, run, 'dam_storage', nodeId)),
+				4,
+				(n) => {
+					if (damLoading) damLoading = { done: n, of: dams.length };
+				},
+				latestRun?.forecastFrom ?? null
+			)
 				.then((levels) => {
 					if (latestRun?.id === run) damLevels = { runId: run, levels };
 				})
@@ -396,7 +404,7 @@
 		}
 		cachedSeries(run, 'dam_storage', id, () => api.runs.series(projectId, run, 'dam_storage', id))
 			.then((s) => {
-				const l = damLevel({ nodeId: id, name: '', capacityM3: cap, minPct: 0 }, s);
+				const l = damLevel({ nodeId: id, name: '', capacityM3: cap, minPct: 0 }, s, latestRun?.forecastFrom ?? null);
 				if (picked?.id === id) damNow = l ? { nodeId: id, pct: l.endPct } : null;
 			})
 			.catch(() => {

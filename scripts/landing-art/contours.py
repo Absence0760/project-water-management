@@ -19,7 +19,8 @@ ap.add_argument("--step", type=float, default=0.18, help="height between contour
 ap.add_argument("--width", type=int, default=1500)
 args = ap.parse_args()
 
-grid = json.load(open(args.heights))
+with open(args.heights) as f:
+    grid = json.load(f)
 nx, ny, Z = grid["nx"], grid["ny"], grid["z"]
 W = args.width
 H = round(W * (ny - 1) / (nx - 1))
@@ -124,9 +125,10 @@ while level < hi:
 
 with open(args.out, "w") as f:
     f.write(
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" fill="none" stroke="currentColor" '
-        f'stroke-linecap="round" stroke-linejoin="round">\n'
+        # One group with its own paint: the page draws it through <use href="…#contours">.
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}">\n'
+        f'<g id="contours" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">\n'
         + "\n".join(paths)
-        + "\n</svg>\n"
+        + "\n</g>\n</svg>\n"
     )
 print(f"contours: {len(paths)} levels, {W} × {H}")

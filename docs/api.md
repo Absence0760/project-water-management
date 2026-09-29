@@ -18,7 +18,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | --- | --- | --- | --- |
 | POST | `/auth/register` | `{ email, password, displayName, acceptTerms, inviteToken?, locale? }` | `acceptTerms` is the version of the terms of use and privacy notice the form showed (the engine's `LEGAL_VERSION`, `packages/engine/src/legal.ts`); missing or any other version is `400 terms_not_accepted` (`params.version`: the current one) before anything else, and the accepted one is stored with the account (`app_user.terms_version` / `terms_accepted_at`, 087). `202 { confirm: true, email }`, **no** cookie: sends a confirmation email, and the account can sign in once it is confirmed (issue #57). The **same** `202` for an address that already has an account, which gets an email instead (a fresh confirmation link if never confirmed, else "you already have an account" with a password-reset link). Through a live invite for exactly this address: `201 { user }` + cookie, confirmed and joined; `409 account_exists` if that address already has an account. `429 signup_throttled` past the sign-up throttle |
 | POST | `/auth/login` | `{ email, password }` | `200 { user }` + cookie; `401` wrong email or password; `403 email_unconfirmed` right password, address never confirmed (no cookie); `429` + `Retry-After` while the address is locked |
-| POST | `/auth/logout` | – | `204`, clears cookie |
+| POST | `/auth/logout` | – | `204`, clears cookie and revokes this session on the server (its `jti`, 102), so a copy of the cookie is refused too; the account's other sessions stay signed in. `204` without a session as well |
 | POST | `/auth/logout-everywhere` | – | `204`, clears cookie and revokes **every** session of the account, on every device (signed in) |
 | GET | `/auth/me` | – | `200 { user }` or `401` |
 | POST | `/auth/me/accept-terms` | `{ version }` | The re-acceptance step ([legal-status.md](./legal-status.md)): `version` is the terms version the notice showed (`LEGAL_VERSION`). `200 { user }` with `termsCurrent: true`, recording it (`app_user.terms_version`; the database stamps the time, and accepting the version already recorded changes nothing). Any other version is `400 terms_not_accepted` (`params.version`: the current one) |
@@ -29,7 +29,7 @@ address doesn't lock it out ([security.md § Authentication](./security.md#authe
 | POST | `/auth/forgot-password` | `{ email }` | **always** `202 { ok: true }` (public) |
 | POST | `/auth/reset-password` | `{ token, password }` | `204`, clears cookie; `400` bad/expired/used link (public) |
 | POST | `/auth/verify-email` | `{ token }` | `200 { verified: true }` + a trusted-device cookie for the address; `400` bad/expired/used link (public) |
-| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
+| POST | `/auth/resend-confirmation` | `{ email }` | **always** `202 { ok: true }`, after the same time as `forgot-password`; mails a new confirmation link only to an unconfirmed account, under the cooldown and daily cap (public: the sign-in page's "Send the link again") |
 | POST | `/auth/resend-verification` | – | `202 { sent: true }`; `409` already verified; `429` sent < 1 min ago, or the day's cap reached (signed in) |
 | POST | `/auth/invite-info` | `{ token }` | `200 { invite: { email, projectName, teamName, invitedBy } }`; `404` bad/expired (public) |
 | POST | `/auth/render-session` | `{ token }` | `200 { ok: true }` + a **render session** cookie; `400` bad/expired/used token; `403` the requester can no longer see the project or the run (public: the headless report renderer's sign-in, [§ Reports](#reports)) |
@@ -52,8 +52,9 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   account exists ([security.md § Authentication](./security.md#authentication)).
 - **Sign-up** sends a verification email. Signing in doesn't require a
   verified address; the UI shows a banner until it is.
-- **`forgot-password`** answers the same `202` whether or not the address has
-  an account, and sends at most one email per address per minute and ten
+- **`forgot-password`** answers the same `202`, after the same time (at
+  least 200 ms; the email is sent without being waited for, issue #51),
+  whether or not the address has an account, and sends at most one email per address per minute and ten
   reset or verification emails per address in 24 hours (a browser trusted for
   the address has its own ten; later requests get `202` and no email).
   Requesting again replaces the previous link.
@@ -70,7 +71,7 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   outstanding reset link, clears the lockout count, and sets a fresh cookie
   so this device stays signed in. A body that fails validation (`400`) is
   refused before anything is counted.
-- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent }`.
+- **`user`** is `{ id, email, displayName, emailVerified, locale, volumeUnit, mailSuppressed, preferences, termsCurrent, farmNoticeCurrent, renderSession? }`.
   `locale` is a language code from the engine's language table
   (`packages/engine/src/languages.ts`, today `'en' | 'af'`) or `null`
   (`app_user.locale`, 050_user_locale.sql, 080_language.sql, WP-2.5): the language of the farmer-facing pages and of the emails the
@@ -86,12 +87,18 @@ stored only as SHA-256 hashes. Links point at `SITE_URL`:
   role](./ui.md)), `[]` until they hide one. Only ever their own.
   `termsCurrent` is whether the account accepted the terms and privacy
   notice now in force (`app_user.terms_version` = `LEGAL_VERSION`, 087):
-  `false` after the version changes, and for an account a script made
-  (`seed:examples`, `import:project`: they accept nothing). The app then
+  `false` after the version changes, and for an account `import:project`
+  made (it accepts nothing; `seed:examples` accepts the version in force for
+  its demo accounts on every seed). The app then
   shows its re-acceptance notice before any page, and `POST
   /auth/me/accept-terms` records the new version
   ([legal-status.md](./legal-status.md)). Only the app is gated: other
-  calls still answer.
+  calls still answer. A **render session** (the report renderer's,
+  [security.md § Render tokens](./security.md#render-tokens)) also answers
+  `renderSession: true`, and the app never gates it: it can read one report
+  and accept nothing, so the notice would stand where the report should be
+  and every PDF of an account behind on the terms (a scheduled report's
+  editor after any terms change) would time out.
   `farmNoticeCurrent` is whether the account acknowledged the farm view's
   notice now in force (`app_user.farm_notice_version` =
   `FARMER_NOTICE_VERSION`, 093): `false` until the farmer presses "I
@@ -280,7 +287,9 @@ alongside teams, e.g. to give an outside client `viewer` access.
   contact anyone.
 - `dataUntil` — the last day of the project's **recorded rain**
   (`rain_catchment_mm` or `rain_chirps_mm`; `YYYY-MM-DD`: the latest
-  `startDate + length − 1`), or `null` with none. A forecast or a flow series
+  last day **with a value**, `lastValueDate`), or `null` with none. Blank
+  days stored after it (a logger's "no reading" for a dead sensor) are no
+  data, so they never make a project look fresh (`series/lastDay.ts`). A forecast or a flow series
   doesn't count: a forecast runs into the future and flow only scores a run.
   `lastRunAt` — ISO timestamp of the newest run, or `null`. `publishedAt` —
   ISO timestamp of the current publication ([§ Publication](#publication)), or
@@ -641,7 +650,7 @@ out, and a re-import of an export records itself as a `project-file` import.
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/members` | – | `{ members: { userId, email, displayName, role, party }[] }` | viewer |
-| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member | owner |
+| POST | `/projects/:id/members` | `{ email, role }` | `201 { member }` for a **verified** account; `201 { invited: true, invite }` when no account has the address *or* its account hasn't verified it (see Invites); `409` if already a direct member; `429` with `Retry-After` past the daily cap on adding by email (below) | owner |
 | PATCH | `/projects/:id/members/:userId` | `{ role?, party? }` (at least one) | `{ member }`. `party` (≤ 80 characters, trimmed; `''` or `null` clears it) is the member's **applying party** (049): an applicant shares applications only with the other members of their own party, compared ignoring case. A change of party or role ends the application shares it no longer allows. Logged as `member.role` / `member.party` | owner |
 | DELETE | `/projects/:id/members/:userId` | – | `204` (owners remove anyone; anyone may remove themselves, a farmer included) | farmer |
 
@@ -670,8 +679,8 @@ the invite will link; revoke a pending one with
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/farmers` | – | `{ farmers: FarmerEntry[] }`: the farmers, then (owners only, by RLS) the pending farmer invites | viewer |
-| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 097), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project | owner |
-| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }` | owner |
+| POST | `/projects/:id/farmers` | `{ email, nodeIds: uuid[1..50], locale?: <language code>, role?: 'farmer' \| 'contributor' }` | `role` (default `farmer`): `contributor` adds or invites a licence applicant with the farms they hold (WP-3.3, 097), with the ordinary invite email for that role. `201 { farmer }` for a verified account, or `201 { invited: true, invite }` (an `InvitedFarmer`) for any other address, the same answer whether or not an unverified account exists. Re-inviting sets the invite's farms to `nodeIds`. `409` when the account is already a member; `400` when a node isn't a farm of this project; `429` past the daily cap on adding by email | owner |
+| POST | `/projects/:id/farmers/bulk` | `{ rows: { email, farm, locale? }[1..200], dryRun?: boolean }` | `200 { results: { row, email, farm, status: 'added' \| 'invited' \| 'error', error? }[], dryRun }`; `429` when its distinct valid addresses (a dry run's too) would pass the daily cap on adding by email | owner |
 | PUT | `/projects/:id/farmers/:userId` | `{ nodeIds: uuid[1..50] }` | `{ farmer }`: replaces their farms; `404` if they aren't a farmer (or a contributor) here | owner |
 
 - `FarmerEntry` is an `ActiveFarmer = { status: 'active', userId, email,
@@ -723,7 +732,19 @@ pre-registering a colleague's address doesn't get you added in their place.
 Re-adding the same address updates the role; the email is re-sent (with a
 fresh link, the old one stops working) unless one went out in the last minute.
 Adding an address whose account *is* verified makes it a member directly and
-clears its invite.
+clears its invite (so the answer, and the members list, tell the adder that
+the address has a verified account: [followups.md § Roles and what each
+member sees](./followups.md#roles-and-what-each-member-sees), issue #51).
+
+**The daily cap on adding by email** (issue #51, `101_invite_throttle.sql`,
+`invites/invites.ts` `INVITE_CAP`): a person adds at most **300** addresses a
+day, and a project or team is added to at most 300 times a day, across
+`POST /projects/:id/members`, `/farmers`, `/farmers/bulk` (each distinct
+valid address counts, a dry run's too) and `POST /teams/:id/members`. Every
+address counts before it is looked up, whether it is then added or invited;
+past the cap the answer is `429 { error }` with `Retry-After` (seconds),
+the same for any address, and nothing is counted, added, invited or mailed.
+A window is 24 hours from its first add.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
@@ -752,7 +773,7 @@ move or copy into it). `role` in the member and invite bodies is one of
 | GET | `/teams/:id` | – | `{ team, members: TeamMember[] }` (admins first, then members, then viewers) | viewer |
 | PATCH | `/teams/:id` | `{ name?, settings?: { portfolio: { thresholds: { green, amber } \| null } } }` (at least one) | `{ team }`. `thresholds` sets the portfolio's traffic lights (below); `null` goes back to the defaults. A change records `team_thresholds.changed` on each of the team's projects; one that changes nothing records nothing | admin |
 | DELETE | `/teams/:id` | – | `204` — its projects stay, owned by their direct members (`team` → `null`) | admin |
-| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member | admin |
+| POST | `/teams/:id/members` | `{ email, role }` | `201 { member }` for a verified account, or `201 { invited: true, invite }` when no verified account has that email (see Projects § Invites); `409` if already a member; `429` past the daily cap on adding by email (Projects § Invites) | admin |
 | PATCH | `/teams/:id/members/:userId` | `{ role }` | `{ member }` | admin |
 | DELETE | `/teams/:id/members/:userId` | – | `204` (admins remove anyone; anyone may remove themselves = leave) | viewer |
 | GET | `/teams/:id/invites` | – | `{ invites: Invite[] }` | admin |
@@ -806,8 +827,11 @@ left out, so nobody gets a catchment roll-up of their neighbours.
     source run's last day of observed rain) and its age; `stale` when older
     than 7 days (the farm page's rule). `behindData`: the project holds
     recorded rain after `figuresUntil`. `dataUntil` is that newest day of
-    recorded rain (the project list's rule). `newerRun`: a baseline run
-    newer than the published one exists.
+    recorded rain (the project list's rule, to the last day with a value).
+    `newerRun`: a baseline run newer than the published one exists. A
+    forecast run never counts as one (with a CHIRPS-GEFS feed one is made
+    every day), nor as the source run or `lastRunAt`: it is guidance beside
+    the runs.
   - `ewr = { status: 'green' | 'amber' | 'red' | 'unknown', daysNotMet30, days30, fraction30, reason? }`:
     the outlet EWR over the 30 days to `figuresUntil` (the publication's
     `catchmentView`, or, for `source: 'run'`, counted in SQL from that run's
@@ -862,7 +886,7 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   | `kind` | Fires when (hysteresis: re-arms only after recovery) | `threshold` | Default: right away | May opt in |
   | --- | --- | --- | --- | --- |
   | `dam_below` (per farm) | the published projection's dam level on its last day of data, or the published forecast's lowest, is below the threshold; re-arms at threshold + 5 points | 0 < t < 1 (0.3) | that farm's farmers, editors, owners | viewers |
-  | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2 | whole days 1–60 (3) | editors, owners | viewers |
+  | `ewr_forecast_fail` | the newest forecast run (while its days haven't passed) has `outletEwrDaysAtRisk ≥ t`; re-arms at ≤ t − 2. A forecast run behind the recorded rain (its `lastObserved` before the last day with a catchment or CHIRPS value) is ignored: it neither opens nor clears an event until the re-made one | whole days 1–60 (3) | editors, owners | viewers |
   | `data_stale` (per feed) | that feed, enabled, is more than t days past its own usual delay (`feeds/health.ts` `staleAfterDays`, or the feed's config); re-arms under t | whole days 1–60 (by source: CHIRPS 3, CHIRPS-GEFS 2, DWS 30) | editors, owners | – |
   | `restriction_published` | the current publication's restriction level, percentage or notice changes (a lift too) | 0 | farmers, viewers and up | – |
   | `feed_failing` | an enabled feed failed t times in a row; re-arms at 0 | 1–20 (3) | owners | editors |
@@ -874,12 +898,14 @@ the worker mails each recipient ([§ below](#how-alert-mail-is-sent)).
   farm or feed of another project `404`. Once `data_stale` is on for any
   feed, a feed added later gets its own rule, on, at its source's default.
 - `ProjectAlerts = { id, name, role, muted, choices: AlertChoice[] }`.
-  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn }`:
+  `AlertChoice = { kind, nodeId, nodeName, mode, defaultMode, chosen, ruleOn, threshold }`:
   `mode` is what you get now (the database's own rule,
   `app_alert_my_mode`), `defaultMode` your role's default, `chosen` whether
   you set it, `ruleOn` whether the catchment has it switched on (off, you
   get nothing whatever you choose). A farmer has one `dam_below` choice per
-  own farm; everyone else one for every farm. `muted`: every alert email
+  own farm; everyone else one for every farm. `threshold` is a farm's dam
+  alert level, the WUA's rule for that farm as a fraction (0.3 = 30 %),
+  `null` for any other choice or a farm with no rule (issue #51). `muted`: every alert email
   for the catchment is off (a digest's one-click unsubscribe).
 - `mode` ∈ `immediate` (right away, at most 5 a day; the rest wait for the
   digest), `daily_digest` (in the 06:00 summary, 06:00 in the project's time zone), `off`.
@@ -1030,11 +1056,21 @@ project has none) is `{ id, nodeId, name (1–200), category ('domestic' |
 or null), count (≥ 0 or null), litresPerUnitDay (≥ 0 or null), lossPct
 (0 ≤ l < 1), monthlyFactor (12 values ≥ 0, or null = 1), returnPct (0–1),
 priority ('first' | 'shared' | 'last'), destination ('internal' |
-'external'), enabled, note (≤ 1000 chars) }[]`, at most 5 000. Defaults:
-other, monthly, null, null, null, 0, null, 0, shared, internal, true, ''.
-`PUT` refuses an object on a gauge, an other water user or an unknown node, a
-monthly one without 12 values, a per-unit one without a count and litres, and
-an external one with a return share above 0.
+'external'), enabled, schedule (below, or null), note (≤ 1000 chars) }[]`,
+at most 5 000. Defaults: other, monthly, null, null, null, 0, null, 0, shared,
+internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
+user or an unknown node, a monthly one without 12 values, a per-unit one
+without a count and litres, and an external one with a return share above 0.
+
+A demand object's `schedule` (engine ≥ 1.17.0, migration 100, issue #90 Q4,
+[model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
+default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
+('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo
+('easter': whole days from Easter Sunday, −60 to 60; else null), weekdays (ISO
+1 = Monday … 7 = Sunday, at least one, or null = every day), factor (0–10, 0 =
+off) }`; the later of two windows covering a day wins. `PUT` refuses a date
+that doesn't exist, a span that ends before it starts and a factor out of
+range; an empty list is stored, and read back, as null.
 
 Boreholes (engine ≥ 0.23.0, migration 012, [model.md §2.7d](./model.md)):
 every node carries `boreholeCapacityM3Day` (≥ 0 or `null` = none),
@@ -1086,7 +1122,9 @@ naming `startDate`, not a server error).
 | PATCH | `/projects/:id/series/:seriesId` | `{ product, productVersion }` (both strings, or both `null` to clear), and/or `{ siteNodeId }` | `SeriesMeta`: says what an existing series holds, or where a flow record was measured (`siteNodeId`: a gauge node above the outlet, or `null` for the outlet; 084, engine ≥ 1.4.0, [data-model.md](./data-model.md#gauge-records-084_gauge_recordssql)); the values and `updatedAt` are untouched. `400` for a site on a rain or evaporation series, a node that isn't in the project (save the model first), a farm or user, or the outlet gauge. Logged as `series.labelled` / `series.site_changed` when it changes | editor |
 | DELETE | `/projects/:id/series/:seriesId` | – | `204` | editor |
 
-`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, product, productVersion, dayBoundary, siteNodeId, rebuilding }` —
+`SeriesMeta = { id, kind, name, unit, startDate, length, updatedAt, lastValueDate, product, productVersion, dayBoundary, siteNodeId, rebuilding }` —
+`lastValueDate` is the last day with a value (`null` when every day is blank): how far the data reaches, where `startDate + length − 1`
+counts the blank days a merge stores (the Data page's freshness, "Data now runs to", the report's data coverage);
 `siteNodeId` is the gauge a flow record was measured at (`null` = the outlet; only the plausibility checks read a gauge's record);
 `rebuilding` is true while a data feed backfills a confirmed replacement of the
 series (its values stay as they are until the swap);
@@ -1217,7 +1255,8 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   `409`: all three are judged on the record), and its uncertainty bands run on
   its input without the tail. Made on request, and, when the project has
   automatic runs on (`settings.autoRun.enabled`), after each forecast feed
-  (CHIRPS-GEFS) ingest that changes days: a `rerun` job with `trigger:
+  (CHIRPS-GEFS) ingest that changes days, and after an auto re-run when the
+  recorded rain changed since the newest forecast run: a `rerun` job with `trigger:
   'forecast'` (dedupe key `forecast`, the re-run's debounce), labelled
   `Forecast · from <day>`, never published automatically
   ([architecture.md § Background work](./architecture.md)).
@@ -1345,8 +1384,9 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   an enabled object has, per object, the run series `object_demand@<id>` and
   `object_supplied@<id>` (m³/day) and `FarmSummary.demandObjects` (`{ id,
   name, category, priority, destination, avgDemandM3Day, avgSuppliedM3Day,
-  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort }[]`, in id
-  order). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
+  avgDeficitM3Day, fractionSupplied, avgReturnedM3Day, daysShort, daysOff? }[]`,
+  in id order; `daysOff`, engine ≥ 1.17.0, only on an object with a schedule:
+  the days it switched the object off, never counted in `daysShort`). Its `demand`, `supplied`, `deficit` and `return_flow` are the crops'
   and the objects' together.
 - `summary.curtailment` (engine ≥ 0.3.0) is the b023 [Shortfalls] report:
   per-farm target volume, reduce (−) / gain (+) and total change in m³/day and
@@ -1718,7 +1758,7 @@ A registered professional signs a run (roadmap WP-3.13, migration 036;
 ## Allocations
 
 Registered and licensed water-use volumes per farm or water user, and a run's
-modelled use against them (roadmap WP-3.10, migration 038,
+modelled use against them (roadmap WP-3.10, migrations 038 and 103,
 [allocations.md](./allocations.md)). The app compares; it never decides
 whether a use is lawful.
 
@@ -1726,17 +1766,21 @@ whether a use is lawful.
 | --- | --- | --- | --- | --- |
 | GET | `/projects/:id/allocations` | – | `{ allocations: Allocation[], sources: AllocationSource[], nodes: { id, name }[], canSeeHolders }`: `nodes` are the farms and water users a row can be matched to; `canSeeHolders` is true for editors and owners | viewer |
 | POST | `/projects/:id/allocations` | `AllocationInput` | `201 { allocation }`. `400` for a node that isn't a farm or water user of this project, dates out of order, a volume < 0; `409` past 5 000 allocations per project | editor |
-| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; `holder: ''` removes the name | editor |
+| PATCH | `/projects/:id/allocations/:aid` | any `AllocationInput` fields (at least one) | `200 { allocation }`; only the fields sent change (issue #72: before, every field not sent went back to its default, the name and registration number included); `holder: ''` removes the name | editor |
 | DELETE | `/projects/:id/allocations/:aid` | – | `204` | editor |
 | POST | `/projects/:id/allocations/import` | `{ kind: 'warms_extract' \| 'csv', fileName, text, reference? }` (`text` ≤ 2 MB) | `200 { fileName, kind, sha256, columns, ignoredColumns, rows: PreviewRow[], nodes, summary: { rows, valid, invalid, matched, unmatched } }`. **Writes nothing.** `422` for a file it can't take (with why: personal-information columns, no volume column, empty, too many rows, an unterminated quote); `409 this file was already imported (…)` for the same SHA-256 | editor |
 | POST | `/projects/:id/allocations/import/commit` | the import body + `matches: { "<line>": nodeId \| null }` | `201 { source, imported, skipped, unmatched }`: the file is parsed again (no state is kept between preview and commit) and its valid rows stored with the file's name and hash; rows with problems are skipped. `400` for a match to a node that isn't a farm or water user; `422` when no row can be imported | editor |
 | DELETE | `/projects/:id/allocations/sources/:sourceId` | – | `204`: the import and every allocation it brought | editor |
-| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
-| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1, default 0.1) | `{ run: { id, label, startDate, endDate }, comparison: AllocationComparison }` (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)) | viewer |
+| GET | `/projects/:id/allocations/export.csv` | – | CSV in the template's columns (`months` as numbers separated by spaces, `conditions` separated by ` \| `) plus `source_file`, `source_sha256`; the `holder` column only for editors and owners; formula-looking cells prefixed with `'` | viewer |
+| GET | `/projects/:id/runs/:runId/allocations` | `?tolerance=` (0 ≤ τ < 1; default the project's `settings.allocationTolerance`, 0.1 unless set) | `{ run: { id, label, startDate, endDate, forecastFrom, allocationMode }, comparison: AllocationComparison }`, `allocationMode` the mode the run ran with (`'none'` for a run before engine 1.18.0) (engine `compareAllocations`, [model.md §2.12](./model.md#212-allocations-modelled-use-vs-registered-volume-roadmap-wp-310)). A forecast run (`forecastFrom` set, WP-2.12) is compared on the days before `forecastFrom` only, like its other historical figures (issue #51) | viewer |
 
 - `Allocation = { id, nodeId, nodeName, sourceId, registrationNo,
   propertyRef, holder, authorisation, purpose, waterSource, volumeM3PerYear,
-  storageM3, validFrom, validTo, reference, createdAt, updatedAt }`. `holder`
+  storageM3, validFrom, validTo, reference, months, maxRateM3s, conditions,
+  createdAt, updatedAt }`. `months` (calendar months 1–12, ascending, or
+  `null` for none stated), `maxRateM3s` (m³/s or `null`) and `conditions`
+  (strings) are licence conditions (103, issue #72), recorded and shown, not
+  yet applied by the engine. `holder`
   is `null` for a viewer (RLS hides `allocation_holder`), and when there is
   none. `sourceId` is `null` for a row typed into the app.
 - `AllocationInput = { nodeId: uuid | null, registrationNo?, propertyRef?,
@@ -1744,7 +1788,20 @@ whether a use is lawful.
   | 'existing_lawful_use', purpose?: 'irrigation' | 'domestic' | 'livestock'
   | 'industry' | 'mining' | 'municipal' | 'other', waterSource: 'surface' |
   'groundwater', volumeM3PerYear, storageM3?, validFrom?, validTo?,
-  reference? }` (dates `YYYY-MM-DD`).
+  reference?, months?: 1–12 each, 1–12 of them, no repeats (stored ascending)
+  | null, maxRateM3s?: 0 ≤ r < 10⁶ | null, conditions?: up to 20 strings of
+  1–500 characters }` (dates `YYYY-MM-DD`).
+- Import: the template and a WARMS extract may carry `months` (numbers or
+  names, ranges over the new year: `Oct-Mar`), `max_rate_m3s` and
+  `conditions` (separated by `|`); a cell that doesn't read is a row problem.
+- Every run's input carries the project's allocations (engine ≥ 1.18.0:
+  `GET /projects/:id/model-input` and the stored run's `inputs.model.allocations`,
+  without names, registration numbers or properties), and a write that changes
+  what a run reads makes the latest run out of date (`project.updated_at`).
+  `settings.allocationMode` (`'none'` | `'cap'` | `'fullAllocation'`) and
+  `settings.allocationTolerance` (0 ≤ τ < 1) are project settings
+  ([Projects](#projects)); `RunSummary.allocations` is the run's own
+  comparison ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
 - `AllocationSource = { id, kind, fileName, sha256, reference, importedAt,
   importedBy, rows }`.
 - `PreviewRow` is a parsed row (`line`, the fields, `errors: string[]`) with
@@ -1924,7 +1981,10 @@ CORS (gateways aren't browsers), JSON bodies only.
 | POST | `/ingest/v1/series/merge` | the body of [`POST /projects/:id/series/merge`](#time-series) (`kind`, `name`, `unit`, `startDate`, `values`, optional `product` / `productVersion` / `dayBoundary`), plus an optional `source` (≤ 100 chars, a free label kept in the audit subject) | `200 { series: SeriesMeta, daysChanged, rerunQueuedFor: iso \| null, rerunHeld: HeldDays \| null }`, `Cache-Control: no-store` |
 
 - **The merge** is the same sequence as the UI's (`series/merge.ts`
-  `mergeInto`): the series is created if it doesn't exist, only the days sent
+  `mergeInto`): the series is created if it doesn't exist (only when the
+  project has no outlet series of that kind: otherwise `409`, and a person
+  adds the series first, since a run reads the first of each kind by name
+  and a key must not be able to replace it; issue #51), only the days sent
   are touched (a `null` clears a day here, where the UI's merge keeps the
   stored value), units are converted to the kind's
   canonical unit, and the version and day-boundary guards answer `409` as
@@ -1938,10 +1998,11 @@ CORS (gateways aren't browsers), JSON bodies only.
   [architecture.md § Automatic runs](./architecture.md#automatic-runs)); it
   runs as the key's creator. `null` otherwise, and when the key's creator's
   account was deleted: the re-run is skipped, the days are still merged.
-- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom }`
+- `rerunHeld` (WP-2.16): `{ negative, outlier, examples: { date, value }[], limitFrom, newSeries }`
   when days this push carried look wrong by the engine's data-quality rules
-  (a negative rain or flow, or a value above the outlier limit), else
-  `null`. The limit needs 100 non-zero days and comes from the first of
+  (a negative rain or flow, or a value above the outlier limit), or when the
+  push created the series (`newSeries: true`, held whatever its days: it is
+  now what runs read for its kind), else `null`. The limit needs 100 non-zero days and comes from the first of
   these that has them; `limitFrom` says which (`null`: none had, so only
   negatives were checked): `others`, the series without this push's days
   and without the days this key wrote before that nobody has written
@@ -1957,7 +2018,8 @@ CORS (gateways aren't browsers), JSON bodies only.
 - **Errors.** `401 { error: "invalid or missing API key" }` (with
   `WWW-Authenticate: Bearer`) for a missing, malformed, unknown, wrong,
   revoked or expired key, one message for all; `403` for a series not in
-  `allowedSeries`, or a scope the key lacks; `429` with `Retry-After`
+  `allowedSeries`, or a scope the key lacks; `409` for a new series of a
+  kind the project already has (and the version and day-boundary guards); `429` with `Retry-After`
   (seconds) past the rate limit; `400` for a body that isn't valid; `413`
   when the series would pass 60 000 days.
 - **Rate limit.** A token bucket per key: 60 requests, refilled at 60 a
@@ -1990,7 +2052,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2001,7 +2063,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   share with the E7 headline and its band). `farm.river.equitableFraction`
   and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
-  D2), and `cutBeyondShare` is `false` (it is measured against the even
+  D2; for a viewer previewing the farm, counted as that farm's own farmer
+  would count them, 096), and `cutBeyondShare` is `false` (it is measured against the even
   share, so it would bound it); the stored projection keeps them.
   `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
   deficitDays, suppliedFraction }` only when the published run is a forecast
@@ -2013,6 +2076,8 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 - `context = { farmsUpstream, farmsDownstream, farmCount }` from
   `app_farm_context`: counts only.
 - `publication = { publishedAt, publishedBy, engineVersion, restriction: { level, pct, notice }, nextExpectedOn }`.
+  `publishedBy` is the publisher's display name, `null` once that account
+  is gone (the page words it, "A former member", in the reader's language).
   The WUA's notice in every language it wrote it in, by code (`{}` for
   none); the page shows the reader's language, else English, else another,
   with a "not translated" line (`pickNotice`, design §7), so a language
@@ -2021,6 +2086,12 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   `dataUntil`, counts only.
 - `stale` is `dataUntil` older than 7 days (the workspace's `STALE_DAYS`)
   when the response was built.
+- `today` is the date in the project's time zone (`project.timeZone`, 058)
+  when the response was built. The page counts ages (the dates line, a
+  forecast's age) to today in `project.timeZone` from the device's clock
+  (`farmToday`, `farm/numbers.ts`), so a saved copy or a tab left open moves
+  on with the day and a phone set to another zone counts the server's days;
+  `today` is its fallback when the browser doesn't know the zone.
 - `project.wuaName` is the WUA's name for the contact lines (`null` =
   "your WUA"); `farm.dataFrom` is the published run's first day, which
   "compared with last season" names when `lastSeason` is `null` (a

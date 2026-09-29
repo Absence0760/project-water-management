@@ -168,7 +168,9 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
 - **Arrange through the API, act through the UI.** Only drive the UI a test is
   actually about. Everything else goes through `support/api.ts`.
 - **Wait on real UI signals**: a heading, a status message, a table row, an
-  `aria-current`, a response (`page.waitForResponse`). Never use
+  `aria-current`, a response (`page.waitForResponse`), an app readiness
+  attribute (a chart's `data-ready`; after a resize, the Network map's
+  `data-fit` through `waitForMapFit` in `support/diagrams.ts`). Never use
   `networkidle`, never `waitForTimeout`, and never inflate a timeout to get past
   a slow step. Fix whatever is slow.
 - **Select by role and accessible name** (`getByRole`, `getByLabel`). If an

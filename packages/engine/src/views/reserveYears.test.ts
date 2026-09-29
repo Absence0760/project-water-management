@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { toEpochDay } from '../calendar';
+import { runForecastChecked } from '../forecast';
 import { runModel } from '../run';
+import { withForecastTail } from '../testing/forecastInvariants';
 import { randomInput } from '../testing/fuzz';
 import { reserveDaysByWaterYear } from './reserveYears';
 
@@ -40,6 +42,25 @@ describe('reserveDaysByWaterYear', () => {
 			expect(years.reduce((n, y) => n + y.below, 0)).toBe(run.summary.catchment.ewrDaysNotMet);
 			expect(years.reduce((n, y) => n + y.days, 0)).toBe(s.values.length);
 		}
+	});
+
+	it("leaves a forecast run's forecast days out, so it still adds up to the summary (issue #51)", () => {
+		let checked = 0;
+		for (const seed of [3, 17, 41, 58]) {
+			const run = runForecastChecked(withForecastTail(randomInput(seed, { maxDays: 2000, maxNodes: 5 }), seed, 30));
+			const from = run.summary.forecast?.from;
+			if (!from) continue;
+			checked++;
+			const s = run.series.find((x) => x.nodeId === null && x.key === 'ewr_shortfall')!;
+			const history = toEpochDay(from) - toEpochDay(run.startDate);
+			expect(history, `seed ${seed}`).toBeLessThan(s.values.length);
+			const years = reserveDaysByWaterYear(run.startDate, s.values, from);
+			expect(years.reduce((n, y) => n + y.days, 0), `seed ${seed}`).toBe(history);
+			expect(years.reduce((n, y) => n + y.below, 0), `seed ${seed}`).toBe(run.summary.catchment.ewrDaysNotMet);
+			// Without forecastFrom every day counts, the forecast's too.
+			expect(reserveDaysByWaterYear(run.startDate, s.values).reduce((n, y) => n + y.days, 0)).toBe(s.values.length);
+		}
+		expect(checked).toBeGreaterThan(0);
 	});
 
 	it('an empty series has no years', () => {

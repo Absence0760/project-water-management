@@ -19,7 +19,7 @@ the roadmap.
   10 Jan 2024. [`figures.ts`](./farmer-view-prototype/figures.ts) prints
   them. Forecast values stay `[placeholders]` until forecast mode exists.
   No client data: the repo is public.
-- **Persona:** [`persona-farmer`](../../.claude/agents/persona-farmer.md).
+- **Persona:** [`persona-farmer`](../../.claude/agents/personas/persona-farmer.md).
   §11 has the test results and what changed because of them.
 
 ## 1. The job
@@ -103,7 +103,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 
 | Line on screen | Source | Notes |
 | --- | --- | --- |
-| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself |
+| Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself. With no text, the percentage alone reads as a cut, "Set by the WUA: a 20 % cut in registered water use.", the same words as the alert email (issue #51), never "20 % of registered use", which reads as an allowance |
 | "No restriction from the WUA" (success tokens, check icon) | level `none` | The official answer stays first and loud even when there's nothing to say (§11 F8) |
 | Model card "Looking back: 1 Oct to 10 Jan", chip "Model: watch", "If you had pumped less on the days the river needed it, you would have had about 83 % of the water you needed." | **E7**: (`CF.suppliedM3Day` − \|`CF.ewrSupplyCutM3Day`\|) ÷ `CF.demandM3Day` [(3 179 − 121) ÷ 3 691 = 83 %] | whole %. Band §6.2. Past tense. Under a `restricted` notice the card collapses to one link line, so only the WUA's percentage competes for attention |
 | "The model's estimate, not an official restriction" | fixed text (D10) | Always on the model card |
@@ -112,7 +112,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 | "You were asked to help on 56 of the 102 days" | days with `ewr_charge` < 0 in the season (E5) | A different count from the sites' days (§11 F10) |
 | "Pump about 220 m³ a day less (2.6 l/s). Averaged over all 102 days that is 121 m³ a day." | season total of −ΔG ÷ charged days [121.2 × 102 ÷ 56]; `CF.ewrSupplyCutM3Day` | The per-day figure applies on the days the river needs it (§11 F9) |
 | "Your dam also held back about 120 m³ a day the river needed. If your dam has an outlet or a bypass, letting that through helps. If it doesn't, the WUA may talk to you about it." | season total of R_store ÷ charged days [65.4 × 102 ÷ 56]; `CF.ewrChargeStorageM3Day` | Information, not an instruction, until the node records release works (E9, §11 F11). Shown only above the floor (§6.2) |
-| "Why?" step 3: received 3 179 − pump less 121 = 3 058 ≈ 83 % of 3 691 | `CF.suppliedM3Day`, −ΔG, `CF.demandM3Day` | Lets a farmer check the headline by hand |
+| "Why?" step 3: received 3 179 − pump less 121 = 3 058 ≈ 83 % of 3 691 | `CF.suppliedM3Day`, −ΔG, `CF.demandM3Day` | Lets a farmer check the headline by hand. Each row is rounded to whole m³ and "Leaves" is worked out from the rounded rows, so the sum adds up as shown (issue #51) |
 | "The river's share of your water is more than an even share of the catchment's supply. The WUA may need to look at this." | `CF.ewrCutBeyondShareM3Day` > 0 | Only when it applies |
 
 ### Q3 How is my dam doing?
@@ -177,7 +177,7 @@ breakdown; not in the first release.
 | Engine / modeller term | Farmer view says | Afrikaans (draft, for the named reviewer) | Never says |
 | --- | --- | --- | --- |
 | Equitable share, K_tot, target volume | "even share" ("everyone gets the same share of what they need") | "gelyke deel" | gain, entitlement, allocation, target |
-| Above (−) / below (+) equitable share, N | "a little more / less than an even share (about 118 m³ a day)" | "'n bietjie meer / minder as 'n gelyke deel" | reduce/gain, "you may take" |
+| Above (−) / below (+) equitable share, N | "a little more / less than an even share (about 118 m³ a day)" under 10 points between the farm's % and the even share, "more / less than …" from 10, "much more / less than …" from 25 (`SHARE_GAP_POINTS`, issue #51) | "'n bietjie meer / minder as 'n gelyke deel" | reduce/gain, "you may take" |
 | EWR, Ecological Reserve | "the river's reserve" ("water the law keeps in the river so it stays healthy for everyone downstream"), with a help link | "die rivier se reserwe" | EWR, shortfall, charge |
 | EWR charge, supply cut ΔG | "pump less" | "pomp minder" | charge, attribution, consumptive |
 | R_store | "your dam held back … the river needed" | "jou dam het … teruggehou wat die rivier nodig gehad het" | storage part, release condition |
@@ -229,7 +229,8 @@ headline**. Beside it, always:
 > your dam. It isn't part of the 83 %.
 
 That is `EQUITABLE_SHARE_FOOTNOTE` in plain words. A farm *above* the even
-share reads "a little more than an even share (about N m³ a day)", which
+share reads "a little more than an even share (about N m³ a day)" (or "more",
+"much more" as the gap grows), which
 isn't a cut instruction either: only the notice is.
 
 ### 5.4 Why the headline isn't `fractionOfDemandLeft`
@@ -351,7 +352,10 @@ screen-reader user can jump by heading.
 - **Reading order** is the visual order (§6.1). One `h1` (the farm's name),
   an `h2` per card, each card a `section` labelled by its `h2`. Charts are
   `aria-hidden` with a visually hidden summary sentence and a real table
-  behind "Show the numbers". Bars and gauges are decorative; the number
+  behind "Show the numbers". The dam summary's latest level is "on 10 January
+  2024" when the data stops mid-month and "at the end of December 2023" when
+  the last month is complete (issue #51). The 12-month chart's axis is in
+  ML; its table follows the unit chosen on the supply card (m³ or ML). Bars and gauges are decorative; the number
   beside them is the content.
 - **Reflow:** no horizontal scroll at 320 px (the existing reflow pattern).
   Chips and buttons wrap; nothing has a fixed width.

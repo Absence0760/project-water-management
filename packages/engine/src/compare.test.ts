@@ -550,6 +550,25 @@ describe('diffInputs', () => {
 		expect(texts(b, a)).toEqual(['Borehole "BH-01" removed from Rooikloof (was 300 m³/day, primary, annual cap 40\u202f000 m³, depletion 0.25)']);
 	});
 
+	it('lists registered volumes added, changed and removed, and the allocation mode and band (engine 1.18.0)', () => {
+		const a = snapshot();
+		const b = copyWithFreshIds(a);
+		const al = { id: 'al', nodeId: 'copy-f1', waterSource: 'surface' as const, volumeM3PerYear: 120_000, validFrom: '2020-10-01', validTo: null };
+		b.model.allocations = [al];
+		expect(texts(a, b)).toEqual(['Registered volume added to Rooikloof (surface 120\u202f000 m³/a, valid 2020-10-01 to …)']);
+		// A copy with fresh ids lines it up by (unit name, water source).
+		const c = copyWithFreshIds(b);
+		c.model.allocations = [{ ...al, id: 'al-copy', nodeId: 'copy-copy-f1', volumeM3PerYear: 90_000 }];
+		expect(texts(b, c)).toEqual(['Rooikloof: registered volume surface 120\u202f000 m³/a, valid 2020-10-01 to … → surface 90\u202f000 m³/a, valid 2020-10-01 to …']);
+		expect(texts(b, a)).toEqual(['Registered volume removed from Rooikloof (was surface 120\u202f000 m³/a, valid 2020-10-01 to …)']);
+		// A snapshot without the settings compared only at ±10 %: the same as saying so.
+		const d = copyWithFreshIds(a);
+		d.settings = { ...d.settings, allocationMode: 'none', allocationTolerance: 0.1 };
+		expect(texts(a, d)).toEqual([]);
+		d.settings = { ...d.settings, allocationMode: 'cap', allocationTolerance: 0.15 };
+		expect(texts(a, d)).toEqual(['Allocation mode: Compare only → Cap use at the registered volume', 'Allocation comparison band: ±10% → ±15%']);
+	});
+
 	it('lists demand objects added, changed and removed, matched across a copy by unit and object name (engine 1.7.0)', () => {
 		const a = snapshot();
 		const b = copyWithFreshIds(a);
@@ -578,6 +597,41 @@ describe('diffInputs', () => {
 			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 550 m³/day on average, piped out, priority first, monthly values changed'
 		]);
 		expect(texts(b, a)).toEqual(['Demand object "Town" removed from Rooikloof (was Municipal (town), 600 m³/day on average, return 0.5, priority first)']);
+	});
+
+	it('lists a demand object’s schedule change, and reads no schedule, null and an empty one alike (engine 1.17.0)', () => {
+		const a = snapshot();
+		const town = {
+			id: 'do',
+			nodeId: a.model.nodes.find((n) => n.name === 'Rooikloof')!.id,
+			name: 'Town',
+			category: 'municipal' as const,
+			sizing: 'monthly' as const,
+			monthlyM3Day: new Array(12).fill(600),
+			count: null,
+			litresPerUnitDay: null,
+			lossPct: 0,
+			monthlyFactor: null,
+			returnPct: 0.5,
+			priority: 'first' as const,
+			destination: 'internal' as const,
+			enabled: true,
+			note: ''
+		};
+		a.model.demandObjects = [town];
+		const b = structuredClone(a);
+		b.model.demandObjects![0]!.schedule = [];
+		expect(texts(a, b)).toEqual([]);
+		// The same window with its keys in another order (as jsonb reads it back) is no change.
+		a.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		const c = structuredClone(a);
+		c.model.demandObjects![0]!.schedule = [{ factor: 0, to: null, span: 'always', from: null, label: 'Weekends', weekdays: [6, 7], easterTo: null, easterFrom: null }];
+		expect(texts(a, c)).toEqual([]);
+		delete a.model.demandObjects![0]!.schedule;
+		b.model.demandObjects![0]!.schedule = [{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0 }];
+		expect(texts(a, b)).toEqual([
+			'Rooikloof: demand object "Town" Municipal (town), 600 m³/day on average, return 0.5, priority first → Municipal (town), 600 m³/day on average, return 0.5, priority first, 1 schedule window, schedule changed'
+		]);
 	});
 
 	it('describes a dam raise on a copied project by farm name', () => {

@@ -1,7 +1,7 @@
 import { seriesRowFlags } from '@water-management/engine';
 import { toEpochDay } from '@water-management/engine/calendar';
 import { describe, expect, it } from 'vitest';
-import { anomalousPushedDays, HELD_EXAMPLES, limitWithout, othersSuffice, outlierLimit } from './hold.js';
+import { anomalousPushedDays, HELD_EXAMPLES, heldFor, limitWithout, othersSuffice, outlierLimit } from './hold.js';
 
 // Rain every 5th day at 10 mm: 150 days give 30 wet days, too few for the
 // outlier rule (100); 600 days give 120.
@@ -13,7 +13,7 @@ describe('anomalousPushedDays', () => {
 	});
 
 	it('counts a negative pushed day, with its date, even on a new series', () => {
-		const held = { negative: 1, outlier: 0, examples: [{ date: '2021-02-10', value: -2 }], limitFrom: null };
+		const held = { negative: 1, outlier: 0, examples: [{ date: '2021-02-10', value: -2 }], limitFrom: null, newSeries: false };
 		expect(anomalousPushedDays('rain_catchment_mm', series(150), { startDate: '2021-02-10', values: [-2] })).toEqual(held);
 		expect(anomalousPushedDays('rain_catchment_mm', null, { startDate: '2021-02-10', values: [-2] })).toEqual(held);
 	});
@@ -127,5 +127,19 @@ describe('anomalousPushedDays', () => {
 		expect(held.negative).toBe(8);
 		expect(held.examples).toHaveLength(HELD_EXAMPLES);
 		expect(held.examples[0]).toEqual({ date: '2021-01-21', value: -1 });
+	});
+});
+
+describe('heldFor', () => {
+	it('holds a push that created its series even with clean days, keeping any flagged counts', () => {
+		expect(heldFor(true, null)).toEqual({ negative: 0, outlier: 0, examples: [], limitFrom: null, newSeries: true });
+		const flagged = anomalousPushedDays('rain_catchment_mm', null, { startDate: '2021-02-10', values: [-2] });
+		expect(heldFor(true, flagged)).toMatchObject({ negative: 1, newSeries: true });
+	});
+
+	it('passes a push into an existing series through as judged (positive control)', () => {
+		expect(heldFor(false, null)).toBeNull();
+		const flagged = anomalousPushedDays('rain_catchment_mm', series(600), { startDate: '2022-02-06', values: [5000] });
+		expect(heldFor(false, flagged)).toBe(flagged);
 	});
 });

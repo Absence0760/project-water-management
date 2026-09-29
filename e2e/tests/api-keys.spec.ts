@@ -70,9 +70,14 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 	// History names the key as the actor.
 	await page.goto(`/projects/${project.id}?tab=history`);
 	const entries = page.getByTestId('history-entry');
+	// A series the key added holds the automatic runs for a person (issue #51, backend series/hold.ts heldFor).
+	// The hold is recorded in the push's own change set, so it shares the push's entry.
 	await expect(entries).toHaveCount(2);
 	await expect(entries.nth(0)).toContainText('API key “Weir gateway”');
-	await expect(entries.nth(0)).toContainText('Added the Flow — logger “Logger” series (1 Jan 2024 to 7 Jan 2024)');
+	await expect(entries.nth(0)).toContainText('Held automatic runs: an API key added the Flow — logger “Logger” series, which runs will read.');
+	await expect(entries.nth(0)).toContainText('+1 more');
+	await entries.nth(0).getByRole('link').click();
+	await expect(page.getByTestId('history-detail')).toContainText('Added the Flow — logger “Logger” series (1 Jan 2024 to 7 Jan 2024)');
 	await expect(entries.nth(1)).toContainText('Created an API key “Weir gateway”');
 	await expect(entries.nth(1)).toContainText('Owner');
 

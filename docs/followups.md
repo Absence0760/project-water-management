@@ -8,8 +8,8 @@ Tick items off (or move them into an issue) as they are done.
 This file holds the detail. Anything that blocks a release or waits on
 someone outside the code also has a GitHub issue: release blockers #62,
 the history scrub #63, the legal go-live gates #103, the information officer's POPIA
-questions #90,
-the hydrologist's decisions #46, applicant decisions #50, the Step 2
+questions and the applicant decisions (D1–D3, WP-3.3) #90,
+the hydrologist's decisions #46, the Step 2
 persona run #51, planning outputs #53, the client's requests #54.
 
 The buildable work is filed in batches by area, one issue per batch, so a
@@ -1880,6 +1880,35 @@ the first non-modeller user is invited (WUA staff, a client reviewer), and
 with WP-2.1 at the latest, so the farmer role lands alongside a team viewer
 role and not before it.
 
+- [ ] **Adding someone by email tells the adder whether they have an
+      account, and adds a verified account without asking it** (issue #51,
+      adversary finding 3). `POST /projects/:id/members`, `/farmers`,
+      `/farmers/bulk` and `POST /teams/:id/members` add a verified account
+      at once (`201 { member }` with its display name, bulk `status:
+      'added'`) and invite any other address (`201 { invited: true }`,
+      `'invited'`). Any registered user can create a project and so own
+      one, so this probes which addresses have verified accounts, learns
+      their display names, and makes a stranger a member (with the alert
+      mails that brings) without their consent. Built now: the daily cap on
+      adding by email, 300 a person and 300 a project or team, counted
+      before the lookup (`101_invite_throttle.sql`, `invites/invites.ts`
+      `INVITE_CAP`), which bounds both the probing and the invite mail.
+      **Not built, and one change:** every add by email becomes an invite,
+      and a verified account joins only when its holder accepts (a link in
+      the invite mail opening an accept page while signed in, or a pending
+      invitation on their project list), so every answer is the same
+      `{ invited: true, invite }` / `'invited'` and no display name is shown
+      before acceptance. Changing the response shape alone would not close
+      the leak: `GET /projects/:id/members` (and the farmers list) shows an
+      added account, with its name and address, at once, so the shape and
+      acceptance have to land together. Size: the invite routes, an accept
+      endpoint and page, the members and farmers panels' wording, and the
+      tests that add verified members directly (about 200 call sites use
+      `POST …/members` as setup and would need an accept step or a test
+      helper). Who: operator (product call: WUA staff lose "added at once").
+      Trigger: before public registration opens, or before the first
+      catchment with members outside the operator's own team.
+
 ## Features left half-way
 
 - [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
@@ -2619,22 +2648,38 @@ The first slice (2026-09-26: migration 038, engine `compareAllocations`,
 stores registered volumes and compares them with a run's modelled use. Left,
 from the WP:
 
-- [ ] **Engine `allocationMode`** (`cap` | `fullAllocation`, default `none`)
-      with `RunSummary.allocations` and a `checkAllocations` invariant in
-      `runModel`; bumps `ENGINE_VERSION`. `cap`: cumulative supply per water
-      year ≤ the allocation; `fullAllocation`: demand replaced by the
-      allocation over its monthly pattern. Durable fix for "what if every
-      lawful user took their entitlement" (WP-3.11's background run).
-      Trigger: WP-3.11 (cumulative impact) or an assessor asking.
-- [ ] **`settings.allocationTolerance`** instead of the API's `?tolerance=`
-      (default 0.1, pending the hydrologist). Trigger: the first client asking
-      for another band.
+- [x] **Engine `allocationMode`** (2026-09-28, engine 1.18.0, issue #72):
+      `none` | `cap` | `fullAllocation`, with `RunSummary.allocations`, the
+      `allocations` self-check (`checkAllocations`, also in the fuzz's
+      invariants) and every run's input carrying the volumes (no names).
+      `cap`: each unit's surface and groundwater use per water year within
+      its whole-year registered volumes; `fullAllocation`: its demand scaled
+      per water year to them, keeping its own seasonal shape (not the
+      licence's months: those aren't applied yet, below). Warm starts carry
+      both ([model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72)).
+- [ ] **How the cap counts water drawn from a dam boreholes filled.** The
+      cap counts every dam draw as surface use, so groundwater pumped into a
+      dam and drawn out uses both volumes, where the comparison nets it
+      (§2.12). The durable fix is a per-day provenance of stored water (the
+      pumped share of each dam's storage) so the cap nets it the same way.
+      Trigger: the hydrologist's answer on s21b and the netting (#90).
+- [x] **`settings.allocationTolerance`** (2026-09-28, issue #72): the
+      comparison's band as a project setting (Settings › Registered volumes,
+      default 0.1, pending the hydrologist); `?tolerance=` still overrides it
+      for one request.
 - [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
       extract (plan.md questions).
-- [ ] **Licence conditions**: `months`, `maxRateM3s`, a `conditions jsonb`
-      (the WP's `Allocation` shape), shown and later enforced by `cap`.
+- [x] **Licence conditions** (2026-09-28, migration 103, issue #72):
+      `months`, `max_rate_m3s`, `conditions jsonb` on each allocation, in the
+      form, the list, the import template and the export, and on the run's
+      input.
+- [ ] **Apply licence conditions in the cap**: no supply outside the months
+      of use, and a unit's daily take at most its maximum rate × 86 400. The
+      engine already receives them (`AllocationEntry.months`, `maxRateM3s`).
+      Trigger: a licence whose conditions bind in a scenario an assessor
+      runs, or the client asking.
 - [ ] **Farm view**: a farmer's own registered volume beside their modelled
       use (RLS already allows it: `allocation_select_farmer`,
       `allocation_holder_select`); share views per D3 (c) (volumes public,
@@ -2703,17 +2748,43 @@ from the WP:
       (seed: `WBT_RUN_OF_RIVER=1` per workbook) imports the flagged dummy-dam
       and dam-less units as run of river with an uncapped pump; set per
       workbook in the private seed settings.
-- [ ] **Demand objects: the daily schedule.** Not built: date windows with a
-      factor, an uploaded daily factor series
-      through Add data, and the reason a day is off (not needed: no demand,
-      no return; supplied from elsewhere: no river take, the return goes on;
-      curtailed: a shortfall), with switched-off days reported apart from
-      short days. Durable fix: a `schedule` on the object (windows) and an
-      object-scoped series kind for the uploaded factor, applied in
-      `network/demandObjects.ts planObjects` before the split, with the
-      reason carried into the return (a per-day return override) and the
-      summary. Trigger: the client's answer on the schedule (fixed pattern or
-      uploaded series; what off means).
+- [x] **Demand objects: date-window schedules** (2026-09-28, engine 1.17.0,
+      migration 100, issue #90 Q4 and Q12). The client answered: the daily
+      pattern depends on the demand type (a town's is fixed, irrigation's
+      varies) and the switch is set by date, not by river flow. A `schedule`
+      on the object: windows (every day, a yearly MM-DD span wrapping the
+      year end, a one-off date range, days around Easter), narrowed to
+      weekdays, each with a factor (0 = off), the later window winning;
+      applied in `network/demandObjects.ts planObjects` before the split and
+      recomputed by the self-checks; days off reported apart from days
+      short (`DemandObjectSummary.daysOff`); the node form's On/off schedule
+      ([model.md §2.7f](./model.md), [ui.md](./ui.md)). Off keeps today's
+      meaning: no demand, so no supply and nothing returned.
+- [ ] **Demand objects: the off reason.** Not built, because the client
+      hasn't answered it (issue #90 Q12 is only partly answered): what causes
+      off days (occupancy, works downtime, load-shedding, switching to a
+      borehole), whether an off period can mean "supplied from elsewhere"
+      (no river take, the return goes on) or "curtailed" (counted as a
+      shortfall) rather than "not needed", and whether a treatment works
+      keeps discharging while its user is off the river. Today every off day
+      is "not needed" (no demand, no return). Durable fix: a `reason` on a
+      schedule window (`notNeeded` / `elsewhere` / `curtailed`), carried into
+      the return as a per-day override (an `elsewhere` day keeps its return,
+      from a set discharge or the recent mean) and into the summary
+      (curtailed days as short, elsewhere days as met elsewhere). Trigger:
+      the client's answer to the rest of Q12.
+- [ ] **Demand objects: an uploaded daily factor series.** Not built: a
+      meter or works record of which days a demand ran, uploaded through Add
+      data as a daily factor on one object (the design's second source
+      beside the windows). Left out of the schedule PR because it isn't
+      bounded like the windows: it needs a series kind scoped to an object
+      (today's series are project- or node-scoped), its storage and
+      provenance, the Add data flow and preview, and a rule for days the
+      record doesn't cover. Durable fix: an `object_factor@<id>` series kind
+      stored like the node series, multiplied after the schedule in
+      `planObjects` (a gap runs at the schedule's factor), with the checks
+      reading it the same way. Trigger: a client supplying such a record for
+      a demand whose pattern windows can't describe.
 - [ ] **Demand objects: a structured demand source.** The rule is decided
       (issue #54 Q11, confirmed by the client in issue #90): a demand comes
       from meter records where they exist, else the reconciliation
@@ -2830,6 +2901,16 @@ from the WP:
       FarmShell). Test: `notes/counts.test.ts`.
 
 ## Portfolio dashboard (WP-2.14)
+
+- [ ] **The project list's data age counts to the viewer's day, not the
+      project's** (WUA-manager persona, #51, Low). `projects/freshness.ts`
+      `daysSince` uses the browser's calendar date, while the portfolio's and
+      the outcome columns' `figuresAgeDays` / `stale` count to the project's
+      `today` (`project.time_zone`). The same `ProjectTable` row shows both,
+      so outside SAST they disagree by a day for part of each day. Durable
+      fix: pass the project's `today` (the outcomes row already carries it)
+      into `dataFreshness` and count to it, with a TZ-skewed unit test (rule
+      7). Do it with the next change to the project list.
 
 - [x] **Traffic-light thresholds per team (D11)** (2026-09-26).
       `055_team_settings` adds `team.settings` with a validated
@@ -2961,7 +3042,7 @@ Applicant view and the Applications tab. Left:
       storing a projection with the run, which would still leave `inputs`
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
-- [ ] **D1, D2, D3 are open decisions** ([issue #50](https://github.com/Absence0760/project-water-management/issues/50); step-3 § 11), built on the
+- [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
       recommended defaults: D2's anonymised baseline and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
@@ -2996,7 +3077,7 @@ Applicant view and the Applications tab. Left:
       `scenarios/oracles.db.test.ts` ("ids and counts"), each with its
       positive control ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
 - [ ] **The wording of a value rule refused because of hidden data**
-      ([issue #50](https://github.com/Absence0760/project-water-management/issues/50)).
+      ([issue #90](https://github.com/Absence0760/project-water-management/issues/90)).
       Built on the recommended default: the applicant is told only "doesn't
       apply to the catchment as modelled" (`MASKED_RULE`), never which rule
       or the hidden values; the assessors, checking the same application,
@@ -3004,14 +3085,15 @@ Applicant view and the Applications tab. Left:
       namespace). **Pending the client**: whether an applicant may be told
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
-      Trigger: the client's answer on issue #50.
+      Trigger: the client's answer on issue #90.
 - [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
       access** (WP-3.15) link from the list and the Application panel.
       Trigger: those WPs.
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
-      are gauge data). Pending the hydrologist.
+      are gauge data). Pending the hydrologist and the licensing authority
+      (issue #90).
 - [x] **Performance of `run_series_select`.** Every viewer read of run series
       now evaluates `app_hidden_scenario_runs()` and the contributor policy's
       two helpers once per query (hashed subplans; the contributor ones exit
@@ -3052,17 +3134,31 @@ Applicant view and the Applications tab. Left:
 
 - [ ] **Performance budgets on the deployed site.** Lighthouse ≥ 95 in all
       four categories, LCP < 2.0 s on throttled 4G, CLS 0 (the issue's
-      quality bar). A local baseline (2026-09-28, the build served with gzip
-      like CloudFront; [design/landing-art.md § Quality
-      bar](./design/landing-art.md#quality-bar)) passes everything but LCP:
-      97 / 97 / 100 / 100, CLS 0, **LCP 2.4–2.6 s** on Lighthouse's mobile
-      preset. Tried locally with no effect: preloading the hero from the head,
-      and inlining the stylesheets. What is left is ~0.7 s of render delay,
-      main-thread time, so if the deployed site also misses 2.0 s the levers
-      are: less script and CSS before the landing's first paint (the root
-      layout's app-wide code), then giving phones the 800 px render (`sizes`
-      asks for 140vw, so a phone gets the 1200 px one). Trigger: the first deploy (Phase
-      6), tracked on #92; measure there, then close #57.
+      quality bar). Met locally (2026-09-28, the build served over HTTP/2
+      with gzip like CloudFront; [design/landing-art.md § Quality
+      bar](./design/landing-art.md#quality-bar)): 100 / 100 / 96 / 100, LCP
+      1.6 s, CLS 0 on the mobile preset. The earlier 2.4–2.6 s miss was the
+      measuring server's HTTP/1.1 and a background texture standing in as
+      the LCP element (now vector, and landing.spec.ts checks the LCP
+      element is the hero render). If the deployed site still misses 2.0 s,
+      the lever left is the ~0.5 s render delay: less script before the
+      landing's first paint (the root layout's app-wide code). Trigger: the
+      first deploy (Phase 6), tracked on #92; measure there, then close #57.
+- [ ] **`/welcome` in Afrikaans before hydration** (issue #51, the
+      international persona). The page is prerendered once, in English, and
+      `app.html` says `<html lang="en">`; an Afrikaans visitor's words and
+      `lang` switch together only once the app hydrates and loads the
+      catalogue. `lang="en"` is correct for what is on the page before then
+      (the words are English), so setting `lang="af"` early from the stored
+      choice would claim Afrikaans for English text, and an inline script
+      would also need its own hash in the meta CSP (`kit.csp` hash mode,
+      `infra/scripts/check-csp.mjs`). Durable fix: prerender the landing
+      page once per language (`/welcome` and an Afrikaans `/af/welcome`, or
+      the language as a path parameter with `entries`), each with its own
+      `lang`, `hreflang` links between them, and the root sending a stored
+      or browser choice to the right one. Trigger: the landing page is
+      linked from somewhere Afrikaans readers arrive first (a WUA's
+      Afrikaans newsletter), or a screen-reader user reports it.
 - [x] **A public summary of the engine audit** for the trust strip's first
       point: `/methods` ("How the model is checked"), linked from the trust
       strip and the footer ([ui.md § Methods page](./ui.md#methods-page)).
@@ -3228,6 +3324,16 @@ Left, each with its trigger:
       click tracking on the configuration set (POPIA: say so in the privacy
       notice) or a "Was this useful?" link. Trigger: one season of alerts on
       production (#92).
+- [ ] **A farmer's own dam alert level** (issue #51, the farmer persona:
+      "40 %, chosen by me, before my planting decision"). The page now
+      shows the WUA's level for each farm (`AlertChoice.threshold`), but only
+      the WUA sets it (`alert_rule`, one per farm, editors). Letting a farmer
+      pick their own warning level (a per-subscription threshold on
+      `alert_subscription`, beside the WUA's) is a
+      decision for the WUA, not a build: an alert at a farmer's level is
+      still the model's estimate, and a level above the WUA's could read as
+      an earlier restriction. Trigger: the client decides whether farmers
+      may set their own level (plan.md §9 questions).
 - [ ] **WhatsApp / SMS** (optional, after Step 2): `alert_subscription.channel`
       is ready; a transport beside `mail/transport.ts` with a log transport
       locally. Trigger: farmers ask for it after a season of email.
@@ -3338,8 +3444,42 @@ own. Loop in the CISO or security analyst before acting on any of them.
       produces. While the account exists, clearing or changing
       `decided_by` is still refused. `auth/account-deletion.db.test.ts`
       covers both.
-- [ ] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51); WP-2.16 items not run in this
-      pass): `/persona farmer,wua-manager,hydrologist,adversary,accessibility-user,international-user`
-      with the verdicts recorded in step-2 §9, and the 60-farm load
-      timings. Trigger: when WP-2.5 (Afrikaans), WP-2.12 and WP-2.13 land,
-      since three of the personas judge those.
+- [x] **Persona verdicts and load checks** ([issue #51](https://github.com/Absence0760/project-water-management/issues/51)):
+      the six personas' verdicts are in step-2 §9 "Build verdicts" (first
+      pass 2026-09-28, fixes in #127, #129, #130, #134, #135 and the PR that
+      closed #51, re-checked at 81db5ed), and the 60-farm load timings in
+      step-2 WP-2.16 "Load checks" (manual run ≈ 8.7 s on the API Lambda,
+      under the 10 s trigger; storage flat over 30 days).
+- [ ] **Hold a key's pushes into a short series?** A series with fewer than
+      100 non-zero days has no outlier limit, so a key's push into it is
+      checked for negatives only (security.md § API keys, Limits). Holding
+      every such push is safer but holds a new logger's automatic runs
+      until a person runs the model, every day, for months on a dry rain
+      record. Who: operator,
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      Trigger: before the first gateway key is issued on production.
+- [ ] **The WUA's cut % beside its own notice.** The farm page and `/share`
+      show "a 20 % cut in registered water use" only when the WUA wrote no
+      notice text; the alert email shows both. Make them agree (both, or
+      neither). Who: operator,
+      [#93](https://github.com/Absence0760/project-water-management/issues/93).
+      Trigger: before farmers are invited.
+- [ ] **A stale EWR-forecast alert says nothing.** A firing
+      `ewr_forecast_fail` event is left as it is while its forecast is behind
+      the recorded rain (`alerts/evaluate.ts`, by design: a stale forecast
+      neither opens nor clears), but when no new forecast is made (the
+      forecast feed failing) the workspace's Active alerts shows it as
+      current. Show "forecast out of date since …" on the event (the
+      `feed_failing` alert already fires for the feed). Trigger: before a
+      forecast feed runs on production.
+- [ ] **A log of restriction decisions** (WUA persona): which restriction
+      the WUA published, when, and by whom, for members and the CMA. The
+      publication history holds it; a page that lists it doesn't exist.
+      Trigger: a WUA asks, or Step 3's licensing evidence needs it.
+- [ ] **One guard for views over a run's stored series.** Every view that
+      reads a run's daily series (not its summary) must cut a forecast run
+      at `summary.forecast.from` (`beforeForecast`); issue #51 found four
+      that didn't, one at a time. A guard test listing each
+      `api.runs.series` / `run_series` consumer and how it treats a forecast
+      run would stop the next one. Trigger: the next view over stored
+      series.

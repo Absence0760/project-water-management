@@ -66,6 +66,14 @@ describe('the auto run label', () => {
 		}
 	);
 
+	it('counts recorded rain only: observed flow months past the rain does not move it', () => {
+		const flowAhead = { ...series, flow_observed_m3s: { startDate: '2024-02-01', values: new Array(120).fill(0.2) } };
+		expect(observedDataEnd(flowAhead)).toBe('2024-02-29');
+		// CHIRPS counts as recorded rain.
+		expect(observedDataEnd({ ...flowAhead, rain_chirps_mm: { startDate: '2024-03-01', values: [0, 2, null] } })).toBe('2024-03-02');
+		expect(autoRunLabel({ series: { flow_observed_m3s: { startDate: '2024-02-01', values: [1] } } })).toBe('Auto');
+	});
+
 	it('is plain "Auto" with no observed data', () => {
 		expect(autoRunLabel({ series: {} })).toBe('Auto');
 		expect(

@@ -151,6 +151,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			const parts = [num(s.negative) ? `${plural(num(s.negative)!, 'negative day')}` : '', num(s.outlier) ? `${plural(num(s.outlier)!, 'day')} far above its usual range` : ''].filter(Boolean);
 			// limitFrom 'own' (055): no person-made run has read the series yet, so its usual range is the key's own, a weaker check.
 			const own = s.limitFrom === 'own' ? ' Its usual range so far is the key’s own: no run of the model has read this series yet.' : '';
+			// newSeries (issue #51): the key created the series, which becomes the model's input for its kind; held whatever its days.
+			if (s.newSeries === true) {
+				const also = parts.length ? ` Some of its days look wrong (${parts.join(', ')}).` : '';
+				return `Held automatic runs: an API key added ${seriesName(s)}, which runs will read.${also} Check the data, then run the model`;
+			}
 			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}).${own} Check the data, then run the model`;
 		}
 		case 'series.labelled': {

@@ -14,7 +14,7 @@
 	import { base } from '$app/paths';
 	import { api, type AlertChoice, type AlertMode, type ProjectAlerts } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
-	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText } from '$lib/components/alerts/words';
+	import { ALERT_MODES, choiceLabel, DAILY_CAP, modeLabel, resumeProblem, suppressedText, thresholdLine } from '$lib/components/alerts/words';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
 	import { t } from '$lib/i18n/locale.svelte';
 	import { errorText } from '$lib/i18n/apiError';
@@ -139,11 +139,12 @@
 					{#if s.error}<div class="alert alert-error" role="alert">{s.error}</div>{/if}
 					<div class="rows">
 						{#each p.choices as c (slot(p, c))}
+							{@const level = thresholdLine(c)}
 							<fieldset
 								class="choice"
 								data-choice="{c.kind}{c.nodeId ? `/${c.nodeId}` : ''}"
 								data-rule-on={c.ruleOn ? 'true' : 'false'}
-								aria-describedby={c.ruleOn ? undefined : `off-${p.id}`}
+								aria-describedby={c.ruleOn ? (level ? `level-${slot(p, c)}` : undefined) : `off-${p.id}`}
 							>
 								<legend>{choiceLabel(c)}{#if !c.ruleOn}<span class="mark" aria-hidden="true">*</span>{/if}</legend>
 								<div class="modes">
@@ -161,6 +162,8 @@
 										</label>
 									{/each}
 								</div>
+								<!-- The level a farm's dam alert warns below: the WUA's rule (issue #51). -->
+								{#if level}<p class="level" id="level-{slot(p, c)}" data-threshold={c.threshold}>{level}</p>{/if}
 							</fieldset>
 						{/each}
 					</div>
@@ -270,6 +273,13 @@
 		font-weight: 500;
 		flex: 1 1 12rem;
 		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.level {
+		flex: 1 1 100%;
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--text-2);
 		overflow-wrap: anywhere;
 	}
 	.mark {

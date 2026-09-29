@@ -481,7 +481,10 @@ keeps that record.
   and the warning says which. Natural flow a caller supplies
   (`runModelWith`) gets the plain "more runoff than rainfall" warning.
 - **Days with no rainfall value** from any source are counted: the model treats
-  them as dry (0 mm), for runoff and for demand.
+  them as dry (0 mm), for runoff and for demand. Since engine 1.16.0 the
+  warning names their date ranges (the first three, then how many more
+  periods) and how many fall in the reporting window, so a reader sees when
+  "this week" ran on blank days (a logger outage before a forecast).
 - The recession-table check (W4) went with the model.
 
 The same sheet also:
@@ -2904,10 +2907,11 @@ regression suite is unchanged.
 | `priority` | `first` (before the unit's crops), `shared` (pro rata with them), `last` (after them) |
 | `destination` | `internal`: used in the catchment. `external`: piped out, so nothing returns (a return share there is refused on save) |
 | `enabled` | false keeps it on record without modelling it |
+| `schedule` | date windows with a factor on its daily demand, 0 = off (engine ≥ 1.17.0, migration 100; below); null or empty = every day at its month's demand |
 
 **Each day**, on a unit with objects (§2.7's columns; o_k is object k's demand
 today, its month's value × the node's demand factor from the day it applies,
-as for the crop requirement, issue #53 R1):
+as for the crop requirement, issue #53 R1, × its schedule's factor that day):
 
 ```
 D   = F / e + Σ o_k                         (the unit's abstraction demand)
@@ -2942,10 +2946,45 @@ conservative reading where it didn't settle them):
   reconciliation strategy's AADD usually includes losses, so only a demand
   sized per unit is grossed up. Where distribution losses go (to the river or
   out of the catchment) is not modelled: they are consumed.
-- *No daily on/off yet.* The schedule (date windows with a factor, an
-  uploaded factor series, and the reason a day is off) is a follow-up
-  ([followups.md](./followups.md) "Demand objects: the daily schedule"); a
-  monthly profile covers the seasonal part.
+- *Off means no demand.* A day the schedule switches off (factor 0) has
+  no demand, so no supply and nothing returned: the "not needed" reading.
+  The client has said the switch is set by date (issue #90 Q12); what
+  causes off days, whether an off day can instead mean "supplied from
+  elsewhere" (no river take, the return goes on) or "curtailed" (a
+  shortfall), and whether a treatment works keeps discharging while its
+  user is off the river are still open, so no off *reason* is modelled
+  ([followups.md](./followups.md) "Demand objects: the off reason").
+
+**The schedule** (engine ≥ 1.17.0, issue #90 Q4 and Q12, `network/demandSchedule.ts`).
+The client's answer: the daily pattern depends on the demand type, fixed
+for a town, varying for irrigation, and it is set by date, not by river
+flow. So an object carries a list of windows, each a set of days and a
+factor on the object's demand on those days (0 = off, above 1 a peak, at
+most 10). A window covers:
+
+| `span` | Days |
+| --- | --- |
+| `always` | every day (with weekdays: a weekly pattern, e.g. weekends off) |
+| `yearly` | `from`–`to` as MM-DD every year, inclusive; wraps the year end when `from` is later (`12-15`–`01-10`); `02-29` counts only in a leap year |
+| `range` | `from`–`to` as YYYY-MM-DD, once (a works shutdown) |
+| `easter` | `easterFrom`–`easterTo` whole days from Easter Sunday, −60 to 60 (−2 Good Friday, +1 Family Day), Western (Gregorian) Easter |
+
+and `weekdays` (ISO 1 = Monday … 7 = Sunday, null = all) narrows any span.
+The later of two windows that cover a day sets its factor, so a list reads
+top to bottom as "then, on these days, instead"; a day no window covers
+runs at 1. The factor multiplies the month's demand after the demand factor:
+o_k(t) = monthly_k[m] × df[m] × s_k(t). An object's schedule ranges over
+at most 24 windows. A window the run can't use (a bad date, a factor out of
+range, an Easter span past 60 days) is refused on save and skipped with a
+warning by the run. A schedule that changes no day (every factor 1, or
+windows outside the run) runs to the bit as no schedule.
+
+*Not built yet:* an uploaded daily factor series (a meter record of which
+days a works ran) needs an object-scoped series kind, its upload through
+Add data and its storage; it's a follow-up
+([followups.md](./followups.md) "Demand objects: an uploaded daily factor
+series"), to be built when a client has such a record. Flow-triggered
+switching stays with the hands-off-flow rule (WP-3.8).
 - *Not scaled per category.* A scenario's `demand.scale` on a unit scales its
   crops and its objects alike; the client wants every category cut by the
   same % (#53 O4, issue #90), so no per-category restriction is planned, and
@@ -2960,10 +2999,12 @@ conservative reading where it didn't settle them):
 **Outputs** (only on a unit with an enabled object): per object the series
 `object_demand@<id>` and `object_supplied@<id>`, and
 `FarmSummary.demandObjects` (each one's mean demand, supply, deficit, fraction
-supplied, return and days short). The unit's `demand`, `supplied`, `deficit`
+supplied, return and days short, and, on an object with a schedule, its
+days off, engine ≥ 1.17.0; a day off is never a day short). The unit's `demand`, `supplied`, `deficit`
 and `return_flow` are its crops' and objects' together, labelled so.
 
-**Checks.** `checkWorkings` recomputes each object's demand from the model,
+**Checks.** `checkWorkings` recomputes each object's demand from the model
+(its schedule included),
 checks D = F / e + Σ o_k, 0 ≤ G_k ≤ o_k, Σ G_k ≤ G, the class order (no later
 class gets water while an earlier one is short) and equal shares within a
 class, and T from the parts; `checkBalance` closes the unit with that T; the
@@ -2971,10 +3012,12 @@ EWR attribution check uses G − T as the unit's consumptive use. The fuzz
 generator gives 25 % of networks up to three objects on half their units
 (monthly or per unit, any class, any return share, some piped out, some
 switched off, now and then one on a gauge or user, which the run skips with a
-warning); the doubled-crop-area law doubles the objects' demand too, since a
+warning), and half the objects a schedule of up to four windows of every
+span, overlapping, from off to a peak (engine ≥ 1.17.0); the doubled-crop-area law doubles the objects' demand too, since a
 fixed demand beside a growing one can legitimately raise a unit's whole-run
 supply fraction. Hand examples: `run.demandObjects.test.ts`,
-`network/demandObjects.test.ts`.
+`network/demandObjects.test.ts`, `network/demandSchedule.test.ts` (Easter
+dates, the year-end wrap, 29 February, overlap order).
 
 ### 2.8 Outputs
 
@@ -4845,11 +4888,12 @@ before 0.35.0 have neither field (all seepage returned then).
 
 ### 2.12 Allocations: modelled use vs registered volume (roadmap WP-3.10)
 
-Not part of the workbook, and not part of `runModel`: `compareAllocations`
-(`packages/engine/src/allocations/compare.ts`) reads a stored run's series and
-the project's registered volumes and returns a comparison. A run's output
-doesn't change, so `ENGINE_VERSION` doesn't move. The data, the import and the
-wording rules are in [allocations.md](./allocations.md).
+Not part of the workbook. `compareAllocations`
+(`packages/engine/src/allocations/compare.ts`) reads a run's series and the
+project's registered volumes and returns a comparison: the Allocations tab
+calls it on a stored run, and since engine 1.18.0 `runModel` calls it too, for
+`RunSummary.allocations`, when the input carries allocations (§2.12a). The
+data, the import and the wording rules are in [allocations.md](./allocations.md).
 
 For each farm or water user *n*, water source *s* and water year *y*
 (October–September, labelled by the year it starts in; `waterYearOf`), over
@@ -4898,7 +4942,8 @@ the days *D(y)* of *y* inside the run:
   exactly *V(a)*; a run that covers part of the year, or a validity window
   that starts or ends in it, gives the prorated volume.
 - ratio = *M* ÷ *R* (none when *R* = 0), and a status with tolerance *τ*
-  (default 0.1, pending the hydrologist): **over** *M* > *R*(1 + *τ*),
+  (`settings.allocationTolerance`, engine ≥ 1.18.0, default 0.1, pending the
+  hydrologist; the API's `?tolerance=` overrides it for one request): **over** *M* > *R*(1 + *τ*),
   **under** *M* < *R*(1 − *τ*), **within** otherwise; with *R* = 0,
   **unregistered** if *M* > 0, else **none**. Quantities below 10⁻⁶ m³ count
   as 0.
@@ -4917,10 +4962,115 @@ once; the groundwater side alone equals Σ `groundwater_used` + Σ
 `river_abstraction`; every run day falls in exactly one water year; and the
 result is the same at UTC+14 and UTC−11.
 
-Not built yet: the engine settings `allocationMode` = `cap` (supply limited
-so cumulative supply within a water year ≤ the allocation) and
-`fullAllocation` (demand replaced by the allocation), which will change
-`runModel` and bump `ENGINE_VERSION` (followups.md § Allocations).
+### 2.12a Allocations and full-allocation runs (engine ≥ 1.18.0, issue #72)
+
+`settings.allocationMode` makes the registered volumes part of the run
+(`packages/engine/src/allocations/mode.ts`; `ENGINE_VERSION` 1.18.0). The
+backend puts the project's allocations on every run's input
+(`ProjectModel.allocations`: id, unit, source, volume, storage, validity and
+the licence conditions; never a name, registration number or property), so a
+stored run replays with the volumes it ran on and the run comparison's input
+diff lists a volume added, changed or removed. Allocations that don't read (a
+volume that isn't a number ≥ 0, an unknown source, dates that aren't ISO days
+in order) are left out with a warning; the ones matched to a farm or water
+user of the run are used, in id order (so a unit's volume sums to the same
+bits whatever order they came in).
+
+- **`none`** (the default, and every run before 1.18.0): nothing changes but
+  the summary. A run whose input has allocations reports
+  `RunSummary.allocations`: the mode, the band *τ*, how many allocations it
+  used and how many weren't matched, and per unit with an allocation and per
+  water source it has one for, §2.12's whole-year figures (`wholeYears`,
+  `yearsOver`, the mean modelled use and registered volume per whole year).
+  The per-year detail stays in the Allocations tab's comparison (a summary of
+  60 units × 40 years × 2 sources would be most of a megabyte).
+- **`cap`**: each unit's use per water year stays within what is registered
+  for it, per source:
+
+  ```
+  budget(n,s,y) = Σ over n's allocations a of source s: V(a) × |L(y) ∩ [validFrom(a), validTo(a)]| ÷ |L(y)|
+  surface use   = G − GW          (the dam, the river pump and off-take water used; §2.7d–§2.7e, §2.6a)
+  groundwater   = GW + GWd        (to the crop and into the dam)
+  room(t)       = MAX(0, budget(y) − use so far in y),  at the start of day t
+  ```
+
+  with *L(y)* the whole water year, not only its days inside the run, so a
+  run that starts or ends inside a year doesn't shrink it, and a unit may take
+  its volume early in the year and then go without (that is what a volume per
+  year allows). On a day the unit's own sources give at most the room: off-take
+  water used is MIN(what arrived, D, surface room) and the rest flows on; the
+  river pump and the dam together give at most the surface room left
+  (`surfaceSplit` on MIN(D left, room)); every pumping unit, the dam-target
+  ones included, pumps within the groundwater room left, and a dam-target
+  unit pumps only for the demand the capped surface can still draw. The
+  supplemental and emergency boreholes then cover what the capped surface
+  can't, within their own room: a unit with a small surface volume and a
+  groundwater one turns to its boreholes. Water not taken stays in the dam or
+  the river. A source with no allocation isn't capped (a warning names the
+  units without any, and a unit with boreholes but no groundwater volume).
+  The run stores each capped source's room (`allocation_room_surface`,
+  `allocation_room_groundwater`, m³ at the start of the day), and
+  `RunSummary.allocations` lists per source the water years the cap bound
+  (`capReached`: use within 10⁻⁹ of the budget).
+
+  The cap counts every draw from the dam as surface use, groundwater pumped
+  into it included: §2.12's netting (a pumped m³ drawn back out isn't a
+  second, surface take) needs the whole year's pumping and drawing, which a
+  day-by-day limit doesn't have. So under the cap such water uses up both
+  volumes; the comparison still nets it, and reads the unit below its
+  surface volume by that much. Pending the hydrologist, with dam filling vs
+  registered storage (s21b, issue #90).
+- **`fullAllocation`**: "what if every lawful user took their entitlement",
+  the background run of a cumulative assessment (WP-3.11). Each unit's
+  abstraction demand D = F / e + its demand objects' (a water user's own
+  demand) is scaled, water year by water year, by
+
+  ```
+  k(n,y) = Σ over n's allocations a (both sources): V(a) × |D(y) ∩ [validFrom(a), validTo(a)]| ÷ |L(y)|  ÷  Σ over D(y) of D
+  ```
+
+  over the run's days *D(y)* of the year (a part year asks for the prorated
+  volume), so it asks for exactly its registered volume and keeps its own
+  seasonal shape; the crop requirement F and every demand object scale by the
+  same *k*, and the soil-water store and effective rain are untouched (they
+  set the shape). A senior water user is scaled before its demand is passed
+  to the farms upstream (§2.7c), so they pass the scaled demand. A year with
+  no demand can't be scaled and asks for nothing (a warning names the unit
+  and year); a unit without a volume keeps its modelled demand (a warning
+  names them). What the unit is then supplied is the model's, as always. The
+  run stores *k* as `allocation_demand_factor`, and `RunSummary.allocations`
+  lists per unit and year the demand before and the volume it was scaled to
+  (`scaled`).
+
+Licence conditions (the months of use, a maximum rate, conditions in words;
+migration 103) ride on the input but neither mode applies them yet
+(followups.md § Allocations).
+
+**Warm starts** (§2.16): a snapshot keeps each capped unit's use so far in
+the water year (`allocationUsedM3`) and a full allocation's factor for the
+year in progress (`allocationFactor`), so a resumed run's days are the
+uninterrupted run's to the bit (`warmstart.invariants.test.ts`, whose random
+networks carry allocations in every mode).
+
+**Yield** (§2.13): the probed dam's own cap is taken off (a yield is what the
+dam can give, not what is registered); the other units keep theirs. Automatic
+calibration (§2.10b) builds its network plan the same way, so a project set
+to cap or full allocation is fitted against the flows the mode produces.
+
+**Checks** (`verify/checks.ts` `checkAllocations`, the `allocations` self-check
+on every saved run, and the engine fuzz with allocations in a quarter of its
+networks): a room column only for a capped source, falling by exactly the
+day's use within a water year and starting again at the recomputed budget on
+1 October, never below 0, and the day's use never above it; a full
+allocation's factor constant within a year and each scaled unit's demand over
+the run's days of a year equal to the volume registered over them; no mode
+column in a run of another mode; and `RunSummary.allocations` equal to
+`compareAllocations` of the run's own series. The day replays in the balance
+and workings checks (the user's river take, the farm's dam, river pump,
+off-take and boreholes) read the room columns and the factor. The
+"doubling crop areas never raises the supply fraction" property is checked
+with the mode off: a full allocation holds allocated demand fixed and a cap
+ties supply to the volume, so neither keeps it.
 
 ### 2.13 Firm yield and storage–yield (engine ≥ 0.34.0, roadmap WP-3.6)
 
@@ -5531,7 +5681,11 @@ can store one per base run. The state holds:
   when 0; §2.7d), whether the
   river pump was on the day before (the trigger rule, §2.7e) and each
   pumping unit's volume so far this water year (the annual caps; a
-  resumed run clears them on 1 October as an uninterrupted one does);
+  resumed run clears them on 1 October as an uninterrupted one does), and
+  from engine 1.18.0 (§2.12a) an allocation cap's surface and groundwater
+  use so far this water year (`allocationUsedM3`) and a full allocation's
+  demand factor for the water year in progress (`allocationFactor`), each
+  left out without one;
 - per Reserve rule table, the natural and impacted flow of the calendar
   month the day falls in, from its first day to the day before, so a month
   split by the snapshot is still assessed whole (§2.9c); with low flows on

@@ -5,7 +5,10 @@
 // carries each dam's figures in its summary (FarmSummary.dam*, issue #55;
 // damLevelsFromSummary); an older run's series are fetched (runs/cache.ts) and
 // reduced here by damLevel(), the same rules as the engine's damFigures().
-import { fromEpochDay, toEpochDay, type DailySeries, type FarmSummary } from '@water-management/engine';
+// On a forecast run the figures are the record's (issue #51): the summary's
+// are, and damLevel() stops the series at `forecastFrom`, so "at the end" is
+// the day before the forecast, never a forecast day.
+import { beforeForecast, fromEpochDay, toEpochDay, type DailySeries, type FarmSummary } from '@water-management/engine';
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
@@ -34,14 +37,16 @@ export const AGO_DAYS = 30;
 
 /**
  * One dam's levels, or null when the series has no finite value or the dam
- * no capacity. Values are m³; the result is % of capacity.
+ * no capacity. Values are m³; the result is % of capacity. A forecast run's
+ * days from `forecastFrom` on are left out.
  */
 export function damLevel(
 	dam: { nodeId: string; name: string; capacityM3: number; minPct: number },
-	series: DailySeries
+	series: DailySeries,
+	forecastFrom: string | null = null
 ): DamLevel | null {
 	if (!(dam.capacityM3 >= 1)) return null;
-	const v = series.values;
+	const v = beforeForecast(series.values, series.startDate, forecastFrom);
 	let last = -1;
 	for (let i = v.length - 1; i >= 0; i--) {
 		const x = v[i];
@@ -141,8 +146,9 @@ export function damsInRun(
 
 /**
  * Each dam's levels from the run summary (engine ≥ 1.2.0, issue #55), with no
- * series to fetch; `endDate` is the run's last day (the engine's storage has a
- * value every day). null when any dam lacks the figures (a run saved before
+ * series to fetch; `endDate` is the last day the summary covers (the engine's
+ * storage has a value every day): the run's last day, or on a forecast run
+ * the day before the forecast (latestRun.ts historyEnd). null when any dam lacks the figures (a run saved before
  * them): the caller falls back to the series (loadDamLevels). Emptiest first.
  */
 export function damLevelsFromSummary(
@@ -192,7 +198,8 @@ export async function loadDamLevels(
 	dams: readonly { nodeId: string; name: string; capacityM3: number; minPct: number }[],
 	get: (nodeId: string) => Promise<DailySeries>,
 	atOnce = 4,
-	onDone?: (done: number) => void
+	onDone?: (done: number) => void,
+	forecastFrom: string | null = null
 ): Promise<DamLevel[]> {
 	const out: DamLevel[] = [];
 	let next = 0;
@@ -200,7 +207,7 @@ export async function loadDamLevels(
 	const worker = async () => {
 		while (next < dams.length) {
 			const d = dams[next++]!;
-			const l = damLevel(d, await get(d.nodeId));
+			const l = damLevel(d, await get(d.nodeId), forecastFrom);
 			if (l) out.push(l);
 			onDone?.(++done);
 		}

@@ -89,6 +89,7 @@ describe('modelRuleIssues', () => {
 			note: '',
 			...over
 		});
+		const win = (over: object = {}) => ({ label: '', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: null, factor: 0, ...over });
 		const m = {
 			nodes: [n('g', 'gauge', null), n('f', 'farm', 'g'), n('u', 'user', 'g')],
 			crops: [],
@@ -103,10 +104,13 @@ describe('modelRuleIssues', () => {
 				o('lost', 'zz'),
 				o('short', 'f', { monthlyM3Day: [1, 2] }),
 				o('noCount', 'f', { sizing: 'perUnit', monthlyM3Day: null }),
-				o('ext', 'f', { destination: 'external', returnPct: 0.3 })
+				o('ext', 'f', { destination: 'external', returnPct: 0.3 }),
+				// A schedule (engine 1.17.0): one good window and one bad; and one with too many windows.
+				o('sched', 'f', { schedule: [win({ weekdays: [6, 7] }), win({ span: 'yearly', from: '12-01', to: null })] }),
+				o('many', 'f', { schedule: Array.from({ length: 25 }, () => win()) })
 			]
 		} as unknown as ProjectModel;
-		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['doExternal:ext', 'doKind:onGauge', 'doKind:onUser', 'doMonthly:short', 'doNode:lost', 'doPerUnit:noCount', 'dup:demand object id:ok']);
+		expect([...modelRuleIssues(m).keys()].sort()).toEqual(['doExternal:ext', 'doKind:onGauge', 'doKind:onUser', 'doMonthly:short', 'doNode:lost', 'doPerUnit:noCount', 'doSchedule:sched:1', 'doScheduleCount:many', 'dup:demand object id:ok']);
 	});
 
 	it('supply rules (WP-3.8): a farm’s; trigger needs a dam; run of river has none; stop ≥ trigger', () => {

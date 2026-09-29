@@ -36,7 +36,7 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's and the RLS role check's).
+  query's, the RLS role check's and the Step 2 60-farm load checks).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
@@ -116,7 +116,7 @@ pnpm test:engine | test:frontend | test:backend   # test:backend includes the ro
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
@@ -131,6 +131,7 @@ pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked
 
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in, no auto-merge for actions or docker) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
+pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
@@ -228,6 +229,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/testing.md`: which test command when, and how long each takes
+- `docs/contributing.md`: the git workflow for sessions sharing a checkout, code organization, the root scripts format, and which files the templates repo owns; `.claude/README.md`: the Claude agents and commands
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/design/ui-playbook.md`: how screens are designed, built and tested (process, layout rules, reusable pieces, testing traps; the `ui-designer` agent works from it)

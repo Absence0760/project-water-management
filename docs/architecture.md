@@ -742,7 +742,8 @@ Settings → Automatic runs.
 - **The run** (`jobs/handlers/rerun.ts`, payload `trigger: 'auto'`): does
   nothing if the project turned automatic runs off since; otherwise
   `executeRun(db, id, autoRunLabel, 'auto')`, labelled `Auto · data to
-  <last observed day>` (the forecast series doesn't count), stored with
+  <last recorded rain day>` (the last catchment or CHIRPS value: neither the
+  forecast nor observed flow, which can run months past the rain), stored with
   `model_run.trigger = 'auto'`, then `trimRuns`, which caps each trigger
   apart: the newest unkept auto run replaces the older one, and never pushes
   a person's run out ([data-model.md](./data-model.md), **Run output volume**).
@@ -761,9 +762,16 @@ Settings → Automatic runs.
   An issue the observed rain has overtaken (no forecast day after the last
   observed one) leaves nothing to run: the job ends done, with no run. Never
   auto-published, whatever `autoRun.publish` says: a forecast is guidance,
-  and publishing one stays a person's act. Only a feed's forecast queues
-  one: a person who uploads a forecast runs it from the Runs tab (Run
-  forecast), and an API key's ingest carries observed data.
+  and publishing one stays a person's act. A feed's new forecast days queue
+  one; so does new **recorded rain**, whatever brought it (a key's push, a
+  CHIRPS or gauge update, an upload): the auto re-run, when its project's
+  newest forecast run was made before the catchment or CHIRPS rain last
+  changed (`runs/autoRun.ts` `forecastRunBehindRain`), queues the forecast
+  run again, since its history, and so its starting states, are out of date
+  (after a logger outage it would run weeks of since-recorded days as dry).
+  Observed flow only scores a run and queues none. A person who uploads a
+  forecast runs it from the Runs tab (Run forecast); that run, like a
+  scheduled one, queues the alert check (`runs/routes.ts`).
 - **Publication stays a person's act** (roadmap D5): the Overview offers
   the editor "New auto run: publish?". A project may opt in to
   `publish: 'if_no_new_warnings'` (`publish/autoPublish.ts`): the auto run
@@ -799,7 +807,8 @@ flowchart LR
 ```
 
 1. **Queue.** `alerts/queue.ts` queues an `alert_eval` (one pending per
-   project) after an auto or forecast run, after a person publishes or
+   project) after an auto or forecast run (a forecast run made by hand
+   too), after a person publishes or
    changes the restriction notice, and when an editor changes the rules.
    The tick queues the checks no run causes (a feed going stale or failing,
    dead jobs) through `app_alert_schedule`: hourly for projects with those
@@ -808,7 +817,8 @@ flowchart LR
    RLS). Values come from the current publication (dam level: the farm's
    published projection, and its published forecast's lowest), the newest
    forecast run (EWR days at risk; skipped while an API key's anomalous push
-   is held), the data feeds (staleness per feed, each at its own level) and
+   is held, and while that run is behind the recorded rain: its
+   `lastObserved` before the rain's last recorded day), the data feeds (staleness per feed, each at its own level) and
    the dead jobs. `alerts/rules.ts` decides
    with hysteresis: open an event on crossing, clear it only after recovery
    past the margin. A restriction notice is an event per change. Each newly

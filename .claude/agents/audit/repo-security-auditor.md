@@ -99,7 +99,7 @@ Every finding cites the documented control it breaks (`docs/security.md §
 | `ssrf` | Boundary 5, fetcher and renderer | `feeds/`, `lambda-fetcher.ts`, `lambda-renderer.ts`, `reports/` |
 | `queues` | Message validation in the worker, acting-user re-check, poison messages, cross-project job ids | `jobs/`, `lambda-worker.ts`, `feeds/ingest.ts` |
 | `ci` | Boundary 6 | `.github/workflows/`, `infra/oidc.tf`, `scripts/guards/check_workflows.mjs` |
-| `public-repo` | Boundary 7, including fixtures that look real | `fixtures/`, `scripts/wbt-import/fixtures/`, `e2e/`, `docs/` |
+| `public-repo` | Boundary 7, including fixtures that look real | `backend/fixtures/`, `scripts/wbt-import/fixtures/`, `e2e/`, `docs/` |
 | `all` | Every area above, briefly; go deep only where something smells | |
 
 ## How to work

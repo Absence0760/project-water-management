@@ -9,6 +9,7 @@ import { actAsUser, withoutUser, withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { resetPasswordMail, siteLink, verifyEmailMail } from '../mail/templates.js';
 import { trySendMail, type Mail } from '../mail/transport.js';
+import { answerAlike } from './accountMail.js';
 import { requireUser, type AuthEnv } from './middleware.js';
 import { hashPassword } from './password.js';
 import { clearSession } from './session.js';
@@ -84,25 +85,28 @@ export async function verificationMail(
 }
 
 export const emailAuthRoutes = new Hono<AuthEnv>()
-	// Always 202 with the same body, whether or not the address has an account,
-	// so the endpoint can't be used to discover accounts, and whether or not a
+	// Always 202 with the same body, after the same time, whether or not the
+	// address has an account, so the endpoint can't be used to discover
+	// accounts (answerAlike, auth/accountMail.ts), and whether or not a
 	// limit held the email back. Throttled per address through the token table
 	// (one mail per cooldown window) and the daily cap (078), on which a
 	// browser trusted for the address counts on its own allowance.
 	.post('/forgot-password', async (c) => {
 		const body = z.object({ email }).parse(await readJson(c));
-		const mail = await withoutUser(async (db) => {
-			// app_user is under RLS (068) and nobody is signed in: the one-address lookup.
-			const { rows } = await db.query<{ id: string; email: string; locale: string | null }>(
-				'SELECT id, email, locale FROM app_auth_account($1)',
-				[body.email]
-			);
-			const user = rows[0];
-			if (!user) return null;
-			const issued = await issueEmailToken(db, user.id, 'reset', await requestDevice(c, db, user.id, user.email));
-			return 'token' in issued ? resetPasswordMail(user.email, siteLink('/reset-password', issued.token), user.locale) : null;
-		});
-		if (mail) await trySendMail(mail);
+		// The same time for a known and an unknown address too: the send isn't awaited (auth/accountMail.ts).
+		await answerAlike(() =>
+			withoutUser(async (db) => {
+				// app_user is under RLS (068) and nobody is signed in: the one-address lookup.
+				const { rows } = await db.query<{ id: string; email: string; locale: string | null }>(
+					'SELECT id, email, locale FROM app_auth_account($1)',
+					[body.email]
+				);
+				const user = rows[0];
+				if (!user) return null;
+				const issued = await issueEmailToken(db, user.id, 'reset', await requestDevice(c, db, user.id, user.email));
+				return 'token' in issued ? resetPasswordMail(user.email, siteLink('/reset-password', issued.token), user.locale) : null;
+			})
+		);
 		return c.json({ ok: true }, 202);
 	})
 	// Sets a new password, marks the address verified (the link proved the

@@ -77,7 +77,7 @@ export interface ScenarioResult {
  *    and a rule an op breaks because of hidden data (a hidden item, a hidden
  *    node's hidden values, the catchment's flow shares or area while any
  *    node is hidden) reported only as `doesn't apply to the catchment as
- *    modelled` (MASKED_RULE; the wording is pending the client, issue #50).
+ *    modelled` (MASKED_RULE; the wording is pending the client, issue #90).
  *
  * Afterwards each hidden item gets its real id and name back: a name an op
  * gave a visible item suffixes the hidden one (`renamed`), and an id an op
@@ -92,7 +92,7 @@ export interface ScenarioMask {
 	boreholes?: readonly string[];
 }
 
-/** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #50). */
+/** What a masked rule reads: says nothing of the hidden data that broke it. Pending the client (issue #90). */
 export const MASKED_RULE = "doesn't apply to the catchment as modelled";
 
 export interface MaskedRename {

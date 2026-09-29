@@ -84,6 +84,7 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'report_schedule.acting_user_id': { excluded: 'the project’s schedule; report_schedule.configured is in auditEvents' },
 	'report_schedule.created_by': { excluded: 'the project’s schedule; report_schedule.configured is in auditEvents' },
 	'report_schedule_recipient.user_id': { section: 'reportSubscriptions' },
+	'revoked_session.user_id': { excluded: 'ids of sessions the person signed out, no other data; kept until the token would have expired, 7 days at most' },
 	'run_nomination.nominated_by': { excluded: 'the project’s evidence nomination; its maker only' },
 	'run_publication.published_by': { excluded: 'the project’s publication; publication.published is in auditEvents' },
 	'run_publication.updated_by': { excluded: 'the project’s publication; its last editor only' },
@@ -130,6 +131,7 @@ async function farmSection(db: Db, link: FarmLinkRow) {
 		`SELECT a.id, h.user_display AS "holderName", a.registration_no AS "registrationNo", a.property_ref AS "propertyRef",
 			a.authorisation, a.purpose, a.water_source AS "waterSource", a.volume_m3_year AS "volumeM3Year",
 			a.storage_m3 AS "storageM3", a.valid_from::text AS "validFrom", a.valid_to::text AS "validTo", a.reference,
+			a.months::int[] AS months, a.max_rate_m3s AS "maxRateM3s", a.conditions,
 			a.created_at AS "createdAt", a.updated_at AS "updatedAt"
 		 FROM allocation a LEFT JOIN allocation_holder h ON h.allocation_id = a.id
 		 WHERE a.project_id = $1 AND a.node_id = $2
@@ -152,7 +154,7 @@ async function farmSection(db: Db, link: FarmLinkRow) {
 				notice: cur.notice
 			},
 			nextExpectedOn: cur.next_expected_on,
-			figures: await farmerProjection(db, link.projectId, cur.view)
+			figures: await farmerProjection(db, link.projectId, link.nodeId, cur.view)
 		};
 	}
 	return { ...link, allocations, publication };

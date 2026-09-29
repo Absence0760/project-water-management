@@ -32,6 +32,7 @@ import { opsSha256 } from '../src/scenarios/schema.js';
 import { buildExamples } from './examples/catchments.js';
 import { findOwnedProject, importProjectData } from './import-project.js';
 import { hashPassword } from '../src/auth/password.js';
+import { LEGAL_VERSION } from '@water-management/engine/legal';
 
 
 // DEV-ONLY demo credentials — these users exist only in local docker Postgres.
@@ -60,6 +61,21 @@ async function ensureUser(u: { email: string; password: string; displayName: str
 		return created;
 	});
 }
+
+/**
+ * The demo accounts accept the terms in force (LEGAL_VERSION), as a person
+ * signing up does: otherwise the app puts the re-acceptance step in front of
+ * every page, and a scheduled report's editor shows it to nobody. Run on
+ * every seed, so a re-seed after a terms change brings them up to date.
+ */
+async function acceptCurrentTerms(emails: readonly string[]) {
+	for (const email of emails) {
+		const id = await withoutUser(async (db) => (await db.query<{ id: string }>('SELECT id FROM app_auth_account($1)', [email])).rows[0]?.id);
+		if (!id) continue;
+		await withUser(id, (db) => db.query('UPDATE app_user SET terms_version = $2 WHERE id = $1 AND terms_version IS DISTINCT FROM $2', [id, LEGAL_VERSION]));
+	}
+}
+const SEEDED = () => [DEMO.email, ANALYST.email, ...FARMERS.map((f) => f.email), APPLICANT.email];
 
 /** Make `email` a farmer (or a contributor) on the project, linked to the named farm, as the project's owner would. */
 async function linkFarmer(ownerEmail: string, projectId: string, farmerId: string, farm: string, role: 'farmer' | 'contributor' = 'farmer') {
@@ -136,6 +152,7 @@ export async function seedExamples(): Promise<string[]> {
 		[sandspruit!.name, ANALYST.email]
 	]);
 	if (existing) {
+		await acceptCurrentTerms(SEEDED());
 		console.log('✓ the example catchments already exist: skipped');
 		return existing;
 	}
@@ -166,6 +183,7 @@ export async function seedExamples(): Promise<string[]> {
 		for (const [catchment, farm] of f.farms) await linkFarmer(byName[catchment].owner, byName[catchment].id, id, farm);
 	}
 	await seedApplication(byName[APPLICANT.catchment]);
+	await acceptCurrentTerms(SEEDED());
 	return ids;
 }
 

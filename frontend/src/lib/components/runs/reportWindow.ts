@@ -73,44 +73,102 @@ function fromDays(d0: number, a: number, b: number): ResolvedWindow {
 	return { from: a - d0, to: b - d0, reportStart: fromEpochDay(a), reportEnd: fromEpochDay(b), days: b - a + 1 };
 }
 
+/** A run as the window needs it: its days, and (GET …/runs/:runId) its input snapshot and forecast. */
+export interface WindowRun {
+	startDate: string;
+	endDate: string;
+	inputSeries?: Partial<Record<string, { startDate: string; length: number }>> | null;
+	summary?: { forecast?: { from: string } | null } | null;
+	/** A forecast run's first forecast day (RunMeta.forecastFrom, WP-2.12); the summary's `forecast.from` says the same. */
+	forecastFrom?: string | null;
+}
+
+/** A forecast run's first forecast day, from the run's meta or its summary; null for an ordinary run. */
+const forecastStart = (run: WindowRun): string | null => run.forecastFrom ?? run.summary?.forecast?.from ?? null;
+
+/**
+ * The run's last day of recorded rain, clamped to the run: the day before a
+ * forecast run's first forecast day, else the last day of the catchment or
+ * CHIRPS series in its input snapshot, else (an older payload) its last day.
+ * The publication counts its "last 7 / 30 days" to the same day (backend
+ * publish.ts loadProjectionRun `observed_until`, publish/recent.ts), so the
+ * portfolio's "N short this week" and the page it links to count the same 7
+ * days, and days after the rain (run as dry) are never "this week".
+ */
+export function runDataUntil(run: WindowRun): string {
+	const d0 = toEpochDay(run.startDate);
+	const d1 = toEpochDay(run.endDate);
+	let end: number | null = null;
+	const from = forecastStart(run);
+	if (from) end = toEpochDay(from) - 1;
+	else {
+		for (const kind of ['rain_catchment_mm', 'rain_chirps_mm']) {
+			const s = run.inputSeries?.[kind];
+			if (!s || !(s.length > 0)) continue;
+			const e = toEpochDay(s.startDate) + s.length - 1;
+			if (end === null || e > end) end = e;
+		}
+	}
+	return fromEpochDay(end === null ? d1 : Math.min(d1, Math.max(d0, end)));
+}
+
 /**
  * Resolves a choice against one run (its first and last day) and the window
  * the run itself reported over (RunSummary.curtailment's, the project
- * setting as the run applied it). "Last N days" end on the run's last day,
- * or on a forecast run (`forecastFrom`, WP-2.12) on the last day before the
+ * setting as the run applied it). "Last N days" end on the run's last day of
+ * recorded rain (runDataUntil), with a note when the run goes on past it. On a
+ * forecast run (`forecastFrom`, WP-2.12) that is the last day before the
  * forecast (issue #51): the latest days of the record, never forecast days
- * read as "this week". "Whole record" and a custom range may still reach
- * into the forecast; forecastDaysIn says so.
+ * read as "this week". "Whole record" and a custom range end there too, with a
+ * note: a forecast run's historical figures never average over its forecast
+ * days (the forecast has its own card). On an ordinary run whose forecast
+ * rain filled days after the record, forecastDaysIn says how many are in.
  */
-export function resolveWindow(
-	choice: WindowChoice,
-	run: { startDate: string; endDate: string; forecastFrom?: string | null },
-	own: { reportStart: string; reportEnd: string }
-): WindowResolution {
+export function resolveWindow(choice: WindowChoice, run: WindowRun, own: { reportStart: string; reportEnd: string }): WindowResolution {
 	const d0 = toEpochDay(run.startDate);
 	const d1 = toEpochDay(run.endDate);
+	const from = forecastStart(run);
+	// The record's last day: the day before a forecast run's forecast, else the run's.
+	const rec = from ? Math.min(d1, Math.max(d0, toEpochDay(from) - 1)) : d1;
+	const beforeForecast = `It ends on ${fromEpochDay(rec)}, the last day before the forecast.`;
 	if (choice.preset === 'project') return { ok: true, window: fromDays(d0, toEpochDay(own.reportStart), toEpochDay(own.reportEnd)), note: null };
-	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, d1), note: null };
+	if (choice.preset === 'all') return { ok: true, window: fromDays(d0, d0, rec), note: rec < d1 ? beforeForecast : null };
 	const n = LAST_DAYS[choice.preset];
 	if (n) {
-		const last = run.forecastFrom ? Math.max(d0, Math.min(d1, toEpochDay(run.forecastFrom) - 1)) : d1;
-		const a = Math.max(d0, last - n + 1);
-		const w = fromDays(d0, a, last);
-		const short = w.days < n ? `The run has only ${w.days} day${w.days === 1 ? '' : 's'}${last < d1 ? ' before the forecast' : ''}, so this covers all of it.` : null;
-		const forecast = last < d1 ? `It ends on ${fromEpochDay(last)}, the last day before the forecast.` : null;
-		return { ok: true, window: w, note: [short, forecast].filter(Boolean).join(' ') || null };
+		const until = runDataUntil(run);
+		const e = toEpochDay(until);
+		const a = Math.max(d0, e - n + 1);
+		const w = fromDays(d0, a, e);
+		const forecast = e < d1 && forecastStart(run) !== null;
+		const notes = [
+			w.days < n
+				? `The run has only ${w.days} day${w.days === 1 ? '' : 's'}${forecast ? ' before the forecast' : ' of recorded rain'}, so this covers all of it.`
+				: null,
+			e < d1
+				? forecast
+					? beforeForecast
+					: `Ends on the last day of recorded rain, ${until}; the run goes on to ${run.endDate} without it.`
+				: null
+		].filter((x): x is string => x !== null);
+		return { ok: true, window: w, note: notes.length ? notes.join(' ') : null };
 	}
 	if (choice.preset !== 'custom') return { ok: false, error: 'Unknown window.' };
 	const a = toEpochDay(choice.start);
 	const b = toEpochDay(choice.end);
 	if (a > b) return { ok: false, error: 'The window must start before it ends.' };
 	if (b < d0 || a > d1) return { ok: false, error: `The window ${choice.start} to ${choice.end} is outside this run (${run.startDate} to ${run.endDate}).` };
+	if (a > rec) return { ok: false, error: `The window ${choice.start} to ${choice.end} is in the forecast: this run's record ends on ${fromEpochDay(rec)}.` };
 	const ca = Math.max(a, d0);
-	const cb = Math.min(b, d1);
+	const cb = Math.min(b, rec);
 	return {
 		ok: true,
 		window: fromDays(d0, ca, cb),
-		note: ca !== a || cb !== b ? `Cut to the run: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.` : null
+		note:
+			cb < Math.min(b, d1)
+				? `Cut to the record before the forecast: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+				: ca !== a || cb !== b
+					? `Cut to the run: ${fromEpochDay(ca)} to ${fromEpochDay(cb)}.`
+					: null
 	};
 }
 

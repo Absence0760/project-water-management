@@ -1,8 +1,9 @@
 // Inviting people who don't have an account yet (004_email.sql, invites.ts).
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
-import { anon, asOwner, lastMailTo, mailCount, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, asOwner, lastMailTo, mailCount, node, signUp, tokenIn } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
+import { INVITE_CAP } from './invites.js';
 import { SESSION_COOKIE, signSession } from '../auth/session.js';
 
 const newEmail = (tag: string) => `${tag}-${crypto.randomUUID()}@example.com`;
@@ -360,5 +361,99 @@ describe('team invites', () => {
 		const inviteId = (await admin.call('POST', `/teams/${teamId}/members`, { email, role: 'admin' })).body.invite.id;
 		expect((await admin.call('DELETE', `/teams/${teamId}/invites/${inviteId}`)).status).toBe(204);
 		expect((await admin.call('GET', `/teams/${teamId}/invites`)).body.invites).toEqual([]);
+	});
+});
+
+// Issue #51 (adversary finding 3): adding people by email is capped per
+// inviting user and per project or team a day (101_invite_throttle.sql,
+// INVITE_CAP), counted before the address is looked up, so a capped owner
+// learns nothing more about which addresses have accounts, and can't keep
+// mailing strangers the project's name. Refused adds count nothing.
+describe('the daily cap on adding by email (101_invite_throttle)', () => {
+	const bucket = (b: string) => asOwner('SELECT attempts FROM invite_throttle WHERE bucket = $1', [b]).then((r) => (r[0]?.attempts as number | undefined) ?? 0);
+	const fill = (b: string, n: number) => asOwner('UPDATE invite_throttle SET attempts = $2 WHERE bucket = $1', [b, n]);
+
+	it('counts every address added, whether it has an account or not (positive control: under the cap both go through)', async () => {
+		const owner = await signUp('CapOwner');
+		const known = await signUp('CapKnown');
+		const pid = await projectOf(owner);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).status).toBe(201);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: newEmail('capped-guest'), role: 'viewer' })).status).toBe(201);
+		expect(await bucket(`user:${owner.id}`)).toBe(2);
+		expect(await bucket(`project:${pid}`)).toBe(2);
+	});
+
+	it('answers 429 with Retry-After once a person’s day is used up, the same for a known and an unknown address, and counts nothing', async () => {
+		const owner = await signUp('CapFull');
+		const known = await signUp('CapKnown2');
+		const pid = await projectOf(owner);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: newEmail('first'), role: 'viewer' })).status).toBe(201);
+		await fill(`user:${owner.id}`, INVITE_CAP.perUser);
+		const unknown = newEmail('nobody');
+		const a = await anon('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' }, owner.cookie);
+		const b = await anon('POST', `/projects/${pid}/members`, { email: unknown, role: 'viewer' }, owner.cookie);
+		for (const r of [a, b]) {
+			expect(r.status).toBe(429);
+			expect(Number(r.headers.get('retry-after'))).toBeGreaterThan(0);
+		}
+		expect(a.body).toEqual(b.body);
+		expect(await bucket(`user:${owner.id}`)).toBe(INVITE_CAP.perUser);
+		// Nothing was added, invited or mailed.
+		expect(await asOwner('SELECT 1 FROM project_member WHERE project_id = $1 AND user_id = $2', [pid, known.id])).toEqual([]);
+		expect(await asOwner('SELECT 1 FROM invite WHERE email = $1', [unknown])).toEqual([]);
+		expect(mailCount(unknown)).toBe(0);
+		// The same person's other projects and teams, and the farmer routes, share the cap.
+		const other = await projectOf(owner, 'Another');
+		expect((await owner.call('POST', `/projects/${other}/members`, { email: newEmail('x'), role: 'viewer' })).status).toBe(429);
+		const team = (await owner.call('POST', '/teams', { name: 'Capped team' })).body.team.id as string;
+		expect((await owner.call('POST', `/teams/${team}/members`, { email: newEmail('t'), role: 'member' })).status).toBe(429);
+		// A window that is over starts again.
+		await asOwner(`UPDATE invite_throttle SET window_start = now() - interval '24 hours 1 second' WHERE bucket = $1`, [`user:${owner.id}`]);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: newEmail('next-day'), role: 'viewer' })).status).toBe(201);
+	});
+
+	it('caps a project for all its owners together', async () => {
+		const owner = await signUp('CapA');
+		const coOwner = await signUp('CapB');
+		const pid = await projectOf(owner);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: coOwner.email, role: 'owner' })).status).toBe(201);
+		await fill(`project:${pid}`, INVITE_CAP.perTarget);
+		expect((await coOwner.call('POST', `/projects/${pid}/members`, { email: newEmail('co'), role: 'viewer' })).status).toBe(429);
+		// Positive control: the co-owner's own day isn't used up, so another project of theirs still works.
+		const theirs = await projectOf(coOwner, 'Theirs');
+		expect((await coOwner.call('POST', `/projects/${theirs}/members`, { email: newEmail('co2'), role: 'viewer' })).status).toBe(201);
+	});
+
+	it('counts a bulk farmer add per address, a dry run too, and refuses one that would pass the cap', async () => {
+		const owner = await signUp('CapBulk');
+		const pid = await projectOf(owner);
+		const out = node('Outlet', null);
+		const farm = node('Hoek', out.id);
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [out, farm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const rows = [newEmail('b1'), newEmail('b2'), newEmail('b3')].map((email) => ({ email, farm: 'Hoek' }));
+		// The same address twice is one address.
+		const preview = await owner.call('POST', `/projects/${pid}/farmers/bulk`, { rows: [...rows, rows[0]], dryRun: true });
+		expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+		expect(await bucket(`user:${owner.id}`)).toBe(3);
+		await fill(`user:${owner.id}`, INVITE_CAP.perUser - 2);
+		expect((await owner.call('POST', `/projects/${pid}/farmers/bulk`, { rows })).status).toBe(429);
+		expect(await bucket(`user:${owner.id}`)).toBe(INVITE_CAP.perUser - 2);
+		expect((await owner.call('POST', `/projects/${pid}/farmers/bulk`, { rows: rows.slice(0, 2) })).status).toBe(200);
+		expect((await owner.call('POST', `/projects/${pid}/farmers`, { email: newEmail('one-more'), nodeIds: [farm.id] })).status).toBe(429);
+	});
+
+	it('lets only a project’s owner or a team’s admin count against it', async () => {
+		const owner = await signUp('CapGate');
+		const editor = await signUp('CapGateEditor');
+		const pid = await projectOf(owner);
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: editor.email, role: 'editor' })).status).toBe(201);
+		const attempt = (userId: string, kind: string, target: string) =>
+			withUser(userId, (db) => db.query(`SELECT app_invite_attempt($1, $2, 1, 300, 300, '24 hours') AS wait`, [kind, target]));
+		await expect(attempt(editor.id, 'project', pid)).rejects.toMatchObject({ code: '42501' });
+		await expect(attempt(editor.id, 'team', pid)).rejects.toMatchObject({ code: '42501' });
+		expect((await attempt(owner.id, 'project', pid)).rows[0].wait).toBe(0);
+		// Nobody reads or writes the table directly.
+		expect((await withUser(owner.id, (db) => db.query('SELECT * FROM invite_throttle'))).rows).toEqual([]);
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE invite_throttle SET attempts = 0`))).resolves.toMatchObject({ rowCount: 0 });
 	});
 });

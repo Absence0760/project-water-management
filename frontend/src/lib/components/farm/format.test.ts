@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '$lib/i18n/locale.svelte';
 import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import {
+	farmToday,
 	count,
 	DAYS,
 	FARMS,
@@ -169,5 +170,28 @@ describe('dates (§8)', () => {
 			process.env.TZ = 'Pacific/Pago_Pago';
 			expect(fmtStampDay('2024-01-11T23:30:00Z')).toBe('11 Jan 2024');
 		});
+	});
+});
+
+// Issue #51: "today" is the catchment's, not the phone's, and moves on with the clock.
+describe('farmToday', () => {
+	const tz = process.env.TZ;
+	afterEach(() => {
+		process.env.TZ = tz;
+	});
+	const view = { today: '2024-01-05', project: { timeZone: 'Africa/Johannesburg' } };
+
+	it('is today in the project’s zone, from this device’s clock, whatever zone the phone is set to', () => {
+		process.env.TZ = 'Pacific/Pago_Pago'; // UTC−11: still the 5th on the phone
+		expect(farmToday(view, new Date('2024-01-05T23:30:00Z'))).toBe('2024-01-06');
+		// A saved copy days later moves on with the clock, not the response's `today`.
+		expect(farmToday(view, new Date('2024-01-09T08:00:00Z'))).toBe('2024-01-09');
+	});
+
+	it('falls back to the server’s today for an unknown zone, and to the phone’s date for an old saved copy', () => {
+		process.env.TZ = 'Pacific/Kiritimati'; // UTC+14
+		const now = new Date('2024-01-05T12:00:00Z');
+		expect(farmToday({ today: '2024-01-05', project: { timeZone: 'Not/AZone' } }, now)).toBe('2024-01-05');
+		expect(farmToday({ project: {} }, now)).toBe('2024-01-06');
 	});
 });

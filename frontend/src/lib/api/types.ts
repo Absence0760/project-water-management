@@ -71,6 +71,8 @@ export interface User {
 	 * account a script made. Nothing asks again yet (docs/legal-status.md).
 	 */
 	termsCurrent?: boolean;
+	/** The report renderer's session (a render token's, reports/scope.ts): it renders the report, never the terms step. */
+	renderSession?: boolean;
 	/**
 	 * Acknowledged the farm view's notice now in force (app_user.farm_notice_version,
 	 * 093, against the engine's FARMER_NOTICE_VERSION). The farm pages show the
@@ -402,6 +404,8 @@ export interface AlertChoice {
 	chosen: boolean;
 	/** The catchment has this alert switched on; off, you get nothing whatever you choose. */
 	ruleOn: boolean;
+	/** A farm's dam alert: the level it warns below, a fraction (0.3 = 30 %), the WUA's; null otherwise. */
+	threshold: number | null;
 }
 
 /** GET /me/alerts: one catchment's choices. */
@@ -1310,6 +1314,10 @@ export interface Allocation {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	/** Licence conditions (103, issue #72): calendar months of use (null = none stated), the most it may take at once (m³/s), conditions in words. Shown; the engine doesn't enforce them yet. */
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	createdAt: string;
 	updatedAt: string;
 }
@@ -1349,6 +1357,9 @@ export interface AllocationInput {
 	validFrom?: string | null;
 	validTo?: string | null;
 	reference?: string;
+	months?: number[] | null;
+	maxRateM3s?: number | null;
+	conditions?: string[];
 }
 
 /** One row of an import preview. */
@@ -1366,6 +1377,9 @@ export interface AllocationPreviewRow {
 	validFrom: string | null;
 	validTo: string | null;
 	reference: string;
+	months: number[] | null;
+	maxRateM3s: number | null;
+	conditions: string[];
 	errors: string[];
 	nodeId: string | null;
 	matchedBy: 'registration' | 'property' | 'name' | 'manual' | null;

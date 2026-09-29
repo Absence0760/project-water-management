@@ -37,6 +37,19 @@ describe('damLevel', () => {
 		expect(damLevel({ ...dam, minPct: 0 }, series('2025-06-01', [0, 0]))!.daysAtMin).toBe(0);
 	});
 
+	it("leaves a forecast run's forecast days out: the end is the day before the forecast (issue #51)", () => {
+		// 2025-01-01 … 01-05 recorded, 01-06 … 01-08 forecast (a dry tail that empties the dam).
+		const s = series('2025-01-01', [900, 500, 250, 400, 600, 100, 50, 20]);
+		const l = damLevel(dam, s, '2025-01-06')!;
+		expect(l).toEqual(damLevel(dam, series('2025-01-01', [900, 500, 250, 400, 600])));
+		expect(l).toMatchObject({ endPct: 60, endDate: '2025-01-05', lowPct: 25, lowDate: '2025-01-03' });
+		// Positive control: without forecastFrom the tail counts.
+		expect(damLevel(dam, s)).toMatchObject({ endPct: 2, endDate: '2025-01-08', lowPct: 2 });
+		// The summary's figures (the record's) and the cut series agree, dated the same day.
+		const fromSummary = damLevelsFromSummary([dam], [{ nodeId: 'f1', name: 'f1', ...damFigures([900, 500, 250, 400, 600], 1000, 0.1, '2025-01-01')! } as FarmSummary], '2025-01-05')![0];
+		expect(fromSummary).toEqual(l);
+	});
+
 	it('is null without capacity or without any finite value', () => {
 		expect(damLevel({ ...dam, capacityM3: 0 }, series('2025-01-01', [1]))).toBeNull();
 		expect(damLevel(dam, series('2025-01-01', [null, Number.NaN]))).toBeNull();

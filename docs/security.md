@@ -11,7 +11,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (`bcryptjs`, cost 12; 4 under vitest and on the e2e API server, which sets `PASSWORD_HASH_COST=4`, an override Lambda refuses at startup; `auth/password.ts`) and are 8–200 characters. Emails are `citext`, so
   lookups ignore case. The hash never leaves the backend.
 - **Session:** an HS256 JWT signed with `AUTH_JWT_SECRET` (`jose`). It carries
-  the user id and has a 7-day expiry. It sits in the **`wm_session` cookie**,
+  the user id and a random session id (`jti`, required: a token without one
+  is refused, since it could never be signed out) and has a 7-day expiry. It sits in the **`wm_session` cookie**,
   which is `HttpOnly`, `SameSite=Lax` and `Secure` (Secure can be turned off
   only for plain-http local dev). JavaScript never sees the token.
 - **Same-origin in production.** CloudFront serves the site and proxies
@@ -34,8 +35,13 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   update to an earlier time or to NULL keeps the later one, so no update can
   revive a signed-out session. It then
   re-issues this device's cookie, so only the device that changed it stays
-  signed in. Plain logout clears the cookie only
-  (that one token stays valid until expiry if it was copied). Rotating
+  signed in. **Plain logout** (`POST /auth/logout`) signs that one session
+  out on the server as well as clearing its cookie (issue #51): its `jti`
+  goes into `revoked_session` (102, through `app_revoke_session`, under the
+  signed-in account only) until the token would have expired, and the same
+  one-statement check reads it (`app_session_state`), so a copied cookie
+  stops working at sign-out, not 7 days later. The account's other sessions
+  stay signed in. Tests: `auth/session.db.test.ts` "signing out". Rotating
   `AUTH_JWT_SECRET` logs everyone out.
 - Login returns the same error for an unknown email and a wrong password.
 - **Sign-in lockout** (`login_throttle`, `backend/src/auth/routes.ts`
@@ -113,14 +119,38 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   address's cooldown and daily cap, so sign-up can't be used to flood an
   inbox. The one exception is sign-up through an invite link, which names its
   address already: `409 account_exists` there tells the holder nothing new.
-  Accepted residual risk: response *timing* differs slightly (a known address
-  does DB writes and an SES call).
+  **Timing too** (issue #51): `forgot-password` and `resend-confirmation`
+  never wait for the send (it is started and left to finish), and answer
+  after one fixed floor of 200 ms from the start of the request, known
+  address or not, which also covers a known address's token write
+  (`auth/accountMail.ts` `answerAlike`; `auth/accountMail.test.ts` drives
+  it with promises, no clock). In Lambda a send still in flight when the
+  answer goes finishes at the environment's next invocation, or is lost if
+  the environment is retired; the floor gives it that long first, and a
+  lost link is asked for again. `register` sends a mail on both of its
+  paths (a link, or "you already have an account"), so only its database
+  work differs, slightly: accepted residual risk.
 - **Confirmation before sign-in** leaves one legacy state: an unconfirmed
   account signed in before this rule (its session stays valid until it
   expires) still sees the confirm-your-email banner and can resend the link
   (`POST /auth/resend-verification`). Opening a confirmation link trusts that
   browser for the address's sign-in lockout (`auth/device.ts`), as a password
   reset does.
+- **Adding people by email is capped** (issue #51, `101_invite_throttle.sql`,
+  `invites/invites.ts` `INVITE_CAP`): 300 addresses a day per inviting
+  person and per project or team, across the member, farmer, bulk-farmer
+  and team-member routes, each address counted before it is looked up and
+  a bulk dry run counted too. Any registered user can own a project, and
+  those routes add a verified account at once but invite any other
+  address, so they tell the adder which addresses have verified accounts
+  (and their display names) and mail the project's name to an address the
+  adder chose; the cap bounds both. `app_invite_attempt` (SECURITY
+  DEFINER) counts only for the project's owner or the team's admin, so
+  nobody can use up another project's allowance; the table is deny-all.
+  **Open:** the add itself still differs (and the members list shows the
+  account at once) until a verified account must accept an invite too
+  ([followups.md § Roles and what each member sees](./followups.md#roles-and-what-each-member-sees)).
+  Tests: `invites/invites.db.test.ts` "the daily cap on adding by email".
 - **Sign-up throttle** (`079_signup_throttle.sql`, `auth/signupThrottle.ts`):
   at most **10 sign-ups per client address an hour** and **500 in all an
   hour**, in Postgres so it holds across Lambda instances; past either,
@@ -239,7 +269,8 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   the raw tokens just mailed; pins the 1 h / 48 h / 7 day lifetimes (a re-sent
   invite included); races `app_consume_email_token` across two open
   transactions; refuses forged session JWTs (unsigned, other key, HS512, other
-  issuer, expired, non-uuid subject, tampered) and pins the 7-day cookie; and
+  issuer, expired, non-uuid subject, tampered, no or a malformed session id)
+  and pins the 7-day cookie; and
   checks that adding a member, team member or farmer (single and bulk) and
   signing in answer the same for an unknown address and an unverified or
   wrong-password one.
@@ -319,6 +350,13 @@ buys a **render session** that can read one report and nothing else.
   full one. RLS still applies underneath: the session is the requester's, so
   it sees at most what they see. It is also revoked with every other session
   of the account (the `sessions_revoked_at` watermark).
+  `/auth/me` answers `renderSession: true` for it, and the app skips the
+  terms re-acceptance step for it (`termsGateApplies`): the step is a
+  person's, and a session that can accept nothing would otherwise render
+  the step instead of the report and time out. Refusing at queue time
+  instead would stop every scheduled report after a terms change until its
+  editor signed in; the report's readers are members under their own
+  acceptance.
 - **Tests:** `reports/reports.db.test.ts` checks single use, expiry, the
   scope on another project, another run and every other kind of route, with a
   positive control (the report's own reads answer `200`), a requester who
@@ -552,8 +590,9 @@ and nothing else.
   them count again: they are that person's values now. **Limits** (a
   partial mitigation):
   - a plausible wrong value, inside the series' usual range, isn't caught;
-  - the outlier rule needs 100 non-zero days in the series, so a new or
-    short series is checked for negatives only;
+  - the outlier rule needs 100 non-zero days in the series, so a short
+    series is checked for negatives only (a new one a key creates is held
+    whatever its days, below);
   - when the days left without the key's own are too few for the rule (a
     series the key alone fills, like a logger's), the limit comes from what
     a person last **accepted**: the values the project's latest manual run
@@ -573,6 +612,33 @@ and nothing else.
     even one absurd value through; this still catches that, and a key
     poisoning slowly can lift it only until the first manual run. A run
     saved before 056 records no series, so it is no reference either.
+
+- **A key can't swap the model's input** (issue #51). A run reads the
+  first outlet series of each kind by name (`runs/execute.ts`
+  `loadLiveInput`), so a key free to create series could add one named to
+  sort ahead of the person's and the model would read the key's days, with
+  nothing held (a new series has no history for the outlier limit). Two
+  rules close it, for every key, whatever its `allowedSeries`:
+  - a key may **create** a series only of a kind the project has no outlet
+    series of; otherwise the merge is `409` and a person adds the series
+    first, with its record so far: the message says so, since a series with
+    fewer than 100 non-zero days is checked for negatives only (Limits
+    above). The key may then merge
+    into it (`series/merge.ts` `assertKeyMayCreate`, through
+    `app_project_has_outlet_series`, SECURITY DEFINER because a key limited
+    to some series can't see the others, `100_key_series_kind.sql`; called
+    under the series cap's per-project advisory lock, so two keys can't add
+    the second series of a kind at once);
+  - a push that **creates** a series always holds the automatic runs
+    (`newSeries: true` in `series.held` and `rerunHeld`, `series/hold.ts`
+    `heldFor`): the series becomes the model's input for its kind, so a
+    person looks before a run reads it.
+
+  Tests: `ingest/ingest.db.test.ts` "a key can’t add a series the model
+  would read in place of a person’s" (a second rain series refused for an
+  open and an allow-listed key, the model input unchanged, a merge into the
+  existing series as the positive control, a new kind held, the kind check
+  answering only writers).
 
   Recovery is the runbook in
   [deployment.md § Runbooks](./deployment.md#runbooks) (revoke, find the
@@ -1193,7 +1259,7 @@ In short:
     `applyScenario`'s `mask`), so its messages quote no hidden name or id
     without any text redaction, count nothing hidden, and a rule broken
     because of hidden data reads only "doesn't apply to the catchment as
-    modelled" (wording pending the client, issue #50). The DB test scans everything the applicant
+    modelled" (wording pending the client, issue #90). The DB test scans everything the applicant
     received for another farm's name. RLS gives a contributor no run row
     at all, their own application's included (046_contributor_runs), since
     its `inputs` snapshot is the whole base with the ops applied: the run
@@ -1281,7 +1347,7 @@ In short:
     shares over 100 %, no catchment area left) says only that the op
     doesn't apply to the catchment as modelled. Whether it applies can't be
     hidden (a model that breaks a save rule can't run); the words are the
-    client's call (issue #50).
+    client's call (issue #90).
   - **D1**: a team member who is also a contributor is an editor (the
     effective role is the max), so a consultancy mustn't host the baseline in
     its own team while its staff act for applicants.
@@ -1615,7 +1681,17 @@ database:
   counts, never names. The export's `holder` column is only in an editor's
   file.
 - Cells are stored as they came; the CSV export neutralises formula-looking
-  cells (`'` prefix), as every export does.
+  cells (`'` prefix), as every export does. A licence condition in words
+  (103) is checked like the holder: a 13-digit number there is a row problem.
+- **Run inputs** (engine ≥ 1.18.0, issue #72): every run's stored input
+  carries the project's allocations so the run replays, but only what the
+  engine reads (id, unit, source, volume, storage, validity, months, maximum
+  rate), never the holder's name, the registration number or the property
+  (`runs/execute.ts allocationsForRun`; `conditions.db.test.ts` fails if one
+  appears). A viewer reads a run's input and could read the volumes anyway;
+  an applicant's projection of a published base keeps only the allocations on
+  their own units (`scenarios/applicant.ts`), and a contributor never reads a
+  run's summary, whose comparison names every unit.
 - In the data-subject export ([§ Personal information](#personal-information-popia)),
   a farmer gets the allocations matched to *their* linked farms, holder name
   included (what RLS already lets them read). A holder is never matched to
@@ -1694,6 +1770,8 @@ PDF someone else asked for kept the person as a recipient
 | Account: email, display name, password hash, session watermark, when they last downloaded their data (052), whether SES suppressed the address (057), which terms and privacy notice they accepted and when (087) | `app_user`, `email_token` | Until the account is deleted; tokens a week past expiry | Deleted | – |
 | Sign-in attempts, keyed by the typed address (and a trusted device's id, 070) | `login_throttle`, `login_device_throttle` | A day without attempts | Not linked to the account | – |
 | Reset and verification emails sent, for the daily cap (and a trusted device's id, 078) | `account_mail_quota` | 24 hours | Deleted | – |
+| Ids of sessions the person signed out (102) | `revoked_session` | Until the token would have expired, 7 days at most | Deleted | – |
+| Adds by email, counted for the daily cap: the adder's id and the project's or team's (101) | `invite_throttle` | 24 hours from the window's first add | Lapses with its window | Lapses with its window |
 | Display preferences: the workspace sections a person hid from their sidebar (083); own row only under RLS | `user_preferences` | Until the account is deleted | Deleted | – |
 | Memberships and roles | `project_member`, `team_member` | Until removed or left | Deleted | Deleted |
 | Farmer ↔ farm link (a person tied to a farm's water use) | `farm_link` (`added_by`) | Until unlinked, removed or left | Deleted (with the membership) | Deleted |

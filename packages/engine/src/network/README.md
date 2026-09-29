@@ -33,6 +33,7 @@ workbook cells.
 | `users.test.ts` | – | Other water users (WP-1.33, docs/model.md §2.7c), hand-worked. |
 | `boreholes.ts` | – | A node's boreholes resolved for the plan (WP-1.34, docs/model.md §2.7d); `simulate.ts` pumps and depletes. |
 | `demandObjects.ts` | – (a workbook's demand-object register, issue #54 item 2b) | A unit's non-crop demands (town, domestic, livestock, piped out) resolved for the plan: each one's daily demand, return share and priority class, and the split of the unit's supply between its crops and its objects (engine ≥ 1.7.0, docs/model.md §2.7f). |
+| `demandSchedule.ts` | – (issue #90 Q4, Q12) | A demand object's schedule: recurring date windows (every day, a yearly span, a one-off range, days around Easter; optionally on some weekdays) with a factor on its demand, 0 = off; the later of two overlapping windows wins (engine ≥ 1.17.0, docs/model.md §2.7f). |
 | `dam.ts` | – | Dam survey curves (area linear in volume), release rules and the seepage destination, resolved for the plan and read by the self-checks (WP-3.5, docs/model.md §2.7a); `simulate.ts` applies them. |
 | `landcover.ts` | – | Land-cover streamflow reductions (WP-1.35, docs/model.md §2.5a): patches per farm, the Q75 low-flow threshold, the day's reduction of the farm's runoff. |
 | `round.ts` | – | Excel `ROUND` / `ROUNDDOWN`, for tests that replay workbook cells only. |

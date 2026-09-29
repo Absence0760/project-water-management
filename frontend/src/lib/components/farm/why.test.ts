@@ -1,6 +1,8 @@
 // The "Why about 83 %?" page (board 4: docs/design/farmer-view-prototype/Why.dc.html)
 // with the Vaalbank fixture, and the design's rules for the other cases.
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { setLocale } from '$lib/i18n/locale.svelte';
+import { markedCatalogue } from '$lib/i18n/fixtureCatalogue';
 import type { FarmProjection } from '@water-management/engine';
 import { vaalbankFixture } from './fixture';
 import { plainText, type Rich } from '$lib/i18n/rich';
@@ -44,8 +46,24 @@ describe('step 1: was water shared fairly?', () => {
 	});
 
 	it('never words the share as water to take', () => {
-		expect(sp(shareComparison(-118))).toBe('a little more than an even share (about 118 m³ a day)');
-		expect(shareComparison(0.4)).toBe('about an even share');
+		expect(sp(shareComparison(-118, -3))).toBe('a little more than an even share (about 118 m³ a day)');
+		expect(shareComparison(0.4, 0)).toBe('about an even share');
+	});
+
+	// Issue #51: Klipdrift got 57 % against an even share of 88 %, which is not "a little less".
+	it('grows the wording with the gap in percentage points, on both sides', () => {
+		expect(sp(shareComparison(118, 9.9))).toBe('a little less than an even share (about 118 m³ a day)');
+		expect(sp(shareComparison(500, 10))).toBe('less than an even share (about 500 m³ a day)');
+		expect(sp(shareComparison(-500, -24.9))).toBe('more than an even share (about 500 m³ a day)');
+		expect(sp(shareComparison(977, 31))).toBe('much less than an even share (about 977 m³ a day)');
+		expect(sp(shareComparison(-977, -25))).toBe('much more than an even share (about 977 m³ a day)');
+		// A gap in points but under the 1 m³/day floor is still an even share.
+		expect(shareComparison(0.4, 30)).toBe('about an even share');
+	});
+
+	it('measures the gap from the farm’s own supply against the even share', () => {
+		const s = step1(farm((f) => ((f.season.fraction = 0.57), (f.river.equitableFraction = 0.88), (f.river.aboveBelowShareM3Day = 977))));
+		expect(s.shown && txt(s.you)).toBe('You received 57 %: much less than an even share (about 977 m³ a day).');
 	});
 });
 
@@ -133,6 +151,13 @@ describe('step 3: where 83 % comes from', () => {
 		);
 	});
 
+	// Issue #51 (Rietspruit): each row rounded on its own gave 1 772 − 38 = 1 735.
+	it('adds up as shown: Leaves is You received less Pump less, after rounding', () => {
+		const s = step3(farm((f) => ((f.river.suppliedM3Day = 1772.4), (f.river.supplyCutM3Day = 37.6))))!;
+		expect(s.rows.slice(0, 3).map((r) => sp(r.value))).toEqual(['1 772 m³ a day', '− 38 m³ a day', '1 734 m³ a day']);
+		expect(txt(s.sum)).toMatch(/^1 734 is about /);
+	});
+
 	it('is left out with no headline', () => {
 		expect(step3(farm((f) => (f.river.headline = null)))).toBeNull();
 	});
@@ -149,5 +174,17 @@ describe('what the WUA decided; what this is not', () => {
 			'Not a forecast. It looks back over 1 Oct to 10 Jan.',
 			'Not measured. It comes from a model of the catchment, which can be wrong.'
 		]);
+	});
+});
+
+// Issue #51: af-ZA abbreviates months with a dot, so a sentence ending on a date read "…tot 10 Jan..".
+describe('Afrikaans dates at the end of a sentence', () => {
+	afterEach(() => setLocale('en'));
+
+	it('end with one full stop', async () => {
+		await setLocale('af', await markedCatalogue());
+		const notForecast = whatThisIsNot(farm())[1]!;
+		expect(notForecast).toMatch(/10 Jan\.$/);
+		expect(notForecast).not.toMatch(/\.\.$/);
 	});
 });

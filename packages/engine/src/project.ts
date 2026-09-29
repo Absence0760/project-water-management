@@ -18,6 +18,8 @@ import type { Wr2012Report } from './reference/wr2012';
 import type { EwrChargeSource, EwrRuleTable, LowFlowMeasure } from './reserve/rules';
 import type { EwrAssuranceSite } from './reserve/assurance';
 import type { SupplyAssurance } from './network/reliability';
+import type { AllocationEntry, AllocationWaterSource } from './allocations/compare';
+import type { AllocationMode } from './allocations/mode';
 import { defaultWr2012Settings, type Wr2012Settings } from './reference/wr2012Settings';
 
 /** How each farm's share of catchment natural flow is derived (b023 [Farm spec]). */
@@ -262,6 +264,22 @@ export interface ProjectSettings {
 	 * pan more in winter), which one factor can't show.
 	 */
 	lakeEvapFactorMonthly?: Monthly | null;
+	/**
+	 * What the project's registered volumes (ProjectModel.allocations) do to a
+	 * run (engine ≥ 1.18.0, issue #72, ./allocations/mode.ts, docs/model.md
+	 * §2.12a): 'none' (the default) compares only; 'cap' keeps each unit's
+	 * surface and groundwater use per water year within its registered
+	 * volumes; 'fullAllocation' scales each unit's demand to them. Optional
+	 * so settings stored before it still type; absent = 'none'.
+	 */
+	allocationMode?: AllocationMode;
+	/**
+	 * The band around a registered volume counted as "within" when modelled
+	 * use is compared with it (RunSummary.allocations, the Allocations tab),
+	 * a fraction in [0, 1) (engine ≥ 1.18.0, issue #72). Default 0.1 (±10 %),
+	 * pending the hydrologist. Absent = the default.
+	 */
+	allocationTolerance?: number;
 	/** WR90 A-pan evaporation, mm per water-year month (Oct–Sep). */
 	apanMm: Monthly;
 	flowShareMethod: FlowShareMethod;
@@ -487,6 +505,8 @@ export function defaultProjectSettings(): ProjectSettings {
 		effectiveRainStoreMm: 25,
 		lakeEvapFactor: 0.75,
 		assuranceAnnualThreshold: 0.9,
+		allocationMode: 'none',
+		allocationTolerance: 0.1,
 		lakeEvapFactorMonthly: null,
 		apanMm: zeros,
 		flowShareMethod: 'area',
@@ -1274,6 +1294,14 @@ export interface ProjectModel {
 	 * from the same dam, river pump and boreholes. Absent on older documents = none.
 	 */
 	demandObjects?: DemandObject[];
+	/**
+	 * Registered and licensed water-use volumes (engine ≥ 1.18.0, issue #72,
+	 * docs/allocations.md): what settings.allocationMode caps or scales a run
+	 * to, and what RunSummary.allocations compares its use with. Not part of
+	 * the model document: the backend adds the project's allocations to a
+	 * run's input (no names, only what the engine reads). Absent = none.
+	 */
+	allocations?: AllocationEntry[];
 }
 
 /**
@@ -1321,6 +1349,39 @@ export type DemandObjectPriority = (typeof DEMAND_OBJECT_PRIORITIES)[number];
 export const DEMAND_OBJECT_DESTINATIONS = ['internal', 'external'] as const;
 export type DemandObjectDestination = (typeof DEMAND_OBJECT_DESTINATIONS)[number];
 
+/**
+ * Which days a demand object's schedule window covers (engine ≥ 1.17.0,
+ * docs/model.md §2.7f): 'always' every day (with weekdays, a weekly
+ * pattern); 'yearly' a calendar span each year, `from`–`to` as MM-DD,
+ * wrapping the year end when `from` is later; 'range' once, `from`–`to` as
+ * YYYY-MM-DD; 'easter' `easterFrom`–`easterTo` days from Easter Sunday
+ * (−2 Good Friday, +1 Family Day). Every bound is inclusive.
+ */
+export const DEMAND_SCHEDULE_SPANS = ['always', 'yearly', 'range', 'easter'] as const;
+export type DemandScheduleSpan = (typeof DEMAND_SCHEDULE_SPANS)[number];
+
+/**
+ * One window of a demand object's schedule: on the days it covers, the
+ * object's demand is its month's demand × `factor` (0 = off). Set by date,
+ * never by river flow (issue #90 Q12). The later of two overlapping windows
+ * wins; a day no window covers runs at 1.
+ */
+export interface DemandScheduleWindow {
+	/** What it is, e.g. "Weekends" or "Christmas shutdown"; may be empty. */
+	label: string;
+	span: DemandScheduleSpan;
+	/** 'yearly': MM-DD; 'range': YYYY-MM-DD; null otherwise. */
+	from: string | null;
+	to: string | null;
+	/** 'easter': whole days from Easter Sunday; null otherwise. */
+	easterFrom: number | null;
+	easterTo: number | null;
+	/** ISO weekdays it covers (1 = Monday … 7 = Sunday); null = every day. */
+	weekdays: number[] | null;
+	/** × the demand on those days, 0–10; 0 = off. */
+	factor: number;
+}
+
 export interface DemandObject {
 	id: string;
 	/** The unit (a farm node) whose water supplies it. */
@@ -1344,6 +1405,12 @@ export interface DemandObject {
 	destination: DemandObjectDestination;
 	/** false = kept on record but not modelled (no demand, no results). */
 	enabled: boolean;
+	/**
+	 * Date windows with a factor on its daily demand (engine ≥ 1.17.0): 0 =
+	 * off that day, so no supply and no return. Null or absent = every day
+	 * at its month's demand.
+	 */
+	schedule?: DemandScheduleWindow[] | null;
 	/** Where the number comes from (meter records, a reconciliation strategy, a norm, the workbook), for the report. */
 	note: string;
 }
@@ -1529,6 +1596,12 @@ export interface SeriesMeta {
 	length: number;
 	/** ISO timestamp of the last upload/merge that changed the values. */
 	updatedAt?: string;
+	/**
+	 * The last day with a value (null: every day is blank): how far the data
+	 * reaches, where startDate + length − 1 counts the blank days a logger's
+	 * "no reading" stores. Absent from older clients' fixtures.
+	 */
+	lastValueDate?: string | null;
 	/** Sub-daily readings added up into days in this window (033_series_day_boundary.sql); null = daily values as uploaded. */
 	dayBoundary?: DayBoundary | null;
 	/** What the values are (032_series_provenance.sql): e.g. CHIRPS / 2.0; null = not recorded. */
@@ -1641,6 +1714,8 @@ export interface DemandObjectSummary {
 	avgReturnedM3Day: number;
 	/** Days it got less than its demand (beyond float noise). */
 	daysShort: number;
+	/** Days its schedule switched it off (factor 0; engine ≥ 1.17.0, only on an object with a schedule). Never counted as short. */
+	daysOff?: number;
 }
 
 /**
@@ -2056,6 +2131,48 @@ export interface ForecastRainDays {
 	lastRecorded: string | null;
 }
 
+/** RunSummary.allocations (engine ≥ 1.18.0, issue #72). */
+export interface RunAllocations {
+	mode: AllocationMode;
+	/** The band compareAllocations used (settings.allocationTolerance). */
+	tolerance: number;
+	/** Allocations the run used (a volume, a source, dates that read), matched to one of its farms or water users. */
+	used: number;
+	/** Allocations not matched to a node, or matched to one this run doesn't have. */
+	notMatched: number;
+	/** Per farm or water user with an allocation (node-id order), per water source it has one for. */
+	nodes: RunAllocationNode[];
+}
+
+export interface RunAllocationNode {
+	nodeId: string;
+	name: string;
+	/** Per water source the unit has an allocation for (surface first). */
+	sources: RunAllocationSource[];
+	/**
+	 * 'fullAllocation' only: per water year of the run, the unit's abstraction
+	 * demand before scaling (m³) and the registered volume (both sources, over
+	 * the run's days of the year) it was scaled to.
+	 */
+	scaled?: { waterYear: number; demandM3: number; registeredM3: number }[];
+}
+
+export interface RunAllocationSource {
+	waterSource: AllocationWaterSource;
+	/** Whole water years compared, and how many of them modelled use was above the registered volume plus the tolerance. */
+	wholeYears: number;
+	yearsOver: number;
+	/** Mean modelled use and registered volume per whole water year (m³); null without a whole year. */
+	meanModelledM3PerYear: number | null;
+	meanRegisteredM3PerYear: number | null;
+	/**
+	 * 'cap' only: the water years (part years included) whose use reached the
+	 * cap, each with its budget (the whole year's registered volume) and the
+	 * use (m³). Empty when the cap never bound.
+	 */
+	capReached?: { waterYear: number; budgetM3: number; usedM3: number }[];
+}
+
 /** One node's groundwater abstraction in one water year (WP-3.9, RunSummary.groundwaterAnnualUse). */
 export interface GroundwaterAnnualUse {
 	nodeId: string;
@@ -2113,6 +2230,14 @@ export interface RunSummary {
 	 * without boreholes, and on older runs.
 	 */
 	groundwaterAnnualUse?: GroundwaterAnnualUse[];
+	/**
+	 * Registered volumes against the run's use (engine ≥ 1.18.0, issue #72,
+	 * ./allocations, docs/model.md §2.12a): the allocation mode the run ran
+	 * with and, per farm or water user with an allocation, the whole water
+	 * years compared (compareAllocations with settings.allocationTolerance).
+	 * Absent when the input carries no allocations.
+	 */
+	allocations?: RunAllocations;
 	/** Water balance of the runoff model (engine ≥ 0.5.0, GR4J runs only). */
 	runoff?: RunoffBalance;
 	catchment: {
@@ -2244,7 +2369,7 @@ export interface RunSummary {
 	warnings: string[];
 }
 
-export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover';
+export type VerificationCheckId = 'balance' | 'workings' | 'soilWater' | 'runoff' | 'transfers' | 'reports' | 'ewrAttribution' | 'groundwater' | 'landCover' | 'allocations';
 
 export interface VerificationCheck {
 	id: VerificationCheckId;

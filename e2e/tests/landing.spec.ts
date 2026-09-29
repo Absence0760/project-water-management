@@ -129,6 +129,41 @@ test('the hero moves only when motion is allowed, and rests on its last frame ot
 	await expect(scene).toHaveAttribute('data-playing', 'no');
 });
 
+// WCAG 2.2.2 Pause, Stop, Hide (issue #51): the loop runs for as long as the
+// hero is on screen, so the visitor can stop it, and the gauge's statistic is
+// text to read, so it never fades.
+test('the hero’s loop can be stopped on its still frame and started again, and its statistic never fades', async ({ page }) => {
+	await page.emulateMedia({ reducedMotion: 'no-preference' });
+	await page.goto('/');
+	const scene = page.locator('.hero .scene');
+	await expect(scene).toHaveAttribute('data-playing', 'yes');
+	const running = () => scene.evaluate((el) => el.getAnimations({ subtree: true }).filter((a) => a.playState === 'running').length);
+	expect(await running()).toBeGreaterThan(0);
+	// The statistic isn't animated at all: shown the whole loop.
+	const tag = page.locator('.hero .tag');
+	expect(await tag.evaluate((el) => el.getAnimations().length)).toBe(0);
+	await expect(tag).toHaveCSS('opacity', '1');
+	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+
+	const pause = page.getByRole('button', { name: 'Pause the animation' });
+	await expect(pause).toHaveAttribute('aria-pressed', 'false');
+	await pause.click();
+	await expect(pause).toHaveAttribute('aria-pressed', 'true');
+	await expect(scene).toHaveAttribute('data-motion', 'off');
+	expect(await running()).toBe(0);
+	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+
+	await pause.press('Enter');
+	await expect(pause).toHaveAttribute('aria-pressed', 'false');
+	await expect(scene).toHaveAttribute('data-playing', 'yes');
+	expect(await running()).toBeGreaterThan(0);
+
+	// Under reduced motion nothing moves, so there is nothing to stop.
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await expect(scene).toHaveAttribute('data-motion', 'off');
+	await expect(pause).toHaveCount(0);
+});
+
 test('the hero’s first animated frame is its still frame, so turning motion on changes nothing', async ({ page }) => {
 	// What each animated part shows: its opacity and transform, and the pulse's dash.
 	const frame = () =>
@@ -221,6 +256,35 @@ test('the prerendered page loads every asset it asks for, the contour texture am
 		expect(new URL(res.url()).pathname).toBe('/landing/contours.svg');
 		expect(res.status()).toBe(200);
 		expect(failed).toEqual([]);
+		// And it draws: the file's line group, through <use>, spans the texture's box.
+		const drawn = await p.locator('main .contours use').evaluate((u) => (u as SVGUseElement).getBBox().width);
+		expect(drawn).toBeGreaterThan(1000);
+	}
+});
+
+test('the largest contentful paint is the hero render, never the background texture', async ({ page }) => {
+	// As a CSS mask the page-sized contour texture was an image to the browser,
+	// so it was the page's LCP, fetched only once the styles had resolved
+	// (docs/design/landing-art.md § Quality bar). Drawn as vector through <use>,
+	// it isn't a candidate. Checked on a phone, where the hero sits below the copy.
+	for (const size of [PHONE, DESKTOP]) {
+		await page.setViewportSize(size);
+		await page.goto('/welcome');
+		await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
+		// Every candidate has loaded by the page's load event (the texture too,
+		// when it was a mask); each is reported on the paint after its load, so
+		// wait two frames past it, then the last entry is the page's LCP.
+		const lcp = await page.evaluate(async () => {
+			if (document.readyState !== 'complete') await new Promise((r) => addEventListener('load', r, { once: true }));
+			for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+			return new Promise<string>((resolve) => {
+				new PerformanceObserver((list) => {
+					const last = list.getEntries().at(-1) as PerformanceEntry & { element?: Element | null; url?: string };
+					resolve(`${last.element?.tagName ?? '?'} ${new URL(last.url || location.href).pathname}`);
+				}).observe({ type: 'largest-contentful-paint', buffered: true });
+			});
+		});
+		expect(lcp, `${size.width} px`).toMatch(/^IMG \/landing\/hero-(day|dusk)-\d+\.(avif|webp)$/);
 	}
 });
 
@@ -301,8 +365,8 @@ test('the landing page has no a11y violations with motion on, at desktop and pho
 		await expect(headline(page)).toBeVisible();
 		await expect(page.locator('.hero .scene')).toHaveAttribute('data-motion', 'on');
 		await scrollThrough(page);
-		// The hero's loop held on its first frame: its tag fading in or out is a
-		// moment of the animation, not text anyone is asked to read.
+		// The hero's loop held on its first frame, so the scan sees the frame a
+		// still page shows (the pulse and dams mid-fill are only animation).
 		await page.evaluate(() => {
 			for (const a of document.querySelector('.hero .scene')!.getAnimations({ subtree: true })) {
 				a.pause();
