@@ -11,7 +11,9 @@ import { randomInput } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
 import { calibrate, prepareCalibration, startSeed, startsNotes, validationNotes, type DifferentialTest, type ValidationTest } from './calibrate';
 import { MAX_STARTS } from './params';
+import { BOOTSTRAP_LEVEL, BOOTSTRAP_RESAMPLES, CLIMATOLOGY_HALF_WINDOW } from './bootstrap';
 import { fitScores } from './objective';
+import { wr2012FitStats } from '../reference/wr2012Fit';
 
 const apan = [150, 180, 200, 210, 180, 150, 100, 60, 40, 40, 60, 100];
 const node = (over: Partial<NetworkNode>): NetworkNode => ({
@@ -190,6 +192,32 @@ describe('calibrate', () => {
 		const yearly = calibrate(input, { budget: 100, objective: 'kgeYearly', validate: false });
 		expect(yearly.objective).toBe('kgeYearly');
 		expect(yearly.fit.scores.kgeYearly!).toBeGreaterThanOrEqual(yearly.before.scores.kgeYearly!);
+		// The low/high-flow objective (CR-3) is accepted, optimised and reported.
+		const lowHigh = calibrate(input, { budget: 100, objective: 'kgeLowHigh', validate: false });
+		expect(lowHigh.objective).toBe('kgeLowHigh');
+		expect(lowHigh.fit.scores.kgeLowHigh!).toBeGreaterThanOrEqual(lowHigh.before.scores.kgeLowHigh!);
+		expect(lowHigh.startResults.every((r) => r.score === null || r.score <= lowHigh.fit.scores.kgeLowHigh! + 1e-12)).toBe(true);
+	}, 60_000);
+
+	it('every scored period carries its bootstrap intervals and benchmarks (CR-5); a start’s score does not need them', () => {
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 });
+		const r = calibrate(input, { budget: 50, seed: 2 });
+		const years = r.fit.waterYears.length;
+		expect(years).toBeGreaterThanOrEqual(3);
+		expect(r.fit.intervals).toMatchObject({ level: BOOTSTRAP_LEVEL, resamples: BOOTSTRAP_RESAMPLES, years });
+		const k = r.fit.scores.kgePrime!;
+		expect(r.fit.intervals!.kgePrime!.lo).toBeLessThanOrEqual(k);
+		expect(r.fit.intervals!.kgePrime!.hi).toBeGreaterThanOrEqual(k);
+		expect(r.fit.benchmarks!.meanFlow.kgePrime).toBeCloseTo(1 - Math.SQRT2, 9);
+		expect(r.fit.benchmarks!.halfWindowDays).toBe(CLIMATOLOGY_HALF_WINDOW);
+		// The benchmarks depend only on the observed days: the same for the current and fitted parameters.
+		expect(r.before.benchmarks).toEqual(r.fit.benchmarks);
+		for (const p of [r.splitSample!.calibration, r.splitSample!.validation]) {
+			expect(p.benchmarks).not.toBeNull();
+			expect(p.intervals == null || p.intervals.years === p.waterYears.length).toBe(true);
+		}
+		// Deterministic: the same fit gives the same intervals.
+		expect(calibrate(input, { budget: 50, seed: 2 }).fit.intervals).toEqual(r.fit.intervals);
 	}, 60_000);
 
 	it('scores only observed days inside the calibration window and outside exclusions', () => {
@@ -208,6 +236,12 @@ describe('calibrate', () => {
 		const report = calibrate(input, { budget: 50, validate: false, exclusions: [{ start: '1992-01-01', end: '1992-01-31' }] });
 		expect(report.fit).toMatchObject({ start: '1991-10-01', end: '1993-09-30' });
 		expect(report.fit.scores.days).toBe(700);
+		// The WR2012 five-statistic table (CR-28) on the same days: January 1992 is
+		// excluded, so water year 1991 has a month short and only 1992 counts.
+		expect(report.fit.wr2012Fit!.waterYears).toEqual([1992]);
+		expect(report.before.wr2012Fit!.waterYears).toEqual([1992]);
+		const sim = pb.simulate(report.params);
+		expect(report.fit.wr2012Fit).toEqual(wr2012FitStats(d0, pb.observed, sim, pb.scoredDays));
 	});
 
 	it('reports the CHIRPS factors its rain used, for fit provenance (engine ≥ 0.29.0)', () => {
@@ -306,6 +340,23 @@ describe('calibrate', () => {
 		expect(report.notes.join(' ')).toMatch(/too few to fit on dry years and test on wet ones.*weakly constrained/);
 	});
 
+	it('states how representative the record is against the whole run’s rain (CR-34)', () => {
+		// 12 years of rain, but only the first 3 water years observed.
+		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 12);
+		const obs = input.series.flow_observed_m3s!;
+		obs.values = obs.values.map((v, t) => (t < 365 * 3 ? v : null));
+		const report = calibrate(input, { budget: 20, validate: false });
+		const r = report.representativeness!;
+		expect(r.scoredDays).toBe(report.fit.scores.days);
+		expect(r.waterYears).toBe(3);
+		expect(r.years.map((y) => y.waterYear)).toEqual(report.fit.waterYears);
+		// The long-term reference is the whole run's rain, not the observed years.
+		expect(r.longTerm).toMatchObject({ years: 12, firstYear: 1990, lastYear: 2001 });
+		expect(r.years.every((y) => y.percentile !== null && y.class !== null)).toBe(true);
+		expect(report.notes).toEqual(expect.arrayContaining(r.notes));
+		expect(r.notes.join(' ')).toMatch(/only 3 water years, fewer than 5/);
+	});
+
 	it('flags a record whose "wet" years are hardly wetter than its dry ones', () => {
 		// Identical rain every year: the wet half can't be wetter than the dry half.
 		const input = synthetic({ x1: 420, x2: 0, x3: 85, x4: 2.3 }, 1);
@@ -318,6 +369,68 @@ describe('calibrate', () => {
 		const report = calibrate(input, { budget: 60 });
 		expect(report.differential!.wetDryRatio).toBeLessThan(1.5);
 		expect(report.notes.join(' ')).toMatch(/no clearly wet years to test on/);
+	});
+
+	describe('dry → wet ranking by the reference gauge (a regional wet/dry index, never a target)', () => {
+		const truth = { x1: 420, x2: 0, x3: 85, x4: 2.3 };
+		const opts = { budget: 30, seed: 2 } as const;
+		/** A reference series over the 8-year record whose value in water year 1990 + i is perYear(i). */
+		const referenceOf = (input: ModelInput, perYear: (i: number) => number | null) => {
+			const n = input.series.rain_catchment_mm!.values.length;
+			const d0 = toEpochDay('1990-10-01');
+			return {
+				startDate: '1990-10-01',
+				values: Array.from({ length: n }, (_, t) => {
+					const d = fromEpochDay(d0 + t);
+					const wy = Number(d.slice(0, 4)) - (Number(d.slice(5, 7)) >= 10 ? 0 : 1);
+					return perYear(wy - 1990);
+				})
+			};
+		};
+
+		it('ranks the water years by the reference when it covers them, and records it', () => {
+			const input = synthetic(truth, 8);
+			// Reversed: 1990/91 is the reference's wettest year, 1997/98 its driest.
+			input.series.flow_reference_m3s = referenceOf(input, (i) => 10 - i);
+			const report = calibrate(input, opts);
+			expect(report.differential!.rankedBy).toBe('reference');
+			expect(report.differential!.dryYears).toEqual([1994, 1995, 1996, 1997]);
+			expect(report.differential!.wetYears).toEqual([1990, 1991, 1992, 1993]);
+			// The ratio stays the fitted record's own observed contrast.
+			expect(Number.isFinite(report.differential!.wetDryRatio)).toBe(true);
+			// Asked for 'observed', the reference is ignored.
+			const own = calibrate(input, { ...opts, rankYearsBy: 'observed' });
+			expect(own.differential!.rankedBy).toBe('observed');
+		}, 60_000);
+
+		it('is never scored: with it the report is exactly the report without it, bar the ranking', () => {
+			const base = calibrate(synthetic(truth, 8), opts);
+			expect(base.differential!.rankedBy).toBe('observed');
+			const input = synthetic(truth, 8);
+			// A reference that ranks the years as the observed record does, but at twice (and a tenth of) the flow:
+			// were it ever scored, a score would move.
+			const obs = input.series.flow_observed_m3s!.values as number[];
+			input.series.flow_reference_m3s = { startDate: '1990-10-01', values: obs.map((q) => q * 2) };
+			const ranked = calibrate(input, opts);
+			expect(ranked.differential!.rankedBy).toBe('reference');
+			expect(ranked.flowKind).toBe('flow_observed_m3s');
+			expect({ ...ranked, differential: { ...ranked.differential, rankedBy: 'observed' } }).toEqual(base);
+			// Asked to rank by the fitted record, it matches the report without a reference in every field.
+			input.series.flow_reference_m3s = { startDate: '1990-10-01', values: obs.map((q) => q / 10) };
+			expect(calibrate(input, { ...opts, rankYearsBy: 'observed' })).toEqual(base);
+		}, 120_000);
+
+		it('falls back to the observed ranking, with a note, when the reference misses a year', () => {
+			const input = synthetic(truth, 8);
+			input.series.flow_reference_m3s = referenceOf(input, (i) => (i < 5 ? 10 - i : null));
+			const report = calibrate(input, opts);
+			expect(report.differential!.rankedBy).toBe('observed');
+			expect(report.notes.join(' ')).toMatch(/reference gauge has fewer than 180 days in 3 of the 8 water years .*\(WY 1995\/96, WY 1996\/97, WY 1997\/98\), so it ranks them by their own observed flow instead/);
+			// Asked for 'reference' in a project without one: the same fallback, said.
+			const none = calibrate(synthetic(truth, 8), { ...opts, rankYearsBy: 'reference' });
+			expect(none.differential!.rankedBy).toBe('observed');
+			expect(none.notes).toContain('The project has no reference gauge, so the dry → wet test ranks water years by their own observed flow.');
+		}, 120_000);
 	});
 
 	it('refuses a project with no observed record, and can be cancelled', () => {

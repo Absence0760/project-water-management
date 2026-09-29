@@ -1,4 +1,4 @@
--- 096_preview_farm_holders — the aggregate rule (D2, design §10.3) as a
+-- 104_preview_farm_holders — the aggregate rule (D2, design §10.3) as a
 -- farm's own farmer meets it, for "Preview as farmer" (issue #51).
 --
 -- app_other_farm_holders(p_project) (020) counts the other holders from the
@@ -47,7 +47,7 @@ CREATE FUNCTION app_other_farm_holders(p_project uuid, p_node uuid) RETURNS inte
 	$$;
 
 COMMENT ON FUNCTION app_other_farm_holders(uuid, uuid) IS
-	'The aggregate rule''s other-holder count (D2) as p_node''s own farmer meets it, for "Preview as farmer" (096, issue #51). A farmer gets their own count (p_node ignored); NULL for a non-member.';
+	'The aggregate rule''s other-holder count (D2) as p_node''s own farmer meets it, for "Preview as farmer" (104, issue #51). A farmer gets their own count (p_node ignored); NULL for a non-member.';
 
 -- SECURITY DEFINER: the owner and water_app only (028's rule).
 REVOKE ALL ON FUNCTION app_other_farm_holders(uuid, uuid) FROM PUBLIC;

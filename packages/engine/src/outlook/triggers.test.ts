@@ -6,7 +6,9 @@ import { toEpochDay } from '../calendar';
 import type { ModelInput, ModelOutput } from '../project';
 import { runModelWithoutChecks } from '../run';
 import { outlookAnalogue, resolveSeason, type OutlookSeason } from './season';
-import { outlookMemberInput, runSeasonalOutlook, type OutlookMember } from './outlook';
+import { outlookAnalogues, outlookBaseAndSnapshot, outlookMember, outlookMemberInput, outlookSeasonInput, runSeasonalOutlook, type OutlookMember } from './outlook';
+import { runModelFrom } from '../run';
+import { withDamStorage } from '../warmstart/snapshot';
 import { testCatchment } from './testCatchment';
 import {
 	bandStartStorage,
@@ -14,6 +16,7 @@ import {
 	defaultReviewDate,
 	describeTriggerRow,
 	reviewStorageHistory,
+	reviewTriggerBands,
 	reviewTriggerTable,
 	runReviewTriggers,
 	storageBands,
@@ -293,6 +296,54 @@ describe('the trigger table', () => {
 	});
 });
 
+describe('the job’s path: reviewTriggerBands, member by member, then reviewTriggerTable (issue #53 R6 backend)', () => {
+	it('gives the same table as runReviewTriggers', () => {
+		const lv = levels([1, 0.5]);
+		const years = [2003, 2004, 2005];
+		const want = runReviewTriggers(pumped, { reviewDate: REVIEW, seasonEnd: END, decisionDate: '2012-10-01', levels: lv, analogueYears: years });
+		const { baseRun, snapshot } = outlookBaseAndSnapshot(pumped, REVIEW);
+		const plan = reviewTriggerBands(pumped, baseRun, { reviewDate: REVIEW, seasonEnd: END, decisionDate: '2012-10-01' });
+		expect(plan.bands.map((b) => b.band)).toEqual([...want.rows].reverse().map((r) => r.band));
+		const season = { decisionDate: REVIEW, seasonEnd: END };
+		const { analogues, excluded } = outlookAnalogues(baseRun, season, years);
+		const bands = plan.bands.map((b) => {
+			const s = withDamStorage(snapshot!, pumped, b.storageM3ByDam);
+			return {
+				...b,
+				levels: lv.map((l) => ({
+					id: l.id,
+					label: l.label,
+					problems: [],
+					members: analogues.map((a) => {
+						const m = outlookSeasonInput(pumped, baseRun, season, a, l.ops);
+						return outlookMember(runModelFrom(s, m.input), m.input.model, season, a);
+					})
+				}))
+			};
+		});
+		const got = reviewTriggerTable({
+			reviewDate: REVIEW,
+			seasonEnd: END,
+			model: pumped.model,
+			analogues,
+			excluded,
+			bands,
+			representative: plan.representative,
+			bandSource: plan.bandSource,
+			history: plan.history,
+			lowestOnRecordM3: plan.lowestOnRecordM3,
+			bandWarnings: plan.bandWarnings
+		});
+		expect(got).toEqual(want);
+	});
+
+	it('refuses a review date on or before the decision date, and a catchment without a farm dam, before any member runs', () => {
+		expect(() => reviewTriggerBands(pumped, pumpedBase, { reviewDate: '2012-10-01', seasonEnd: END, decisionDate: '2012-10-01' })).toThrow(/not after/);
+		const noDams = { ...plain, model: { ...plain.model, nodes: plain.model.nodes.map((n) => ({ ...n, damCapacityM3: 0 })) } };
+		expect(() => reviewTriggerBands(noDams, plainBase, { reviewDate: REVIEW, seasonEnd: END })).toThrow(/farm dam/);
+	});
+});
+
 describe('against the plain outlook', () => {
 	it('review date = decision date: the band holding the base run’s storage reproduces the plain outlook', () => {
 		// On 1 October 2012 both dams are full in the base run, so the full band's start (pro rata: each full) is the history's own state.
@@ -342,6 +393,7 @@ function member(waterYear: number, below: number): OutlookMember {
 		analogueTo: `${waterYear + 1}-04-30`,
 		seasonEndStorageM3: 0,
 		storageM3ByDam: {},
+		farms: {},
 		demandM3: 100,
 		suppliedM3: 100,
 		demandMet: 1,

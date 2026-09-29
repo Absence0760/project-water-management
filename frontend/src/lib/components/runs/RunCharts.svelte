@@ -21,6 +21,7 @@
 	import { forecastBand } from '$lib/components/forecast/forecast';
 	import RunChart from './RunChart.svelte';
 	import { toDisplayUnit } from './results';
+	import { clipExclusions, exclusionKeyText, seriesSpan, type ExcludedPeriod } from './exclusionShading';
 
 	let {
 		projectId,
@@ -31,7 +32,8 @@
 		modelTail,
 		record,
 		deeperLead,
-		forecastFrom = null
+		forecastFrom = null,
+		exclusions = []
 	}: {
 		projectId: string;
 		runId: string;
@@ -46,6 +48,8 @@
 		deeperLead?: Snippet;
 		/** A forecast run's first forecast day (WP-2.12): every daily chart shades the days from it. */
 		forecastFrom?: string | null;
+		/** The periods this run's calibration left out (its own settings snapshot, runExclusions): tinted on the hydrograph. */
+		exclusions?: ExcludedPeriod[];
 	} = $props();
 	const band = $derived(forecastBand(forecastFrom));
 
@@ -85,6 +89,9 @@
 	// Gauge or logger, and which one the run is scored against (issue #45).
 	const sources = $derived(observedSources(refs));
 	const hydroSeries = $derived(hydrographSeries(catchment, conv, true, sources));
+	// The run's calibration exclusions over the hydrograph's days, each with its reason in the key under it.
+	const excluded = $derived(clipExclusions(exclusions, seriesSpan(hydroSeries)));
+	const excludedKey = $derived(excluded.length ? { label: 'Excluded from calibration', items: excluded.map(exclusionKeyText) } : undefined);
 	// Which days the flow-duration curves rank. With an observed record that
 	// covers only part of the run, the curves are compared on the days it read
 	// (like with like); the whole run is one click away.
@@ -182,6 +189,8 @@
 				recentLabel="Last 3 years"
 				toolbar={unitToggle}
 				{band}
+				shade={excluded}
+				shadeKey={excludedKey}
 				bind:ready={hydroReady}
 				caption="{observedCaption(catchment, sources)} Natural flow starts hidden: click it in the legend to show it."
 			/>

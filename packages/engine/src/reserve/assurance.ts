@@ -18,7 +18,16 @@
 // Separately, per calendar month, the FDC check: the impacted flow duration
 // curve against the EWR curve at every % point (the "flow equalled or
 // exceeded p % of the time" reading of an assurance rule; Hughes & Hannart
-// 2003, Pollard et al. 2011 Fig. 4).
+// 2003, Pollard et al. 2011 Fig. 4), with the natural flow's duration curve
+// at the same points for the overlay (engine ≥ 1.19.0, CR-29).
+//
+// And, as the gazette and CMAs report it (engine ≥ 1.19.0, CR-29): per
+// calendar month, the % of *days* the flow was below that day's requirement
+// (the month's R spread evenly over its days, as `ewr_rule`) and the % of the
+// required volume not delivered, from daily data beside the monthly verdict
+// (daily data shows more non-compliance: Pollard et al. 2011; Riddell et al.
+// 2014); and the EWR as %nMAR, the mean annual requirement over the run's
+// natural MAR at the site.
 //
 // Invariant (tested): when every EWR value is at most the natural flow at the
 // same point (T ≤ N), natural flow meets its own requirement in every month,
@@ -138,6 +147,46 @@ export interface EwrFdcPoint {
 	impacted: number | null;
 	/** impacted ≥ required; null without a complete month. */
 	met: boolean | null;
+	/**
+	 * The run's natural flow duration curve at the point (table unit), for the
+	 * FDC overlay (engine ≥ 1.19.0, CR-29): always the run's own, whatever
+	 * the table's natural source; null without a complete month; absent on
+	 * older runs.
+	 */
+	natural?: number | null;
+}
+
+/**
+ * Compliance from daily data (engine ≥ 1.19.0, CR-29): each day of a complete
+ * month against that day's requirement (the month's R ÷ its days, as the
+ * `ewr_rule` series), total flow.
+ */
+export interface EwrDailyCompliance {
+	/** Days assessed: the days of the complete months. */
+	days: number;
+	/** Days the flow was below the day's requirement. */
+	daysNotMet: number;
+	/** daysNotMet ÷ days (0–1); null without a day. */
+	timeNotMet: number | null;
+	/** Σ the days' requirements, m³. */
+	requiredM3: number;
+	/** Σ MAX(R_day − A_t, 0), m³. */
+	shortfallM3: number;
+	/** shortfallM3 ÷ requiredM3 (0–1); null when nothing was required. */
+	volumeNotMet: number | null;
+}
+
+/** The EWR as a share of the natural MAR at the site (engine ≥ 1.19.0, CR-29). */
+export interface EwrPctNmar {
+	/** Mean annual requirement, Mm³/a: Σ over the 12 calendar months of the mean complete-month requirement. */
+	ewrMcm: number;
+	/** The run's natural MAR at the site, Mm³/a, the same way (as naturalMar.runMcm). */
+	naturalMarMcm: number;
+	/** 100 × ewrMcm ÷ naturalMarMcm; null when the natural MAR is 0. */
+	pct: number | null;
+	/** With a low-flow grid: the maintenance/drought low flows alone, the same way. */
+	lowFlowMcm?: number;
+	lowFlowPct?: number | null;
 }
 
 /** One calendar month over the run (the list is in water-year order, Oct … Sep). */
@@ -156,6 +205,8 @@ export interface EwrAssuranceMonthOfYear {
 	fdc: EwrFdcPoint[];
 	/** Low flows met ÷ years (engine ≥ 0.33.0); absent without a low-flow grid, null when years = 0. */
 	lowFlowRate?: number | null;
+	/** % of time and volume not met from daily data (engine ≥ 1.19.0, CR-29); absent on older runs. */
+	daily?: EwrDailyCompliance;
 }
 
 export interface EwrAssuranceSite {
@@ -206,6 +257,13 @@ export interface EwrAssuranceSite {
 	 * naturalMarMcm × scale; differencePct = 100 (run − table) ÷ table.
 	 */
 	naturalMar?: { runMcm: number; tableMcm: number; differencePct: number };
+	/** Daily compliance over every calendar month (engine ≥ 1.19.0, CR-29); absent on older runs. */
+	daily?: EwrDailyCompliance;
+	/**
+	 * The EWR as %nMAR (engine ≥ 1.19.0, CR-29): present when the run has every
+	 * calendar month at least once; absent otherwise and on older runs.
+	 */
+	ewrPctNmar?: EwrPctNmar;
 }
 
 /** A site to assess: its table, and its daily natural and simulated flow (m³/day). */
@@ -505,11 +563,18 @@ export function assessSite(
 		const ms = months.filter((m) => waterYearIndex(m.month) === w);
 		const n = ms.length;
 		const impactedValues = list.map((r) => r.actual);
+		const naturalValues = list.map((r) => r.natural);
 		const c = curves[w]!;
 		const fdc: EwrFdcPoint[] = P.map((p, i) => {
 			const q = durationQuantile(impactedValues, p);
 			const required = c.ewr[i]!;
-			return { point: p, required, impacted: q, met: q === null ? null : q >= required - MET_TOLERANCE * Math.max(required, q) };
+			return {
+				point: p,
+				required,
+				impacted: q,
+				met: q === null ? null : q >= required - MET_TOLERANCE * Math.max(required, q),
+				natural: durationQuantile(naturalValues, p)
+			};
 		});
 		const met = ms.filter((m) => m.met).length;
 		const row: EwrAssuranceMonthOfYear = {
@@ -521,7 +586,8 @@ export function assessSite(
 			meanRequired: n ? ms.reduce((s, m) => s + m.required, 0) / n : null,
 			meanActual: n ? ms.reduce((s, m) => s + m.actual, 0) / n : null,
 			naturalCurve: c.natural,
-			fdc
+			fdc,
+			daily: dailyCompliance(list.filter((r) => r.from >= 0), site.impacted, requiredM3Day)
 		};
 		if (table.lowFlow) row.lowFlowRate = n ? ms.filter((m) => m.lowFlowMet).length / n : null;
 		return row;
@@ -572,12 +638,61 @@ export function assessSite(
 		report.highFlows = table.highFlows.map((e) => assessHighFlow(e, table.scale, startDate, inRun, site.natural, site.impacted));
 	}
 	if (onBase) report.lowFlowMeasure = 'baseflow';
+	report.daily = dailyCompliance(inRun, site.impacted, requiredM3Day);
+	if (byW.every((list) => list.length > 0)) {
+		// Σ over the calendar months of the mean complete month, as the natural MAR below.
+		const meanAnnual = (f: (m: EwrAssuranceMonth) => number) =>
+			byW.reduce((s, _, w) => {
+				const ms = months.filter((m) => waterYearIndex(m.month) === w);
+				return s + ms.reduce((a, m) => a + f(m), 0) / ms.length;
+			}, 0) / 1e6;
+		const naturalMarMcm = byW.reduce((s, list) => s + list.reduce((a, r) => a + r.naturalM3, 0) / list.length, 0) / 1e6;
+		const pctOf = (mcm: number) => (naturalMarMcm > 0 ? (100 * mcm) / naturalMarMcm : null);
+		const ewrMcm = meanAnnual((m) => toM3(m.required, m.days, unit));
+		report.ewrPctNmar = { ewrMcm, naturalMarMcm, pct: pctOf(ewrMcm) };
+		if (table.lowFlow) {
+			const lowFlowMcm = meanAnnual((m) => toM3(m.requiredLowFlow!, m.days, unit));
+			report.ewrPctNmar.lowFlowMcm = lowFlowMcm;
+			report.ewrPctNmar.lowFlowPct = pctOf(lowFlowMcm);
+		}
+	}
 	if (table.naturalMarMcm != null && byW.every((list) => list.length > 0)) {
 		const runMcm = byW.reduce((s, list) => s + list.reduce((a, r) => a + r.naturalM3, 0) / list.length, 0) / 1e6;
 		const tableMcm = table.naturalMarMcm * table.scale;
 		report.naturalMar = { runMcm, tableMcm, differencePct: (100 * (runMcm - tableMcm)) / tableMcm };
 	}
 	return { requiredM3Day, report };
+}
+
+/**
+ * Each day of the given complete months against that day's requirement
+ * (requiredM3Day, the month's R ÷ its days), on the day's total flow.
+ */
+function dailyCompliance(blocks: readonly { from: number; days: number }[], impacted: ArrayLike<number>, requiredM3Day: Float64Array): EwrDailyCompliance {
+	let days = 0;
+	let daysNotMet = 0;
+	let requiredM3 = 0;
+	let shortfallM3 = 0;
+	for (const b of blocks)
+		for (let t = Math.max(b.from, 0); t < b.from + b.days; t++) {
+			const r = requiredM3Day[t]!;
+			if (!Number.isFinite(r)) continue;
+			const a = Number.isFinite(impacted[t]!) ? impacted[t]! : 0;
+			days++;
+			requiredM3 += r;
+			if (!isMet(a, r)) {
+				daysNotMet++;
+				shortfallM3 += r - a;
+			}
+		}
+	return {
+		days,
+		daysNotMet,
+		timeNotMet: days ? daysNotMet / days : null,
+		requiredM3,
+		shortfallM3,
+		volumeNotMet: requiredM3 > 0 ? shortfallM3 / requiredM3 : null
+	};
 }
 
 const isMet = (actual: number, required: number) => actual >= required - MET_TOLERANCE * Math.max(Math.abs(required), Math.abs(actual));

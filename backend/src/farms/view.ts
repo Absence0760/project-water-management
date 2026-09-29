@@ -14,6 +14,7 @@ import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
 import { nodeColumnHeader } from '../export/run-tables.js';
+import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
 import { isStale } from '../portfolio/status.js';
@@ -105,7 +106,7 @@ export async function currentFor(db: Db, projectId: string, nodeId: string): Pro
  * least k − 1 other holders. cutBeyondShare is measured against that share,
  * so it goes with it (it would bound K_tot). The farm page and the
  * data-subject export (auth/export.ts) both go through here. Counted as
- * `nodeId`'s own farmer would count it (096), so the WUA's "Preview as
+ * `nodeId`'s own farmer would count it (104), so the WUA's "Preview as
  * farmer" hides the even share where that farmer's page does.
  */
 export async function farmerProjection(db: Db, projectId: string, nodeId: string, view: FarmProjection): Promise<FarmProjection> {
@@ -172,7 +173,9 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 					nextExpectedOn: cur.next_expected_on
 				},
 				outlet30: { name: outlet?.name ?? '', daysNotMet: outlet?.daysNotMet.last30 ?? 0, days: cv.last30.days },
-				stale: isStale(farm.dataUntil, today)
+				stale: isStale(farm.dataUntil, today),
+				// The seasonal outlook the WUA published, this farm's own figures (issue #53 R5, E3), until its season ends there.
+				outlook: await farmOutlook(db, id, nodeId, today)
 			};
 			return c.json(body);
 		});

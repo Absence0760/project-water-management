@@ -2,7 +2,9 @@
 	A run's Reserve compliance (RunSummary.ewrAssurance, engine ≥ 0.21.0;
 	docs/model.md §2.9c): per EWR site with a rule table, the months met, the
 	share met per month of the year (chart and table), the FDC check, and each
-	month in a collapsed table.
+	month in a collapsed table. From engine 1.19.0 (CR-29) also the EWR as
+	%nMAR, % of time and volume not met from daily data, and the monthly
+	flow-duration curves of natural and present-day flow on the EWR curve.
 -->
 <script lang="ts">
 	import { EWR_ASSURANCE_MIN_YEARS, type EwrAssuranceSite } from '@water-management/engine';
@@ -27,6 +29,9 @@
 		UNIT_LABEL,
 		verdict
 	} from './ewrAssurance';
+	import EwrDailyCompliance from './EwrDailyCompliance.svelte';
+	import EwrFdcOverlay from './EwrFdcOverlay.svelte';
+	import { nmarTile } from './ewrReporting';
 
 	let {
 		sites,
@@ -47,6 +52,7 @@
 	const split = $derived(!!site.lowFlow);
 	const src = $derived(sourceLine(site));
 	const mar = $derived(naturalMarLine(site));
+	const nmar = $derived(nmarTile(site));
 
 	// The chart: share of months met per month of the year, on a fixed 0–100 % axis.
 	const W = 480;
@@ -114,6 +120,13 @@
 			<dd>{site.fdc.rate === null ? '–' : fmtPct(site.fdc.rate, 0)}</dd>
 			<dd class="sub">{fmtNum(site.fdc.met)} of {fmtNum(site.fdc.cells)} month × % point checks: simulated flow duration on or above the EWR curve</dd>
 		</div>
+		{#if nmar}
+			<div class="stat">
+				<dt>EWR as % of natural MAR</dt>
+				<dd>{nmar.value}<small>%nMAR</small></dd>
+				<dd class="sub">{nmar.sub}</dd>
+			</div>
+		{/if}
 	</dl>
 
 	<svg viewBox="0 0 {W} {H}" class="bars" role="img" aria-label="Share of months met per month of the year at {site.name} (the table below holds the values)">
@@ -171,6 +184,9 @@
 			</tbody>
 		</table>
 	</div>
+
+	<EwrDailyCompliance {site} />
+	<EwrFdcOverlay {site} />
 
 	{#if grid.waterYears.length}
 		<div class="reserve-heat">

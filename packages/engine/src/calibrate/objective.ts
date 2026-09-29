@@ -15,6 +15,13 @@
 // - NSE on √Q and on ln(Q + ε): Nash–Sutcliffe weighted towards medium and low
 //   flows. KGE is not applied to log flows (Santos et al. 2018: the KGE
 //   components misbehave for log-transformed flows).
+// - Low/high KGE′ (engine ≥ 1.19.0, calibration research CR-3): the mean of
+//   KGE′ on Q and KGE′ on 1/(Q + ε), ε = 1 % of the mean observed flow, the
+//   same ε on both sides (Pushpalatha et al. 2012; Garcia et al. 2017). The
+//   inverse flows weight the recessions and low flows an EWR decision turns
+//   on, while the KGE′(Q) half keeps the high flows and the water balance in.
+//   KGE′ on 1/Q is well behaved where KGE′ on log Q is not: the transformed
+//   flows stay positive, so its bias and CV terms keep their meaning.
 // - FDC signatures (Yilmaz, Gupta & Wagener 2008): % bias of the high-flow
 //   volume (top 2 %), of the mid-segment slope (20–70 % exceedance) and of the
 //   low-flow volume (bottom 30 %, in log space). Reported, not optimised.
@@ -31,6 +38,11 @@ export interface FitScores {
 	nse: number | null;
 	nseSqrt: number | null;
 	nseLog: number | null;
+	/**
+	 * Mean of KGE′(Q) and KGE′(1/(Q + ε)), ε = 1 % of the mean observed flow
+	 * (engine ≥ 1.19.0, CR-3; absent on a report made before it, read as null).
+	 */
+	kgeLowHigh: number | null;
 	/** 100 × (Σsim − Σobs) / Σobs. */
 	volumeErrorPct: number | null;
 	/** %BiasFHV: high-flow (top 2 %) volume bias. */
@@ -142,6 +154,22 @@ function nseOf(o: ArrayLike<number>, s: ArrayLike<number>, f: (q: number) => num
 /** ε for log flows: 1 % of the mean observed flow (as network/stats.ts logNse). */
 export const logEpsilon = (o: ArrayLike<number>) => Math.max(mean(o) / 100, 1e-12);
 
+/** 1/(Q + ε) for every day (negative flows read as 0). */
+export const inverseFlows = (a: ArrayLike<number>, eps: number) => Float64Array.from(a, (q) => 1 / (Math.max(0, q) + eps));
+
+/**
+ * Mean of KGE′ on the flows and KGE′ on their inverses 1/(Q + ε), ε = 1 % of
+ * the mean observed flow (Pushpalatha et al. 2012; Garcia et al. 2017),
+ * applied to observed and simulated alike. null when either half is.
+ */
+export function kgeLowHigh(o: ArrayLike<number>, s: ArrayLike<number>): number | null {
+	const high = kgePrime(o, s);
+	if (high === null) return null;
+	const eps = logEpsilon(o);
+	const low = kgePrime(inverseFlows(o, eps), inverseFlows(s, eps));
+	return low === null ? null : (high + low) / 2;
+}
+
 /** Exceedance-sorted copy (largest first) and the flow at exceedance probability p (0–1). */
 function fdc(a: ArrayLike<number>): Float64Array {
 	return Float64Array.from(a).sort().reverse();
@@ -230,6 +258,7 @@ export function fitScores(o: ArrayLike<number>, s: ArrayLike<number>, groups?: A
 		nse: nse(o, s),
 		nseSqrt: nseOf(o, s, (q) => Math.sqrt(Math.max(0, q))),
 		nseLog: nseOf(o, s, (q) => Math.log(Math.max(0, q) + eps)),
+		kgeLowHigh: kgeLowHigh(o, s),
 		volumeErrorPct: so > 0 ? (100 * (ss - so)) / so : null,
 		...fdcSignatures(o, s)
 	};
@@ -257,6 +286,9 @@ export function objectiveLoss(id: ObjectiveId, o: ArrayLike<number>, s: ArrayLik
 			v = nseOf(o, s, (q) => Math.log(Math.max(0, q) + eps));
 			break;
 		}
+		case 'kgeLowHigh':
+			v = kgeLowHigh(o, s);
+			break;
 	}
 	return v === null ? Infinity : 1 - v;
 }

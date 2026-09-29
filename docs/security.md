@@ -339,8 +339,11 @@ buys a **render session** that can read one report and nothing else.
   `/series`, `/day` and `/signoffs`: exactly the reads the report route
   makes. An impact report's session may also `GET /compare/runs` with
   exactly `a=<baseline project>:<baseline run>&b=<p>:<r>` (those two
-  parameters, once each: the impact section's one read), and never the
-  baseline's project or run directly. Any other method, project, run or route (the run list, members,
+  parameters, once each: the impact section's one read), and the
+  baseline run's `/series` with exactly `key=natural_flow` or
+  `key=ewr_shortfall` (the licence-impact board's, issue #53 R7; no other
+  key, no `nodeId`), and never the baseline's project, the run itself or
+  its other series. Any other method, project, run or route (the run list, members,
   jobs, reports, teams, compare, every write, and the run's own reads the
   report doesn't make: its CSV exports, the workbook's bulk series,
   reproduction, allocation comparison, model input, ensembles) answers
@@ -1009,6 +1012,17 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
+- **Seasonal outlooks to farmers (issue #53 R5, 104).** A farmer never
+  reads a seasonal outlook (`seasonal_outlook` stays viewer-only): an
+  editor publishes one level, and the farmer reads that publication's row
+  for their own linked farms only (`outlook_publication_farm_select`:
+  viewers, or `node_id IN app_farm_nodes(project_id)`), holding the engine's
+  `FarmOutlookProjection`, that farm's own share of demand met and its own
+  dam's end-of-season fill, no other farm's id, name or figure
+  (`views/farmOutlook.test.ts`, `outlooks/publication.db.test.ts` with a
+  positive control). The publication row itself (level, season, who
+  published) is every member's. What was published is append-only; a
+  publication is ended, never edited or deleted by `water_app`.
 - **Publications and the farm view (WP-2.3, WP-2.6 API, 022).** A farmer reads
   run results only through the project's current publication: its counts-only
   `catchment_view`, their own farms' stored projections (`publication_farm`)

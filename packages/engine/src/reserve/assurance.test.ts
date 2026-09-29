@@ -131,6 +131,51 @@ describe('assessSite: worked examples', () => {
 		expect(report.minYears).toBe(0);
 	});
 
+	it('reports % of time and volume not met from daily data beside the monthly verdict (CR-29)', () => {
+		// October 2000: 1.5 Mm³ natural, so R = 0.75 Mm³, 750 000 / 31 m³ a day. No flow for 10 days, then twice the day's R:
+		// the month is met on volume (42/31 × R), but 10 of 31 days, and 10/31 of the volume, were not.
+		const start = '2000-10-01';
+		const days = 31;
+		const rDay = 750_000 / 31;
+		const natural = daily(start, days, () => 1.5e6);
+		const impacted = Float64Array.from({ length: days }, (_, t) => (t < 10 ? 0 : 2 * rDay));
+		const { report } = assessSite(start, days, { table: table(), nodeId: null, name: 'Outlet', isOutlet: true, natural, impacted });
+		expect(report.months[0]!.met).toBe(true);
+		expect(report.daily).toMatchObject({ days: 31, daysNotMet: 10 });
+		expect(report.daily!.timeNotMet).toBeCloseTo(10 / 31, 12);
+		expect(report.daily!.requiredM3).toBeCloseTo(750_000, 6);
+		expect(report.daily!.shortfallM3).toBeCloseTo(10 * rDay, 6);
+		expect(report.daily!.volumeNotMet).toBeCloseTo(10 / 31, 12);
+		expect(report.byMonth[0]!.daily).toEqual(report.daily);
+		// A month of the year with no complete month: nothing assessed.
+		expect(report.byMonth[1]!.daily).toEqual({ days: 0, daysNotMet: 0, timeNotMet: null, requiredM3: 0, shortfallM3: 0, volumeNotMet: null });
+		// The FDC overlay: the run's natural curve beside the impacted one, in the table's unit.
+		for (const f of report.byMonth[0]!.fdc) expect(f.natural).toBeCloseTo(1.5, 12);
+		expect(report.byMonth[1]!.fdc.map((f) => f.natural)).toEqual([null, null, null]);
+		// One month isn't every calendar month: no %nMAR.
+		expect(report.ewrPctNmar).toBeUndefined();
+	});
+
+	it('gives the EWR as %nMAR over a whole year, and the low flows alone with a low-flow grid (CR-29)', () => {
+		// Every month 1.5 Mm³ natural: R = 0.75 (70 % on the curve), so 9 of 18 Mm³ a year, 50 %.
+		// Low flows 0.9 / 0.6 / 0.3 read at 70 %: 0.45 a month, 5.4 Mm³, 30 %.
+		const start = '2000-10-01';
+		const days = daysBetween(start, '2001-09-30');
+		const natural = daily(start, days, () => 1.5e6);
+		const site = { nodeId: null, name: 'Outlet', isOutlet: true, natural, impacted: natural };
+		const r = assessSite(start, days, { ...site, table: table() }).report;
+		expect(r.ewrPctNmar!.ewrMcm).toBeCloseTo(9, 9);
+		expect(r.ewrPctNmar!.naturalMarMcm).toBeCloseTo(18, 9);
+		expect(r.ewrPctNmar!.pct).toBeCloseTo(50, 9);
+		expect(r.ewrPctNmar).not.toHaveProperty('lowFlowPct');
+		const low = assessSite(start, days, { ...site, table: table({ lowFlow: rows([0.9, 0.6, 0.3]) }) }).report;
+		expect(low.ewrPctNmar!.lowFlowMcm).toBeCloseTo(5.4, 9);
+		expect(low.ewrPctNmar!.lowFlowPct).toBeCloseTo(30, 9);
+		// No natural flow: no share.
+		const dry = assessSite(start, days, { ...site, natural: new Float64Array(days), impacted: new Float64Array(days), table: table() }).report;
+		expect(dry.ewrPctNmar!.pct).toBeNull();
+	});
+
 	it('ranks natural flow among the run’s own years, and a flow at exactly the requirement meets it', () => {
 		// Three Octobers of 3, 2 and 1 Mm³: the run's own curve at 10/50/90 % is 3, 2, 1; the EWR is half of it.
 		const start = '2000-10-01';
@@ -169,7 +214,7 @@ describe('assessSite: worked examples', () => {
 		expect(m!.actual).toBeCloseTo(0.3, 12);
 		expect(m!.deficitM3).toBeCloseTo(0.1 * 28 * 86_400, 6);
 		expect(requiredM3Day[0]).toBeCloseTo(0.4 * 86_400, 6);
-		expect(report.byMonth[4]!.fdc[0]).toEqual({ point: 10, required: 0.4, impacted: expect.closeTo(0.3, 12), met: false });
+		expect(report.byMonth[4]!.fdc[0]).toEqual({ point: 10, required: 0.4, impacted: expect.closeTo(0.3, 12), met: false, natural: expect.closeTo(1, 12) });
 	});
 
 	it('counts the longest run of consecutive months not met and leaves part months as NaN', () => {
@@ -284,6 +329,17 @@ describe('assessSite invariants on random series', () => {
 			expect(b.overall.met).toBeLessThanOrEqual(a.overall.met);
 			expect(b.fdc.met).toBeLessThanOrEqual(a.fdc.met);
 			expect(b.overall.longestNotMetRun).toBeGreaterThanOrEqual(a.overall.longestNotMetRun);
+			// Daily (CR-29): the same days, never fewer short, never less shortfall; %nMAR depends only on natural flow.
+			expect(b.daily!.days).toBe(a.daily!.days);
+			expect(b.daily!.requiredM3).toBe(a.daily!.requiredM3);
+			expect(b.daily!.daysNotMet).toBeGreaterThanOrEqual(a.daily!.daysNotMet);
+			expect(b.daily!.shortfallM3).toBeGreaterThanOrEqual(a.daily!.shortfallM3 - 1e-9 * Math.max(1, a.daily!.shortfallM3));
+			expect(b.ewrPctNmar).toEqual(a.ewrPctNmar);
+			a.byMonth.forEach((m, i) => {
+				expect(b.byMonth[i]!.daily!.daysNotMet).toBeGreaterThanOrEqual(m.daily!.daysNotMet);
+				// The FDC overlay's natural curve is the natural flow's, whatever the impacted flow.
+				expect(b.byMonth[i]!.fdc.map((f) => f.natural)).toEqual(m.fdc.map((f) => f.natural));
+			});
 		}
 	});
 
@@ -298,6 +354,12 @@ describe('assessSite invariants on random series', () => {
 			expect(r.byMonth.reduce((s, m) => s + m.met, 0)).toBe(r.overall.met);
 			expect(r.byMonth.reduce((s, m) => s + m.deficitM3, 0)).toBeCloseTo(r.overall.deficitM3, 3);
 			for (const m of r.byMonth) expect(m.rate).toBe(m.years ? m.met / m.years : null);
+			// Daily (CR-29): the months of the year add up to the whole, which covers every day of a complete month.
+			expect(r.byMonth.reduce((s, m) => s + m.daily!.days, 0)).toBe(r.daily!.days);
+			expect(r.daily!.days).toBe(r.months.reduce((s, m) => s + m.days, 0));
+			expect(r.byMonth.reduce((s, m) => s + m.daily!.daysNotMet, 0)).toBe(r.daily!.daysNotMet);
+			expect(r.byMonth.reduce((s, m) => s + m.daily!.shortfallM3, 0)).toBeCloseTo(r.daily!.shortfallM3, 3);
+			expect(r.daily!.timeNotMet).toBe(r.daily!.days ? r.daily!.daysNotMet / r.daily!.days : null);
 			expect(r.months.every((m) => m.percentile >= c.points[0]! && m.percentile <= c.points[c.points.length - 1]!)).toBe(true);
 		}
 	});

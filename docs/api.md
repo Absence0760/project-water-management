@@ -334,16 +334,18 @@ alongside teams, e.g. to give an outside client `viewer` access.
   project document moves the site to the copy's gauge. Like
   `autoRun` it is no model input: runs don't record it, and a `PATCH` that
   changes nothing but `autoRun` and `outcomes` leaves `updatedAt` alone.
-  `settings.outlook = { season, planningShare }` (issue #53 R5,
+  `settings.outlook = { season, planningShare, review }` (issue #53 R5, R6,
   `projects/outlookSettings.ts`, [ui.md § Seasonal outlook](./ui.md#seasonal-outlook))
-  is always present too, defaults `{ season: null, planningShare: null }`:
-  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April, O3)
-  and `DEFAULT_PLANNING_SHARE` (0.8, O6), both confirmed by the client
-  (issue #90).
+  is always present too, defaults `{ season: null, planningShare: null, review: null }`:
+  null = the engine's `DEFAULT_OUTLOOK_SEASON` (1 October – 30 April, O3),
+  `DEFAULT_PLANNING_SHARE` (0.8, O6) and `defaultReviewDate` (1 January for
+  that season, O3), all confirmed by the client (issue #90).
   `PATCH` takes either field: `season` null or `{ startMonth, startDay,
   endMonth, endDay }` (the decision date and the season end as a month and
   day; whole, each a real day of a common year, so not 29 February, and
-  not the same day; `400`), `planningShare` null or a number in (0, 1]. It
+  not the same day; `400`), `planningShare` null or a number in (0, 1],
+  `review` null or `{ month, day }` (a real day of a common year; whether it
+  falls inside the season is checked when an outlook is asked for, `422`). It
   says how a [seasonal outlook](#seasonal-outlooks) is set up; like
   `outcomes` it is no model input (runs don't record it, and saving only it
   leaves `updatedAt` alone).
@@ -496,7 +498,17 @@ alongside teams, e.g. to give an outside client `viewer` access.
   off, the default), `editedParams`, `forcing`, and `starts` (1–10) with
   `startResults` (`{ seed, params, score, best }[]`, one per start) for a
   multi-start fit (absent on a record made before those, i.e. one start), and
-  no others. `bounds` is
+  no others. Each scored period (`fit`, `before`, a test's `calibration`
+  and `validation`, `marPenalty.unpenalised.fit`) is `{ start, end,
+  waterYears, scores, intervals?, benchmarks? }`, `scores` at most 30
+  numbers-or-null by name. From engine 1.19.0 (CR-5) `intervals` is `{ level,
+  resamples, seed, years, kgePrime, nse, kgeLowHigh }`, each score `{ lo, hi
+  }` or `null`, and `null` itself with fewer than 3 water years; `benchmarks`
+  is `{ meanFlow, climatology, halfWindowDays }`, two score sets like
+  `scores`. Both are optional (absent on a record made before them), and a
+  period with any other key is a `400` ([model.md
+  §2.10b](./model.md#210b-automatic-calibration-engine--050-issue-4-phase-4)).
+  `bounds` is
   `wide` (the default: each parameter's calibration range) or `typical`
   (Perrin et al.'s 80 % range). `forcing` (`{ panCoefficient, apanMm,
   chirpsBiasCorrection, zeroRainRuns, chirpsFitPeriod, chirpsFactors }`,
@@ -1062,7 +1074,7 @@ internal, true, null, ''. `PUT` refuses an object on a gauge, an other water
 user or an unknown node, a monthly one without 12 values, a per-unit one
 without a count and litres, and an external one with a return share above 0.
 
-A demand object's `schedule` (engine ≥ 1.17.0, migration 100, issue #90 Q4,
+A demand object's `schedule` (engine ≥ 1.17.0, migration 105, issue #90 Q4,
 [model.md §2.7f](./model.md)) is null or at most 24 windows `{ label (≤ 200,
 default ''), span ('always' | 'yearly' | 'range' | 'easter'), from, to
 ('yearly': 'MM-DD'; 'range': 'YYYY-MM-DD'; else null), easterFrom, easterTo
@@ -1371,7 +1383,13 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   segments and breaks with the simulated slopes, `unexplained` (overall, dry,
   wet) and `hint` (`rain`, `newUse`, `gauge`, `unclear`); `lowFlow` the
   season, `runoffModel`, `points` and `curves` (`source`, `pairedWith`,
-  `days`, `flowsM3s`) and the Q90 `comparison`. The checks only report and
+  `days`, `flowsM3s`) and the Q90 `comparison`. From engine 1.19.0 also
+  `recession` (absent on older runs; null without an observed record or
+  rain; [model.md §2.10d](./model.md), *Recession diagnostics*):
+  `{ flowKind, options, segments, observed, simulated, referenceFlowM3s,
+  observedRate, simulatedRate, rateRatio, bDiff, agrees }`, `segments` as
+  `[first, last]` run-day indices, each fit `{ a, b, points, segments,
+  minQM3s, maxQM3s }` or null. The checks only report and
   warn; their warnings are in `summary.warnings`.
 - Boreholes (engine ≥ 0.23.0): a farm or user with boreholes has
   `avgGroundwaterM3Day` and `avgBaseflowDepletionM3Day` on its summary, the
@@ -2052,7 +2070,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | Method | Path | Response | Min role |
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
-| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale }` (below) | farmer |
+| GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
 | GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
@@ -2092,6 +2110,13 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   (`farmToday`, `farm/numbers.ts`), so a saved copy or a tab left open moves
   on with the day and a phone set to another zone counts the server's days;
   `today` is its fallback when the browser doesn't know the zone.
+- `outlook`: the seasonal outlook the WUA published, this farm's own
+  figures only (issue #53 R5, E3; [§ Seasonal outlooks](#seasonal-outlooks)):
+  `{ decisionDate, seasonEnd, reviewDate, level: { id, label }, nYears,
+  demandYears, demandMet, dam: { capacityM3, seasonEndShare } | null,
+  publishedAt }`, the shares as `{ p10, p50, p90 }` fractions or null.
+  `null` with none published, once withdrawn, or once its season has ended
+  where the catchment is.
 - `project.wuaName` is the WUA's name for the contact lines (`null` =
   "your WUA"); `farm.dataFrom` is the published run's first day, which
   "compared with last season" names when `lastSeason` is `null` (a
@@ -2256,12 +2281,19 @@ every demand level × every analogue water year of the record as one member
 `outlookMember`), stores each member, then the engine's `summariseOutlook`
 as the result. Not a [sweep](#sweeps): a sweep member is a whole-record
 run; an outlook member is one level in one year, measured over the season.
+The same job then draws the **review triggers** for the season's review
+date (issue #53 R6, [model.md §2.15a](./model.md#215a-review-triggers-from-the-outlook-issue-53-r6)),
+and an editor can **publish** one level to the project's farmers (R5, the
+farmer view E3, migration 104).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
-| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` | viewer |
-| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` (null while pending). `404` for one that isn't this project's | viewer |
+| POST | `/projects/:id/outlooks` | `{ name, baseRunId, levels: [{ label, ops }], decisionDate?, seasonEnd?, reviewDate?, planningShare?, analogueYears? }` | `202 { outlook: Outlook, jobId, job: JobMeta }`: written `pending`, its job queued | editor |
+| GET | `/projects/:id/outlooks?baseRunId=` | – | `{ outlooks: Outlook[] }`, newest first, optionally of one base run, **without** `result` or `triggers` | viewer |
+| GET | `/projects/:id/outlooks/:outlookId` | – | `{ outlook: Outlook }` with its `result` and `triggers` (null while pending). `404` for one that isn't this project's | viewer |
+| POST | `/projects/:id/outlooks/:outlookId/publish` | `{ levelId }` | `201 { publication: OutlookPublication }`: that level published to farmers, ending the current publication. Audit `outlook.published` | editor |
+| GET | `/projects/:id/outlook-publication` | – | `{ publication: OutlookPublication \| null }`: the current one | viewer |
+| DELETE | `/projects/:id/outlook-publication` | – | `200 { publication }`, now ended (withdrawn); `404` when none is current. Audit `outlook.unpublished` | editor |
 
 - Body (strict): `name` 1–200 characters; `baseRunId` a saved run of this
   project; `levels` **1–6** (`OUTLOOK_LEVELS_MAX`), each `{ label, ops }`
@@ -2276,7 +2308,16 @@ run; an outlook member is one level in one year, measured over the season.
   decision date (that month and day) whose day before the run holds, and
   the season end the first of its month and day after it. `planningShare`
   (0, 1]: absent, the project's setting, else null (the engine's default,
-  `shareIsDefault` in the result). `analogueYears` (1–200 distinct water
+  `shareIsDefault` in the result). `reviewDate` (ISO, after the decision
+  date, on or before the season end; `400` when the body's own season
+  shows it isn't, else `422`): absent, the project's
+  `settings.outlook.review` (month and day, the first after the decision
+  date; when a season given in the request doesn't hold it, that season's
+  default; `422` when the project's own season doesn't), else the engine's
+  `defaultReviewDate` (1 January for the default season, O3); `null`: no
+  trigger table. A catchment with no farm dam gets none (the bands are dam
+  storage): an explicit review date is then `422`, an absent one is null.
+  `analogueYears` (1–200 distinct water
   years): absent, every one the record holds but the season's own.
 - Checked before anything is queued: the base run as for a sweep (`404`,
   `409` for a scenario or forecast run), and the season: the decision date
@@ -2292,9 +2333,9 @@ run; an outlook member is one level in one year, measured over the season.
   history, then the season), in the job's one transaction: that has to fit
   the worker Lambda's 300 s. No cancel.
 - `Outlook = { id, name, baseRunId, baseRun: { id, label, createdAt },
-  decisionDate, seasonEnd, planningShare, levels: [{ id, label, ops }],
+  decisionDate, seasonEnd, reviewDate, planningShare, levels: [{ id, label, ops }],
   analogueYears, status, engineVersion, job, createdBy, createdAt,
-  completedAt, result? }`. `levels[].id` is its place, `"0"` …; `status`
+  completedAt, result?, triggers? }`. `levels[].id` is its place, `"0"` …; `status`
   `pending` until the job stores the result, then `complete`; `job` as a
   sweep's (a `pending` outlook behind a `dead` job says why in `job.error`).
 - `result`: the engine's `SeasonalOutlook` (model.md §2.15): `decisionDate`,
@@ -2303,7 +2344,9 @@ run; an outlook member is one level in one year, measured over the season.
   `nYears`, `enoughYears` (≥ `OUTLOOK_MIN_YEARS` = 10), `levels` (per level:
   `problems`, `nYears`, `meanDemandM3`, `seasonEndStorageM3`, `demandMet`,
   `userDemandMet`, `ewr` as `{ p10, p50, p90 }` or null, `yearsEwrMet`,
-  `storageByDam`, and every year's values), `planning` (`share`,
+  `storageByDam`, `demandMetByFarm` (engine ≥ 1.19.0: each farm's own share
+  of demand met, `{ nodeId, name, nYears, stat }`), and every year's values,
+  each with its `farms` (node id → season demand and supply)), `planning` (`share`,
   `shareIsDefault`, `reason` `met` / `noLevelMeets` / `notEnoughYears` /
   `noLevels`, the level, `yearsMet`, `ranked`) and `warnings`; plus
   `excluded` (each `{ waterYear, reason }`: the engine's `outsideRecord`,
@@ -2313,7 +2356,38 @@ run; an outlook member is one level in one year, measured over the season.
   `problems` and no years; a level refused in every year likewise; a year
   a running level was refused in is left out of every level (`memberFailed`)
   so the levels compare the same years. One member never fails the outlook.
-- Progress: 0–100 after each member (`job.progress`).
+- `triggers` (null without a review date): `{ reviewDate, table, problem,
+  excluded, failures }`. `reviewDate` is the season's: the day the WUA reads
+  its dams. The outlook's season usually starts after the base run ends
+  (from its newest state), so the base run has no state on that day; the
+  **table** is drawn on the latest day with the review date's month and
+  day that the run's record holds (its `reviewDate`), to the season end's
+  month and day after it, as a rule by storage band for that day of the
+  year: the engine's `ReviewTriggers` (bands, per band the level picked or
+  none, years met, every level's count and percentiles, `monotone`,
+  `notes`, `warnings`) without each band's whole outlook. Every level that
+  ran in the outlook runs in every band; a level refused in one year of a
+  band isn't judged in that band (`failures`, with the band's lower edge).
+  `table` is null, with `problem` in words, when the record holds no such
+  day or the catchment has no farm dam. At most 3 bands (the terciles)
+  × 6 levels × 40 years more members, in the same job.
+- Progress: 0–100 after each member (`job.progress`), the table's members
+  counted after the outlook's.
+- **Publishing to farmers** (the client confirmed farmers see the outlook,
+  O5, issue #90). `OutlookPublication = { id, outlookId, level: { id,
+  label }, decisionDate, seasonEnd, reviewDate, engineVersion, publishedBy,
+  publishedAt, endedAt, farms }`. Publishing stores, for every farm of the
+  project, that farm's own figures at the level (the engine's
+  `farmOutlookProjection`: the level, the season and review date, `nYears`,
+  `demandYears`, `demandMet` and the dam's season-end share of capacity as
+  `{ p10, p50, p90 }` or null), and the farm page reads them back
+  ([§ Farm](#farm), `FarmView.outlook`) until the season ends
+  where the catchment is (project time zone). One current per project; the
+  newest 12 are kept. Refused: an outlook still running (`409`), a level it
+  doesn't have (`422`) or that didn't run (`409`), one computed before
+  per-farm figures (engine < 1.19.0: run it again, `409`), and a season
+  already over (`409`). The app never picks the level: the editor publishes
+  the one the WUA decided.
 
 ## Data feeds
 
@@ -2642,7 +2716,7 @@ after the disclaimer and provenance lines (row 4 on a legacy run): read the file
 | --- | --- | --- |
 | `/projects/:id/runs/:runId/export/daily.csv` | `nodeId?`, `from?`, `to?` | `date` + every daily series of that node (catchment when `nodeId` is omitted), one row per day. Catchment columns follow `CATCHMENT_ORDER` in `backend/src/export/run-tables.ts`: … rain used, final catchment rainfall, CHIRPS as uploaded, bias-corrected CHIRPS, the day's CHIRPS factor, … A farm's columns follow the FarmTemplate letters (`FARM_COLUMNS` in `packages/engine/src/verify/columns.ts`): gross demand, effective rain used, the soil-water store (mm, engine ≥ 0.14.0), F (crop requirement), D (abstraction demand, engine ≥ 0.16.0), G, H, I, the runoff removed by land cover (only a farm with land cover; I + it = natural flow × share), J, K … O, the dam's area, rain on it, evaporation and seepage (engine ≥ 0.16.0), P, Q, R, S, T, U, the balance check V, W, Y … AB (AB is the reach shortfall, a diagnostic from engine 0.17.0), then `ewr_charge` and `ewr_charge_irrigation` (engine ≥ 0.17.0), the letter in brackets in each header (`Irrigation supplied [G] (m³/day)`); a gauge's use the GaugeTemplate letters. Runs before engine 0.12.0 have no working columns (K–P, S, T, V, gross demand, effective rain). A **forecast run** (WP-2.12) leads with `forecast (F = modelled on forecast rain)` after `date`: `F` on each day from `summary.forecast.from`, empty before; its catchment file also has the `Rain source` column. So does `farms.csv`, and the `.xlsx` workbook's daily sheets lead with `forecast (1 = modelled on forecast rain)`, 1 or 0 |
 | `/projects/:id/runs/:runId/export/farms.csv` | `key`, `from?`, `to?` | `date` + one column per farm of the run, in the run's farm order (upstream first, the order of `RunSummary.farms`), for one farm series `key` (any key of `FARM_COLUMNS`, the optional ones included, e.g. `landcover_reduction`; `400` otherwise). `key=runoff` is the workbook's `[Fragmented flow]` sheet (column I), `key=ewr` its `[Fragmented EWR]` sheet (column Y). Each header is the farm's current name, then the letter and unit (`Farm A [I] (m³/day)`); a farm deleted from the model since the run keeps its column under the name the run knew (a run keeps all its series, migration 024), and a farm without that series (a dam column on a farm with no dam) is left out. `404` when no farm has the series |
-| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (the engine version, then `Runoff model` as the run's settings had it; ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages, `Dam capacity (m³)` from the run's own model so storage can be checked against it, and, engine ≥ 1.2.0, the dam's storage figures under labelled headers), catchment figures (the runoff coefficient labelled, and with an observed record the outlet EWR test on the observed record vs the simulated outflow, the whole record then each water year: counts, hit rate, false-alarm ratio, frequency bias), the water balance per water year and for the whole run (its equation row names only the terms the run has, each of them a column, storage set by a storage reset included), the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural; from issue #45 every EWR charge, charge part, other user's charge and site shortfall is written as the positive volume charged, the column headers saying "m³/day charged" or "positive", the curtailment R header "workbook R × −1"), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, a row per month of the year and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run, then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; then, engine ≥ 1.4.0, for each gauge with its own record an `At gauge <name>` line with its share of the natural flow and the naturalised and low-flow blocks again at that gauge; each part says `Not checked: …` when the run lacks what it needs), calibration (from engine 0.39.0 with `Parameters fitted on these days (fitted = in-sample scores)` = the `fitStatus`; every score under a label with its unit, never its raw key: the window, KGE with r, α and β, r², log-NSE and its ε in m³/s, volume error %, the record scored; then the calibration exclusions it applied, `From,To,Reason`, and the annual volumes on the observed days, water year, days, observed and simulated Mm³ and the difference %), the flow-duration percentiles (issue #45: the Runs tab's FDC table, from the same engine function, `views/fdc.ts` `fdcPercentileTable`: `Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days`, a `Whole run` row for natural flow, simulated outflow and the observed record, then, when the observed record misses some of the run's days, `Observed days only (n of N)` rows with natural and simulated ranked on only its days, the chart's default; unrounded; on a forecast run every row ranks only the days before the forecast, after a `The n forecast days are left out: every row ranks the N days before them` line, the first rows labelled `Whole run before the forecast`, issue #51; `No catchment flow series stored for this run` otherwise), a forecast run's forecast days (WP-2.12, only on a forecast run: first and last forecast day, days, last observed rain, forecast rain, outlet EWR days at risk, then per farm the lowest dam level expected (%), days short, demand, supplied and supplied % of demand; every other block covers the days before them), the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
+| `/projects/:id/runs/:runId/export/summary.csv` | – | Run details (the engine version, then `Runoff model` as the run's settings had it; ending with `Run notes`, the run's written explanation, empty when there is none, `Notes last changed` with the time and name when there is one, and the evidence nomination: `Evidence nomination` = `the nominated evidence run` / `nominated before, since replaced` / `not nominated`, then `Nominated,<time>,<name>,<reason>` and, for a replaced run, `Replaced by,<run label>,<time>,<name>,<reason>`), the self-checks (each check passed/FAILED with its first problem, and the largest daily balance check), per-farm summary table (first `Flow share (%)`, the farm's share of the natural flow and of the EWR as the run applied it, engine ≥ 0.27.0, empty on older runs; then the averages, `Dam capacity (m³)` from the run's own model so storage can be checked against it, and, engine ≥ 1.2.0, the dam's storage figures under labelled headers), catchment figures (the runoff coefficient labelled, and with an observed record the outlet EWR test on the observed record vs the simulated outflow, the whole record then each water year: counts, hit rate, false-alarm ratio, frequency bias), the water balance per water year and for the whole run (its equation row names only the terms the run has, each of them a column, storage set by a storage reset included), the curtailment table over the reporting window (every column unrounded, with a row naming the EWR attribution rule, engine ≥ 0.17.0: the EWR charge, its irrigation and storage parts, the supply cut and the EWR site setting it, then `demand_pct_note` — `no_demand`, `below_floor` for demand under 1 m³/day, or empty — and the EWR cut beyond the equitable share; the equitable share is labelled a fairness benchmark, `Above (−) / below (+) equitable share` instead of reduce/gain, and the table ends with the fixed footnote `EQUITABLE_SHARE_FOOTNOTE`, "… Not an allocation or licence condition.", audit Q11), the land-cover reductions (engine ≥ 0.24.0, only with land cover: the low-flow threshold, the mean and its share of natural flow, per class the condensed area, reduction and mm/yr), the other water users (engine ≥ 0.22.0, only when the run has any: whole-run means, then the reporting window's EWR charge, whether each is curtailed and its supply cut), the EWR sites (days not met, shortfall, charged to farms, natural; from issue #45 every EWR charge, charge part, other user's charge and site shortfall is written as the positive volume charged, the column headers saying "m³/day charged" or "positive", the curtailment R header "workbook R × −1"), Reserve compliance by month (engine ≥ 0.21.0; `Not assessed: …` without a rule table; otherwise per site the table's source, coverage, unit, natural-percentile source, scale and % points, months met, deficit, longest run not met, mean shortfall, the FDC check, from engine 1.19.0 (CR-29) the days below the day's requirement with the % of time and of volume not met and the EWR as % of natural MAR (with the low flows' share when the table has a low-flow grid), a row per month of the year, from engine 1.19.0 a row per month of the year from daily data (days assessed, days not met, time not met %, required and shortfall m³, volume not met %) and a row per month × % point of the EWR, natural and simulated flow-duration curves, and a row per complete month with its natural flow, condition, requirement, simulated flow and deficit), the assurance of supply (engine ≥ 0.32.0; `Not computed: run made before engine 0.32.0 …` in each block on older runs: `Assurance of supply (reporting window)` with the window, the annual threshold and a row per farm and user, then the time-based and volumetric reliability by month; `Stress classes by month (supplied ÷ demand)` with the thresholds and, for all farms and users then each one, a row per water year of class and % per month; `Water account by water year (Oct–Sep)` with the in, out, storage, residual and memo columns per water year and the whole run, then the EWR required vs met per site), the 12 CHIRPS bias factors (month, factor, source, shared days) and what the fit left out, the catchment rain treated as missing, the rain-source periods (engine ≥ 0.30.0: one row per period with its reason, run days by source, the rain from the series, its factors' origin and fallback, then the factors Oct … Sep; `None: the catchment series throughout` without periods), the double-mass check against CHIRPS (engine ≥ 0.17.0: slope, segments, breaks, one row per water year), the plausibility checks (engine ≥ 0.25.0, `Run made before engine 0.25.0: …` on older runs: the dry season; natural vs observed + net abstraction per water year with the dams / land cover / use split, gap, tolerance and pass; EWR days not met for good-rain and fallback-rain years, the Reserve months met by the same split, one row per water year with its station days and fallback rain; the double-mass check of observed flow against rain with segments, breaks, the simulated slopes, the change beyond the model overall and by season and what it points to; the dry-season low-flow duration curves in m³/s at Q1 … Q99 with the Q90 comparison; the recession diagnostics (engine ≥ 1.19.0, `Run made before engine 1.19.0: …` on older runs: the record, segment count and settings, a, b, −dQ/dt ÷ Q at the reference flow, points and segments for the record and the simulated outflow, the rate ratio and b difference, and whether they agree, indicatively); then, engine ≥ 1.4.0, for each gauge with its own record an `At gauge <name>` line with its share of the natural flow and the naturalised and low-flow blocks again at that gauge; each part says `Not checked: …` when the run lacks what it needs), calibration (from engine 0.39.0 with `Parameters fitted on these days (fitted = in-sample scores)` = the `fitStatus`; every score under a label with its unit, never its raw key: the window, KGE with r, α and β, r², log-NSE and its ε in m³/s, volume error %, the record scored; then the calibration exclusions it applied, `From,To,Reason`, and the annual volumes on the observed days, water year, days, observed and simulated Mm³ and the difference %; from engine 1.19.0 the WR2012 statistics on monthly flows, CR-28: the complete water years, whether the bands are indicative, then MAR, mean of log10 annual flows, SD, log SD and seasonal index with observed, simulated, the difference %, the band and `yes`/`no`, or `Not computed: …` when no water year has all 12 months observed; never under the raw key `wr2012Fit`), the flow-duration percentiles (issue #45: the Runs tab's FDC table, from the same engine function, `views/fdc.ts` `fdcPercentileTable`: `Days ranked,Flow record,Q10 (m³/s),Q50 (m³/s),Q90 (m³/s),Q95 (m³/s),Days`, a `Whole run` row for natural flow, simulated outflow and the observed record, then, when the observed record misses some of the run's days, `Observed days only (n of N)` rows with natural and simulated ranked on only its days, the chart's default; unrounded; on a forecast run every row ranks only the days before the forecast, after a `The n forecast days are left out: every row ranks the N days before them` line, the first rows labelled `Whole run before the forecast`, issue #51; `No catchment flow series stored for this run` otherwise), a forecast run's forecast days (WP-2.12, only on a forecast run: first and last forecast day, days, last observed rain, forecast rain, outlet EWR days at risk, then per farm the lowest dam level expected (%), days short, demand, supplied and supplied % of demand; every other block covers the days before them), the WR2012 check (`Not checked: …` when the run's settings had no reference; otherwise the quaternary, source, reference period, scaling rule and factors, WR2012 MAR and scaled MAR, the simulated natural MAR and ratio over the overlapping years and the whole run, the 12 monthly means in water-year order with ratio and dry-season mark, the dry-season ratio, the pattern correlation, the flag with its basis, deviation and thresholds, and for a *query* or *not usable* flag whether the run has a written explanation), a column guide (each farm daily column's letter, series key and formula), warnings — blocks separated by a blank record. A run before engine 0.12.0 says it has no self-checks or water balance. Shares are **percentages** (0–100): `Flow share (%)` and `Demand supplied (%)` per farm and `Days EWR not met at the outflow gauge (%)`, where the JSON `RunSummary` has fractions (`flowShare`, `fractionSupplied`, `ewrFractionDaysNotMet`, 0–1) |
 | `/projects/:id/series/:seriesId/export.csv` | `from?`, `to?` | `date` + the input series' values |
 | `/projects/:id/export.json` | – | The project document (below) |
 

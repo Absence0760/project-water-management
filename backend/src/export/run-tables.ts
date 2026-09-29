@@ -15,6 +15,7 @@ import {
 	FLOW_DM_MIN_YEARS,
 	LOW_FLOW_MIN_DAYS,
 	LOW_FLOW_WARN_FACTOR,
+	RECESSION_MIN_SEGMENTS,
 	GAUGE_COLUMNS,
 	USER_COLUMNS,
 	type CalibrationStats,
@@ -24,6 +25,8 @@ import {
 	type FdcPercentileTable,
 	type RunSummary,
 	type WaterBalanceRow,
+	type Wr2012FitStatKey,
+	type Wr2012FitStats,
 	type Wr2012FlagLevel,
 	type Wr2012Scaling
 } from '@water-management/engine';
@@ -332,8 +335,9 @@ const yesNo = (v: boolean | null) => (v === null ? '' : v ? 'yes' : 'no');
  * The hydrologist plausibility checks (engine ≥ 0.25.0, model.md §2.10d): the
  * dry season, then natural vs observed + abstraction per water year, EWR days
  * by rain source, the double-mass check of observed flow against rain and the
- * dry-season low-flow duration curves, then the first and last of those again
- * at each gauge node with a record of its own (engine ≥ 1.4.0). Unrounded.
+ * dry-season low-flow duration curves, the recession diagnostics (engine ≥
+ * 1.19.0), then the first and last of those again at each gauge node with a
+ * record of its own (engine ≥ 1.4.0). Unrounded.
  */
 export function* plausibilityLines(p: RunSummary['plausibility']): Generator<string> {
 	yield csvRow(['Plausibility checks']);
@@ -354,6 +358,8 @@ export function* plausibilityLines(p: RunSummary['plausibility']): Generator<str
 	yield* flowDoubleMassLines(p.flowDoubleMass);
 	yield '';
 	yield* lowFlowLines(p.lowFlow);
+	yield '';
+	yield* recessionLines(p.recession);
 	// Checks 1 and 4 at each gauge node with a record of its own (engine ≥ 1.4.0), against the simulated flow there.
 	for (const g of p.gauges ?? []) {
 		yield '';
@@ -479,6 +485,48 @@ function* lowFlowLines(lf: Plausibility['lowFlow']): Generator<string> {
 	}
 	yield csvRow(['Curve', 'On the days of', 'Days', ...lf.points.map((p) => `Q${p}`)]);
 	for (const c of lf.curves) yield csvRow([RECORD_TEXT[c.source] ?? c.source, c.pairedWith ? RECORD_TEXT[c.pairedWith] : 'every dry-season day', c.days, ...c.flowsM3s]);
+}
+
+/** The recession diagnostics (engine ≥ 1.19.0, model.md §2.10d, CR-13): the settings, both fits and the comparison. */
+function* recessionLines(r: Plausibility['recession']): Generator<string> {
+	yield csvRow(['Recession diagnostics (−dQ/dt = a·Q^b on rain-free recession segments)']);
+	if (r === undefined) {
+		yield csvRow(['Run made before engine 1.19.0: no recession diagnostics']);
+		return;
+	}
+	if (r === null) {
+		yield csvRow(['Not checked: needs an observed flow record and catchment rain']);
+		return;
+	}
+	const o = r.options;
+	yield csvRow([
+		'Record',
+		RECORD_TEXT[r.flowKind],
+		'segments',
+		r.segments.length,
+		'min. length (days)',
+		o.recessionLength,
+		'days dropped after the peak',
+		o.nStart,
+		'allowed rise (m³/s)',
+		o.epsM3s,
+		'rain threshold (mm/day)',
+		o.rainThresholdMm,
+		'−dQ/dt method',
+		o.dQdtMethod
+	]);
+	yield csvRow(['Flow', 'a ((m³/s)^(1−b) per day)', 'b', '−dQ/dt ÷ Q at the reference flow (per day)', 'Points', 'Segments']);
+	for (const [label, f, rate] of [
+		[RECORD_TEXT[r.flowKind], r.observed, r.observedRate],
+		['simulated outflow', r.simulated, r.simulatedRate]
+	] as const) {
+		yield csvRow(f ? [label, f.a, f.b, rate, f.points, f.segments] : [label, 'too few points to fit']);
+	}
+	yield csvRow(['Reference flow (m³/s)', r.referenceFlowM3s, 'rate ratio (simulated ÷ observed)', r.rateRatio, 'b difference (simulated − observed)', r.bDiff]);
+	yield csvRow([
+		'Simulated recession agrees (indicative)',
+		r.agrees === null ? `not judged (fewer than ${RECESSION_MIN_SEGMENTS} segments, or no observed fit)` : yesNo(r.agrees)
+	]);
 }
 
 /** Catchment rain the run treated as missing (engine ≥ 0.15.0, model.md §2.4c, CR-20), one row per period. */
@@ -759,7 +807,9 @@ export function* summaryCsvLines(meta: SummaryMeta, summary: RunSummary): Genera
 
 	yield csvRow(['Calibration (outflow gauge vs observed)']);
 	if (summary.calibration) {
-		for (const row of labelledRows(summary.calibration as unknown as Record<string, unknown>, CALIBRATION_ROWS)) {
+		// The WR2012 table is a list of its own (calibrationDetailLines), not a scalar row, even when null.
+		const { wr2012Fit: _wr2012Fit, ...calibrationScalars } = summary.calibration;
+		for (const row of labelledRows(calibrationScalars as unknown as Record<string, unknown>, CALIBRATION_ROWS)) {
 			yield csvRow(row);
 		}
 		yield* calibrationDetailLines(summary.calibration);
@@ -920,6 +970,14 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 		yield csvRow(['Longest run of months not met', o.longestNotMetRun]);
 		yield csvRow(['Mean shortfall in months not met (% of required)', o.meanShortfallPct]);
 		yield csvRow(['FDC check: month × % point cells met', r.fdc.met, 'of', r.fdc.cells, 'Met (%)', pct(r.fdc.rate) as Cell]);
+		// Engine ≥ 1.19.0 (model.md §2.9c, CR-29): daily compliance and the EWR as %nMAR, only on runs that have them.
+		if (r.daily)
+			yield csvRow(['From daily data: days below the day\'s requirement', r.daily.daysNotMet, 'of', r.daily.days, 'Time not met (%)', pct(r.daily.timeNotMet) as Cell, 'Volume not met (%)', pct(r.daily.volumeNotMet) as Cell]);
+		if (r.ewrPctNmar) {
+			const e = r.ewrPctNmar;
+			yield csvRow(['EWR as % of natural MAR', e.pct, 'EWR (Mm³/a)', e.ewrMcm, 'Natural MAR at the site (Mm³/a)', e.naturalMarMcm]);
+			if (e.lowFlowMcm !== undefined) yield csvRow(['Low flows as % of natural MAR', e.lowFlowPct ?? null, 'Low flows (Mm³/a)', e.lowFlowMcm]);
+		}
 		// Engine ≥ 0.33.0 (model.md §2.9d): the low flows of a total table, as extra lines and columns only when the table has them.
 		const low = r.lowFlow;
 		if (low) {
@@ -941,6 +999,19 @@ export function* ewrAssuranceLines(sites: RunSummary['ewrAssurance']): Generator
 				m.years ? `${fdcMet} of ${m.fdc.length}` : '',
 				...(low ? [pct(m.lowFlowRate ?? null) as Cell] : [])
 			]);
+		}
+		if (r.byMonth.some((m) => m.daily)) {
+			yield csvRow(['Month', 'Days assessed', 'Days not met', 'Time not met (%)', 'Required (m³)', 'Shortfall (m³)', 'Volume not met (%)']);
+			for (const m of r.byMonth) {
+				const d = m.daily;
+				yield csvRow([MONTH_NAMES[m.month - 1]!, d?.days ?? null, d?.daysNotMet ?? null, pct(d?.timeNotMet ?? null) as Cell, d?.requiredM3 ?? null, d?.shortfallM3 ?? null, pct(d?.volumeNotMet ?? null) as Cell]);
+			}
+		}
+		// Engine ≥ 1.19.0 (CR-29): the duration curves at each % point, for the FDC overlay.
+		if (r.byMonth.some((m) => m.fdc.some((f) => f.natural !== undefined))) {
+			yield csvRow(['Month', '% point', `EWR (${u})`, `Natural flow duration (${u})`, `Simulated flow duration (${u})`, 'Met']);
+			for (const m of r.byMonth)
+				for (const f of m.fdc) yield csvRow([MONTH_NAMES[m.month - 1]!, f.point, f.required, f.natural ?? null, f.impacted, f.met === null ? '' : f.met ? 'yes' : 'no']);
 		}
 		yield csvRow([
 			'Year',
@@ -1030,6 +1101,32 @@ export function* calibrationDetailLines(c: CalibrationStats): Generator<string> 
 		yield csvRow(['Water year', 'Days observed', 'Days in the window', 'Observed (Mm³)', 'Simulated (Mm³)', 'Simulated − observed (%)']);
 		for (const y of c.annualVolumes) yield csvRow([waterYearText(y.waterYear), y.days, y.daysInWindow, y.observedMm3, y.simulatedMm3, y.diffPct]);
 	}
+	if (c.wr2012Fit !== undefined) yield* wr2012FitLines(c.wr2012Fit);
+}
+
+const WR2012_FIT_ROW_LABEL: Record<Wr2012FitStatKey, string> = {
+	mar: 'MAR (Mm³/a)',
+	meanLog: 'Mean of log10 annual flows (log10 Mm³)',
+	sd: 'SD of annual flows (Mm³)',
+	logSd: 'SD of log10 annual flows (log10 Mm³)',
+	seasonalIndex: 'Seasonal index (%)'
+};
+
+/**
+ * The WR2012 five-statistic table (CR-28, engine ≥ 1.19.0; model.md §2.10):
+ * absent on older runs, a line saying why when there is no complete water year.
+ */
+export function* wr2012FitLines(w: Wr2012FitStats | null): Generator<string> {
+	yield csvRow(['WR2012 statistics on monthly flows (complete water years, Oct–Sep)']);
+	if (!w) {
+		yield csvRow(['Not computed: no water year has all 12 months observed (a month needs 90 % of its days)']);
+		return;
+	}
+	yield csvRow(['Water years', w.waterYears.map(waterYearText).join(' '), 'Years in the log statistics', w.logYears]);
+	yield csvRow(['Bands', w.bandsConfirmed ? 'good-fit bands' : 'indicative, to be confirmed against WRC TT 689/16 and TT 690/16']);
+	yield csvRow(['Statistic', 'Observed', 'Simulated', 'Simulated − observed (%)', 'Band (|%| below)', 'Within band']);
+	for (const x of w.stats)
+		yield csvRow([WR2012_FIT_ROW_LABEL[x.key], x.observed, x.simulated, x.diffPct, x.bandPct, x.withinBand === null ? '' : x.withinBand ? 'yes' : 'no']);
 }
 
 /** The engine's self-checks on the run (engine ≥ 0.12.0, model.md §6 "Verification"). */

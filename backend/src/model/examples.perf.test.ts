@@ -7,7 +7,7 @@
 // is its own vitest project (`perf`, see vitest.config.ts): excluded from
 // `pnpm test`, run serially via `pnpm test:perf` / the root
 // `pnpm test:backend:perf`.
-import { resolveEnsembleOptions, runEnsemble, runModel, verifyEnsemble } from '@water-management/engine';
+import { resolveEnsembleOptions, runEnsemble, runModel, sensitivityRuns, verifyEnsemble } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { buildExamples, inputOf } from '../../scripts/examples/catchments.js';
 
@@ -38,5 +38,19 @@ describe('engine performance on the example catchments', () => {
 		t = performance.now();
 		expect(verifyEnsemble(input, options, r.members, 3, Math.random).mismatches).toEqual([]);
 		expect(performance.now() - t).toBeLessThan(1000);
+	});
+
+	it('sensitivity runs cost one model run per case, at most 11, on every example catchment (CR-21)', () => {
+		// ~15–35 ms a run (docs/model.md §2.10e), so 11 runs well under 2 s; median of 3 after a warm-up.
+		for (const ex of examples) {
+			const input = inputOf(ex);
+			sensitivityRuns(input);
+			const ms = Array.from({ length: 3 }, () => {
+				const t = performance.now();
+				sensitivityRuns(input);
+				return performance.now() - t;
+			}).sort((a, b) => a - b);
+			expect(ms[1]).toBeLessThan(2000);
+		}
 	});
 });

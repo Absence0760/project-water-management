@@ -353,12 +353,57 @@ const ArealRain = z
 	.strict();
 
 const scoreValue = z.number().finite().nullable();
+const scoreSet = z.record(z.string().max(40), scoreValue).refine((o) => Object.keys(o).length <= 30, 'too many scores');
+const scoreInterval = z.object({ lo: z.number().finite(), hi: z.number().finite() }).strict().nullable();
 const ScoredPeriod = z
 	.object({
 		start: isoDate,
 		end: isoDate,
 		waterYears: z.array(z.number().int()).max(500),
-		scores: z.record(z.string().max(40), scoreValue).refine((o) => Object.keys(o).length <= 30, 'too many scores')
+		scores: scoreSet,
+		// Engine ≥ 1.19.0 (CR-5): bootstrap intervals and benchmark scores. Optional: a record made before them has neither.
+		intervals: z
+			.object({
+				level: z.number().gt(0).lt(1),
+				resamples: z.number().int().min(1).max(100_000),
+				seed: z.number().int().min(0).max(2 ** 32 - 1),
+				years: z.number().int().min(0).max(500),
+				kgePrime: scoreInterval,
+				nse: scoreInterval,
+				kgeLowHigh: scoreInterval
+			})
+			.strict()
+			.nullable()
+			.optional(),
+		benchmarks: z
+			.object({ meanFlow: scoreSet, climatology: scoreSet, halfWindowDays: z.number().int().min(0).max(183) })
+			.strict()
+			.nullable()
+			.optional(),
+		// Engine ≥ 1.19.0 (CR-28): the WR2012 five-statistic table on these days. Optional: absent on a record made before it.
+		wr2012Fit: z
+			.object({
+				waterYears: z.array(z.number().int()).max(500),
+				logYears: z.number().int().min(0).max(500),
+				stats: z
+					.array(
+						z
+							.object({
+								key: z.enum(['mar', 'meanLog', 'sd', 'logSd', 'seasonalIndex']),
+								observed: z.number().finite().nullable(),
+								simulated: z.number().finite().nullable(),
+								diffPct: z.number().finite().nullable(),
+								bandPct: z.number().finite().min(0),
+								withinBand: z.boolean().nullable()
+							})
+							.strict()
+					)
+					.max(5),
+				bandsConfirmed: z.boolean()
+			})
+			.strict()
+			.nullable()
+			.optional()
 	})
 	.strict();
 const params = z.record(z.string().max(40), z.number().finite()).refine((o) => Object.keys(o).length <= 30, 'too many parameters');
@@ -404,7 +449,9 @@ export const FitRecord = z
 		differential: ValidationTest.extend({
 			dryYears: z.array(z.number().int()).max(500),
 			wetYears: z.array(z.number().int()).max(500),
-			wetDryRatio: z.number().finite()
+			wetDryRatio: z.number().finite(),
+			// Engine ≥ 1.19.0: what ranked the years (the reference gauge, or the fitted record). Optional: absent = 'observed'.
+			rankedBy: z.enum(['observed', 'reference']).optional()
 		})
 			.strict()
 			.nullable(),

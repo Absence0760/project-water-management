@@ -275,13 +275,23 @@ const fail = (msg: string): never => {
 	throw new OpError(msg);
 };
 
-/** Deep copy of plain data (settings and the model document are JSON). */
-function cloneData<T>(v: T): T {
+/**
+ * Deep copy of plain data (settings and the model document are JSON). A
+ * `__proto__` (or `constructor` / `prototype`) key, which JSON.parse keeps
+ * as an own property, is dropped rather than written, so input posted from
+ * a page or worker can't swap the copy's prototype.
+ */
+export function cloneData<T>(v: T): T {
 	if (Array.isArray(v)) return v.map(cloneData) as T;
 	if (v && typeof v === 'object') {
-		const o: Record<string, unknown> = {};
-		for (const [k, x] of Object.entries(v)) o[k] = cloneData(x);
-		return o as T;
+		// Object.fromEntries defines own properties (never an assignment that
+		// could reach a prototype), and keys that would name one are dropped as
+		// never being data.
+		return Object.fromEntries(
+			Object.entries(v)
+				.filter(([k]) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype')
+				.map(([k, x]) => [k, cloneData(x)])
+		) as T;
 	}
 	return v;
 }

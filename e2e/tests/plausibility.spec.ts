@@ -1,5 +1,5 @@
 // Hydrologist plausibility checks (engine 0.25.0, docs/model.md §2.10d): a run
-// on a synthetic catchment shows the four checks in their own Runs & results
+// on a synthetic catchment shows the five checks (four before engine 1.19.0) in their own Runs & results
 // panel, with the latest run of another runoff model overlaid on the
 // dry-season low-flow curves: an old legacy run (engine < 1.0.0, planted, as the
 // API can't make one any more). Names and numbers are invented.
@@ -29,9 +29,11 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	await expect(page.getByRole('heading', { level: 2, name: 'GR4J run' })).toBeVisible();
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility checks' }).click();
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
-	await expect(panel.getByText(/^Four checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
+	await expect(panel.getByText(/^Five checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });
-	await expect(results.getByRole('listitem')).toHaveCount(4);
+	// Five on a run from engine 1.19.0: the recession diagnostics (CR-13) are the fifth.
+	await expect(results.getByRole('listitem')).toHaveCount(5);
+	await expect(results.getByRole('listitem').filter({ hasText: /^Recessions: / })).toHaveCount(1);
 	// Three years is too few for the double-mass check.
 	await expect(results.getByRole('listitem').filter({ hasText: 'Observed flow vs rain' })).toHaveText('Observed flow vs rain: not checked');
 
@@ -61,5 +63,8 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 	// Switching the model's curve to the gauge's days relabels it.
 	await panel.getByLabel('Simulated outflow over').selectOption({ label: "the gauge's days only" });
 	await expect(panel.getByText("Simulated outflow on the gauge's days (GR4J, this run) (m³/s)")).toBeVisible();
+
+	// 5. Recession diagnostics (engine ≥ 1.19.0): the section is there, judged or not.
+	await expect(panel.getByRole('heading', { level: 4, name: /^Recession diagnostics/ })).toBeVisible();
 	await expectNoViolations(page);
 });

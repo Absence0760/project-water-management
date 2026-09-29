@@ -14,7 +14,12 @@ import {
 	type CalibrationProgress,
 	type CalibrationReport,
 	type CalibrationStage,
+	type DifferentialTest,
 	type FitScores,
+	type ScoreInterval,
+	type ScoreBenchmarks,
+	type ScoreIntervals,
+	type ScoredPeriod,
 	type ModelInput,
 	type ObjectiveId,
 	type ProjectModel,
@@ -98,6 +103,16 @@ export function waterYearsText(years: readonly number[]): string {
 	return years.length ? `WY ${years.map(waterYearLabel).join(', ')}` : '–';
 }
 
+/**
+ * What ranked the dry → wet test's water years (engine ≥ 1.19.0), in words;
+ * a test from before it (no `rankedBy`) ranked by the fitted record.
+ */
+export function rankedByText(d: Pick<DifferentialTest, 'rankedBy'>): string {
+	return d.rankedBy === 'reference'
+		? 'years ranked dry → wet by the reference gauge (other catchment), a regional wet/dry index that is never scored'
+		: 'years ranked dry → wet by the fitted record’s own mean flow';
+}
+
 /** Runs the fit will make: one optimisation per start, two more with validation, plus one without the WR2012 penalty when it is on. */
 export const totalRuns = (budget: number, validate: boolean, penalty = false, starts = 1) => budget * (starts + (validate ? 2 : 0) + (penalty ? 1 : 0));
 
@@ -139,6 +154,7 @@ export const SCORE_ROWS: ScoreRow[] = [
 	{ key: 'nse', label: 'NSE', unit: '', ideal: '1' },
 	{ key: 'nseSqrt', label: 'NSE on √Q', unit: '', ideal: '1' },
 	{ key: 'nseLog', label: 'NSE on log Q', unit: '', ideal: '1' },
+	{ key: 'kgeLowHigh', label: 'Low/high-flow KGE′ (Q and 1/Q)', unit: '', ideal: '1' },
 	{ key: 'volumeErrorPct', label: 'Volume error', unit: '%', ideal: '0' },
 	{ key: 'fdcHighPct', label: 'High flows (top 2 %)', unit: '%', ideal: '0' },
 	{ key: 'fdcMidSlopePct', label: 'FDC mid-slope', unit: '%', ideal: '0' },
@@ -153,6 +169,10 @@ export interface ScoreColumn {
 	scores: FitScores;
 	/** Validation columns are scored on days the parameters were not fitted to. */
 	validation: boolean;
+	/** 90 % bootstrap intervals (engine ≥ 1.19.0, CR-5); null when too few water years or on an older report. */
+	intervals: ScoreIntervals | null;
+	/** Mean-flow and climatology benchmark scores on the same days (engine ≥ 1.19.0, CR-5); null on an older report. */
+	benchmarks: ScoreBenchmarks | null;
 }
 
 /** What a score table is built from: a fresh report, or a stored fit record (same shape). */
@@ -161,29 +181,99 @@ export type ScoredFit = Pick<CalibrationReport, 'before' | 'fit' | 'splitSample'
 /** The report's periods as table columns: before, fitted, then each test's calibration and validation part. */
 export function scoreColumns(r: ScoredFit): ScoreColumn[] {
 	const p = (x: { start: string; end: string }) => `${x.start} – ${x.end}`;
-	const cols: ScoreColumn[] = [
-		{ id: 'before', label: 'Current parameters', period: p(r.before), scores: r.before.scores, validation: false },
-		{ id: 'fit', label: 'Fitted', period: p(r.fit), scores: r.fit.scores, validation: false }
-	];
+	const col = (id: string, label: string, period: string, x: ScoredPeriod, validation: boolean): ScoreColumn => ({
+		id,
+		label,
+		period,
+		scores: x.scores,
+		validation,
+		intervals: x.intervals ?? null,
+		benchmarks: x.benchmarks ?? null
+	});
+	const cols: ScoreColumn[] = [col('before', 'Current parameters', p(r.before), r.before, false), col('fit', 'Fitted', p(r.fit), r.fit, false)];
 	if (r.splitSample) {
 		cols.push(
-			{ id: 'split-cal', label: 'Split: fitted half', period: p(r.splitSample.calibration), scores: r.splitSample.calibration.scores, validation: false },
-			{ id: 'split-val', label: 'Split: other half', period: p(r.splitSample.validation), scores: r.splitSample.validation.scores, validation: true }
+			col('split-cal', 'Split: fitted half', p(r.splitSample.calibration), r.splitSample.calibration, false),
+			col('split-val', 'Split: other half', p(r.splitSample.validation), r.splitSample.validation, true)
 		);
 	}
 	if (r.differential) {
 		// The dry and wet years interleave, so their first–last dates overlap: list the years scored.
 		const d = r.differential;
 		cols.push(
-			{ id: 'dsst-cal', label: 'Dry years (fitted)', period: waterYearsText(d.calibration.waterYears), scores: d.calibration.scores, validation: false },
-			{ id: 'dsst-val', label: 'Wet years', period: waterYearsText(d.validation.waterYears), scores: d.validation.scores, validation: true }
+			col('dsst-cal', 'Dry years (fitted)', waterYearsText(d.calibration.waterYears), d.calibration, false),
+			col('dsst-val', 'Wet years', waterYearsText(d.validation.waterYears), d.validation, true)
 		);
 	}
 	if (r.independentRecord) {
 		const v = r.independentRecord.validation;
-		cols.push({ id: 'record-val', label: `Independent record: ${FLOW_KIND_LABEL[r.independentRecord.flowKind]}`, period: p(v), scores: v.scores, validation: true });
+		cols.push(col('record-val', `Independent record: ${FLOW_KIND_LABEL[r.independentRecord.flowKind]}`, p(v), v, true));
 	}
 	return cols;
+}
+
+/** A score for the table: "0.62", "+4.1%", or "–" when missing (a score absent from an older report included). */
+export const fmtScore = (v: number | null | undefined, unit: '' | '%' = ''): string =>
+	v === null || v === undefined || !Number.isFinite(v) ? '–' : unit === '%' ? `${v > 0 ? '+' : ''}${fmtNum(v, 1)}%` : fmtNum(v, 2);
+
+/** "(0.48–0.71)", or "(-0.30 to 0.05)" when a bound is negative, so the dash never reads as a minus. */
+export const intervalText = (iv: { lo: number; hi: number }): string =>
+	iv.lo < 0 || iv.hi < 0 ? `(${fmtScore(iv.lo)} to ${fmtScore(iv.hi)})` : `(${fmtScore(iv.lo)}–${fmtScore(iv.hi)})`;
+
+/**
+ * A score cell: the score, with its 90 % bootstrap interval when the column
+ * has one for that score ("0.62 (0.48–0.71)"). The interval is looked up by
+ * the score's own name (only KGE′, NSE and the low/high-flow KGE′ have one),
+ * without importing the engine's list, so the panel's chunk stays free of
+ * the scoring code (issue #9).
+ */
+export function scoreCellText(c: Pick<ScoreColumn, 'scores' | 'intervals'>, key: keyof FitScores, unit: '' | '%' = ''): string {
+	const v = (c.scores[key] as number | null | undefined) ?? null;
+	const found = c.intervals ? (c.intervals as unknown as Record<string, unknown>)[key] : null;
+	const iv = found && typeof found === 'object' ? (found as ScoreInterval) : null;
+	return v !== null && iv ? `${fmtScore(v, unit)} ${intervalText(iv)}` : fmtScore(v, unit);
+}
+
+export interface BenchmarkRow {
+	label: string;
+	/** One cell per column that has benchmarks, in column order. */
+	cells: string[];
+}
+
+/** Columns that carry benchmarks (a report from engine ≥ 1.19.0). */
+export const benchmarkColumns = (cols: readonly ScoreColumn[]) => cols.filter((c) => c.benchmarks);
+
+/**
+ * The model against the two benchmarks on the fit's objective, one row
+ * each, over the columns that carry them; [] when none do (an older report).
+ */
+export function benchmarkRows(cols: readonly ScoreColumn[], objective: ObjectiveId): BenchmarkRow[] {
+	const withB = benchmarkColumns(cols);
+	if (!withB.length) return [];
+	const w = withB[0]!.benchmarks!.halfWindowDays;
+	return [
+		{ label: 'Model', cells: withB.map((c) => scoreCellText(c, objective)) },
+		{ label: 'Mean flow every day', cells: withB.map((c) => fmtScore(c.benchmarks!.meanFlow[objective])) },
+		{ label: `Day-of-year climatology (±${w} days)`, cells: withB.map((c) => fmtScore(c.benchmarks!.climatology[objective])) }
+	];
+}
+
+/**
+ * One plain sentence when the fitted model doesn't beat the day-of-year
+ * climatology on the fit's objective, on the fitted period or a validation
+ * period; null when it beats it everywhere (or nothing can be compared).
+ */
+export function climatologyWarning(cols: readonly ScoreColumn[], objective: ObjectiveId): string | null {
+	const losing = benchmarkColumns(cols).filter((c) => {
+		if (c.id !== 'fit' && !c.validation) return false;
+		const m = c.scores[objective] as number | null | undefined;
+		const b = c.benchmarks!.climatology[objective] as number | null | undefined;
+		return m != null && b != null && m <= b;
+	});
+	if (!losing.length) return null;
+	const where = losing.map((c) => (c.id === 'fit' ? 'the fitted period' : c.id === 'record-val' ? 'the independent record' : `“${c.label}”`));
+	const list = where.length === 1 ? where[0]! : `${where.slice(0, -1).join(', ')} and ${where[where.length - 1]}`;
+	return `On ${list}, the model scores no better than repeating each calendar day’s average observed flow: it adds little beyond the seasonal cycle there.`;
 }
 
 /** The WR2012 MAR penalty will apply: it is switched on and there is a reference to pull towards. */

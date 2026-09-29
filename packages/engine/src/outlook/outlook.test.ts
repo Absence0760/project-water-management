@@ -248,6 +248,50 @@ describe('runSeasonalOutlook on the invented catchment', () => {
 	});
 });
 
+describe('each farm’s own demand met (engine 1.19.0, the farmer view E3)', () => {
+	const o = runSeasonalOutlook(input, { ...SEASON, levels: levels([1, 0.5]) });
+
+	it('a member’s farms add up to its catchment demand and supply', () => {
+		for (const l of o.levels) {
+			for (const y of l.years) {
+				const farms = Object.values(y.farms);
+				expect(farms.reduce((a, f) => a + f.demandM3, 0)).toBeCloseTo(y.demandM3, 6);
+				expect(farms.reduce((a, f) => a + f.suppliedM3, 0)).toBeCloseTo(y.suppliedM3, 6);
+				for (const f of farms) expect(f.suppliedM3).toBeLessThanOrEqual(f.demandM3 + 1e-6);
+			}
+		}
+	});
+
+	it('each farm’s statistic is its own supplied ÷ demand across the years, in 0–1', () => {
+		expect(o.enoughYears).toBe(true);
+		for (const l of o.levels) {
+			expect(l.demandMetByFarm.map((f) => f.nodeId).sort()).toEqual(['a', 'b']);
+			for (const f of l.demandMetByFarm) {
+				const own = l.years.flatMap((y) => (y.farms[f.nodeId] ? [y.farms[f.nodeId]!.suppliedM3 / y.farms[f.nodeId]!.demandM3] : []));
+				expect(f.nYears).toBe(own.length);
+				if (f.nYears < OUTLOOK_MIN_YEARS) expect(f.stat).toBeNull();
+				else {
+					expect(f.stat!.p10).toBeLessThanOrEqual(f.stat!.p50);
+					expect(f.stat!.p50).toBeLessThanOrEqual(f.stat!.p90);
+					expect(f.stat!.p10).toBeGreaterThanOrEqual(Math.min(...own) - 1e-12);
+					expect(f.stat!.p90).toBeLessThanOrEqual(Math.max(...own) + 1e-12);
+					expect(f.stat!.p90).toBeLessThanOrEqual(1 + 1e-9);
+				}
+			}
+		}
+	});
+
+	it('a farm with no demand in any year has no row', () => {
+		const r = summariseOutlook(summary([{ id: 'x', label: 'x', problems: [], members: years(10).map((w) => member(w, { farms: { a: { demandM3: 100, suppliedM3: 80 } } })) }]));
+		expect(r.levels[0]!.demandMetByFarm).toHaveLength(1);
+		expect(r.levels[0]!.demandMetByFarm[0]).toMatchObject({ nodeId: 'a', name: 'Farm A', nYears: 10 });
+		expect(r.levels[0]!.demandMetByFarm[0]!.stat!.p50).toBeCloseTo(0.8, 12);
+		// Fewer years with demand than the minimum: counted, no statistic.
+		const few = summariseOutlook(summary([{ id: 'x', label: 'x', problems: [], members: years(10).map((w, i) => member(w, { farms: i < 3 ? { b: { demandM3: 50, suppliedM3: 50 } } : {} })) }]));
+		expect(few.levels[0]!.demandMetByFarm).toEqual([{ nodeId: 'b', name: 'Farm B', nYears: 3, stat: null }]);
+	});
+});
+
 describe('return flows: why the EWR half of the monotonicity invariant needs β = 0 (model.md §2.15)', () => {
 	const at = (x: ReturnType<typeof testCatchment>) =>
 		runSeasonalOutlook(x, { ...SEASON, levels: levels([1, 0.7]), analogueYears: [2000, 2001, 2002] }).levels.map((l) => l.years.map((y) => y.ewrDays.below));
@@ -273,6 +317,7 @@ function member(waterYear: number, over: Partial<OutlookMember> = {}): OutlookMe
 		analogueTo: `${waterYear + 1}-04-30`,
 		seasonEndStorageM3: 0,
 		storageM3ByDam: {},
+		farms: {},
 		demandM3: 100,
 		suppliedM3: 100,
 		demandMet: 1,
