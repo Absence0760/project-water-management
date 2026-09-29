@@ -213,7 +213,8 @@ Issue #66. For any series, what 032's product and version can't say:
   a source clears it), a merge into a new or empty series, a data feed on the
   series it creates or replaces (`"CHIRPS daily rainfall data feed"`, `"DWS
   gauge flow data feed, station A2H012"`), an import (the file's `source`,
-  `sourceUnit`, `sourceUnitFactor`, else the file's own unit as given), a
+  `sourceUnit`, `sourceUnitFactor`, and nothing when the file has none, so a
+  project round-trips exactly), a
   copy, a restore (`series_revision` keeps all three with the values), and
   `PATCH /projects/:id/series/:seriesId` with `source` (logged as
   `series.labelled` with `origin: { from, to }`).

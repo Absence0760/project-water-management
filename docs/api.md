@@ -1224,8 +1224,9 @@ what it was (no `source` clears it); a merge records them on a new or empty
 series and otherwise keeps the series' own. A data feed records itself
 (`"CHIRPS daily rainfall data feed"`, `"DWS gauge flow data feed, station
 A2H012"`) on a series it creates or replaces. The project document carries
-them per series (`source`, `sourceUnit`, `sourceUnitFactor`; an import
-without the unit pair records the file's own unit).
+them per series (`source`, `sourceUnit`, `sourceUnitFactor`), each only when
+recorded; an import records exactly what the file carries, so a series
+without them exports back without them (an exact round trip).
 
 **Day boundary** (issue #40 (b), [data-model.md § Series day
 boundary](./data-model.md#series-day-boundary-033_series_day_boundarysql)):

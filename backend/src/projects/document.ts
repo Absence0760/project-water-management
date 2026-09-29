@@ -50,8 +50,7 @@ export const ProjectFile = z.object({
 				dayBoundary: z.enum(DAY_BOUNDARIES).optional(),
 				// A flow record's gauge node in the document's model (084_gauge_records); absent = the outlet.
 				siteNodeId: z.string().uuid().optional(),
-				// Where the values came from, and the unit they were first given in (107_series_source.sql); absent = not recorded,
-				// and then the file's own unit is what they were given in.
+				// Where the values came from, and the unit they were first given in (107_series_source.sql); absent = not recorded.
 				source: SourceField,
 				sourceUnit: z.string().trim().min(1).max(20).optional(),
 				sourceUnitFactor: z.number().finite().positive().optional()

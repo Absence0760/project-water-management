@@ -112,10 +112,12 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 				s.dayBoundary ?? null,
 				// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
 				s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null,
+				// Where the values came from and the unit they were first given in (107): only what the file records.
+				// A file without them stores none, so a project round-trips exactly (export writes back only what is
+				// recorded). The file's own `unit` is not the upload's: a document holds values already converted.
 				s.source ?? null,
-				// The unit the values were first given in (107): the file's record of it, else the file's own unit.
-				s.sourceUnit ?? s.givenUnit,
-				s.sourceUnitFactor ?? s.unitFactor
+				s.sourceUnit ?? null,
+				s.sourceUnitFactor ?? null
 			]
 		);
 	}

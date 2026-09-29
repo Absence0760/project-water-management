@@ -100,10 +100,15 @@ describe('series source and unit', () => {
 		const imported = await u.call('POST', '/projects/import', { ...doc, name: 'Src imported' });
 		expect(imported.status).toBe(201);
 		expect(origin(await meta(u, imported.body.project.id))).toEqual(want);
-		// A document without them records the file's own unit as given.
-		const bare = { ...doc, name: 'Src bare', series: [{ kind: 'flow_observed_m3s', unit: 'ML/day', startDate: '2001-01-01', values: [86.4] }] };
+		// And the re-imported project exports them back exactly: the with-source round trip.
+		const again = (await u.call('GET', `/projects/${imported.body.project.id}/export.json`)).body as { series: Record<string, unknown>[] };
+		expect(again.series).toEqual(doc.series);
+		// A document without them records none (not the file's unit, which holds converted values), and exports without the keys.
+		const bare = { ...doc, name: 'Src bare', series: [{ kind: 'flow_observed_m3s', name: '', unit: 'm³/s', startDate: '2001-01-01', values: [1] }] };
 		const b = await u.call('POST', '/projects/import', bare);
-		expect(origin(await meta(u, b.body.project.id))).toEqual({ source: null, sourceUnit: 'ML/day', sourceUnitFactor: 1000 / 86_400 });
+		expect(origin(await meta(u, b.body.project.id))).toEqual({ source: null, sourceUnit: null, sourceUnitFactor: null });
+		const bareBack = (await u.call('GET', `/projects/${b.body.project.id}/export.json`)).body as { series: Record<string, unknown>[] };
+		expect(bareBack.series).toEqual(bare.series);
 		// Half a unit record is refused whole.
 		expect((await u.call('POST', '/projects/import', { ...bare, series: [{ ...bare.series[0], sourceUnit: 'l/s' }] })).status).toBe(400);
 		const input = (await u.call('GET', `/projects/${pid}/model-input`)).body.input as { series: Record<string, { origin?: unknown }> };
