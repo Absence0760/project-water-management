@@ -18,7 +18,7 @@
 	// application button sits at the top of the list instead.
 	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/state';
+	import { navigating, page } from '$app/state';
 	import { api, type Run, type RunMeta, type Scenario, type ScenarioWithCheck } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -119,10 +119,16 @@
 		q.delete('base');
 		return goto(`?${q}`, { noScroll: true, keepFocus: true, replaceState: replace });
 	}
-	// None picked: open the first (the newest). Not while the create dialog is open (it picks the new one).
+	// None picked: open the first (the newest). Not while the URL asks for the
+	// create dialog (it picks the new one), and not while any navigation is in
+	// flight: the newest navigation wins in SvelteKit, so a pick started just
+	// after a click on + New scenario (the list landing a few ms later) used to
+	// cancel the click and drop its `new=1`, and the dialog never opened. The
+	// effect re-runs once the navigation settles. It reads the URL (newParam),
+	// not createOpen, which an effect sets a step later.
 	$effect(() => {
 		const first = scenarios?.[0]?.id;
-		if (!first || selectedId || createOpen) return;
+		if (!first || selectedId || newParam || createOpen || navigating.to) return;
 		untrack(() => void select(first, true));
 	});
 
