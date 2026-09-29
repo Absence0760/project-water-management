@@ -411,7 +411,9 @@ the same file, which the help pages share. It is layout only: the URLs stay
   its accessible name says "Hidden (n)"; see Tabs by role below),
   the project's name (a link to its Summary; a long name is clamped to two
   lines, the full name its tooltip and accessible name), the section labels
-  shown, with a
+  shown (each section a group named by its label; "Catchment" and the labels
+  are styled as Help's side panel's group headings, the text colour, bold and
+  uppercase, which `app-sidebar.spec.ts` compares), with a
   viewer's **Show model inputs** at the end. **Data** carries an amber badge
   counting the series behind: the series a run is driven by (recorded rain,
   A-pan evaporation; never a forecast or a flow) ending more than

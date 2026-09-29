@@ -87,6 +87,30 @@ test.describe('1440×960', () => {
 		await page.keyboard.press('Escape');
 	});
 
+	test("the group titles read as Help's side panel's do", async ({ page, owner }) => {
+		void owner;
+		const project = await seedRunnableProject(page.request, LONG_NAME);
+		const look = (selector: string) =>
+			page.locator(selector).evaluateAll((els) =>
+				els.map((el) => {
+					const s = getComputedStyle(el);
+					return [s.color, s.fontSize, s.fontWeight, s.letterSpacing, s.textTransform].join(' ');
+				})
+			);
+		await page.goto('/help');
+		await expect(page.getByRole('navigation', { name: 'Help' })).toBeVisible();
+		const help = await look('nav.help-nav .group');
+		expect(help.length).toBeGreaterThan(1);
+		expect(new Set(help).size).toBe(1);
+
+		await page.goto(`/projects/${project.id}`);
+		await expect(nav(page).getByRole('group', { name: 'Outcomes' })).toBeVisible();
+		// "Catchment" and each section's label (Outcomes, Build the model, Review).
+		const titles = await look('aside.app-sidebar .side-kicker, aside.app-sidebar .section-label');
+		expect(titles).toHaveLength(4);
+		expect(titles).toEqual(titles.map(() => help[0]));
+	});
+
 	test('with sections hidden, the count badge keeps the slot from scrolling sideways', async ({ page, owner }) => {
 		void owner;
 		const project = await seedRunnableProject(page.request, LONG_NAME);
