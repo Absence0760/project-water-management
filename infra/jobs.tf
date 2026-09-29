@@ -72,22 +72,16 @@ resource "aws_iam_role" "worker_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "worker_lambda_vpc" {
-  role       = aws_iam_role.worker_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs and VPC ENIs: iam.tf.
 
-# Consume the jobs queue (the event source mapping polls as this role) and
-# send to it (a handler that queues follow-up work wakes the worker too).
+# Consume the jobs queue: the event source mapping polls as this role. No
+# SendMessage: only the API's routes wake the worker (jobs/wake.ts
+# wakeWorker); a job that queues follow-up work leaves it to the insert
+# trigger locally and the 5-minute tick in production (series/newData.ts).
 data "aws_iam_policy_document" "worker_lambda" {
   statement {
     sid       = "ConsumeJobsQueue"
     actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.jobs.arn]
-  }
-  statement {
-    sid       = "WakeJobsQueue"
-    actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.jobs.arn]
   }
 }
@@ -205,7 +199,8 @@ resource "aws_lambda_function" "worker" {
 
   depends_on = [
     aws_cloudwatch_log_group.worker,
-    aws_iam_role_policy_attachment.worker_lambda_vpc,
+    aws_iam_role_policy.lambda_logs["worker"],
+    aws_iam_role_policy.lambda_vpc_eni["worker"],
     aws_iam_role_policy.worker_lambda,
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
@@ -370,7 +365,13 @@ resource "aws_vpc_endpoint" "sqs" {
   tags = { Name = "${local.project}-sqs" }
 }
 
+# Only SendMessage, from the two roles whose code calls it (the only SQS
+# call in backend/src: jobs/transport.ts). Every queue the worker, fetcher
+# or renderer consumes is read by a Lambda event source mapping, whose
+# pollers run in the Lambda service and never use this endpoint, so no
+# receive, delete or visibility action is allowed through it.
 data "aws_iam_policy_document" "sqs_endpoint" {
+  # The API wakes the worker after queueing a job (jobs/wake.ts).
   statement {
     sid       = "ApiSendsWakeUps"
     actions   = ["sqs:SendMessage"]
@@ -380,16 +381,7 @@ data "aws_iam_policy_document" "sqs_endpoint" {
       identifiers = [aws_iam_role.lambda.arn]
     }
   }
-  statement {
-    sid       = "WorkerUsesJobsQueue"
-    actions   = ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.jobs.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # Reports (reports.tf): the worker asks the renderer and reads its answers.
+  # Reports (reports.tf): the worker asks the renderer.
   statement {
     sid       = "WorkerSendsRenderRequests"
     actions   = ["sqs:SendMessage"]
@@ -399,39 +391,11 @@ data "aws_iam_policy_document" "sqs_endpoint" {
       identifiers = [aws_iam_role.worker_lambda.arn]
     }
   }
-  statement {
-    sid       = "WorkerConsumesRenderResults"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.render_results.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # SES bounces and complaints (ses.tf): the worker reads them.
-  statement {
-    sid       = "WorkerConsumesMailEvents"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.mail_events.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  # Data feeds (feeds.tf): the worker asks the fetcher and reads its answers.
+  # Data feeds (feeds.tf): the worker asks the fetcher.
   statement {
     sid       = "WorkerSendsFetchRequests"
     actions   = ["sqs:SendMessage"]
     resources = [aws_sqs_queue.fetch_requests.arn]
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.worker_lambda.arn]
-    }
-  }
-  statement {
-    sid       = "WorkerConsumesIngestResults"
-    actions   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes", "sqs:ChangeMessageVisibility"]
-    resources = [aws_sqs_queue.ingest_results.arn]
     principals {
       type        = "AWS"
       identifiers = [aws_iam_role.worker_lambda.arn]

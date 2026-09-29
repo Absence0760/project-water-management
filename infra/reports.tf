@@ -271,10 +271,25 @@ resource "aws_ecr_lifecycle_policy" "renderer" {
   })
 }
 
-# Lambda pulls the image as the service, for this one function only.
+# How Lambda gets the image (same account, AWS: "only one side needs to allow
+# access", https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#configuration-images-permissions):
+#
+# - The renderer's execution role may pull from this repository
+#   (renderer_ecr_pull, below). That grant alone is enough to pull.
+# - The repository policy carries the statement Lambda itself looks for, in
+#   the shape and under the Sid AWS documents, narrowed to this one function.
+#   When a CreateFunction or UpdateFunctionCode finds no such statement,
+#   Lambda tries to add one, which needs ecr:SetRepositoryPolicy on the
+#   caller. Neither the deploy role nor anything else here holds that, and
+#   none should: with the statement in place, Lambda has nothing to add.
+#   The deploy role may read the policy (oidc.tf, RendererImageLambdaCheck)
+#   so Lambda can see the statement when it updates the function.
+#
+# After the first apply, confirm nothing added a statement of its own:
+# `aws ecr get-repository-policy` shows exactly this one (docs/deployment.md).
 data "aws_iam_policy_document" "renderer_ecr" {
   statement {
-    sid     = "LambdaPullsRendererImage"
+    sid     = "LambdaECRImageRetrievalPolicy"
     actions = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
     principals {
       type        = "Service"
@@ -300,11 +315,7 @@ resource "aws_iam_role" "renderer_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs only: no VPC access, nothing else managed.
-resource "aws_iam_role_policy_attachment" "renderer_lambda_logs" {
-  role       = aws_iam_role.renderer_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-}
+# Logs (its own log group only) are in iam.tf; no VPC access, no managed policy.
 
 data "aws_iam_policy_document" "renderer_lambda" {
   statement {
@@ -329,6 +340,21 @@ resource "aws_iam_role_policy" "renderer_lambda" {
   name   = "render-queues-and-pdfs"
   role   = aws_iam_role.renderer_lambda.id
   policy = data.aws_iam_policy_document.renderer_lambda.json
+}
+
+# Pull its own image: this repository only, the two actions a pull uses.
+data "aws_iam_policy_document" "renderer_ecr_pull" {
+  statement {
+    sid       = "PullRendererImage"
+    actions   = ["ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer"]
+    resources = [aws_ecr_repository.renderer.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "renderer_ecr_pull" {
+  name   = "renderer-image-pull"
+  role   = aws_iam_role.renderer_lambda.id
+  policy = data.aws_iam_policy_document.renderer_ecr_pull.json
 }
 
 resource "aws_cloudwatch_log_group" "renderer" {
@@ -382,7 +408,8 @@ resource "aws_lambda_function" "renderer" {
 
   depends_on = [
     aws_cloudwatch_log_group.renderer,
-    aws_iam_role_policy_attachment.renderer_lambda_logs,
+    aws_iam_role_policy.lambda_logs["renderer"],
+    aws_iam_role_policy.renderer_ecr_pull,
     aws_iam_role_policy.renderer_lambda,
     aws_ecr_repository_policy.renderer,
   ]

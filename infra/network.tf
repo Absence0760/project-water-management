@@ -248,8 +248,10 @@ resource "aws_vpc_endpoint" "secretsmanager" {
 
 data "aws_iam_policy_document" "secretsmanager_endpoint" {
   statement {
-    sid       = "ReadRdsMasterSecretOnly"
-    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    sid = "ReadRdsMasterSecretOnly"
+    # GetSecretValue is the one call (config/secretsManager.ts); the migrate
+    # role holds nothing else on the secret either (lambda.tf).
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
     principals {
       type        = "AWS"

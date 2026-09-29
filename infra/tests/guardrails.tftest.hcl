@@ -2045,8 +2045,8 @@ run "data_feeds" {
     error_message = "The fetcher's role reaches the two feed queues only: receive fetch-requests, send ingest-results."
   }
   assert {
-    condition     = aws_iam_role_policy_attachment.fetcher_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-    error_message = "The fetcher gets basic logging only (no VPC or other managed policy)."
+    condition     = aws_iam_role_policy.lambda_logs["fetcher"].role == aws_iam_role.fetcher_lambda.id && !contains(keys(aws_iam_role_policy.lambda_vpc_eni), "fetcher")
+    error_message = "The fetcher logs to its own log group only, with no VPC ENI policy (iam.tf; run lambda_logs_scoped in iam.tftest.hcl pins the statement)."
   }
   assert {
     condition = (
@@ -2335,8 +2335,8 @@ run "reports" {
     error_message = "The renderer may receive render-requests, send render-results and put PDFs: never read, list or delete them, nor anything else."
   }
   assert {
-    condition     = aws_iam_role_policy_attachment.renderer_lambda_logs.policy_arn == "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
-    error_message = "The renderer gets basic logging only (no VPC, no other managed policy)."
+    condition     = aws_iam_role_policy.lambda_logs["renderer"].role == aws_iam_role.renderer_lambda.id && !contains(keys(aws_iam_role_policy.lambda_vpc_eni), "renderer")
+    error_message = "The renderer logs to its own log group only, with no VPC ENI policy (iam.tf; run lambda_logs_scoped in iam.tftest.hcl pins the statement)."
   }
   assert {
     condition = (
