@@ -2,12 +2,21 @@
 // against its EWR. The KPI tiles, the flow chart with its windows and shading, the days below the
 // reserve per water year, the panels moved from Runs & results, the run picker, the links in from
 // the Summary and Runs & results (old #res-… links included), the empty state and a viewer.
-import { addMember, createProject, createRun } from '../support/api.ts';
+import type { Page } from '@playwright/test';
+import { addMember, createProject, createRun, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { openRiver, riverTile, riverTiles, seedRiverProject } from '../support/river.ts';
 import { grouped, ungroup } from '../support/format.ts';
+
+/** Visible elements on the page that scroll vertically inside themselves (the window is the page's one scroll). */
+const innerScrollers = (page: Page) =>
+	page.locator('.page').evaluate((root) =>
+		[...root.querySelectorAll('*')]
+			.filter((e) => e.checkVisibility() && /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
+			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
+	);
 
 type Catchment = { ewrDaysNotMet: number; ewrFractionDaysNotMet: number; meanSimulatedOutflowM3Day: number; meanNaturalFlowM3Day: number };
 
@@ -65,15 +74,18 @@ test('the tiles, the flow chart, the water-year bars and the moved panels, for t
 	// No rule table: no Reserve compliance panel.
 	await expect(page.locator('#res-reserve')).toHaveCount(0);
 
-	// The first screen fits the window: the chart and the bars end inside it, on one bottom edge, and fill it.
+	// The page flows in the window's one scroll (it was fitted to the window until 2026-09-29, and read as the
+	// whole page): the chart has a fixed, generous height with the bars beside it as tall, and the next panel's top
+	// edge shows inside 1440 × 960, so there is visibly more below.
 	const vh = page.viewportSize()!.height;
 	const chart = (await page.getByRole('region', { name: 'Flow vs reserve' }).boundingBox())!;
 	const bars = (await years.boundingBox())!;
 	expect(bars.x).toBeGreaterThan(chart.x + chart.width);
-	expect(chart.y + chart.height).toBeLessThanOrEqual(vh);
-	expect(chart.y + chart.height).toBeGreaterThan(vh - 40);
 	expect(Math.abs(chart.y + chart.height - (bars.y + bars.height))).toBeLessThan(2);
-	expect(chart.height).toBeGreaterThan(400);
+	expect(chart.height).toBeGreaterThan(500);
+	expect((await page.locator('#res-ewr figure.chart .u-over').boundingBox())!.height).toBeGreaterThan(300);
+	expect((await page.locator('#res-ewr-grid').boundingBox())!.y).toBeLessThan(vh);
+	expect(await innerScrollers(page)).toEqual([]);
 });
 
 test('the flow chart: 30 days / 1 year / All, and the days below the reserve shaded to the tile’s count', async ({ page, owner }) => {
@@ -273,7 +285,7 @@ test('a viewer reads it too, with no run button', async ({ page, owner, signIn }
 	await expect(viewer.page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
 });
 
-test.describe('no accessibility violations', () => {
+test.describe('nothing scrolls inside a card, and no accessibility violations', () => {
 	for (const [label, viewport] of [
 		['desktop', { width: 1440, height: 960 }],
 		['phone', { width: 390, height: 844 }]
@@ -289,7 +301,66 @@ test.describe('no accessibility violations', () => {
 			await expect(page.getByTestId('outcome-matrix')).toBeVisible();
 			await expect(page.getByRole('region', { name: 'Water account' })).toBeVisible();
 			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
+			expect(await innerScrollers(page)).toEqual([]);
 			await expectNoViolations(page);
 		});
 	}
+});
+
+const MONTHS = ['Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep'];
+const POINTS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 99];
+
+test('twenty water years with a rule table: every table grows with the page, and Month by month shows two years, then Show all', async ({ page, owner }) => {
+	void owner;
+	// Seeding and running twenty years of daily data is most of the time.
+	test.setTimeout(60_000);
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const id = await seedRiverProject(page.request, 'River twenty years', 20 * 365 + 5);
+	// Synthetic: asks for nothing but in January, where it asks for more than the river carries.
+	await updateSettings(page.request, id, {
+		ewrRules: [{ siteNodeId: null, source: 'Synthetic rule table', component: 'total', unit: 'mcm', points: POINTS, ewr: MONTHS.map((m) => POINTS.map(() => (m === 'Jan' ? 1000 : 0))), naturalSource: 'run', natural: null, scale: 1 }]
+	});
+	await createRun(page.request, id, 'Long record');
+	await openRiver(page, id);
+	const years = page.getByRole('region', { name: 'Days below the reserve, each water year' });
+	await expect(years.getByRole('img', { name: /in 20 water years\.$/ })).toBeVisible();
+	const reserve = page.getByRole('region', { name: /^Reserve compliance by month/ });
+	await expect(reserve.getByRole('table', { name: /^Each month at the outlet/ }).locator('tbody tr')).toHaveCount(20);
+	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// The water-year table under the bars: all twenty rows in the page, the chart keeping its height beside it.
+	const chartH = (await page.getByRole('region', { name: 'Flow vs reserve' }).boundingBox())!.height;
+	await years.getByText('Show as a table').click();
+	await expect(years.getByRole('table').locator('tbody tr')).toHaveCount(20);
+	await expect(years.getByRole('table').locator('tbody tr').last()).toHaveText(/^2038\/39/);
+	expect((await page.getByRole('region', { name: 'Flow vs reserve' }).boundingBox())!.height).toBeCloseTo(chartH, 0);
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// Month by month: 240 rows would add seven screens, so the first 24, then all of them in place, and back.
+	await reserve.getByText(/^Month by month \(240 months\)/).click();
+	const each = reserve.getByRole('table', { name: /^Each complete month/ });
+	await expect(each.locator('tbody tr')).toHaveCount(24);
+	await expect(each.locator('tbody tr').first()).toHaveText(/^Oct 2019/);
+	const more = reserve.getByRole('button', { name: 'Show all 240 months' });
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(more).toHaveAttribute('aria-controls', (await each.locator('xpath=..').getAttribute('id'))!);
+	expect(await innerScrollers(page)).toEqual([]);
+	await more.click();
+	await expect(each.locator('tbody tr')).toHaveCount(240);
+	await expect(each.locator('tbody tr').last()).toHaveText(/^Sep 2039/);
+	const fewer = reserve.getByRole('button', { name: 'Show the first 24 months' });
+	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+	expect(await innerScrollers(page)).toEqual([]);
+	await expectNoViolations(page);
+	await fewer.click();
+	await expect(each.locator('tbody tr')).toHaveCount(24);
+
+	// On a phone: stacked, nothing scrolling inside itself or sideways.
+	await page.setViewportSize({ width: 390, height: 844 });
+	await openRiver(page, id);
+	await expect(years.getByRole('img')).toBeVisible();
+	await expect(page.getByRole('region', { name: /^EWR compliance by month/ })).toBeVisible();
+	expect(await innerScrollers(page)).toEqual([]);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });

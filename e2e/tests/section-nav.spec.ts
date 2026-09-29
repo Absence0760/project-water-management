@@ -195,7 +195,7 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	// Its group names would take it to a second row at 1440, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
-	// One row at 1440, so the first screen, which fits the window below it, loses little.
+	// One row at 1440, so the first screen loses little.
 	expect(await barRows(menu)).toBe(1);
 
 	await menu.getByRole('link', { name: 'Water account' }).click();

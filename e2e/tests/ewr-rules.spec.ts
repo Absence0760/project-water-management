@@ -129,8 +129,12 @@ test('a run reports monthly Reserve compliance in the headline and its own panel
 	await expect(byMonth.getByRole('row', { name: /^Feb 3 3 100%/ })).toBeVisible();
 	await panel.getByText(/^Month by month/).click();
 	const each = panel.getByRole('table', { name: /^Each complete month/ });
-	await expect(each.getByRole('row')).toHaveCount(37);
+	// The first two years, then the rest in place (the table grows with the page; it never scrolls in a box).
+	await expect(each.getByRole('row')).toHaveCount(25);
 	await expect(each.getByRole('row', { name: /^Jan 2020 .* not met$/ })).toBeVisible();
+	await panel.getByRole('button', { name: 'Show all 36 months' }).click();
+	await expect(each.getByRole('row')).toHaveCount(37);
+	await expect(each.getByRole('row', { name: /^Jan 2022 .* not met$/ })).toBeVisible();
 	// The flow chart draws the rule requirement the headline is judged by, beside the pragmatic EWR (issue #51).
 	const flowFig = page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart');
 	const legend = (name: string) => flowFig.locator('.u-legend tr.u-series', { has: page.locator('.u-label', { hasText: new RegExp(`^${name}`) }) });
