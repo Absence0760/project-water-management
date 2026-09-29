@@ -1182,16 +1182,28 @@
 //             and sensitivity code it runs; all of it is scoring or run code
 //             the worker needs, so none can move to the page. No new
 //             dependency. Headroom ~3 KB total, ~1 KB worker.
-// 2026-09-28  total 1127 → 1133 KB (measured 1130; main @ 09c4ed7 measured
-//             1124). Issue #66, data-quality limits as settings (engine
-//             1.20.0): the Settings tab's Data quality section grows from 3
-//             to 17 fields (DataQualitySection, its validation and option
-//             lists; tab chunk 55.9 → 57.9 KB), the zero-run CHIRPS check,
-//             'usualRain' rule, moving low-vs-CHIRPS baseline and scaled
-//             minimum in quality.ts (shared engine chunk 40.5 → 41.1 KB,
-//             import worker +0.5 KB), their run-comparison labels, the fit
-//             provenance line and one help entry. No new dependency.
-//             Headroom ~3 KB.
+// 2026-09-29  total 1127 → 1137 KB (measured 1134 with #65's calibration
+//             batch merged in; the branch added 11 KB over main before it).
+//             Issue #53's remaining planning outputs: the impact report's
+//             licence-impact board by year class (R7: the engine's
+//             licenceImpact view, the board and its view model, in the
+//             impact section's lazy chunk), the seasonal outlook's review
+//             trigger table and publish-to-farmers controls (R6, R5; the
+//             outlook panel's lazy chunk), the review-date setting, and the
+//             farm page's "This season" card with its Afrikaans (E3). Every
+//             piece already sits in a lazy chunk, so a further split would
+//             only move bytes. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1137 → 1143 KB (measured 1140 with main @ 347ca24
+//             merged in, which measures 1134; before the merge the branch
+//             measured 1130 against main @ 09c4ed7's 1124). Issue #66,
+//             data-quality limits as settings (engine 1.20.0): the Settings
+//             tab's Data quality section grows from 3 to 17 fields
+//             (DataQualitySection, its validation and option lists; tab chunk
+//             55.9 → 57.9 KB), the zero-run CHIRPS check, 'usualRain' rule,
+//             moving low-vs-CHIRPS baseline and scaled minimum in quality.ts
+//             (shared engine chunk 40.5 → 41.1 KB, import worker +0.5 KB),
+//             their run-comparison labels, the fit provenance line and one
+//             help entry. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1202,7 +1214,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1133,
+	totalCodeKb: 1143,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,

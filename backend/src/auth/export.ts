@@ -77,6 +77,8 @@ export const USER_FK_COVERAGE: Record<string, { section: string } | { excluded: 
 	'note.author_id': { section: 'notes' },
 	'note.deleted_by': { excluded: 'notes the person hid; note.deleted is in auditEvents' },
 	'project.created_by': { excluded: 'the project itself; the membership is in projectMemberships' },
+	'outlook_publication.ended_by': { excluded: 'the project’s outlook publication to farmers; outlook.unpublished is in auditEvents' },
+	'outlook_publication.published_by': { excluded: 'the project’s outlook publication to farmers; outlook.published is in auditEvents' },
 	'project_import.imported_by': { excluded: 'the project’s import report; its maker only' },
 	'project_member.user_id': { section: 'projectMemberships' },
 	'render_token.user_id': { excluded: 'secrets (single-use render tokens), 5 minutes' },

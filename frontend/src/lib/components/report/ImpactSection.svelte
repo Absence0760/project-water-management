@@ -4,17 +4,42 @@
 	with on Compare runs (`against`), from the same GET /compare/runs and the
 	same outcomes, takeaways and input changes as that page
 	(compare/summary.ts), so the paper and the screen never disagree. Its own
-	chunk: only a report opened with `against` loads it.
+	chunk: only a report opened with `against` loads it. It opens with the
+	licence-impact board by year class (issue #53 R7, LicenceImpactBoard,
+	./licenceImpact.ts), the baseline as the background run.
 -->
 <script lang="ts">
-	import type { RunCompareResponse } from '$lib/api';
+	import type { EwrRuleTable, NetworkNode } from '@water-management/engine';
+	import type { OutcomeSettings, RunCompareResponse } from '$lib/api';
 	import ChangesList from '$lib/components/compare/ChangesList.svelte';
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import { fmtMetric } from '$lib/components/compare/delta';
 	import { compareDamStorage, outcomeRows, takeaways } from '$lib/components/compare/summary';
+	import { chooseSite, matrixSites } from '$lib/components/outcomes/matrix';
 	import { fmtDate } from '$lib/format/number';
+	import LicenceImpactBoard from './LicenceImpactBoard.svelte';
+	import type { ImpactSeries } from './impactSeries';
+	import { buildLicenceImpactBoard } from './licenceImpact';
 
-	let { data }: { data: RunCompareResponse } = $props();
+	let {
+		data,
+		series,
+		outcomes = null,
+		nodes = [],
+		ewrRules = []
+	}: {
+		data: RunCompareResponse;
+		/** The board's daily series (loadImpactSeries). */
+		series: ImpactSeries;
+		/** The project's settings.outcomes: the year-class method and the Reserve site, as the outcome matrix uses them. */
+		outcomes?: Partial<OutcomeSettings> | null;
+		/** This run's network and Reserve rule tables, for the site. */
+		nodes?: readonly NetworkNode[];
+		ewrRules?: readonly Pick<EwrRuleTable, 'siteNodeId'>[];
+	} = $props();
+
+	const site = $derived(chooseSite(outcomes?.siteNodeId, matrixSites(nodes, ewrRules)).site);
+	const board = $derived(buildLicenceImpactBoard({ data, series, method: outcomes?.yearClassMethod ?? 'auto', site }));
 
 	const runName = (s: RunCompareResponse['a']) => s.run.label || 'Untitled run';
 	const rows = $derived(outcomeRows([data.comparison], [compareDamStorage(data)]));
@@ -31,6 +56,10 @@
 {#if sameRun}
 	<p class="alert alert-info">The baseline is this run, so nothing has changed.</p>
 {/if}
+
+<LicenceImpactBoard view={board} />
+
+<h3>Headline outcomes</h3>
 
 <div class="table-wrap">
 	<table class="data impact-table">

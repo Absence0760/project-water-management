@@ -763,8 +763,9 @@ From the client's four sketched outputs; research and recommendations in
   season's irrigation level, and when does it review? *The decision date is
   built as a project setting (`settings.outlook.season`, Settings →
   Seasonal outlook, issue #53 R5): the season as a month and day each end,
-  default 1 October – 30 April; the review date's default (the engine's
-  `defaultReviewDate`, 1 January for that season) is part of R6.*
+  default 1 October – 30 April; the review date too
+  (`settings.outlook.review`, R6), default the engine's
+  `defaultReviewDate`, 1 January for that season.*
   **Answered 2026-09-28 (issue #90):** the client confirmed the season
   1 October – 30 April with a review on 1 January; the pending badges are
   gone.
@@ -776,6 +777,10 @@ From the client's four sketched outputs; research and recommendations in
   client: whether the town's uses count as domestic or irrigation.
 - **O5. Audience.** Is the seasonal outlook for the WUA only, or also for
   farmers on their phones (so in Afrikaans too)?
+  **Answered 2026-09-28 (issue #90):** farmers too. *Built (issue #53 R5,
+  E3): the WUA publishes the level it set, and each farm's page shows what
+  that level gave the farm in past years' weather, in English and
+  Afrikaans (ui.md § Farmer view).*
 - **O6. Planning share.** The outlook reports the highest demand level that
   meets the EWR in a set share of past years. What share: 80 %? The app
   reports the trade-off; the WUA publishes the decision (disclaimer, D10).

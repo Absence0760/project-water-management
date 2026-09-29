@@ -19,7 +19,10 @@
 # Pinned-Dependencies): the image by its digest (the multi-arch index of the
 # tag; `docker buildx imagetools inspect mcr.microsoft.com/playwright:<tag>`
 # prints it), and the npm packages by renderer-deps/package-lock.json, which
-# `npm ci` installs exactly, integrity hashes checked. To move Playwright:
+# `npm ci` installs exactly, integrity hashes checked, and the deps stage's
+# apt packages by exact version from one Ubuntu archive snapshot (below).
+# Dependabot's docker entry (.github/dependabot.yml, never auto-merged) opens
+# the tag-and-digest PR. To move Playwright:
 # bump the tag and digest here (both FROM lines), playwright-core in
 # renderer-deps/package.json and backend/package.json, then refresh the lock
 # with `npm install --package-lock-only` in renderer-deps/. `pnpm check:pins`
@@ -32,9 +35,31 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b7
 # aws-lambda-ric compiles a native addon at install (its preinstall and
 # install scripts: the ones renderer-deps/package.json's allowScripts lets
 # run, since npm 11.16+ skips every other package's); its preinstall unpacks
-# .tar.xz sources, hence xz-utils.
-RUN apt-get update \
-	&& apt-get install -y --no-install-recommends g++ make cmake autoconf automake libtool python3 unzip xz-utils libcurl4-openssl-dev \
+# .tar.xz sources, hence xz-utils. These build tools live in this stage only:
+# the final image copies node_modules and nothing else from it.
+#
+# Pinned like the rest: each package at an exact version, resolved from one
+# Ubuntu archive snapshot (snapshot.ubuntu.com, `--snapshot`), so the
+# versions stay installable after noble-updates/-security supersede them and
+# the unpinned transitive packages are fixed by the same snapshot. The
+# versions are the snapshot's candidates, read from the digest-pinned base:
+#   docker run --rm <the FROM image> bash -c 'apt-get update --snapshot <ID> -qq &&
+#     apt-cache policy g++ make cmake autoconf automake libtool python3 unzip xz-utils libcurl4-openssl-dev'
+# Move the snapshot and the versions together (when the base digest moves, or
+# for a fix in one of them); `pnpm check:pins` refuses an unpinned package.
+ARG APT_SNAPSHOT=20260928T000000Z
+RUN apt-get update --snapshot "$APT_SNAPSHOT" \
+	&& apt-get install -y --no-install-recommends --snapshot "$APT_SNAPSHOT" \
+		g++=4:13.2.0-7ubuntu1 \
+		make=4.3-4.1build2 \
+		cmake=3.28.3-1build7 \
+		autoconf=2.71-3 \
+		automake=1:1.16.5-1.3ubuntu1 \
+		libtool=2.4.7-7build1 \
+		python3=3.12.3-0ubuntu2.1 \
+		unzip=6.0-28ubuntu4.1 \
+		xz-utils=5.6.1+really5.4.5-1ubuntu0.3 \
+		libcurl4-openssl-dev=8.5.0-2ubuntu10.15 \
 	&& rm -rf /var/lib/apt/lists/*
 WORKDIR /deps
 COPY renderer-deps/package.json renderer-deps/package-lock.json ./

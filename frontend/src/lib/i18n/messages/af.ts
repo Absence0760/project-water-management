@@ -191,6 +191,8 @@ export const af: Catalogue = {
 	'5cf817d2': 'Ontvang',
 	// Water you needed and received each month
 	'54a6fc83': 'Water wat jy elke maand nodig gehad en ontvang het',
+	// Season outlook
+	'874f0827': 'Seisoensvooruitsig',
 	// Your hydrological unit on the river
 	'865adbb9': 'Jou hidrologiese eenheid aan die rivier',
 	// Water you received this season
@@ -565,6 +567,22 @@ export const af: Catalogue = {
 	'9db32ccd': 'Beperking',
 	// The WUA wrote this notice in {language} only.
 	'c2ecebc9': 'Die WGV het hierdie kennisgewing net in {language} geskryf.',
+	// Worked out by the model from past years’ weather: not a forecast, and not a promise. Only a notice from your WUA or from DWS is a restriction.
+	'cd5093ff': 'Deur die model bereken uit vorige jare se weer: nie ’n voorspelling nie, en nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.',
+	// In {n} past years’ weather, at this level you got about {mid} of the water you needed, and between {low} and {high} in most of them.
+	'5c8f4062': 'In die weer van {n} vorige jare het jy op hierdie vlak ongeveer {mid} gekry van die water wat jy nodig gehad het, en in die meeste daarvan tussen {low} en {high}.',
+	// The model has no irrigation demand for you this season.
+	'00f2a120': 'Volgens die model het jy hierdie seisoen geen besproeiingswater nodig nie.',
+	// There are too few past years to give a range for you.
+	'18735c0b': 'Daar is te min vorige jare om vir jou ’n spreiding te gee.',
+	// This season
+	'94b85826': 'Hierdie seisoen',
+	// Your WUA set irrigation at {level} for {from} to {to}.
+	'72fc4395': 'Jou WGV het besproeiing vir {from} tot {to} op {level} gestel.',
+	// Your dam ended the season about {mid} full, and between {low} and {high} in most of those years.
+	'2f141624': 'Jou dam was aan die einde van die seisoen ongeveer {mid} vol, en in die meeste van daardie jare tussen {low} en {high}.',
+	// Your WUA reviews the level on {date}.
+	'1a2694d0': 'Jou WGV hersien die vlak op {date}.',
 	// What the model found
 	'6312837d': 'Wat die model gevind het',
 	// Why about {pct}?
