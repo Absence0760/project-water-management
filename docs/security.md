@@ -2150,6 +2150,45 @@ key there would let any read-only principal forge any user's session.
   The workflow guard refuses any job that grants `id-token: write` outside
   `environment: production` (one allowlisted exception, Scorecard's signing
   job) and any `pull_request_target` workflow that checks out the PR's head.
+- **CI's dependency cache is not trusted by release builds.** Every job in
+  `ci.yml` (and `dependabot-lockfile.yml`'s credential-free job) restores
+  pnpm's store through `actions/setup-node`'s `cache: pnpm`; both deploy
+  workflows restore no cache at all (`check_workflows.mjs` rule
+  `no-cache`, [deployment.md § What each deploy does](./deployment.md#what-each-deploy-does)).
+  That split is the control, because **pnpm's store-integrity check would
+  not reject a doctored store** (checked 2026-09-29 against pnpm 10.33.2,
+  issue #126):
+  - `verify-store-integrity` (default `true`) checks a stored file "before
+    linking it … if a file in the store has been modified"
+    ([pnpm.io/settings/store](https://pnpm.io/settings/store#verifystoreintegrity)).
+    "Modified" means an mtime more than 100 ms after the `checkedAt` the
+    package's index file records; only then is the file re-hashed, and only
+    against the hash that same index file holds (`verifyFile` /
+    `checkFile` in `@pnpm/store.cafs`'s `checkPkgFilesIntegrity`, in
+    pnpm's bundled `dist/pnpm.cjs`). The lockfile's tarball `integrity`
+    only locates the index file; a package already in the store is not
+    re-downloaded or re-derived from its tarball.
+  - A cache is a tar archive its writer controls end to end: the content
+    files (named by their own hash, so a doctored file simply gets a new
+    name), the index files that map a package to them, and every mtime.
+    A poisoned entry can therefore point an index at doctored files with
+    a `checkedAt` that says "unmodified", and pnpm links them without
+    re-hashing; even a re-hash would pass, against the forged index.
+    pnpm's own docs say the store "is intended to be shared only between
+    mutually trusted users, jobs, and processes".
+  - So the check guards against a corrupted store, not a hostile one, and
+    no pnpm setting fixes that. **Release builds are sufficient as they
+    are**: they install cold from the registry against the lockfile's
+    tarball hashes, and they are the only builds that ship or hold deploy
+    credentials. A poisoned cache could still change what a CI job on
+    `main` or a PR runs (a false green or red, or code run with that job's
+    read-only token), which is why no CI job that restores the cache holds
+    a secret, and why the release preflight's trust in `CI gate` is a gate
+    on the commit, not on the bytes CI built. Nothing to set in non-release
+    CI: setting `verify-store-integrity` explicitly would change nothing
+    (it is already the default and the forged index satisfies it). If a
+    cache-restoring job ever needs a secret, drop the cache from it
+    instead.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,

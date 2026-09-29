@@ -58,8 +58,8 @@ The checklist for these is issue #62; the history scrub is #63.
 - [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
-      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to that
-      version and apply again. The image has never been built or run on
+      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to the
+      tag it printed (`<version>-<sha12>`) and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
 - [ ] **Raise the Lambda concurrent-executions quota before the first apply

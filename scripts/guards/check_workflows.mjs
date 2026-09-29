@@ -33,6 +33,12 @@
 //              says --provenance=false --sbom=false --platform linux/amd64
 //              (on the command's first line). Lambda accepts one image
 //              manifest, never the image index attestations produce.
+//   image-sha  a step that runs `docker push` names the commit it built from
+//              (`${{ needs.<job>.outputs.sha }}` or `${{ github.sha }}`), so
+//              its tag can carry it. The renderer's ECR tags are immutable
+//              and a deploy skips a push whose tag already exists: a tag
+//              made of the version alone would let a release recut at the
+//              same version on a new commit keep the old image.
 //   push-full  ci.yml's `changes` job (the docs-only skip) emits code=true for
 //              every event but pull_request, before anything else writes
 //              `code=`, and never diffs against github.event.before. The
@@ -306,6 +312,31 @@ export function autoMergeProblem(text) {
 	return null;
 }
 
+const COMMIT_SHA_REF = /\$\{\{\s*(needs\.[\w-]+\.outputs\.sha|github\.sha)\s*\}\}/;
+
+/**
+ * The steps (1-based start lines) that run `docker push` without naming the
+ * commit SHA anywhere in the step: its `env:`, `with:` or `run:`. A step runs
+ * from its `- ` line to the next line indented no deeper than that dash.
+ * @param {string[]} lines
+ * @returns {number[]}
+ */
+export function unshaPushSteps(lines) {
+	const out = [];
+	lines.forEach((l, i) => {
+		if (/^\s*#/.test(l) || !/\bdocker\s+push\b/.test(l)) return;
+		let start = i;
+		while (start >= 0 && !/^\s*- /.test(lines[start])) start--;
+		if (start < 0) return;
+		const indent = lines[start].match(/^\s*/)[0].length;
+		let end = start + 1;
+		while (end < lines.length && (/^\s*$/.test(lines[end]) || lines[end].match(/^\s*/)[0].length > indent)) end++;
+		const step = lines.slice(start, end).filter((x) => !/^\s*#/.test(x)).join('\n');
+		if (!COMMIT_SHA_REF.test(step) && !out.includes(start + 1)) out.push(start + 1);
+	});
+	return out;
+}
+
 /**
  * @param {string} file e.g. `.github/workflows/ci.yml`
  * @param {string} text
@@ -343,6 +374,10 @@ export function checkWorkflow(file, text) {
 			out.push({ file, line: i + 1, rule: 'image', message: `docker build without ${missing.join(' ')}: an attestation-carrying image index is what Lambda rejects` });
 		}
 	});
+
+	for (const line of unshaPushSteps(lines)) {
+		out.push({ file, line, rule: 'image-sha', message: 'a step pushes an image without naming the commit it was built from; tag it <version>-<sha> (needs.<job>.outputs.sha or github.sha) so a recut release pushes its own image' });
+	}
 
 	const perms = topLevelPermissions(text);
 	if (!perms) {

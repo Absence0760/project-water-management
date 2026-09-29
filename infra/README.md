@@ -485,7 +485,13 @@ Claude does not run any of these, and none of them print a secret. Replace
 `<region>` with the chosen region (e.g. `af-south-1`).
 
 1. **Account.** Create the bootstrap config (`create_subdomain = true`) per
-   Runbook A in `~/github/project-mgmt/docs/runbooks.md`, then run it:
+   Runbook A in `~/github/project-mgmt/docs/runbooks.md`, **with
+   `region = "us-east-1"`**, whatever `aws_region` this stack will use. The
+   bootstrap creates the tfstate bucket and the sops KMS key in its `region`,
+   and this repo's backend reads state from us-east-1 only (`main.tf`,
+   `backend "s3"`); a bootstrap run with `af-south-1` puts the bucket where
+   `terraform init` can't find it. The workload region is `aws_region` in
+   `prod.tfvars` (step 6), not the bootstrap's. Then run it:
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management --plan`
    - `cd ~/github/templates && ./scripts/new-project-account.sh water-management`
 
@@ -592,14 +598,33 @@ Claude does not run any of these, and none of them print a secret. Replace
     Approve each in the `production` environment. The backend deploy ends
     with a `/api/health` check through CloudFront; check the site by hand
     too: `curl -s https://water-management.jaredhoward.com/api/health`.
+
+    **Expected alarm between the apply and this deploy:** the apply creates
+    the worker and fetcher with Terraform's stub code, which throws on every
+    invocation (`jobs.tf`, `feeds.tf`). The worker's 5-minute tick invokes
+    it, so `water-management-worker-errors` goes to ALARM within minutes of
+    the apply and emails the alerts topic; the fetcher runs only on a fetch
+    request, which the stub worker never sends, so `fetcher-errors` stays
+    quiet unless something is queued by hand. `worker-heartbeat` stays OK (a
+    failed invocation still counts). Nothing is lost: no job can exist before
+    the first release (the API stub answers 503 to every request). The alarm
+    clears on the first evaluation period after the backend deploy moves the
+    worker to its real code (about 5 minutes). The stubs throw on purpose:
+    the same alarm is what should fire if a worker is ever recreated from
+    its stub and no release follows, so don't silence it; if you apply long
+    before releasing, acknowledge the email and release.
 10a. **The report renderer** (after the first backend deploy). That deploy
-    pushed the renderer image to ECR, tagged with the release version, and
-    left a notice that the function doesn't exist yet. Set
-    `renderer_image_tag = "0.1.0"` (that version) in `prod.tfvars`, then plan
-    and apply (step 8). Every later backend release moves the function to
-    its own image; the tag in `prod.tfvars` only ever creates it. Until then
-    report requests wait in `render-requests` (4 days) and show as
-    "rendering".
+    pushed the renderer image to ECR, tagged `<version>-<first 12 hex of the
+    released commit>` (e.g. `0.1.0-0123456789ab`), and left a notice naming
+    the tag and saying the function doesn't exist yet. Set
+    `renderer_image_tag` to that tag in `prod.tfvars`, then plan and apply
+    (step 8). Every later backend release moves the function to its own
+    image; the tag in `prod.tfvars` is what a (re-)created function starts
+    from, and the ECR lifecycle policy never expires the image it names
+    (`reports.tf`: a higher-priority rule selects exactly that tag, so the
+    keep-the-last-10 rule can't reach it). To move the protection to a newer
+    image, set the newer tag and apply. Until the function exists, report
+    requests wait in `render-requests` (4 days) and show as "rendering".
 10b. **SES suppression through the endpoint** (after the first backend
     deploy; issue #126). Step 4a only proves the SES API endpoint service
     exists; it doesn't prove the endpoint carries the SESv2
