@@ -23,6 +23,8 @@
 		type FlowShareMethod,
 		type PeInput,
 		type ProjectSettings,
+		type CalibrationFlowKind,
+		type SeriesOrigin,
 		type SeriesProvenance,
 		type ApanDailyFingerprint,
 		type AllocationMode,
@@ -56,6 +58,7 @@
 	import Wr2012Section from './Wr2012Section.svelte';
 	import EwrRulesSection from './EwrRulesSection.svelte';
 	import ZeroRainSection from './ZeroRainSection.svelte';
+	import FlowGapFillFields from './FlowGapFillFields.svelte';
 	import ChirpsFitPeriodSection from './ChirpsFitPeriodSection.svelte';
 	import RainSourceSection from './RainSourceSection.svelte';
 	import { proposeFitRanges } from './proposeFitRanges';
@@ -79,6 +82,7 @@
 		editor,
 		seriesKinds = null,
 		chirpsSource,
+		observedOrigins,
 		apanSeries,
 		readonly,
 		onProjectChange
@@ -89,6 +93,8 @@
 		seriesKinds?: string[] | null;
 		/** The CHIRPS series' product and version a run would use (issue #40c); undefined when not known. */
 		chirpsSource?: SeriesProvenance | null;
+		/** Each observed record's source and given unit a run would read (107_series_source.sql); undefined when not known. */
+		observedOrigins?: Partial<Record<CalibrationFlowKind, SeriesOrigin | null>>;
 		/** The daily A-pan series a run would read (issue #45): null for none, undefined while the list loads. */
 		apanSeries?: Pick<SeriesMeta, 'id' | 'updatedAt'> | null;
 		readonly: boolean;
@@ -804,6 +810,10 @@
 			availableKinds={seriesKinds}
 		/>
 		<CalibrationExclusions bind:list={s.calibrationExclusions} bind:error={exclusionsError} {readonly} />
+		<!-- Gap filling of the observed records (engine ≥ 1.20.0, issue #66); the server merges its default into every project's settings. -->
+		{#if s.flowGapFill}
+			<FlowGapFillFields bind:value={s.flowGapFill} {readonly} {seriesKinds} />
+		{/if}
 	</section>
 
 	<div class="panel" id="set-fit">
@@ -819,7 +829,15 @@
 			onApply={applyFit}
 		/>
 		{#if s.fitRecord}
-			<FitProvenance record={s.fitRecord} settings={s as unknown as ProjectSettings} heading="Fit record of these parameters" context="form" {chirpsSource} apanDaily={apanNow} />
+			<FitProvenance
+				record={s.fitRecord}
+				settings={s as unknown as ProjectSettings}
+				heading="Fit record of these parameters"
+				context="form"
+				{chirpsSource}
+				apanDaily={apanNow}
+				observedOrigin={observedOrigins ? (observedOrigins[s.fitRecord.flowKind as CalibrationFlowKind] ?? null) : undefined}
+			/>
 		{/if}
 	</div>
 

@@ -2,6 +2,10 @@
 // docs/data-model.md § Series provenance). A select's value is the
 // provenance key ('CHIRPS/2.0'), '' for "not recorded".
 import {
+	CALIBRATION_FLOW_KINDS,
+	seriesOrigin,
+	type CalibrationFlowKind,
+	type SeriesOrigin,
 	chirpsFactorSets,
 	CHIRPS_PROVENANCES,
 	provenanceKey,
@@ -56,6 +60,32 @@ export function provenanceFields(key: string): { product: string | null; product
 export function chirpsSourceOf(list: readonly Pick<SeriesMeta, 'kind' | 'product' | 'productVersion'>[] | null | undefined): SeriesProvenance | null | undefined {
 	if (!list) return undefined;
 	return seriesProvenance(list.find((s) => s.kind === 'rain_chirps_mm'));
+}
+
+/**
+ * The source and given unit (107_series_source.sql) of each observed record a
+ * run would read: the first outlet series of each kind by name, as runs pick
+ * (null = not recorded); undefined when the list isn't known. For the fit
+ * record's "calibration record changed since fit".
+ */
+export function observedOriginsOf(
+	list: readonly Pick<SeriesMeta, 'kind' | 'siteNodeId' | 'source' | 'sourceUnit' | 'sourceUnitFactor'>[] | null | undefined
+): Partial<Record<CalibrationFlowKind, SeriesOrigin | null>> | undefined {
+	if (!list) return undefined;
+	const out: Partial<Record<CalibrationFlowKind, SeriesOrigin | null>> = {};
+	for (const k of CALIBRATION_FLOW_KINDS) {
+		const s = list.find((x) => x.kind === k && !x.siteNodeId);
+		if (s) out[k] = seriesOrigin(s);
+	}
+	return out;
+}
+
+/** The same from a run's recorded input series or a model input: undefined when the run is older than the source (nothing to compare). */
+export function originOfInput(series: Partial<Record<string, Pick<RunSeriesSnapshot | DailySeries, 'origin'>>> | null | undefined, kind: string | null | undefined): SeriesOrigin | null | undefined {
+	if (!series || !kind) return undefined;
+	const s = series[kind];
+	if (!s) return null;
+	return s.origin;
 }
 
 /**

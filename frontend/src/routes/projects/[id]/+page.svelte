@@ -36,7 +36,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
-	import { chirpsSourceOf } from '$lib/series/provenance';
+	import { chirpsSourceOf, observedOriginsOf } from '$lib/series/provenance';
 	import { api, ApiError, hasRole, type Project, type ProjectSummary, type RunMeta } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -698,6 +698,7 @@
 								{editor}
 								seriesKinds={series?.filter((x) => !x.siteNodeId).map((x) => x.kind) ?? null}
 								chirpsSource={chirpsSourceOf(series)}
+								observedOrigins={observedOriginsOf(series)}
 								apanSeries={series ? (series.find((x) => x.kind === 'evap_apan_mm') ?? null) : undefined}
 								readonly={!canEdit}
 								{onProjectChange}

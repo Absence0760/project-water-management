@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
+import { apanDailyOfInput, apanDailyOfValues, asksFreeProvenance, asksProvenance, freeProvenanceFields, CHIRPS_CHOICES, chirpsSourceOf, chirpsSourceOfInput, describeProvenance, observedOriginsOf, originOfInput, provenanceFields, rebuildingNote, runChirpsFactors, seriesProvenance } from './provenance';
 
 describe('series provenance choices', () => {
 	it('asks only for a CHIRPS series, offering v2.0 and v3.0’s two daily products', () => {
@@ -91,3 +91,23 @@ describe('runChirpsFactors (issue #51)', () => {
 	});
 });
 
+
+describe('observed records’ source and unit (issue #66, 107_series_source.sql)', () => {
+	it('takes the first outlet record of each kind, as runs pick; undefined while the list is unknown', () => {
+		const list = [
+			{ kind: 'flow_logger_m3s', siteNodeId: 'g1', source: 'at a gauge', sourceUnit: null, sourceUnitFactor: null },
+			{ kind: 'flow_logger_m3s', siteNodeId: null, source: 'Logger 7', sourceUnit: 'l/s', sourceUnitFactor: 0.001 },
+			{ kind: 'flow_observed_m3s', siteNodeId: null, source: null, sourceUnit: null, sourceUnitFactor: null }
+		];
+		expect(observedOriginsOf(list)).toEqual({ flow_observed_m3s: null, flow_logger_m3s: { source: 'Logger 7', unit: 'l/s', factor: 0.001 } });
+		expect(observedOriginsOf(null)).toBeUndefined();
+	});
+	it('reads a run’s recorded input: undefined for a run from before it, null for no series', () => {
+		const origin = { source: 'DWS X1H001', unit: 'm³/s', factor: 1 };
+		expect(originOfInput({ flow_observed_m3s: { origin } }, 'flow_observed_m3s')).toEqual(origin);
+		expect(originOfInput({ flow_observed_m3s: {} }, 'flow_observed_m3s')).toBeUndefined();
+		expect(originOfInput({}, 'flow_observed_m3s')).toBeNull();
+		expect(originOfInput(null, 'flow_observed_m3s')).toBeUndefined();
+		expect(originOfInput({}, undefined)).toBeUndefined();
+	});
+});

@@ -73,7 +73,12 @@ function range(s: Record<string, unknown>): string {
 /** "; now CHIRPS sat v3.0, was CHIRPS v2.0" when a replace changed the series' product or version (032), else ''. */
 function versionChange(s: Record<string, unknown>): string {
 	const p = s.provenance as Record<string, unknown> | undefined;
-	return p && typeof p === 'object' ? `; now ${str(p.to)}, was ${str(p.from)}` : '';
+	const o = s.origin as Record<string, unknown> | undefined;
+	return (
+		(p && typeof p === 'object' ? `; now ${str(p.to)}, was ${str(p.from)}` : '') +
+		// Where the values came from, or the unit they were given in (107_series_source.sql).
+		(o && typeof o === 'object' ? `; source now ${str(o.to)}, was ${str(o.from)}` : '')
+	);
 }
 
 /** "green under 5 %, amber under 20 % (the defaults)": a team_thresholds.changed side. */
@@ -159,6 +164,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Held automatic runs: new days in ${seriesName(s)} look wrong (${parts.join(', ') || 'flagged days'}).${own} Check the data, then run the model`;
 		}
 		case 'series.labelled': {
+			// A source change (107_series_source.sql) has `origin` in place of `provenance`.
+			if (s.origin && typeof s.origin === 'object' && !s.provenance) {
+				const o = s.origin as Record<string, unknown>;
+				return `Recorded the source of ${seriesName(s)}: ${str(o.to)} (was ${str(o.from)})`;
+			}
 			const p = (s.provenance ?? {}) as Record<string, unknown>;
 			return `Marked ${seriesName(s)} as ${str(p.to)} (was ${str(p.from)})`;
 		}

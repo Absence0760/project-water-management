@@ -24,7 +24,11 @@
 		doubleMass,
 		doubleMassCheck,
 		fromEpochDay,
+		isGapFillKind,
 		observedAgreement,
+		originLabel,
+		resolveFlowGapFill,
+		seriesOrigin,
 		rainVsChirps,
 		rainVsChirpsCheck,
 		resolveDataQuality,
@@ -59,6 +63,7 @@
 	import { freshness, freshnessOrder, isRecordedRain, STALE_DAYS } from './freshness';
 	import { cachedValues, cacheValues } from './valuesCache';
 	import { zeroRainShading } from './zeroRain';
+	import { flowFillShading } from './flowFill';
 	import { dataAnchor, dataNavGroups } from './sections';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
@@ -232,6 +237,32 @@
 		const fit = { fitPeriod: resolveChirpsFitPeriod(settings?.chirpsFitPeriod, []) };
 		return v ? zeroRainShading(v, resolveZeroRain(zeroRainRuns, []), (h && values[h.id]) || null, settings?.chirpsBiasCorrection ?? 'monthly', fit) : null;
 	});
+
+	// Days a run fills in an observed flow record (settings.flowGapFill, engine ≥ 1.20.0), shaded on the record
+	// a run reads (the first of its kind by name), with the filled values as a line of their own.
+	const flowShading = $derived.by(() => {
+		if (!viewing || !isGapFillKind(viewing.kind) || viewing.id !== first(viewing.kind)?.id) return null;
+		const v = values[viewing.id];
+		if (!v) return null;
+		const fill = resolveFlowGapFill(settings?.flowGapFill);
+		const donorKind = fill[viewing.kind]?.donor;
+		const d = donorKind ? first(donorKind) : undefined;
+		return flowFillShading(viewing.kind, v, fill, (d && values[d.id]) || null);
+	});
+
+	/** Say where a series' values came from (107_series_source.sql); '' clears it. Its values are untouched. */
+	async function resource(s: SeriesMeta, text: string) {
+		actionError = null;
+		const next = text.trim() || null;
+		if (next === (s.source ?? null)) return;
+		try {
+			const meta = await api.series.source(projectId, s.id, next);
+			list = list.map((x) => (x.id === s.id ? { ...x, source: meta.source ?? null } : x));
+			onSeriesChange?.(list);
+		} catch (e) {
+			actionError = msg(e);
+		}
+	}
 
 	// Gauge vs logger, when both records exist.
 	const agreement = $derived.by(() => {
@@ -525,6 +556,10 @@
 								{:else if asksFreeProvenance(s.kind) && seriesProvenance(s)}
 									<span class="prov" data-testid="series-provenance">{describeProvenance(s)}</span>
 								{/if}
+								<!-- Where the values came from, and a unit conversion at upload (107): only when there is something to say. -->
+								{#if s.source || (s.sourceUnit && s.sourceUnitFactor !== 1)}
+									<span class="prov" data-testid="series-source">{originLabel(seriesOrigin(s), s.unit)}</span>
+								{/if}
 								{#if SITED_KINDS.has(s.kind) && (gauges.length || s.siteNodeId)}
 									{#if readonly}
 										<span class="prov" data-testid="series-site">{s.siteNodeId ? `At gauge ${siteName(s.siteNodeId)}` : 'At the outlet'}</span>
@@ -619,19 +654,43 @@
 						title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
 						unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
 						height={chartH}
-						series={[{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values }]}
+						series={[
+							{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
+							...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
+						]}
 						logToggle={!isRain(viewing.kind)}
 						bind:log={flowLog}
 						recentDays={3 * 365}
 						recentLabel="Last 3 years"
-						shade={shading?.ranges ?? []}
-						caption={shading?.caption ?? undefined}
+						shade={shading?.ranges ?? flowShading?.ranges ?? []}
+						caption={shading?.caption ?? flowShading?.caption ?? undefined}
 					/>
 				</div>
 			</div>
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
 		{/if}
+		<!-- The charted series' source and given unit (107_series_source.sql); an editor records the source here. -->
+		<div class="origin" data-testid="series-origin">
+			{#if readonly}
+				<span>Source: {viewing.source ?? 'not recorded'}</span>
+			{:else}
+				<label for="series-source-input">Source</label>
+				{#key viewing.id}
+					<input
+						id="series-source-input"
+						maxlength="200"
+						placeholder="Not recorded: e.g. DWS X1H001, farm logger file"
+						value={viewing.source ?? ''}
+						onchange={(e) => resource(viewing, e.currentTarget.value)}
+					/>
+				{/key}
+			{/if}
+			<span class="muted" data-testid="series-given-unit">
+				{viewing.sourceUnit ? `Uploaded in ${viewing.sourceUnit}${viewing.sourceUnitFactor !== 1 ? `, converted to ${viewing.unit} (× ${viewing.sourceUnitFactor})` : ''}` : 'Upload unit not recorded'}
+			</span>
+			<HelpTip key="series-source" />
+		</div>
 	</section>
 {/if}
 </div>
@@ -736,6 +795,19 @@
 		margin-top: 0.15rem;
 		font-size: 0.75rem;
 		max-width: 100%;
+	}
+	/* The charted series' source (107_series_source.sql): saved on change, like the product select. */
+	.origin {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.25rem 0.6rem;
+		margin-top: 0.5rem;
+		font-size: 0.85rem;
+	}
+	.origin input {
+		flex: 1 1 16rem;
+		max-width: 28rem;
 	}
 	.role {
 		display: inline-block;

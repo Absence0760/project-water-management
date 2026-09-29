@@ -67,6 +67,9 @@
 	// The alternative gauge and the reanalysis (issue #40 (b)): a free product and version, e.g. "SASSCAL AWS" / "1".
 	let freeProduct = $state('');
 	let freeVersion = $state('');
+	// Where the file's values came from (107_series_source.sql): a station, agency, file or feed. Free text, optional.
+	let source = $state('');
+	let sourceTouched = $state(false);
 	// A sub-daily file (issue #40 (b) amendment 5): its text, kept to add it up again when the day boundary changes.
 	let subDailyText = $state<string | null>(null);
 	let dayBoundary = $state<DayBoundary>('08:00');
@@ -99,6 +102,11 @@
 	$effect(() => {
 		const t = target;
 		if (!provenanceTouched) provenanceKey = t?.product && t.productVersion ? `${t.product}/${t.productVersion}` : '';
+	});
+	// Until typed in, an existing series' own source (so a replace keeps it rather than clearing it).
+	$effect(() => {
+		const t = target;
+		if (!sourceTouched) source = t?.source ?? '';
 	});
 	const askProvenance = $derived(asksProvenance(kind));
 	const askFree = $derived(asksFreeProvenance(kind));
@@ -262,7 +270,9 @@
 					// Said only when picked: a merge that doesn't say keeps the series' label; one of another version is refused.
 					...(labelFields ?? {}),
 					// A sub-daily file's day boundary: one of the other window into a filled series is refused (409).
-					...boundaryFields
+					...boundaryFields,
+					// Recorded only on a new or empty series; one holding values keeps its own.
+					...(source.trim() ? { source: source.trim() } : {})
 				});
 				result = {
 					meta,
@@ -278,7 +288,9 @@
 					startDate: parsed.startDate,
 					values: parsed.values,
 					...(askProvenance ? provenanceFields(provenanceKey) : (labelFields ?? {})),
-					...boundaryFields
+					...boundaryFields,
+					// A replace records what the file is, or clears it.
+					source: source.trim() || null
 				});
 				result = { meta, added: parsed.rowCount, changed: 0, message: `Uploaded ${plural(meta.length, 'day')} to “${meta.name || label}”.` };
 			}
@@ -345,6 +357,18 @@
 				{#each units as u (u)}<option value={u}>{u}</option>{/each}
 			</select>
 		</div>
+	</div>
+	<div class="field">
+		<label for={id('source')}>Source <span class="muted">(optional)</span></label>
+		<input
+			id={id('source')}
+			maxlength="200"
+			placeholder="e.g. DWS X1H001, SAWS 0021478, farm logger"
+			bind:value={source}
+			oninput={() => (sourceTouched = true)}
+			aria-describedby={id('source-h')}
+		/>
+		<span class="hint muted" id={id('source-h')}>Where the values come from: a station, agency or file. The unit chosen above is recorded with it.</span>
 	</div>
 	{#if askProvenance}
 		<div class="field">
