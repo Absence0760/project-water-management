@@ -135,6 +135,25 @@ export function resetPasswordMail(to: string, url: string, locale?: string | nul
 export type InviteTarget = { kind: 'project' | 'team'; name: string; role: string };
 
 /**
+ * A role value as the email names it: the UI's names (frontend
+ * lib/api/roleLabels.ts, issue #162), one set for projects and teams. A team
+ * `member` is an editor on every team project and an `admin` an owner, so the
+ * invitee reads the same word the app will show them. Unknown values as sent.
+ */
+const ROLE_NAME: Readonly<Record<string, string>> = {
+	farmer: 'farmer',
+	contributor: 'applicant',
+	viewer: 'viewer',
+	editor: 'editor',
+	owner: 'owner',
+	member: 'editor',
+	admin: 'owner'
+};
+export function roleName(role: string): string {
+	return Object.hasOwn(ROLE_NAME, role) ? ROLE_NAME[role]! : role;
+}
+
+/**
  * `sign-up`: the address has no account; the link is `/register?invite=…`.
  * `confirm`: an unverified account already has the address; the link is a
  * verify-email link, and confirming accepts the invitation.
@@ -147,7 +166,8 @@ export function inviteMail(
 	mode: 'sign-up' | 'confirm' = 'sign-up'
 ): Mail {
 	const what = target.kind === 'project' ? `the catchment project “${target.name}”` : `the team “${target.name}”`;
-	const invited = `${inviterName} invited you to ${what} as ${/^[aeiou]/i.test(target.role) ? 'an' : 'a'} ${target.role}.`;
+	const role = roleName(target.role);
+	const invited = `${inviterName} invited you to ${what} as ${/^[aeiou]/i.test(role) ? 'an' : 'a'} ${role}.`;
 	const confirm = mode === 'confirm';
 	return render('invite', to, `${inviterName} invited you to ${PRODUCT}`, {
 		heading: `You're invited to ${PRODUCT}`,

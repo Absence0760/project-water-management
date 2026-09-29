@@ -14,6 +14,8 @@
 		api,
 		ApiError,
 		hasTeamRole,
+		roleLabel,
+		roleTitle,
 		TEAM_ROLES,
 		type Invite,
 		type Portfolio,
@@ -144,11 +146,11 @@
 			const r = await api.teams.addMember(teamId, email.trim(), role);
 			if (r.invited) {
 				invites = upsertInvite(invites, r.invite);
-				added = `Invitation sent to ${r.invite.email}. They’ll join as ${r.invite.role} once they confirm this email address (signing up first if they’re new).`;
+				added = `Invitation sent to ${r.invite.email}. They’ll join as ${roleLabel(r.invite.role)} once they confirm this email address (signing up first if they’re new).`;
 			} else {
 				addToMembers(r.member);
 				invites = invites.filter((x) => x.email.toLowerCase() !== r.member.email.toLowerCase());
-				added = `${r.member.displayName} added as ${r.member.role}.`;
+				added = `${r.member.displayName} added as ${roleLabel(r.member.role)}.`;
 			}
 			email = '';
 			role = 'member';
@@ -184,8 +186,8 @@
 		const self = m.userId === me;
 		if (soleAdmin(m)) {
 			error = self
-				? 'You are the only admin. Make another member an admin before you leave, or delete the team.'
-				: 'A team must keep at least one admin.';
+				? 'You are the only owner. Make someone else an owner before you leave, or delete the team.'
+				: 'A team must keep at least one owner.';
 			return;
 		}
 		const q = self
@@ -284,7 +286,7 @@
 				<div class="title">
 					<div class="head">
 						<h1>{team.name}</h1>
-						<span class="badge" class:badge-owner={isAdmin}>{team.role}</span>
+						<span class="badge" class:badge-owner={isAdmin}>{roleLabel(team.role)}</span>
 					</div>
 					<p class="muted facts">
 						{plural(team.projectCount, 'project')}{#if totals && totals.catchments}{' '}({statusSummary(totals.counts)}){/if} ·
@@ -353,7 +355,7 @@
 					<section class="panel members" aria-labelledby="members-h">
 						<div class="panel-head">
 							<h2 id="members-h">Members</h2>
-							{#if !isAdmin}<span class="muted small">Only admins can manage members.</span>{/if}
+							{#if !isAdmin}<span class="muted small">Only owners can manage members.</span>{/if}
 						</div>
 						<div class="table-wrap">
 							<table class="data">
@@ -380,11 +382,11 @@
 														onchange={(e) => setRole(m, e.currentTarget.value as TeamRole)}
 													>
 														{#each TEAM_ROLES as r (r)}
-															<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{r}</option>
+															<option value={r} disabled={r !== 'admin' && soleAdmin(m)}>{roleLabel(r)}</option>
 														{/each}
 													</select>
 												{:else}
-													<span class="badge" class:badge-owner={m.role === 'admin'}>{m.role}</span>
+													<span class="badge" class:badge-owner={m.role === 'admin'}>{roleLabel(m.role)}</span>
 												{/if}
 											</td>
 											<td class="act">
@@ -417,7 +419,7 @@
 									<div class="field">
 										<label for="tm-role">Role</label>
 										<select id="tm-role" bind:value={role}>
-											{#each TEAM_ROLES as r (r)}<option value={r}>{r}</option>{/each}
+											{#each TEAM_ROLES as r (r)}<option value={r}>{roleLabel(r)}</option>{/each}
 										</select>
 									</div>
 									<button class="btn btn-primary" type="submit" disabled={adding || !email.trim()}>
@@ -442,9 +444,9 @@
 							{/key}
 						{/if}
 						<dl class="roles">
-							<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
-							<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
-							<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages this team.</dd></div>
+							<div><dt>{roleTitle('viewer')}</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
+							<div><dt>{roleTitle('member')}</dt><dd>Edits every team project: model, data and runs.</dd></div>
+							<div><dt>{roleTitle('admin')}</dt><dd>Owns every team project (delete, share, move) and manages this team.</dd></div>
 						</dl>
 						<p class="muted small">Anyone without an account gets an email invitation to sign up.</p>
 					</section>

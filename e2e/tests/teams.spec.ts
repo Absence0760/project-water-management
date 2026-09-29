@@ -30,7 +30,7 @@ test('a team owns catchments together', async ({ page, owner, signIn }) => {
 	// The only admin is told to hand over before leaving (no request sent), in the settings sheet.
 	const settings = await openTeamSettings(page);
 	await settings.getByRole('button', { name: 'Leave team' }).click();
-	await expect(settings.getByRole('alert')).toContainText('You are the only admin');
+	await expect(settings.getByRole('alert')).toContainText('You are the only owner');
 	await closeTeamSettings(page);
 
 	// New project in the header: the dialog opens with the team preselected.
@@ -88,7 +88,8 @@ test('a team admin invites an address with no account and revokes it', async ({ 
 	await expect(page.getByText('1 member ·')).toBeVisible();
 
 	const pending = page.getByRole('region', { name: /Pending invitations/ });
-	await expect(pending.getByRole('listitem').filter({ hasText: email })).toContainText('member');
+	// A team `member` reads as an editor, the project role it gives (#162).
+	await expect(pending.getByRole('listitem').filter({ hasText: email })).toContainText('editor');
 
 	page.once('dialog', (d) => void d.accept());
 	await pending.getByRole('button', { name: `Revoke invitation to ${email}` }).click();
@@ -110,10 +111,13 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	await page.getByRole('button', { name: 'Add', exact: true }).click();
 	await expect(page.getByText('Team reviewer added as viewer.')).toBeVisible();
 	await expect(page.getByLabel('Team role for Team reviewer')).toHaveValue('viewer');
+	// One set of role names across teams and projects (#162): the picker and the key say Viewer / Editor / Owner.
+	await expect(page.getByLabel('Role', { exact: true }).locator('option')).toHaveText(['viewer', 'editor', 'owner']);
+	await expect(page.getByRole('region', { name: 'Members' }).getByRole('term')).toHaveText(['Viewer', 'Editor', 'Owner']);
 	await expect(page.getByRole('region', { name: 'Members' }).getByRole('definition')).toHaveText([
 		"Reads every team project and its runs, but can't change or run anything.",
 		'Edits every team project: model, data and runs.',
-		'Owner of every team project (delete, share, move) and manages this team.'
+		'Owns every team project (delete, share, move) and manages this team.'
 	]);
 
 	// They see the team's project as a viewer, with no way to delete it.
@@ -130,7 +134,7 @@ test('a team viewer reads the team’s catchments but can’t add to the team', 
 	// The team page doesn't offer to add a project, and neither does New project.
 	await reviewer.page.goto(`/teams/${team.id}`);
 	await expect(reviewer.page.getByRole('heading', { level: 1, name: 'Review Board' })).toBeVisible();
-	await expect(reviewer.page.getByText('Only admins can manage members.')).toBeVisible();
+	await expect(reviewer.page.getByText('Only owners can manage members.')).toBeVisible();
 	await expect(reviewer.page.getByRole('link', { name: 'New project', exact: true })).toHaveCount(0);
 	await reviewer.page.goto(`/?owner=team:${team.id}&new=1`);
 	const np = reviewer.page.getByRole('dialog', { name: 'New project' });
@@ -182,7 +186,7 @@ test('only a team admin edits the portfolio traffic lights; a member reads which
 	await colleague.page.goto(`/teams/${team.id}`);
 	const theirs = (await openTeamSettings(colleague.page)).getByRole('region', { name: 'Portfolio traffic lights' });
 	await expect(theirs).toContainText('amber under 12.5 %');
-	await expect(theirs).toContainText('Only admins can change them.');
+	await expect(theirs).toContainText('Only owners can change them.');
 	await expect(theirs.getByRole('button')).toHaveCount(0);
 	await expect(theirs.getByRole('spinbutton')).toHaveCount(0);
 

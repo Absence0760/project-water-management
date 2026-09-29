@@ -65,7 +65,7 @@
 			<option value="">Personal</option>
 			{#each teams as t (t.id)}<option value={t.id}>{t.name}</option>{/each}
 		</select>
-		<span class="hint" id="imp-team-hint">In a team, members can edit, viewers can only read and team admins are owners.</span>
+		<span class="hint" id="imp-team-hint">In a team, its editors and owners can edit it and its viewers can only read it.</span>
 	</div>
 {/if}
 

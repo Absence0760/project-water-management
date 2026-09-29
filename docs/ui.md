@@ -1235,6 +1235,20 @@ Laid out for the app frame (issue #17): the layouts answer to the page's own
 width through container queries, not the window's, since the sidebar takes
 240 px.
 
+**Role names** (issue #162): the UI uses one set of names for team and
+project roles, **Viewer / Editor / Owner**. A team role is shown by the
+project role it gives on every team project, so the API's team `member`
+reads "editor" and its `admin` "owner" (a project `contributor` reads
+"applicant"). Only the words differ; the API and database keep their values.
+Every role label goes through `roleLabel` / `roleTitle`
+(`lib/api/roleLabels.ts`): the team pages' badges, role pickers, roles key
+and add messages, the Members panel, pending invites, the project list's
+role and the History tab's member lines. The invite email names the role the
+same way (`roleName`, `backend/src/mail/templates.ts`). With one set of names
+the Project page no longer spells out "team admins are owners…": its Team
+panel says team members keep their team role on the project. Below,
+"admin" and "member" are the API's team roles.
+
 **`/teams`** shows each team as a card: its name (opens the team) and your
 role, then **Projects**, **Members**, **Farms short this week** (added up
 over the projects whose count is known, "2 of 14 farms"; "–" when none is)
@@ -1263,10 +1277,10 @@ alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): name
 with the email under it, role, Remove; the add-by-email form, pending
 invites and the roles list. Admins pick each member's role from
-**viewer / member / admin** (the sole admin's viewer and member options are
-disabled), and the page explains each role in a short list under the table:
-viewers read every team project, members edit them, admins own them and
-manage the team. A team viewer doesn't get "New project"; the
+**viewer / editor / owner** (the API's `viewer` / `member` / `admin`; the
+sole admin's viewer and editor options are disabled), and the page explains
+each role in a short list under the table: viewers read every team project,
+editors edit them, owners own them and manage the team. A team viewer doesn't get "New project"; the
 New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
@@ -1275,7 +1289,7 @@ personal copy (the Copy dialog says so).
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **Portfolio traffic lights**
 (below), and **Leave or delete** (*Leave team* for everyone, the only admin
-told to hand over first; *Delete team* for admins, which closes the sheet
+told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the portfolio's
 "Change them on the team page" links there), and closing it drops the
 parameter in place, so Back closes it.
@@ -1288,7 +1302,7 @@ still to be confirmed by the hydrologist*. Admins get two number inputs,
 *Green below (%)* and *Amber below (%)*, checked as the API checks them (both
 0–100, green below amber; the message sits under the inputs, which carry
 `aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
-once the team has its own, *Use the defaults*. Anyone else sees "Only admins
+once the team has its own, *Use the defaults*. Anyone else sees "Only owners
 can change them." A change shows in each team project's History tab
 (`team_thresholds.changed`).
 
@@ -1334,7 +1348,7 @@ opens the address is sent to their farm view (`/farm`), as the project list
 does. The intro states the thresholds the statuses were judged by (the API's
 `thresholds`, the team's or the defaults) and whose they are; an admin gets
 a link to change them in the team page's settings sheet (§ Teams,
-`?settings=1`), anyone else is told a team admin can.
+`?settings=1`), anyone else is told a team owner can.
 
 A dashboard (issue #17). The header carries *Team page* and, for members
 and admins, *New project in this team*; under it five tiles: **EWR, last 30

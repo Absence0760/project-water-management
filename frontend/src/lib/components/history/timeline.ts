@@ -2,6 +2,7 @@
 // item says, grouping one request's items (a change set) into one entry, and
 // entries into the viewer's calendar days. No DOM, no fetch.
 import { registrationLine } from '@water-management/engine';
+import { roleLabel } from '$lib/api/roleLabels';
 import type { HistoryEvent, HistoryItem, HistoryRevision } from '$lib/api/types';
 import { fmtDay, fmtNum, localIsoDate } from '$lib/format/number';
 import { kindLabel } from '$lib/series/kinds';
@@ -52,6 +53,14 @@ export function revisionLines(r: HistoryRevision): string[] {
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v));
+/** A recorded role value, project or team, by the name the UI gives it (a team `member` is an editor). */
+const role = (v: unknown): string => roleLabel(str(v));
+/**
+ * ", so owner here" when the project role a team role gives reads differently
+ * from the team role; nothing when it doesn't, which is every known role today.
+ */
+const hereToo = (teamRole: unknown, projectRole: unknown): string =>
+	!str(projectRole) || role(projectRole) === role(teamRole) ? '' : `, so ${role(projectRole)} here`;
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n)} ${n === 1 ? one : many}`;
 
@@ -115,11 +124,11 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return text[0]!.toUpperCase() + text.slice(1);
 		}
 		case 'member.added':
-			return s.via === 'invite' ? `${who} joined as ${str(s.role)} (accepted an invite)` : `Added ${who} as ${str(s.role)}`;
+			return s.via === 'invite' ? `${who} joined as ${role(s.role)} (accepted an invite)` : `Added ${who} as ${role(s.role)}`;
 		case 'member.removed':
-			return s.self ? `${who} left the project` : `Removed ${who} (${str(s.role)})`;
+			return s.self ? `${who} left the project` : `Removed ${who} (${role(s.role)})`;
 		case 'member.role':
-			return `Changed ${who}’s role from ${str(s.from)} to ${str(s.to)}`;
+			return `Changed ${who}’s role from ${role(s.from)} to ${role(s.to)}`;
 		case 'member.party':
 			return s.to ? `Put ${who} in the applying party ${str(s.to)}` : `Took ${who} out of the applying party ${str(s.from)}`;
 		case 'farmer.linked':
@@ -127,7 +136,7 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		case 'farmer.unlinked':
 			return `Unlinked ${who} from the hydrological unit ${str(s.nodeName)}${UNLINK_CAUSES[str(s.cause)] ?? ''}`;
 		case 'invite.sent':
-			return `Invited ${str(s.email)} as ${str(s.role)}`;
+			return `Invited ${str(s.email)} as ${role(s.role)}`;
 		case 'invite.revoked':
 			return `Revoked the invite for ${str(s.email)}`;
 		case 'publication.published': {
@@ -260,12 +269,12 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 		// Who reaches the project through its team (072): each is recorded on every team project, with the role it gives here.
 		case 'team_member.added':
 			return s.via === 'invite'
-				? `${who} joined the team “${str(s.team)}” as ${str(s.teamRole)} (accepted an invite), so ${str(s.role)} here`
-				: `Added ${who} to the team “${str(s.team)}” as ${str(s.teamRole)}, so ${str(s.role)} here`;
+				? `${who} joined the team “${str(s.team)}” as ${role(s.teamRole)} (accepted an invite)${hereToo(s.teamRole, s.role)}`
+				: `Added ${who} to the team “${str(s.team)}” as ${role(s.teamRole)}${hereToo(s.teamRole, s.role)}`;
 		case 'team_member.role':
-			return `Changed ${who}’s role in the team “${str(s.team)}” from ${str(s.from)} to ${str(s.to)}, so ${str(s.role)} here`;
+			return `Changed ${who}’s role in the team “${str(s.team)}” from ${role(s.from)} to ${role(s.to)}${hereToo(s.to, s.role)}`;
 		case 'team_member.removed':
-			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${str(s.teamRole)}) from the team “${str(s.team)}”`;
+			return s.self ? `${who} left the team “${str(s.team)}”` : `Removed ${who} (${role(s.teamRole)}) from the team “${str(s.team)}”`;
 		case 'team.deleted':
 			return `Deleted the team “${str(s.team)}”: its ${plural(num(s.members) ?? 0, 'member')} no longer reach this project through it`;
 		default:
