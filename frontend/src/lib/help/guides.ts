@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the hydrological unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
+						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). The emptiest dams come first; with many dams, **Show all** under the cards lists the rest. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the hydrological unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
 					},
 					{
 						type: 'p',
@@ -436,7 +436,7 @@ export const GUIDES: Guide[] = [
 					{
 						type: 'list',
 						items: [
-							'The table lists the series that are **behind** first: rainfall or evaporation a run reads whose data is more than a week old, the same ones the number beside **Data** counts, each marked **Behind**. Then the last date of each series, its coverage per year and % missing. Click a row (or its **View**) to chart it; the link can be shared, and Back returns to the series before.',
+							'The table lists the series that are **behind** first: rainfall or evaporation a run reads whose data is more than a week old, the same ones the number beside **Data** counts, each marked **Behind**. Then the last date of each series, its coverage per year and % missing. With many series the first six show and **Show all** lists the rest. Click a row (or its **View**) to chart it: the chart, below the table, comes into view; the link can be shared, and Back returns to the series before.',
 							'**Data checks**: negative values, outliers, flat stretches, suspect zero rain and breaks in catchment rain’s ratio to CHIRPS, which the [[double-mass|double-mass]] chart shows by water year.',
 							'The chart of the catchment rain a run reads shades the days a run treats as missing or spreads a [[rain-accumulations|multi-day accumulation]] over.',
 							'With both a gauge and a logger, the [[gauge-logger-agreement|gauge vs logger]] table flags water years where they disagree. Choose the record you trust as the calibration flow series (**Settings & calibration → Calibration record**).',
@@ -468,7 +468,6 @@ export const GUIDES: Guide[] = [
 							'Enter a daily cap in m³ if there is one.',
 							'Set the [[transfer-min-storage|minimum storage]] the source dam keeps.',
 							'With several transfers, set each one’s [[transfer-priority|priority]]: lower moves first.',
-							'Check **When water moves** under the rules: each month’s enabled rules and the most they can move in a day together, before the dams’ own limits.',
 							'Save, then run.'
 						]
 					}
@@ -722,7 +721,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Hydrological units**, also under *Outcomes*, is the hydrological units’ page for one run (the newest, or pick another from the run menu in its header; the Summary’s **Supply by hydrological unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the hydrological units below 95 %, the hydrological units short on any of the run’s last 7 days (**Short this week**, which opens the curtailment over those days) and the total shortfall. Then a card per hydrological unit, least supplied first, in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that hydrological unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared. Below them: the **Hydrological unit results** table (hydrological units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each hydrological unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
+						text: '**Hydrological units**, also under *Outcomes*, is the hydrological units’ page for one run (the newest, or pick another from the run menu in its header; the Summary’s **Supply by hydrological unit** and **Needs attention** link there). Four tiles: irrigation supplied with its change from the run before, the hydrological units below 95 %, the hydrological units short on any of the run’s last 7 days (**Short this week**, which opens the curtailment over those days) and the total shortfall. Then a card per hydrological unit, the three least supplied first (**Show all** lists the rest in place), in the Summary’s and the Network’s colours: its % supplied, its shortfall, its days short in the reporting window and in the last 7 days, and any cut the curtailment asks of it, with links to its node on the Network and its planted areas. Pick a card to chart that hydrological unit’s supply against its demand (the days it was short shaded) or its dam storage, over **30 days / 1 year / All**; the link can be shared, and on a wide screen the chart stays beside the cards as you scroll. Below them: the **Hydrological unit results** table (hydrological units under 95 % flagged, with a small bar beside each %), the **Curtailment** targets with their **Reporting window** (each hydrological unit’s supply against a fairness benchmark, its EWR charge and the supply cut that meets it, and the EWR sites; see [[guide:curtailment-targets|Curtailment targets]]) and **Assurance of supply**.'
 					},
 					{
 						type: 'note',
