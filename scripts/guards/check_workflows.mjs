@@ -40,7 +40,11 @@
 //              error's SQL or data; the detail belongs in CloudWatch.
 //   auto-merge dependabot-auto-merge.yml has an ecosystem allowlist, and it
 //              leaves out github_actions and docker (the renderer image:
-//              .github/dependabot.yml's docker entry). Those PRs stay manual.
+//              .github/dependabot.yml's docker entry); and the same `if:`
+//              excludes the renderer image's npm directory
+//              (/backend/renderer-deps) by fetch-metadata's `directory` and by
+//              the PR's branch name, each on its own line joined with `&&`.
+//              Those PRs stay manual.
 //
 // Line-based on purpose (no YAML dependency at the root): the workflows are
 // ours and 2-space indented, and the tests pin the shapes it reads.
@@ -147,9 +151,21 @@ export function pushFullProblem(jobLines) {
 export const MANUAL_ECOSYSTEMS = ['github_actions', 'docker'];
 
 /**
+ * Dependabot directories whose PRs a human always merges, whatever their
+ * ecosystem (the auto-merge rule): the renderer image's npm packages.
+ */
+export const MANUAL_DIRECTORIES = ['/backend/renderer-deps'];
+
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+
+/**
  * The auto-merge rule for dependabot-auto-merge.yml: its ecosystem allowlist
  * (the `fromJSON('[...]')` compared with package-ecosystem) must exist and
- * must leave out every MANUAL_ECOSYSTEMS entry.
+ * must leave out every MANUAL_ECOSYSTEMS entry, and the same `if:` must
+ * exclude every MANUAL_DIRECTORIES entry twice, each clause on its own line
+ * ending in `&&`: `!startsWith(steps.meta.outputs.directory, '<dir>')` and
+ * `!contains(github.event.pull_request.head.ref, '<dir>/')` (fetch-metadata
+ * derives the directory from the branch name, so the branch is the backstop).
  * @param {string} text
  * @returns {{ line?: number, message: string } | null}
  */
@@ -166,6 +182,26 @@ export function autoMergeProblem(text) {
 	const manual = MANUAL_ECOSYSTEMS.filter((e) => listed.includes(e));
 	if (manual.length) {
 		return { line: at + 1, message: `the auto-merge allowlist includes ${manual.join(', ')}; those bumps stay manual (actions run with the repo's token; the renderer image's tag and digest move with its other Playwright pins)` };
+	}
+	// The `if:` that holds the allowlist: from its `if:` key to the next line
+	// indented no deeper than that key.
+	let ifAt = at;
+	while (ifAt >= 0 && !/^\s+if:/.test(lines[ifAt])) ifAt--;
+	if (ifAt < 0) return { line: at + 1, message: 'the ecosystem allowlist is not inside an `if:` this guard can read' };
+	const indent = lines[ifAt].match(/^\s*/)[0].length;
+	const block = [lines[ifAt].replace(/^\s+if:\s*(>-?|\|-?)?\s*/, '')];
+	for (let i = ifAt + 1; i < lines.length && (lines[i].match(/^\s*/)[0].length > indent || /^\s*$/.test(lines[i])); i++) {
+		if (!/^\s*$/.test(lines[i])) block.push(lines[i].trim());
+	}
+	const missing = [];
+	for (const dir of MANUAL_DIRECTORIES) {
+		const byDirectory = new RegExp(`^!startsWith\\(steps\\.meta\\.outputs\\.directory, '${escapeRe(dir)}'\\) &&$`);
+		const byBranch = new RegExp(`^!contains\\(github\\.event\\.pull_request\\.head\\.ref, '${escapeRe(dir)}/'\\) &&$`);
+		if (!block.some((l) => byDirectory.test(l))) missing.push(`!startsWith(steps.meta.outputs.directory, '${dir}') &&`);
+		if (!block.some((l) => byBranch.test(l))) missing.push(`!contains(github.event.pull_request.head.ref, '${dir}/') &&`);
+	}
+	if (missing.length) {
+		return { line: ifAt + 1, message: `the auto-merge condition does not exclude the renderer image's npm directory; add, each on its own line: ${missing.join(' / ')}` };
 	}
 	return null;
 }
