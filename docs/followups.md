@@ -69,6 +69,15 @@ The checklist for these is issue #62; the history scrub is #63.
       validation. In af-south-1 request at least the sum of the reservations
       + 10 (33 at the defaults; ask for 1000) and wait for the grant:
       infra/README.md § Operator steps, step 3.
+- [ ] **Confirm the database's KMS key before the first apply (#126,
+      2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
+      customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
+      sharing and AWS Backup cross-account copies possible, for $1–3 a month.
+      Keep it, or set `false` for the AWS-managed `aws/rds` key, in
+      `terraform.tfvars`. It can't be changed once the instance exists
+      (deployment.md § Decide before the first apply). Still open for
+      whenever a cross-account backup is built: an alarm on the key being
+      disabled or scheduled for deletion (EventBridge on CloudTrail).
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses

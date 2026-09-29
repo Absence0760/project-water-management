@@ -16,8 +16,8 @@ commit, especially for af-south-1.
 
 | | Minimal | Full |
 | --- | --- | --- |
-| **us-east-1** | **≈ $50 / month** | **≈ $110–115 / month** |
-| **af-south-1** (recommended region) | **≈ $58–63 / month** | **≈ $135–150 / month** |
+| **us-east-1** | **≈ $51 / month** | **≈ $111–116 / month** |
+| **af-south-1** (recommended region) | **≈ $59–64 / month** | **≈ $136–151 / month** |
 | Features | All of them | All of them |
 | Database | 1 instance, 1 AZ, `db.t4g.micro` | Multi-AZ standby, `db.t4g.small` |
 | VPC endpoints | 1 AZ each | 2 AZs each |
@@ -75,12 +75,12 @@ Cost, us-east-1:
 | 3 interface endpoints × 1 AZ | 21.90 |
 | WAF (ACL + 4 rules) | 9.00 |
 | CloudWatch alarms, logs, RDS log export | ~3.40 |
-| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
+| 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $53** |
+| **Total** | **≈ $54** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
-**≈ $59–64**.
+**≈ $60–65**.
 
 What you accept:
 
@@ -123,11 +123,11 @@ Cost, us-east-1:
 | 3 interface endpoints × 2 AZs | 43.80 |
 | WAF (ACL + 4 rules + requests) | ~9.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.60 |
-| KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
+| 2 KMS keys (sops; the database's, `rds_customer_managed_key`), Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 4.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $113–118** |
+| **Total** | **≈ $114–119** |
 
-af-south-1: **≈ $135–150**.
+af-south-1: **≈ $136–151**.
 
 What it buys:
 

@@ -185,6 +185,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
+| `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds` |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
@@ -213,7 +214,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 ### Database: RDS PostgreSQL 17, not Aurora Serverless v2
 
 `db.t4g.micro` (2 burstable vCPU, 1 GiB) runs single-AZ with 20 GiB gp3
-(autoscaling to 50). It is encrypted with the AWS-managed key, and has 7-day
+(autoscaling to 50). It is encrypted with a customer-managed KMS key by
+default (§ Database encryption key below), and has 7-day
 automated backups with PITR, deletion protection, `prevent_destroy` and a
 final snapshot under a per-stack unique name (§ Tearing down).
 Performance Insights and Enhanced Monitoring are off, and the PostgreSQL log
@@ -264,6 +266,35 @@ here.
 RDS's own. Raising a reserved concurrency means redoing this sum. RDS
 Proxy isn't used: its minimum bill (~$22/month) is more than the DB at this
 scale. An alarm fires at 60 connections.
+
+### Database encryption key: customer-managed, decided before the first apply
+
+`rds_customer_managed_key` (default `true`) encrypts the instance, its
+backups and snapshots with `alias/water-management-rds` (`kms.tf`); `false`
+uses RDS's AWS-managed `aws/rds` key. RDS fixes the key at creation, so
+flipping the variable later forces a new instance, which `prevent_destroy`
+refuses; changing keys on a live database means snapshot → copy under the
+new key → restore to a new instance.
+
+- **Why on:** only a CMK lets a snapshot be shared with another account or
+  AWS Backup copy it into another account's vault (`aws/rds`'s policy is
+  immutable). That keeps a backup account in the Organization and a
+  handover to the client's own account possible. Cost $1/month, $3 from
+  the third year of yearly rotation.
+- **Key policy:** the account administers the key (including
+  `kms:PutKeyPolicy`, so it can't be locked out) but can't use it; use and
+  `kms:CreateGrant` only through RDS in this region and account
+  (`kms:ViaService`, `kms:CallerAccount`, `kms:GrantIsForAWSResource`).
+- **Guards:** `prevent_destroy`, the 30-day maximum deletion window, yearly
+  automatic rotation. Deleting the key loses the database and every backup;
+  disabling it stops the instance within hours.
+- **Not shared** with the secrets (they stay on `aws/secretsmanager`, so no
+  Lambda role needs `kms:Decrypt`) or the buckets (SSE-S3).
+- **Performance Insights**, if it is turned on (`local.db_performance_insights`
+  in `rds.tf`), takes the same key; its key can't change once PI is on.
+
+The tradeoffs table and the AWS sources are in
+[docs/deployment.md § Decide before the first apply](../docs/deployment.md#decide-before-the-first-apply).
 
 ### Secrets: estate pattern (private `infra-secrets` + sops), RDS-managed master
 
@@ -431,10 +462,11 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
+| KMS `alias/water-management-rds` (`rds_customer_managed_key`, default on; +$1 at each of the first two yearly rotations; requests within the free tier) | 1.00 |
 | CloudWatch: 42 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed, job-dead, feed-fetch-failed and report-render-failed log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the six DLQ new-arrival alarms (jobs, the two feed and two render DLQs, mail-events; one metric each, metric math is free), fetcher errors and throttles, the fetch-requests and render-requests message age, renderer errors, throttles and duration, RDS CPU surplus credits charged), logs, RDS log export | ~4.20 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $54** (the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
+| **Total** | **≈ $55** (the database's KMS key added $1.00, the data feeds added ≈ $1.00, server-side reports ≈ $1.30–1.50, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -465,10 +497,10 @@ office NAT) stuck behind a limit. What to do: [docs/deployment.md §
 Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
-which comes to **≈ $58–63/month**. Check the AWS pricing calculator before
+which comes to **≈ $59–64/month** (with the database's KMS key). Check the AWS pricing calculator before
 you commit to it. The default `budget_monthly_usd = 80` is set for
-af-south-1: its ACTUAL 80% alert ($64) sits just above that idle, so it
-doesn't fire every month (in us-east-1, ~60 is enough). See
+af-south-1: its ACTUAL 80% alert ($64) sits at the top of that idle, so it
+shouldn't fire every month (in us-east-1, ~60 is enough). See
 [§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
 (`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
 `sqs_endpoint_az_count`, all 1 by default), and dropping WAF, which is not
@@ -558,7 +590,9 @@ Claude does not run any of these, and none of them print a secret. Replace
 6. **Non-secret config.** Following the estate pattern (feohledger,
    threkir), keep it in the private repo as
    `~/github/infra-secrets/water-management/prod.tfvars`, based on
-   [`terraform.tfvars.example`](./terraform.tfvars.example).
+   [`terraform.tfvars.example`](./terraform.tfvars.example). Confirm
+   `rds_customer_managed_key` there (default `true`): it can't be changed
+   after the first apply (§ Database encryption key).
 7. **Backend config:**
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 8. **Plan, review, apply:**
@@ -964,7 +998,12 @@ The database has two guards, both to be lifted on purpose, in this order:
    (the plan shows only the deletion-protection change; `prevent_destroy` is
    Terraform-side). With `prevent_destroy` still `true`, `terraform destroy`
    fails at plan time, before touching anything; the `data` test run pins it,
-   so don't commit the edit.
+   so don't commit the edit. With `rds_customer_managed_key` on, also set
+   the key's `prevent_destroy` in `kms.tf` to `false`. The destroy then
+   schedules the key for deletion after its 30-day window, and **the final
+   snapshot below is encrypted with that key**: restore or copy it under
+   another key within the window, or cancel the deletion
+   (`aws kms cancel-key-deletion`), if it must stay usable.
 2. `terraform destroy`. It leaves a final snapshot
    `water-management-final-<8 hex>`: the suffix is a `random_id` made with the
    stack, so a stack rebuilt later gets a new one and its own teardown doesn't

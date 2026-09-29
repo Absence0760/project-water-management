@@ -2305,7 +2305,9 @@ key there would let any read-only principal forge any user's session.
   is not pinned to this repo's `environment:production` subject
   (`infra/oidc.tf` postcondition, tested).
 - **Database** (`infra/rds.tf`, not yet applied): RDS in private subnets, no
-  public endpoint, encryption at rest, TLS enforced (`rds.force_ssl`),
+  public endpoint, encryption at rest (a customer-managed KMS key by default,
+  `rds_customer_managed_key`, usable only through RDS; deployment.md § Decide
+  before the first apply), TLS enforced (`rds.force_ssl`),
   automated backups + PITR (7–35 days; single-AZ recovery point about
   5 minutes), deletion protection and `prevent_destroy`, a final snapshot on
   teardown (kept until deleted), and an RDS event subscription to the alerts

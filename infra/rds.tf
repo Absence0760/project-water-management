@@ -34,6 +34,8 @@ resource "aws_db_subnet_group" "main" {
 # do that: the replacement's name would collide with the group still in use.
 locals {
   db_major_version = "17"
+  # Performance Insights stays off (the aws_db_instance comment says why).
+  db_performance_insights = false
 }
 
 resource "aws_db_parameter_group" "main" {
@@ -110,7 +112,11 @@ resource "aws_db_instance" "main" {
   storage_type          = "gp3"
   allocated_storage     = var.db_allocated_storage_gb
   max_allocated_storage = var.db_max_allocated_storage_gb
-  storage_encrypted     = true # AWS-managed aws/rds key; a CMK would add $1/mo for no gain here
+  storage_encrypted     = true
+  # The customer-managed key (kms.tf) when var.rds_customer_managed_key is on,
+  # else null: RDS's AWS-managed aws/rds key. Fixed at creation; changing it
+  # forces a new instance, which prevent_destroy below refuses.
+  kms_key_id = one(aws_kms_key.rds[*].arn)
 
   db_name  = "water"
   username = "water"
@@ -136,8 +142,12 @@ resource "aws_db_instance" "main" {
   # Off to keep the bill flat: Performance Insights and Enhanced Monitoring.
   # The basic (free) CloudWatch RDS metrics feed the alarms in alarms.tf, and
   # slow queries land in the exported postgresql log.
-  performance_insights_enabled = false
-  monitoring_interval          = 0
+  # Turning Performance Insights on later: set local.db_performance_insights.
+  # Its key is fixed once PI is on, so it takes the same key as storage (the
+  # API refuses a PI key while PI is off, hence null then).
+  performance_insights_enabled    = local.db_performance_insights
+  performance_insights_kms_key_id = local.db_performance_insights ? one(aws_kms_key.rds[*].arn) : null
+  monitoring_interval             = 0
 
   enabled_cloudwatch_logs_exports = ["postgresql"]
 
