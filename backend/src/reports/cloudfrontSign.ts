@@ -14,7 +14,7 @@
 //   <url>?<query>&Expires=<epoch s>&Signature=<b64url>&Key-Pair-Id=<id>&Hash-Algorithm=SHA256
 //
 // node:crypto only: no SDK, nothing to bundle, and signing makes no request.
-import { createSign } from 'node:crypto';
+import { createPublicKey, createSign, createVerify } from 'node:crypto';
 
 export const HASH_ALGORITHM = 'SHA256';
 
@@ -23,6 +23,36 @@ export interface CloudFrontSigner {
 	keyPairId: string;
 	/** The matching RSA private key, PEM. */
 	privateKey: string;
+}
+
+/**
+ * Refuse a private key that isn't the other half of `publicKey`. The API's
+ * private key comes from sops (its runtime secret) and the public key from
+ * Terraform's input (CloudFront's trusted key group, and CLOUDFRONT_PUBLIC_KEY
+ * in the API's environment); nothing at plan time can compare them without
+ * holding the private key, so the API does at cold start. A mismatch would
+ * sign every download link with a key CloudFront rejects (403).
+ *
+ * Compares the public halves and proves it by signing a probe the public key
+ * must verify. Errors say what is wrong, never quote a key.
+ */
+export function assertKeyPair(privateKey: string, publicKey: string): void {
+	let derived: Buffer, expected: Buffer;
+	try {
+		derived = createPublicKey(privateKey).export({ type: 'spki', format: 'der' });
+	} catch {
+		throw new Error('CLOUDFRONT_PRIVATE_KEY is not a readable private key');
+	}
+	try {
+		expected = createPublicKey(publicKey).export({ type: 'spki', format: 'der' });
+	} catch {
+		throw new Error('CLOUDFRONT_PUBLIC_KEY is not a readable public key');
+	}
+	const probe = cannedPolicy('https://key-pair.check/', 1);
+	const signature = createSign('RSA-SHA256').update(probe).sign(privateKey);
+	if (!derived.equals(expected) || !createVerify('RSA-SHA256').update(probe).verify(publicKey, signature)) {
+		throw new Error('CLOUDFRONT_PRIVATE_KEY is not the private half of CLOUDFRONT_PUBLIC_KEY: report_download_signing_key and cloudfront_private_key in sops disagree (docs/deployment.md § Rotating a secret)');
+	}
 }
 
 /** The canned policy for `url` until `expires` (epoch seconds): exact JSON, no whitespace, as CloudFront rebuilds it. */

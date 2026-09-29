@@ -3,8 +3,8 @@
 // run: no private key is ever committed.
 import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cannedPolicy, cloudFrontBase64, signCloudFrontUrl } from './cloudfrontSign.js';
-import { DOWNLOAD_URL_TTL_SECONDS, downloadUrl, reportDownloads, reportKey } from './storage.js';
+import { assertKeyPair, cannedPolicy, cloudFrontBase64, signCloudFrontUrl } from './cloudfrontSign.js';
+import { assertDownloadSigner, DOWNLOAD_URL_TTL_SECONDS, downloadUrl, reportDownloads, reportKey } from './storage.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
 	modulusLength: 2048,
@@ -66,6 +66,49 @@ describe('signCloudFrontUrl', () => {
 		expect(() => signCloudFrontUrl(`${url}&Expires=9`, 1, signer)).toThrow(/Expires/);
 		expect(() => signCloudFrontUrl(url, 1.5, signer)).toThrow(/epoch/);
 		expect(() => signCloudFrontUrl(url, 1, { ...signer, keyPairId: 'k-lower' })).toThrow(/public key id/);
+	});
+});
+
+describe('assertKeyPair: the sops private key must pair with the public key Terraform trusts', () => {
+	// openssl genpkey writes PKCS#8; the same key as PKCS#1 must pass too.
+	const pkcs8 = generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
+
+	it('accepts a matching pair (positive control), in PKCS#1 or PKCS#8', () => {
+		expect(() => assertKeyPair(privateKey, publicKey)).not.toThrow();
+		expect(() => assertKeyPair(pkcs8.privateKey, pkcs8.publicKey)).not.toThrow();
+	});
+
+	it('refuses a private key from another pair, never quoting either key', () => {
+		let message = '';
+		try {
+			assertKeyPair(privateKey, other.publicKey);
+		} catch (err) {
+			message = (err as Error).message;
+		}
+		expect(message).toMatch(/CLOUDFRONT_PRIVATE_KEY is not the private half of CLOUDFRONT_PUBLIC_KEY/);
+		expect(message).not.toContain('-----');
+	});
+
+	it('refuses what is not a key at all, naming which', () => {
+		expect(() => assertKeyPair('REPLACE_ME', publicKey)).toThrow(/CLOUDFRONT_PRIVATE_KEY is not a readable private key/);
+		expect(() => assertKeyPair(privateKey, 'REPLACE_ME')).toThrow(/CLOUDFRONT_PUBLIC_KEY is not a readable public key/);
+		expect(() => assertKeyPair(privateKey, '')).toThrow(/CLOUDFRONT_PUBLIC_KEY/);
+	});
+});
+
+describe('assertDownloadSigner (the API cold-start check)', () => {
+	afterEach(() => vi.unstubAllEnvs());
+
+	it('checks the pair only when signing CloudFront URLs', () => {
+		vi.stubEnv('REPORT_DOWNLOADS', 'presigned');
+		vi.stubEnv('CLOUDFRONT_PRIVATE_KEY', '');
+		expect(() => assertDownloadSigner()).not.toThrow();
+		vi.stubEnv('REPORT_DOWNLOADS', 'cloudfront');
+		vi.stubEnv('CLOUDFRONT_PRIVATE_KEY', privateKey);
+		vi.stubEnv('CLOUDFRONT_PUBLIC_KEY', publicKey);
+		expect(() => assertDownloadSigner()).not.toThrow();
+		vi.stubEnv('CLOUDFRONT_PUBLIC_KEY', other.publicKey);
+		expect(() => assertDownloadSigner()).toThrow(/not the private half/);
 	});
 });
 

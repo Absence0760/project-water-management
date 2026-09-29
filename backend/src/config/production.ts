@@ -114,9 +114,13 @@ const appPassword: Check = (v) => (set(v) && /^[A-Za-z0-9]{24,}$/.test(v) ? null
 /** A CloudFront public key id (the signed URL's Key-Pair-Id), as Terraform's aws_cloudfront_public_key returns it. */
 const cloudFrontKeyId: Check = (v) => (!set(v) ? 'is not set' : /^K[A-Z0-9]{8,}$/.test(v.trim()) ? null : 'is not a CloudFront public key id');
 
-/** A PEM private key (Terraform's tls_private_key, PKCS#1 or PKCS#8). */
+/** A PEM private key (openssl genpkey writes PKCS#8; PKCS#1 is accepted too). */
 const pemPrivateKey: Check = (v) =>
 	!set(v) ? 'is not set' : /^-----BEGIN (RSA )?PRIVATE KEY-----\r?\n[\s\S]{200,}\r?\n-----END (RSA )?PRIVATE KEY-----\s*$/.test(v.trim()) ? null : 'is not a PEM private key';
+
+/** A PEM public key (SubjectPublicKeyInfo, as openssl pkey -pubout writes it). */
+const pemPublicKey: Check = (v) =>
+	!set(v) ? 'is not set' : /^-----BEGIN PUBLIC KEY-----\r?\n[A-Za-z0-9+/=\r\n]{200,}\r?\n-----END PUBLIC KEY-----\s*$/.test(v.trim()) ? null : 'is not a PEM public key';
 
 const unset: Check = (v) => (set(v) ? 'must not be set in production' : null);
 
@@ -236,6 +240,10 @@ export const SETTINGS: Record<string, Setting> = {
 		checks: { api: oneOf('cloudfront') }
 	},
 	CLOUDFRONT_KEY_PAIR_ID: { why: 'The distribution’s trusted public key that verifies download signatures (infra/reports.tf).', checks: { api: cloudFrontKeyId } },
+	CLOUDFRONT_PUBLIC_KEY: {
+		why: 'The public half of the signing key (report_download_public_keys[report_download_signing_key]); lambda.ts refuses to start unless CLOUDFRONT_PRIVATE_KEY pairs with it.',
+		checks: { api: pemPublicKey }
+	},
 	CLOUDFRONT_PRIVATE_KEY: {
 		why: 'Signs report downloads (its public half is in the distribution’s key group). From the API’s runtime secret.',
 		checks: { api: pemPrivateKey }

@@ -22,12 +22,13 @@
 //                private bucket through its origin access control, behind the
 //                WAF (infra/reports.tf). Signed with the private key of the
 //                distribution's trusted key group (CLOUDFRONT_KEY_PAIR_ID,
-//                CLOUDFRONT_PRIVATE_KEY from the API's runtime secret). The
-//                API itself can't read the bucket.
+//                CLOUDFRONT_PRIVATE_KEY from the API's runtime secret;
+//                CLOUDFRONT_PUBLIC_KEY, its public half, checked against it at
+//                cold start). The API itself can't read the bucket.
 //
 // The AWS SDK is imported lazily, like the mail and queue transports.
 import type { S3Client } from '@aws-sdk/client-s3';
-import { signCloudFrontUrl } from './cloudfrontSign.js';
+import { assertKeyPair, signCloudFrontUrl } from './cloudfrontSign.js';
 
 export const STORAGES = ['local', 's3'] as const;
 export type Storage = (typeof STORAGES)[number];
@@ -127,6 +128,17 @@ export async function putPdf(key: string, body: Uint8Array): Promise<void> {
 	await ensureBucket();
 	const { s3: c, sdk } = await s3();
 	await c.send(new sdk.PutObjectCommand({ Bucket: reportsBucket(), Key: key, Body: body, ContentType: 'application/pdf' }));
+}
+
+/**
+ * The API's cold-start check (lambda.ts): with REPORT_DOWNLOADS=cloudfront,
+ * refuse to start unless the signing key is the private half of the public
+ * key Terraform trusts (cloudfrontSign.ts assertKeyPair). Off (presigned) it
+ * does nothing.
+ */
+export function assertDownloadSigner(): void {
+	if (reportDownloads() !== 'cloudfront') return;
+	assertKeyPair(process.env.CLOUDFRONT_PRIVATE_KEY ?? '', process.env.CLOUDFRONT_PUBLIC_KEY ?? '');
 }
 
 /**
