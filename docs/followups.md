@@ -522,17 +522,27 @@ collected as a checklist in issue #46; tick it there as they answer.
       caveat. Settings hashes the project's series, the Runs page, report and
       run comparison read each run's snapshot `valuesSha256`
       ([model.md §2.10b](./model.md)).
-- [ ] **Quantile-map a replacement gauge's daily intensities
-      (calibration-research.md §4, *Check daily intensity*).** A rain-source
-      period scales the alternative gauge by a monthly factor, which keeps
-      its own wet-day distribution: a single gauge can have more intense
-      days than a mean of several gauges, and GR4J turns more
-      of that into flow. Durable fix: an optional per-period quantile
-      mapping of the wet-day distribution, month by month, onto the primary
-      series' reference era, preserving the monthly totals. Trigger: the
-      hydrologist applies a rain-source period to the client record and the
-      share of rain on heavy days (≥ 20 mm) in the period differs from the
-      reference era by more than the calibration band allows.
+- [x] **Quantile-map a replacement gauge's daily intensities
+      (calibration-research.md §4, *Check daily intensity*; done, engine
+      1.20.0, issue #66).** Every rain-source period now reports the share
+      of its rain on heavy days (≥ 20 mm) and its wet days against the
+      primary record's in a reference era, and warns when the heavy-day
+      shares are more than 5 points apart; an opt-in per-period
+      `quantileMap` maps the scaled gauge's wet days onto the primary
+      record's, month by month (else by season, else not at all, at 30 wet
+      days), keeping every year-month's total. The default (no map) runs
+      exactly as before ([model.md §2.4e *Daily
+      intensity*](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)).
+- [ ] **Confirm the daily-intensity defaults with the hydrologist (issue
+      #66).** Built on documented defaults: a heavy day is ≥ 20 mm; the
+      check warns beyond 5 share points; a wet day is ≥ 1 mm; the map works
+      by calendar month, pooling the 3-month season below 30 wet days on
+      either side and leaving a thinner season unmapped. Also whether the
+      map should adjust wet-day frequency (it doesn't: it keeps each month's
+      wet days and total, so a gauge wet on fewer days keeps part of its
+      heavy-day excess). Trigger: the hydrologist's answer, or the first
+      client period with the map on. Each is a constant in
+      `packages/engine/src/rainSourcePeriods.ts`.
 - [x] **Help text read-through** (`frontend/src/lib/help/tips.ts`,
       `articles.ts` and `farmer.ts`; issue #76, 2026-09-27). A
       `persona-hydrologist` pass checked every entry against the engine;
@@ -1014,7 +1024,11 @@ the suggested order (the IDs carry the detail):
       CR-34, the dry → wet ranking), are in issue #90.
 - [ ] **Later (P2/P3):** CR-7 regional filters, CR-8 trade-off view, CR-9
       proxy basin (issue #4 item 3), CR-10 GR6J, CR-15/16 fitted recession with
-      uncertainty and BFI, CR-23 CHIRPS quantile mapping, CR-24 alternative
+      uncertainty and BFI, CR-23 CHIRPS quantile mapping (the pure mapper
+      exists since engine 1.20.0, `packages/engine/src/quantileMap.ts`: fit
+      CHIRPS' wet days against the catchment's over the §2.4b fit period and
+      apply it to the gap days with the monthly factor as the fallback),
+      CR-24 alternative
       ratings, CR-25 human-use flag, CR-30 assurance-table EWR, CR-31 licence
       scenario report, CR-32 dam and abstraction assumptions, CR-33 seasonal
       reporting.

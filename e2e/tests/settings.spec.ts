@@ -327,6 +327,16 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await expect(save).toBeDisabled();
 	await period.getByLabel('Gaps from').selectOption('rain_reanalysis_mm');
 	await expect(section.getByRole('alert')).toBeHidden();
+
+	// The quantile map (engine ≥ 1.20.0) is opt-in, at 1 mm; a wet-day threshold outside 0.1–10 mm isn't taken.
+	await period.getByLabel(/Quantile-map its wet days/).check();
+	await expect(period.getByLabel('Wet day from (mm)')).toHaveValue('1');
+	await period.getByLabel('Mapped onto water years from').fill('2001');
+	await period.getByLabel('Wet day from (mm)').fill('0');
+	await expect(period.getByLabel('Wet day from (mm)')).toHaveAttribute('aria-invalid', 'true');
+	await period.getByLabel('Wet day from (mm)').fill('2.5');
+	await expect(period.getByLabel('Wet day from (mm)')).not.toHaveAttribute('aria-invalid');
+	await expect(section.getByRole('alert')).toBeHidden();
 	await expect(save).toBeEnabled();
 	await save.click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
@@ -337,9 +347,18 @@ test('rain-source periods: a reason, fixed factors’ provenance and a non-CHIRP
 	await expect(period.getByLabel('Factor, Oct, period 1')).toHaveValue('1.3');
 	await expect(period.getByLabel('Gaps from')).toHaveValue('rain_reanalysis_mm');
 	await expect(period.getByLabel(/CHIRPS ingests this gauge/)).toBeChecked();
+	await expect(period.getByLabel(/Quantile-map its wet days/)).toBeChecked();
+	await expect(period.getByLabel('Wet day from (mm)')).toHaveValue('2.5');
 	const settings = (await (await page.request.get(`${API_URL}/projects/${project.id}`)).json()).project.settings;
 	expect(settings.rainSource).toEqual([
-		expect.objectContaining({ start: '2012-10-01', end: '2019-09-30', series: 'rain_catchment_alt_mm', gaugeInChirps: true, fallback: expect.objectContaining({ series: 'rain_reanalysis_mm' }) })
+		expect.objectContaining({
+			start: '2012-10-01',
+			end: '2019-09-30',
+			series: 'rain_catchment_alt_mm',
+			gaugeInChirps: true,
+			fallback: expect.objectContaining({ series: 'rain_reanalysis_mm' }),
+			quantileMap: expect.objectContaining({ fromWaterYear: 2001, wetDayMm: 2.5 })
+		})
 	]);
 
 	// Remove it: none again.

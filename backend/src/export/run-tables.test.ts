@@ -455,6 +455,43 @@ describe('rain-source block (engine ≥ 0.30.0)', () => {
 		expect([...summaryCsvLines(meta, { ...summary, rainSource: { periods: [period] } })]).toContain('Factor per month,Oct,Nov,Dec,Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep');
 	});
 
+	it('adds the daily-intensity check and the quantile map from engine 1.20.0', () => {
+		const share = (x: number) => ({ share: x, totalMm: 1000, heavyDays: 10, days: 2000, wetDays: 700 });
+		const withIntensity = {
+			...period,
+			intensity: {
+				heavyDayMm: 20,
+				band: 0.05,
+				wetDayMm: 1,
+				reference: { ...share(0.25), era: null, window: { fromWaterYear: 1990, toWaterYear: 2011 } },
+				scaled: share(0.4),
+				mapped: null,
+				differs: true
+			},
+			quantileMap: null
+		};
+		const mapped = {
+			...withIntensity,
+			intensity: { ...withIntensity.intensity, reference: { ...withIntensity.intensity.reference, era: { fromWaterYear: 1995, toWaterYear: 2011 }, window: { fromWaterYear: 1995, toWaterYear: 2011 } }, mapped: share(0.3) },
+			quantileMap: {
+				era: { fromWaterYear: 1995, toWaterYear: 2011 },
+				window: { fromWaterYear: 1995, toWaterYear: 2011 },
+				wetDayMm: 1,
+				minWetDays: 30,
+				months: Array.from({ length: 12 }, (_, i) => ({ month: i + 1, basis: i === 6 ? ('season' as const) : ('month' as const), referenceWetDays: 200, periodWetDays: 60 })),
+				mappedDays: 900
+			}
+		};
+		const lines = [...rainSourceCsvLines({ periods: [withIntensity, { ...mapped, start: '2020-10-01', end: '2021-09-30' }] })];
+		expect(lines.slice(7)).toEqual([
+			'Daily intensity,Heavy day (mm),Reference,Reference heavy-day share (%),Series × factor heavy-day share (%),After the quantile map (%),Band (points),Differs by more than the band,Quantile map',
+			'2012-10-01 to 2019-09-30,20,the whole trusted primary catchment series (1990/91–2011/12),25,40,,5,yes,none: the monthly factor alone',
+			"2020-10-01 to 2021-09-30,20,the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12),25,40,30,5,yes,\"wet days (≥ 1 mm) quantile-mapped onto the primary catchment series over 1995/96–2011/12 (readings in 1995/96–2011/12), each month's total kept; by month: Oct, Nov, Dec, Jan, Feb, Mar, Apr, May, Jun, Aug, Sep; by season: Jul\""
+		]);
+		// A run before 1.20.0 has no intensity block.
+		expect([...rainSourceCsvLines({ periods: [period] })]).toHaveLength(5);
+	});
+
 	it('says when there are none, or the run predates them', () => {
 		expect([...rainSourceCsvLines(null)][1]).toBe('None: the catchment series throughout');
 		expect([...rainSourceCsvLines(undefined)][1]).toMatch(/before engine 0\.30\.0/);

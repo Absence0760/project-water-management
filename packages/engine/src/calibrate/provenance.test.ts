@@ -322,6 +322,12 @@ describe('fit record', () => {
 		expect(fitRecordStatus({ ...base, rainSource: [] }, rec).forcingChanged).toBe(true);
 		expect(fitRecordStatus({ ...base, rainSource: [{ ...period, end: '2020-09-30' }] }, rec).forcingChanged).toBe(true);
 		expect(fitRecordStatus({ ...base, rainSource: [{ ...period, fitReference: { ...period.fitReference!, fromWaterYear: 1990 } }] }, rec).forcingChanged).toBe(true);
+		// Turning on the quantile map (engine ≥ 1.20.0) changes the rain the fit saw, and so does its threshold.
+		const mapped = { ...period, quantileMap: { fromWaterYear: 1995, toWaterYear: 2008, wetDayMm: 1 } };
+		expect(fitRecordStatus({ ...base, rainSource: [mapped] }, rec).forcingChanged).toBe(true);
+		const recMapped = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, rainSource: [mapped] } });
+		expect(fitRecordStatus({ ...base, rainSource: [{ ...mapped }] }, recMapped).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, rainSource: [{ ...mapped, quantileMap: { ...mapped.quantileMap, wetDayMm: 2 } }] }, recMapped).forcingChanged).toBe(true);
 		// A forcing recorded before 0.30.0 ran with no periods: adding one is a change, none is not.
 		const { rainSource: _r, ...pre030 } = rec.forcing!;
 		expect(fitRecordStatus({ ...base, rainSource: [period] }, { ...rec, forcing: pre030 }).forcingChanged).toBe(true);

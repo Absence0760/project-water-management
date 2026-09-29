@@ -28,6 +28,20 @@
 // of every fit (the CHIRPS factors, a 'fit' here, the accumulation detection)
 // and out of the zero-run handling (§2.4c). The stored series are never
 // changed.
+//
+// Daily intensity (engine ≥ 1.20.0, issue #66): a monthly factor keeps the
+// series' own wet-day distribution, and a single automatic gauge has more
+// intense days than a mean of several gauges. Every period reports the share
+// of its rain on heavy days (≥ HEAVY_DAY_MM) against the primary record's in
+// a reference era, and warns when they differ by more than HEAVY_SHARE_BAND.
+// An opt-in `quantileMap` then maps the scaled series' wet days (≥ wetDayMm)
+// onto the primary record's wet-day distribution over its era (./quantileMap),
+// calendar month by month; a month with fewer than QM_MIN_WET_DAYS wet days
+// on either side pools its 3-month season, and a season too thin keeps the
+// monthly factor alone. Each calendar month of the period (a year-month)
+// then has its wet days rescaled to the scaled wet total, so every month's
+// rain is exactly what the factor alone gives: the mapping moves rain
+// between days, never in or out of a month.
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearLabel, waterYearOf } from './calendar';
 import { EXCLUSION_REASON_MAX, EXCLUSIONS_MAX } from './calibrate/provenance';
 import {
@@ -37,11 +51,13 @@ import {
 	type DailySeries,
 	type RainSourceFactorProvenance,
 	type RainSourcePeriod,
+	type RainSourceQuantileMap,
 	type RainSourceReferenceEra,
 	type SeriesKind,
 	type ZeroRainSettings
 } from './project';
 import { rainVsChirps } from './quality';
+import { heavyDayShare, mapWetDay, quantileTable, rescaleToTotal } from './quantileMap';
 import { provenanceLabel, type SeriesProvenance } from './seriesProvenance';
 import {
 	CHIRPS_FACTOR_MAX,
@@ -56,6 +72,17 @@ import {
 
 /** Length limit of the provenance texts (source, method). */
 export const RAIN_SOURCE_TEXT_MAX = 200;
+
+/** A heavy day, mm: the daily-intensity check's threshold (calibration-research.md §4). */
+export const HEAVY_DAY_MM = 20;
+/** Warn when a period's heavy-day share differs from the reference era's by more than this (share points, 0.05 = 5 %). */
+export const HEAVY_SHARE_BAND = 0.05;
+/** The quantile map's wet-day threshold a new period starts with, and its allowed range, mm. */
+export const QM_WET_DAY_MM_DEFAULT = 1;
+export const QM_WET_DAY_MM_MIN = 0.1;
+export const QM_WET_DAY_MM_MAX = 10;
+/** Wet days a month (else its season) needs on each side, reference era and period, before it is mapped. */
+export const QM_MIN_WET_DAYS = 30;
 
 /** Where a day's rain came from: the values of the per-day `rain_source` column. */
 export const RAIN_SOURCE_CODE = { catchment: 0, series: 1, chirps: 2, reanalysis: 3, forecast: 4 } as const;
@@ -83,7 +110,7 @@ const isYear = (v: unknown): v is number => typeof v === 'number' && Number.isIn
 const plainObject = (v: unknown): Record<string, unknown> | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null);
 const text = (v: unknown, max: number) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
 
-const PERIOD_KEYS = new Set(['start', 'end', 'series', 'factors', 'provenance', 'fitReference', 'fallback', 'gaugeInChirps', 'reason']);
+const PERIOD_KEYS = new Set(['start', 'end', 'series', 'factors', 'provenance', 'fitReference', 'fallback', 'gaugeInChirps', 'quantileMap', 'reason']);
 
 /**
  * Why a rain-source period is invalid, or null. Exactly what the API's schema
@@ -136,6 +163,16 @@ export function rainSourcePeriodError(raw: unknown): string | null {
 	} else if (o.gaugeInChirps === true) {
 		return 'the period says CHIRPS ingests its gauge, so its gaps need a fallback that isn’t CHIRPS (reanalysis)';
 	}
+	if (o.quantileMap !== undefined) {
+		const q = plainObject(o.quantileMap);
+		if (!q) return 'quantileMap must be { fromWaterYear, toWaterYear, wetDayMm }';
+		const bad = Object.keys(q).filter((k) => k !== 'fromWaterYear' && k !== 'toWaterYear' && k !== 'wetDayMm');
+		if (bad.length) return `quantileMap has unknown field${bad.length === 1 ? '' : 's'} ${bad.join(', ')}`;
+		if (!isYear(q.fromWaterYear) || !isYear(q.toWaterYear) || q.fromWaterYear > q.toWaterYear) return 'quantileMap needs a reference era of water years (first ≤ last)';
+		if (typeof q.wetDayMm !== 'number' || !Number.isFinite(q.wetDayMm) || q.wetDayMm < QM_WET_DAY_MM_MIN || q.wetDayMm > QM_WET_DAY_MM_MAX) {
+			return `quantileMap's wet-day threshold must be ${QM_WET_DAY_MM_MIN}–${QM_WET_DAY_MM_MAX} mm`;
+		}
+	}
 	return null;
 }
 
@@ -158,6 +195,10 @@ function cleanPeriod(o: Record<string, unknown>): RainSourcePeriod {
 	} else p.fitReference = eraOf(o.fitReference);
 	if (o.fallback !== undefined) p.fallback = eraOf(o.fallback) as RainSourcePeriod['fallback'];
 	if (o.gaugeInChirps !== undefined) p.gaugeInChirps = o.gaugeInChirps as boolean;
+	if (o.quantileMap !== undefined) {
+		const q = o.quantileMap as RainSourceQuantileMap;
+		p.quantileMap = { fromWaterYear: q.fromWaterYear, toWaterYear: q.toWaterYear, wetDayMm: q.wetDayMm };
+	}
 	return p;
 }
 
@@ -247,6 +288,65 @@ export interface RainSourceFallbackFit {
 	factors: (number | null)[];
 }
 
+/** Heavy-day rain over a sample: total, the share on days ≥ HEAVY_DAY_MM, and how many such days; and how often it is wet. */
+export interface HeavyDayShare {
+	/** Share of the rain that fell on heavy days (0 … 1); null with no rain. */
+	share: number | null;
+	totalMm: number;
+	heavyDays: number;
+	/** Days with a reading, and those at or above the wet-day threshold. */
+	days: number;
+	wetDays: number;
+}
+
+/** The daily-intensity check of a period (engine ≥ 1.20.0): heavy-day shares, reference vs period. */
+export interface RainSourceIntensity {
+	heavyDayMm: number;
+	band: number;
+	/** The wet-day threshold `wetDays` counts at: the quantile map's, else QM_WET_DAY_MM_DEFAULT. */
+	wetDayMm: number;
+	reference: HeavyDayShare & {
+		/**
+		 * The water years read: the quantile map's era, else a 'fit' period's
+		 * reference era; null = the whole trusted primary record (outside
+		 * every period, off suspect days).
+		 */
+		era: { fromWaterYear: number; toWaterYear: number } | null;
+		/** Water years that actually gave readings. */
+		window: ChirpsFitWindow | null;
+	};
+	/** The series × its monthly factor over the whole period (every day it has a reading and the month a factor). */
+	scaled: HeavyDayShare;
+	/** The same days after the quantile map; null without one. */
+	mapped: HeavyDayShare | null;
+	/** |scaled − reference| > band; null when either share is. */
+	differs: boolean | null;
+}
+
+/** One calendar month of a period's quantile map. */
+export interface RainSourceQuantileMonth {
+	/** Calendar month 1–12. */
+	month: number;
+	/** What the month is mapped with: its own wet days, its 3-month season's, or nothing (the monthly factor alone). */
+	basis: 'month' | 'season' | null;
+	/** Wet days behind the basis (the month's own when it isn't mapped): primary record over the era, and the scaled series over the period. */
+	referenceWetDays: number;
+	periodWetDays: number;
+}
+
+/** A period's quantile map as a run applied it (the tables stay with the fit, RainSourcePeriodFactors). */
+export interface RainSourceQuantileMapInfo {
+	era: { fromWaterYear: number; toWaterYear: number };
+	/** Water years of the primary record that gave readings. */
+	window: ChirpsFitWindow | null;
+	wetDayMm: number;
+	minWetDays: number;
+	/** Calendar months Jan … Dec. */
+	months: RainSourceQuantileMonth[];
+	/** Run days whose rain the map changed (wet days of a mapped month). */
+	mappedDays: number;
+}
+
 /** One period as a run applied it (RunSummary.rainSource.periods). */
 export interface RainSourcePeriodInfo {
 	start: string;
@@ -267,6 +367,10 @@ export interface RainSourcePeriodInfo {
 	seriesPresent: boolean;
 	/** The product and version the series holds (032_series_provenance; null = not recorded, absent when the caller didn't say). */
 	seriesProvenance?: SeriesProvenance | null;
+	/** The daily-intensity check (engine ≥ 1.20.0; absent before). */
+	intensity?: RainSourceIntensity;
+	/** The opt-in quantile map (engine ≥ 1.20.0): null = monthly factor alone; absent before 1.20.0. */
+	quantileMap?: RainSourceQuantileMapInfo | null;
 	/** Run days in the period, and where their rain came from. */
 	runDays: number;
 	seriesDays: number;
@@ -323,6 +427,41 @@ const ratios = (t: MonthSums) => {
 /** Water-year-ordered settings factors → calendar months (Jan … Dec). */
 const toCalendar = (wy: readonly number[]) => Array.from({ length: 12 }, (_, i) => wy[waterYearIndex(i + 1)]!);
 
+/** The calendar months of a month's 3-month season (DJF, MAM, JJA, SON). */
+export const seasonOf = (m: number): number[] => {
+	if (m === 12 || m <= 2) return [12, 1, 2];
+	const first = m - (m % 3);
+	return [first, first + 1, first + 2];
+};
+
+/** A period's quantile map as fitted: the run info's fields plus one pair of tables per calendar month (null = not mapped). */
+export type RainSourceQuantileMapFit = Omit<RainSourceQuantileMapInfo, 'mappedDays'> & {
+	tables: ({ source: number[]; target: number[] } | null)[];
+};
+
+/** A period's fits from the whole stored record (what a warm-start snapshot pins). */
+export type RainSourcePeriodFactors = Pick<RainSourcePeriodInfo, 'factors' | 'fit' | 'fallback' | 'factorMode' | 'provenance'> & {
+	/** The daily-intensity check's reference side (engine ≥ 1.20.0; absent on a fit pinned before). */
+	intensityReference?: RainSourceIntensity['reference'];
+	quantileMap?: RainSourceQuantileMapFit | null;
+};
+
+/** Each day of the period the series has a reading and its month a factor: epoch day, calendar month, series × factor. */
+function scaledDays(alt: DailySeries | undefined, p: RainSourcePeriod, factors: readonly (number | null)[]): { day: number; month: number; mm: number }[] {
+	if (!alt) return [];
+	const s0 = toEpochDay(alt.startDate);
+	const a = Math.max(toEpochDay(p.start), s0);
+	const b = Math.min(toEpochDay(p.end), s0 + alt.values.length - 1);
+	const out: { day: number; month: number; mm: number }[] = [];
+	for (let day = a; day <= b; day++) {
+		const v = alt.values[day - s0];
+		const month = monthOfEpochDay(day);
+		const f = factors[month - 1];
+		if (isReading(v) && f != null) out.push({ day, month, mm: v * f });
+	}
+	return out;
+}
+
 /**
  * The factors of every period, from the whole stored record (like the §2.4b
  * factors, so a shorter run doesn't change them). The primary catchment
@@ -334,7 +473,7 @@ export function rainSourceFactors(
 	periods: readonly RainSourcePeriod[],
 	zr: ZeroRainSettings,
 	accumulations: AccumulationSpans
-): Pick<RainSourcePeriodInfo, 'factors' | 'fit' | 'fallback' | 'factorMode' | 'provenance'>[] {
+): RainSourcePeriodFactors[] {
 	const primary = series.rain_catchment_mm;
 	const replaced = rainSourceSpans(periods);
 	const suspect = suspectRainDays(primary, zr, accumulations, replaced);
@@ -373,8 +512,115 @@ export function rainSourceFactors(
 			const c = catchmentRatio(p.fallback);
 			fallback = { era: { ...p.fallback }, fitWindow: c.window, days: c.days, factors: c.ratio.map((r) => (r === null ? null : clamp(r))) };
 		}
-		return { factors, fit, fallback, factorMode: p.factors === 'fit' ? 'fit' : 'fixed', provenance: p.provenance ? { ...p.provenance } : null };
+		// The daily-intensity reference: the primary record's trusted readings over an era.
+		const refEra = p.quantileMap ?? (p.factors === 'fit' ? p.fitReference! : null);
+		const refSpan = refEra ? eraSpan({ series: 'rain_chirps_mm', ...refEra }) : ([-Infinity, Infinity] as const);
+		const byMonth: number[][] = Array.from({ length: 13 }, () => []);
+		const refValues: number[] = [];
+		let lo = Infinity;
+		let hi = -Infinity;
+		if (primary) {
+			const p0 = toEpochDay(primary.startDate);
+			const a = Math.max(refSpan[0], p0);
+			const b = Math.min(refSpan[1], p0 + primary.values.length - 1);
+			for (let day = a; day <= b; day++) {
+				const v = primary.values[day - p0];
+				if (!isReading(v) || !trusted(day)) continue;
+				refValues.push(v);
+				if (p.quantileMap && v >= p.quantileMap.wetDayMm) byMonth[monthOfEpochDay(day)]!.push(v);
+				const wy = waterYearOf(day);
+				if (wy < lo) lo = wy;
+				if (wy > hi) hi = wy;
+			}
+		}
+		const window = Number.isFinite(lo) ? { fromWaterYear: lo, toWaterYear: hi } : null;
+		const intensityReference: RainSourceIntensity['reference'] = {
+			...shareOf(refValues, p.quantileMap?.wetDayMm ?? QM_WET_DAY_MM_DEFAULT),
+			era: refEra ? { fromWaterYear: refEra.fromWaterYear, toWaterYear: refEra.toWaterYear } : null,
+			window
+		};
+		let quantileMap: RainSourceQuantileMapFit | null = null;
+		if (p.quantileMap) {
+			const q = p.quantileMap;
+			const periodByMonth: number[][] = Array.from({ length: 13 }, () => []);
+			for (const d of scaledDays(series[p.series], p, factors)) if (d.mm >= q.wetDayMm) periodByMonth[d.month]!.push(d.mm);
+			const pool = (ms: number[], src: number[][]) => ms.flatMap((k) => src[k]!);
+			const months: RainSourceQuantileMonth[] = [];
+			const tables: RainSourceQuantileMapFit['tables'] = [];
+			for (let m = 1; m <= 12; m++) {
+				let basis: RainSourceQuantileMonth['basis'] = null;
+				let ref = byMonth[m]!;
+				let per = periodByMonth[m]!;
+				if (ref.length >= QM_MIN_WET_DAYS && per.length >= QM_MIN_WET_DAYS) basis = 'month';
+				else {
+					const sr = pool(seasonOf(m), byMonth);
+					const sp = pool(seasonOf(m), periodByMonth);
+					if (sr.length >= QM_MIN_WET_DAYS && sp.length >= QM_MIN_WET_DAYS) {
+						basis = 'season';
+						ref = sr;
+						per = sp;
+					}
+				}
+				months.push({ month: m, basis, referenceWetDays: ref.length, periodWetDays: per.length });
+				tables.push(basis ? { source: quantileTable(per)!, target: quantileTable(ref)! } : null);
+			}
+			quantileMap = { era: { fromWaterYear: q.fromWaterYear, toWaterYear: q.toWaterYear }, window, wetDayMm: q.wetDayMm, minWetDays: QM_MIN_WET_DAYS, months, tables };
+		}
+		return { factors, fit, fallback, factorMode: p.factors === 'fit' ? 'fit' : 'fixed', provenance: p.provenance ? { ...p.provenance } : null, intensityReference, quantileMap };
 	});
+}
+
+/** The heavy-day share of `values` and how many are wet (≥ wetMm). */
+function shareOf(values: readonly number[], wetMm: number): HeavyDayShare {
+	const h = heavyDayShare(values, HEAVY_DAY_MM);
+	return { share: h.share, totalMm: h.totalMm, heavyDays: h.heavyDays, days: values.length, wetDays: values.filter((v) => v >= wetMm).length };
+}
+
+/**
+ * A period's rain from the series over the whole period (not only the run's
+ * days, so a shorter run doesn't change a day's value): series × factor, and
+ * with a quantile map each year-month's wet days mapped and rescaled to that
+ * year-month's scaled wet total. Keyed by epoch day; `mapped` holds the days
+ * the map changed.
+ */
+export function periodRain(
+	alt: DailySeries | undefined,
+	p: RainSourcePeriod,
+	f: RainSourcePeriodFactors
+): { rain: Map<number, number>; mapped: Set<number>; scaled: HeavyDayShare; after: HeavyDayShare | null } {
+	const days = scaledDays(alt, p, f.factors);
+	const rain = new Map<number, number>();
+	for (const d of days) rain.set(d.day, d.mm);
+	const mapped = new Set<number>();
+	const wetMm = f.quantileMap?.wetDayMm ?? QM_WET_DAY_MM_DEFAULT;
+	const scaled = shareOf(days.map((d) => d.mm), wetMm);
+	const qm = f.quantileMap;
+	if (!qm) return { rain, mapped, scaled, after: null };
+	// Year-month blocks of the wet days in mapped months.
+	const blocks = new Map<string, { day: number; mm: number; month: number }[]>();
+	for (const d of days) {
+		if (d.mm < qm.wetDayMm || !qm.tables[d.month - 1]) continue;
+		const key = fromEpochDay(d.day).slice(0, 7);
+		let b = blocks.get(key);
+		if (!b) blocks.set(key, (b = []));
+		b.push(d);
+	}
+	for (const b of blocks.values()) {
+		const t = qm.tables[b[0]!.month - 1]!;
+		const raw = b.map((d) => d.mm);
+		const total = raw.reduce((s, x) => s + x, 0);
+		const r = rescaleToTotal(
+			raw.map((x) => mapWetDay(t.source, t.target, x, qm.wetDayMm)),
+			raw,
+			total
+		);
+		b.forEach((d, i) => {
+			rain.set(d.day, r.values[i]!);
+			if (!r.kept) mapped.add(d.day);
+		});
+	}
+	const after = shareOf(days.map((d) => rain.get(d.day)!), wetMm);
+	return { rain, mapped, scaled, after };
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +646,7 @@ export interface RainSourceRun {
 export function applyRainSource(
 	series: Partial<Record<SeriesKind, DailySeries>>,
 	periods: readonly RainSourcePeriod[],
-	factors: ReturnType<typeof rainSourceFactors>,
+	factors: readonly RainSourcePeriodFactors[],
 	catchment: (number | null)[],
 	start: number
 ): RainSourceRun {
@@ -416,15 +662,35 @@ export function applyRainSource(
 		periods: periods.map((p, k) => {
 			const f = factors[k]!;
 			const alt = series[p.series];
+			const pr = periodRain(alt, p, f);
+			const ref = f.intensityReference;
+			const intensity: RainSourceIntensity | undefined = ref
+				? {
+						heavyDayMm: HEAVY_DAY_MM,
+						band: HEAVY_SHARE_BAND,
+						wetDayMm: f.quantileMap?.wetDayMm ?? QM_WET_DAY_MM_DEFAULT,
+						reference: ref,
+						scaled: pr.scaled,
+						mapped: pr.after,
+						differs: ref.share === null || pr.scaled.share === null ? null : Math.abs(pr.scaled.share - ref.share) > HEAVY_SHARE_BAND
+					}
+				: undefined;
+			const qm = f.quantileMap;
 			const out: RainSourcePeriodInfo = {
 				start: p.start,
 				end: p.end,
 				series: p.series,
 				reason: p.reason,
-				...f,
+				factors: f.factors,
+				fit: f.fit,
+				fallback: f.fallback,
+				factorMode: f.factorMode,
+				provenance: f.provenance,
 				gaugeInChirps: p.gaugeInChirps === true,
 				seriesPresent: !!alt,
 				...(alt?.provenance !== undefined ? { seriesProvenance: alt.provenance ? { ...alt.provenance } : null } : {}),
+				...(intensity ? { intensity } : {}),
+				...(qm !== undefined ? { quantileMap: qm ? { era: qm.era, window: qm.window, wetDayMm: qm.wetDayMm, minWetDays: qm.minWetDays, months: qm.months, mappedDays: 0 } : null } : {}),
 				runDays: 0,
 				seriesDays: 0,
 				seriesRawMm: 0,
@@ -444,11 +710,13 @@ export function applyRainSource(
 				const v = valueOn(alt, day);
 				const fm = f.factors[m];
 				if (v !== null && fm != null) {
-					catchment[t] = v * fm;
+					const mm = pr.rain.get(day) ?? v * fm;
+					catchment[t] = mm;
 					code[t] = RAIN_SOURCE_CODE.series;
 					out.seriesDays++;
 					out.seriesRawMm += v;
-					out.seriesMm += v * fm;
+					out.seriesMm += mm;
+					if (out.quantileMap && pr.mapped.has(day)) out.quantileMap.mappedDays++;
 					continue;
 				}
 				catchment[t] = null;
@@ -542,34 +810,96 @@ export function rainSourceText(periods: unknown): string {
 		.map((p) => {
 			const f = p.factors === 'fit' ? `fitted against ${rainSourceKindName(p.fitReference?.series ?? '')} ${p.fitReference ? yearSpan(p.fitReference.fromWaterYear, p.fitReference.toWaterYear) : ''}`.trim() : `fixed factors ${Array.isArray(p.factors) ? p.factors.join('/') : ''}`;
 			const fb = p.fallback ? `, gaps from ${rainSourceKindName(p.fallback.series)} ${yearSpan(p.fallback.fromWaterYear, p.fallback.toWaterYear)}` : '';
-			return `${p.start} to ${p.end}: ${rainSourceKindName(p.series)}, ${f}${fb} (${p.reason})`;
+			const qm = p.quantileMap ? `, wet days (≥ ${p.quantileMap.wetDayMm} mm) quantile-mapped onto the catchment series ${yearSpan(p.quantileMap.fromWaterYear, p.quantileMap.toWaterYear)}` : '';
+			return `${p.start} to ${p.end}: ${rainSourceKindName(p.series)}, ${f}${fb}${qm} (${p.reason})`;
 		})
 		.join('; ');
 }
 
-/** One run warning per period: where its days' rain came from and the factors. */
+const pct = (x: number | null) => (x === null ? 'no rain' : `${Math.round(x * 100)} %`);
+
+/** The months (water-year order) grouped by the quantile map's basis: "by month: Oct, Nov; by season: Apr, May; not mapped …: Jun". */
+function basisText(months: readonly RainSourceQuantileMonth[]): string {
+	const groups: [string, RainSourceQuantileMonth['basis']][] = [
+		['by month', 'month'],
+		['by season', 'season'],
+		[`not mapped (fewer than ${QM_MIN_WET_DAYS} wet days even over the season)`, null]
+	];
+	return groups
+		.map(([label, basis]) => {
+			const ms = WY_MONTHS.filter((m) => (months[m - 1]?.basis ?? null) === basis).map((m) => MONTH_ABBR[m - 1]);
+			return ms.length ? `${label}: ${ms.join(', ')}` : '';
+		})
+		.filter(Boolean)
+		.join('; ');
+}
+
+/** The quantile map as applied, in words (warnings, run comparison, the summary CSV); null without one. */
+export function rainSourceQuantileMapText(q: RainSourceQuantileMapInfo | null | undefined): string | null {
+	if (!q) return null;
+	return (
+		`wet days (≥ ${q.wetDayMm} mm) quantile-mapped onto the primary catchment series over ${yearSpan(q.era.fromWaterYear, q.era.toWaterYear)} ` +
+		`(readings in ${windowText(q.window)}), each month's total kept; ${basisText(q.months)}`
+	);
+}
+
+/** Where the daily-intensity check's reference came from, in words. */
+export const rainSourceIntensityReferenceText = (r: RainSourceIntensity['reference']): string =>
+	r.era
+		? `the primary catchment series over ${yearSpan(r.era.fromWaterYear, r.era.toWaterYear)} (readings in ${windowText(r.window)})`
+		: `the whole trusted primary catchment series (${windowText(r.window)})`;
+
+/**
+ * The daily-intensity check in words, or null when there is nothing to say:
+ * a period with a quantile map (what it did), or one whose heavy-day share
+ * differs from the reference by more than the band (consider mapping).
+ */
+export function rainSourceIntensityWarning(p: RainSourcePeriodInfo): string | null {
+	const i = p.intensity;
+	if (!i) return null;
+	const wet = (h: HeavyDayShare) => (h.days ? `${Math.round((h.wetDays / h.days) * 100)} %` : 'no');
+	const head =
+		`Daily intensity of the ${rainSourceKindName(p.series)} over ${p.start} to ${p.end}: ${pct(i.scaled.share)} of its rain × factor fell on heavy days ` +
+		`(≥ ${i.heavyDayMm} mm), against ${pct(i.reference.share)} in ${rainSourceIntensityReferenceText(i.reference)}; wet (≥ ${i.wetDayMm} mm) on ${wet(i.scaled)} of days against ${wet(i.reference)}`;
+	if (p.quantileMap) {
+		return `${head}. After the quantile map, ${pct(i.mapped?.share ?? null)} on heavy days: ${rainSourceQuantileMapText(p.quantileMap)}; ${plural(p.quantileMap.mappedDays, 'run day')} changed.`;
+	}
+	if (!i.differs) return null;
+	return (
+		`${head}. The heavy-day shares are more than ${Math.round(i.band * 100)} points apart: a monthly factor keeps the gauge's own wet-day distribution, and GR4J turns ` +
+		'heavier days into more flow. Consider quantile-mapping its wet days onto the primary series (Settings → Rain source), or carry the runoff effect in the calibration band. ' +
+		'The map keeps each month’s total and its wet days, so it corrects the spread of the falls, not how often it rains: a gap that comes from fewer wet days stays.'
+	);
+}
+
+/** Run warnings per period: where its days' rain came from and the factors, then the daily-intensity check when it has something to say. */
 export function rainSourcePeriodWarnings(info: RainSourceInfo | null): string[] {
 	if (!info) return [];
-	return info.periods.map((p) => {
-		const head = `Catchment rain from the ${rainSourceKindName(p.series)} over ${p.start} to ${p.end} (${p.reason})`;
-		if (!p.seriesPresent) {
-			return `${head}: the project has no ${p.series} series, so all ${plural(p.runDays, 'run day')} fall through to ${rainSourceFallbackText(p.fallback)}, then forecast rain.`;
-		}
-		const through: string[] = [];
-		if (p.chirpsDays) through.push(`${p.chirpsDays} from CHIRPS (bias-corrected)`);
-		if (p.reanalysisDays) through.push(`${p.reanalysisDays} from the reanalysis`);
-		if (p.forecastDays) through.push(`${p.forecastDays} from forecast rain`);
-		if (p.noneDays) through.push(`${p.noneDays} with no value (run as 0 mm)`);
-		const missingMonths = WY_MONTHS.filter((m) => p.factors[m - 1] == null).map((m) => MONTH_ABBR[m - 1]);
-		return (
-			`${head}: ${p.seriesDays} of ${plural(p.runDays, 'run day')} from the series ` +
-			`(${Math.round(p.seriesRawMm)} mm → ${Math.round(p.seriesMm)} mm × monthly factor)` +
-			(through.length ? `; its gaps: ${through.join(', ')}` : '') +
-			`. Factors (${rainSourceFactorOrigin(p)}): ${rainSourceFactorText(p.factors)}.` +
-			(missingMonths.length ? ` ${missingMonths.join(', ')} ha${missingMonths.length === 1 ? 's' : 've'} no factor, so their days fall through to ${rainSourceFallbackText(p.fallback)}.` : '') +
-			' The primary catchment series is not used in the period and stays out of every factor fit. Settings → Rain source.'
-		);
+	return info.periods.flatMap((p) => {
+		const intensity = rainSourceIntensityWarning(p);
+		return intensity ? [periodWarning(p), intensity] : [periodWarning(p)];
 	});
+}
+
+function periodWarning(p: RainSourcePeriodInfo): string {
+	const head = `Catchment rain from the ${rainSourceKindName(p.series)} over ${p.start} to ${p.end} (${p.reason})`;
+	if (!p.seriesPresent) {
+		return `${head}: the project has no ${p.series} series, so all ${plural(p.runDays, 'run day')} fall through to ${rainSourceFallbackText(p.fallback)}, then forecast rain.`;
+	}
+	const through: string[] = [];
+	if (p.chirpsDays) through.push(`${p.chirpsDays} from CHIRPS (bias-corrected)`);
+	if (p.reanalysisDays) through.push(`${p.reanalysisDays} from the reanalysis`);
+	if (p.forecastDays) through.push(`${p.forecastDays} from forecast rain`);
+	if (p.noneDays) through.push(`${p.noneDays} with no value (run as 0 mm)`);
+	const missingMonths = WY_MONTHS.filter((m) => p.factors[m - 1] == null).map((m) => MONTH_ABBR[m - 1]);
+	return (
+		`${head}: ${p.seriesDays} of ${plural(p.runDays, 'run day')} from the series ` +
+		`(${Math.round(p.seriesRawMm)} mm → ${Math.round(p.seriesMm)} mm × monthly factor${p.quantileMap ? ', wet days quantile-mapped' : ''})` +
+		(through.length ? `; its gaps: ${through.join(', ')}` : '') +
+		`. Factors (${rainSourceFactorOrigin(p)}): ${rainSourceFactorText(p.factors)}.` +
+		(missingMonths.length ? ` ${missingMonths.join(', ')} ha${missingMonths.length === 1 ? 's' : 've'} no factor, so their days fall through to ${rainSourceFallbackText(p.fallback)}.` : '') +
+		' The primary catchment series is not used in the period and stays out of every factor fit. Settings → Rain source.'
+	);
 }
 
 /**
@@ -582,6 +912,7 @@ export function rainSourceLines(info: RainSourceInfo | null | undefined): string
 		(p) =>
 			`${p.start} to ${p.end} (${p.reason}): ${rainSourceKindName(p.series)}` +
 			`${p.seriesProvenance !== undefined ? ` (${provenanceLabel(p.seriesProvenance)})` : ''} × ${rainSourceFactorText(p.factors)}; ` +
-			`${rainSourceFactorOrigin(p)}; gaps from ${rainSourceFallbackText(p.fallback)}`
+			`${rainSourceFactorOrigin(p)}; gaps from ${rainSourceFallbackText(p.fallback)}` +
+			(p.quantileMap ? `; ${rainSourceQuantileMapText(p.quantileMap)}` : '')
 	);
 }
