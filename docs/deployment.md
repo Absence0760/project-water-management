@@ -1010,6 +1010,15 @@ plan-only until the first deploy):
   first backend deploy, set it and apply ([infra/README.md § Operator steps](../infra/README.md#operator-steps), step 10a).
   Until then the deploy logs a notice and render requests wait in their
   queue.
+  **After that apply, and again after the second backend release** (the
+  first to move an existing renderer), confirm the repository policy still
+  holds only Terraform's statement:
+  `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
+  (step 10a says what to look for). The renderer's role pulls the image
+  with its own grant, and the repository policy carries the statement
+  Lambda looks for, so Lambda has nothing to add; nobody holds
+  `ecr:SetRepositoryPolicy`, and the deploy role reads the policy only
+  (`ecr:GetRepositoryPolicy`, for Lambda's check on `UpdateFunctionCode`).
 - **The bucket**: `water-management-reports-<account>`, private (public
   access blocked, bucket-owner objects), SSE-S3, TLS only, and a lifecycle
   that deletes `reports/` objects after **7 days** (the tick deletes the

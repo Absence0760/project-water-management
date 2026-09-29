@@ -64,10 +64,11 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   (the migrate Lambda's RDS master secret, and the API, worker and migrate
   Lambdas' runtime secrets; its endpoint policy lets each role read only its
   own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
-  endpoint policy, `jobs.tf`, names only those two roles and six queues: the
-  API may only send to `jobs`; the worker uses `jobs`, sends
-  `fetch-requests` and `render-requests`, and consumes `ingest-results`,
-  `render-results` and `mail-events`). Security groups only ever reference
+  endpoint policy, `jobs.tf`, allows `SendMessage` only, from those two roles
+  to three queues: the API to `jobs`, the worker to `fetch-requests` and
+  `render-requests`. Every queue a Lambda consumes is read by an event
+  source mapping, whose pollers run in the Lambda service, not through the
+  endpoint). Security groups only ever reference
   other security groups, never a CIDR: RDS takes 5432 from the API, migrate
   and worker Lambda groups and nothing else, each endpoint takes 443 from
   the Lambdas that use it, and none of RDS or the endpoints has egress. A
@@ -165,7 +166,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
-| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
+| `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
 | `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
@@ -173,6 +174,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
 | `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
+| `iam.tf` | Every Lambda role's logs policy (create streams and put events in its own log group only; no `logs:CreateLogGroup`, no AWS-managed policy) and the API, worker and migrate roles' VPC ENI policy (AWS's six EC2 actions, denied to the function's own code) |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
@@ -180,6 +182,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
+| `tests/iam.tftest.hcl` | Plan-only IAM tests (issue #126): each role's own log group, the ENI policy, the SQS endpoint's send-only policy, the ECR repository policy and the renderer's pull grant, the deploy policy's reads, the migrate role, the Secrets Manager endpoint and the alert topics' policies |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
@@ -575,6 +578,23 @@ Claude does not run any of these, and none of them print a secret. Replace
     its own image; the tag in `prod.tfvars` only ever creates it. Until then
     report requests wait in `render-requests` (4 days) and show as
     "rendering".
+
+    Then check how Lambda was given the image (issue #126). The renderer's
+    role may pull from the repository itself (`renderer_ecr_pull`), and the
+    repository policy holds the one statement Lambda looks for
+    (`renderer_ecr`, Sid `LambdaECRImageRetrievalPolicy`), so Lambda should
+    have had nothing to add; nothing holds `ecr:SetRepositoryPolicy`, so if it
+    had tried, the apply would have failed rather than widened the policy.
+    `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
+    must show exactly that one statement, with its `aws:sourceArn` condition
+    naming `water-management-renderer`. Any other statement: note it on #126
+    and fold its shape into `renderer_ecr` rather than leaving drift.
+    **On the second backend release** (the first that moves an existing
+    renderer, as the deploy role, with `UpdateFunctionCode`): check the
+    deploy's renderer step passed and run the same command again. The deploy
+    role holds `ecr:GetRepositoryPolicy` (read) for Lambda's check, never
+    `SetRepositoryPolicy`; an `AccessDenied` naming either in the deploy log
+    goes on #126.
 10b. **SES suppression through the endpoint** (after the first backend
     deploy; issue #126). Step 4a only proves the SES API endpoint service
     exists; it doesn't prove the endpoint carries the SESv2
@@ -716,9 +736,9 @@ the worker timeout, the worker's runtime / size / concurrency / VPC / env and
 no owner credentials, the 5-minute tick, its invoke permission and its
 zero-retry, 300-second-maximum-age delivery (EventBridge target and Lambda
 async config), the SQS
-event source, the SQS endpoint's policy naming only the two roles and the
-six queues (jobs, fetch-requests, ingest-results, render-requests,
-render-results, mail-events), one per statement, and the deploy role's right to update the worker); the data-feed
+event source, the SQS endpoint's policy naming only the two roles and
+three queues (the API to jobs, the worker to fetch-requests and
+render-requests), `SendMessage` only, one per statement, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
 size and concurrency, an environment with no database URL, a role on the two
 feed queues only; the worker's `FEED_FETCHER=sqs` and its event source; the

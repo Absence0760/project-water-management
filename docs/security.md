@@ -2136,6 +2136,16 @@ key there would let any read-only principal forge any user's session.
   role's trust policy is pinned to `repo:<owner>/<repo>:environment:production`,
   and that environment has a required reviewer. A workflow can only assume the
   role after a human approves the run.
+- **Each Lambda role writes to its own log group only** (`infra/iam.tf`,
+  issue #126): `logs:CreateLogStream` and `logs:PutLogEvents` on
+  `/aws/lambda/<its function>`, no `logs:CreateLogGroup` (Terraform makes
+  every group), and no AWS-managed policy, whose logs grants are on `*`. So
+  a compromised fetcher or renderer (the two with internet access) can't
+  forge the lines the API's and worker's log alarms count. The VPC Lambdas'
+  EC2 ENI actions are denied to their own code (`lambda:SourceFunctionArn`),
+  leaving them to the Lambda service. The SQS endpoint admits `SendMessage`
+  only; the deploy role reads nothing from the frontend bucket and can't
+  change the renderer's repository policy (`tests/iam.tftest.hcl`).
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,

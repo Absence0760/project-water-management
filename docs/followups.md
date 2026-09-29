@@ -3356,6 +3356,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       re-enabled, or before the first release: run `test:backend:db` and
       the 14 e2e shards (or both suites locally, not beside each other).
 
+- [ ] **Make the deploy role's sops-key grant opt-in upstream** (issue #126
+      § IAM). The templates `project-baseline` module's key policy lets the
+      GitHub deploy role `kms:Decrypt` the project's sops key, which no
+      workflow here uses, and which would let an approved deploy run decrypt
+      every production secret. The proposal (a `deploy_role_sops_access`
+      variable, off here, default flipped once consumers opt in) is in
+      [upstream/templates-baseline-sops-deploy-grant.md](./upstream/templates-baseline-sops-deploy-grant.md).
+      The change belongs in the `templates` repo, not here. Trigger: before
+      the first `terraform apply`, or the next baseline change, whichever
+      comes first; then re-run the baseline stage and check the key policy.
+
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other
   than the owner and `water_app`. The in-flight `025_share_links.sql` branch
