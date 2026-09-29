@@ -2613,7 +2613,12 @@ which checks every catchment tab).
   **Gaps from** (CHIRPS × the CHIRPS fit-period factors, or the reanalysis
   with the water years its factors are fitted on) and **CHIRPS ingests this
   gauge in this period**, which refuses CHIRPS as the reference and needs a
-  reanalysis fallback. The form blocks Save on the engine's own check
+  reanalysis fallback. **Quantile-map its wet days onto the catchment
+  series** (engine ≥ 1.21.0, issue #66, off by default) adds the water
+  years to map onto (the fit's reference era, or the ten water years before
+  a fixed-factor period, to start with) and **Wet day from (mm)** (1 mm,
+  0.1–10); a hint says what it does and that each run reports the heavy-day
+  share either way. The form blocks Save on the engine's own check
   (`rainSourceError`, which the API uses too), with the first problem
   shown under the list. It doesn't reuse the period editors above: its rows
   have different fields, and it is the second list with water-year fields

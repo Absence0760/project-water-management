@@ -122,8 +122,8 @@ with `pnpm -C e2e exec playwright show-trace <path>/trace.zip`.
 | `support/static-server.mjs` | Serves the e2e frontend build on the site port: files as they are, `/welcome` from the prerendered `welcome.html`, `index.html` for any other path (the SPA fallback), as CloudFront does. No dependencies |
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
-| `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
-| `tests/golden-path.spec.ts` | One user journey done only through the UI: register, create "Catchment D", build the network, crops and a transfer, save, set A-pan and EWR, upload two years of rain and flow, run the model, read the results, reload, then add two more catchments |
+| `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |
+| `tests/golden-path.spec.ts` | The new-user journey, in four tests ([The golden path](#the-golden-path)): register, create "Catchment D", build the network, upload two years of rain, flow and daily A-pan, run the model and read the results, all through the UI; then, on that catchment arranged through the API, crops and a transfer into a run and each unit's results; monthly A-pan and EWR into the run's summary, and a reload; two more catchments beside one with a run |
 | `tests/landing.spec.ts` | The public landing page (issue #57): a signed-out `/` shows it and its buttons lead to sign-in and sign-up; a signed-in `/` is still the project list; other signed-out routes still go to `/login?next=`; `/welcome` is prerendered HTML with its description, Open Graph and canonical tags and the social card; the what-if answers from the generated grid in words and figures; the hero moves only with motion allowed, pauses off screen and rests on its still frame otherwise; axe at desktop and phone in light and dark, no sideways scroll; Afrikaans |
 | `tests/legal.spec.ts` | The legal pages (`/privacy`, `/terms`): prerendered HTML naming the operator and contact (and, for privacy, the Information Regulator and the hosting region); open signed out and in; axe and no sideways scroll at desktop and phone; linked from the landing footer, the sign-in pages' Legal nav and the sign-up form's sentence; the methods page (`/methods`): prerendered with the engine version, the known limitations and the full audit's link, linked from the trust strip and footer, axe light and dark at desktop and phone |
 | `art/landing-screens.spec.ts` | Not part of the suite: `pnpm gen:landing-art` runs it (`art/playwright.config.ts`, the e2e servers) to capture the app screens the landing page shows, from the seeded example catchments, light and dark |
@@ -182,3 +182,53 @@ These follow the project rules in `CLAUDE.md`. Keep to them:
   values or workbook-derived data.
 - A spec that finds an app bug gets the fix in the app, in its own commit.
   Never loosen the assertion to make it pass.
+- **One test, one 30 s budget.** A test drives at most a few dozen UI steps.
+  Every step costs ~30 ms of Playwright's own work on an idle laptop (a
+  `getByLabel` walks the DOM; a fill is ~25 ms, almost none of it in the app)
+  and three to four times that beside five other workers, so a long journey
+  fails on its length alone. Split it, arranging each later part through the
+  API (below).
+
+### The golden path
+
+`tests/golden-path.spec.ts` was one test: register, build Catchment D through
+every screen, run it, read the results, reload, add two more catchments, about
+165 UI steps. It went past Playwright's 30 s budget in 2 of 24 runs beside the
+model, scenarios, runs, transfers-page and diagram-labels specs at 6 workers
+(issue #138). The traces showed no slow step: 7 s alone, 15–24 s in that mix,
+with the time spread evenly over the steps (settings' 24 fills 1.1 s → 3.6 s,
+the network 0.7 → 2.1 s, registering 0.7 → 2.6 s). Its 103 API requests took
+1.5 s in all alone and 5–7.5 s in the mix; the slowest, the model run, 0.2 s
+and 0.9 s. A CPU profile of twelve Settings fills (~300 ms) put ~5 ms in the
+app's code, no long tasks, and a third in Playwright's selector engine
+resolving `getByLabel`; the rest was idle and protocol round trips. There was
+nothing in the app to fix.
+
+It is now four tests, each well inside the budget:
+
+| Test | Through the UI | Arranged through the API |
+| --- | --- | --- |
+| a new user builds a catchment through the UI, runs it and reads the results | register, new project, the network, save, upload rain, flow and daily A-pan, run, the summary, calibration and chart | nothing |
+| crops and a transfer … feed a run and each unit's results | a crop, planted areas, a transfer, save, run, Units & supply | the catchment, its data and monthly A-pan (`seedCatchmentD`) |
+| A-pan and EWR, entered in Settings, feed the run's summary … after a reload | monthly A-pan and EWR, run, the plain-words summary, reload | the catchment with its crop and transfer, and its data |
+| a user with a catchment adds more catchments … | two new projects, the list, reopening the first | a runnable catchment and its run |
+
+The first still does a new user's critical path through the UI alone, so a
+UI-built model that the API would build differently still reaches a run. What
+the split gives up: no single test enters every screen's data and then runs
+it, so crops typed into the UI and A-pan typed into Settings each reach a run
+only in their own test. Each of those tests checks its screen's effect on the
+run, which is what the one journey checked too.
+
+Measured on the same laptop, 6 workers, `--repeat-each=5 --retries=0`, beside
+model, scenarios, runs, transfers-page and diagram-labels (other sessions
+running too, load average 16–20 on 20 cores):
+
+| | Longest golden-path test | Result |
+| --- | --- | --- |
+| Before (one test) | 7.0–23.3 s, median 20.3 s (37 s and two timeouts in a heavier run) | 230 passed |
+| After, run 1 | 9.4–10.6 s, median 10.3 s (the others ≤ 8.4 s) | 245 passed |
+| After, run 2 | 7.6–11.6 s, median 11.0 s (the others ≤ 10.7 s) | 245 passed |
+
+Alone, the four take 4.6, 3.6, 3.2 and 2.2 s, against the one test's 9.3 s in
+the same run.

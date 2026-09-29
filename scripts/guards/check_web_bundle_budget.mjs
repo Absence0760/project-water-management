@@ -1204,14 +1204,16 @@
 //             (shared engine chunk 40.5 → 41.1 KB, import worker +0.5 KB),
 //             their run-comparison labels, the fit provenance line and one
 //             help entry. No new dependency. Headroom ~3 KB.
-// 2026-09-29  total 1143 → 1147 KB (measured 1144 with main @ d7df0a02
-//             merged in, which measures 1143: main had no headroom left).
-//             Issue #126 round 4, the sign-in CAPTCHA: the API client's
-//             WAF-answer detection (405 + x-amzn-waf-action) in the shared
-//             api chunk, and the sign-in page's puzzle section and retry in
-//             its own route chunk. AWS's CAPTCHA script is loaded on demand
-//             from the WAF's SDK origin, never bundled. No new dependency.
-//             Headroom ~3 KB.
+// 2026-09-29  total 1143 → 1149 KB (measured 1146 with #157 merged in).
+//             Issue #66, rain-source periods' daily intensity: the heavy-day
+//             check and the opt-in quantile-map fields in Settings → Rain
+//             source periods and their run-comparison and fit-provenance
+//             lines. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total stays 1149 KB (measured 1148 with issue #126 round 4
+//             merged onto main @ the #157 raise). The sign-in CAPTCHA's
+//             WAF-answer detection in the shared api chunk and its puzzle
+//             section in the sign-in route chunk take ~2 KB of that headroom;
+//             AWS's script is loaded on demand, never bundled. Headroom ~1 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1222,7 +1224,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1147,
+	totalCodeKb: 1149,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,
