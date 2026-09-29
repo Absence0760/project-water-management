@@ -396,7 +396,7 @@ interface Rule {
  * - room at the destination (audit N4): a farm that sends nothing receives
  *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
  *   evaporation − seepage) + today's demand D + a fixed release's floor,
- *   engine ≥ 1.27.0);
+ *   engine ≥ 1.28.0);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ over its destinations
  *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
@@ -439,7 +439,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
 	 * + rain on the dam − evaporation − seepage) + today's demand D (engine ≥
 	 * 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
-	 * (engine ≥ 1.27.0: the release with no inflow and nothing transferred
+	 * (engine ≥ 1.28.0: the release with no inflow and nothing transferred
 	 * in, fixedReleaseFloor). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
 	 * days that cap bites the room read here is smaller than the engine's but

@@ -285,7 +285,7 @@ describe('dam storage (WP-3.5)', () => {
 		expect(g.at(-1)).toBe(0);
 	});
 
-	it('a transfer into a full dam with a fixed release refills what it releases (engine 1.27.0)', () => {
+	it('a transfer into a full dam with a fixed release refills what it releases (engine 1.28.0)', () => {
 		// U holds 50 000 m³ and sends to A (full, no demand, 400 m³/day fixed release) up to 864 m³/day.
 		const i = input({ damInitialPct: 1, damReleaseRule: 'fixed', damReleaseM3Day: flat(400) }, { settings: { lakeEvapFactor: 0 } });
 		i.model.nodes = i.model.nodes.map((n) => (n.id === 'U' ? { ...n, damCapacityM3: 50_000, damInitialPct: 1 } : n));

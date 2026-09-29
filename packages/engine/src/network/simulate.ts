@@ -600,7 +600,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		//   v = MAX(0, MIN(source free, destination room, max daily))
 		// with source free = Q_src[t−1] − drawn today − reserve and destination
 		// room = cap_dst − (Q_dst[t−1] + rain on it − evaporation − seepage)
-		// + D_dst[t] + a fixed release's floor (engine ≥ 1.27.0) − scheduled
+		// + D_dst[t] + a fixed release's floor (engine ≥ 1.28.0) − scheduled
 		// into it today, so a transfer never pumps into a
 		// full dam only to spill, and one to a farm with no dam still serves its
 		// demand (audit N4). The dam's own gains and losses today (N2) count:
@@ -639,7 +639,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
 				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
 				const qStart = q + loss.Pd - loss.E - loss.Sp;
-				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.27.0): the
+				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.28.0): the
 				// room counts it as it would be with no inflow and nothing transferred in. For a dam that
 				// only receives, that is a lower bound of the day's release. One that also sends later
 				// today can release less, but only when the release is cut to the water above dead
