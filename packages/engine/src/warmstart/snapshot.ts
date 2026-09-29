@@ -30,6 +30,7 @@ import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput } from '../project';
 import type { PreparedFits } from '../prepare';
 import { ENGINE_VERSION } from '../version';
+import { damCapacityOn } from '../network/development';
 import { decodePlain, encodePlain, Hasher, hashText, stableStringify, type Encoded } from './plain';
 
 /** The snapshot's kind tag. */
@@ -258,7 +259,8 @@ export function withDamStorage(snapshot: ModelStateSnapshot, input: ModelInput, 
 		if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`withDamStorage: farm "${n.name}" storage ${String(v)} is not a number`);
 		const node = state.nodes[i]!;
 		node.setFromM3 ??= node.storageM3;
-		node.storageM3 = Math.min(Math.max(v, 0), n.damCapacityM3);
+		// Within the capacity on the snapshot's day (engine ≥ 1.27.0: it can change over the run).
+		node.storageM3 = Math.min(Math.max(v, 0), damCapacityOn(n, toEpochDay(snapshot.date)));
 	}
 	return { ...snapshot, state: encodePlain(state) };
 }

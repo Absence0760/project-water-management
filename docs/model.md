@@ -3149,10 +3149,20 @@ too, §2.7c). The soil-water store and the rain the crops would have used run
 as usual (they set the demand's shape, not its size). Boreholes and the
 river pump follow the demand, so they take nothing before it either.
 
+On a day with no capacity what is routed into the dam comes out in its
+`spill` column (the dam can't hold it), so a dam not yet in service reads as
+spilling everything that reaches it; the balance is exact. Under a full
+allocation (§2.12a) a unit with an abstraction date asks for the registered
+volume over its days from then, not the whole year's in fewer days. A run
+warns when sediment run back from the survey makes a dam more than 1.25 ×
+its surveyed capacity. Firm yield (§2.13) resizes the entered capacity and
+keeps each day's factor.
+
 Scenarios can set all four (`node.set`, [scenarios.md](./scenarios.md)), so
 a proposal can add a dam from a future date. Pending the hydrologist
-(issue #90): the linear rate and the choice to scale dead storage and the
-triggers with the capacity.
+(issue #90, [engine-audit.md S1](./engine-audit.md)): the linear rate run
+both ways, how far back it should run, and the choice to scale dead storage
+and the triggers with the capacity.
 
 ### 2.8 Outputs
 

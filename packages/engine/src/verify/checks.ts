@@ -1736,6 +1736,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 		}
 		if (mode === 'fullAllocation' && KF) {
 			const D = g('demand');
+			const abstractFrom = abstractionStartDay(n, day0, out.days, []);
 			if (!D) return `${n.id}: demand series missing`;
 			for (let t = 0; t < out.days; ) {
 				const wy = waterYearOf(day0 + t);
@@ -1746,7 +1747,9 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 					if (KF[k] !== KF[t]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
 					d += D[k]!;
 				}
-				const reg = registeredOver(allocs, wy, day0 + t, day0 + last);
+				// Over the days the unit abstracts on (engine ≥ 1.27.0: from its abstraction date).
+				const a = Math.max(t, abstractFrom);
+				const reg = a > last ? 0 : registeredOver(allocs, wy, day0 + a, day0 + last);
 				const want = KF[t]! > 0 ? reg : 0;
 				if (Math.abs(d - want) > tol(Math.max(d, reg))) return `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run`;
 				t = last + 1;

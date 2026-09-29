@@ -91,6 +91,32 @@ describe('the capacity factor', () => {
 		expect([...modelRuleIssues(i.model).values()].join()).toMatch(/"A": a sediment rate needs the date/);
 	});
 
+	it('warns when the dam is run back to far more than its surveyed capacity (positive control: a small factor says nothing)', () => {
+		const w: string[] = [];
+		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('1990-01-01'), 60, w);
+		expect(w.join()).toMatch(/holds up to 1\.62 × its surveyed capacity/);
+		const quiet: string[] = [];
+		capacityScaleOf(node('A', 'farm', null, { damCapacityM3: 100_000, damSurveyDate: '2021-01-01', damSedimentPctPerYear: 0.02 }), toEpochDay('2019-01-01'), 60, quiet);
+		expect(quiet).toEqual([]);
+	});
+
+	it('reads the date boundaries by epoch day, whatever the time zone (rule 7)', () => {
+		const tz = process.env.TZ;
+		process.env.TZ = 'Pacific/Kiritimati';
+		try {
+			const built = { kind: 'farm' as const, damCapacityM3: 100_000, damSurveyDate: null, damSedimentPctPerYear: null, damInServiceFrom: '2021-02-01', abstractionFrom: null };
+			expect(damCapacityFactor(built, toEpochDay('2021-01-31'))).toBe(0);
+			expect(damCapacityFactor(built, toEpochDay('2021-02-01'))).toBe(1);
+			expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2021-02-01' }), toEpochDay('2021-01-01'), 60, [])).toBe(31);
+			const o = run(input({ damInitialPct: 0, damInServiceFrom: '2021-01-21' }), new Array(60).fill(2_000));
+			expect(col(o, 'A', 'dam_storage')![19]).toBe(0);
+			expect(col(o, 'A', 'dam_storage')![20]).toBeCloseTo(2_000, 6);
+		} finally {
+			if (tz === undefined) delete process.env.TZ;
+			else process.env.TZ = tz;
+		}
+	});
+
 	it('an abstraction date counts from the run start, clamped to it', () => {
 		const w: string[] = [];
 		expect(abstractionStartDay(node('A', 'farm', null, { abstractionFrom: '2021-01-11' }), d0, 60, w)).toBe(10);
@@ -160,6 +186,19 @@ describe('a run with the development fields', () => {
 		expect(d[10]).toBeCloseTo(400, 6);
 		// Positive control: without the date the farm abstracts from day 0.
 		expect(col(run(input({}, { need: 400 }), new Array(60).fill(0)), 'A', 'demand')![0]).toBeCloseTo(400, 6);
+	});
+
+	it('a full allocation asks for the volume over the days the unit abstracts on, not the whole year (engine review)', () => {
+		// 36 500 m³ a year registered; the unit abstracts from day 30 of the 60-day run: 30 days' volume, 100 m³/day.
+		const i = input({ abstractionFrom: '2021-01-31' }, { need: 400 });
+		i.model.allocations = [{ id: 'a', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 36_500 }];
+		i.settings = { ...i.settings, allocationMode: 'fullAllocation' };
+		const o = run(i, new Array(60).fill(0));
+		passed(o);
+		const d = col(o, 'A', 'demand')!;
+		expect(d.slice(0, 30).every((v) => v === 0)).toBe(true);
+		expect(d.slice(30).reduce((a, b) => a + b, 0)).toBeCloseTo(3_000, 6);
+		expect(o.summary.warnings.some((w) => w.includes('has no demand in water year'))).toBe(false);
 	});
 
 	it('the supply rule’s trigger level is a share of the day’s capacity', () => {

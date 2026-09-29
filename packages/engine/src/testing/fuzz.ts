@@ -646,13 +646,6 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 }
 
 /**
- * Schedules on half the demand objects (engine ≥ 1.17.0, docs/model.md
- * §2.7f): up to four windows each, of every span (every day, yearly spans
- * that wrap the year end or not, a one-off range in or around the run,
- * Easter), on some weekdays or all, with factors from off (0, over-weighted)
- * to a peak, overlapping at random, and now and then an empty schedule.
- */
-/**
  * Development over the run (engine ≥ 1.27.0, ../network/development.ts) in
  * 20 % of seeds: on a farm dam, now and then a sediment rate with a survey
  * date anywhere from a run before the start to after the end, and an
@@ -674,6 +667,13 @@ function addDevelopment(g: Rng, nodes: NetworkNode[], start: number, days: numbe
 	}
 }
 
+/**
+ * Schedules on half the demand objects (engine ≥ 1.17.0, docs/model.md
+ * §2.7f): up to four windows each, of every span (every day, yearly spans
+ * that wrap the year end or not, a one-off range in or around the run,
+ * Easter), on some weekdays or all, with factors from off (0, over-weighted)
+ * to a peak, overlapping at random, and now and then an empty schedule.
+ */
 function addSchedules(g: Rng, objects: DemandObject[], start: number, days: number): void {
 	const md = () => `${String(g.int(1, 12)).padStart(2, '0')}-${String(g.int(1, 28)).padStart(2, '0')}`;
 	for (const o of objects) {

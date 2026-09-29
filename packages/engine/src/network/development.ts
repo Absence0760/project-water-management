@@ -27,6 +27,9 @@ export const SEDIMENT_YEAR_DAYS = 365.25;
 /** The most capacity a dam may lose to sediment a year (a share of the surveyed capacity): 20 %. */
 export const DAM_SEDIMENT_MAX_PER_YEAR = 0.2;
 
+/** A dam larger than this × its surveyed capacity at some point of a run (sediment run back from the survey) is warned about. */
+export const DAM_SEDIMENT_WARN_FACTOR = 1.25;
+
 /** The run series that carries a dam's capacity on each day, when it changes over the run. */
 export const DAM_CAPACITY_SERIES = { key: 'dam_capacity', label: 'Dam capacity on the day (sediment, in service from)', unit: 'm³' } as const;
 
@@ -90,6 +93,13 @@ export function capacityScaleOf(n: NetworkNode, start: number, days: number, war
 	if (!(rate > 0 && n.damSurveyDate) && !(from > 0)) return undefined;
 	const k = new Float64Array(days);
 	for (let t = 0; t < days; t++) k[t] = damCapacityFactor(n, start + t);
+	// Linear back from a recent survey over a long record makes the dam far larger than surveyed, at the
+	// same full-supply area: said, pending the hydrologist's ruling on how far that may go (engine-audit.md S1).
+	const most = k.reduce((a, v) => Math.max(a, v), 0);
+	if (most > DAM_SEDIMENT_WARN_FACTOR)
+		warnings.push(
+			`farm "${n.name}": with ${(rate * 100).toFixed(1)} % a year lost to sediment since ${n.damSurveyDate}, the dam holds up to ${most.toFixed(2)} × its surveyed capacity early in the run; check the rate and the survey date`
+		);
 	return k;
 }
 

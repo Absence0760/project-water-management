@@ -84,7 +84,7 @@ import {
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
 import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
-import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from './network/development';
+import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, damCapacityOn } from './network/development';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -1198,6 +1198,8 @@ export function buildNetworkPlan(
 	// scaled to its volume before its claim is passed down, and the rest of the mode put into the plan below.
 	const allocationMode = resolveAllocationMode(settings.allocationMode, []);
 	const allocation = matchAllocations(model.allocations, allocationMode, nodes, warnings);
+	// A full allocation is scaled to the volume over the days the unit abstracts on.
+	if (abstractFrom.some((s) => s > 0)) allocation.abstractFrom = new Map(abstractFrom.flatMap((s, i) => (s > 0 ? [[i, s] as [number, number]] : [])));
 	// A resumed full allocation keeps the capture run's factor for the water year in progress (engine ≥ 1.18.0).
 	if (warm.allocationFactor?.some((f) => f !== undefined)) allocation.pinned = new Map(warm.allocationFactor.flatMap((f, i) => (f === undefined ? [] : [[i, f] as [number, number]])));
 	if (allocationMode !== 'none' && allocation.byNode.size && start === undefined) throw new Error('buildNetworkPlan: settings.allocationMode needs the run start');
@@ -1310,8 +1312,10 @@ function storageResetOf(
 			warnings.push(`damStorageReset: farm "${n.name}" storage ${String(v)} is not a number; ignored`);
 			continue;
 		}
-		if (v < 0 || v > n.damCapacityM3) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${n.damCapacityM3} m³; clamped`);
-		byNode.set(i, Math.min(Math.max(v, 0), n.damCapacityM3));
+		// Against the capacity on the reset day (engine ≥ 1.27.0: it can change over the run).
+		const cap = damCapacityOn(n, start + day);
+		if (v < 0 || v > cap) warnings.push(`damStorageReset: farm "${n.name}" storage ${v} m³ is outside 0 … its capacity ${cap} m³ that day; clamped`);
+		byNode.set(i, Math.min(Math.max(v, 0), cap));
 	}
 	return byNode.size ? { day, byNode } : null;
 }
