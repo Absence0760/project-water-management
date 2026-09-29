@@ -25,6 +25,7 @@
 // the same seed and options reproduce the ensemble exactly (./verify.ts checks it).
 import { fromEpochDay, toEpochDay, waterYearIndex, waterYearOf, type Monthly } from '../calendar';
 import { prepareCalibration } from '../calibrate/calibrate';
+import { censoredObserved } from '../calibrate/dayFlags';
 import { CALIBRATION_BOUNDS, CALIBRATION_PARAMS, type ParamSet } from '../calibrate/params';
 import { fitScores } from '../calibrate/objective';
 import { CALIBRATION_FLOW_KINDS, type CalibrationFlowKind, type ModelInput, type ModelOutput } from '../project';
@@ -333,6 +334,8 @@ interface RecordDays {
 	accept: Int32Array;
 	acceptYears: Int32Array;
 	held: Int32Array;
+	/** The censoring bound on above-rating days (calibrate/dayFlags.ts), null when none are censored. */
+	censor: Float64Array | null;
 }
 
 export interface EnsembleContext {
@@ -381,7 +384,7 @@ export function ensembleContext(input: ModelInput, options: ResolvedEnsembleOpti
 		for (const { k, pb } of probs) {
 			const accept = pb.scoredDays.filter((t) => t < split);
 			const held = pb.scoredDays.filter((t) => t >= split);
-			records.set(k, { observed: pb.observed, accept, acceptYears: Int32Array.from(accept, (t) => waterYearOf(d0 + t)), held });
+			records.set(k, { observed: pb.observed, accept, acceptYears: Int32Array.from(accept, (t) => waterYearOf(d0 + t)), held, censor: pb.censor ?? null });
 		}
 	}
 	const monthDays = Array.from({ length: 12 }, () => [] as number[]);
@@ -502,7 +505,9 @@ export function memberScores(ctx: EnsembleContext, m: EnsembleMember, out: Model
 	const rec = ctx.records.get(m.record);
 	if (!rec) throw new Error(`the ${RECORD_LABELS[m.record]} is not part of this ensemble`);
 	const sim = catchmentSeries(out, 'simulated_outflow');
-	const o = Float64Array.from(rec.accept, (t) => rec.observed[t]!);
+	// Scored as the fit scores them: flagged days left out (the problem's days), censored ones met once the simulation reaches the highest gauging.
+	const obs = censoredObserved(rec.observed, sim, rec.accept, rec.censor);
+	const o = Float64Array.from(rec.accept, (t) => obs[t]!);
 	const sv = Float64Array.from(rec.accept, (t) => sim[t] ?? NaN);
 	const f = fitScores(o, sv, rec.acceptYears);
 	const w = out.summary.wr2012;

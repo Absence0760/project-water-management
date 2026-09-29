@@ -16,6 +16,7 @@ export * from './legal';
 export * from './runoff';
 export * from './calibrate/calibrate';
 export * from './calibrate/representativeness';
+export * from './calibrate/dayFlags';
 export * from './calibrate/params';
 export * from './calibrate/objective';
 export * from './calibrate/objectives';

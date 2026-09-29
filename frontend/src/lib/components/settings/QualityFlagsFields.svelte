@@ -1,0 +1,139 @@
+<!--
+	Settings fields for settings.qualityFlags (engine ≥ 1.20.0, calibration
+	research CR-18/19): the gauged range of each calibration record (the
+	highest and lowest field gaugings behind its rating curve, with their
+	source), and how Fit automatically scores extrapolated, suspect and
+	infilled days. Bind the value; `error` is set while it is invalid, so the
+	parent form can block saving.
+-->
+<script lang="ts">
+	import { RATING_SOURCE_MAX, type CalibrationFlowKind, type GaugeRating, type QualityFlagSettings } from '@water-management/engine';
+	import HelpTip from '$lib/components/help/HelpTip.svelte';
+	import NumberInput from '$lib/components/common/NumberInput.svelte';
+	import { ABOVE_OPTIONS, FLAG_OPTIONS, qualityFlagsError, ratedKinds, ratingField, RECORD_NAME, withRating } from './qualityFlags';
+
+	let {
+		value = $bindable(),
+		error = $bindable(null),
+		readonly = false,
+		seriesKinds = null
+	}: {
+		value: QualityFlagSettings;
+		error?: string | null;
+		readonly?: boolean;
+		/** Series kinds the project has (null = not known: both records are offered). */
+		seriesKinds?: string[] | null;
+	} = $props();
+
+	const uid = $props.id();
+	const kinds = $derived(ratedKinds(seriesKinds));
+	$effect(() => {
+		error = qualityFlagsError(value);
+	});
+	const set = (kind: CalibrationFlowKind, patch: Partial<GaugeRating>) => (value.ratings = withRating(value.ratings, kind, patch));
+</script>
+
+<fieldset class="plain qf" aria-describedby="{uid}-hint">
+	<legend>Quality flags for Fit automatically <HelpTip key="settings.qualityFlags" /></legend>
+	<p class="hint" id="{uid}-hint">
+		A flow above the highest field gauging, or below the lowest, comes from an extrapolated rating curve. Enter the gauged range where you know it,
+		with where it comes from. Days the Data checks call suspect (outliers, flat stretches) are flagged too. The fit leaves flagged days out by default
+		and shows its score on all days beside it; the run’s calibration statistics still score every observed day.
+	</p>
+	{#each kinds as kind (kind)}
+		{@const r = ratingField(value, kind)}
+		<div class="rating" data-testid="rating-{kind}">
+			<div class="field">
+				<label for="{uid}-{kind}-max">{RECORD_NAME[kind]}: highest gauging <span class="u">(m³/s)</span></label>
+				<NumberInput id="{uid}-{kind}-max" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })} placeholder="not known" />
+			</div>
+			<div class="field">
+				<label for="{uid}-{kind}-min">Lowest gauging <span class="u">(m³/s)</span></label>
+				<NumberInput id="{uid}-{kind}-min" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })} placeholder="not known" />
+			</div>
+			<div class="field source">
+				<label for="{uid}-{kind}-src">Source</label>
+				<input
+					id="{uid}-{kind}-src"
+					type="text"
+					maxlength={RATING_SOURCE_MAX}
+					readonly={readonly}
+					value={r.source}
+					oninput={(e) => set(kind, { source: e.currentTarget.value })}
+					placeholder="e.g. DWS gauging list, rating table 2019"
+				/>
+			</div>
+		</div>
+	{/each}
+	<div class="uses">
+		<div class="field">
+			<label for="{uid}-above">Days above the highest gauging</label>
+			<select id="{uid}-above" bind:value={value.aboveRating} disabled={readonly}>
+				{#each ABOVE_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+		</div>
+		<div class="field">
+			<label for="{uid}-below">Days below the lowest gauging</label>
+			<select id="{uid}-below" bind:value={value.belowRating} disabled={readonly}>
+				{#each FLAG_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+		</div>
+		<div class="field">
+			<label for="{uid}-suspect">Suspect days</label>
+			<select id="{uid}-suspect" bind:value={value.suspect} disabled={readonly}>
+				{#each FLAG_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+		</div>
+		<div class="field">
+			<label for="{uid}-infilled">Infilled days</label>
+			<select id="{uid}-infilled" bind:value={value.infilled} disabled={readonly}>
+				{#each FLAG_OPTIONS as o (o.value)}<option value={o.value}>{o.label}</option>{/each}
+			</select>
+		</div>
+	</div>
+	{#if error}<p class="err" role="alert">{error}</p>{/if}
+</fieldset>
+
+<style>
+	.plain {
+		border: 0;
+		padding: 0;
+		margin: 0.75rem 0 0;
+		min-width: 0;
+	}
+	legend {
+		font-weight: 500;
+		font-size: 0.9rem;
+		padding: 0;
+		margin-bottom: 0.2rem;
+	}
+	.hint {
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		margin: 0 0 0.4rem;
+	}
+	.rating,
+	.uses {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+		gap: 0.25rem 1rem;
+		margin-bottom: 0.4rem;
+	}
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.field :global(input),
+	.field select {
+		width: 100%;
+	}
+	.u {
+		color: var(--text-muted);
+		font-weight: 400;
+	}
+	.err {
+		color: var(--danger);
+		font-size: 0.85rem;
+	}
+</style>

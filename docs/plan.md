@@ -515,7 +515,10 @@ questions, in [model.md §3](./model.md#3-workbook-quirks-and-suspected-bugs).
 > 2. **Rating (CR-18):** what is the highest field gauging at the logger, and
 >    which rating curve converts its stage to flow? Flows above that gauging
 >    are extrapolated, so peak days and wet-season volumes are uncertain; the
->    answer decides which days get flagged.
+>    answer decides which days get flagged. **Where it goes (engine 1.20.0,
+>    issue #66):** Settings → Calibration record → Quality flags takes each
+>    record's highest and lowest gauging with its source; until it is
+>    entered, no day is flagged as extrapolated (model.md §2.10h).
 > 3. **Area:** which catchment area should the project use where published
 >    figures disagree?
 > 4. **Accept the limitation:** where a calibration record can't pin down

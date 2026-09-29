@@ -18,6 +18,7 @@ import type { RunoffModelId } from '../runoff/types';
 import { sameProvenance, type SeriesProvenance } from '../seriesProvenance';
 import type { CalibrationReport, DifferentialTest, IndependentRecordTest, MarPenaltyResult, ScoredPeriod, StartResult, ValidationTest } from './calibrate';
 import type { CalibrationBounds, ParamSet } from './params';
+import { resolveQualityFlags, type DayQuality, type QualityFlagSettings } from './dayFlags';
 import type { ObjectiveId } from './objectives';
 
 /** A period left out of calibration scores: a whole water year (Oct–Sep), or a date range. Always with a reason. */
@@ -163,6 +164,15 @@ export interface FitRecord {
 	calibrationStart: string | null;
 	calibrationEnd: string | null;
 	exclusions: CalibrationExclusion[];
+	/**
+	 * settings.qualityFlags at the time (engine ≥ 1.20.0, CR-18/19): the gauged
+	 * ranges and how flagged days were scored, which decide the days fitted as
+	 * the window and exclusions do. Absent on a record made before it.
+	 */
+	qualityFlags?: QualityFlagSettings;
+	/** The report's quality-flag summary (CR-22) and the fit on all days (CR-19); absent before engine 1.20.0. */
+	dayQuality?: DayQuality | null;
+	fitAllDays?: ScoredPeriod | null;
 	/** Whether the split-sample and dry → wet tests were asked for, and the independent record. */
 	validate: boolean;
 	validationRecord: CalibrationFlowKind | null;
@@ -264,6 +274,8 @@ export interface FitContext {
 	/** The Settings form the fit ran on. */
 	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection'> & {
 		calibrationExclusions?: CalibrationExclusion[] | null;
+		/** Engine ≥ 1.20.0; absent = the defaults. */
+		qualityFlags?: QualityFlagSettings | null;
 		zeroRainRuns?: ZeroRainSettings;
 		chirpsFitPeriod?: ChirpsFitPeriod;
 		rainSource?: RainSourcePeriod[];
@@ -305,6 +317,9 @@ export function fitRecordFromReport(r: CalibrationReport, ctx: FitContext): FitR
 		calibrationStart: ctx.settings.calibrationStart ?? null,
 		calibrationEnd: ctx.settings.calibrationEnd ?? null,
 		exclusions: (ctx.settings.calibrationExclusions ?? []).map((x) => ({ ...x })),
+		qualityFlags: resolveQualityFlags(ctx.settings.qualityFlags, []),
+		...(r.dayQuality !== undefined ? { dayQuality: structuredClone(r.dayQuality) } : {}),
+		...(r.fitAllDays !== undefined ? { fitAllDays: r.fitAllDays } : {}),
 		validate: ctx.validate,
 		validationRecord: ctx.validationRecord,
 		fit: r.fit,
@@ -374,6 +389,12 @@ export interface FitRecordStatus {
 	/** The calibration window, exclusions or flow record differ from the fit's. */
 	windowChanged: boolean;
 	exclusionsChanged: boolean;
+	/**
+	 * The quality-flag settings (a gauged range, or how extrapolated, suspect
+	 * or infilled days are scored; engine ≥ 1.20.0) differ from the fit's, so
+	 * other days would be fitted. False on a record made before them.
+	 */
+	qualityFlagsChanged: boolean;
 	flowKindChanged: boolean;
 	/**
 	 * The potential-evaporation input (`settings.pe`: its kind, or its
@@ -568,6 +589,8 @@ export function fitRecordStatus(settings: Partial<ProjectSettings>, record: FitR
 		otherModel: (record.model as string) !== 'gr4j',
 		windowChanged: (settings.calibrationStart ?? null) !== record.calibrationStart || (settings.calibrationEnd ?? null) !== record.calibrationEnd,
 		exclusionsChanged: !sameJson(settings.calibrationExclusions ?? [], record.exclusions ?? []),
+		// Compared resolved on both sides, so a stored field left at its default is no change.
+		qualityFlagsChanged: record.qualityFlags !== undefined && !sameJson(resolveQualityFlags(settings.qualityFlags, []), resolveQualityFlags(record.qualityFlags, [])),
 		// The record names what was fitted (the default pick resolved), so only an explicit, different choice counts.
 		flowKindChanged: kind !== null && kind !== record.flowKind,
 		forcingChanged:
@@ -594,7 +617,7 @@ export function calibrationFitStatus(settings: Partial<ProjectSettings>, flowKin
 	if (!record || (record.model as string) !== 'gr4j') return 'notFitted';
 	const status = fitRecordStatus(settings, record);
 	if (status.editedParams.length) return 'edited';
-	if (status.windowChanged || status.exclusionsChanged || record.flowKind !== flowKind) return 'otherPeriod';
+	if (status.windowChanged || status.exclusionsChanged || status.qualityFlagsChanged || record.flowKind !== flowKind) return 'otherPeriod';
 	return 'fitted';
 }
 
@@ -607,6 +630,9 @@ export function fitRecordCaveats(status: FitRecordStatus, paramLabel: (key: stri
 	}
 	if (status.windowChanged) out.push('The calibration window has changed since the fit.');
 	if (status.exclusionsChanged) out.push('The calibration exclusions have changed since the fit.');
+	if (status.qualityFlagsChanged) {
+		out.push('The quality-flag settings (a gauged range, or how extrapolated, suspect or infilled days are scored) have changed since the fit, so it was fitted on other days. Refit before relying on the parameters.');
+	}
 	if (status.flowKindChanged) out.push('The calibration flow series has changed since the fit.');
 	if (status.chirpsSourceChanged) {
 		out.push(

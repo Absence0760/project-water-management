@@ -2609,7 +2609,18 @@ which checks every catchment tab).
   2015-10-01 – 2016-09-30"). A blank reason, a reversed range or a period
   listed twice shows an alert and blocks Save (the save bar links here).
   Excluded days are left out of Fit automatically and the run's calibration
-  statistics (model.md §2.10).
+  statistics (model.md §2.10). Under them, **Quality flags for Fit
+  automatically** (`settings/QualityFlagsFields.svelte`, helpers in
+  `settings/qualityFlags.ts`; engine ≥ 1.20.0, CR-18/19, model.md §2.10h): for
+  each calibration record the project has (both when not known), its
+  **highest gauging** and **lowest gauging** (m³/s, empty = not known) and a
+  **Source**, required once either is set; and four selects for what the fit
+  does with **days above the highest gauging** ("Censor: only ask the model
+  to reach the highest gauging (default)", "Leave out", "Score as
+  recorded") and with **days below the lowest gauging**, **suspect days**
+  and **infilled days** ("Leave out (default)", "Score as recorded"). A
+  range without its source, or a lowest gauging not below the highest, shows
+  an alert and blocks Save. An emptied range stores nothing.
 - **Fit automatically** (`#set-fit`, `calibration/FitPanel.svelte`) fits the
   selected model's parameters in a Web Worker (`lib/calibration/`). It takes
   the objective, **Bounds** (a select: "Wide (default)" — each parameter's
@@ -2662,6 +2673,23 @@ which checks every catchment tab).
     that is never scored", or the fitted record's own mean flow (engine ≥
     1.19.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
     fit record's dry → wet line says the same.
+    From engine 1.20.0 (CR-19), when the quality flags left days out or
+    censored any, a **Fitted, all days (flags ignored)** column follows
+    **Fitted**: the fitted parameters on every observed day, as recorded.
+    Above the representativeness block, **Data quality of the scored
+    record** (`calibration/DataQualityPanel.svelte`, rows in
+    `calibration/dayQuality.ts`; engine ≥ 1.20.0, CR-22, model.md §2.10h,
+    `data-testid="fit-data-quality"`): the heading's gist ("1 204 of 1 461
+    observed days scored · 31 left out · 12 censored"), the record's gauged
+    range and source (or that none is recorded), a table of the window's
+    observed flow by flag (days, share, and in the fit: scored, censored at
+    the highest gauging, left out, scored as recorded, no reading; "Not
+    flagged (no gauged range recorded)" in place of "In the gauged range"
+    when none is), a table of the scored days' rain by source (catchment
+    gauge reading, infilled, missing, and zero-rain runs set aside among
+    them), how wet the scored years were (the representativeness gist), and
+    a list of what the record can't support. A report from before 1.20.0 has
+    none of it.
     Under it, **How representative is the record** (engine ≥ 1.19.0, CR-34;
     `calibration/representativeness.ts`): the record's length and its mean
     rain as a share of the long-term mean in the heading, the engine's
@@ -2727,6 +2755,12 @@ which checks every catchment tab).
     of kind or of the monthly row shows **Forcing changed since fit**; a
     reworded source doesn't, and under a monthly PE neither does a change to
     the pan coefficient or A-pan alone.
+    From engine 1.20.0 the record has a **Quality flags** row (the data
+    quality gist and the gauged range), its score table adds **All days
+    (flags ignored)** beside the in-sample column when the flags changed the
+    days, and a change of a gauged range or of how flagged days are scored
+    since the fit shows a **Quality flags changed since fit** badge with a
+    caveat (model.md §2.10h).
     Viewers can fit but not apply. With no observed record the panel says to
     upload one. The fit uses the form as it stands, and the network with
     unsaved edits if there are any.

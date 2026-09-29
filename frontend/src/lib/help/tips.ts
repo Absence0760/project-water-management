@@ -683,6 +683,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.calibrationExclusions', 'stats.exclusions', 'stats.excludedDays']
 	},
 	{
+		id: 'quality-flags',
+		term: 'Quality flags (per-day)',
+		short: 'Each observed day is in the gauged range, above or below it, suspect, infilled or missing. Fit automatically sets flagged days aside.',
+		category: 'fit',
+		fields: ['settings.qualityFlags']
+	},
+	{
 		id: 'fit-record',
 		term: 'Fit record',
 		short: 'What “Apply to form” stores with fitted parameters: how the fit was made and how it scored on days it never saw.',

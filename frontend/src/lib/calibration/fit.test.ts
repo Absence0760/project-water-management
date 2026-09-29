@@ -164,6 +164,16 @@ describe('scoreColumns', () => {
 		expect(scoreColumns(report()).map((c) => c.id)).toEqual(['before', 'fit']);
 	});
 
+	it('adds the fit on all days beside the fit when the quality flags changed the days scored (CR-19), and not otherwise', () => {
+		const cols = scoreColumns(report({ fitAllDays: period('2003-01-01', '2008-12-31', 0.5) }));
+		expect(cols.map((c) => [c.id, c.label, c.validation])).toEqual([
+			['before', 'Current parameters', false],
+			['fit', 'Fitted', false],
+			['fit-all', 'Fitted, all days (flags ignored)', false]
+		]);
+		expect(scoreColumns(report({ fitAllDays: null })).map((c) => c.id)).toEqual(['before', 'fit']);
+	});
+
 	it('shows the dry → wet test as the water years scored, never an overlapping date envelope', () => {
 		// Interleaved years: the dry set's first–last dates (2004-10-01 … 2007-09-30)
 		// sit inside the wet set's (2003-10-01 … 2008-09-30), although no year is in both.
@@ -318,6 +328,7 @@ describe('applyReport', () => {
 			otherModel: false,
 			windowChanged: false,
 			exclusionsChanged: false,
+			qualityFlagsChanged: false,
 			flowKindChanged: false,
 			forcingChanged: false,
 			chirpsSourceChanged: false,

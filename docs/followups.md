@@ -902,12 +902,33 @@ the suggested order (the IDs carry the detail):
       run's complete water years of rain, the mean against the long-term
       mean, and notes when the record can't test wet or dry years or has
       fewer than 5), shown in Fit automatically (model.md §2.10b).
-- [ ] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
+- [x] **Data layer:** CR-18 per-day quality flags → CR-19 flag-aware
       objective → CR-20 flagged zero-rain runs become missing so corrected
       CHIRPS fills them (closes the gap behind issue #2) → CR-22 data-quality
       panel. CR-20 went first (built 2026-09-24, engine 0.15.0; see
       "Zero-rain runs treated as missing" above). Its per-day infill flag is
-      the rain slice that CR-18 then generalises.
+      the rain slice that CR-18 then generalises. **Done (engine 1.20.0,
+      issue #66, model.md §2.10h):** CR-18 flags each day (`calibrate/dayFlags.ts`:
+      in range, above / below the gauged range entered per record, suspect by
+      the Data checks, infilled, missing; human use defined, not derived; rain
+      observed / infilled / missing), CR-19 censors days above the highest
+      gauging and leaves below-rating, suspect and infilled days out of the
+      fit by default, with the fit on all days beside it and the settings in
+      the fit record, and CR-22 is the Fit panel's data-quality panel. The
+      recession segments (CR-13) leave flagged days out. The infilled class
+      reads gap-filled observed flow's mask through `observedInfillMask`
+      once gap filling of observed flow (issue #66) lands; until then it is
+      empty. The defaults are open questions on issue #66.
+- [ ] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
+      The flags exist per day in the engine (`flowDayFlags`) and drive the
+      fit and its panel, but a run doesn't store them, so the hydrograph and
+      the Data tab can't shade the days above the gauged range or those the
+      fit left out. Durable fix: a run column (`observed_flow_quality`,
+      codes as `FLOW_DAY_FLAGS`, added only when a day is flagged, like
+      `rain_catchment_missing`) registered in `verify/columns.ts`, shaded on
+      the hydrograph with a legend. Trigger: the hydrologist asks to see
+      which days were flagged, or gap filling of observed flow lands and its
+      infilled days need showing.
 - [x] **Fit-settings sweep (headless).** **Done (2026-09-28, issue #65):**
       `pnpm fit-sweep <project.json> --grid <grid.json>`
       (`backend/scripts/fit-sweep.ts`, model.md §2.10b) fits every cell of
@@ -995,8 +1016,10 @@ the suggested order (the IDs carry the detail):
       Background jobs. **Needs the hydrologist to sign off** the default
       rules (flag thresholds, selection score, filters) before any automated
       fit is used as evidence; the question is in issue #90. Trigger: once
-      the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Still
-      waiting on CR-18.
+      the sweep (done 2026-09-28) and CR-18 (issue #66) have landed. Both
+      have (CR-18/19 in engine 1.20.0): the rule set can now read
+      `dayQuality` and the per-day flags; it still waits on the hydrologist
+      signing off the default rules.
 - [x] **Recession:** CR-13 diagnostics (−dQ/dt vs Q; the imported table
       to overlay went with the legacy model in engine 1.0.0). CR-14 is
       dropped: engine 1.0.0 removed the legacy model (issue #16). **Done
@@ -1005,7 +1028,7 @@ the suggested order (the IDs carry the detail):
       GR4J's simulated outflow on the same days, power-law fits compared at
       the median flow (indicative warnings with 8 or more segments, "Not
       judged" below), in the Plausibility checks panel and the summary CSV
-      (model.md §2.10d). CR-18's flags plug into its day mask when built.
+      (model.md §2.10d). CR-18's flags joined its day mask in engine 1.20.0.
 - [x] **Hydrologist questions** from the review: the EWR form the CMA expects (CR-30), the logger's highest gauging and
       rating (CR-18), the defensible abstraction estimate and range (CR-21,
       CR-32), and which MAR estimate to trust (CR-7). CR-18 is

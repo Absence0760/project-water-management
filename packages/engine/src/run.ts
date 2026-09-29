@@ -21,6 +21,7 @@ import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { chirpsFactorOn, ZERO_RAIN_COLUMN, type ChirpsCorrection } from './rain';
 import { doubleMassCheck } from './doublemass';
 import { plausibilityChecks, type GaugePlausibilityInput } from './plausibility';
+import { flaggedDayMask, flowDayFlags, observedInfillMask, ratingOf } from './calibrate/dayFlags';
 import { daysPerMonth, fromEpochDay, monthOfEpochDay, toEpochDay, waterYearIndex, waterYearOf } from './calendar';
 import { cropFactorAreaM2, demandFactorOf, demandFactorStart, farmDailyDemand, farmIrrigationEfficiency, grossFarmDemandM3PerDay, ownCropEfficiency, type Crop } from './demand';
 import { apanDailyMm } from './evaporation/apanDaily';
@@ -959,6 +960,13 @@ function runPlausibility(r: {
 	};
 	const dams = damsOf(null);
 	const gauges = gaugeSites(r, byId, damsOf);
+	// The calibration record's quality flags (CR-18): the recession segments leave flagged days out.
+	const kind = r.observedKind;
+	const flowFlagged = kind
+		? flaggedDayMask(
+				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(series[kind], start, days) })
+			)
+		: null;
 	const catchment = r.aligned('rain_catchment_mm');
 	const station = new Uint8Array(days);
 	for (let t = 0; t < days; t++) station[t] = catchment[t] != null && !r.accumulation?.mask[t] ? 1 : 0;
@@ -971,6 +979,7 @@ function runPlausibility(r: {
 		observed,
 		calibrationKind: r.observedKind,
 		excluded,
+		...(flowFlagged ? { flowFlagged } : {}),
 		damsM3Day: dams,
 		landCoverM3Day: r.coverTotal,
 		rainMm: r.finalRain,

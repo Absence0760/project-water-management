@@ -22,9 +22,9 @@
 // 2013; Dralle et al. 2017): a step into day t counts only when the
 // catchment rain on t and on t − 1 is known and at most `rainThresholdMm`,
 // and when both days' flows are usable: recorded, above zero, and not
-// left out by the caller's mask (the run's calibration exclusions, and the
-// per-day flow quality flags of CR-18 once they exist: extrapolated, infilled
-// or suspect days). A missing day, a wet day and a rise all end a run.
+// left out by the caller's mask (the run's calibration exclusions, and from
+// engine 1.20.0 the days CR-18's flow quality flags mark extrapolated,
+// infilled or suspect: ../calibrate/dayFlags.ts flaggedDayMask). A missing day, a wet day and a rise all end a run.
 //
 // Two departures from TOSSH, both about where a run ends, not what it is:
 // a run cut off by the end of the record is kept like one cut off by a gap

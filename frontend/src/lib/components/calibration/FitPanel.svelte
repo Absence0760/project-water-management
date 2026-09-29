@@ -50,6 +50,7 @@
 	} from '$lib/calibration/fit';
 	import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 	import MarPenaltyResult from './MarPenaltyResult.svelte';
+	import DataQualityPanel from './DataQualityPanel.svelte';
 	import { representativenessGist, representativenessKey, representativenessRows } from './representativeness';
 	import Wr2012FitTable from './Wr2012FitTable.svelte';
 	import { wr2012FitPeriods } from '$lib/calibration/wr2012Fit';
@@ -390,6 +391,10 @@
 				<Wr2012FitTable periods={wr2012FitPeriods(report)} />
 				{#if report.marPenalty}
 					<MarPenaltyResult {report} penalty={report.marPenalty} {paramLabel} />
+				{/if}
+				{#if report.dayQuality}
+					<!-- Calibration research CR-22: the per-day quality flags of the fitted record and its rain. -->
+					<DataQualityPanel quality={report.dayQuality} representativeness={report.representativeness ?? null} />
 				{/if}
 				{#if report.representativeness}
 					{@const rep = report.representativeness}

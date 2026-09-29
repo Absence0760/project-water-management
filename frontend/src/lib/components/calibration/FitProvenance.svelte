@@ -14,6 +14,7 @@
 	import { peText } from '$lib/components/settings/peInput';
 	import { fmtNum } from '$lib/format/number';
 	import { apanDailyText, chirpsFactorsText, fitModelLabel, monthsText, paramLabel } from './provenance';
+	import { dayQualityGist, ratingLine } from './dayQuality';
 
 	const chirpsBiasLabel = (mode: string) => CHIRPS_BIAS_OPTIONS.find((o) => o.value === mode)?.label ?? mode;
 
@@ -46,7 +47,7 @@
 	const status = $derived(record ? fitRecordStatus(settings, record, { chirpsSource, apanDaily, ...(chirpsFactors !== undefined ? { chirpsFactors } : {}) }) : null);
 	const caveats = $derived(status ? fitRecordCaveats(status, (k) => paramLabel(record!.model, k)) : []);
 	// The in-sample fit, then the validation parts: the columns a reader should judge by.
-	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.validation)) : []);
+	const columns = $derived(record ? scoreColumns(record).filter((c) => c.id !== 'before' && (c.id === 'fit' || c.id === 'fit-all' || c.validation)) : []);
 	const windowText = (r: FitRecord) =>
 		r.calibrationStart || r.calibrationEnd ? `${r.calibrationStart ?? 'start of record'} – ${r.calibrationEnd ?? 'end of record'}` : 'whole record';
 	// GR4J's PE input the fit ran under (engine ≥ 0.31.0, issue #39); a forcing without it ran on pan coefficient × A-pan.
@@ -66,6 +67,7 @@
 			<strong>{fitModelLabel(record.model)} fit of {fittedAtText(record.fittedAt)}</strong>
 			{#if status && status.editedParams.length}<span class="badge badge-warn">Parameters edited since fit</span>{/if}
 			{#if status && status.forcingChanged}<span class="badge badge-warn">Forcing changed since fit</span>{/if}
+			{#if status && status.qualityFlagsChanged}<span class="badge badge-warn">Quality flags changed since fit</span>{/if}
 		</p>
 		{#each caveats as c (c)}<p class="alert alert-warning small" role="status">{c}</p>{/each}
 		<dl class="meta">
@@ -151,6 +153,13 @@
 					</dd>
 				</div>
 			{/if}
+			{#if record.dayQuality}
+				<!-- Engine ≥ 1.20.0 (CR-18/19): which days the quality flags let the fit score. -->
+				<div data-testid="fit-quality-flags">
+					<dt>Quality flags <HelpTip key="settings.qualityFlags" /></dt>
+					<dd>{dayQualityGist(record.dayQuality)}. {ratingLine(record.dayQuality)}</dd>
+				</div>
+			{/if}
 			<div><dt>Parameters fitted</dt><dd>{record.free.map((k) => `${paramLabel(record.model, k)} ${fmtNum(record.params[k], 3)}`).join(', ')}</dd></div>
 		</dl>
 		<div class="table-wrap">
@@ -160,7 +169,7 @@
 					<tr>
 						{#each columns as c (c.id)}
 							<th scope="col" class="num" class:val={c.validation}>
-								{c.id === 'fit' ? 'Calibration period (in-sample)' : c.label}<br /><span class="period">{c.period}</span>
+								{c.id === 'fit' ? 'Calibration period (in-sample)' : c.id === 'fit-all' ? 'All days (flags ignored)' : c.label}<br /><span class="period">{c.period}</span>
 							</th>
 						{/each}
 					</tr>
