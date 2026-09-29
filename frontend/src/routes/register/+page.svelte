@@ -205,6 +205,7 @@
 {:else}
 <AuthCard
 	legal={false}
+	fit
 	title={inviteState === 'ok' ? t('Accept your invitation') : t('Create an account')}
 	subtitle={inviteState === 'none' ? t('Model your own catchments, or join a team’s.') : undefined}
 >
@@ -274,9 +275,12 @@
 		</div>
 
 		<!-- Directly above the button that makes the account, so the terms are seen before they are accepted
-		     (a notice below the button is weak evidence of assent): the main points in the reader's language,
-		     then a required, unticked box. -->
-		<TermsSummary />
+		     (a notice below the button is weak evidence of assent; #47): the main points in the reader's language,
+		     then a required, unticked box. The points are in their own scroll box (issue #162), so the form fits
+		     a laptop's window and the box, the tick and the button are on screen together: the heading and the
+		     first points always show, the whole list shows whenever the window has room, a fade says there is
+		     more, and the box scrolls with the keyboard. "Read the full terms" sits beside its heading. -->
+		<TermsSummary contained termsHref="{base}/terms" />
 		<div class="agree">
 			<input id="agree" type="checkbox" required bind:checked={agreed} />
 			<label for="agree">
@@ -312,7 +316,8 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.5rem;
-		margin: 0 0 0.25rem;
+		/* No bottom margin: the button's 0.5rem is the gap (the form is a flex column on a wide screen, where margins don't collapse). */
+		margin: 0;
 		font-size: 1rem;
 		color: var(--text-2);
 	}
@@ -325,8 +330,9 @@
 		min-height: 24px;
 		margin: 0;
 	}
+	/* The Terms and Privacy links look like links (accent and underlined, as in running text), not like the label around them (WCAG 1.4.1). */
 	.agree a {
-		color: inherit;
+		text-decoration: underline;
 		font-weight: 400;
 	}
 	.status {

@@ -30,9 +30,11 @@ const SIZES = [
  * layout's "Could not reach the API" is one too).
  */
 /**
- * `long`: the sign-up form carries the Terms' main points above its button, at
- * body size (docs/legal-status.md), so it is taller than a window and scrolls;
- * its title still starts on the same line as every other page's.
+ * `long`: the sign-up form carries the Terms' main points above its button
+ * (docs/legal-status.md). On a wide window they sit in their own scroll box,
+ * which shrinks until the form fits (issue #162; the 1440×900 test below), and
+ * past its minimum the page scrolls; on a phone the page scrolls. Its title
+ * still starts on the same line as every other page's.
  */
 const STATES: { name: string; path: string; settle: (page: Page) => Promise<void>; long?: boolean }[] = [
 	{ name: 'sign in', path: '/login', settle: (p) => expect(p.getByLabel('Email')).toBeVisible() },
@@ -81,8 +83,8 @@ for (const size of SIZES) {
 						const button = page.getByRole('button', { name: /^Create account/ });
 						await button.scrollIntoViewIfNeeded();
 						await expect(button).toBeInViewport();
-						const end = await page.evaluate(() => document.documentElement.scrollHeight - (document.querySelector('.form-box')!.getBoundingClientRect().bottom + scrollY));
-						// The form column's 2.5rem bottom padding (35 px), and no more.
+						const end = await page.evaluate(() => document.documentElement.scrollHeight - (document.querySelector('.form-box')!.lastElementChild!.getBoundingClientRect().bottom + scrollY));
+						// The form column's bottom padding (2.5rem, 35 px, at most), and no more.
 						expect(end, `${s.name}: room below the form`).toBeLessThanOrEqual(36);
 						await page.evaluate(() => scrollTo(0, 0));
 					} else {
@@ -194,6 +196,75 @@ test('the password field’s Show / Hide button is named for what it does, and t
 	await page.getByRole('button', { name: 'Hide password' }).click();
 	await expect(field).toHaveAttribute('type', 'password');
 });
+
+// Issue #162: at 1440×900 the sign-up page doesn't scroll. The Terms' main
+// points, which made it 1146 px tall, are their own scroll box above the tick
+// and the button: named by its heading, reached with Tab and scrolled with the
+// keyboard, with a fade while there is more below and "Read the full terms"
+// beside the heading. On a phone the page scrolls and the box stays contained.
+for (const lang of ['en', 'af'] as const) {
+	test(`the sign-up form fits a 1440×900 window, its terms summary a keyboard-scrollable box, ${lang}`, async ({ page }) => {
+		const w = lang === 'en' ? (english: string) => english : await words(lang);
+		await page.addInitScript((code) => localStorage.setItem('wm.locale', code), lang);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/register');
+		const box = page.getByRole('group', { name: w('The main things you agree to') });
+		await expect(box).toBeVisible();
+		expect(await page.evaluate(() => document.scrollingElement!.scrollHeight - innerHeight), 'the page scrolls').toBeLessThanOrEqual(0);
+		for (const el of [box, page.getByRole('checkbox'), page.getByRole('button', { name: w('Create account') })]) await expect(el).toBeInViewport({ ratio: 1 });
+		// "Read the full terms", beside the heading (by place: its words may not be translated yet).
+		await expect(page.locator('[data-terms-summary]').getByRole('link')).toHaveAttribute('href', /\/terms$/);
+
+		// Focusable and scrolled by the keyboard, the fade shown until the end.
+		await expect(box).toHaveAttribute('tabindex', '0');
+		const fade = page.locator('[data-terms-summary] .scroll-wrap');
+		await expect(fade).toHaveClass(/\bmore\b/);
+		expect(await box.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0);
+		await page.getByRole('checkbox').focus();
+		await page.keyboard.press('Shift+Tab');
+		await expect(box).toBeFocused();
+		await page.keyboard.press('ArrowDown');
+		await expect.poll(() => box.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+		await page.keyboard.press('End');
+		await expect.poll(() => box.evaluate((el) => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight)).toBe(true);
+		await expect(fade).not.toHaveClass(/\bmore\b/);
+		await expectNoViolations(page);
+	});
+}
+
+test('on a phone the sign-up page scrolls, and the terms summary stays a contained, focusable box', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto('/register');
+	const box = page.getByRole('group', { name: 'The main things you agree to' });
+	await expect(box).toHaveAttribute('tabindex', '0');
+	// At most 12rem (168 px at the 14 px root), with more in it to scroll.
+	expect(await box.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(168);
+	expect(await box.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeGreaterThan(0);
+});
+
+// Issue #162: the consent line's links read as links, not as the label's text
+// (WCAG 1.4.1: colour alone isn't enough, so they are underlined too).
+for (const colorScheme of ['light', 'dark'] as const) {
+	test(`the sign-up form’s Terms and Privacy links are underlined in the link colour, ${colorScheme}`, async ({ page }) => {
+		await page.emulateMedia({ colorScheme });
+		await page.goto('/register');
+		const label = page.locator('label[for="agree"]');
+		for (const name of ['Terms of use', 'Privacy notice']) {
+			const link = label.getByRole('link', { name });
+			await expect(link).toHaveCSS('text-decoration-line', 'underline');
+			const [linkColour, labelColour, accent] = await link.evaluate((a) => {
+				const probe = document.createElement('a');
+				probe.href = '#';
+				document.body.append(probe);
+				const out = [getComputedStyle(a).color, getComputedStyle(a.closest('label')!).color, getComputedStyle(probe).color];
+				probe.remove();
+				return out;
+			});
+			expect(linkColour).toBe(accent);
+			expect(linkColour).not.toBe(labelColour);
+		}
+	});
+}
 
 // Issue #51 (the accessibility persona). The toggle sits beside the text, taking
 // its own width, so a long word (Afrikaans "Versteek", 70 px) never covers the

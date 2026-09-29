@@ -40,7 +40,15 @@ client goes live. Not customer-facing.
   to", `lib/components/legal/termsSummary.ts`; the same points open the
   Terms as "The short version"), then a required, unticked checkbox: "I have
   read the main points above and accept the Terms of use and Privacy
-  notice". The account records the version (087).
+  notice". The account records the version (087). Since issue #162 the
+  points are in their own scroll box, so the form fits a laptop's window:
+  the heading, **Read the full terms** and the first lines always show, the
+  whole list whenever the window has room, a fade marks more below, and the
+  box scrolls with the keyboard ([ui.md § Sign-up assent](./ui.md)). Before,
+  the box stood at full height and the page scrolled. Whether a scroll box
+  is as good evidence of assent as the full-height box is a question for
+  counsel (below); the box still sits between the fields and the tick, and
+  the tick still says the main points were read.
 - **Third parties who accepted nothing:** the public share page carries the
   model-results disclaimer (not an authorisation under the National Water
   Act) and links to both pages; invitation emails link the privacy notice
@@ -78,7 +86,10 @@ client goes live. Not customer-facing.
      it is small once the notices sit with the figures. *Done:* the main-points
      summary and required checkbox at sign-up, "The short version" at the
      top of the Terms, §12–13 out of capitals, the Terms §3 duty to pass
-     reports on whole, and the re-acceptance step.
+     reports on whole, and the re-acceptance step. *Open for counsel:*
+     whether the summary in a scroll box (issue #162, so the sign-up form
+     fits the window) draws attention to the terms as well as the
+     full-height box did (s49(3)–(4)).
   2. **Virginia courts.** *Research:* not durable against South African
      farmers (a South African court keeps its discretion, and the CPA and
      ECTA can't be contracted out of). *Done:* §15 per user, as above.

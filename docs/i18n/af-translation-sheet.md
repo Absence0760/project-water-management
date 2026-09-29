@@ -18,4 +18,14 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+1 strings: 1 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### terms-summary
+
+The main points of the Terms of use, in a box above the create-account button and on the “Our terms have changed” page. Legal points: keep their exact force. The Terms themselves are in English only; this box is the one part a farmer reads in their own language. “§13” is section 13 of the Terms.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `b6cba77c` | Read the full terms |  |  |

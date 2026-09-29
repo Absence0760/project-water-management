@@ -184,10 +184,23 @@ included): a bordered box, **The main things you agree to**, with the four
 points in the reader's language (and, in another language, "The Terms are
 in English; this summary is in your language"), then a required, unticked
 checkbox, "I have read the main points above and accept the Terms of use
-and Privacy notice", whose label links both pages. The browser won't submit
-the form until it is ticked. With the box at body size the sign-up form is taller
-than a window, so it is the one sign-in page that scrolls (to the end of the
-form and no further; `auth-pages.spec.ts`).
+and Privacy notice", whose label links both pages (in the link colour and
+underlined, so they don't read as the label's text; WCAG 1.4.1). The browser won't submit
+the form until it is ticked. The points sit in their own scroll box under the
+box's heading, with **Read the full terms** beside it (issue #162;
+`TermsSummary` `contained`): on a window 901 px wide or more the sign-up card
+(`AuthCard` `fit`) is a column the window's height, and the box gives up
+height until the form fits, so the page doesn't scroll at 1440×900 (in
+English and Afrikaans, a dead invitation's warning included; at 1280×800 in
+English) and the box, the tick and the button are on screen together. It
+shows the whole list whenever the window has room, and never less than its
+heading and about three lines; below that the page scrolls after all. On a
+phone the page scrolls and the box is at most 12rem. While the points overflow
+the box is a focusable group named by its heading (the scroll-region watcher,
+`lib/a11y/scrollRegions.ts`), so Tab reaches it and the arrow keys scroll it,
+and a fade at its foot says there is more below (`auth-pages.spec.ts`). The
+sign-in pages' space above the title is 4vh and 1.5rem (was 6vh and 2rem) to
+make that room; the title still sits in the same place on every one of them.
 
 **Re-acceptance notice.** When the terms change (`LEGAL_VERSION`), a
 signed-in account whose `termsCurrent` is false (it accepted an older
@@ -343,13 +356,14 @@ fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
-The tabs are grouped into three sections, in this order: **Build the
-model** (Network, Crops & demand, Transfers, Data, Settings & calibration),
-**Review** (Project, Applications, History) and, at the bottom,
-**Outcomes** (Summary, River & reserve, Hydrological units, Runs & results, Dams,
-Compare runs, Scenarios, Allocations). Issue #17's option A put Outcomes
-first; the operator moved it last on 2026-09-27. The Summary is still the
-tab a project opens on. The sections are
+The tabs are grouped into three sections, in this order: **Outcomes**
+(Summary, River & reserve, Hydrological units, Runs & results, Dams,
+Compare runs, Scenarios, Allocations), **Build the model** (Network, Crops &
+demand, Transfers, Data, Settings & calibration) and **Review** (Project,
+Applications, History). Outcomes leads because the Summary is the tab a
+project opens on (issue #17's option A; moved last on 2026-09-27 and back to
+the top by issue #162), and Help's "Getting around a project" names them in
+the same order (`tour.test.ts` fails if the two part). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
@@ -925,8 +939,8 @@ it scrolls, and isn't fitted to the window.
   a focused tile gets an outline.
 - **Import record** (`project/ImportReportPanel.svelte`, 017_project_import),
   under Project details, only for a project imported through the import dialog
-  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
-  shows nothing). "Imported from the b023 workbook *file* on *date time* by
+  (it fetches `GET /projects/:id/import-report`; `{ report: null }` shows
+  nothing, and no request fails for a project that wasn't imported). "Imported from the b023 workbook *file* on *date time* by
   *name*.", the importer and web build, then the review's two lists, shared
   with it (`import/ImportReportLists.svelte`): **Importer notes** and the
   **Unmapped report** (a workbook's only), each with its count sentence and
