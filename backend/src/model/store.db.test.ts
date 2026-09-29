@@ -148,7 +148,7 @@ describe('model store', () => {
 			// Demand objects (engine 1.7.0, 088) on the farm (a unit), out of name order on purpose: one monthly, one per unit.
 			demandObjects: [
 				{ id: crypto.randomUUID(), nodeId: farm.id, name: 'Village', category: 'domestic', sizing: 'perUnit', monthlyM3Day: null, count: 1200, litresPerUnitDay: 90, lossPct: 0.2, monthlyFactor: [1, 1, 2.5, 2.5, 1, 1, 1, 1, 1, 1, 1, 0.5], returnPct: 0.35, priority: 'first', destination: 'internal', enabled: true,
-					// A schedule (engine 1.17.0, 100), in its order: weekends at half, Easter at a peak.
+					// A schedule (engine 1.17.0, 105), in its order: weekends at half, Easter at a peak.
 					schedule: [
 						{ label: 'Weekends', span: 'always', from: null, to: null, easterFrom: null, easterTo: null, weekdays: [6, 7], factor: 0.5 },
 						{ label: 'Easter', span: 'easter', from: null, to: null, easterFrom: -2, easterTo: 1, weekdays: null, factor: 1.8 },
@@ -234,7 +234,7 @@ describe('model store', () => {
 		expect((cleared.settings as { effectiveRainFractionMonthly: unknown }).effectiveRainFractionMonthly).toBeNull();
 	});
 
-	it('stores a demand object’s schedule (engine 1.17.0, 100): an empty one as none, a bad window refused', async () => {
+	it('stores a demand object’s schedule (engine 1.17.0, 105): an empty one as none, a bad window refused', async () => {
 		const u = await signUp('Schedule');
 		const projectId = await newProject(u, 'Demand schedule');
 		const outlet = node('Outlet', null);
