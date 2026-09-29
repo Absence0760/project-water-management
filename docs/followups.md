@@ -68,7 +68,18 @@ The checklist for these is issue #62; the history scrub is #63.
       raised, and `-1` (unreserved) is now refused by the variables'
       validation. In af-south-1 request at least the sum of the reservations
       + 10 (33 at the defaults; ask for 1000) and wait for the grant:
-      infra/README.md § Operator steps, step 3.
+      infra/README.md § Operator steps, step 3. Then run
+      `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
+      state bucket and sops key, the SES endpoint service, the RDS class) and
+      plan only once it passes.
+- [ ] **After the first apply and first release, run
+      `infra/scripts/postapply-check.sh` (#126, 2026-09-29)** and clear
+      every FAIL: unconfirmed alert subscriptions, the RDS event
+      subscription, the ECR policy, the site's 404s and bucket listing, the
+      Function URL's 403 (infra/README.md § Operator steps, step 8). At the
+      first deploy, before client data, prove RDS events reach the alerts
+      topic with the reboot and `--rds-event-test` (step 10c): the topic
+      policy's `aws:SourceArn` condition can't be proven by a plan.
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
