@@ -1339,7 +1339,7 @@ describe('runModel — input data quality', () => {
 		const nat = () => ({ naturalFlowM3Day: new Array(days).fill(0) });
 		const byDefault = runModelWith(i, nat);
 		expect(dq(byDefault)).toMatchObject({ minRatio: 2 / 3, maxRatio: 1.5, minDays: 90, flaggedYears: [] });
-		i.settings.dataQuality = { agreementMinRatio: 0.9, agreementMaxRatio: 1.1, agreementMinDays: 60 };
+		i.settings.dataQuality = { ...defaultProjectSettings().dataQuality, agreementMinRatio: 0.9, agreementMaxRatio: 1.1, agreementMinDays: 60 };
 		const strict = runModelWith(i, nat);
 		expect(dq(strict)).toMatchObject({ minRatio: 0.9, maxRatio: 1.1, minDays: 60, flaggedYears: [2019] });
 		expect(strict.summary.warnings.some((w) => /Observed flow records disagree.*expected 90–110 %/.test(w))).toBe(true);
