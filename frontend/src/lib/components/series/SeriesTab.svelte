@@ -8,10 +8,11 @@
 	// count as the sidebar's badge), Preview all data and Add data. The table
 	// lists the series behind first (series/freshness.ts `freshnessOrder`,
 	// the badge's own rule), then those a run reads, then the rest; picking a
-	// row charts it (`series=<id>`, so Back returns to the one before). On a
-	// big enough window the table and the chart are exactly the height left
-	// (the Dams page's measure): the table scrolls inside its box and the
-	// chart fills the rest. The checks and the reference follow below.
+	// row charts it (`series=<id>`, so Back returns to the one before). The
+	// page flows in the window's one scroll: the first few rows show, the rest
+	// behind "Show all N series" (series/fold.ts; the charted row always
+	// shows), and nothing scrolls inside itself. The chart follows the table,
+	// and a pick brings it into view. The checks and the reference follow.
 	// Uploading is the header's Add data (series/AddDataDialog.svelte): the
 	// page charts what it uploaded (`series=`), and the empty state's button
 	// opens the same dialog (`onadddata`).
@@ -67,6 +68,7 @@
 	import { zeroRainShading } from './zeroRain';
 	import { flowFillShading } from './flowFill';
 	import { dataAnchor, dataNavGroups, retiredDataAnchor } from './sections';
+	import { foldRows } from './fold';
 	import SectionNav from '$lib/components/common/SectionNav.svelte';
 	import { holdAnchor } from '$lib/help/anchor';
 
@@ -157,12 +159,22 @@
 		if ((e.target as Element).closest('button, a, input, select, summary, [role="menu"]')) return;
 		choose(id);
 	}
-	/** Chart a series: a URL change, so it can be shared and Back returns; stacked, the chart comes into view. */
+	/** Chart a series: a URL change, so it can be shared and Back returns; the chart, under the table, comes into view. */
 	function choose(id: string, replaceState = false) {
 		if (id === selectedId && seriesParam === id) return;
 		void goto(withParam(page.url, 'series', id), { noScroll: true, keepFocus: true, replaceState }).then(() => {
-			if (!fit && !replaceState) chartEl?.scrollIntoView({ block: 'nearest' });
+			if (!replaceState) showChart();
 		});
+	}
+	/** Scroll the chart just into view (its foot to the window's, less the save bar) unless it already is. */
+	function showChart() {
+		const el = chartEl;
+		if (!el) return;
+		const r = el.getBoundingClientRect();
+		const dock = parseFloat(getComputedStyle(el).getPropertyValue('--dock-h')) || 0;
+		if (r.top >= 0 && r.bottom <= innerHeight - dock) return;
+		const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+		el.scrollIntoView({ block: r.height > innerHeight - dock ? 'start' : 'nearest', behavior: smooth ? 'smooth' : 'auto' });
 	}
 	let flowLog = $state(false);
 
@@ -404,46 +416,14 @@
 		behindAge.size ? `${behindAge.size} behind (more than ${STALE_DAYS} days old)` : ''
 	);
 
-	// --- the table and the chart fit the window on a big enough page (the Dams page's measure) ---
+	// --- the fold: the first few rows in that order (and the charted one), the rest behind "Show all N series" ---
 	let pageW = $state(0);
-	let innerH = $state(0);
-	// Below ~720 px high the table would get only a row or two; the page scrolls as before instead.
-	const fit = $derived(pageW >= 720 && innerH >= 720 && list.length > 0);
 	let chartEl: HTMLElement | undefined = $state();
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-	// Filling: the plot gets what the slot leaves after the chart's own head, legend and caption.
-	const FIXED_H = 320;
-	const MIN_H = 150;
-	let slot: HTMLDivElement | undefined = $state();
-	let fig: HTMLDivElement | undefined = $state();
-	let fillH = $state(FIXED_H);
-	$effect(() => {
-		if (!fit || !slot || !fig) return;
-		const s = slot;
-		const f = fig;
-		const measure = () => {
-			const wrap = f.querySelector<HTMLElement>('.u-wrap');
-			if (!wrap) return;
-			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
-			if (Math.abs(target - fillH) > 2) fillH = target;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(s);
-		ro.observe(f);
-		return () => ro.disconnect();
-	});
-	const chartH = $derived(fit ? fillH : FIXED_H);
+	let open = $state(false);
+	// Six rows and the chart's head sit on a 1440 × 960 first screen; below 640 px each row is a tall card, so four.
+	const cap = $derived(pageW > 0 && pageW <= 640 ? 4 : 6);
+	const fold = $derived(foldRows(rows, selectedId, open, cap));
+	const CHART_H = 320;
 
 	// The section header (workspace/SectionHeader) carries the title and the count; the tab adds Preview all data.
 	$effect(() => fillHeader({ actions: headerActions }));
@@ -492,8 +472,6 @@
 	});
 </script>
 
-<svelte:window bind:innerHeight={innerH} />
-
 {#snippet headerActions()}
 	{#if list.length}
 		<button type="button" class="btn" onclick={openPreviewAll} onpointerenter={warmPreview} onfocus={warmPreview}>Preview all data</button>
@@ -521,7 +499,6 @@
 {#if list.length}<SectionNav groups={navGroups} label="Data sections" groupNames />{/if}
 
 <div class="data-page" bind:clientWidth={pageW}>
-<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 <section class="panel list-panel" id="data-series" aria-labelledby="ser-h">
 	<div class="panel-head">
 		<h2 id="ser-h">Input time series</h2>
@@ -552,7 +529,7 @@
 		     rows and cells stop being display: table-*. -->
 		<div class="table-wrap">
 			<!-- svelte-ignore a11y_no_redundant_roles -->
-			<table class="data series" role="table">
+			<table class="data series" id="series-rows" role="table">
 				<thead role="rowgroup">
 					<tr role="row">
 						<th scope="col" role="columnheader">Series</th>
@@ -565,7 +542,7 @@
 					</tr>
 				</thead>
 				<tbody role="rowgroup">
-					{#each rows as s (s.id)}
+					{#each fold.shown as s (s.id)}
 						{@const st = stats[s.id]}
 						{@const end = endDate(s)}
 						{@const age = daysBetween(st?.lastValueDate ?? end, today)}
@@ -679,6 +656,11 @@
 				</tbody>
 			</table>
 		</div>
+		{#if open || fold.hidden}
+			<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="series-rows" onclick={() => (open = !open)}>
+				{open ? `Show only the first ${cap} series` : `Show all ${rows.length} series`}
+			</button>
+		{/if}
 		<p class="muted small key">
 			<span class="sw full"></span> complete year <span class="sw part"></span> some days missing <span class="sw none"></span> no data.
 			Rainfall "typical" = mean annual total; flow = mean daily flow. <span class="behind">Behind</span> a series a run reads, more than {STALE_DAYS} days old.
@@ -690,25 +672,21 @@
 	<section class="panel chart-panel" id="data-chart" aria-labelledby="chart-h" bind:this={chartEl}>
 		<h2 id="chart-h" class="visually-hidden">Series chart</h2>
 		{#if values[viewing.id]}
-			<div class="slot" bind:this={slot}>
-				<div bind:this={fig}>
-					<LineChart
-						title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
-						unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
-						height={chartH}
-						series={[
-							{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
-							...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
-						]}
-						logToggle={!isRain(viewing.kind)}
-						bind:log={flowLog}
-						recentDays={3 * 365}
-						recentLabel="Last 3 years"
-						shade={shading?.ranges ?? flowShading?.ranges ?? []}
-						caption={shading?.caption ?? flowShading?.caption ?? undefined}
-					/>
-				</div>
-			</div>
+			<LineChart
+				title="{kindLabel(viewing.kind)}{viewing.name ? ` · ${viewing.name}` : ''}"
+				unit={isRain(viewing.kind) ? 'mm/day' : viewing.unit}
+				height={CHART_H}
+				series={[
+					{ label: viewing.name || kindLabel(viewing.kind), startDate: values[viewing.id]!.startDate, values: values[viewing.id]!.values },
+					...(flowShading?.ranges.length ? [{ label: 'Filled in a run', style: 'points' as const, startDate: flowShading.filled.startDate, values: flowShading.filled.values }] : [])
+				]}
+				logToggle={!isRain(viewing.kind)}
+				bind:log={flowLog}
+				recentDays={3 * 365}
+				recentLabel="Last 3 years"
+				shade={shading?.ranges ?? flowShading?.ranges ?? []}
+				caption={shading?.caption ?? flowShading?.caption ?? undefined}
+			/>
 		{:else}
 			<div class="chart-ph" role="status">Loading series…</div>
 		{/if}
@@ -735,7 +713,6 @@
 		</div>
 	</section>
 {/if}
-</div>
 </div>
 
 {#if agreement}
@@ -917,42 +894,13 @@
 	.data-page {
 		container: data-page / inline-size;
 	}
-	.first {
-		display: flex;
-		flex-direction: column;
-	}
-	/* Big enough: the table and the chart are the height left in the window (less the save bar); the table's rows
-	   scroll inside its box, the chart takes the rest. */
-	.first.fit {
-		height: max(540px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		gap: 1rem;
-		margin-bottom: 1rem;
-	}
-	.fit > .panel {
-		margin: 0;
-	}
-	.fit .list-panel {
-		flex: 0 1 auto;
-		min-height: 11rem;
-		max-height: 55%;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .list-panel :global(.table-wrap) {
-		flex: 1 1 auto;
-		min-height: 0;
+	/* The page is the one scroll: the table grows with its rows (six until "Show all", the charted one too)
+	   instead of scrolling inside the global 70vh cap; it still scrolls sideways if it must. */
+	.list-panel .table-wrap {
 		max-height: none;
 	}
-	.fit .chart-panel {
-		flex: 1 1 0;
-		min-height: 16rem;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .slot {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
+	.more {
+		margin-top: 0.5rem;
 	}
 	.warn {
 		color: var(--warning);

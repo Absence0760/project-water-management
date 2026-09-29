@@ -1,6 +1,6 @@
 // The Data section (?tab=series, issue #17 option A): the input series freshness first, the series behind (the
-// sidebar badge's count and rule) marked and listed first, the picked series charted (series=<id>), the table and
-// the chart fitting the window, and Add data refreshing the list. Synthetic series only.
+// sidebar badge's count and rule) marked and listed first, the picked series charted (series=<id>), the page flowing in
+// the window's one scroll with a long table folded under "Show all", and Add data refreshing the list. Synthetic series only.
 import { fileURLToPath } from 'node:url';
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
@@ -77,7 +77,15 @@ test('picking a series charts it through the URL: Back returns to the one before
 	await expect(seriesRow(page, 'Gauge R1').getByRole('button', { name: 'View', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('with 30 series at 1440×960 the table and the chart fill the window: the rows scroll in their box, the chart stays in view', async ({ page, owner }) => {
+/** Elements on the Data tab that scroll vertically inside themselves (the page is the one scroll; issue #17, 2026-09-29). */
+const innerScrollers = (page: import('@playwright/test').Page) =>
+	page.locator('.data-page').evaluate((root) =>
+		[root, ...root.querySelectorAll('*')]
+			.filter((e) => /(auto|scroll)/.test(getComputedStyle(e).overflowY) && e.scrollHeight > e.clientHeight + 1)
+			.map((e) => `${e.tagName.toLowerCase()}.${e.className}`)
+	);
+
+test('with 30 series the table shows the first six, the rest under “Show all”; the charted row stays; a pick brings the chart into view; nothing scrolls inside itself', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Data big');
@@ -89,30 +97,59 @@ test('with 30 series at 1440×960 the table and the chart fill the window: the r
 	}
 	await openData(page, project.id);
 	await chartReady(page);
-	await expect(seriesRows(page)).toHaveCount(30);
 
-	// The behind series (5 A-pan) lead the table, and the badge counts the same 5.
-	await expect(page.getByTestId('series-behind')).toHaveCount(5);
+	// The five behind lead, then the observed flow a run reads (the default chart): six rows, the rest folded.
+	await expect(seriesRows(page)).toHaveCount(6);
 	for (let i = 0; i < 5; i++) await expect(seriesRows(page).nth(i).getByTestId('series-behind')).toBeVisible();
+	await expect(seriesRows(page).nth(5)).toHaveClass(/selected/);
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(5 series behind)');
-
-	// The block reaches the window's bottom (less its 1rem margin); the table scrolls inside its box; the chart is in view.
-	const block = page.locator('.first.fit');
-	await expect(block).toHaveCount(1);
-	const box = (await block.boundingBox())!;
-	expect(Math.abs(box.y + box.height - (960 - 16))).toBeLessThanOrEqual(4);
-	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
-	expect(await wrap.evaluate((el) => el.scrollHeight > el.clientHeight + 100)).toBe(true);
-	await expect(seriesChart(page)).toBeInViewport({ ratio: 1 });
+	await expect(page.getByTestId('series-summary')).toContainText('30 series');
+	const more = page.getByRole('button', { name: 'Show all 30 series' });
+	await expect(more).toHaveAttribute('aria-expanded', 'false');
+	await expect(more).toHaveAttribute('aria-controls', 'series-rows');
+	// The page flows: the table grows with its rows, the chart below starts on the first screen, nothing scrolls in a box.
 	await expect(seriesRows(page).first()).toBeInViewport();
+	await expect(seriesChart(page)).toBeInViewport();
+	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 	await expectNoViolations(page);
 
-	// A phone stacks: nothing fitted, no sideways scroll, the rows as cards.
+	// Open: all thirty in place, the page (not the table) growing.
+	await more.click();
+	await expect(seriesRows(page)).toHaveCount(30);
+	const fewer = page.getByRole('button', { name: 'Show only the first 6 series' });
+	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+	expect(await innerScrollers(page)).toEqual([]);
+
+	// Pick one far down: its chart comes into view (the chart is below the table), and it is a history entry.
+	const far = seriesRows(page).nth(20);
+	const name = (await far.locator('.nm').innerText()).replace(/\s*\(.*\)$/, '').trim();
+	await far.locator('.kind').click();
+	await expect(far).toHaveClass(/selected/);
+	await expect(seriesChart(page).getByRole('figure')).toContainText(name);
+	await expect(seriesChart(page)).toBeInViewport({ ratio: 1 });
+
+	// Fold again: the picked row keeps its place after the first six, and a reload of the link shows it too.
+	await fewer.click();
+	await expect(seriesRows(page)).toHaveCount(7);
+	await expect(seriesRows(page).last()).toContainText(name);
+	await page.reload();
+	await expect(seriesRows(page)).toHaveCount(7);
+	await expect(seriesRows(page).last()).toHaveClass(/selected/);
+
+	// A phone: four cards, then the fold (and the picked one); no inner scroll, no sideways scroll.
 	await page.setViewportSize({ width: 390, height: 844 });
-	await expect(block).toHaveCount(0);
+	await expect(seriesRows(page)).toHaveCount(5);
+	await expect(page.getByRole('button', { name: 'Show all 30 series' })).toBeVisible();
+	await chartReady(page);
+	expect(await innerScrollers(page)).toEqual([]);
 	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	const wrap = page.locator('.table-wrap').filter({ has: page.locator('table.series') });
 	expect(await wrap.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+	// A pick on a phone brings the chart, below the cards, into view.
+	await seriesRows(page).nth(1).locator('.kind').click();
+	await expect(seriesRows(page).nth(1)).toHaveClass(/selected/);
+	await expect(seriesChart(page)).toBeInViewport();
 	await expectNoViolations(page);
 });
 
@@ -194,10 +231,15 @@ test('a viewer sees the same freshness, Preview all data, and no Add data or Del
 	await expect(v.getByRole('button', { name: 'Add data' })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: /^Delete/ })).toHaveCount(0);
 	await expect(v.getByLabel('CSV file')).toHaveCount(0);
+	// Five series: all shown, no fold; nothing scrolls inside itself.
+	await expect(seriesRows(v)).toHaveCount(5);
+	await expect(v.getByRole('button', { name: /^Show all/ })).toHaveCount(0);
+	expect(await innerScrollers(v)).toEqual([]);
 	await expectNoViolations(v);
 
 	await v.setViewportSize({ width: 390, height: 844 });
 	await expect(seriesRows(v).first()).toBeVisible();
+	expect(await innerScrollers(v)).toEqual([]);
 	await expectNoViolations(v);
 });
 
@@ -218,7 +260,7 @@ test('with no series the header offers only Add data, the empty state points at 
 	await expect(page.getByTestId('section-context')).toHaveText('No input series yet');
 	await expect(page.getByRole('button', { name: 'Preview all data' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Add data' })).toBeVisible();
-	await expect(page.locator('.first.fit')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: /^Show all/ })).toHaveCount(0);
 	// An upload takes the empty state (and the button) away: the new series is listed and charted, and focus
 	// lands on the series panel's heading rather than falling to the page.
 	await fromEmpty.click();
