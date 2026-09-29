@@ -245,7 +245,7 @@ test('--execute restores, verifies, swaps, moves Terraform state and stops short
 	assert.ok(r.tf.every((c) => c.profile === 'water-management'), 'Terraform runs under the given profile');
 	// Import and plan evaluate the configuration, so they get the runtime
 	// secrets (tf.sh, sops → ephemeral TF_VAR_*); reading state needs none.
-	const RUNTIME = ['TF_VAR_alerts_token_secret', 'TF_VAR_auth_jwt_secret', 'TF_VAR_db_app_password', 'TF_VAR_runtime_secret_version'];
+	const RUNTIME = ['TF_VAR_alerts_token_secret', 'TF_VAR_auth_jwt_secret', 'TF_VAR_cloudfront_private_key', 'TF_VAR_db_app_password', 'TF_VAR_runtime_secret_version'];
 	assert.deepEqual(
 		r.tf.map((c) => [c.args[0], c.tfvars]),
 		r.tf.map((c) => [c.args[0], ['import', 'plan'].includes(c.args[0]) ? RUNTIME : []]),

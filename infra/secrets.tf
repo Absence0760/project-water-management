@@ -9,7 +9,7 @@
 # that key) and hands the values over as TF_VAR_* — no plaintext file is ever
 # written. Key list: infra/prod.sops.yaml.example.
 #
-# Out of state (issue #126): the three variables are ephemeral
+# Out of state (issue #126): the sops variables are ephemeral
 # (variables.tf), and they reach only the runtime secrets' write-only
 # `secret_string_wo` below. Terraform stores neither an ephemeral value nor a
 # write-only one, in state or in a saved plan. (The RDS master password never

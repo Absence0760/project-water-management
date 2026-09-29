@@ -11,6 +11,7 @@ const DEFAULT = {
 	auth_jwt_secret: 'synthetic-jwt-0123456789abcdef0123456789abcdef',
 	db_app_password: 'synthetic0db0password0123456789',
 	alerts_token_secret: 'synthetic0alerts0token0123456789abcdef',
+	cloudfront_private_key: 'synthetic signing key\nsecond line',
 };
 
 const args = process.argv.slice(2);
