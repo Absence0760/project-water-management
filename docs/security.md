@@ -1829,20 +1829,32 @@ the whole report is **untrusted text stored server-side**:
 ### Calibration rules sign-off
 
 Automated calibration's rules (`settings.calibrationRules`, issue #153,
-[model.md §2.10j](./model.md)) are an evidence-integrity control: a fit can
-only be stored under the rules saved before it ran, with the parameters of
-the case they kept (`autoFitRecordError`, a `409`; `importedAutoFitError` on
-import). What the server can't check:
+[model.md §2.10j](./model.md)) are an evidence-integrity control:
 
-- **The scores.** The fit runs in the browser, so a hostile editor could
-  report invented scores. The record keeps the rules, seed, engine version
-  and every fit tried, so anyone can re-run it and compare.
-- **The sign-off.** `signedOff` is a name and a date that any editor may
-  enter. It isn't tied to the hydrologist's account or to a role, so it is
-  self-attested. Changing a rule clears it (server-side), and run comparison
-  lists every sign-off change. A sign-off bound to a named account with its
-  own role is the durable fix, and waits on the client's answer to who signs
-  off (#90, "Automated calibration rules").
+- **The server computes and writes every automated fit.** It fits the saved
+  rules in its own jobs (`backend/src/calibration/`), stores every score, and
+  builds the fit record itself when a fit is applied. A settings save can only
+  carry a stored automated record back unchanged (`autoFitRecordError`, a
+  `409`), so a client can't claim a fit, a score or a set of rules it didn't
+  run. Applying refuses a run whose rules or inputs have changed since
+  (a `409`). The seed and search are rules too, so re-running with other
+  seeds is a rule change with its own revision, never a way to shop for a
+  score. A project file import checks a file's automated record against the
+  file's own rules (`importedAutoFitError`); the file itself is the importer's.
+- **The sign-off is bound to the account that gave it.** The hydrologist
+  types their name as a signature (as on a run's sign-off); the server dates
+  it and records the signed-in account as the actor of a
+  `calibration_rules.signed_off` audit event (a withdrawal:
+  `calibration_rules.sign_off_withdrawn`). No account id is copied into the
+  settings. Changing a rule clears the sign-off server-side, and run
+  comparison lists every sign-off change.
+- **Still open:** any editor may sign off; whether only a named role (the
+  hydrologist's) should is the client's call (#90, "Automated calibration
+  rules").
+- **Account deletion.** The typed signature stays with the rules it signed
+  (the settings, their history, run snapshots and the calibration rows), as a
+  run's typed signature does; the account is cleared from the audit event
+  (`auth/personal-data.security.db.test.ts` RETAINED_AFTER_DELETION).
 
 ### Allocations: POPIA minimisation (038_allocations.sql)
 
@@ -2347,8 +2359,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- The calibration rules' sign-off is self-attested, and automated fits'
-  scores are client-reported ([§ Calibration rules sign-off](#calibration-rules-sign-off)).
+- Any editor may sign off the calibration rules; restricting it to a role
+  waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
 - POPIA: no privacy notice and no self-service account deletion yet
   (Phase 7); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).

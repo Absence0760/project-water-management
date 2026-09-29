@@ -5506,10 +5506,11 @@ of calibrate → review → refit: which periods to leave out, which forcing,
 which fit to keep are chosen after the scores are seen, and choosing by the
 score overfits and is easy to game. `settings.calibrationRules`
 (`packages/engine/src/calibrate/rulesSettings.ts`) makes those choices in
-advance, and `autoCalibrate` (`calibrate/auto.ts`) applies them end to end, so
-no one steers the result. An assessor then challenges the rules, not the fit.
-Settings → Fit automatically → *Calibration rules* and *Automated
-calibration*; it runs in the browser's calibration worker, like a fit.
+advance, and the server applies them end to end (`planAutoCalibration`,
+`runAutoCase` and `finishAutoCalibration` in `calibrate/auto.ts`, run by
+`backend/src/calibration/`), so no one steers the result. An assessor then
+challenges the rules, not the fit. Settings → Fit automatically →
+*Calibration rules* and *Automated calibration*.
 
 The rule set:
 
@@ -5543,7 +5544,14 @@ The rule set:
    the rules run: otherwise the same rules could be re-run with seed after
    seed until one scored well. Another seed is a rule change, with its own
    revision.
-6. **Filters** a kept fit must pass (both on by default). *MAR inside the
+6. **After** (`after`). `onNewData` (default `off`): when new observed or
+   rain data arrives, run the rules and keep the report (`report`), or also
+   apply the kept fit (`apply`), which the server does only while the rules
+   are signed off (otherwise it reports). `ensemble` (default on): applying a
+   kept fit also runs the model with it and the uncertainty ensemble around
+   it (§2.10e, CR-1: the EWR range of the parameter sets that fit nearly as
+   well), centred on the new fit record's bounds and objective.
+7. **Filters** a kept fit must pass (both on by default). *MAR inside the
    WR2012 band*: the simulated natural MAR with the fitted parameters (on the
    basis the WR2012 check uses, §2.10c) inside the calibration penalty's band
    when both ends are set, else within the check's query threshold (the flag
@@ -5555,22 +5563,45 @@ The rule set:
 If no fit passes, **none is kept**, and each fit lists why (`selectCase` in
 `calibrate/rules.ts`). The rules, not the result, are then what to change.
 
-**Fixed before the result.** The run reads the rules from the **saved**
-settings only. The page won't start while the form has unsaved rule edits,
-and the server refuses (409) a fit record whose rules aren't the saved ones
-(another revision or content), or one saved in the same request as a rule
-change (`autoFitRecordError`, `backend/src/projects/settings.ts`), or one whose
-parameters aren't those of the case it says the rules kept. A project file
-import applies the same check against the file's own rules
-(`importedAutoFitError`). The fit itself runs in the browser, so the scores
-it reports can't be re-checked on the server: what the server holds fixed is
-the rules they were chosen by, and the record keeps every fit tried, so an
-assessor can reproduce the report from the rules, the seed and the engine
-version. `revision`
-is the server's: it is 1 for a project's first rule set, and a save that
-changes a rule adds 1 and clears `signedOff` (the sign-off covered the rules
-as they were), unless the same save records a new sign-off. A save that only
-signs off keeps the revision.
+**Run by the server.** *Run the calibration rules* (`POST
+/projects/:id/auto-calibrations`) plans a run from the **saved** settings
+only: the water years the rules leave out and the cases in order, stored in
+an `auto_calibration` row (108_auto_calibration.sql) with the rules, their
+revision and a SHA-256 of the model input. Each case is then one
+`auto_calibration` background job, which fits it, stores it and queues the
+next, so no job runs longer than one fit; the last picks the fit to keep. A
+case job that finds the input changed since the plan fails the run, saying
+so, since fits on other data wouldn't compare. Before anything is queued, one
+case's time is estimated from a model run × the model runs a case makes, and
+rules estimated past 4 minutes a fit (the job worker's limit, with room) are
+refused, asking for a smaller search. The page won't start while the form
+has unsaved rule edits. Every score is the server's own.
+
+**Applied by the server.** *Apply and save the kept fit* (`POST
+…/auto-calibrations/:cid/apply`) writes the kept case's parameters (and, for
+a preset, that pan coefficient and its source) with a fit record the server
+builds from the stored case, as a settings revision, then runs the model and
+(`after.ensemble`) queues the ensemble around the fit on that run, which a
+`uncertainty` job computes on the server. It is refused (409) when nothing
+was kept, it was applied already, the rules have changed since (revision,
+content or sign-off), or the project's inputs no longer hash as they did.
+A client can't write an automated fit record at all: a settings save may
+only carry the stored one back unchanged (`autoFitRecordError`,
+`backend/src/projects/settings.ts`). A project file import checks a file's
+automated record against the file's own rules (`importedAutoFitError`).
+`revision` is the server's: it is 1 for a project's first rule set, and a
+save that changes a rule adds 1 and clears `signedOff` (the sign-off covered
+the rules as they were), unless the same save records a new sign-off. A
+save that only signs off keeps the revision.
+
+**New data.** With `after.onNewData` on, new days of any series but the
+forecast (a person's upload or merge, a feed, an API key's ingest) queue one
+pending run of the rules per project (`app_enqueue_auto_calibration`),
+debounced like the automatic re-run (settings.autoRun's debounce, at most 2
+hours after it was first queued), as the same acting user. Its report waits
+for an editor, unless the rules say `apply` and are signed off: then the job
+applies the kept fit, runs the model (an `auto` run) and queues the ensemble,
+as above.
 
 **Record.** Applying the kept fit writes its parameters (and, for a preset,
 that pan coefficient and its source), and a normal fit record (§2.10b) with
@@ -5588,11 +5619,12 @@ like any other setting (`calibrationRulesChanges`).
 them off (#90, "Automated calibration rules": the flag threshold, the
 selection score and the filters). Until then the page, the fit record and the
 caveats say a fit they keep is **not evidence**. Record the sign-off in
-Settings once it's given. The sign-off is a name and date an editor enters,
-not tied to the hydrologist's own account (docs/security.md § Calibration
-rules sign-off). Not built yet: re-running the rules on their own
-when new observed or rain data arrives, which is the background-jobs step
-(docs/followups.md § Calibration research).
+Settings once it's given: the hydrologist types their name, as a signature
+(like a run's sign-off, api.md § Sign-offs), and the server dates it and records their
+account in the project's history (`calibration_rules.signed_off`, and
+`calibration_rules.sign_off_withdrawn`), so who signed off is the account
+that did, not a name anyone could type (docs/security.md § Calibration rules
+sign-off).
 
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 

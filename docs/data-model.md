@@ -635,6 +635,9 @@ the result change?", and put back any earlier version.
   author's name and id (048) and whether it was their own, never the body),
   `signoff.created` (036: the sign-off's id, run, signer's typed name and
   registration, statement version and hash),
+  `calibration_rules.signed_off` / `calibration_rules.sign_off_withdrawn`
+  (issue #153: the rules' revision and, when signed, the signer's typed name;
+  the actor is the signing account),
   `allocation.created/changed/deleted/imported/import_deleted` (038:
   registration numbers, file name and hash, counts; never a holder's name),
   `api_key.created/revoked` (039: key id, name, prefix, scopes, allowed
@@ -1959,6 +1962,40 @@ No job table of its own: `job` holds status, progress and errors.
   id answers as an unknown one), and the job re-checks it as its acting user
   (`JobHandler.alsoRole`), so it dies once they lose the role or the dam
   (`yield/contributor.db.test.ts`).
+
+### Automated calibrations (108_auto_calibration.sql)
+
+A run of the project's calibration rules, fitted by the server one case per
+`auto_calibration` job (issue #153, [model.md §2.10j](./model.md),
+[api.md § Automated calibration](./api.md#automated-calibration)). Written
+`running` with everything its result depends on, fitted and completed once by
+whoever it runs as, and applied at most once by an editor; the API keeps the
+newest 20 per project (never an applied one).
+
+`auto_calibration`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id`, `job_id` | The project; the job fitting the next case (SET NULL when purged) |
+| `trigger` | `manual` (an editor asked) or `new_data` (queued by new data, `after.onNewData`) |
+| `status` | `running`, `complete` or `failed` (`error` says why: the data or settings changed between cases) |
+| `rules`, `rules_revision` | settings.calibrationRules as they stood, and their revision (fixed at insert) |
+| `input_sha256` | SHA-256 of the model input the plan was made on; every case job refuses another |
+| `plan` | The engine's `AutoCalibrationPlan`: the water years left out by rule and the cases in order (fixed at insert) |
+| `cases` | The fitted cases (`AutoCase`, with their fit reports), appended one per job, at most 8, never rewritten |
+| `report`, `chosen` | On completion: the notes, each case's verdict (`eligible`, `reasons`) and the kept case's index (or null) |
+| `created_by`, `created_at`, `completed_at`, `engine_version` | Stamped by the guard trigger |
+| `applied_by`, `applied_at`, `applied_run_id`, `uncertainty_id` | Applying the kept fit: who, when, the run it made and the ensemble started on it; set once |
+
+RLS: a viewer reads, an editor writes. The guard (`auto_calibration_update`)
+lets only the user it runs as fit it, keeps the cases append-only, fixes a
+complete run but for its one application, and lets a foreign key clear a link
+(an account going, the job purge, a run trimmed) and nothing else. water_app
+may update only the outcome and application columns; `created_by`,
+`applied_by` and `completed_at` are the trigger's.
+`app_enqueue_auto_calibration(project)` (SECURITY DEFINER, as
+`app_enqueue_rerun`) queues one pending run of the rules per project when new
+data arrives and `calibrationRules.after.onNewData` asks for it.
 
 ### Scenario sweeps (062_scenario_sweeps.sql)
 
