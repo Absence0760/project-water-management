@@ -9,6 +9,7 @@ import { addDataDialog, csv, dropCsv } from '../support/addData.ts';
 import { addMember, createProject, putSeries, syntheticRain } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import type { Page } from '@playwright/test';
+import { answerConfirm } from '../support/confirm.ts';
 
 const RAIN = { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(30) };
 const NEW_DAYS = 'date,value\n2021-10-31,4\n2021-11-01,1\n';
@@ -81,18 +82,13 @@ test('the close button closes at once with nothing read, and asks before discard
 	await addButton(page).click();
 	await dialog.getByLabel('CSV file').setInputFiles(csv('rain.csv', NEW_DAYS));
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
-	let asked = '';
-	page.once('dialog', (d) => {
-		asked = d.message();
-		void d.dismiss();
-	});
 	await closeButton.click();
-	await expect.poll(() => asked).toBe("Discard the file you haven't uploaded yet?");
+	await answerConfirm(page, false, 'Discard the file?');
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
 
-	page.once('dialog', (d) => void d.accept());
 	await closeButton.click();
+	await answerConfirm(page, true);
 	await expect(dialog).toBeHidden();
 	// Opened again, the form starts empty.
 	await addButton(page).click();
@@ -133,13 +129,8 @@ test('an upload that changes stored days asks in the dialog; Back returns to the
 	await expect(dialog.getByRole('button', { name: 'Upload and merge' })).toBeEnabled();
 	// The button that was Back is Cancel again and keeps the focus; Cancel asks before discarding the file.
 	await expect(dialog.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
-	let asked = '';
-	page.once('dialog', (d) => {
-		asked = d.message();
-		void d.dismiss();
-	});
 	await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-	await expect.poll(() => asked).toBe("Discard the file you haven't uploaded yet?");
+	await answerConfirm(page, false, 'Discard the file?');
 	await expect(dialog).toBeVisible();
 });
 

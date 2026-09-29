@@ -147,7 +147,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description and time zone, with **Save details**), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
+						text: '**Project**, under *Review*, is what the project is and who can open it: the model’s headline facts (hydrological units, catchment area, dam capacity, irrigated area, transfers, time series, runs and the outflow gauge, each a link to where it is edited), **Project details** (name, description, time zone and WUA name, saved with **Save changes** at the foot of the page, as model edits are), the **Import record** of an imported project, **Recent notes**, and on the right the **Team**, **Members**, **Farmers** and, for owners, **Share links**. **Download** in its header takes a copy of the project. The Summary links there under **Model facts, details, team and sharing**.'
 					},
 					{
 						type: 'p',

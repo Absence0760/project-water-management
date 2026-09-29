@@ -10,6 +10,7 @@ import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 test('a farm note shown to the farm reaches its farmer; a team note never does', async ({ page, owner, signIn }) => {
 	void owner;
@@ -90,8 +91,8 @@ test('a settings group and a run take notes, and the author edits and deletes th
 	await runDialog.getByRole('button', { name: 'Add note' }).click();
 	const runItem = runDialog.getByRole('list', { name: 'Notes' }).getByRole('listitem');
 	await expect(runItem).toContainText('Checked against the weir log');
-	page.once('dialog', (d) => d.accept());
 	await runItem.getByRole('button', { name: /^Delete/ }).click();
+	await answerConfirm(page, true, 'Delete this note?');
 	await expect(runDialog).toContainText('No notes yet.');
 	await runDialog.getByRole('button', { name: 'Close', exact: true }).click();
 	await expect(page.getByRole('button', { name: 'Add a note on this run' })).toBeVisible();

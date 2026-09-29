@@ -13,6 +13,7 @@
 	// (the Dams page's measure): the table scrolls inside its box and the
 	// chart fills the rest. The checks, the upload form and the reference
 	// follow below.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -322,7 +323,13 @@
 	};
 
 	async function remove(s: SeriesMeta) {
-		if (!confirm(`Delete the series "${s.name || kindLabel(s.kind)}"? Runs already stored are not affected.`)) return;
+		const ok = await confirmDialog({
+			title: `Delete the series “${s.name || kindLabel(s.kind)}”?`,
+			message: 'Runs already stored are not affected.',
+			confirmLabel: 'Delete series',
+			danger: true
+		});
+		if (!ok) return;
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);

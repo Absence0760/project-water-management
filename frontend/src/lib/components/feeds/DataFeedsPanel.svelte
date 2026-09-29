@@ -6,6 +6,7 @@
 	Part of the Settings tab's chunk. Helpers in ./feeds.ts.
 -->
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, tick } from 'svelte';
 	import { api } from '$lib/api';
 	import { fmtNum } from '$lib/format/number';
@@ -188,12 +189,24 @@
 
 	async function act(f: FeedMeta, what: 'run' | 'toggle' | 'remove' | 'replace' | 'withdraw') {
 		if (busy) return;
-		if (what === 'remove' && !confirm(`Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`)) return;
+		if (
+			what === 'remove' &&
+			!(await confirmDialog({
+				title: 'Remove this feed?',
+				message: `Remove the ${sourceLabel(f)} feed into “${describeTarget(f)}”? The series keeps the days it already has.`,
+				confirmLabel: 'Remove feed',
+				danger: true
+			}))
+		)
+			return;
 		if (
 			what === 'replace' &&
-			!confirm(
-				`Replace “${describeTarget(f)}” with${describeWrites(f).slice(2)}? The feed’s next fetch replaces the whole series from its start date; the old values stay in the History tab, where they can be restored. The CHIRPS factors change with it, so refit afterwards.`
-			)
+			!(await confirmDialog({
+				title: `Replace “${describeTarget(f)}”?`,
+				message: `Replace “${describeTarget(f)}” with${describeWrites(f).slice(2)}? The feed’s next fetch replaces the whole series from its start date; the old values stay in the History tab, where they can be restored. The CHIRPS factors change with it, so refit afterwards.`,
+				confirmLabel: 'Replace series',
+				danger: true
+			}))
 		)
 			return;
 		busy = f.id;

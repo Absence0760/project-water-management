@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { compareTabHref } from '$lib/components/compare/picker';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -338,7 +339,7 @@
 	}
 
 	async function remove(r: RunMeta) {
-		if (!confirm(`Delete run "${r.label || fmtDate(r.createdAt, true)}"?`)) return;
+		if (!(await confirmDialog({ title: `Delete run “${r.label || fmtDate(r.createdAt, true)}”?`, confirmLabel: 'Delete run', danger: true }))) return;
 		actionError = null;
 		try {
 			await api.runs.remove(projectId, r.id);

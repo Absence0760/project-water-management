@@ -142,11 +142,15 @@ that needs them.
   chunk that is really gone can't cause a reload loop. With unsaved changes
   the message says so ("save them first, or the browser will ask before the
   reload discards them"): the reload is a plain `location.reload()`, which
-  meets the page's existing `beforeunload` guard, so nothing is dropped
-  without the browser's prompt. A page reports unsaved changes to it with
+  meets the leave guard's reload prompt (`lib/nav/leaveGuard.ts`: the
+  browser's own box, the one place it shows), so nothing is dropped
+  without it. A page reports unsaved changes to it with
   `provideUnsaved()` (`common/chunkFailed.ts`, a Svelte context; nested
-  providers combine): the workspace page gives its model editor's `dirty`,
-  a scenario's override editor its own. Users: `Lazy`, the project list's
+  providers combine): the workspace page gives its model editor's and
+  project details' `dirty`, a scenario's override editor its own. (In-app
+  navigation away from unsaved work is the leave guard's, registered
+  separately with `guardUnsaved`, `lib/nav/unsaved.ts`; docs/ui.md
+  § Leaving with unsaved changes.) Users: `Lazy`, the project list's
   import dialog, the workbook reader in that dialog, Overview's alert email
   settings, the printable report's human-impact tables (it waits for them
   before it is ready), the run's workbook download (the alert sits below

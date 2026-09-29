@@ -26,6 +26,9 @@
 	import ScenarioCompare from './ScenarioCompare.svelte';
 	import { nameIds, namesOf, opItems, snapshotInput, stepInputs } from './ops';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { leavesScenario } from './leaves';
 
 	// The Yield panel (WP-3.6) and its chart load only once a dam is picked.
 	const loadYield = () => import('$lib/components/yield/YieldPanel.svelte');
@@ -202,6 +205,12 @@
 		description = s.description;
 		renaming = true;
 	}
+	// A rename typed but not saved: leaving the scenario asks first (lib/nav/leaveGuard.ts).
+	guardUnsaved({
+		dirty: () => renaming && (name.trim() !== s.name || description.trim() !== s.description),
+		what: () => `a new name for “${s.name}” not yet saved`,
+		leaves: leavesScenario
+	});
 	async function saveName(e: SubmitEvent) {
 		e.preventDefault();
 		if (await patch({ name: name.trim(), description: description.trim() })) renaming = false;
@@ -220,7 +229,15 @@
 	const MOVE_LABEL: Record<ScenarioStatus, string> = { draft: 'Back to draft', submitted: 'Submit', withdrawn: 'Withdraw', decided: 'Mark decided' };
 	const STATUS_LABEL: Record<ScenarioStatus, string> = { draft: 'Draft', submitted: 'Submitted', withdrawn: 'Withdrawn', decided: 'Decided' };
 	async function move(to: ScenarioStatus) {
-		if (to === 'submitted' && !confirm(`Submit “${s.name}”? Its changes, base run and nodes are then frozen.`)) return;
+		if (
+			to === 'submitted' &&
+			!(await confirmDialog({
+				title: `Submit “${s.name}”?`,
+				message: 'Its changes, base run and nodes are then frozen.',
+				confirmLabel: 'Submit'
+			}))
+		)
+			return;
 		if (await patch({ status: to })) note = `Now ${STATUS_LABEL[to].toLowerCase()}.`;
 	}
 
@@ -283,7 +300,15 @@
 
 	// --- delete ------------------------------------------------------------------------
 	async function remove() {
-		if (!confirm(`Delete the scenario “${s.name}”? Its runs stay, as ordinary runs.`)) return;
+		if (
+			!(await confirmDialog({
+				title: `Delete the scenario “${s.name}”?`,
+				message: 'Its runs stay, as ordinary runs.',
+				confirmLabel: 'Delete scenario',
+				danger: true
+			}))
+		)
+			return;
 		saving = true;
 		error = null;
 		try {

@@ -12,6 +12,8 @@ import { fact, membersPanel, openProject } from '../support/project.ts';
 
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 const region = (page: Page, name: string) => page.getByRole('region', { name, exact: true });
+/** The page's save bar while only the project details are unsaved. */
+const detailsBar = (page: Page) => page.getByRole('region', { name: 'Unsaved project details' });
 const summaryLink = (page: Page) => page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
 
 test('the page: one title, its context and Download in the header, the facts, details and who has access', async ({ page, owner }) => {
@@ -63,7 +65,7 @@ test('the page: one title, its context and Download in the header, the facts, de
 	await expect(region(page, 'Members')).toHaveCount(0);
 });
 
-test('the Summary links here and Back returns; details save from here', async ({ page, owner }) => {
+test('the Summary links here and Back returns; details save from the page’s save bar', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Project from the Summary');
 	await page.goto(`/projects/${project.id}`);
@@ -71,16 +73,28 @@ test('the Summary links here and Back returns; details save from here', async ({
 	await expect(page).toHaveURL(/\?tab=project$/);
 	await expect(page.getByRole('heading', { level: 1, name: 'Project', exact: true })).toBeVisible();
 
+	// The details go through the same sticky bar as the model's edits (issue #162 item 12): no button of their own.
+	await expect(page.getByRole('button', { name: 'Save details' })).toHaveCount(0);
 	const name = page.getByLabel('Name', { exact: true });
 	await name.fill('Project renamed');
-	await page.getByRole('button', { name: 'Save details' }).click();
-	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
+	await expect(detailsBar(page)).toContainText('Unsaved changes to the project details');
+	await detailsBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await expect(detailsBar(page)).toHaveCount(0);
 	await expect(page.getByTestId('project-name')).toHaveText('Project renamed');
+
+	// An empty name can't be saved: the bar says why.
+	await name.fill(' ');
+	await expect(detailsBar(page)).toContainText('The project needs a name.');
+	await expect(detailsBar(page).getByRole('button', { name: 'Save changes' })).toBeDisabled();
+	// Discard puts the saved name back.
+	await detailsBar(page).getByRole('button', { name: 'Discard' }).click();
+	await expect(name).toHaveValue('Project renamed');
+	await expect(detailsBar(page)).toHaveCount(0);
 
 	// The WUA's name, which the farm pages' contact lines use (095_wua_name).
 	await page.getByLabel('WUA name').fill('Summary Valley WUA');
-	await page.getByRole('button', { name: 'Save details' }).click();
-	await expect(region(page, 'Project details').getByRole('status')).toHaveText('Saved.');
+	await detailsBar(page).getByRole('button', { name: 'Save changes' }).click();
+	await expect(detailsBar(page)).toHaveCount(0);
 	await page.reload();
 	await expect(page.getByLabel('WUA name')).toHaveValue('Summary Valley WUA');
 
@@ -129,7 +143,7 @@ test('a viewer sees the page without the model inputs, read-only, with no share 
 	await expect(membersPanel(v).getByRole('rowheader').first()).toBeVisible();
 
 	await expect(v.getByLabel('Name', { exact: true })).not.toBeEditable();
-	await expect(v.getByRole('button', { name: 'Save details' })).toHaveCount(0);
+	await expect(v.getByTestId('details-save-hint')).toHaveCount(0);
 	await expect(v.getByRole('button', { name: 'Invite farmers' })).toHaveCount(0);
 	await expect(region(v, 'Share links')).toHaveCount(0);
 	// Anyone who can open the project can download a copy.

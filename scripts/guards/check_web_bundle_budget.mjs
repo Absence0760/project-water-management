@@ -1243,6 +1243,14 @@
 //             34.1 KB. The split and the two lazy chunks cost ~2 KB of total
 //             (smaller files compress less well). Calibration worker 36 KB,
 //             unchanged. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1166 → 1170 KB (measured 1167 on main @ 58192db8 plus
+//             issue #162 items 11, 12, 13, 21). The app's own confirmation
+//             dialog replacing the browser's confirm() in 24 files (the
+//             ConfirmHost in the root layout, each call's title, detail and
+//             button words), the leave guard (lib/nav: the registry, the
+//             destination names, the one beforeNavigate) and the project
+//             details moved onto the page's save bar. No new dependency.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1253,7 +1261,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1166,
+	totalCodeKb: 1170,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

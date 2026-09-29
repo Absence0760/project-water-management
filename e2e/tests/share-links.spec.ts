@@ -11,6 +11,7 @@ import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const PHONE = { width: 360, height: 740 };
 const words = await siteWords('af');
@@ -117,8 +118,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await expect(row).not.toContainText('Never');
 
 	// Withdraw it: the confirm, then the link is dead for whoever holds it.
-	page.once('dialog', (d) => d.accept());
 	await row.getByRole('button', { name: 'Withdraw Catchment forum' }).click();
+	await answerConfirm(page, true, 'Withdraw the link “Catchment forum”?');
 	await expect(row).toContainText('Withdrawn');
 	await expect(row.getByRole('button', { name: /^Withdraw/ })).toHaveCount(0);
 

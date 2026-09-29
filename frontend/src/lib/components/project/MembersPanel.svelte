@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, roleLabel, ROLES, type Invite, type Member, type ProjectTeam, type Role } from '$lib/api';
@@ -118,10 +119,12 @@
 
 	async function remove(m: Member) {
 		const self = m.userId === currentUserId;
-		const q = self
-			? 'Leave this project? You will lose access unless someone adds you again.'
-			: `Remove ${m.displayName} (${m.email}) from this project?`;
-		if (!confirm(q)) return;
+		const ok = await confirmDialog(
+			self
+				? { title: 'Leave this project?', message: 'You will lose access unless someone adds you again.', confirmLabel: 'Leave project', danger: true }
+				: { title: 'Remove this member?', message: `Remove ${m.displayName} (${m.email}) from this project?`, confirmLabel: 'Remove member', danger: true }
+		);
+		if (!ok) return;
 		busy = m.userId;
 		error = null;
 		try {

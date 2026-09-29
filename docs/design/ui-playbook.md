@@ -461,6 +461,8 @@ section it belongs to, with the example that taught it.
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide`, body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
+| Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
+| Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Grids inside a modal | the existing component unchanged (`CropsTab sections` → `CropGrids`, `NetworkTab only="table"`), never a fork |
 | A small chart in a row or card (sparkline) | `charts/Sparkline.svelte` (the compact pattern, § 3 "Label every chart"; `caption` required) |

@@ -9,6 +9,7 @@
 	// (model/GridModal.svelte, `sections`), scenario override mode all three
 	// (scenarios/OverrideEditor.svelte). The Crops page itself (CropsTab) is
 	// cards and bars over the same editor.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import type { ProjectSettings } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { prefetch } from '$lib/components/common/lazy';
@@ -87,9 +88,18 @@
 		queueMicrotask(() => document.getElementById(`crop-name-${c.id}`)?.focus());
 	}
 
-	function remove(id: string, name: string) {
+	async function remove(id: string, name: string) {
 		const used = editor.model.cropAreas.some((a) => a.cropId === id);
-		if (used && !confirm(`Remove crop "${name}" and its planted areas on every hydrological unit?`)) return;
+		if (
+			used &&
+			!(await confirmDialog({
+				title: `Remove crop “${name}”?`,
+				message: 'Its planted areas on every hydrological unit are removed too.',
+				confirmLabel: 'Remove crop',
+				danger: true
+			}))
+		)
+			return;
 		editor.removeCrop(id);
 	}
 

@@ -11,6 +11,8 @@
 	import { isLandingRoot, isPublicPath, routeAccess, session, STATIC_PATHS, termsGateApplies } from '$lib/auth/session.svelte';
 	import { dropProjectPage, startProjectPage } from '$lib/workspace/firstLoad';
 	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
+	import ConfirmHost from '$lib/components/common/ConfirmHost.svelte';
+	import { installLeaveGuard } from '$lib/nav/leaveGuard';
 	import AppShell from '$lib/components/layout/AppShell.svelte';
 	import { msg, type Msg } from '$lib/i18n/msg';
 
@@ -51,6 +53,9 @@
 	// loaded; otherwise SvelteKit + Vite can render it unstyled for a moment
 	// and a scroll or measurement made then is wrong ($lib/nav/stylesheets).
 	onNavigate(() => stylesheetsReady());
+	// Unsaved work (a page registers it, lib/nav/unsaved.ts) is asked about in the app's
+	// own dialog before a navigation drops it; ConfirmHost below shows every such question.
+	installLeaveGuard();
 	// Wide tables and drawings that scroll sideways take keyboard focus when they overflow.
 	onMount(() => watchScrollRegions(document.body));
 
@@ -230,6 +235,9 @@
 {:else}
 	{@render content()}
 {/if}
+
+<!-- The app's confirmation questions (confirmDialog), on every page. -->
+<ConfirmHost />
 
 <style>
 	/* In the verify-email banner's place, under the header. */

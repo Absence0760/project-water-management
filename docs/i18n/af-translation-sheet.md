@@ -18,7 +18,7 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-20 strings: 20 on the site, 0 in emails, 0 in the glossary.
+21 strings: 21 on the site, 0 in emails, 0 in the glossary.
 
 ## The site (farm pages, sign-in pages, account)
 
@@ -62,6 +62,14 @@ Farm view: the “Your hydrological unit on the river” card. Counts only, neve
 | `1cdbc4c7` | River at {name}: kept its reserve on every one of the {days} to {date}. | Keep: {date}, {days}, {name} |  |
 | `bded7e0c` | River at {name}: below its reserve on **all of the {days} to {date}**. | Keep: {date}, {days}, {name} |  |
 | `921f114d` | River at {name}: below its reserve on **{n} of the {days} to {date}**. | Keep: {date}, {days}, {n}, {name} |  |
+
+### farm.notes
+
+Farm view: the notes card.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `9d3e3253` | Delete this note? |  |  |
 
 ### farm.damPage
 

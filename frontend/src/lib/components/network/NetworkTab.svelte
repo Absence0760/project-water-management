@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -257,7 +258,7 @@
 		else queueMicrotask(() => document.getElementById(`node-name-${n.id}`)?.focus());
 	}
 
-	function remove(id: string, name: string) {
+	async function remove(id: string, name: string) {
 		const refs = editor.model.transfers.filter((t) => t.fromNodeId === id || t.toNodeId === id).length;
 		const areas = editor.model.cropAreas.filter((a) => a.nodeId === id).length;
 		const cover = (editor.model.landCover ?? []).filter((p) => p.nodeId === id).length;
@@ -265,7 +266,7 @@
 		const demandObjects = (editor.model.demandObjects ?? []).filter((o) => o.nodeId === id).length;
 		const isFarm = nodes.find((n) => n.id === id)?.kind === 'farm';
 		const question = removeMessage({ name, isFarm, areas, transfers: refs, cover, boreholes, demandObjects, farmers: farmerCount ? (farmerCount[id] ?? 0) : null });
-		if (question && !confirm(question)) return;
+		if (question && !(await confirmDialog({ title: `Remove “${name}”?`, message: question, confirmLabel: 'Remove', danger: true }))) return;
 		editor.removeNode(id);
 		if (selectedId === id) selectedId = null;
 		if (editParam === id) sheetOpen = false;

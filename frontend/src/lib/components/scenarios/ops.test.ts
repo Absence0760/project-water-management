@@ -1,7 +1,7 @@
 import { applyScenario, blankEwrRuleTable, classifyOp, classifyScenario, type EwrRuleTable, type ModelInput, type Monthly, type ScenarioOp } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { newNode } from '$lib/model/editor.svelte';
-import { OUTLET_SITE, buildOp, checkOp, describeOp, draftSpec, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
+import { OUTLET_SITE, buildOp, checkOp, describeOp, draftSpec, draftStarted, emptyDraft, nameIds, namesOf, opItems, snapshotInput, startTable, statusByOp, stepInputs, type OpDraft } from './ops';
 
 // Synthetic ids (UUID-shaped, as the backend requires) and invented names.
 const G = '00000000-0000-4000-8000-000000000001';
@@ -417,5 +417,14 @@ describe('opItems', () => {
 	it('still lists the ops with no base and no check', () => {
 		const { items } = opItems([raise], null, null, null, namesOf([base().model]));
 		expect(items).toEqual([{ text: 'Upper farm: Dam capacity → 180\u202f000 m³', cls: null, problem: null, notes: [] }]);
+	});
+});
+
+describe('draftStarted', () => {
+	it('a kind alone is not started; a target or a value is', () => {
+		expect(draftStarted(emptyDraft())).toBe(false);
+		expect(draftStarted(emptyDraft('transfer.set'))).toBe(false);
+		expect(draftStarted({ ...emptyDraft(), nodeId: 'n1' })).toBe(true);
+		expect(draftStarted({ ...emptyDraft('settings.set'), value: '3' })).toBe(true);
 	});
 });
