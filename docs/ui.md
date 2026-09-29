@@ -1278,7 +1278,10 @@ Each table (`ProjectTable.svelte`, container on its wrapper) folds Lowest
 dam and Last run into a line under the name at 1100 px or narrower (a
 1280 px window beside the app sidebar), and at 730 px every figure: the
 pill, units short, the freshness badge, the last run and the lowest dam
-stack under the name, with Add data and ⋯ stacked on the right.
+stack under the name, with Add data and ⋯ stacked on the right. The rain
+badge wraps inside its cell at any width (until 2026-09-29 it stayed on one
+line and ran under Last run; `projects.spec.ts` checks it at 1440, 1024 and
+320 px).
 
 **A click anywhere on a project's row opens it.** The name link stretches
 over the row (`ProjectTable.svelte`, `.name::after`), so it's a real link:

@@ -199,6 +199,27 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await expect(staleRow.getByTitle(/^Project last changed: /).first()).toHaveText(/^edited \d{1,2} \w{3} \d{4}$/);
 	await expect(emptyRow.locator('td.c-run')).toHaveText('Not run yet');
 
+	// The badge wraps inside its cell rather than run under Last run: kept on one line, it was ~58 px wider than
+	// the Data column at every width that shows the column, and wider than a 320 px phone's name cell.
+	for (const width of [1440, 1024, 320]) {
+		await page.setViewportSize({ width, height: 800 });
+		const badge = staleRow.getByTitle('Recorded rain (catchment or CHIRPS) runs to 30 Oct 2020').filter({ visible: true });
+		await expect(badge).toHaveCount(1);
+		const fit = await badge.evaluate((b) => {
+			const cell = b.closest('td, th') as HTMLElement;
+			const bb = b.getBoundingClientRect();
+			const cb = cell.getBoundingClientRect();
+			const run = cell.parentElement!.querySelector<HTMLElement>('td.c-run');
+			const rb = run && run.offsetParent ? run.getBoundingClientRect() : null;
+			return {
+				inside: bb.left >= cb.left - 0.5 && bb.right <= cb.right - parseFloat(getComputedStyle(cell).paddingRight) + 0.5,
+				clearOfRun: !rb || bb.right <= rb.left + 0.5
+			};
+		});
+		expect(fit, `the rain badge at ${width} px`).toEqual({ inside: true, clearOfRun: true });
+	}
+	await page.setViewportSize({ width: 1280, height: 720 });
+
 	// "Add data" opens the workspace with the upload dialog requested.
 	const add = emptyRow.getByRole('link', { name: 'Add data to Freshness — empty' });
 	await expect(add).toHaveAttribute('href', `/projects/${empty.id}?add=data`);
