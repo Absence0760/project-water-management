@@ -14,6 +14,7 @@ export const SETTINGS_SECTIONS = [
 	{ id: 'set-ewr', label: 'EWR' },
 	{ id: 'set-reserve', label: 'Reserve rules' },
 	{ id: 'set-period', label: 'Simulation period' },
+	// Its zero-rain and low-vs-CHIRPS limits change results (issue #66), so it is a model input (issue #173).
 	{ id: 'set-quality', label: 'Data quality' },
 	// How the Runs tab's outcome matrix reads a demand sweep (issue #53 R4); changes no result.
 	{ id: 'set-outcomes', label: 'Outcome matrix' },
@@ -28,14 +29,15 @@ export const SETTINGS_SECTIONS = [
 export type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
 /**
- * The menu's groups (issue #17): the model's inputs; the settings that only
+ * The menu's groups (issue #17): the model's inputs (Data quality among them:
+ * some of its limits change results, issue #173); the settings that only
  * decide how results are read (they change no result); and what runs or
  * connects by itself. The last group also links the panels after Data feeds,
  * which save on their own: API keys (owners only) and Scheduled reports.
  */
 export function settingsNavGroups(isOwner: boolean): { label: string; ids: string[] }[] {
 	const ids = SETTINGS_SECTIONS.map((s) => s.id as string);
-	const read = ids.indexOf('set-quality');
+	const read = ids.indexOf('set-outcomes');
 	const auto = ids.indexOf('set-auto');
 	return [
 		{ label: 'Model inputs', ids: ids.slice(0, read) },
