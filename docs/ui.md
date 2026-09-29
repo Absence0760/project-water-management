@@ -785,23 +785,34 @@ put the results first; its first screen follows board A1 of the redesign
 2. **The first screen, once there is a run**: the **Latest run** KPI row
    (four cards, the mean outflow in the line under them), the **Days below
    the reserve** strip across the page under it, then **Needs attention**
-   beside **Supply by farm** (two equal columns from 900 px, one alone
-   takes the width; stacked below 900 px). From 1100 × 620 px (`FIT_QUERY`
-   in `OverviewTab.svelte`) the block is exactly the height left in the
-   window below its own top edge (measured with a `ResizeObserver` on
-   `body`, as the Network's map, less the save bar when it shows; at least
-   560 px): the two cards fill what the KPIs and the strip leave and scroll
-   inside themselves. On a phone the KPIs are 2 × 2.
+   with the **Active alerts** ([§ Alerts](#alerts)) under it, beside
+   **Supply by farm** (two columns from 900 px, one alone takes the width;
+   stacked below 900 px, Needs attention and the alerts first). On a phone
+   the KPIs are 2 × 2. The Summary is a reading page: it flows with one
+   scroll, the window's, and no card scrolls inside itself; each card is as
+   tall as its content, so the columns may end at different heights. Until
+   2026-09-29 this block was sized to exactly the height left in the window
+   (`FIT_QUERY`, from 1100 × 620 px) with the two cards scrolling inside
+   themselves: on a desktop it looked like the whole page, and the alerts,
+   the published baseline, the links and the setup checklist below it went
+   unseen. Supply by farm is bounded instead by showing its eight emptiest
+   units with a **Show all N hydrological units** button, and Needs
+   attention holds at most five cards (one per kind, `attention.ts`). The
+   alerts moved up from below the first screen at the same time: an alert
+   firing is something to act on, like the Needs attention cards beside
+   it, and its heading is inside a 1440 × 960 window even with thirty
+   units.
    Until issue #162 the Summary drew the full **Flow vs reserve** chart here,
    filling what the KPIs left; River & reserve draws the same chart, larger
    and with more controls, so the Summary now shows the strip and links
    there instead: the flow chart is drawn once, on River & reserve.
-3. **Below the first screen**, compact: the active alerts
-   ([§ Alerts](#alerts)) beside the published baseline (two columns once the
-   tab is 56rem wide, a container query; stacked below that), each panel
-   unchanged; one line of links, **Dam levels for each dam → Dams** (once the
-   latest run has dams; the table moved to the [Dams](#dams) page) and
-   **Model facts, details, team and sharing → Project**; then the setup
+3. **Below the first screen**, compact: the published baseline across the
+   tab (before the first run, when there is no first screen, the active
+   alerts sit beside it, two columns once the tab is 56rem wide, a container
+   query; stacked below that), each panel unchanged; one line of links,
+   **Dam levels for each dam → Dams** (once the latest run has dams; the
+   table moved to the [Dams](#dams) page) and **Model facts, details, team
+   and sharing → Project**; then the setup
    checklist, the one-line "Setup complete" once every step is done. The
    model's headline facts, project details, import record, recent notes,
    team, members, farmers and share links moved to the [Project](#project)
@@ -830,7 +841,11 @@ put the results first; its first screen follows board A1 of the redesign
   where the **Flow vs reserve** chart is.
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
-  % of its demand supplied, fullest first and emptiest last, in the Network's
+  % of its demand supplied, emptiest first (fullest first until 2026-09-29;
+  the card shows the first eight, so the short units lead, as on the Dams
+  page and Hydrological units), with **Show all N hydrological units**
+  (`aria-expanded`) opening the rest in place and **Show the 8 emptiest**
+  closing them, in the Network's
   supply bands (`network/supplyColour.ts`: amber below `SUPPLY_TARGET`, red
   below `LOW_SUPPLY`, with a key; a farm with no demand says "no demand"
   and goes last). A farm's name opens its [farm drawer](#farm-drawer)
@@ -889,7 +904,7 @@ put the results first; its first screen follows board A1 of the redesign
   (`LoadState`, with a retry) and the Runs tab then opens the run at once. Four
   cards in a row, 2 × 2 below 760 px.
 - **Published baseline** (WP-2.3, `overview/PublishedBaseline.svelte`),
-  below the first screen, after the active alerts (shown with or without runs): what stakeholders and farmers see. It fetches
+  below the first screen (after the active alerts before the first run; shown with or without runs): what stakeholders and farmers see. It fetches
   `GET /projects/:id/publication` and names the published run (a link to it
   in Runs, with its period from the page's runs list), when and by whom it
   was published, the notice level with its percentage ("Advisory · 15 %"),

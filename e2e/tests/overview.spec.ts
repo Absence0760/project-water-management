@@ -3,6 +3,7 @@
 // the Project page (project-page.spec.ts).
 import type { Page } from '@playwright/test';
 import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { seedSupplyProject } from '../support/supply.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -115,32 +116,36 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(page.getByTestId('supply-bars-what')).toHaveText("Share of each hydrological unit's irrigation demand supplied, latest run");
 
 	// First screen (issue #17 A1, #162): the KPI row, the reserve strip across the page under it, then Needs
-	// attention beside Supply by unit (the flow chart that was here is River & reserve's alone).
+	// attention with the active alerts under it, beside Supply by unit (the flow chart that was here is River &
+	// reserve's alone).
 	const kpis = await box('Latest run');
 	const strip = await box('Days below the reserve');
 	const attention = await box('Needs attention');
 	const supply = await box('Supply by hydrological unit');
+	const alerts = await box('Active alerts');
 	expect(strip.y).toBeGreaterThan(kpis.y + kpis.height - 1);
 	expect(Math.abs(strip.width - kpis.width)).toBeLessThan(2);
 	expect(attention.y).toBeGreaterThan(strip.y + strip.height - 1);
 	expect(Math.round(supply.y)).toBe(Math.round(attention.y));
 	expect(supply.x).toBeGreaterThan(attention.x + attention.width);
-	// It fits the window: the two cards end inside it, on one bottom edge, and fill it.
-	const vh = page.viewportSize()!.height;
-	expect(supply.y + supply.height).toBeLessThanOrEqual(vh);
-	expect(Math.abs(attention.y + attention.height - (supply.y + supply.height))).toBeLessThan(2);
-	expect(supply.y + supply.height).toBeGreaterThan(vh - 40);
+	expect(alerts.y).toBeGreaterThan(attention.y + attention.height - 1);
+	expect(Math.round(alerts.x)).toBe(Math.round(attention.x));
+	// It flows with the page (the window's is the one scroll): the alerts start inside the window, and no
+	// card is a scroll box of its own.
+	expect(alerts.y).toBeLessThan(page.viewportSize()!.height);
+	for (const name of ['Needs attention', 'Supply by hydrological unit', 'Active alerts']) {
+		const [sh, ch] = await page.getByRole('region', { name, exact: true }).evaluate((el) => [el.scrollHeight, el.clientHeight]);
+		expect(sh, name).toBeLessThanOrEqual(ch);
+	}
 
-	// Below it, compact (issue #17): the alerts beside the published baseline, then one line of links (the Dams
-	// page, the Project page), then the one-line setup. Nothing else: the rest is on the Project page.
-	const alerts = await box('Active alerts');
+	// Below it, compact (issue #17): the published baseline, then one line of links (the Dams page, the Project
+	// page), then the one-line setup. Nothing else: the rest is on the Project page.
 	const baseline = await box('Published baseline');
-	expect(alerts.y).toBeGreaterThan(Math.max(attention.y + attention.height, supply.y + supply.height));
-	expect(Math.round(baseline.y)).toBe(Math.round(alerts.y));
-	expect(baseline.x).toBeGreaterThan(alerts.x + alerts.width);
+	expect(baseline.y).toBeGreaterThan(Math.max(alerts.y + alerts.height, supply.y + supply.height));
+	expect(Math.abs(baseline.width - kpis.width)).toBeLessThan(2);
 	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
 	const links = (await damsLink.boundingBox())!;
-	expect(links.y).toBeGreaterThan(alerts.y + alerts.height);
+	expect(links.y).toBeGreaterThan(baseline.y + baseline.height);
 	expect(Math.round((await projectLink.boundingBox())!.y)).toBe(Math.round(links.y));
 	const setupBox = await box(/^Set(up| up this catchment)/);
 	expect(setupBox.y).toBeGreaterThan(links.y);
@@ -198,18 +203,20 @@ test('needs attention cards and supply by hydrological unit: coloured by how muc
 	const supply = page.getByRole('region', { name: 'Supply by hydrological unit' });
 	const rows = supply.getByRole('listitem');
 	await expect(rows).toHaveCount(2);
-	// Fullest first, emptiest last, in the Network's supply bands, with a key to them.
-	await expect(rows.first()).toContainText('Upper farm');
-	await expect(rows.last()).toContainText('Lower farm');
-	await expect(rows.last()).toHaveAttribute('data-band', /^(short|low)$/);
+	// Emptiest first (the card shows the first eight), in the Network's supply bands, with a key to them.
+	await expect(rows.first()).toContainText('Lower farm');
+	await expect(rows.last()).toContainText('Upper farm');
+	await expect(rows.first()).toHaveAttribute('data-band', /^(short|low)$/);
 	const pcts = await rows.evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.pct')!.textContent!)));
-	expect(pcts[0]!).toBeGreaterThan(pcts[1]!);
+	expect(pcts[0]!).toBeLessThan(pcts[1]!);
+	// Two units: nothing to show all.
+	await expect(supply.getByRole('button', { name: /^Show all/ })).toHaveCount(0);
 	await expect(supply).toContainText(/supplied/);
 	// The whole picture is on Units & supply, for the same run (issue #17).
 	await expect(supply.getByRole('link', { name: 'More on Hydrological units' })).toHaveAttribute('href', /^\?tab=supply&run=[0-9a-f-]{36}$/);
 
 	// A farm's name opens its planted areas over the Summary.
-	await rows.last().getByRole('link', { name: 'Lower farm' }).click();
+	await rows.first().getByRole('link', { name: 'Lower farm' }).click();
 	await expect(page).toHaveURL(new RegExp(`\\?farm=${project.model.nodes[2]!.id}$`));
 	await expect(page.getByRole('dialog', { name: 'Lower farm: planted areas' })).toBeVisible();
 	await page.keyboard.press('Escape');
@@ -219,6 +226,48 @@ test('needs attention cards and supply by hydrological unit: coloured by how muc
 	await short.click({ position: { x: 16, y: 34 } });
 	await expect(page).toHaveURL(new RegExp(`[?&]tab=supply&run=[0-9a-f-]{36}&unit=${project.model.nodes[2]!.id}$`));
 	await expect(page.getByRole('region', { name: 'Hydrological unit detail: Lower farm' })).toBeVisible();
+});
+
+test('a catchment with many units: Supply by unit shows the eight emptiest and opens the rest in place, with no card scrolling inside itself', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	const project = await seedSupplyProject(page.request, 'Summary many units', 30);
+	await createRun(page.request, project.id, 'Baseline');
+	await page.goto(`/projects/${project.id}`);
+	const supply = page.getByRole('region', { name: 'Supply by hydrological unit' });
+	const rows = supply.getByRole('listitem');
+	await expect(rows).toHaveCount(8);
+	// The emptiest lead: the eight shown are no fuller than any hidden one.
+	const shownPcts = await rows.evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.pct')!.textContent!)));
+	expect([...shownPcts].sort((a, b) => a - b)).toEqual(shownPcts);
+	const scrolls = async (name: string) =>
+		page.getByRole('region', { name, exact: true }).evaluate((el) => [el.scrollHeight, el.clientHeight, getComputedStyle(el).overflowY]);
+	for (const name of ['Needs attention', 'Supply by hydrological unit']) {
+		const [sh, ch, overflow] = await scrolls(name);
+		expect(sh, name).toBeLessThanOrEqual(ch as number);
+		expect(overflow, name).toBe('visible');
+	}
+	// What follows Needs attention is on the first screen: the alerts' heading is inside the window.
+	const alertsHeading = (await page.getByRole('heading', { level: 2, name: 'Active alerts' }).boundingBox())!;
+	expect(alertsHeading.y + alertsHeading.height).toBeLessThanOrEqual(960);
+
+	const all = supply.getByRole('button', { name: 'Show all 32 hydrological units' });
+	await expect(all).toHaveAttribute('aria-expanded', 'false');
+	await all.click();
+	await expect(rows).toHaveCount(32);
+	const fewer = supply.getByRole('button', { name: 'Show the 8 emptiest' });
+	await expect(fewer).toHaveAttribute('aria-expanded', 'true');
+	await expect(fewer).toBeFocused();
+	const allPcts = await rows.evaluateAll((lis) => lis.map((li) => li.getAttribute('data-band') === 'none' ? Infinity : parseFloat(li.querySelector('.pct')!.textContent!)));
+	expect(allPcts.slice(0, 8)).toEqual(shownPcts);
+	expect(Math.min(...allPcts.slice(8))).toBeGreaterThanOrEqual(Math.max(...shownPcts));
+	// Open, the card grows with the page rather than scrolling inside itself.
+	const [sh, ch] = await scrolls('Supply by hydrological unit');
+	expect(sh).toBeLessThanOrEqual(ch as number);
+	await fewer.click();
+	await expect(rows).toHaveCount(8);
+	await expect(all).toHaveAttribute('aria-expanded', 'false');
+	await expectNoViolations(page);
 });
 
 test.describe('the first screen has no accessibility violations', () => {

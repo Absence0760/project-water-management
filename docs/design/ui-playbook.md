@@ -77,8 +77,8 @@ section it belongs to, with the example that taught it.
   that pushed the results 110 px down, its status one slim line under the
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
-- **Dashboards fit the window; reading pages scroll.** A dashboard (Summary,
-  Network, Crops, Dams, River & reserve, Hydrological units, the portfolio) is
+- **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
+  Crops, Dams, River & reserve, Hydrological units, the portfolio) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -92,6 +92,20 @@ section it belongs to, with the example that taught it.
   itself as right: shrunk on a phone, the map kept that height at 1440
   (`diagram-labels.spec.ts` resizes 390 → 1440 and checks it refills).
   Subtract the gutter and `--dock-h`, which are known.
+- **Don't fit a first screen that has more below it.** The Summary was a
+  fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
+  unit) with the alerts, published baseline, links and setup checklist
+  underneath. At 1440×960 the fitted block ended at the window's foot, the
+  two cards scrolled inside themselves, and it looked like the whole page:
+  users missed everything below it, with no cue it existed (2026-09-29).
+  A fitted block whose cards scroll inside themselves reads as the end of
+  the page, so a page whose main content continues below should not fit:
+  let it flow with the window's one scroll, bound a long list by showing the worst few with a
+  **Show all N** button (`aria-expanded`) that opens the rest in place (the
+  Summary's Supply by unit and the Dams page's Dam levels show eight), and
+  let the next card's top edge show inside the window
+  (`overview.spec.ts` checks no Summary card scrolls and the alerts' heading is
+  inside 1440×960 with thirty units).
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
