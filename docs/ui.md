@@ -2029,7 +2029,7 @@ One crop's name and 12 monthly factors in a side sheet over the page
 linked and Back closes it; Done, Esc or the ✕ drop `crop` in place
 (`withoutParam`). **+ Add crop** adds "Crop N" and opens its sheet with the
 name focused. The sheet shows the factors four to a row (labelled "Orchard
-crop factor, Jan", as in the grid), the mean, the high-factor warning for
+crop factor, Jan", as in the grid), the high-factor warning for
 this crop, the × A-pan, not FAO Kc note, and which farms plant it and how
 much. **Remove crop** asks first when the crop is planted anywhere, removes
 it with its areas, and closes the sheet. It edits the shared `ModelEditor`
@@ -2038,8 +2038,9 @@ values read-only and Close. `Dialog` `side`, full width on a phone.
 
 ### Crop grids
 
-The old tab body, unchanged, is `crops/CropGrids.svelte`: crop factors
-(reorderable, the × A-pan intro, the warning naming every crop and month
+The old tab body is `crops/CropGrids.svelte`: crop factors (no mean column
+since issue #174: an unweighted 12-month average the b023 workbook doesn't
+have, which read as a figure it isn't; reorderable, the × A-pan intro, the warning naming every crop and month
 above 1.0: `highCropFactors`, a hint, never a block on saving), planted areas
 in **ha** (stored as m²; farm rows in network order, reorderable; the
 no-planted-area note) and the demand preview (chart and `DemandTable`).
@@ -2173,7 +2174,7 @@ the scenario's ([§ Scenarios](#scenarios-tabscenarios)).
 On a phone (≤ 640 px) the crop-factor and planted-area grids (in the grid
 modal and override mode) turn each row
 into a card with visible labels: the crop name (with reorder and remove) on
-top, the twelve factors four to a row and the mean below; each farm's crops two
+top, the twelve factors four to a row; each farm's crops two
 to a row with its total, and a totals card last. Every field is on screen
 without scrolling the table sideways. The read-only demand preview stays a
 table that scrolls. With no farm or crop yet, the Planted areas note links to
