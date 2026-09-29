@@ -110,3 +110,11 @@ source workbooks), which CI never has (CLAUDE.md rule 10).
   close to vitest's 5 s default under load until they did (8 × 60 000-value
   PUTs → one INSERT; 13 runs → 3 runs published 13 times). Size the fixture,
   not the timeout.
+- **Long e2e journeys**: Playwright gives each test 30 s. A UI step (a
+  click, a fill, an expect) is ~30 ms of Playwright's own work on an idle
+  laptop and three to four times that beside five other workers, so a test of
+  ~165 steps, the old golden path, timed out on its length alone with no slow
+  step in it (issue #138). Keep a test to a few dozen steps and arrange the
+  rest through the API; the golden path is now four tests
+  ([e2e/README.md § The golden path](../e2e/README.md#the-golden-path)).
+  Split the journey, not the budget.
