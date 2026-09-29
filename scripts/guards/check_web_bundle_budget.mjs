@@ -1243,6 +1243,12 @@
 //             34.1 KB. The split and the two lazy chunks cost ~2 KB of total
 //             (smaller files compress less well). Calibration worker 36 KB,
 //             unchanged. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total stays 1166 KB (measured 1165 with issue #126 round 4
+//             merged onto main @ the #66 gap-filling raise, which measures
+//             1163). The sign-in CAPTCHA's WAF-answer detection in the shared
+//             api chunk and its puzzle section in the sign-in route chunk take
+//             ~2 KB of that headroom; AWS's script is loaded on demand, never
+//             bundled. Headroom ~1 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs

@@ -28,6 +28,15 @@ describe('CORS', () => {
 		const evil = await app.request('/health', { headers: { origin: 'https://evil.example' } });
 		expect(evil.headers.get('access-control-allow-origin')).toBeNull();
 	});
+
+	it('lets the sign-in retry carry the WAF token header, and nothing else new', async () => {
+		vi.stubEnv('ALLOWED_ORIGINS', ORIGIN);
+		const pre = await createApp().request('/auth/login', {
+			method: 'OPTIONS',
+			headers: { origin: ORIGIN, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type,x-aws-waf-token' }
+		});
+		expect(pre.headers.get('access-control-allow-headers')?.toLowerCase().split(/\s*,\s*/).sort()).toEqual(['content-type', 'x-aws-waf-token']);
+	});
 });
 
 describe('cross-origin writes', () => {

@@ -65,6 +65,24 @@ export const DEFAULT_RENDER_TIMEOUT_MS = 90_000;
 
 const trimSlash = (u: string) => u.replace(/\/+$/, '');
 
+/**
+ * Why POST /auth/render-session didn't give a session, and whether another
+ * attempt could. Only the API's own coded refusal (`render_token_refused`,
+ * reports/routes.ts: the token is used, expired, or the requester lost
+ * access) is final. Anything else may pass next time and is retried with
+ * backoff: in production the request goes through CloudFront and the WAF,
+ * whose rate rules answer a plain 403 (infra/waf.tf) that would otherwise
+ * read as a refused token, and a 429, a 5xx or a body that isn't the API's
+ * JSON is the same kind of passing trouble.
+ */
+export function sessionRefusal(status: number, body: unknown): RenderError {
+	const code = typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : undefined;
+	if ((status === 400 || status === 403) && code === 'render_token_refused') {
+		return new RenderError('the render token was refused (used, expired, or the requester lost access)', { retry: false });
+	}
+	return new RenderError(`the render session could not start (HTTP ${status})`);
+}
+
 /** Render settings from the environment (the worker's and the renderer Lambda's). */
 export function renderOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): RenderOptions {
 	const n = Number(env.REPORT_RENDER_TIMEOUT_MS);
@@ -219,11 +237,9 @@ export async function renderReportPdf(t: RenderTarget, o: RenderOptions): Promis
 			failOnStatusCode: false
 		});
 		if (!res.ok()) {
-			const refused = res.status() === 400 || res.status() === 403;
-			throw new RenderError(
-				refused ? 'the render token was refused (used, expired, or the requester lost access)' : `the render session could not start (HTTP ${res.status()})`,
-				{ retry: !refused }
-			);
+			// A WAF block's body is HTML, not the API's JSON: no code, so retried.
+			const body: unknown = await res.json().catch(() => null);
+			throw sessionRefusal(res.status(), body);
 		}
 		const page = await context.newPage();
 		const url = `${o.siteUrl}/projects/${encodeURIComponent(t.projectId)}/report?${reportQuery(t)}`;

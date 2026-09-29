@@ -58,10 +58,77 @@ variable "bootstrap_slug" {
   default     = "water-management"
 }
 
-variable "secrets_file" {
-  description = "Path to the sops-encrypted prod secrets. Defaults to the private estate repo cloned as a sibling of this one (~/github/infra-secrets). Override with TF_VAR_secrets_file if your clone lives elsewhere."
+# --- Runtime secrets (secrets.tf) --------------------------------------------
+#
+# Ephemeral: Terraform keeps them out of state and out of a saved plan. They
+# come from infra-secrets/water-management/prod.sops.yaml through
+# infra/scripts/tf.sh (sops exec-env → TF_VAR_*), never from a tfvars file,
+# and reach only the runtime secrets' write-only values. Each validation
+# names the sops key, never the value.
+
+variable "auth_jwt_secret" {
+  description = "Signs the wm_session JWT (HS256). sops key auth_jwt_secret; generate with openssl rand -hex 32."
   type        = string
-  default     = ""
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = length(var.auth_jwt_secret) >= 32
+    error_message = "auth_jwt_secret in prod.sops.yaml must be at least 32 characters (the backend refuses shorter). Generate with: openssl rand -hex 32"
+  }
+  validation {
+    # The committed dev/test values (backend/.env.development, src/__tests__/setup.ts)
+    # are public; the API Lambda refuses them at init too (config/production.ts).
+    condition     = !can(regex("^(dev|test)-only-", var.auth_jwt_secret))
+    error_message = "auth_jwt_secret in prod.sops.yaml is a committed dev/test placeholder. Generate a real one with: openssl rand -hex 32"
+  }
+}
+
+variable "db_app_password" {
+  description = "Password of the RLS-bound runtime role water_app. sops key db_app_password; generate with openssl rand -hex 24."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{24,}$", var.db_app_password))
+    error_message = "db_app_password in prod.sops.yaml must be 24+ alphanumeric characters (it is embedded in DATABASE_URL and role DDL). Generate with: openssl rand -hex 24"
+  }
+}
+
+variable "alerts_token_secret" {
+  description = "Signs the one-click unsubscribe links in alert emails (the worker only). sops key alerts_token_secret; generate with openssl rand -hex 32."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    condition     = can(regex("^[A-Za-z0-9]{32,}$", var.alerts_token_secret))
+    error_message = "alerts_token_secret in prod.sops.yaml must be 32+ alphanumeric characters (the worker refuses shorter). Generate with: openssl rand -hex 32"
+  }
+}
+
+variable "cloudfront_private_key" {
+  description = "Signs report download links (CloudFront signed URLs, reports.tf): an RSA 2048 private key, PEM. sops key cloudfront_private_key; generate with openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 (infra/prod.sops.yaml.example). Its public half is report_download_public_keys[report_download_signing_key]; the API refuses to start if they aren't a pair."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    # The shape only: whether it pairs with the signing public key is checked
+    # by the API at cold start (reports.tf).
+    condition     = can(regex("^-----BEGIN (RSA )?PRIVATE KEY-----\\n[A-Za-z0-9+/=\\n]+\\n-----END (RSA )?PRIVATE KEY-----$", trimspace(var.cloudfront_private_key)))
+    error_message = "cloudfront_private_key in prod.sops.yaml must be a PEM private key. Generate with: openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048"
+  }
+}
+
+variable "runtime_secret_version" {
+  description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed; any change to this number writes every runtime secret again and cold-starts the API, worker and migrate Lambdas. Don't set it in a tfvars file: scripts/tf.sh derives it from prod.sops.yaml's sops.lastmodified (YYYYMMDDhhmmss), so every sops edit rotates, and refuses a var file that pins it. Pass -var runtime_secret_version=… only to force a rewrite of unchanged values (docs/deployment.md § Rotating a secret)."
+  type        = number
+  default     = 1
+  validation {
+    # Up to 16 digits: YYYYMMDDhhmmss is 14, and the AWS provider holds
+    # secret_string_wo_version as a 64-bit int (its 64-bit builds are the only
+    # platforms in .terraform.lock.hcl).
+    condition     = var.runtime_secret_version >= 1 && var.runtime_secret_version < 1e16 && floor(var.runtime_secret_version) == var.runtime_secret_version
+    error_message = "runtime_secret_version is a whole number from 1 to 16 digits (scripts/tf.sh sets it from sops.lastmodified as YYYYMMDDhhmmss)."
+  }
 }
 
 # --- Network -----------------------------------------------------------------
@@ -127,12 +194,27 @@ variable "secretsmanager_endpoint_az_count" {
 # --- Edge + cost controls ----------------------------------------------------
 
 variable "waf_rate_limit_per_ip" {
-  description = "WAF rate-limit threshold: requests per IP per 5-minute rolling window. AWS minimum is 100."
+  description = "WAF rate limit on /api/*: requests per IP per 5-minute rolling window. AWS minimum is 100."
   type        = number
   default     = 1000
   validation {
     condition     = var.waf_rate_limit_per_ip >= 100
     error_message = "AWS WAF rate-based rule minimum is 100 per 5-minute window."
+  }
+}
+
+# The static site's backstop (waf.tf): every path, so the SPA's cached files
+# (a cold visit is ~150 requests; the report renderer loads them for every
+# PDF) don't count against the API's limit, yet one IP can't pull them
+# unthrottled. The default blocks one IP at the cloudfront-requests alarm's
+# default threshold.
+variable "waf_site_rate_limit_per_ip" {
+  description = "WAF rate limit on every path (the static site's backstop): requests per IP per 5-minute rolling window. At least waf_rate_limit_per_ip, since /api/* requests count here too."
+  type        = number
+  default     = 5000
+  validation {
+    condition     = var.waf_site_rate_limit_per_ip >= var.waf_rate_limit_per_ip
+    error_message = "waf_site_rate_limit_per_ip counts /api/* requests too, so below waf_rate_limit_per_ip it would become the API's limit."
   }
 }
 
@@ -151,6 +233,48 @@ variable "cloudfront_requests_alarm_per_5min" {
   validation {
     condition     = var.cloudfront_requests_alarm_per_5min >= 1000 && var.cloudfront_requests_alarm_per_5min <= 20000
     error_message = "Between 1000 (one person at the WAF's per-IP limit would page) and 20000 (a flood just under it would cost ~$9-16/day unseen)."
+  }
+}
+
+# --- Sign-in CAPTCHA (waf.tf SignInCaptchaPerIP) ------------------------------
+
+variable "waf_signin_captcha_per_5min" {
+  description = "Sign-in POSTs (POST /api/auth/login) from one IP in 5 minutes above which the WAF answers with a CAPTCHA instead of passing the request on. Default 20: a person signing in makes 1-5, an office behind one NAT a handful more; a guesser past it must solve a puzzle every captcha immunity period. Must stay below the auth block rule's 100, or the CAPTCHA never shows before the block."
+  type        = number
+  default     = 20
+  validation {
+    condition     = var.waf_signin_captcha_per_5min >= 10 && var.waf_signin_captcha_per_5min <= 99
+    error_message = "Between 10 (AWS's minimum for a rate-based rule) and 99 (below RateLimitAuthPerIP's 100, which blocks outright)."
+  }
+}
+
+variable "waf_signin_captcha_action" {
+  description = "What the sign-in CAPTCHA rule does past its threshold: CAPTCHA (the puzzle), or COUNT (only counts, in the WAF metrics and sampled requests: the switch-off if the puzzle misfires; docs/deployment.md § Runbooks)."
+  type        = string
+  default     = "CAPTCHA"
+  validation {
+    condition     = contains(["CAPTCHA", "COUNT"], var.waf_signin_captcha_action)
+    error_message = "CAPTCHA or COUNT."
+  }
+}
+
+variable "waf_captcha_integration_url" {
+  description = "This account's AWS WAF CAPTCHA integration URL for CloudFront scope (https://<id>.edge.captcha-sdk.awswaf.com/<id>/). Not a secret: read it once with `aws wafv2 list-api-keys --scope CLOUDFRONT --region us-east-1 --query ApplicationIntegrationURL --output text`. The site's CSP allows exactly its origin and its challenge script's (<id>.edge.sdk.awswaf.com), and the frontend loads jsapi.js from it. Empty (the default): the CSP allows no WAF origin and the sign-in page says to wait instead of showing the puzzle."
+  type        = string
+  default     = ""
+  validation {
+    condition     = var.waf_captcha_integration_url == "" || can(regex("^https://[a-z0-9]+\\.[a-z0-9-]+\\.captcha-sdk\\.awswaf\\.com/[a-z0-9]+/$", var.waf_captcha_integration_url))
+    error_message = "Empty, or https://<id>.<edge|region>.captcha-sdk.awswaf.com/<id>/ exactly as list-api-keys prints it (with the trailing slash)."
+  }
+}
+
+variable "login_failed_alarm_per_15min" {
+  description = "Alarm when more than this many credential checks fail in 15 minutes across all accounts (the login-failed alarm: one password sprayed over many accounts, which each address's own lockout can't see). Default 30: a person locking themselves out logs 5-10, so 30 is several at once for a handful of users. Runbook: docs/deployment.md § Runbooks, Credential stuffing."
+  type        = number
+  default     = 30
+  validation {
+    condition     = var.login_failed_alarm_per_15min >= 10 && var.login_failed_alarm_per_15min <= 300
+    error_message = "Between 10 (one person locking themselves out would page) and 300 (one IP at the WAF's auth limit, 100 per 5 minutes, would stay unseen)."
   }
 }
 
@@ -181,9 +305,9 @@ variable "budget_daily_usd" {
 }
 
 variable "cost_anomaly_threshold_usd" {
-  description = "Cost Anomaly Detection (free): an AWS-services monitor whose anomalies with a total cost impact of at least this many USD page the us-east-1 alerts topic. 0 skips the monitor, e.g. when the account already has its one allowed services monitor (infra/README.md § Operator steps)."
+  description = "Cost Anomaly Detection (free): an AWS-services monitor whose anomalies with a total cost impact of at least this many USD page the us-east-1 alerts topic. Default 0 (off): an account may hold only one services monitor and AWS may have created one, which would fail the first apply, and the monitor needs ~10 days of history anyway. Turn it on after the first apply (10 is a sensible value; infra/README.md § Operator steps, step 11)."
   type        = number
-  default     = 10
+  default     = 0
 
   validation {
     condition     = var.cost_anomaly_threshold_usd >= 0
@@ -317,6 +441,32 @@ variable "renderer_image_tag" {
   validation {
     condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.renderer_image_tag))
     error_message = "renderer_image_tag must be empty or a release version like 0.4.0."
+  }
+}
+
+variable "report_download_public_keys" {
+  description = "The CloudFront public keys trusted to sign report downloads, name -> PEM (openssl pkey -in <key> -pubout). Not secret. Usually one; two while a rotation overlaps (docs/deployment.md § Rotating a secret)."
+  type        = map(string)
+  validation {
+    condition     = length(var.report_download_public_keys) >= 1 && length(var.report_download_public_keys) <= 5
+    error_message = "report_download_public_keys needs 1 to 5 keys (a CloudFront key group holds at most 5)."
+  }
+  validation {
+    condition     = alltrue([for k in keys(var.report_download_public_keys) : can(regex("^[a-z0-9][a-z0-9-]{0,40}$", k))])
+    error_message = "report_download_public_keys names must be lowercase letters, digits and dashes (e.g. 2026-09)."
+  }
+  validation {
+    condition     = alltrue([for v in values(var.report_download_public_keys) : can(regex("^-----BEGIN PUBLIC KEY-----\\n[A-Za-z0-9+/=\\n]+\\n-----END PUBLIC KEY-----$", trimspace(v)))])
+    error_message = "Each report_download_public_keys value must be a PEM public key (-----BEGIN PUBLIC KEY-----), never a private key."
+  }
+}
+
+variable "report_download_signing_key" {
+  description = "Which report_download_public_keys entry the API signs with: the public half of cloudfront_private_key in prod.sops.yaml."
+  type        = string
+  validation {
+    condition     = contains(keys(var.report_download_public_keys), var.report_download_signing_key)
+    error_message = "report_download_signing_key must name an entry of report_download_public_keys."
   }
 }
 

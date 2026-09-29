@@ -19,6 +19,7 @@ import { readJson } from '../http/body.js';
 import { LOCALES, type Locale } from '../mail/i18n/index.js';
 import { clientKey } from '../http/clientAddress.js';
 import { countSignup } from './signupThrottle.js';
+import { logLoginFailed } from './loginFailed.js';
 import { PREFERENCES_COL, PreferencesPatch, savePreferences, toPreferences } from './preferences.js';
 import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/legal';
 
@@ -268,11 +269,18 @@ export const authRoutes = new Hono<AuthEnv>()
 			return { lockedSeconds, row: lockedSeconds > 0 || !found ? undefined : { ...found, sessions_revoked_at: watermark }, device };
 		});
 		if (lockedSeconds > 0) {
+			logLoginFailed('/auth/login', 'locked');
 			c.header('Retry-After', String(lockedSeconds));
 			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
 		}
 		const ok = await verifyPassword(body.password, row?.password_hash ?? DUMMY_HASH);
-		if (!row || !ok) throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
+		if (!row || !ok) {
+			// One line counted across all accounts (auth/loginFailed.ts): the
+			// reason tells the operator an unknown address from a wrong
+			// password; the answer below is the same for both.
+			logLoginFailed('/auth/login', row ? 'bad_password' : 'unknown_account');
+			throw ApiError.coded(401, 'wrong_credentials', 'wrong email or password');
+		}
 		// The password proved the account: read it as its owner.
 		const user = await withUser(row.id, async (db) => {
 			await attemptSucceeded(db, body.email, device);
@@ -415,10 +423,12 @@ export const authRoutes = new Hono<AuthEnv>()
 		});
 		if (!row) throw ApiError.coded(401, 'not_signed_in', 'not signed in');
 		if (lockedSeconds > 0) {
+			logLoginFailed('/auth/change-password', 'locked');
 			c.header('Retry-After', String(lockedSeconds));
 			throw ApiError.coded(429, 'signin_locked', lockedMessage(lockedSeconds), { seconds: lockedSeconds });
 		}
 		if (!(await verifyPassword(body.currentPassword, row.password_hash))) {
+			logLoginFailed('/auth/change-password', 'bad_password');
 			throw ApiError.coded(403, 'wrong_current_password', 'your current password is wrong');
 		}
 		const newHash = await hashPassword(body.newPassword);

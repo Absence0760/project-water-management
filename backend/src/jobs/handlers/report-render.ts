@@ -11,7 +11,10 @@
 //     internet, so it hands the render to the renderer Lambda through the
 //     `render-requests` queue and marks the report `rendering`. The Lambda's
 //     answer comes back on `render-results` and becomes a second
-//     `report_render` job carrying `result`, which records it and mails.
+//     `report_render` job carrying `result`, which records it and mails,
+//     or, for a failure another attempt could fix (the result's `retry`: a
+//     WAF block, a timeout), queues the request again with backoff
+//     (requestRenderAgain).
 //
 // The render token is issued in its own committed transaction as the acting
 // user, because the headless browser presents it on another connection
@@ -22,14 +25,45 @@
 // (seconds; capped by REPORT_RENDER_TIMEOUT_MS), the same trade the inline
 // feed fetch makes locally. Production never does this.
 import { z } from 'zod';
-import { withUser } from '../../db/tx.js';
+import { type Db, withUser } from '../../db/tx.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from '../../reports/render.js';
 import { putPdf, reportKey } from '../../reports/storage.js';
-import { failReport, finishReport, loadReport } from '../../reports/store.js';
+import { failReport, finishReport, loadReport, REPORT_MAX_ATTEMPTS } from '../../reports/store.js';
 import { issueRenderToken } from '../../reports/tokens.js';
 import { JobError } from '../errors.js';
+import { enqueueJob } from '../queue.js';
 import { defineHandler } from '../registry.js';
 import { type RenderRequestMessage, RenderResult, reportRenderer, sendToQueue } from '../transport.js';
+
+/**
+ * Production's retry of a render the renderer Lambda answered with a
+ * retryable failure (reports/render.ts: anything but the API's coded refusal
+ * of the token or the page's own "can't show this"). The request's job is
+ * long done by then, so the queue's own retry can't reach it: queue another
+ * request job instead, delayed like the queue's backoff (2^n minutes), until
+ * REPORT_MAX_ATTEMPTS requests have been made in all. Each request issues a
+ * fresh token. The report stays `rendering` meanwhile (the 1-hour answer
+ * window, store.ts, covers 2 + 4 minutes of backoff and three renders).
+ * Returns false when the attempts are used up.
+ */
+export async function requestRenderAgain(db: Db, projectId: string, reportId: string): Promise<boolean> {
+	const { rows } = await db.query<{ n: number }>(
+		`SELECT count(*)::int AS n FROM job WHERE project_id = $1 AND kind = 'report_render' AND payload->>'reportId' = $2 AND NOT (payload ? 'result')`,
+		[projectId, reportId]
+	);
+	const made = rows[0]?.n ?? 0;
+	if (made >= REPORT_MAX_ATTEMPTS) return false;
+	await enqueueJob(db, {
+		projectId,
+		kind: 'report_render',
+		payload: { reportId },
+		// One retry per request made, whatever redelivers the answer.
+		dedupeKey: `report_retry:${reportId}:${made}`,
+		delaySeconds: 60 * 2 ** made,
+		maxAttempts: REPORT_MAX_ATTEMPTS
+	});
+	return true;
+}
 
 export const ReportRenderPayload = z
 	.object({
@@ -49,7 +83,11 @@ export const reportRenderHandler = defineHandler({
 		if (!report || report.status === 'done' || report.status === 'failed') return;
 
 		if (payload.result) {
-			if (!payload.result.ok) return failReport(db, report, `the renderer failed: ${payload.result.error}`);
+			if (!payload.result.ok) {
+				// A failure another attempt could fix (a WAF block, a timeout): ask again, later.
+				if (payload.result.retry && (await requestRenderAgain(db, job.projectId, report.id))) return;
+				return failReport(db, report, `the renderer failed: ${payload.result.error}`);
+			}
 			return finishReport(db, report, payload.result);
 		}
 

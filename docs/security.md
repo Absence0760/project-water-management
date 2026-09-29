@@ -220,7 +220,9 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   (SQLSTATE, SES/SMTP code) and HTTP status, plus stack frames for an
   unexpected job failure or an unhandled API error (`unhandled_error`, which
   also names the route's pattern, never the concrete path, since a path can
-  carry a token). Never an error's message or a pg `detail`, which
+  carry a token). A failed sign-in or bad account link logs `login_failed`
+  with the route's pattern and a reason code only, never the address tried
+  (§ Throttles that don't depend on the WAF). Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
@@ -299,8 +301,111 @@ different viewer address through an edge-verified app, so a limit keyed on the
 client would never engage, and checks that the sign-in lock, the reset
 cooldown and the verification cooldown each still do (with positive
 controls), and that `/%61uth/login` is refused before it is counted.
-Spraying one password across many accounts from many addresses is still only
-slowed by the WAF's per-IP limits; each account is limited on its own.
+
+**One password sprayed across many accounts.** Each account is limited on
+its own, so trying one password against many accounts from many addresses
+passes every limit above. Two controls see it: the WAF's **sign-in CAPTCHA**
+(below) makes every IP past 20 sign-ins in 5 minutes solve a puzzle, and the
+failures are **counted across all accounts**: every failed credential check logs one line,
+`{"event":"login_failed","route":"/auth/login","reason":"bad_password"}`
+(`auth/loginFailed.ts`), which the `login-failed` alarm counts across all
+accounts (more than 30 in 15 minutes by default, `infra/alarms.tf`;
+[deployment.md § Runbooks](./deployment.md#runbooks), Credential stuffing).
+
+- *Reasons:* `unknown_account` and `bad_password` (sign-in; change-password's
+  current password is `bad_password` on `/auth/change-password`), `locked`
+  (refused by the lockout before the password is checked), and `invalid_link`
+  (a malformed, used, expired or unknown reset or verification token).
+- *No personal data:* the line holds the route's pattern and the reason only,
+  never the typed address, an account id, the client address or a token; the
+  logger's signature takes two closed unions, so a caller can't pass one.
+- *The client can't tell the reasons apart:* an unknown address and a wrong
+  password answer the same `401 wrong_credentials` after the same bcrypt work
+  (`DUMMY_HASH`), and neither sets a cookie. `login-throttle.security.db.test.ts`
+  compares the two answers and checks the lines (with a no-line positive
+  control for a correct password and a good link).
+- *Why an alarm and no global circuit breaker:* a breaker that slows every
+  sign-in once failures across all accounts pass a threshold would be counted
+  in Postgres (Lambda has many instances), and its input is free to produce:
+  anyone can fail a sign-in with a made-up address. So an attacker could
+  switch it on at will, turning an attack on the few into a slowdown for
+  everyone, and each held request keeps an API Lambda busy (duration billed,
+  reserved concurrency used), so the delay spends this account's money and
+  crowds out real users rather than the attacker's. It also wouldn't stop a
+  spray, only stretch it. The alarm costs nothing on the request path; the
+  response is the operator's (a tighter or blocking WAF rule, the runbook).
+  The puzzle is per IP at the edge instead: it costs a real user nothing
+  unless their own network is over the threshold.
+
+### Sign-in CAPTCHA
+
+`infra/waf.tf` `SignInCaptchaPerIP` (issue #126): past
+`waf_signin_captcha_per_5min` (default 20) `POST /api/auth/login` requests from
+one IP in 5 minutes, AWS WAF answers a sign-in that carries no valid CAPTCHA
+token itself, with **HTTP 405 and `x-amzn-waf-action: captcha`** (an API
+request gets no interstitial page). A request with a valid token is counted
+and goes on. Below the threshold nobody sees a puzzle.
+
+- *Scope:* `POST` and exactly `/api/auth/login`, after URL-decoding,
+  normalising and lower-casing the path (as the auth block rule does), so
+  `/api/%61uth/login` counts too. Not forgot-password or the confirmation
+  resends: they answer the same `202` for every address, so they reveal and
+  guess nothing, and each address is capped at 10 emails a day (above);
+  spraying them costs mail, not accounts.
+- *Order:* after `RateLimitAuthPerIP` (100 per 5 minutes on `/api/auth/*`,
+  blocks), so an IP past 100 is blocked outright rather than offered a puzzle
+  (solves are billed, $0.40 per 1,000), and before the site-wide limit.
+- *Immunity:* a solved puzzle lasts 300 seconds (`captcha_config`, pinned
+  rather than inherited): enough to sign in; someone paying people to solve
+  puzzles buys 5 minutes, still under the 100-per-5-minute block, with every
+  failure still counted by the `login-failed` alarm.
+- *The page:* the API client turns that 405 into an `ApiError` with code
+  `captcha_required` (`frontend/src/lib/api/client.ts`, `isWafCaptcha`: the
+  header, not the status alone). The sign-in page then loads AWS's CAPTCHA
+  JavaScript API (`jsapi.js`) **only then**, renders the puzzle in the form
+  (`auth-extras/SignInCaptcha.svelte`, focus to its heading; the puzzle's
+  audio button plays a spoken version), and sends the sign-in again with the
+  token in the `x-aws-waf-token` header. A retry that gets the 405 again, or
+  a script that fails to load, says "Too many sign-in attempts from your
+  network. Wait a few minutes, then try again." (never a loop).
+  `lib/auth/wafCaptcha.test.ts` and `e2e/tests/captcha.spec.ts` (a faked 405
+  and a stub SDK) test it.
+- *Off locally:* the script URL and key are build-time config
+  (`PUBLIC_WAF_CAPTCHA_SCRIPT_URL`, `PUBLIC_WAF_CAPTCHA_API_KEY`), empty in the
+  committed env files; there is no WAF locally, so nothing asks for a puzzle.
+  A production build without them shows the "wait" message instead.
+- *The API key* (`aws_wafv2_api_key.captcha`, CloudFront scope, token domain
+  the site's domain only) lets pages on that domain render this account's
+  puzzles. It ships in the page, like any CAPTCHA site key; it goes to a
+  GitHub secret only because the provider marks it sensitive.
+- *CSP:* the one third-party origin the site allows. Once
+  `waf_captcha_integration_url` is set, the header's `script-src` and
+  `connect-src` add exactly the CAPTCHA SDK's origin
+  (`<id>.edge.captcha-sdk.awswaf.com`) and its challenge script's
+  (`<id>.edge.sdk.awswaf.com`, which `jsapi.js` loads; without it no token is
+  issued), and `media-src` allows `data:` for the audio. SvelteKit's meta CSP
+  adds the same two to `script-src` from the build's script URL
+  (`frontend/svelte.config.js` refuses any other shape). No `'unsafe-eval'`,
+  no `blob:`, no wildcard: loading AWS's SDK (2026-09) under exactly this
+  policy in Chromium drew no violation beyond its web-font stylesheet on
+  `static.captcha.awswaf.com`, left blocked (the puzzle uses the system font).
+  Guardrail runs `signin_captcha*` pin the rule, the key and the CSP.
+- *Switch-off:* `waf_signin_captcha_action = "COUNT"` keeps the rule counting
+  and stops the puzzle ([deployment.md § Runbooks](./deployment.md#runbooks),
+  The sign-in CAPTCHA misfires).
+- *Limits:*
+  - Per IP: a botnet with each address under 20 sign-ins per 5 minutes never
+    meets it; the `login-failed` alarm is what sees that.
+  - The puzzle's words are AWS's, in English (it has no Afrikaans); the
+    heading and explanation around it are translated.
+  - Anyone can load the public SDK with the public key and submit solves,
+    which AWS bills. Budgets and Cost Anomaly Detection
+    ([deployment.md § Budget alerts](./deployment.md#budget-alerts)) are the
+    backstop; AWS offers no cap on it.
+  - The challenge script's host is derived from the integration URL (same id
+    on `sdk.awswaf.com`), as AWS's SDK does today. If AWS changes that, the
+    puzzle fails to load under the CSP and the page says to wait: it fails
+    closed, and the runbook's step "the puzzle doesn't render" covers it.
 
 ## Render tokens
 
@@ -330,7 +435,11 @@ buys a **render session** that can read one report and nothing else.
   and sets a `wm_session` cookie whose JWT carries `scope: { p, r }` (with
   `a: { p, r }` for an impact report's baseline) and
   lives **10 minutes**. A used, expired, unknown or malformed token gets one
-  answer, `400`. The renderer calls it through its browser context's own
+  answer, `400`. Both refusals carry the machine-only code
+  `render_token_refused`: the renderer fails a report for good only on that
+  code, so a WAF or CloudFront `403` in front of the API (no code) is
+  retried with backoff, not mistaken for a refused token
+  (`reports/render.ts` `sessionRefusal`, `reports.test.ts`). The renderer calls it through its browser context's own
   request client, so the cookie lives only in that throwaway context, which
   is closed with the browser after the render.
 - **The scope** (`reports/scope.ts`, enforced in `requireUser`): a render
@@ -418,13 +527,31 @@ buys a **render session** that can read one report and nothing else.
   not taken ([infra/README.md](../infra/README.md), the renderer).
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
-  or taken from a message), deleted after 7 days. A download is a pre-signed
-  GET that lasts **60 seconds**, minted per request by
+  or taken from a message), deleted after 7 days. A download is a
+  **CloudFront signed URL** that lasts **60 seconds**, minted per request by
   `GET /projects/:id/reports/:jobId/pdf` for a viewer of the project and
   handed over as a `302` (`no-store`, `no-referrer`); the status route
-  carries no link (issue #126). So the only lasting handle on a PDF is that
-  API route, behind the session, CloudFront, the WAF's rate rule and the
-  project's membership, and every download re-checks membership. The
+  carries no link (issue #126). The URL is on the site's own origin,
+  `/reports/<project>/<report>.pdf`: a CloudFront behaviour that serves the
+  bucket through its own origin access control and **only** to a request
+  signed by a key in the distribution's trusted key group (a canned policy,
+  RSA-SHA256, covering the exact URL, the download file name included, and
+  the expiry; `reports/cloudfrontSign.ts`). The bucket policy lets that one
+  distribution (`AWS:SourceArn`) `GetObject` under `reports/`, and nothing
+  else reads it: the API holds no S3 grant at all, only the private key
+  (from its runtime secret, § Runtime secrets), and the renderer may only
+  put. So the transfer itself, not just the redirect, passes CloudFront and
+  the WAF's per-IP rate rule, and the only lasting handle on a PDF is the
+  API route, behind the session, the WAF and the project's membership;
+  every download re-checks membership. The behaviour caches nothing and
+  forwards only `response-content-disposition` to S3. It takes precedence
+  over the SPA, so the frontend must never serve anything under `/reports`:
+  `scripts/guards/check_reports_path.mjs` (run by `pnpm test:guards` and
+  CI's guard step) fails on a top-level `reports` route, a top-level dynamic
+  route, or a static file there. Locally
+  (`REPORT_DOWNLOADS=presigned`, the default) the link is a pre-signed MinIO
+  GET instead, so no cloud account is needed; production's config check
+  refuses anything but `cloudfront` (§ Production configuration). The
   alternative, streaming the PDF through the API, was not taken: the API's
   Function URL is in buffered mode (a 6 MB response cap, less after base64,
   that a long report could pass), and streaming would hold a VPC Lambda open
@@ -438,14 +565,23 @@ buys a **render session** that can read one report and nothing else.
   schedules. The hourly and schedule caps are counted under an advisory lock
   (per user and project, per project), so a burst of concurrent requests
   can't pass them together (`jobs/costCaps.security.db.test.ts`).
-- **Accepted residual risks.** A pre-signed link works for its minute for
-  whoever holds it, from any address, and the S3 GET itself is outside
-  CloudFront and the WAF: a member who scripts the route can still pull a
-  PDF as often as the WAF's rate rule lets the redirects through, and each
-  URL may be replayed within its 60 s. Egress per minted URL is therefore
-  bounded by the PDF's size times what can be fetched in a minute, and the
-  minting is rate-limited and needs a live membership; don't log the
-  `Location` header. A render request dead-lettered in production still holds its token
+- **Accepted residual risks.** A signed link works for its minute for
+  whoever holds it, from any address (a canned policy binds no IP), and may
+  be fetched more than once in that minute. But every fetch, like every
+  redirect, now counts against the WAF's per-IP rate rule and shows in the
+  distribution's request and blocked-request alarms, so a member scripting
+  downloads is throttled on the transfer itself, not only on minting. Don't
+  log the `Location` header. The signing key is operator-generated and
+  kept like the session key: in sops (`cloudfront_private_key`), handed to
+  Terraform as an ephemeral variable and written only into the API's
+  write-only runtime secret, so it is **never in Terraform state** (§ Runtime
+  secrets). Only the public keys are, which is harmless. Terraform can't
+  check at plan time that the sops key and the configured public key are a
+  pair, so the API checks at cold start (`reports/cloudfrontSign.ts`
+  `assertKeyPair`: the same public key, and a probe it signs verifies) and
+  refuses to start on a mismatch, rather than signing every link with a key
+  CloudFront rejects. Rotation overlaps two trusted keys, so no valid link
+  fails (docs/deployment.md § The report-download signing key). A render request dead-lettered in production still holds its token
   until it expires (5 minutes): the DLQ is encrypted and readable only by the
   account. The worker's inline render (local and CI only) holds the job's
   database transaction open for the few seconds it takes.
@@ -837,6 +973,12 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     otherwise; checked and stamped in one conditional `UPDATE`, so two calls
     at once can't both pass), so an address that keeps bouncing costs the account one
     bounce a day, not a loop.
+  - *The SES endpoint.* The SES API endpoint's policy repeats the IAM
+    split (`ses_endpoint`, `ses.tf`): the API and worker roles may send, as
+    no-reply@ only, and only the API role may release an address; no other
+    principal can use the endpoint. That the endpoint carries
+    `DeleteSuppressedDestination` at all is to be confirmed on the first
+    deploy (infra/README.md step 10b, #126).
 
 ## Authorization: per-project roles enforced by Postgres RLS
 
@@ -1853,8 +1995,8 @@ readable by anyone. The rules:
   `Absence0760/infra-secrets` repo under `water-management/`, SOPS-encrypted
   under `alias/water-management-sops`. Bootstrap:
   `infra-secrets/bin/sops-init.sh --project water-management --region <region>`.
-  Terraform consumes them with the `carlpett/sops` provider or a
-  decrypt-to-tfvars step into a gitignored `terraform.tfvars`.
+  Terraform gets them as ephemeral variables through `infra/scripts/tf.sh`
+  (`sops exec-env`), never from a tfvars file.
 - **No client data.** Workbooks (kept outside the repo in `../project-water-management-source/`; `*.xlsm`, `*.xlsx` are gitignored) and
   everything extracted from them (`data/`) are gitignored. Committed test
   fixtures are **synthetic**: made-up farm names, made-up numbers. Never paste
@@ -1902,14 +2044,17 @@ readable by anyone. The rules:
 - **Production secrets live outside this repo**, in
   `infra-secrets/water-management/prod.sops.yaml`, SOPS-encrypted under
   `alias/water-management-sops`. Decryption is gated by IAM (`kms:Decrypt`) and
-  logged in CloudTrail. The key rotates yearly. Terraform's `carlpett/sops`
-  provider decrypts in memory, so nothing is written to disk.
-  See `../infra-secrets/README.md`.
-- This app's production secrets: `AUTH_JWT_SECRET` and the `water_app` DB
-  password. The owner (`water`) password is managed and rotated by RDS in
-  Secrets Manager (`manage_master_user_password`), read only by the migrate
-  Lambda at run time. The CloudFront shared secret and the alert
-  unsubscribe-token secret are generated by Terraform (`random_password`).
+  logged in CloudTrail. The key rotates yearly. `infra/scripts/tf.sh` runs
+  Terraform under `sops exec-env`, which decrypts in memory, so nothing is
+  written to disk, and hands the values over as ephemeral variables, so
+  nothing is written to Terraform state either ([§ Runtime
+  secrets](#runtime-secrets)). See `../infra-secrets/README.md`.
+- This app's production secrets: `AUTH_JWT_SECRET`, the `water_app` DB
+  password and the alert unsubscribe-token secret, all in sops. The owner
+  (`water`) password is managed and rotated by RDS in Secrets Manager
+  (`manage_master_user_password`), read only by the migrate Lambda at run
+  time. The CloudFront shared secret is generated by Terraform
+  (`random_password`).
 
 ### Runtime secrets
 
@@ -1924,7 +2069,7 @@ key there would let any read-only principal forge any user's session.
 
   | Lambda | Keys |
   | --- | --- |
-  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET` |
+  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports) |
   | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
   | migrate | `WATER_APP_PASSWORD` |
   | fetcher, renderer | none: no database, no session |
@@ -1957,13 +2102,28 @@ key there would let any read-only principal forge any user's session.
   secret, a denylist keeps secret names out of every environment block, and
   each entry point loads its secret before its checks); the `runtime_secrets`
   tftest (the keys, each role's grant scoped to its ARN, the endpoint policy
-  and security groups, no Secrets Manager access for the deploy role).
-- **What remains.** The values are still in Terraform state (as before; the
-  state bucket is private and encrypted). The CloudFront secret is also in the
-  distribution's origin header, which `cloudfront:GetDistributionConfig`
-  returns; it lets a caller past the WAF to the Function URL, where the app's
-  own authentication still applies. Rotation: [deployment.md § Rotating a
-  secret](./deployment.md#rotating-a-secret).
+  and security groups, no Secrets Manager access for the deploy role, every
+  version write-only, the values ephemeral).
+- **Out of Terraform state.** The sops values reach Terraform only as
+  ephemeral variables (`infra/scripts/tf.sh`, `sops exec-env` → `TF_VAR_*`),
+  and flow only into `secret_string_wo`, the write-only argument of each
+  secret's version. Terraform stores neither an ephemeral value nor a
+  write-only one, in state or in a saved plan, so reading the state bucket no
+  longer yields the session key, the `water_app` password or the unsubscribe
+  key. The `runtime_secrets` tftest checks that no version uses
+  `secret_string` and that the values are ephemeral (`ephemeralasnull`, with
+  the CloudFront secret as the positive control). The price: Terraform can't
+  see a changed sops value by itself; `infra/scripts/tf.sh` sets
+  `runtime_secret_version` from the sops file's plaintext `sops.lastmodified`,
+  so every sops edit rewrites the secrets
+  ([deployment.md § Rotating a secret](./deployment.md#rotating-a-secret)).
+- **What remains.** The CloudFront shared secret is still in Terraform state
+  (the `random_password` and the distribution), because CloudFront's origin
+  `custom_header` isn't a write-only argument, and in the distribution's
+  configuration, which `cloudfront:GetDistributionConfig` returns. Either
+  lets a caller past the WAF to the Function URL, where the app's own
+  authentication still applies; neither lets anyone forge a session. The state
+  bucket is private, SSE-encrypted and versioned.
 - **Committed local defaults are non-sensitive by design.**
   `backend/.env.development` holds the docker-compose throwaway passwords
   (`water`/`water`, `water_app`/`water_app`) and a dev-only JWT secret. They
@@ -1995,7 +2155,7 @@ key there would let any read-only principal forge any user's session.
   loudly instead of opening the Function URL (`app.security.test.ts`).
 - **Production configuration fails closed** (`backend/src/config/production.ts`).
   Every setting falls back to the local stack when unset (`STORAGE=local`,
-  `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
+  `REPORT_DOWNLOADS=presigned`, `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
   localhost links), so a Lambda missing one would quietly serve synthetic data
   or email localhost links rather than fail. All five entry points (`lambda.ts`,
   `lambda-worker.ts`, `lambda-fetcher.ts`, `lambda-renderer.ts`,
@@ -2013,9 +2173,20 @@ key there would let any read-only principal forge any user's session.
   each entry point with a production-shaped env (the positive control).
   Terraform also refuses a placeholder `auth_jwt_secret` at plan time
   (`infra/lambda.tf` precondition, `rejects_dev_placeholder_jwt_secret`).
-- **WAF:** two per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
-  limit scoped to `/api/auth/*`, and a general limit (`waf_rate_limit_per_ip`,
-  default 1000 per 5 minutes) covering the whole site and `/api/*`.
+- **WAF:** three per-IP rate limits on CloudFront: a tight 100-requests-per-5-minutes
+  limit scoped to `/api/auth/*`, the API's limit (`waf_rate_limit_per_ip`,
+  default 1000 per 5 minutes) scoped to `/api/*`, and a site-wide backstop
+  on every path (`waf_site_rate_limit_per_ip`, default 5000). The API's
+  limit doesn't count the SPA's cached files, so a cold visit (~150 of
+  them) or the report renderer, which loads the SPA in a fresh Chromium for
+  every PDF from a few shared Lambda addresses, doesn't eat it; the
+  backstop still caps one IP pulling the static site (a request the WAF
+  blocks isn't billed by CloudFront, one it allows is), at the
+  `cloudfront-requests` alarm's own default. Both API-path rules match the
+  decoded, normalised, lowercased path (`infra/waf.tf`,
+  `waf_rate_rules_scope`). A renderer the WAF blocks gets a plain `403`
+  without the API's `render_token_refused` code, so the render is retried
+  with backoff rather than failed (§ Render tokens).
 - **Ambiguous paths are refused by the API** (`backend/src/http/rawPath.ts`,
   issue #126). The WAF matches rules on the raw path and Hono routes on a
   decoded one (`decodeURI`), so `/api/%61uth/login` is `/auth/login` to the
@@ -2059,8 +2230,8 @@ key there would let any read-only principal forge any user's session.
   `ingest-results`, nothing else (guardrail tests pin both). The SQS endpoint
   policy lets the worker, and only the worker, reach those two queues.
 - **Blast radius:** Lambda reserved concurrency is capped. There are monthly
-  and daily budgets and Cost Anomaly Detection (deployment.md § Budget
-  alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
+  and daily budgets and Cost Anomaly Detection (off until the operator turns
+  it on after the first apply; deployment.md § Budget alerts), and alarms on Lambda errors, throttles, the API's unhandled 500s
   (`unhandled_error`) and CloudFront 5xx. Both alert topics admit only this
   account's services (`aws:SourceAccount`, and `aws:SourceArn` for CloudWatch
   and Budgets), so another account can't publish fake alerts through them.
@@ -2085,7 +2256,7 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
 
 Revisit AWS-0132 for `reports` if a client contract asks for customer-held
 keys or key-level audit of report reads.
@@ -2147,7 +2318,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - **CSP `style-src 'unsafe-inline'` (accepted risk).** The CloudFront CSP
   (`infra/security_headers.tf`) is strict on scripts: the header's
   `script-src 'self' 'unsafe-inline'` is narrowed by SvelteKit's per-build
-  `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script,
+  `<meta>` CSP to `'self'` plus the hash of its one inline bootstrap script
+  (and the sign-in CAPTCHA SDK's two origins once configured, § Sign-in CAPTCHA),
   and the frontend deploy refuses a build without that meta policy
   (`infra/scripts/check-csp.mjs`). This needs `kit.csp.mode = 'hash'` in
   `frontend/svelte.config.js`. Styles keep `'unsafe-inline'`, because Svelte
@@ -2171,8 +2343,10 @@ notice to data subjects).
 1. **Suspected secret leak:** rotate the secret at its source.
    `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored
    run unverified until re-run ([§ Run stamps](#run-stamps)). DB passwords: `ALTER ROLE`
-   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml` and
-   `terraform apply`. The operator runs these steps by hand.
+   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml`
+   and apply through `infra/scripts/tf.sh` (the edit moves
+   `sops.lastmodified`, which rotates the runtime secrets). The operator runs
+   these steps by hand.
 2. **Suspected cross-project data exposure:** check the RLS policies and the
    `water_app` role flags (`\du`, `pg_policies`). Add a failing DB test that
    reproduces it before fixing.

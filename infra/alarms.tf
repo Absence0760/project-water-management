@@ -9,8 +9,8 @@
 # Pre-condition: IAM billing access must be enabled in this account before
 # the first apply that includes `aws_budgets_budget` (a one-time root toggle,
 # infra/README.md § Operator steps). Until then set var.budget_monthly_usd = 0
-# (and var.cost_anomaly_threshold_usd = 0) or the apply fails with
-# AccessDeniedException on the budgets.
+# (and leave var.cost_anomaly_threshold_usd at its default 0) or the apply
+# fails with AccessDeniedException on the budgets.
 # ----------------------------------------------------------------------------
 
 # The regional topic carries the regional CloudWatch alarms. The budgets and
@@ -159,10 +159,12 @@ resource "aws_budgets_budget" "daily" {
 # spend and flags a jump in any one of them, which the budgets only see once
 # the account total crosses a line. It needs ~10 days of history, so in the
 # first month the daily budget is the guard, not this.
-# An account may hold only ONE services monitor. If this one already has one
-# (AWS auto-creates a default for some new Cost Explorer users), the apply
-# fails on it: import it, or set cost_anomaly_threshold_usd = 0
-# (infra/README.md § Operator steps, step 4).
+# An account may hold only ONE services monitor, and AWS auto-creates a
+# default for some new Cost Explorer users, so creating ours could fail the
+# first apply. Hence off by default (cost_anomaly_threshold_usd = 0), which
+# loses nothing (no history yet): the operator turns it on after the first
+# apply, importing an existing monitor if there is one (infra/README.md §
+# Operator steps, step 11).
 # Cost Explorer is a global API served from us-east-1, hence the provider.
 
 resource "aws_ce_anomaly_monitor" "services" {
@@ -397,6 +399,52 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
   statistic           = "Sum"
   threshold           = 0
   alarm_description   = "The API answered a request with an unhandled 500 (invisible to the Lambda Errors metric). Search the API log group for event = unhandled_error: route says which endpoint, error/code the exception's name and code (a Postgres SQLSTATE for a database error), at the stack frames. Runbook: docs/deployment.md § Runbooks."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# --- Failed sign-ins across all accounts --------------------------------------
+# Every sign-in throttle is keyed on one address (the lockout, the reset and
+# verification cooldowns; docs/security.md § Throttles that don't depend on the
+# WAF), so one password tried against many accounts from many IPs gets past
+# each of them and the WAF's per-IP auth limit alone slows it. Only a count
+# over all accounts sees that. Each failed credential check logs one line
+# (backend/src/auth/loginFailed.ts):
+#   {"event":"login_failed","route":"/auth/login","reason":"bad_password"}
+# the route's pattern and a reason code (unknown_account, bad_password,
+# locked, invalid_link), never the address, an id, the client IP or a token.
+# Only the API checks credentials, so only its log group is filtered.
+#
+# Threshold (login_failed_alarm_per_15min, default 30 in 15 minutes): the
+# pilot is a handful of users; one of them fumbling a password into a lock
+# logs 5-10 lines, so 30 is several people locking themselves out at once, or
+# someone guessing. One IP at the WAF auth limit (100 per 5 minutes) reaches it
+# in under 5 minutes. Alarm, not a circuit breaker: why is in docs/security.md.
+
+resource "aws_cloudwatch_log_metric_filter" "login_failed" {
+  name           = "${local.project}-login-failed"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.event = \"login_failed\" }"
+
+  metric_transformation {
+    name          = "LoginFailed"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "login_failed" {
+  alarm_name          = "${local.project}-login-failed"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.login_failed.metric_transformation[0].namespace
+  period              = 900
+  statistic           = "Sum"
+  threshold           = var.login_failed_alarm_per_15min
+  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter event = \"login_failed\" | stats count() by reason, route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }
@@ -711,13 +759,15 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_requests" {
   }
 }
 
-# Sustained blocks. Only the two rate rules block (waf.tf has no managed rule
-# groups), so a block means one IP went over 100 auth requests, or
-# waf_rate_limit_per_ip requests, in 5 minutes. 100 blocked in a period is a
-# whole auth-rule window's worth; in each of 3 periods running (15 minutes)
-# it is someone persisting (credential stuffing, a scraper) or a real client
-# stuck behind a limit: the report renderer (<= 2 Lambda egress IPs, one
-# /api/auth/render-session call per render) or an office behind one NAT.
+# Sustained blocks. Only the three rate rules block (waf.tf has no managed
+# rule groups), so a block means one IP went over 100 auth requests,
+# waf_rate_limit_per_ip API requests, or waf_site_rate_limit_per_ip requests
+# in all, in 5 minutes. 100 blocked in a period is a whole auth-rule
+# window's worth; in each of 3 periods running (15 minutes) it is someone
+# persisting (credential stuffing, a scraper) or a real client stuck behind
+# a limit: the report renderer (<= 2 Lambda egress IPs, one
+# /api/auth/render-session call and the SPA per render; a blocked render
+# retries with backoff, reports/render.ts) or an office behind one NAT.
 # Blocked requests cost WAF's $0.60/M only, so this is the attack and
 # false-positive signal; cloudfront_requests is the cost one.
 # Dimensions: the ACL's metric name and Rule = ALL (every rule). A
@@ -734,7 +784,7 @@ resource "aws_cloudwatch_metric_alarm" "waf_blocked_requests" {
   period              = 300
   statistic           = "Sum"
   threshold           = 100
-  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are failing; one office IP means raise waf_rate_limit_per_ip. Runbook: docs/deployment.md, Runbooks, Request flood."
+  alarm_description   = "The WAF blocked more than 100 requests in each of the last three 5-minute periods: an attacker persisting, or a real client stuck behind a rate limit. Read the ACL's sampled requests (us-east-1): /api/auth/ from many IPs is credential stuffing; the renderer's IPs mean reports are being retried and may fail; one office IP means raise waf_rate_limit_per_ip (API paths) or waf_site_rate_limit_per_ip (the rest). Runbook: docs/deployment.md, Runbooks, Request flood."
   alarm_actions       = [aws_sns_topic.alerts_us_east_1.arn]
   treat_missing_data  = "notBreaching"
 

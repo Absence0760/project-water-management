@@ -1,7 +1,7 @@
 // The pure parts of server-side reports: object keys and download names,
 // the status a viewer sees, PDF page counting and the render settings.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, footerTemplate, renderOptionsFromEnv, reportQuery } from './render.js';
+import { confinementArgs, countPdfPages, DEFAULT_RENDER_TIMEOUT_MS, footerTemplate, RenderError, renderOptionsFromEnv, reportQuery, sessionRefusal } from './render.js';
 import { reportFileName, reportKey, storageKind } from './storage.js';
 import { RENDER_ANSWER_WITHIN_MS, reportState } from './store.js';
 
@@ -117,5 +117,44 @@ describe('confinementArgs', () => {
 		const args = confinementArgs({ siteUrl: 'http://localhost:7777', apiUrl: 'http://127.0.0.1:3001' });
 		expect(args[0]).toBe('--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1');
 		expect(args[2]).toBe('--proxy-bypass-list=<-loopback>;http://localhost:7777;http://127.0.0.1:3001');
+	});
+});
+
+// In production the render-session request goes through CloudFront and the
+// WAF (infra/waf.tf), whose rate rules answer a plain 403 with an HTML body.
+// Only the API's own coded refusal is final; everything else is retried.
+describe('sessionRefusal', () => {
+	const refused = { error: 'this render token is invalid, used or expired', code: 'render_token_refused' };
+
+	it('is final for the API’s coded refusal: a used or expired token (400) or a requester who lost access (403)', () => {
+		for (const status of [400, 403]) {
+			const e = sessionRefusal(status, status === 403 ? { error: 'the requester can no longer see this report', code: 'render_token_refused' } : refused);
+			expect(e).toBeInstanceOf(RenderError);
+			expect(e).toMatchObject({ retry: false, message: 'the render token was refused (used, expired, or the requester lost access)' });
+		}
+	});
+
+	it('retries a WAF or CloudFront block: a 403 without the API’s code (an HTML body parses to nothing)', () => {
+		expect(sessionRefusal(403, null)).toMatchObject({ retry: true, message: 'the render session could not start (HTTP 403)' });
+		expect(sessionRefusal(403, { message: 'Forbidden' })).toMatchObject({ retry: true });
+		expect(sessionRefusal(403, { error: 'forbidden' })).toMatchObject({ retry: true });
+	});
+
+	it('retries a rate limit, a server error, and any other code (the code must be the render one)', () => {
+		expect(sessionRefusal(429, null)).toMatchObject({ retry: true, message: 'the render session could not start (HTTP 429)' });
+		expect(sessionRefusal(502, null)).toMatchObject({ retry: true });
+		expect(sessionRefusal(500, { error: 'Internal server error' })).toMatchObject({ retry: true });
+		expect(sessionRefusal(403, { code: 'not_signed_in' })).toMatchObject({ retry: true });
+		expect(sessionRefusal(400, { error: 'invalid request' })).toMatchObject({ retry: true });
+	});
+
+	it('retries the code on a status the API never sends it with (a proxy echoing a body is not the API)', () => {
+		expect(sessionRefusal(502, refused)).toMatchObject({ retry: true });
+		expect(sessionRefusal(429, refused)).toMatchObject({ retry: true });
+	});
+
+	it('ignores a body that isn’t an object', () => {
+		expect(sessionRefusal(403, 'render_token_refused')).toMatchObject({ retry: true });
+		expect(sessionRefusal(400, ['render_token_refused'])).toMatchObject({ retry: true });
 	});
 });

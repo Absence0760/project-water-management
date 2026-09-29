@@ -8,8 +8,9 @@ here has been applied yet; see [Operator steps](#operator-steps) for the order.
 
 ```
 browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-management.jaredhoward.com
-                    ├─ /*      → CF Function spa_rewrite → S3 (private, OAC)        SPA build
-                    └─ /api/*  → CF Function strips /api → Lambda Function URL      Hono API
+                    ├─ /*         → CF Function spa_rewrite → S3 (private, OAC)     SPA build
+                    ├─ /reports/* → signed URLs only (key group) → S3 reports (OAC) report PDFs
+                    └─ /api/*     → CF Function strips /api → Lambda Function URL   Hono API
                                   + X-CloudFront-Shared-Secret                     (nodejs24.x, arm64)
                                                                                       │ VPC, private subnets
                                                           SES API (VPC endpoint) ◄────┤ SendEmail as no-reply@
@@ -27,7 +28,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
    worker ──SendMessage (endpoint)──► SQS render-requests ──► renderer Lambda (container image, Chromium;
    worker ◄── SQS render-results ◄──SendMessage (public)──────┘   NO VPC, no DB; reports.tf)
                                                                   ├──HTTPS──► the site via CloudFront (render session)
-                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── API pre-signs GETs
+                                                                  └──PutObject──► S3 reports (private, SSE, 7 days) ◄── CloudFront /reports/* (OAC, signed URLs the API mints)
                      (each queue: a DLQ after 5 receives; alarms)
 ```
 
@@ -57,7 +58,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   doesn't go through the function's ENI. The VPC reaches exactly three AWS
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert
-  emails; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
+  emails, and `DeleteSuppressedDestination` from the API only; its endpoint
+  policy names only those two roles, those actions and a send as
+  no-reply@; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
   (the migrate Lambda's RDS master secret, and the API, worker and migrate
   Lambdas' runtime secrets; its endpoint policy lets each role read only its
   own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
@@ -117,11 +120,15 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   lines), its npm packages (playwright-core, aws-lambda-ric) by
   `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
   its build stage's apt packages by exact version from one Ubuntu archive
-  snapshot (`APT_SNAPSHOT`; move the snapshot and the versions together,
-  read from the base with `apt-cache policy` as the Dockerfile shows).
+  snapshot (`APT_SNAPSHOT`). Nothing moves that snapshot by itself, so
+  `pnpm gen:renderer-apt` moves it and the versions together (each read
+  from the digest-pinned base with `apt-cache --snapshot`), on every
+  Dependabot `docker` PR and whenever the weekly
+  `renderer-apt-snapshot.yml` check opens its issue (snapshot over 90 days
+  old; `pnpm check:apt-snapshot` locally).
   Dependabot's `docker` entry for `/backend` opens the tag-and-digest PR;
-  it is never auto-merged (`pnpm check:workflows` keeps `docker` off the
-  auto-merge allowlist). Moving
+  neither it nor the `/backend/renderer-deps` npm entry is ever
+  auto-merged (`pnpm check:workflows` keeps both out of auto-merge). Moving
   Playwright moves every pin at once: the Dockerfile tag and digest
   (`docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`),
   playwright-core in `backend/renderer-deps/package.json` (then
@@ -153,23 +160,24 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
-| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`); the API, worker and migrate Lambdas' runtime secrets in Secrets Manager, each role's read of its own |
+| `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
+| `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
-| `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
-| `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
+| `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, downloads through CloudFront (the trusted public keys from `report_download_public_keys` and their key group, the reports OAC, the origin request policy that forwards only the file name, and the bucket policy that lets only this distribution read `reports/`; the `/reports/*` behaviour itself is in `s3_cloudfront.tf`), and the DLQ / renderer-errors / renderer-duration alarms |
+| `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
-| `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
+| `waf.tf` | Web ACL with 3 per-IP rate rules (`/api/auth/*`: 100/5 min; `/api/*`: `waf_rate_limit_per_ip`; every path, the static site's backstop: `waf_site_rate_limit_per_ip`) and the sign-in CAPTCHA rule (`POST /api/auth/login`: a puzzle past `waf_signin_captcha_per_5min`), plus its CAPTCHA API key |
+| `alarms.tf` | SNS topics (regional + us-east-1, each publish-only for this account's services), monthly + daily budgets and Cost Anomaly Detection (to the us-east-1 topic), Lambda/RDS/SES alarms, the us-east-1 CloudFront 5xx, CloudFront request-flood and WAF blocked-requests alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` and `login_failed` filters (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh`, and the `db_*` names `restore-db.sh` reads |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
-| `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
+| `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
 | `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (51 runs; see [Validating locally](#validating-locally)) |
@@ -212,10 +220,10 @@ scale. An alarm fires at 60 connections.
 | Secret | Source | In Terraform state? |
 | --- | --- | --- |
 | RDS master (`water`, schema owner) | `manage_master_user_password`: RDS generates it, stores it in Secrets Manager and rotates it (every 7 days by default) | **No.** Only the migrate Lambda reads it, at run time |
-| `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | Yes |
-| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | Yes |
-| CloudFront shared secret | `random_password` → the API's runtime secret, and CloudFront's origin header | Yes |
-| Alert unsubscribe-token secret | `random_password` → the worker's runtime secret | Yes |
+| `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | **No.** Ephemeral variable → write-only value |
+| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | **No.** Ephemeral variable → write-only value |
+| Alert unsubscribe-token secret | sops `alerts_token_secret` → the worker's runtime secret | **No.** Ephemeral variable → write-only value |
+| CloudFront shared secret | `random_password` → the API's runtime secret (write-only), and CloudFront's origin header | **Yes**, in `random_password.cloudfront_shared_secret` and the distribution: `custom_header` isn't a write-only argument |
 
 **No secret sits in a Lambda's environment** (issue #126). Environment
 variables come back in plain text from `lambda:GetFunctionConfiguration`,
@@ -234,17 +242,43 @@ CloudFront secret in the distribution's origin header, readable with
 `cloudfront:GetDistributionConfig`; it only lets a caller past the WAF to the
 Function URL, where the app's own auth still applies.
 
+**No sops value sits in Terraform state or a saved plan** (issue #126).
+`scripts/tf.sh` runs Terraform under `sops exec-env`, which hands each key
+over as an ephemeral variable (`TF_VAR_<key>`; Terraform never persists an
+ephemeral value), and those variables reach only `secret_string_wo`, the
+write-only argument of each runtime secret's version (Terraform sends it to
+AWS and keeps no copy; the tftest checks the plan holds no `secret_string`
+and that the values are ephemeral). Because nothing is stored,
+Terraform can't see a changed sops value: `runtime_secret_version`
+(`secret_string_wo_version`) is the signal to write again, and `tf.sh` derives
+it from the sops file's plaintext `sops.lastmodified` (awk over the `sops:`
+block, nothing decrypted for it), so every sops edit rotates by itself
+([§ Rotating secrets](#rotating-secrets)). Needs Terraform 1.11+ and the AWS
+provider's 6.x line, both pinned in `main.tf`.
+
+Why variables rather than the carlpett/sops provider's `ephemeral
+"sops_file"`: Terraform's test mocks can't open an ephemeral resource before
+1.17 (hashicorp/terraform#38928), and the whole mocked suite runs through
+`secrets.tf`. Once `.terraform-version` is 1.17+, an ephemeral `sops_file`
+(mocked with `mock_ephemeral`) could replace `tf.sh`.
+
+**What stays in state:** the CloudFront shared secret, twice (the
+`random_password` and the distribution's origin header). The header argument
+isn't write-only, so no ephemeral source could reach it. A reader of state
+could call the Function URL directly, past the WAF, where the app's own auth
+still applies; it can't forge a session. The state bucket is SSE-encrypted,
+private to this account, and versioned, and **old state versions written
+before this change still hold the earlier plaintext** (the sops values, the
+old alert-token secret): the stack isn't deployed yet, so there are none;
+if it had been, rotating each sops value once after this change would retire
+them.
+
 This follows the estate. project-flakey uses the same RDS-managed master plus
-app secrets from sops. The state bucket is SSE-encrypted, private to this
-account, and versioned. As `project-mgmt/docs/secrets-management.md` says,
-sops protects secrets in git, not in state. The master is kept out of state
-because it is the one credential that bypasses RLS. The cost of that choice is
-the Secrets Manager VPC endpoint (~$7.30/month). The alternative, a
-sops-supplied master password in the migrate Lambda's env, would save that but
-put the owner credential in state and in the Lambda config. The runtime
-secrets now share that endpoint. To go further, the secret versions could be
-written write-only (`secret_string_wo` from an `ephemeral "sops_file"`), which
-would take the sops values out of state too.
+app secrets from sops. The master is kept out of state because it is the one
+credential that bypasses RLS. The cost of that choice is the Secrets Manager
+VPC endpoint (~$7.30/month). The alternative, a sops-supplied master password
+in the migrate Lambda's env, would save that but put the owner credential in
+the Lambda config. The runtime secrets now share that endpoint.
 
 The migrate Lambda sets `water_app`'s password as a **SCRAM-SHA-256
 verifier** computed in the Lambda, so the plaintext never reaches Postgres or
@@ -301,8 +335,22 @@ the us-east-1 one ([§ Budget alerts](#budget-alerts)).
   the meta policy is missing, so the header's `'unsafe-inline'` can never be
   the effective policy. `style-src` keeps `'unsafe-inline'`: Svelte templates
   and uPlot set inline `style` attributes, which nothing narrower allows (an
-  accepted risk; CSS can't run script). No third-party origin is allowed
-  anywhere.
+  accepted risk; CSS can't run script). One third-party origin pair only:
+  once `waf_captcha_integration_url` is set, `script-src` and `connect-src`
+  (header and meta) add the account's CAPTCHA SDK origin and its challenge
+  script's, and `media-src` allows `data:` for the puzzle's audio (the
+  sign-in CAPTCHA below; docs/security.md § Sign-in CAPTCHA).
+- **Sign-in CAPTCHA** (`waf.tf` `SignInCaptchaPerIP`, priority 1 between the
+  auth block and the site-wide limit): a rate-based rule on `POST
+  /api/auth/login` (decoded, normalised, lower-cased path) whose action is
+  `CAPTCHA` past `waf_signin_captcha_per_5min` (default 20, 10–99) per IP in
+  5 minutes, immunity 300 s; `waf_signin_captcha_action = "COUNT"` is the
+  switch-off. `aws_wafv2_api_key.captcha` (us-east-1, CloudFront scope,
+  token domain `var.domain_name`) is the CAPTCHA JavaScript API key; outputs
+  `waf_captcha_script_url` and `waf_captcha_api_key` (sensitive) feed the
+  frontend build. The integration URL isn't a Terraform attribute (the ACL's
+  `application_integration_url` is only filled for the ATP/ACFP rule groups),
+  so it is a variable, read once with `aws wafv2 list-api-keys`.
 - **PriceClass_All**: AWS's price-class table ([CloudFront pay-as-you-go pricing](https://aws.amazon.com/cloudfront/pricing/pay-as-you-go/)) puts South Africa, Kenya, Nigeria, Egypt and the Middle East only in PriceClass_All, so
   100 or 200 would serve SA users from Europe or Asia. At this traffic the
   difference in price is cents.
@@ -330,20 +378,30 @@ Idle to light use, on-demand, us-east-1:
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
 | Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
-| WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
+| WAF: ACL + 4 rules (+ $0.60 / 1M requests; CAPTCHA solves $0.40 / 1,000, only under pressure) | 9.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
+| CloudWatch: 35 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error, login-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.50 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $51** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20) |
+| **Total** | **≈ $53** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20, the site-wide backstop and sign-in CAPTCHA rules $1.00 each) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
 at Africa's), $1.60–2.80 per million; one it blocks costs the WAF's $0.60/M
 only (CloudFront doesn't bill WAF-blocked requests). The per-IP rate limits
-stop one client, not a botnet keeping each IP under them: 1,000 requests a
-second is ~$140–240 a day. Nothing can cap that without dropping the CSP (the
+(`waf.tf`: 100 on `/api/auth/*`, `waf_rate_limit_per_ip` on `/api/*`, and
+`waf_site_rate_limit_per_ip`, default 5,000, on every path) stop one client,
+not a botnet keeping each IP under them. The API's limit doesn't count the
+SPA's files, so a cold visit (~150 of them) and the report renderer (which
+loads the SPA for every PDF from a few shared Lambda addresses) don't eat
+it; the site-wide backstop is there because an unlimited static site would
+let one IP run up allowed-request charges until someone acts on the alarm
+below, and its default blocks one IP at that alarm's own threshold. A
+renderer blocked by any of them is retried with backoff (a WAF `403` has no
+`render_token_refused` code, `backend/src/reports/render.ts`), not failed.
+A botnet at 1,000 requests
+a second costs ~$140–240 a day. Nothing can cap that without dropping the CSP (the
 CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
@@ -388,7 +446,7 @@ alarms are what bound and report a runaway while it happens.
 | Monthly, ACTUAL 80% | the month's spend passes $64 (on $80) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
-| Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` ($10) | AWS-services monitor, free, needs ~10 days of history. |
+| Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
 
 Each topic's policy admits only this account (`aws:SourceAccount`, plus
 `aws:SourceArn` on CloudWatch's `…:alarm:*` and Budgets' `arn:aws:budgets::<acct>:*`,
@@ -426,23 +484,17 @@ Claude does not run any of these, and none of them print a secret. Replace
    `aws service-quotas get-service-quota --service-code lambda --quota-code L-B99A9384 --region <region> --profile water-management --query Quota.Value`.
 4. **Billing access for budgets.** As the account root: Account → "IAM user
    and role access to Billing information" → Activate. Until then, set
-   `budget_monthly_usd = 0` (skips both budgets) and
-   `cost_anomaly_threshold_usd = 0`. Then check whether the account already
-   has a Cost Anomaly Detection services monitor (AWS auto-creates one for
-   some new accounts, and an account may hold only one):
-   `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorDimension,MonitorArn]'`.
-   If it lists a `SERVICE` monitor, either import it before the apply
-   (`terraform import 'aws_ce_anomaly_monitor.services[0]' <arn>`, after
-   `init` in step 8) or keep `cost_anomaly_threshold_usd = 0`; otherwise
-   the apply fails on the monitor.
+   `budget_monthly_usd = 0` (skips both budgets). Cost Anomaly Detection is
+   off by default (`cost_anomaly_threshold_usd = 0`), so the first apply
+   can't fail on an existing monitor; step 11 turns it on.
 4a. **SES endpoint service check** (read-only, before the first plan): confirm
    the SES API endpoint service exists in the region (it launched Dec 2025):
    `aws ec2 describe-vpc-endpoint-services --service-names com.amazonaws.<region>.email --region <region> --profile water-management --query 'ServiceDetails[].ServiceName'`.
    An empty result means the apply would fail on `aws_vpc_endpoint.ses`.
 5. **Secrets** in the private repo. The key list is in
    [`prod.sops.yaml.example`](./prod.sops.yaml.example). Generate the values
-   with `openssl rand -hex 32` (JWT) and `openssl rand -hex 24` (db password)
-   inside the editor.
+   with `openssl rand -hex 32` (JWT, alert-token secret) and
+   `openssl rand -hex 24` (db password) inside the editor.
    - `cd ~/github/infra-secrets && ./bin/sops-init.sh --project water-management --region us-east-1`
      (the KMS key lives in the bootstrap region)
    - `cd ~/github/infra-secrets && AWS_PROFILE=water-management sops water-management/prod.sops.yaml`
@@ -455,12 +507,15 @@ Claude does not run any of these, and none of them print a secret. Replace
    `cd ~/github/project-water-management/infra && printf 'bucket = "water-management-tfstate-%s"\n' "$(aws sts get-caller-identity --profile water-management --query Account --output text)" > backend.config`
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`
-   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
-   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
+   - `mkdir -p -m 700 ~/.cache/water-management && cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh plan -var-file=../../infra-secrets/water-management/prod.tfvars -out="$HOME/.cache/water-management/prod.tfplan"`
+   - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply "$HOME/.cache/water-management/prod.tfplan" && rm -f "$HOME/.cache/water-management/prod.tfplan"`
 
-   A saved plan holds every variable and secret it read (the decrypted sops
-   values, the database passwords) in plain form, so it is written outside
-   the repo and deleted once applied. If you don't apply it, delete it
+   `tf.sh` decrypts `prod.sops.yaml` in memory and passes the runtime secrets
+   as ephemeral variables; the apply needs them again (a saved plan doesn't
+   keep them), which is why it goes through `tf.sh` too. A saved plan no
+   longer holds the sops values, but it still holds a copy of state, and so
+   the CloudFront shared secret, so it is still written outside the repo and
+   deleted once applied. If you don't apply it, delete it
    yourself: `rm -f ~/.cache/water-management/prod.tfplan`. `.gitignore`
    also ignores `*.tfplan` as a backstop.
 
@@ -520,30 +575,95 @@ Claude does not run any of these, and none of them print a secret. Replace
     its own image; the tag in `prod.tfvars` only ever creates it. Until then
     report requests wait in `render-requests` (4 days) and show as
     "rendering".
+10b. **SES suppression through the endpoint** (after the first backend
+    deploy; issue #126). Step 4a only proves the SES API endpoint service
+    exists; it doesn't prove the endpoint carries the SESv2
+    `DeleteSuppressedDestination` call the API makes when someone turns
+    alert emails back on (`POST /me/alerts/resume`,
+    `backend/src/mail/suppression.ts`), or that it honours the endpoint
+    policy's `ApiReleasesSuppressedAddress` statement (`ses.tf`). Put a test
+    address you own on the suppression list
+    (`aws sesv2 put-suppressed-destination --email-address <you> --reason BOUNCE --region <region> --profile water-management`),
+    sign in as that account, turn alert emails back on, then check it's gone:
+    `aws sesv2 get-suppressed-destination --email-address <you> --region <region> --profile water-management`
+    should answer `NotFoundException`. If the resume request fails instead
+    (a 500, and an `AccessDenied` or timeout for `DeleteSuppressedDestination`
+    in the API's log), the endpoint doesn't carry the call: until that's
+    fixed, take an address off the list by hand after someone turns mail
+    back on (`aws sesv2 delete-suppressed-destination --email-address <address> --region <region> --profile water-management`),
+    and record the finding in #126. The same applies if the first apply
+    rejects the endpoint policy itself (the endpoint service not supporting
+    custom policies): note it on #126 before removing the `policy` argument.
+
+11. **Turn on Cost Anomaly Detection** (after the first apply; it needs ~10
+    days of billing history before it flags anything, so nothing is lost by
+    doing this in the first week or two). An account may hold only one
+    AWS-services monitor, and AWS creates a default one for some new Cost
+    Explorer users, so check first:
+    `aws ce get-anomaly-monitors --region us-east-1 --profile water-management --query 'AnomalyMonitors[].[MonitorName,MonitorType,MonitorDimension,MonitorArn]'`.
+    - **No `DIMENSIONAL` / `SERVICE` monitor listed:** set
+      `cost_anomaly_threshold_usd = 10` in `prod.tfvars`, then plan and apply
+      (step 8). The plan adds `aws_ce_anomaly_monitor.services[0]` and its
+      subscription to the us-east-1 alerts topic.
+    - **One is listed:** set `cost_anomaly_threshold_usd = 10`, adopt it
+      before planning:
+      `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh import -var-file=../../infra-secrets/water-management/prod.tfvars 'aws_ce_anomaly_monitor.services[0]' <MonitorArn>`,
+      then plan. It should show the monitor renamed in place (to
+      `water-management-services`) and the subscription added; if it shows
+      the monitor replaced, stop and ask. AWS's default monitor may come with
+      its own subscription (it emails the account's root address): list them
+      with `aws ce get-anomaly-subscriptions --region us-east-1 --profile water-management --query 'AnomalySubscriptions[].[SubscriptionName,SubscriptionArn]'`,
+      and delete the default one once ours is applied, if you don't want both
+      (`aws ce delete-anomaly-subscription --subscription-arn <arn> --region us-east-1 --profile water-management`).
+    - Either way, confirm afterwards: the first command lists one monitor,
+      `water-management-services`.
 
 ### Rotating secrets
 
 Every secret below reaches its Lambdas through their runtime secrets
-(`secrets.tf`). An apply that changes one writes a new secret version, which
-changes `RUNTIME_SECRET_VERSION` in each affected Lambda's configuration, so
-every running instance is replaced by a cold start that reads the new value:
-there is no separate restart step. A value changed by hand in the console is
-**not** picked up (each Lambda reads the version Terraform pinned); change it
-at its source and apply instead.
+(`secrets.tf`), written write-only: Terraform keeps no copy, so **it can't
+tell that a sops value changed** by itself. `tf.sh` gives it the signal:
+it sets `runtime_secret_version` from the sops file's `sops.lastmodified`
+(`YYYYMMDDhhmmss`; plaintext metadata sops rewrites on every edit), so a sops
+rotation is two steps: edit the value with sops, apply through `tf.sh`. The
+new counter replaces every runtime secret's version, which changes
+`RUNTIME_SECRET_VERSION` in each Lambda's configuration, so every running
+instance is replaced by a cold start that reads the new value: there is no
+separate restart step. A value changed by hand in the console is **not**
+picked up (each Lambda reads the version Terraform pinned); change it at its
+source and apply instead.
 
-- **`db_app_password`:** edit it with sops, apply, and invoke the migrate
-  Lambda straight away. The API fails DB logins until you do:
+- **Forced rewrite of unchanged values:** add
+  `-var runtime_secret_version=$(date -u +%Y%m%d%H%M%S)` to the apply (or
+  export `TF_VAR_runtime_secret_version`, which `tf.sh` then leaves alone).
+  The next plain run returns to `lastmodified` and rewrites once more.
+- **Never set `runtime_secret_version` in `prod.tfvars`** (or any var file):
+  Terraform ranks var files above `tf.sh`'s value, so it would pin the
+  counter and silently stop rotation. `tf.sh` refuses to run if one does.
+
+The apply, for any of the sops keys:
+`cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars`
+
+- **`db_app_password`:** edit it with sops, apply, and invoke the migrate Lambda straight away. The API fails DB logins
+  until you do:
   `aws lambda invoke --function-name water-management-migrate --cli-binary-format raw-in-base64-out --payload '{}' --cli-read-timeout 320 --region <region> --profile water-management /dev/stdout`
-- **`auth_jwt_secret`:** edit it with sops and apply. Everyone is signed out.
-- **CloudFront shared secret:**
-  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
+- **`auth_jwt_secret`:** edit it with sops, apply. Everyone is signed out.
+- **`alerts_token_secret`** (WP-2.13, the worker only): only if it leaked,
+  since every unsubscribe link in alert emails already sent stops working
+  ("Manage your alerts" still does). Edit it with sops, apply. The alert kill switch is
+  `alerts_enabled = false` (docs/deployment.md § Runbooks, alert storm).
+- **CloudFront shared secret** (not in sops: replacing it rewrites the runtime
+  secrets in the same apply, `replace_triggered_by` in `secrets.tf`):
+  `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management ./scripts/tf.sh apply -var-file=../../infra-secrets/water-management/prod.tfvars -replace=random_password.cloudfront_shared_secret`
   (a few seconds of 403s while CloudFront and Lambda converge).
-- **Alert unsubscribe-token secret** (WP-2.13, the worker only): only if it
-  leaked, since every unsubscribe link in alert emails already sent stops
-  working ("Manage your alerts" still does):
-  `terraform apply -var-file=… -replace=random_password.alerts_token_secret`.
-  The alert kill switch is `alerts_enabled = false` (docs/deployment.md §
-  Runbooks, alert storm).
+- **`cloudfront_private_key`** (report download links, the API only): an
+  RSA key pair the operator generates; the public half is
+  `report_download_public_keys` in `prod.tfvars`. Rotate with two keys
+  overlapping (add the new public key and apply; put the new private key in
+  sops and point `report_download_signing_key` at it, apply; drop the old
+  public key, apply), so no valid link fails. The API refuses to start if
+  the sops key and the signing public key aren't a pair. Commands and
+  details: docs/deployment.md § The report-download signing key.
 - **RDS master:** RDS rotates it automatically. Nothing reads it except the
   migrate Lambda, which fetches it on every run.
 
@@ -608,7 +728,10 @@ wired to SNS, including the `self_check_failed` log metric filters (pattern
 and metric name, on both the API and worker log groups) and its alarm, and
 the `mail_send_failed` filters (both log groups) and alarm, and the
 `unhandled_error` filter (the API's log group, the API's unhandled 500s the
-Lambda `Errors` metric can't see) and alarm; the us-east-1 alarms
+Lambda `Errors` metric can't see) and alarm, and the `login_failed` filter
+(the API's log group: failed credential checks across all accounts, which the
+per-address lockout can't sum) and its alarm (more than 30 in one 15-minute
+period by default); the us-east-1 alarms
 (`cloudfront-5xx`, `cloudfront-requests`, `waf-blocked-requests`) wired to the
 us-east-1 topic, with the request-flood alarm's metric, dimensions and 5,000
 threshold and the WAF alarm's `BlockedRequests` on the ACL's metric name with
@@ -620,7 +743,8 @@ no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
 alarm; the budgets (monthly $80 with FORECASTED 100% / ACTUAL 80% / ACTUAL
 100%, the derived $6 daily ACTUAL 100%, all to the us-east-1 topic), the
-Cost Anomaly Detection monitor and subscription, and both alert topics'
+Cost Anomaly Detection monitor and subscription (off by default,
+`anomaly_detection_off_by_default`; on at a threshold, `anomaly_detection_on`), and both alert topics'
 policies (one service per statement, each pinned by `aws:SourceAccount`,
 CloudWatch and Budgets also by `aws:SourceArn`), with runs for the derived
 and explicit daily amounts and for switching each off, and five negative runs
@@ -633,7 +757,9 @@ immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
 below two ticks does; two more refuse a `cloudfront_requests_alarm_per_5min`
-outside 1,000–20,000. Another six refuse an alert mailbox nobody reads:
+outside 1,000–20,000, and two a `login_failed_alarm_per_15min` outside
+10–300 (below 10 one person locking themselves out pages; above 300 one IP at
+the WAF's auth limit stays unseen). Another six refuse an alert mailbox nobody reads:
 `budget_alert_email` is required, and an empty, malformed or reserved
 address fails the plan (example.com/.org/.net and their subdomains, and the
 `.example`, `.test`, `.invalid` and `.localhost` TLDs of RFC 2606 / RFC 6761,
@@ -646,7 +772,22 @@ Lambda and a worker cap below the sum of its SQS triggers'
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker
 throttles alarm; and `waf_auth_rule_matches_decoded_path` pins the auth rate
 limit's `URL_DECODE` → `NORMALIZE_PATH` → `LOWERCASE` transformations (so
-`/api/%61uth/login` can't slip past it). The `network` run pins the
+`/api/%61uth/login` can't slip past it); `waf_rate_rules_scope` pins the API
+rule to `/api/` (same transformations), the unscoped site-wide backstop, the
+three limits and their order, and `rejects_site_rate_limit_below_the_api_limit`
+the variables' ordering. `signin_captcha` pins the sign-in
+CAPTCHA: the rule order (auth block, CAPTCHA, API, site-wide), its `CAPTCHA`
+action, the 300 s immunity, the 20-per-5-minute per-IP limit below the
+block's, the scope (`POST` and exactly `/api/auth/login`, same three
+transformations), the API key's CloudFront scope and site-only token domain,
+and a CSP with no WAF origin (but `media-src 'self' data:`) and an empty
+script URL until the integration URL is set;
+`signin_captcha_with_integration_url` checks that `script-src` and
+`connect-src` then add exactly the two SDK origins (no wildcard,
+`unsafe-eval` or `blob:`) and the script URL is its `jsapi.js`;
+`signin_captcha_count_mode` checks the COUNT switch-off; and four more refuse
+a limit of 100 or 9, an action other than CAPTCHA/COUNT and a wildcard
+integration URL. The `network` run pins the
 private-only VPC: no internet, egress-only or NAT gateway, Elastic IP,
 `aws_route`, VPN, peering or transit attachment anywhere in the module, no
 `0.0.0.0/0` or `::/0` string, no inline route on the private route table

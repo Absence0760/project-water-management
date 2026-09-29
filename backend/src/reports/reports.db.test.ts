@@ -4,6 +4,7 @@
 // report API and its RLS, report schedules (RLS, recipients, the tick), and
 // impact reports (082): the baseline must be readable by the requester.
 // The render itself (Chromium + MinIO) is reports/render.db.test.ts.
+import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { anon, app, asOwner, lastMailTo, monthly, node, signUp } from '../__tests__/helpers.js';
 import { newToken } from '../auth/tokens.js';
@@ -11,6 +12,7 @@ import { withUser } from '../db/tx.js';
 import { reportRenderHandler } from '../jobs/handlers/report-render.js';
 import { SCHEDULE_NO_ACCESS, SCHEDULE_NO_RUNS, scheduleDueReports } from './schedule.js';
 import { finishReport, loadReport, REPORTS_PER_HOUR } from './store.js';
+import { cannedPolicy } from './cloudfrontSign.js';
 import { issueRenderToken } from './tokens.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -136,7 +138,8 @@ describe('render tokens', () => {
 		const again = await exchange(token);
 		expect(again.status).toBe(400);
 		expect(again.cookie).toBeNull();
-		expect(again.body).toEqual({ error: 'this render token is invalid, used or expired' });
+		// Coded: the renderer treats only this refusal as final (reports/render.ts sessionRefusal).
+		expect(again.body).toEqual({ error: 'this render token is invalid, used or expired', code: 'render_token_refused' });
 
 		const late = await withUser(owner.id, (db) => issueRenderToken(db, projectId, runId));
 		await asOwner(`UPDATE render_token SET expires_at = now() - interval '1 second' WHERE project_id = $1`, [projectId]);
@@ -180,6 +183,61 @@ describe('render tokens', () => {
 		const res = await exchange(token);
 		expect(res.status).toBe(403);
 		expect(res.cookie).toBeNull();
+		expect(res.body).toEqual({ error: 'the requester can no longer see this report', code: 'render_token_refused' });
+	});
+});
+
+// Production (REPORT_RENDERER=sqs): the renderer Lambda's answer comes back as
+// a report_render job carrying `result`. A retryable failure (a WAF block, a
+// timeout) asks again with backoff, up to REPORT_MAX_ATTEMPTS requests; a
+// final one fails the report at once.
+describe('the renderer’s answer (production)', () => {
+	it('asks again after 2, then 4 minutes for a retryable failure, then fails; a final failure fails at once', async () => {
+		const owner = await signUp('RrRetry');
+		const { projectId } = await withRun(owner, 'Retry');
+		const queue = async () => {
+			const res = await owner.call('POST', `/projects/${projectId}/reports`, {});
+			expect(res.status).toBe(202);
+			const [{ id }] = await asOwner('SELECT id FROM report WHERE job_id = $1', [res.body.jobId]);
+			// The request went out (what the sqs branch does): the report waits for the answer.
+			await asOwner(`UPDATE report SET status = 'rendering' WHERE id = $1`, [id]);
+			await asOwner(`UPDATE job SET status = 'done', finished_at = now() WHERE id = $1`, [res.body.jobId]);
+			return id as string;
+		};
+		const answer = (reportId: string, retry: boolean) => {
+			const job = { id: crypto.randomUUID(), projectId, kind: 'report_render' as const, actingUserId: owner.id, leaseToken: crypto.randomUUID(), attempts: 1, maxAttempts: 3 };
+			const result = { ok: false as const, error: 'the render session could not start (HTTP 403)', retry };
+			return withUser(owner.id, (db) => reportRenderHandler.run({ db, job, payload: { reportId, result }, progress: async () => true }));
+		};
+		const requests = (reportId: string) =>
+			asOwner(
+				`SELECT status, round(extract(epoch FROM run_after - created_at) / 60)::int AS "delayMin", max_attempts AS "maxAttempts"
+				 FROM job WHERE project_id = $1 AND payload->>'reportId' = $2 AND NOT (payload ? 'result') ORDER BY created_at`,
+				[projectId, reportId]
+			);
+		const report = async (id: string) => (await asOwner('SELECT status, error FROM report WHERE id = $1', [id]))[0];
+
+		const r = await queue();
+		await answer(r, true);
+		expect(await requests(r)).toEqual([
+			{ status: 'done', delayMin: 0, maxAttempts: 3 },
+			{ status: 'queued', delayMin: 2, maxAttempts: 3 }
+		]);
+		expect(await report(r)).toEqual({ status: 'rendering', error: null });
+		await answer(r, true);
+		expect((await requests(r)).map((j) => j.delayMin)).toEqual([0, 2, 4]);
+		expect(await report(r)).toEqual({ status: 'rendering', error: null });
+		// Three requests made: the third retryable failure is the last.
+		await answer(r, true);
+		expect(await requests(r)).toHaveLength(3);
+		expect(await report(r)).toEqual({ status: 'failed', error: 'the renderer failed: the render session could not start (HTTP 403)' });
+
+		// A final failure (the API's coded refusal) asks nothing again.
+		const f = await queue();
+		await answer(f, false);
+		expect(await requests(f)).toHaveLength(1);
+		expect((await report(f)).status).toBe('failed');
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });
 
@@ -286,6 +344,7 @@ const pdf = (u: User, projectId: string, jobId: string) =>
 describe('GET /projects/:id/reports/:jobId/pdf', () => {
 	it('redirects a member to a one-minute pre-signed GET, fresh each time; a stranger, a pending or an expired PDF gets none', async () => {
 		vi.stubEnv('STORAGE', 'local');
+		vi.stubEnv('REPORT_DOWNLOADS', 'presigned');
 		const owner = await signUp('PdfOwner');
 		const viewer = await signUp('PdfViewer');
 		const stranger = await signUp('PdfStranger');
@@ -324,6 +383,47 @@ describe('GET /projects/:id/reports/:jobId/pdf', () => {
 		const gone = await pdf(viewer, projectId, jobId);
 		expect(gone.status).toBe(404);
 		expect(((await gone.json()) as { error: string }).error).toBe('the PDF has expired: PDFs are kept for 7 days');
+		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
+	});
+
+	it('in production (REPORT_DOWNLOADS=cloudfront) redirects to a CloudFront signed URL on the site’s /reports/ path, never to S3', async () => {
+		// A throwaway key pair: production's comes from Terraform (infra/reports.tf).
+		const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+			modulusLength: 2048,
+			publicKeyEncoding: { type: 'spki', format: 'pem' },
+			privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
+		});
+		vi.stubEnv('REPORT_DOWNLOADS', 'cloudfront');
+		vi.stubEnv('SITE_URL', 'https://water.example.org');
+		vi.stubEnv('CLOUDFRONT_KEY_PAIR_ID', 'K2JCJMDEHXQW5F');
+		vi.stubEnv('CLOUDFRONT_PRIVATE_KEY', privateKey);
+		const owner = await signUp('PdfCfOwner');
+		const stranger = await signUp('PdfCfStranger');
+		const { projectId } = await withRun(owner, 'Upper Catchment');
+		const { jobId } = (await owner.call('POST', `/projects/${projectId}/reports`, {})).body;
+		const [r] = await asOwner('SELECT id FROM report WHERE job_id = $1', [jobId]);
+		await withUser(owner.id, (db) => db.query(`UPDATE report SET status = 'done', pages = 9, bytes = 1000, finished_at = now() WHERE id = $1`, [r.id]));
+
+		const before = Math.floor(Date.now() / 1000);
+		const res = await pdf(owner, projectId, jobId);
+		expect(res.status).toBe(302);
+		expect(res.headers.get('cache-control')).toBe('no-store');
+		const location = res.headers.get('location')!;
+		const m = /^(.*)&Expires=(\d+)&Signature=([A-Za-z0-9~_-]+)&Key-Pair-Id=K2JCJMDEHXQW5F&Hash-Algorithm=SHA256$/.exec(location);
+		expect(m, location).not.toBeNull();
+		const [, resource, expires, signature] = m!;
+		expect(resource).toMatch(
+			new RegExp(`^https://water\\.example\\.org/reports/${projectId}/${r.id}\\.pdf\\?response-content-disposition=attachment%3B%20filename%3D%22upper-catchment-report-\\d{4}-\\d{2}-\\d{2}\\.pdf%22$`)
+		);
+		expect(Number(expires) - before).toBeGreaterThanOrEqual(59);
+		expect(Number(expires) - before).toBeLessThanOrEqual(61);
+		expect(location).not.toMatch(/X-Amz-|amazonaws\.com|9002/);
+		// CloudFront's check: the canned policy rebuilt from the URL verifies with the public key.
+		const sig = Buffer.from(signature!.replace(/-/g, '+').replace(/_/g, '=').replace(/~/g, '/'), 'base64');
+		expect(createVerify('RSA-SHA256').update(cannedPolicy(resource!, Number(expires))).verify(publicKey, sig)).toBe(true);
+
+		// Membership still gates the signing: a stranger gets no URL.
+		expect((await pdf(stranger, projectId, jobId)).status).toBe(404);
 		await asOwner('DELETE FROM job WHERE project_id = $1', [projectId]);
 	});
 });

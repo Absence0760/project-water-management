@@ -3,7 +3,7 @@
 // translated pages word from their catalogue.
 import { Hono } from 'hono';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, ERROR_CODES, handleError, mustChange } from './errors.js';
+import { ApiError, ERROR_CODES, handleError, MACHINE_ERROR_CODES, mustChange } from './errors.js';
 
 function appThrowing(err: unknown) {
 	const app = new Hono();
@@ -29,6 +29,12 @@ describe('handleError', () => {
 	it('keeps the codes unique and snake_case (each is a key of the frontend apiError.ts CODES)', () => {
 		expect(new Set(ERROR_CODES).size).toBe(ERROR_CODES.length);
 		for (const c of ERROR_CODES) expect(c).toMatch(/^[a-z]+(_[a-z]+)*$/);
+	});
+
+	it('keeps the machine-only codes apart from the worded ones (the frontend test reads ERROR_CODES only)', () => {
+		const all = [...ERROR_CODES, ...MACHINE_ERROR_CODES];
+		expect(new Set(all).size).toBe(all.length);
+		for (const c of MACHINE_ERROR_CODES) expect(c).toMatch(/^[a-z]+(_[a-z]+)*$/);
 	});
 });
 

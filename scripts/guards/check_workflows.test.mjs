@@ -145,17 +145,48 @@ test('a docker build must produce one linux/amd64 manifest without attestations'
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);
 });
 
+const EXCLUDE_RENDERER_DEPS =
+	"          !startsWith(steps.meta.outputs.directory, '/backend/renderer-deps') &&\n" +
+	"          !contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&\n";
+
 test('auto-merge: the allowlist exists and leaves github_actions and docker to a human', () => {
 	const file = '.github/workflows/dependabot-auto-merge.yml';
 	const step = (list) =>
 		good +
-		`      - name: Approve + auto-merge minor / patch\n        if: >-\n          contains(fromJSON('${JSON.stringify(list)}'), steps.meta.outputs.package-ecosystem) &&\n          steps.meta.outputs.update-type == 'version-update:semver-patch'\n`;
+		`      - name: Approve + auto-merge minor / patch\n        if: >-\n          contains(fromJSON('${JSON.stringify(list)}'), steps.meta.outputs.package-ecosystem) &&\n${EXCLUDE_RENDERER_DEPS}          steps.meta.outputs.update-type == 'version-update:semver-patch'\n`;
 	assert.deepEqual(rules(step(['npm_and_yarn', 'pip', 'docker_compose', 'terraform']), file), []);
 	assert.deepEqual(rules(step(['npm_and_yarn', 'docker']), file), ['auto-merge']);
 	assert.deepEqual(rules(step(['github_actions']), file), ['auto-merge']);
 	assert.deepEqual(rules(good, file), ['auto-merge'], 'no allowlist at all fails closed');
 	assert.deepEqual(rules(step(['docker'])), [], 'other workflows are not read for it');
 	assert.match(checkWorkflow(file, step(['docker']))[0].message, /includes docker/);
+});
+
+test('auto-merge: the renderer image\'s npm directory stays manual, by directory and by branch', () => {
+	const file = '.github/workflows/dependabot-auto-merge.yml';
+	const allow = `contains(fromJSON('["npm_and_yarn", "pip"]'), steps.meta.outputs.package-ecosystem) &&`;
+	const patch = "steps.meta.outputs.update-type == 'version-update:semver-patch'";
+	const step = (...conds) => good + `      - name: Approve + auto-merge\n        if: >-\n${conds.map((c) => `          ${c}\n`).join('')}        env:\n          X: y\n`;
+	const byDir = "!startsWith(steps.meta.outputs.directory, '/backend/renderer-deps') &&";
+	const byBranch = "!contains(github.event.pull_request.head.ref, '/backend/renderer-deps/') &&";
+
+	assert.deepEqual(rules(step(allow, byDir, byBranch, patch), file), [], 'positive control: both exclusions present');
+	assert.deepEqual(rules(step(byBranch, allow, byDir, patch), file), [], 'order within the condition does not matter');
+	assert.deepEqual(rules(step(allow, patch), file), ['auto-merge'], 'neither exclusion');
+	assert.deepEqual(rules(step(allow, byDir, patch), file), ['auto-merge'], 'directory only: the branch backstop is missing');
+	assert.deepEqual(rules(step(allow, byBranch, patch), file), ['auto-merge'], 'branch only: the directory check is missing');
+	assert.match(checkWorkflow(file, step(allow, byDir, patch))[0].message, /head\.ref, '\/backend\/renderer-deps\/'/);
+	// Near misses that would not exclude it.
+	assert.deepEqual(rules(step(allow, byDir.slice(1), byBranch, patch), file), ['auto-merge'], 'not negated');
+	assert.deepEqual(rules(step(allow, byDir.replace(' &&', ' ||'), byBranch, patch), file), ['auto-merge'], 'joined with ||');
+	assert.deepEqual(rules(step(allow, byDir.replace('renderer-deps', 'renderer'), byBranch, patch), file), ['auto-merge'], 'another directory');
+	// Outside the allowlist's own `if:` it does not count.
+	const elsewhere = good +
+		`      - name: Other\n        if: >-\n          ${byDir}\n          ${byBranch}\n          true\n` +
+		`      - name: Approve + auto-merge\n        if: >-\n          ${allow}\n          ${patch}\n`;
+	assert.deepEqual(rules(elsewhere, file), ['auto-merge'], 'the exclusions sit in another step');
+	const inRun = step(allow, patch) + `        run: |\n          ${byDir}\n          ${byBranch}\n`;
+	assert.deepEqual(rules(inRun, file), ['auto-merge'], 'the same text past the end of the `if:` does not count');
 });
 
 test('auto-merge: the repo workflow passes', () => {

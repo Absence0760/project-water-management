@@ -16,7 +16,8 @@
 //   3. every host a committed dev default names is local;
 //   4. the dev-only placeholders stay placeholders (`AUTH_JWT_SECRET` starts
 //      with `dev-only-`, `CLOUDFRONT_SHARED_SECRET` is empty, the object
-//      store is the local MinIO with its default `minioadmin` login);
+//      store is the local MinIO with its default `minioadmin` login, report
+//      downloads are pre-signed MinIO GETs and no CloudFront signing key is set);
 //   5. frontend env files define only `PUBLIC_*` keys (anything else in a
 //      Vite env file is either ignored or a secret in the wrong place), and the
 //      production default points the API at same-origin `/api`.
@@ -127,6 +128,13 @@ export function checkEnvFile(file, text) {
 			}
 			if (key === 'STORAGE' && value !== 'local') {
 				out.push({ file, line, rule: 'STORAGE must be local (MinIO) in a committed dev default' });
+			}
+			// Report downloads: pre-signed MinIO GETs locally; the CloudFront signing key is Terraform's, never committed.
+			if (key === 'REPORT_DOWNLOADS' && value !== 'presigned') {
+				out.push({ file, line, rule: 'REPORT_DOWNLOADS must be presigned (MinIO) in a committed dev default' });
+			}
+			if ((key === 'CLOUDFRONT_PRIVATE_KEY' || key === 'CLOUDFRONT_KEY_PAIR_ID') && value !== '') {
+				out.push({ file, line, rule: `${key} must stay unset in a committed dev default (Terraform generates the key pair; the private half lives in the API's runtime secret)` });
 			}
 		}
 	}

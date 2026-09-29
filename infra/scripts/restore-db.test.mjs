@@ -76,9 +76,14 @@ const OUTPUTS = {
 
 function setup({ outputs = OUTPUTS, state = fixture() } = {}) {
 	const dir = mkdtempSync(join(tmpdir(), 'restore-db-'));
-	for (const tool of ['aws', 'terraform']) {
+	for (const [tool, stub] of [
+		['aws', 'restore-db-stubs/aws.mjs'],
+		['terraform', 'restore-db-stubs/terraform.mjs'],
+		// tf.sh's sops (synthetic values), for the import and plan.
+		['sops', 'tf-stubs/sops.mjs'],
+	]) {
 		const p = join(dir, tool);
-		writeFileSync(p, `#!/bin/sh\nexec node ${join(here, 'restore-db-stubs', `${tool}.mjs`)} "$@"\n`);
+		writeFileSync(p, `#!/bin/sh\nexec node ${join(here, stub)} "$@"\n`);
 		chmodSync(p, 0o755);
 	}
 	const files = {
@@ -86,7 +91,10 @@ function setup({ outputs = OUTPUTS, state = fixture() } = {}) {
 		awsLog: join(dir, 'aws.log'),
 		tfLog: join(dir, 'tf.log'),
 		outputs: join(dir, 'outputs.json'),
+		secrets: join(dir, 'prod.sops.yaml'),
 	};
+	// Only its plaintext sops.lastmodified is read (tf.sh's rotation counter).
+	writeFileSync(files.secrets, 'synthetic: ENC[AES256_GCM,data:eA==,type:str]\nsops:\n    lastmodified: "2026-09-28T08:15:00Z"\n');
 	writeFileSync(files.state, JSON.stringify(state));
 	writeFileSync(files.outputs, JSON.stringify(outputs));
 	writeFileSync(files.awsLog, '');
@@ -104,6 +112,7 @@ function run(ctx, args, env = {}) {
 			FAKE_AWS_LOG: ctx.files.awsLog,
 			FAKE_TF_LOG: ctx.files.tfLog,
 			FAKE_TF_OUTPUTS: ctx.files.outputs,
+			WM_SECRETS_FILE: ctx.files.secrets,
 			RESTORE_DB_TIMESTAMP: TS,
 			RESTORE_DB_POLL_SECONDS: '0',
 			RESTORE_DB_TIMEOUT_SECONDS: '5',
@@ -234,7 +243,14 @@ test('--execute restores, verifies, swaps, moves Terraform state and stops short
 		`plan -input=false -no-color -var-file=${VAR_FILE}`,
 	]);
 	assert.ok(r.tf.every((c) => c.profile === 'water-management'), 'Terraform runs under the given profile');
-	assert.ok(r.stdout.includes(`terraform apply -var-file=${VAR_FILE}`), r.stdout);
+	// Import and plan evaluate the configuration, so they get the runtime
+	// secrets (tf.sh, sops → ephemeral TF_VAR_*); reading state needs none.
+	const RUNTIME = ['TF_VAR_alerts_token_secret', 'TF_VAR_auth_jwt_secret', 'TF_VAR_cloudfront_private_key', 'TF_VAR_db_app_password', 'TF_VAR_runtime_secret_version'];
+	assert.deepEqual(
+		r.tf.map((c) => [c.args[0], c.tfvars]),
+		r.tf.map((c) => [c.args[0], ['import', 'plan'].includes(c.args[0]) ? RUNTIME : []]),
+	);
+	assert.ok(r.stdout.includes(`tf.sh -chdir=`) && r.stdout.includes(` apply -var-file=${VAR_FILE}`), r.stdout);
 	assert.match(r.stdout, /--function-name water-management-migrate --cli-binary-format/);
 });
 
@@ -289,6 +305,16 @@ test('guard rails', () => {
 		assert.match(r.stderr, why, args.join(' '));
 		assert.deepEqual(r.aws.filter((c) => !READ_ONLY.has(c.op)), [], args.join(' '));
 	}
+});
+
+test('refuses to start without the sops secrets file that step 6 needs, before any AWS change', () => {
+	const ctx = setup();
+	const r = run(ctx, [...BASE, '--latest', '--execute', '--yes'], { WM_SECRETS_FILE: join(ctx.dir, 'missing.sops.yaml') });
+	assert.notEqual(r.status, 0);
+	assert.match(r.stderr, /no sops file at .*missing\.sops\.yaml/);
+	assert.match(r.stderr, /needs the runtime secrets from sops/);
+	assert.deepEqual(r.aws, [], 'not even a read');
+	assert.deepEqual(r.tf, []);
 });
 
 test('refuses a region other than the stack\'s, and a stack without the database outputs', () => {

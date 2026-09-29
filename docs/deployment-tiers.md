@@ -52,8 +52,8 @@ Terraform defaults.
 - Worker, fetcher and report-renderer Lambdas, SQS queues, the 5-minute tick.
 - SES for account, alert and report email.
 - One ENI each for the Secrets Manager, SES and SQS interface endpoints.
-- Monthly and daily budgets, Cost Anomaly Detection and the CloudWatch
-  alarms, mailed to `budget_alert_email` ([deployment.md § Budget
+- Monthly and daily budgets, Cost Anomaly Detection (off until turned on
+  after the first apply) and the CloudWatch alarms, mailed to `budget_alert_email` ([deployment.md § Budget
   alerts](./deployment.md#budget-alerts)).
 
 `terraform.tfvars` (on top of the required values in
@@ -73,11 +73,11 @@ Cost, us-east-1:
 | RDS `db.t4g.micro` single-AZ | 11.70 |
 | RDS gp3 storage, 20 GiB | 2.30 |
 | 3 interface endpoints × 1 AZ | 21.90 |
-| WAF (ACL + 2 rules) | 7.00 |
+| WAF (ACL + 4 rules) | 9.00 |
 | CloudWatch alarms, logs, RDS log export | ~2.80 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $51** |
+| **Total** | **≈ $52** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
 **≈ $58–63**.
@@ -121,11 +121,11 @@ Cost, us-east-1:
 | RDS gp3 storage, 20 GiB, Multi-AZ | 4.60 |
 | Backups beyond the free allowance (14 days) | ~1.00 |
 | 3 interface endpoints × 2 AZs | 43.80 |
-| WAF (ACL + 2 rules + requests) | ~7.60 |
+| WAF (ACL + 4 rules + requests) | ~9.60 |
 | CloudWatch alarms, logs, RDS log export | ~3.00 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $111–116** |
+| **Total** | **≈ $112–117** |
 
 af-south-1: **≈ $135–150**.
 
@@ -178,7 +178,8 @@ reserved-concurrency caps (`lambda_reserved_concurrency` 10, worker 8,
 fetcher 2, renderer 2; never `-1`, which the variables refuse) bound the worst case of an attack or a runaway job,
 and the budgets page on a day over the daily amount, at 80% and 100% of the
 month and on a forecast over 100% (after ~5 weeks of history), plus Cost
-Anomaly Detection ([deployment.md § Budget alerts](./deployment.md#budget-alerts)).
+Anomaly Detection once it is turned on after the first apply
+([deployment.md § Budget alerts](./deployment.md#budget-alerts)).
 
 ## Cheaper options, and why they aren't used
 

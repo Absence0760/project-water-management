@@ -51,13 +51,23 @@
 # ----------------------------------------------------------------------------
 
 locals {
+  # The sign-in CAPTCHA (waf.tf) is the one exception to "no third-party
+  # origin": once waf_captcha_integration_url is set, script-src and
+  # connect-src also allow exactly the account's CAPTCHA SDK origin and its
+  # challenge script's (local.waf_captcha_origins), and media-src allows
+  # data: for the puzzle's audio version (the SDK plays data:audio/aac).
+  # Nothing else: no 'unsafe-eval' (the SDK doesn't need it), no blob: and no
+  # wildcard. The SDK's web-font stylesheet on static.captcha.awswaf.com stays
+  # blocked (the puzzle falls back to the system font). SvelteKit's meta CSP
+  # adds the same two origins to its script-src (frontend/svelte.config.js).
   csp_site = join("; ", [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    join(" ", concat(["script-src 'self' 'unsafe-inline'"], local.waf_captcha_origins)),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
+    "media-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    join(" ", concat(["connect-src 'self'"], local.waf_captcha_origins)),
     "manifest-src 'self'",
     "worker-src 'self'",
     "object-src 'none'",

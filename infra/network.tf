@@ -2,8 +2,10 @@
 # Private-only VPC — no internet gateway, no NAT, no public subnets
 #
 # Nothing in the VPC needs the internet:
-#   - the API Lambda talks to Postgres, to SES (SendEmail) through the SES
-#     API interface endpoint in ses.tf, to SQS (job wake-ups) through the
+#   - the API Lambda talks to Postgres, to SES (SendEmail, and
+#     DeleteSuppressedDestination when someone turns mail back on) through
+#     the SES API interface endpoint in ses.tf (its endpoint policy names the
+#     API and worker roles and their actions only), to SQS (job wake-ups) through the
 #     SQS interface endpoint in jobs.tf, and to Secrets Manager (its runtime
 #     secret, once per cold start, secrets.tf) through the endpoint below. It
 #     makes no other outbound calls; CloudWatch Logs delivery is done by the

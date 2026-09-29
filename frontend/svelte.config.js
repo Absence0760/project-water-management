@@ -1,6 +1,24 @@
 import adapter from "@sveltejs/adapter-static";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
+/**
+ * The sign-in CAPTCHA's script origins for the meta CSP (issue #126,
+ * src/lib/auth/wafCaptcha.ts): the CAPTCHA SDK's (jsapi.js) and the challenge
+ * script's it loads, the same id on sdk.awswaf.com. Infra's header CSP
+ * allows the same two (infra/security_headers.tf). None when the URL is
+ * empty (local dev, tests); a URL of any other shape fails the build rather
+ * than widening the policy.
+ * @param {string | undefined} scriptUrl
+ * @returns {Array<`https://${string}.awswaf.com`>}
+ */
+export function wafCaptchaOrigins(scriptUrl) {
+	if (!scriptUrl) return [];
+	const m = /^(https:\/\/([a-z0-9]+)\.([a-z0-9-]+))\.captcha-sdk\.awswaf\.com\/[a-z0-9]+\/jsapi\.js$/.exec(scriptUrl);
+	if (!m) throw new Error(`PUBLIC_WAF_CAPTCHA_SCRIPT_URL must be https://<id>.<edge|region>.captcha-sdk.awswaf.com/<id>/jsapi.js, got ${scriptUrl}`);
+	const host = /** @type {`https://${string}`} */ (m[1]);
+	return [`${host}.captcha-sdk.awswaf.com`, `${host}.sdk.awswaf.com`];
+}
+
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: [vitePreprocess()],
@@ -31,7 +49,9 @@ const config = {
 		// inline bootstrap script. It narrows CloudFront's header policy
 		// (infra/security_headers.tf); the deploy refuses a build without it
 		// (infra/scripts/check-csp.mjs).
-		csp: { mode: 'hash', directives: { 'script-src': ['self'] } },
+		// The sign-in CAPTCHA's two script origins join it when the deploy
+		// sets PUBLIC_WAF_CAPTCHA_SCRIPT_URL (wafCaptchaOrigins below).
+		csp: { mode: 'hash', directives: { 'script-src': ['self', ...wafCaptchaOrigins(process.env.PUBLIC_WAF_CAPTCHA_SCRIPT_URL)] } },
 		// The one prerendered page, the landing page at /welcome (issue #57),
 		// writes absolute URLs into its link-preview tags (og:url, og:image,
 		// the canonical link) from the site's origin: the deploy's

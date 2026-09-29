@@ -8,7 +8,8 @@ const ARN = 'arn:aws:secretsmanager:af-south-1:000000000000:secret:water-managem
 const VALUES = {
 	AUTH_JWT_SECRET: 'jwt-value-that-must-never-be-printed-0000000',
 	DATABASE_URL: 'postgresql://water_app:pw-that-must-never-be-printed@db.example.org:5432/water?sslmode=verify-full',
-	CLOUDFRONT_SHARED_SECRET: 'edge-value-that-must-never-be-printed-00000'
+	CLOUDFRONT_SHARED_SECRET: 'edge-value-that-must-never-be-printed-00000',
+	CLOUDFRONT_PRIVATE_KEY: 'signing-key-that-must-never-be-printed-000000'
 };
 const lambdaEnv = (patch: Record<string, string | undefined> = {}) => ({
 	AWS_LAMBDA_FUNCTION_NAME: 'water-management-backend',

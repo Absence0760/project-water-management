@@ -11,6 +11,7 @@
 //     each of which a Lambda that checks that setting must refuse.
 // Positive control: the production-shaped env (the same keys Terraform sets)
 // starts every Lambda, entry point included.
+import { generateKeyPairSync } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -41,8 +42,12 @@ const DB_URL = `postgresql://water_app:${'a1'.repeat(16)}@water-management.abc12
 const CA = '/var/task/rds-global-bundle.pem';
 const SECRET_ARN = (role: string) => `arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/${role}-AbCdEf`;
 const runtimeSecret = (role: string) => ({ RUNTIME_SECRET_ARN: SECRET_ARN(role), RUNTIME_SECRET_VERSION: '00000000-0000-0000-0000-000000000000' });
+// The report-download key pair, generated per run (the API checks at cold start that they pair).
+const pemPair = () =>
+	generateKeyPairSync('rsa', { modulusLength: 2048, publicKeyEncoding: { type: 'spki', format: 'pem' }, privateKeyEncoding: { type: 'pkcs8', format: 'pem' } });
+const SIGNING = pemPair();
 const PROD_SECRETS: Record<Role, Record<string, string>> = {
-	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48) },
+	api: { DATABASE_URL: DB_URL, AUTH_JWT_SECRET: 'f'.repeat(64), CLOUDFRONT_SHARED_SECRET: 'c'.repeat(48), CLOUDFRONT_PRIVATE_KEY: SIGNING.privateKey },
 	worker: { DATABASE_URL: `${DB_URL}&application_name=worker`, AUTH_JWT_SECRET: 'f'.repeat(64), ALERTS_TOKEN_SECRET: 'a'.repeat(48) },
 	fetcher: {},
 	renderer: {},
@@ -61,7 +66,10 @@ const PROD: Record<Role, Record<string, string>> = {
 		JOB_TRANSPORT: 'sqs',
 		JOBS_QUEUE_URL: SQS('jobs'),
 		STORAGE: 's3',
-		REPORTS_BUCKET: 'water-management-reports-000000000000'
+		REPORTS_BUCKET: 'water-management-reports-000000000000',
+		REPORT_DOWNLOADS: 'cloudfront',
+		CLOUDFRONT_KEY_PAIR_ID: 'K2JCJMDEHXQW5F',
+		CLOUDFRONT_PUBLIC_KEY: SIGNING.publicKey
 	},
 	worker: {
 		...runtimeSecret('worker'),
@@ -318,6 +326,12 @@ describe('each Lambda refuses a missing or local-default setting', () => {
 			['api', 'AUTH_JWT_SECRET', devJwt],
 			['api', 'AUTH_JWT_SECRET', 'test-only-jwt-secret-0000000000000000000'],
 			['api', 'STORAGE', 'local'],
+			['api', 'REPORT_DOWNLOADS', 'presigned'],
+			['api', 'REPORT_DOWNLOADS', undefined],
+			['api', 'CLOUDFRONT_KEY_PAIR_ID', 'not-a-key-id'],
+			['api', 'CLOUDFRONT_PRIVATE_KEY', 'c'.repeat(64)],
+			['api', 'CLOUDFRONT_PUBLIC_KEY', 'c'.repeat(64)],
+			['api', 'CLOUDFRONT_PUBLIC_KEY', SIGNING.privateKey],
 			['worker', 'STORAGE', 'local'],
 			['renderer', 'STORAGE', undefined],
 			['fetcher', 'FEED_SOURCE', 'fixtures'],
@@ -415,6 +429,17 @@ describe('each entry point runs the check at init', () => {
 		stubProcessEnv(prod(role, { [name]: undefined, ...Object.fromEntries(RUNTIME_SECRETS[role].map((k) => [k, undefined])) }));
 		stubSecretsManager(role, PROD_SECRETS[role]);
 		await expect(load[role]()).rejects.toThrow(new RegExp(`refusing to start the ${role} Lambda: .*${name}`));
+	}, 30_000);
+
+	it('api: refuses to load when its download signing key is not the private half of CLOUDFRONT_PUBLIC_KEY', async () => {
+		stubProcessEnv({ ...PROD.api, CLOUDFRONT_PUBLIC_KEY: pemPair().publicKey, AWS_LAMBDA_FUNCTION_NAME: 'water-management-api' });
+		stubSecretsManager('api', PROD_SECRETS.api);
+		const err = await load.api().then(
+			() => null,
+			(e: unknown) => e as Error
+		);
+		expect(err?.message).toMatch(/CLOUDFRONT_PRIVATE_KEY is not the private half of CLOUDFRONT_PUBLIC_KEY/);
+		expect(err?.message).not.toContain('PRIVATE KEY-----');
 	}, 30_000);
 
 	it.each(ROLES.filter((r) => RUNTIME_SECRETS[r].length))('%s: refuses to load when its secret lacks a key, naming the key', async (role) => {
