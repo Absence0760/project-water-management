@@ -465,7 +465,7 @@ export function monthly(v: unknown, name: string, warnings: string[]): Monthly {
 	}) as unknown as Monthly;
 }
 
-function mergeSettings(raw: ModelInput['settings'], warnings: string[]): ProjectSettings {
+export function mergeSettings(raw: ModelInput['settings'], warnings: string[]): ProjectSettings {
 	const d = defaultProjectSettings();
 	const s = { ...d, ...(raw ?? {}) } as ProjectSettings;
 	// Only the keys that outlived the legacy runoff model (engine 1.0.0): a stored project may still carry its others.

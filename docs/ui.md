@@ -2950,6 +2950,40 @@ which checks every catchment tab).
     parameters, with and without the penalty. With a band, the row instead
     reads "Simulated natural MAR ÷ band (low–high Mm³/a)" and the caption
     below says the penalty is zero inside it.
+  - **Calibration rules** and **Automated calibration** (engine ≥ 1.25.0,
+    issue #153, [model.md §2.10j](./model.md)), under the fit record, each its
+    own chunk. The rules (`settings/CalibrationRulesFields.svelte`, helpers in
+    `settings/calibrationRules.ts`) show their **revision** and a **Draft** or
+    **Signed off** badge, then: **Leave out a water year by its flagged days**
+    (on, 20 %), **Keep the fit with the best** (a score) **on the held-out
+    test** (dry → wet, split-sample or the other record), the **pan
+    coefficients to fit under** (the project's own, the presets), **Bounds**,
+    **Objectives**, the two **filters** a kept fit must pass, the search
+    (**Model runs per fit**, **Starts per fit**, **Seed**: part of the rules,
+    so another seed is a rule change), and "*n* fits,
+    each with the split-sample and dry → wet tests (at most 8)". An empty
+    list or more than 8 fits shows an alert and blocks Save (the save bar
+    links to *Fit automatically*). **Signed off by** and **On** with **Record
+    the sign-off**, or **Withdraw the sign-off**, record the hydrologist's
+    agreement; saving a rule change raises the revision and withdraws it
+    (the server's rule). Viewers see the rules, disabled, with no sign-off
+    controls.
+    The run (`calibration/AutoFitPanel.svelte`, helpers in
+    `lib/calibration/autoFit.ts`) lists the **saved** rules, warns while they
+    are drafts, and says how many model runs the rules' search makes; it
+    offers no seed or budget of its own. While the form's rules differ from
+    the saved ones it says to save them first, and **Run the calibration
+    rules** and **Apply the kept fit to form** are disabled. The run shows
+    "Fit *i* of *n* (…)" progress, then the notes (drafts, a filter that
+    couldn't apply, why nothing was kept), the water years left out by rule,
+    a **Fits the rules tried** table (fit, *Kept* / *Passed* / *Not kept*, the
+    held-out score, natural MAR, the filters, why not kept) and the kept
+    fit's parameters. **Apply the kept fit to form** fills them in (and the
+    pan coefficient it was fitted under, for a preset) with a fit record
+    carrying the rules; it never saves. The fit record then shows an
+    **Automated** badge, **Picked by** (the rules' revision and sign-off, the
+    kept fit of *n*) and **Left out by rule**, a caveat while the rules were
+    drafts, and **Rules changed since fit** once they change.
 - **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
   `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
   naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,

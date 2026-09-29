@@ -27,7 +27,8 @@ import {
 	type RunoffModelId,
 	type SeriesOrigin,
 	type SeriesProvenance,
-	type ApanDailyFingerprint
+	type ApanDailyFingerprint,
+	type AutoFitRecord
 } from '@water-management/engine';
 import { FLOW_KIND_LABEL } from '$lib/components/calibration/metrics';
 import { fmtNum } from '$lib/format/number';
@@ -316,6 +317,8 @@ export function fitRecordFor(
 		chirpsSource?: SeriesProvenance | null;
 		apanDaily?: ApanDailyFingerprint | null;
 		observedOrigin?: SeriesOrigin | null;
+		/** How automated calibration chose the fit (issue #153); omit for a fit a person chose. */
+		auto?: AutoFitRecord;
 	}
 ): FitRecord {
 	return fitRecordFromReport(r, {
@@ -329,7 +332,8 @@ export function fitRecordFor(
 		// The daily A-pan series it ran on (issue #45), when known.
 		...(opts.apanDaily !== undefined ? { apanDaily: opts.apanDaily } : {}),
 		// The fitted record's source and given unit (107_series_source.sql), when known.
-		...(opts.observedOrigin !== undefined ? { observedOrigin: opts.observedOrigin } : {})
+		...(opts.observedOrigin !== undefined ? { observedOrigin: opts.observedOrigin } : {}),
+		...(opts.auto ? { auto: opts.auto } : {})
 	});
 }
 

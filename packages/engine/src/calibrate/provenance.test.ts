@@ -17,8 +17,10 @@ import {
 	fitRecordFromReport,
 	fitRecordStatus,
 	resolveFitRecord,
-	sanitizeExclusions
+	sanitizeExclusions,
+	type AutoFitRecord
 } from './provenance';
+import { defaultCalibrationRules } from './rulesSettings';
 
 /** The accumulation fields (engine ≥ 0.20.0) at their defaults. */
 const ACC: Pick<ZeroRainSettings, 'accumulationMode' | 'keepReadings' | 'addAccumulations'> = { accumulationMode: 'spread', keepReadings: [], addAccumulations: [] };
@@ -229,7 +231,7 @@ describe('fit record', () => {
 		// The fit's own recorded forcing matches this settings object exactly, so forcingChanged starts false.
 		const rec = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, panCoefficient: s.panCoefficient, apanMm: s.apanMm } });
 		const ok = fitRecordStatus(s, rec);
-		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
+		expect(ok).toEqual({ editedParams: [], otherModel: false, windowChanged: false, exclusionsChanged: false, qualityFlagsChanged: false, flowKindChanged: false, forcingChanged: false, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		expect(fitRecordCaveats(ok)).toEqual([]);
 		const changed = fitRecordStatus(
 			{
@@ -243,11 +245,43 @@ describe('fit record', () => {
 			},
 			rec
 		);
-		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false });
+		expect(changed).toEqual({ editedParams: ['x1'], otherModel: false, windowChanged: true, exclusionsChanged: true, qualityFlagsChanged: false, flowKindChanged: true, forcingChanged: true, chirpsSourceChanged: false, apanDailyChanged: false, chirpsFactorsChanged: false, observedOriginChanged: false, flowFillChanged: false, rulesChanged: false, draftRules: false });
 		const caveats = fitRecordCaveats(changed, (k) => k.toUpperCase());
 		expect(caveats).toHaveLength(5);
 		expect(caveats[0]).toMatch(/^Parameters edited since the fit: X1\./);
 		expect(caveats.at(-1)).toMatch(/potential evaporation GR4J runs on \(the PE input, or the pan coefficient or A-pan evaporation it is taken from\), the areal rainfall correction, CHIRPS bias correction, CHIRPS fit period, rain-source periods or zero-rain run handling has changed since the fit/);
+	});
+
+	it('keeps how automated calibration chose the fit, and says when its rules are drafts or have changed since (issue #153)', () => {
+		// The settings the fit ran on, so only the rules can differ.
+		const s = { ...gr4jSettings(), ...ctx.settings } as ProjectSettings;
+		const rules = defaultCalibrationRules();
+		const auto: AutoFitRecord = {
+			rules,
+			ruleExclusions: [{ waterYear: 2013, reason: 'Rule (calibration rules, exclusions): 200 of 365 observed days flagged (54.8 %), more than 20 %' }],
+			chosen: 0,
+			cases: [{ label: 'wide', pan: 'project', bounds: 'wide', objective: 'kgePrime', score: 0.71, eligible: true, reasons: [], params: { x1: 400, x2: 0, x3: 80, x4: 2 } }]
+		};
+		const rec = fitRecordFromReport(report(), { ...ctx, auto });
+		expect(rec.auto).toEqual(auto);
+		// A copy: changing the report's rules later doesn't reach the record.
+		rules.exclusions.maxFlaggedShare = 0.5;
+		expect(rec.auto!.rules.exclusions.maxFlaggedShare).toBe(0.2);
+		// Draft rules, the same as the settings': not evidence, but not stale.
+		const draft = fitRecordStatus({ ...s, calibrationRules: defaultCalibrationRules() }, rec);
+		expect(draft).toMatchObject({ draftRules: true, rulesChanged: false });
+		expect(fitRecordCaveats(draft)).toEqual([expect.stringMatching(/^Automated calibration picked this fit under draft rules/)]);
+		// Another selection now: the rules would pick another way.
+		const moved = fitRecordStatus({ ...s, calibrationRules: { ...defaultCalibrationRules(), selection: { test: 'split', score: 'kgePrime' } } }, rec);
+		expect(moved.rulesChanged).toBe(true);
+		expect(fitRecordCaveats(moved)).toContainEqual('The calibration rules have changed since automated calibration picked this fit: run it again under the current rules.');
+		// A sign-off after the fit alone is no rule change (the record still ran under drafts).
+		const signed = fitRecordStatus({ ...s, calibrationRules: { ...defaultCalibrationRules(), revision: 2, signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } }, rec);
+		expect(signed).toMatchObject({ rulesChanged: false, draftRules: true });
+		// Signed-off rules at the fit: no caveat. A fit a person chose has neither flag.
+		const signedRec = fitRecordFromReport(report(), { ...ctx, auto: { ...auto, rules: { ...defaultCalibrationRules(), signedOff: { by: 'A. Hydrologist', on: '2026-09-29' } } } });
+		expect(fitRecordCaveats(fitRecordStatus(s, signedRec))).toEqual([]);
+		expect(fitRecordStatus(s, fitRecordFromReport(report(), ctx))).toMatchObject({ rulesChanged: false, draftRules: false });
 	});
 
 	it('records the quality-flag settings, summary and fit on all days, and says when the flag settings changed (CR-18/19)', () => {

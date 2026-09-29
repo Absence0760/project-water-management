@@ -537,6 +537,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   settings. A `PATCH` merges the group one level
   deep. Anything else is a `400`; settings stored before it read back as off.
   [model.md §2.10i](./model.md).
+  `calibrationRules` (engine ≥ 1.25.0, issue #153, [model.md §2.10j](./model.md))
+  is automated calibration's rule set, replaced whole: `{ revision?,
+  exclusions: { maxFlaggedShare (0 < x < 1, or null) }, forcing: { pan
+  ('project' or a pan preset id, 1–8) }, cases: { bounds (wide | typical),
+  objectives (the objective ids) }, selection: { test (dryWet | split |
+  independent), score (an objective id) }, run: { seed (whole, 0 – 2³¹ − 1),
+  starts (1–10), budget (whole, 50–10 000) }, filters: { wr2012Mar, typicalParams
+  (booleans) }, signedOff ({ by (1–200 characters), on (YYYY-MM-DD) } or null)
+  }`, strict, with at most 8 fits (forcing × bounds × objectives) and no
+  entry listed twice; anything else is a `400`. The server sets `revision`:
+  a save that changes a rule adds 1 and clears `signedOff` unless the same
+  save records a new one; a sign-off alone keeps it. Settings stored before
+  it read back with the defaults (revision 1, not signed off).
   `fitRecord` is the record of the automatic fit whose parameters Apply wrote
   (`FitRecord` in `packages/engine/src/calibrate/provenance.ts`), or `null`:
   `{ fittedAt (ISO timestamp), engineVersion, model, objective, bounds, seed,
@@ -556,7 +569,19 @@ alongside teams, e.g. to give an outside client `viewer` access.
   setting), `dayQuality` (the fit's `DayQuality` summary: `flowKind, rating,
   use, windowDays, flow, scoredDays, censoredDays, leftOutDays,
   suspectZeroDays, rain, notes`, or `null`) and `fitAllDays` (a scored
-  period, or `null`), and no others. Each scored period (`fit`, `before`, a test's `calibration`
+  period, or `null`), from engine 1.25.0 the optional `auto` (issue #153:
+  `{ rules, ruleExclusions, chosen, cases }`, the rules as they ran, validated
+  like the setting with its `revision`; the water years they left out, as
+  exclusions; the index of the kept case, which must be one of `cases` and
+  eligible; and each case `{ label, pan, bounds, objective, score, eligible,
+  reasons, params }`, at most 8), and no others. A save whose `fitRecord`
+  carries a new `auto` is a `409` unless its `rules` are the saved rules (the
+  same revision, content and sign-off), the same save leaves the rules
+  unchanged, and `params` (on the `free` keys) are the kept case's, so a fit
+  can't claim rules changed after its result was seen. `POST /projects/import`
+  checks a file's automated fit against the file's own `calibrationRules` the
+  same way (a `400`, "invalid project file").
+  Each scored period (`fit`, `before`, a test's `calibration`
   and `validation`, `marPenalty.unpenalised.fit`) is `{ start, end,
   waterYears, scores, intervals?, benchmarks? }`, `scores` at most 30
   numbers-or-null by name. From engine 1.19.0 (CR-5) `intervals` is `{ level,

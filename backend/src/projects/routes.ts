@@ -17,7 +17,7 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
+import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
 import { TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
@@ -285,6 +285,9 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
 			if (dqError) throw new ApiError(400, dqError);
+			// An automated fit must have run under the rules saved before it (issue #153).
+			const autoError = settings && body.settings?.fitRecord !== undefined ? autoFitRecordError(mergeSettings(current.settings), settings) : null;
+			if (autoError) throw new ApiError(409, autoError);
 			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {

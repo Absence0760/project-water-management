@@ -20,6 +20,7 @@ import { exclusionKey, exclusionLabel, type CalibrationExclusion, type FitRecord
 import { originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from './seriesProvenance';
 import { defaultFlowGapFill, gapFillRecordLabel, GAP_FILL_KINDS, type FlowGapFillSpec } from './flowGapFill';
 import { qualityFlagChanges, resolveQualityFlags, type QualityFlagSettings } from './calibrate/qualityFlagSettings';
+import { calibrationRulesChanges, resolveCalibrationRules } from './calibrate/rulesSettings';
 import { fitPeriodText, fitSegmentName, fitWindowLabels, type ChirpsCorrection } from './rain';
 import { rainSourceLines, rainSourceText } from './rainSourcePeriods';
 import {
@@ -940,6 +941,8 @@ function diffSettings(
 	out.push(...diffExclusions(za.addAccumulations, zb.addAccumulations, 'Listed accumulation'));
 	out.push(...diffFlowGapFill(a.flowGapFill, b.flowGapFill));
 	for (const c of qualityFlagChanges(a.qualityFlags as QualityFlagSettings, b.qualityFlags as QualityFlagSettings)) push(c.subject, c.text);
+	// Automated calibration's rules (engine ≥ 1.25.0, issue #153): a snapshot without them ran the defaults.
+	for (const c of calibrationRulesChanges(resolveCalibrationRules(a.calibrationRules, []), resolveCalibrationRules(b.calibrationRules, []))) push(c.subject, c.text);
 	out.push(...diffFitRecord(a.fitRecord, b.fitRecord));
 	// Anything we don't have a label for (older or newer engine keys) still shows up.
 	const known = new Set([
@@ -955,6 +958,7 @@ function diffSettings(
 		'zeroRainRuns',
 		'flowGapFill',
 		'qualityFlags',
+		'calibrationRules',
 		'fitRecord',
 		'pe',
 		'lakeEvapFactorMonthly',
@@ -1117,10 +1121,10 @@ function diffExclusions(ra: unknown, rb: unknown, noun = 'Calibration exclusion'
 const MODEL_NAME: Record<string, string> = { gr4j: 'GR4J', legacy: 'legacy' };
 
 /** "GR4J fit of 2026-09-24 14:05 UTC (KGE′, seed 1)". */
-export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed'>): string {
+export function describeFitRecord(r: Pick<FitRecord, 'model' | 'fittedAt' | 'objective' | 'seed' | 'auto'>): string {
 	const when = typeof r.fittedAt === 'string' ? r.fittedAt.replace('T', ' ').replace(/:\d{2}(\.\d+)?Z$/, ' UTC') : 'unknown time';
 	const objective = (OBJECTIVE_LABELS[r.objective as ObjectiveId] ?? String(r.objective)).replace(/ \([^()]*\)$/, '');
-	return `${MODEL_NAME[r.model] ?? String(r.model)} fit of ${when} (${objective}, seed ${r.seed})`;
+	return `${r.auto ? 'automated ' : ''}${MODEL_NAME[r.model] ?? String(r.model)} fit of ${when} (${objective}, seed ${r.seed}${r.auto ? `, calibration rules revision ${r.auto.rules.revision}` : ''})`;
 }
 
 /** The fit record the parameters came from: set, cleared, replaced, or edited since. */

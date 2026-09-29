@@ -1826,6 +1826,24 @@ the whole report is **untrusted text stored server-side**:
 - Not in `export.json`, so an export can't carry one project's report into
   another's import.
 
+### Calibration rules sign-off
+
+Automated calibration's rules (`settings.calibrationRules`, issue #153,
+[model.md §2.10j](./model.md)) are an evidence-integrity control: a fit can
+only be stored under the rules saved before it ran, with the parameters of
+the case they kept (`autoFitRecordError`, a `409`; `importedAutoFitError` on
+import). What the server can't check:
+
+- **The scores.** The fit runs in the browser, so a hostile editor could
+  report invented scores. The record keeps the rules, seed, engine version
+  and every fit tried, so anyone can re-run it and compare.
+- **The sign-off.** `signedOff` is a name and a date that any editor may
+  enter. It isn't tied to the hydrologist's account or to a role, so it is
+  self-attested. Changing a rule clears it (server-side), and run comparison
+  lists every sign-off change. A sign-off bound to a named account with its
+  own role is the durable fix, and waits on the client's answer to who signs
+  off (#90, "Automated calibration rules").
+
 ### Allocations: POPIA minimisation (038_allocations.sql)
 
 A WARMS extract can carry the registered user's identity number, phone
@@ -2329,6 +2347,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
+- The calibration rules' sign-off is self-attested, and automated fits'
+  scores are client-reported ([§ Calibration rules sign-off](#calibration-rules-sign-off)).
 - POPIA: no privacy notice and no self-service account deletion yet
   (Phase 7); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).

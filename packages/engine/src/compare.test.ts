@@ -891,6 +891,24 @@ describe('diffInputs', () => {
 		expect(diffInputs(old, a)).toEqual([]);
 	});
 
+	it('describes a calibration rule change and a sign-off (issue #153); a run saved before engine 1.25.0 reads as the default rules', () => {
+		const a = snapshot();
+		const b = structuredClone(a);
+		b.settings.calibrationRules = {
+			...defaultProjectSettings().calibrationRules,
+			revision: 2,
+			selection: { test: 'split', score: 'kgePrime' },
+			signedOff: { by: 'A. Hydrologist', on: '2026-09-29' }
+		};
+		expect(texts(a, b)).toEqual([
+			'Calibration rules, keep: the best KGE′ (Kling–Gupta, 2012) on the dry → wet test (wet years) → the best KGE′ (Kling–Gupta, 2012) on the split-sample test (other half)',
+			'Calibration rules: draft (not signed off) → signed off by A. Hydrologist on 2026-09-29'
+		]);
+		const old = snapshot();
+		delete (old.settings as Record<string, unknown>).calibrationRules;
+		expect(diffInputs(old, a)).toEqual([]);
+	});
+
 	it('describes the multi-day accumulation settings (B4); a run saved before 0.20.0 ran them as recorded', () => {
 		const a = snapshot();
 		const b = structuredClone(a);

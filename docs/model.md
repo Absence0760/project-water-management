@@ -5514,6 +5514,101 @@ day should be clamped to the record's maximum or to the weir's rated
 maximum, when known; and whether a filled record should ever be scored by
 default (it isn't).
 
+### 2.10j Automated calibration with pre-declared rules (engine ≥ 1.25.0, issue #153)
+
+Not in the workbook. Fit automatically (§2.10b) needs a person at every pass
+of calibrate → review → refit: which periods to leave out, which forcing,
+which fit to keep are chosen after the scores are seen, and choosing by the
+score overfits and is easy to game. `settings.calibrationRules`
+(`packages/engine/src/calibrate/rulesSettings.ts`) makes those choices in
+advance, and `autoCalibrate` (`calibrate/auto.ts`) applies them end to end, so
+no one steers the result. An assessor then challenges the rules, not the fit.
+Settings → Fit automatically → *Calibration rules* and *Automated
+calibration*; it runs in the browser's calibration worker, like a fit.
+
+The rule set:
+
+1. **Exclusions** (`exclusions.maxFlaggedShare`, default **0.2**; null = none
+   by rule). Over the calibration window and outside the stored exclusions,
+   each water year's share of its observed days that carry a per-day quality
+   flag (§2.10h: above or below the gauged range, suspect or infilled; the
+   days `flaggedDayMask` marks) is counted (`flaggedYearExclusions` in
+   `calibrate/dayFlags.ts`). A year above the share is left out of every fit,
+   on top of `settings.calibrationExclusions`, with a reason that names the
+   rule ("Rule (calibration rules, exclusions): 200 of 365 observed days
+   flagged (54.8 %), more than 20 %"). The quality flags' own treatments still
+   decide the days scored inside the years kept.
+2. **Forcing** (`forcing.pan`, default the project's own pan coefficient).
+   Each listed coefficient (the project's row, or a preset,
+   `PAN_COEFFICIENT_PRESETS`) is its own set of fits. Nothing else about the
+   forcing varies. A preset needs GR4J's PE to be pan × A-pan (§2.4a): under a
+   monthly PE row it wouldn't reach GR4J, and the run is refused.
+3. **Fits** (`cases.bounds` × `cases.objectives`, default wide and typical
+   bounds on KGE′). Every forcing × bounds × objective is one full fit
+   (`calibrate`, §2.10b) with the split-sample and dry → wet tests, and with
+   the other observed record as an independent test when the project has
+   both. At most `RULE_CASES_MAX` = **8** fits.
+4. **Selection** (`selection.test` and `selection.score`, default the wet
+   years' KGE′ from the dry → wet test). The fit kept is the one with the best
+   score on that **held-out** test, the first on a tie. It is never the
+   in-sample score: a fit whose record doesn't allow the test isn't kept, and
+   the report says so, rather than falling back to the fit on the fitted days.
+5. **Search** (`run`, default seed 1, 5 starts per fit, 1 500 model runs per
+   optimisation). The seed, starts and budget are rules too, not chosen when
+   the rules run: otherwise the same rules could be re-run with seed after
+   seed until one scored well. Another seed is a rule change, with its own
+   revision.
+6. **Filters** a kept fit must pass (both on by default). *MAR inside the
+   WR2012 band*: the simulated natural MAR with the fitted parameters (on the
+   basis the WR2012 check uses, §2.10c) inside the calibration penalty's band
+   when both ends are set, else within the check's query threshold (the flag
+   is `ok` or `note`). Without a WR2012 reference it can't be applied, and the
+   report says so rather than failing every fit. *Parameters in the typical
+   range*: every fitted parameter inside Perrin et al.'s (2003) 80 % range
+   (the `typical` bounds).
+
+If no fit passes, **none is kept**, and each fit lists why (`selectCase` in
+`calibrate/rules.ts`). The rules, not the result, are then what to change.
+
+**Fixed before the result.** The run reads the rules from the **saved**
+settings only. The page won't start while the form has unsaved rule edits,
+and the server refuses (409) a fit record whose rules aren't the saved ones
+(another revision or content), or one saved in the same request as a rule
+change (`autoFitRecordError`, `backend/src/projects/settings.ts`), or one whose
+parameters aren't those of the case it says the rules kept. A project file
+import applies the same check against the file's own rules
+(`importedAutoFitError`). The fit itself runs in the browser, so the scores
+it reports can't be re-checked on the server: what the server holds fixed is
+the rules they were chosen by, and the record keeps every fit tried, so an
+assessor can reproduce the report from the rules, the seed and the engine
+version. `revision`
+is the server's: it is 1 for a project's first rule set, and a save that
+changes a rule adds 1 and clears `signedOff` (the sign-off covered the rules
+as they were), unless the same save records a new sign-off. A save that only
+signs off keeps the revision.
+
+**Record.** Applying the kept fit writes its parameters (and, for a preset,
+that pan coefficient and its source), and a normal fit record (§2.10b) with
+`auto`: the rules as they ran (revision and sign-off included), the water
+years the rule left out, the index of the kept fit, and every fit with its
+held-out score, whether it passed and why not. The seed and engine version
+are the record's own, so the same input, rules, seed and engine version give
+the same report (the seed and search are the rules' own). `fitRecordStatus` adds `rulesChanged` (the rules now decide
+differently from the record's, a sign-off alone aside) and `draftRules` (the
+fit ran under rules not signed off), each with a caveat. A run snapshots the
+rules with the settings, and run comparison lists a rule change or sign-off
+like any other setting (`calibrationRulesChanges`).
+
+**Draft defaults.** The defaults above are drafts until the hydrologist signs
+them off (#90, "Automated calibration rules": the flag threshold, the
+selection score and the filters). Until then the page, the fit record and the
+caveats say a fit they keep is **not evidence**. Record the sign-off in
+Settings once it's given. The sign-off is a name and date an editor enters,
+not tied to the hydrologist's own account (docs/security.md § Calibration
+rules sign-off). Not built yet: re-running the rules on their own
+when new observed or rain data arrives, which is the background-jobs step
+(docs/followups.md § Calibration research).
+
 ### 2.11 Curtailment targets (`[Shortfalls]`)
 
 The `[Shortfalls]` sheet answers *how much must each farm cut (or may it

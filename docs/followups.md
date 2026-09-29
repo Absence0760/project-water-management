@@ -1042,7 +1042,13 @@ the suggested order (the IDs carry the detail):
         from daily data beside the monthly verdict, monthly FDC overlays
         of natural, present-day and (on the compare page) scenario flow on
         the EWR curve, and the EWR as %nMAR.
-- [ ] **Automated calibration with pre-declared rules.** Today every pass
+- [ ] **Automated calibration with pre-declared rules.** *Steps 1–3 and the
+      fit record built in engine 1.25.0 (issue #153, model.md §2.10j):
+      `settings.calibrationRules`, `autoCalibrate`, the server's revision and
+      stale-fit refusal, Settings → Fit automatically → Calibration rules and
+      Automated calibration. Open: step 4 (CR-1's ensemble around the kept
+      fit, run by hand from the Uncertainty bands panel today), step 5 below, and
+      the hydrologist's sign-off of the draft defaults (#90).* Today every pass
       of the calibrate → review → adjust → refit loop needs a person, because
       the choices (exclusions, forcing, which fit to keep) are made after the
       scores are seen. Automating those choices by chasing the score would
@@ -1062,7 +1068,13 @@ the suggested order (the IDs carry the detail):
          range.
       5. New observed or rain data triggers a rerun (needs the Background
          jobs item in [planned-work.md](./planned-work.md)); the fit record's
-         stale checks already say when one is due.
+         stale checks already say when one is due. **Still open** (#153): the
+         rules run in the browser's worker today; the durable fix is a
+         `calibration` job on the queue (backend/src/jobs) that runs
+         `autoCalibrate` on the saved rules server-side, stores the report and
+         writes the kept fit (with its record) only once the rules are signed
+         off. Trigger: the hydrologist signs off the rules (#90), since before
+         that an unattended fit is not evidence anyway.
 
       The rule set, seed and engine version go in the fit record, so a run
       is reproducible and an assessor can challenge the rules rather than

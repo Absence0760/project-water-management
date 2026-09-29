@@ -349,6 +349,95 @@ describe('fit provenance and calibration exclusions (issue #4)', () => {
 	});
 });
 
+describe('automated calibration rules and fits (issue #153)', () => {
+	const period = { start: '2020-01-01', end: '2020-01-30', waterYears: [2019], scores: { days: 30, kgePrime: 0.7 } };
+	const autoRecord = (rules: Record<string, unknown>) => ({
+		fittedAt: '2026-09-29T10:00:00.000Z',
+		engineVersion: '1.25.0',
+		model: 'gr4j',
+		objective: 'kgePrime',
+		bounds: 'typical',
+		seed: 3,
+		budget: 250,
+		evaluations: 750,
+		cancelled: false,
+		free: ['x1', 'x3', 'x4'],
+		params: { x1: 420, x2: 0, x3: 70, x4: 2.1 },
+		startParams: { x1: 350, x2: 0, x3: 90, x4: 1.7 },
+		flowKind: 'flow_observed_m3s',
+		simulatedKey: 'simulated_outflow',
+		calibrationStart: null,
+		calibrationEnd: null,
+		exclusions: [],
+		validate: true,
+		validationRecord: null,
+		fit: period,
+		before: period,
+		splitSample: null,
+		differential: null,
+		independentRecord: null,
+		notes: [],
+		editedParams: [],
+		auto: {
+			rules,
+			ruleExclusions: [],
+			chosen: 0,
+			cases: [{ label: 'typical', pan: 'project', bounds: 'typical', objective: 'kgePrime', score: 0.7, eligible: true, reasons: [], params: { x1: 420, x2: 0, x3: 70, x4: 2.1 } }]
+		}
+	});
+
+	it('bumps the revision on a rule change, stores only a fit made under the saved rules, and snapshots both in a run', async () => {
+		const u = await signUp('Autorules');
+		const projectId = await runnable(u);
+		const current = (await u.call('GET', `/projects/${projectId}`)).body.project.settings;
+		expect(current.calibrationRules).toMatchObject({ revision: 1, signedOff: null });
+
+		const changed = await u.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibrationRules: { ...current.calibrationRules, revision: 40, selection: { test: 'split', score: 'kgePrime' } } }
+		});
+		expect(changed.status).toBe(200);
+		const rules = changed.body.project.settings.calibrationRules;
+		expect(rules).toMatchObject({ revision: 2, selection: { test: 'split' } });
+
+		// A fit made under revision 1 (before the change) is refused, with nothing stored.
+		const stale = await u.call('PATCH', `/projects/${projectId}`, { settings: { fitRecord: autoRecord({ ...current.calibrationRules }) } });
+		expect(stale.status).toBe(409);
+		expect(stale.body.error).toContain('revision 1, but the saved rules are revision 2');
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.fitRecord).toBeNull();
+		// Nor can the rules change in the same save as the fit they picked.
+		const both = await u.call('PATCH', `/projects/${projectId}`, {
+			settings: { calibrationRules: { ...rules, exclusions: { maxFlaggedShare: 0.5 } }, fitRecord: autoRecord(rules) }
+		});
+		expect(both.status).toBe(409);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.calibrationRules.revision).toBe(2);
+
+		// Positive control: a fit made under the saved rules is stored, and a run snapshots it with the rules.
+		const ok = await u.call('PATCH', `/projects/${projectId}`, { settings: { gr4j: { ...current.gr4j, x1: 420, x3: 70, x4: 2.1 }, fitRecord: autoRecord(rules) } });
+		expect(ok.status).toBe(200);
+		expect(ok.body.project.settings.fitRecord.auto.rules.revision).toBe(2);
+		const run = (await u.call('POST', `/projects/${projectId}/runs`, { label: 'auto' })).body.run.id;
+		const detail = (await u.call('GET', `/projects/${projectId}/runs/${run}`)).body.run;
+		expect(detail.settings.calibrationRules).toMatchObject({ revision: 2 });
+		expect(detail.settings.fitRecord.auto.chosen).toBe(0);
+		// A later rule change leaves the stored fit alone (the page says it is stale).
+		const later = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibrationRules: { ...rules, exclusions: { maxFlaggedShare: 0.3 } } } });
+		expect(later.status).toBe(200);
+		expect(later.body.project.settings.fitRecord.auto.rules.revision).toBe(2);
+		expect(later.body.project.settings.calibrationRules.revision).toBe(3);
+	});
+
+	it('rejects an invalid rule set with a 400 and no raw DB error text, and leaves the stored one alone', async () => {
+		const u = await signUp('Autorulesbad');
+		const projectId = await runnable(u);
+		const current = (await u.call('GET', `/projects/${projectId}`)).body.project.settings;
+		const res = await u.call('PATCH', `/projects/${projectId}`, { settings: { calibrationRules: { ...current.calibrationRules, forcing: { pan: ['nowhere'] } } } });
+		expect(res.status).toBe(400);
+		expect(JSON.stringify(res.body)).toContain('unknown pan coefficient');
+		expect(JSON.stringify(res.body)).not.toMatch(/violates|constraint|relation|syntax error|column|pg_|SQLSTATE/i);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.calibrationRules).toEqual(current.calibrationRules);
+	});
+});
+
 describe('settings.pe (engine ≥ 0.31.0, issue #39)', () => {
 	const pe = { kind: 'monthly', mm: [90, 120, 150, 170, 150, 130, 90, 60, 45, 45, 55, 70], source: 'Station FAO-56 ET₀ × 1.0' };
 
