@@ -10,10 +10,11 @@
 import { spawnSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { API_URL } from './env.ts';
+import { API_URL, buildDirsFor, E2E_SLOT } from './env.ts';
 
-export const E2E_BUILD_DIR = 'build-e2e';
-export const E2E_KIT_DIR = '.svelte-kit-e2e';
+/** Per slot (env.ts buildDirsFor): `build-e2e` in the main checkout and CI, `build-e2e-<slot>` elsewhere. */
+export const E2E_BUILD_DIR = buildDirsFor(E2E_SLOT).build;
+export const E2E_KIT_DIR = buildDirsFor(E2E_SLOT).kit;
 
 const frontend = fileURLToPath(new URL('../../frontend/', import.meta.url));
 
