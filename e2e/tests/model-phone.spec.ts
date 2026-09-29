@@ -124,7 +124,7 @@ test.describe('phone', () => {
 	});
 });
 
-test('on a desktop the crop table keeps its column headers and a transfer card its group labels', async ({ page, owner }) => {
+test('on a desktop the crop table keeps its column headers and a transfer card its field labels', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 900 });
 	const project = await createProject(page.request, 'Desktop tables');
@@ -135,7 +135,10 @@ test('on a desktop the crop table keeps its column headers and a transfer card i
 	await page.goto(`/projects/${project.id}?tab=transfers`);
 	const rule = page.getByTestId('transfer-rule');
 	await expect(rule.getByText('Max rate by month', { exact: true })).toBeVisible();
-	await expect(rule.getByText('Limits', { exact: true })).toBeVisible();
+	// Wide, the dividers mark the Limits and Source groups and each field names itself, so their titles go.
+	await expect(rule.getByText('Limits', { exact: true })).toBeHidden();
+	await expect(rule.getByText('Daily cap, m³', { exact: true })).toBeVisible();
+	await expect(rule.getByText('Priority, lower first', { exact: true })).toBeVisible();
 	await expect(rule.getByText('Takes from', { exact: true })).toBeVisible();
 	await expect(rule.getByRole('heading', { level: 3, name: 'Transfer 1', exact: true })).toBeVisible();
 });

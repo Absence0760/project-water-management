@@ -9,7 +9,10 @@
 	// Remove), then its fields in three top-aligned groups: the max rate by month,
 	// the limits (daily cap, priority) and the source (takes from, and the dam's
 	// minimum or a river off-take's fields). The groups sit side by side where the
-	// card is wide and stack where it isn't (container queries on the card).
+	// card is wide and stack where it isn't (container queries on the card). Where
+	// the card is widest the head line becomes a column on the card's left (From
+	// over To, the switch and Remove under them), level with the rates, so a rule
+	// is about as tall as its month fields rather than a head line taller.
 	import { tick } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -98,6 +101,7 @@
 					{@const label = `transfer ${i + 1}`}
 					{@const river = (t.source ?? 'dam') === 'river'}
 					<li class="rule" class:off={!t.enabled} data-id={t.id} data-testid="transfer-rule" aria-labelledby="tr-{t.id}-h">
+						<div class="rule-in" class:river>
 						<div class="rule-head">
 							<div class="title">
 								<h3 class="rule-title" id="tr-{t.id}-h" tabindex="-1">
@@ -137,8 +141,9 @@
 
 						<div class="rule-body">
 							<div class="grp g-rates">
-								<div class="grp-t"><span>Max rate by month</span> <span class="u">m³/s, blank = off</span> <HelpTip key="transfer.monthlyRateM3s" /></div>
-								<MonthRates rule={t} {label} disabled={readonly} />
+								<MonthRates rule={t} {label} disabled={readonly}>
+									{#snippet title()}<div class="grp-t"><span>Max rate by month</span> <span class="u">m³/s</span> <HelpTip key="transfer.monthlyRateM3s" /></div>{/snippet}
+								</MonthRates>
 							</div>
 
 							<div class="grp g-limits">
@@ -200,6 +205,7 @@
 									{/if}
 								</div>
 							</div>
+						</div>
 						</div>
 					</li>
 				{/each}
@@ -265,7 +271,7 @@
 		grid-template-areas: 'title route acts';
 		align-items: center;
 		gap: 0.5rem 1rem;
-		padding: 0.55rem 0.75rem 0.55rem 0.9rem;
+		padding: 0.45rem 0.75rem 0.45rem 0.9rem;
 		border-bottom: 1px solid var(--border);
 	}
 	.title {
@@ -414,7 +420,7 @@
 		grid-template-columns: minmax(0, 1fr);
 		grid-template-areas: 'rates' 'limits' 'source';
 		gap: 0.9rem 1.5rem;
-		padding: 0.7rem 0.9rem 0.8rem;
+		padding: 0.6rem 0.9rem 0.65rem;
 		align-items: start;
 	}
 	.g-rates {
@@ -434,13 +440,18 @@
 		align-items: center;
 		flex-wrap: wrap;
 		gap: 0 0.35rem;
-		min-height: 1.4rem;
+		/* As tall as the rates' title line (its summary button), so the three groups' fields start level. */
+		min-height: 24px;
 		margin-bottom: 0.3rem;
 		font-size: 0.75rem;
 		font-weight: 600;
 		letter-spacing: 0.02em;
 		text-transform: uppercase;
 		color: var(--text-2);
+	}
+	/* The rates' title sits on MonthRates' own head line, which spaces it. */
+	.g-rates .grp-t {
+		margin-bottom: 0;
 	}
 	.grp-t .u {
 		font-weight: 400;
@@ -509,19 +520,70 @@
 			grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
 		}
 	}
-	/* Wide: the three groups side by side (the rates' six columns keep 0.0129 and 12.345 whole). */
+	/* Wide (1280 and 1440 windows): the head line becomes a column on the card's left (number, From over To,
+	   the switch and Remove) beside the three groups, so a rule is as tall as its month fields. The rates
+	   keep six columns wide enough for 0.0129 and 12.345; the source goes two to a row where there's room.
+	   At 14 px a rem: 17 + 27 + 9 + 13.5 + the dividers ≈ 71rem, a 1280 window's ~73rem card. */
 	@container rule (min-width: 70rem) {
+		.rule-in {
+			display: grid;
+			grid-template-columns: 17rem minmax(0, 1fr);
+		}
+		.rule-head {
+			grid-template-columns: minmax(0, 1fr);
+			grid-template-areas: 'title' 'route' 'acts';
+			align-content: start;
+			gap: 0.4rem;
+			padding: 0.6rem 0.75rem 0.65rem 0.9rem;
+			border-bottom: 0;
+			border-right: 1px solid var(--border);
+		}
+		/* From over To, each with its word; the route's help tip beside From. */
+		.route {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: 0.3rem 0.35rem;
+		}
+		.route .end {
+			grid-column: 1;
+			display: grid;
+			grid-template-columns: 2.2rem minmax(0, 1fr);
+		}
+		.route > :global(.helptip) {
+			grid-column: 2;
+			grid-row: 1;
+		}
+		.arrow {
+			display: none;
+		}
+		.rule-acts {
+			justify-content: space-between;
+		}
+		/* A dam source's two fields stack, no taller than the rates, and give the rates the room; a river
+		   off-take's six stay two to a row (one column of six was the old table's ~330 px row). */
 		.rule-body {
-			grid-template-columns: minmax(23rem, 1fr) 9rem minmax(22rem, 1.15fr);
+			grid-template-columns: minmax(27rem, 1fr) 9rem 13.5rem;
 			grid-template-areas: 'rates limits source';
 		}
 		.g-source .fields {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.river .rule-body {
+			grid-template-columns: minmax(27rem, 1fr) 9rem minmax(20rem, 0.8fr);
+		}
+		.river .g-source .fields {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 		.g-limits,
 		.g-source {
 			padding-left: 1.25rem;
 			border-left: 1px solid var(--border);
+		}
+		/* The dividers mark the groups here and every field names itself ("Daily cap, m³", "Takes from"), so
+		   the Limits and Source titles would only be a line that makes each of thirty cards taller. */
+		.g-limits > .grp-t,
+		.g-source > .grp-t {
+			display: none;
 		}
 	}
 

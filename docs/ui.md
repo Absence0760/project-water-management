@@ -2276,7 +2276,10 @@ has a rate in any month, since its rates and limits go with it, and says
 Discard on the save bar still brings it back until the model is saved; a blank
 rule goes at once. Focus moves to the next rule's heading (the previous one's
 for the last). An off rule's card is tinted, with a neutral edge instead of
-the accent one, and says **off** in words (not faded text).
+the accent one, and says **off** in words (not faded text). Where the card is
+widest (1280 and 1440 windows) the head line is a column on the card's left
+instead, level with the rates: the number, From over To, then the switch and
+Remove.
 
 The card's body holds three top-aligned groups:
 
@@ -2284,9 +2287,12 @@ The card's body holds three top-aligned groups:
   twelve m³/s fields in water-year order, six to a row (four in a phone's
   card, all twelve in one row where the group is 58rem wide), each wide
   enough to show 0.0129 or 12.345 whole, with tabular figures; a blank month
-  is off. Under them the months in words with the largest rate, and **… in
-  every month**, which puts the largest rate in all twelve (both to four
-  decimals, so the button names the rate it copies). A workbook rule with one
+  is off (the title says m³/s; "blank = off" is in the fields' group name and
+  each blank field says *off*). On the title's line, at its right, the months
+  in words with the largest rate, and **… in every month**, which puts the
+  largest rate in all twelve (both to four decimals, so the button names the
+  rate it copies); they wrap under the title only where the group is too
+  narrow for both. A workbook rule with one
   rate in its ticked months shows that rate in each of them and runs as
   before; the first edit gives it its own rate per month (`monthlyRateM3s`,
   with `months` and `maxRateM3s` kept in step).
@@ -2303,7 +2309,13 @@ The card's body holds three top-aligned groups:
   the destination’s dam. The fields sit two to a row, not one tall column.
 
 Every field keeps its visible label and its ⓘ tip. The groups sit side by
-side where the card is 70rem wide (1280 and 1440 windows); from 46rem the
+side where the card is 70rem wide (1280 and 1440 windows), beside the head
+column; there the Limits and Source titles are dropped (dividers mark the
+groups and every field names itself), a dam source's two fields stack in a
+narrow column and a river off-take's sit two to a row. A rule on a dam is
+147 px tall at 1440 (the table's row was 120 px; the first cards were 225 px,
+so thirty rules scrolled twice as far), 173 px at 1280 when its summary
+wraps. From 46rem the
 rates sit beside the limits with the source across under them (the grid
 modal, narrow windows); below that (a phone) everything stacks, From and To
 each take a full row with their word, the source's selects take the card's

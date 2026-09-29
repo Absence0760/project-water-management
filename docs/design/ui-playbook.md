@@ -282,6 +282,16 @@ section it belongs to, with the example that taught it.
   conditional fields two to a row, the groups side by side by the card's
   width (`@container rule`). Size number fields for real values (0.0129,
   12.345) and check them with `scrollWidth <= clientWidth` in e2e.
+- **A card per row costs height; measure a long list against the table it
+  replaced.** The first Transfers cards were 225 px a rule against the
+  table's 120, so thirty rules scrolled twice as far: a head line across the
+  top, a title line per group and a summary line under the months, each
+  repeated thirty times, where the table said them once in its header.
+  Where the card is wide the head became a column on the card's left, level
+  with the rates, the summary moved onto the rates' title line, and the
+  Limits and Source titles went (dividers mark the groups and each field
+  names itself): 147 px at 1440. `transfers-page.spec.ts` caps the height
+  of a rule with thirty on the page.
 - **Put a panel's columns side by side by the panel's width, not the
   window's.** Runs & results' runoff panel set its table beside the stores
   chart above a 900 px *viewport*; at 1024 px the sidebar and the runs rail
