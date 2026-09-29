@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { dayQuality, defaultProjectSettings, PE_SOURCE_MAX, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { dayQuality, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -32,12 +32,66 @@ describe('SettingsPatch.dataQuality', () => {
 			expect(ok(bad), JSON.stringify(bad)).toBe(false);
 		}
 	});
+
+	it('takes the limits added in engine 1.20.0 (issue #66) with the engine’s ranges', () => {
+		expect(
+			ok({
+				outlierFactorRain: 1000,
+				outlierFactorFlow: 1.5,
+				flatlineRainDays: 2,
+				flatlineEvapDays: 366,
+				flatlineFlowMinDays: 10,
+				flatlineFlowMaxDays: 40,
+				zeroRunRule: 'usualRain',
+				zeroRunMinWetDays: 1,
+				zeroRunUsualShare: 1,
+				zeroRunMinDays: 366,
+				zeroRunChirpsCheck: true,
+				lowVsChirpsRatio: 0.99,
+				lowVsChirpsBaseline: 'moving',
+				lowVsChirpsMinimum: 'scaled'
+			})
+		).toBe(true);
+		for (const bad of [
+			{ outlierFactorRain: 1 },
+			{ outlierFactorFlow: 1001 },
+			{ flatlineRainDays: 1 },
+			{ flatlineFlowMaxDays: 30.5 },
+			{ zeroRunRule: 'weekly' },
+			{ zeroRunMinWetDays: 0 },
+			{ zeroRunUsualShare: 0 },
+			{ zeroRunUsualShare: 1.1 },
+			{ zeroRunChirpsCheck: 'yes' },
+			{ lowVsChirpsRatio: 1 },
+			{ lowVsChirpsBaseline: 'decade' },
+			{ lowVsChirpsMinimum: 'none' }
+		]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('checks the flow flat-line cap against its floor on the merged settings', () => {
+		expect(dataQualityPatchError(patchSettings({}, { dataQuality: { flatlineFlowMinDays: 30 } }))).toBeNull();
+		expect(dataQualityPatchError(patchSettings({}, { dataQuality: { flatlineFlowMinDays: 100 } }))).toMatch(/flow flat-line cap \(90 days\) can't be below its floor \(100 days\)/);
+		expect(dataQualityPatchError(patchSettings({ dataQuality: { flatlineFlowMaxDays: 20 } }, { dataQuality: { flatlineFlowMinDays: 20 } }))).toBeNull();
+		expect(dataQualityPatchError(mergeSettings({}))).toBeNull();
+	});
+
+	it('records the rain-check limits in a fit record’s forcing, optionally', () => {
+		const rc = FitRecord.shape.forcing.unwrap().shape.rainChecks;
+		expect(rc.safeParse(undefined).success).toBe(true);
+		expect(rc.safeParse(rainCheckLimits(defaultDataQualitySettings())).success).toBe(true);
+		expect(rc.safeParse({ ...rainCheckLimits(defaultDataQualitySettings()), outlierFactorRain: 5 }).success).toBe(false);
+		expect(rc.safeParse({ zeroRunRule: 'usualRain' }).success).toBe(false);
+	});
 });
 
 describe('mergeSettings', () => {
 	it('fills dataQuality from the defaults for settings stored before it existed, and field by field', () => {
-		expect(mergeSettings({}).dataQuality).toEqual({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
+		expect(mergeSettings({}).dataQuality).toEqual(defaultDataQualitySettings());
+		// Stored before the engine 1.20.0 limits: they take their defaults, so the project runs as before.
 		expect(mergeSettings({ dataQuality: { agreementMinDays: 30 } }).dataQuality).toEqual({
+			...defaultDataQualitySettings(),
 			agreementMinRatio: 2 / 3,
 			agreementMaxRatio: 1.5,
 			agreementMinDays: 30
@@ -493,7 +547,7 @@ describe('patchSettings', () => {
 		const stored = { gr4j: { x1: 500, x3: 40 }, dataQuality: { agreementMinDays: 30 } };
 		const s = patchSettings(stored, { gr4j: { x4: 2 }, dataQuality: { agreementMinRatio: 0.9 } });
 		expect(s.gr4j).toMatchObject({ x1: 500, x3: 40, x4: 2 });
-		expect(s.dataQuality).toEqual({ agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
+		expect(s.dataQuality).toEqual({ ...defaultDataQualitySettings(), agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
 	});
 
 	it('replaces top-level values and whole WR2012 groups (the reference is never half-merged)', () => {
@@ -684,7 +738,7 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...record, marPenalty: { ...marPenalty, extra: 1 } })).toBe(false);
 	});
 
-	it('accepts the quality-flag settings, summary and fit on all days (CR-18/19/22, engine ≥ 1.20.0), and a record from before them without', () => {
+	it('accepts the quality-flag settings, summary and fit on all days (CR-18/19/22, engine ≥ 1.22.0), and a record from before them without', () => {
 		const flags = Uint8Array.from([0, 0, 4, 6]);
 		const settings = defaultProjectSettings().qualityFlags;
 		const dq = dayQuality({ flowKind: 'flow_logger_m3s', settings, windowIdx: [0, 1, 2, 3], flags, scoring: scoringDays([0, 1, 2, 3], flags, settings, null, 4), observed: Float64Array.from([1, 2, 0, NaN]), rainFlags: Uint8Array.from([0, 1, 0, 2]), zeroRunMask: null });
@@ -1061,7 +1115,7 @@ describe('remapSettingNodeIds (project copy)', () => {
 	});
 });
 
-describe('SettingsPatch.qualityFlags (engine ≥ 1.20.0, CR-18/19)', () => {
+describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
 	const ok = (qualityFlags: unknown) => SettingsPatch.safeParse({ qualityFlags }).success;
 	const rating = { gaugedMaxM3s: 12.5, gaugedMinM3s: 0.02, source: 'DWS gaugings 1998–2020' };
 

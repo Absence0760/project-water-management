@@ -101,6 +101,12 @@ export const TIPS: HelpTipText[] = [
 		id: 'gauge-logger-agreement',
 		term: 'Gauge vs logger agreement',
 		short: 'Flags water years where the observed gauge and the logger disagree by more than the set ratio, on enough shared days.',
+		category: 'fit'
+	},
+	{
+		id: 'data-quality-limits',
+		term: 'Data quality limits',
+		short: 'The limits of the input checks: gauge vs logger, outliers, flat stretches, and catchment rain recorded as zero or far below CHIRPS.',
 		category: 'fit',
 		fields: ['settings.dataQuality']
 	},

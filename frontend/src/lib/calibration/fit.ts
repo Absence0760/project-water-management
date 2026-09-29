@@ -191,7 +191,7 @@ export function scoreColumns(r: ScoredFit): ScoreColumn[] {
 		benchmarks: x.benchmarks ?? null
 	});
 	const cols: ScoreColumn[] = [col('before', 'Current parameters', p(r.before), r.before, false), col('fit', 'Fitted', p(r.fit), r.fit, false)];
-	// The fit on every observed day, flagged ones included and nothing censored (CR-19, engine ≥ 1.20.0): only when the flags changed the days.
+	// The fit on every observed day, flagged ones included and nothing censored (CR-19, engine ≥ 1.22.0): only when the flags changed the days.
 	if (r.fitAllDays) cols.push(col('fit-all', 'Fitted, all days (flags ignored)', p(r.fitAllDays), r.fitAllDays, false));
 	if (r.splitSample) {
 		cols.push(
@@ -306,7 +306,7 @@ export function seedError(seed: number | null): string | null {
  */
 export function fitRecordFor(
 	r: CalibrationReport,
-	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> & Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'qualityFlags'>>,
+	settings: Pick<ProjectSettings, 'calibrationStart' | 'calibrationEnd' | 'calibrationExclusions' | 'panCoefficient' | 'apanMm' | 'chirpsBiasCorrection' | 'zeroRainRuns' | 'chirpsFitPeriod'> & Partial<Pick<ProjectSettings, 'rainSource' | 'pe' | 'panCoefficientSource' | 'arealRain' | 'dataQuality' | 'qualityFlags'>>,
 	opts: { validate: boolean; validationRecord: CalibrationFlowKind | null; now?: Date; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null }
 ): FitRecord {
 	return fitRecordFromReport(r, {

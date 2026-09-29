@@ -365,12 +365,17 @@ async function catchmentDay(db: Db, projectId: string, runId: string, date: stri
 	);
 	if (!rows.length) throw new ApiError(404, 'not found');
 	const b = r.runoff;
-	// A conceptual model's stores the day before. Only their total is recorded
-	// at the start of the run (after the warm-up), so on its first day each
-	// store is null and the total is the run's starting storage.
+	// A conceptual model's stores the day before. On the run's first day that
+	// is each store after the warm-up (engine ≥ 1.20.0, summary.runoff.storesStartMm);
+	// a run from before kept only their total, so each store is null there and
+	// the total is the run's starting storage.
 	const byKey = new Map(rows.map((x) => [x.key, x]));
+	const startOf = (k: string) => {
+		const v = b?.storesStartMm?.[k];
+		return typeof v === 'number' ? v : null;
+	};
 	const previousStores = b
-		? (Object.fromEntries(RUNOFF_STORES.map((k) => [k, r.index === 0 ? null : (byKey.get(k)?.previous ?? null)])) as Record<(typeof RUNOFF_STORES)[number], number | null>)
+		? (Object.fromEntries(RUNOFF_STORES.map((k) => [k, r.index === 0 ? startOf(k) : (byKey.get(k)?.previous ?? null)])) as Record<(typeof RUNOFF_STORES)[number], number | null>)
 		: null;
 	const previousStorageMm = !b
 		? null

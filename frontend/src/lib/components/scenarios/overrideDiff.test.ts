@@ -107,7 +107,32 @@ describe('diffModel', () => {
 		];
 		const e2 = editing(curved);
 		node(e2, UP).damCapacityM3 = up.damCapacityM3 * 1.2;
-		expect(diffModel(curved, e2.snapshot()).unsupported).toEqual([expect.stringMatching(/dam, which has a survey curve: .*Add it as a change instead/)]);
+		expect(diffModel(curved, e2.snapshot()).unsupported).toEqual([expect.stringMatching(/dam, which has a survey curve: .*add it as a change instead/)]);
+	});
+
+	it('records a survey curve edit as node.set, after the capacity when the dam is raised with it (engine 1.20.0)', () => {
+		const b = base();
+		const up = b.model.nodes.find((n) => n.id === UP)!;
+		up.damCurve = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 5, areaM2: 50_000, volumeM3: up.damCapacityM3 }
+		];
+		const surveyed = [
+			{ levelM: 0, areaM2: 0, volumeM3: 0 },
+			{ levelM: 4, areaM2: 40_000, volumeM3: 100_000 },
+			{ levelM: 8, areaM2: 70_000, volumeM3: 240_000 }
+		];
+		// The curve alone.
+		const e = editing(b);
+		node(e, LO).damCurve = surveyed.map((r) => ({ ...r, volumeM3: (r.volumeM3 * 90_000) / 240_000 }));
+		expect(roundTrips(b, e.snapshot())).toEqual([{ op: 'node.set', nodeId: LO, field: 'damCurve', value: node(e, LO).damCurve }]);
+		// A raise with the enlarged dam's own survey: the curve lands as entered, not resized along the old one.
+		const e2 = editing(b);
+		node(e2, UP).damCapacityM3 = 240_000;
+		node(e2, UP).damCurve = surveyed;
+		const ops = roundTrips(b, e2.snapshot());
+		expect(ops.map((o) => (o.op === 'node.set' ? o.field : o.op))).toEqual(['damCapacityM3', 'damAreaFullM2', 'damCurve']);
+		expect(applyScenario(b, ops).input.model.nodes.find((n) => n.id === UP)!.damCurve).toEqual(surveyed);
 	});
 
 	it('turns a supply rule and river pump edit into node.set (WP-3.8): river first at 1,200 m³/day', () => {

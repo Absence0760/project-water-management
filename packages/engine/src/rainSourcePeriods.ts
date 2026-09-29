@@ -35,6 +35,7 @@ import {
 	RAIN_SOURCE_REFERENCES,
 	RAIN_SOURCE_SERIES,
 	type DailySeries,
+	type DataQualitySettings,
 	type RainSourceFactorProvenance,
 	type RainSourcePeriod,
 	type RainSourceReferenceEra,
@@ -333,12 +334,14 @@ export function rainSourceFactors(
 	series: Partial<Record<SeriesKind, DailySeries>>,
 	periods: readonly RainSourcePeriod[],
 	zr: ZeroRainSettings,
-	accumulations: AccumulationSpans
+	accumulations: AccumulationSpans,
+	dq?: DataQualitySettings
 ): Pick<RainSourcePeriodInfo, 'factors' | 'fit' | 'fallback' | 'factorMode' | 'provenance'>[] {
 	const primary = series.rain_catchment_mm;
 	const replaced = rainSourceSpans(periods);
-	const suspect = suspectRainDays(primary, zr, accumulations, replaced);
-	const low = new Set(rainVsChirps(withoutReplaced(series, replaced))?.flaggedYears ?? []);
+	// settings.dataQuality (engine ≥ 1.20.0) decides which zero runs and years are suspect.
+	const suspect = suspectRainDays(primary, zr, accumulations, replaced, { dq, chirps: series.rain_chirps_mm ?? null });
+	const low = new Set(rainVsChirps(withoutReplaced(series, replaced), dq)?.flaggedYears ?? []);
 	const trusted = (day: number) => suspect.status(day) === null || suspect.status(day) === 'keptDry' ? !low.has(waterYearOf(day)) : false;
 	const eraSpan = (e: RainSourceReferenceEra) => [toEpochDay(`${e.fromWaterYear}-10-01`), toEpochDay(`${e.toWaterYear + 1}-09-30`)] as const;
 	const catchmentRatio = (e: RainSourceReferenceEra) => {

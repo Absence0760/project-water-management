@@ -1,4 +1,4 @@
-import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
+import { calibrate, defaultProjectSettings, ENGINE_VERSION, fitRecordStatus, forecastSplit, rainCheckLimits, type CalibrationReport, type ModelInput, type ProjectSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	applyReport,
@@ -377,7 +377,7 @@ describe('fitRecordFor', () => {
 	it('records the evaporation forcing the fit ran under, copied, not shared with the form', () => {
 		const form = { ...defaultProjectSettings(), panCoefficient: [0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65, 0.65] as ProjectSettings['panCoefficient'] };
 		const rec = fitRecordFor(report(), form, { validate: false, validationRecord: null });
-		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' }, arealRain: null });
+		expect(rec.forcing).toEqual({ panCoefficient: form.panCoefficient, apanMm: form.apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: form.zeroRainRuns, chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' }, arealRain: null, rainChecks: rainCheckLimits(form.dataQuality) });
 		(form.panCoefficient as unknown as number[])[0] = 0.9;
 		expect(rec.forcing!.panCoefficient[0]).toBe(0.65);
 	});

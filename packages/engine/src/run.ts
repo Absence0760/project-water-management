@@ -730,7 +730,7 @@ function runNetwork(
 	const agreement = observedAgreement(series, agreementOptions(settings.dataQuality));
 	const agreementNote = agreementWarning(agreement);
 	if (agreementNote) warnings.push(agreementNote);
-	const checks = seriesChecks(series);
+	const checks = seriesChecks(series, settings.dataQuality);
 	// The double-mass check (engine ≥ 0.18.0) follows the catchment rain's own checks.
 	const dmCheck = doubleMassCheck(doubleMass, chirpsCorrection?.fitPeriod?.period);
 	if (dmCheck) {

@@ -118,9 +118,12 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   `damInitialPct`, `damMinPct`, `damAreaFullM2`, `damAreaExponent`,
   `damSeepagePerDay`, `divertCapacityM3Day`, `irrigationEfficiency`,
   `lossReturnFraction`; dam storage (WP-3.5) `damReleaseRule`,
-  `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct` (a
-  `node.add` may also carry a `damCurve`; there is no `node.set` for it
-  yet); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
+  `damReleaseM3Day`, `damOutletCapacityM3Day`, `damSeepageReturnPct`, and
+  the survey curve `damCurve` (engine ≥ 1.20.0: up to 200 rows of
+  `{ levelM, areaM2 ≥ 0, volumeM3 ≥ 0 }`, or null for none, the power law;
+  whether the rows make a usable curve, volume rising and some area, is a
+  save rule checked when the op applies; a `node.add` could always carry
+  one); boreholes `boreholeCapacityM3Day`, `boreholeRule`,
   `boreholeTriggerPct`, `streamDepletionFrac`, `streamDepletionLagDays`;
   supply rule and river pump (WP-3.8, [model.md §2.7e](./model.md))
   `supplyRule` (`damFirst` | `riverFirst` | `trigger` | `runOfRiver`),
@@ -150,6 +153,19 @@ Every op targets by id; `ScenarioOp` is a closed union discriminated by `op`.
   the capacity op describes the dam at its old size and is resized with it.
   A new dam (from 0) keeps an unknown area unknown. Before 1.10.0 the area
   stayed as entered, or followed capacity ÷ 3 m (constant mean depth).
+  **The enlarged dam's own survey** (engine ≥ 1.20.0): a `damCurve` op
+  after the capacity op replaces the resized curve with the one entered. A
+  survey curve whose top row is already within 1 % of the new capacity (the
+  tolerance a run allows between the two) is left as it is, and the capacity
+  op's note says so: one a `damCurve` op before it set describes the new dam,
+  so the two ops mean the same in either order, and the base's own curve is
+  not stretched for a change that small (before 1.20.0 it was). One that fits the old capacity
+  instead describes the dam at its old size and is resized with it, as an
+  earlier area op is. "Raise this dam to 240 000 m³ with its surveyed curve"
+  is two ops: `damCapacityM3` → 240000 and `damCurve` → the survey rows. The
+  "Add a change" form takes the rows pasted as the Network tab's survey box
+  reads them (level, area, volume, one row per line) and checks them the
+  same way; empty is none.
 - user (other water user): `name`, `userDemandM3Day`, `userReturnPct`,
   `userPriority`, and the borehole fields.
 - gauge: `name`, and `ewrSite` (engine ≥ 1.5.0, true or false): whether the
@@ -642,11 +658,15 @@ control, is in [ui.md § Scenarios](./ui.md#scenarios-tabscenarios).
   holding the rest back until undone (the engine has no op for them yet;
   [§ Not yet supported](#not-yet-supported)): editing or removing an
   existing crop, changing a node's kind, moving a node (what it drains
-  into), a new node that drains nowhere, a dam survey curve, the capacity
-  of a dam with a survey curve (the op would resize the curve, which the
-  table can't show; add it as a change instead, engine ≥ 1.10.0), and a field the
+  into), a new node that drains nowhere, the capacity of a dam with a
+  survey curve when the curve is left as it was (the op would resize the
+  curve, which the table can't show; paste the enlarged dam's survey with
+  it, or add it as a change instead, engine ≥ 1.10.0), and a field the
   engine doesn't let a scenario set on that kind of node (a gauge's area).
   Row order is display only and isn't recorded.
+- **A dam's survey curve in the table** (engine ≥ 1.20.0) is a `damCurve`
+  op; with a capacity edit on the same dam it comes after the capacity op
+  (and its `damAreaFullM2`), so the curve lands as entered.
 - **A dam's capacity in the table** records the area the table shows: the
   capacity op (which resizes the area along the dam's own relation, § Dam
   capacity) is followed by a `damAreaFullM2` op with the table's value

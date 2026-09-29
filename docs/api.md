@@ -356,9 +356,22 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
-  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
+  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
-  `agreementMinDays` (whole days, 1–366); any subset may be sent.
+  `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
+  `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
+  `flatlineRainDays`, `flatlineEvapDays`, `flatlineFlowMinDays`,
+  `flatlineFlowMaxDays` (whole days 2–366), `zeroRunRule` (`wetDays` |
+  `usualRain`), `zeroRunMinWetDays` and `zeroRunMinDays` (whole days 1–366),
+  `zeroRunUsualShare` (0 < s ≤ 1), `zeroRunChirpsCheck` (boolean),
+  `lowVsChirpsRatio` (0 < r < 1), `lowVsChirpsBaseline` (`record` |
+  `moving`) and `lowVsChirpsMinimum` (`fixed` | `scaled`); any subset may be
+  sent. A patch that leaves `flatlineFlowMaxDays` below
+  `flatlineFlowMinDays` (after merging over the stored values) is a `400`.
+  `GET` fills a field the stored settings lack with its default
+  ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+  A fit record's `forcing.rainChecks` (optional) holds the zero-run and
+  low-vs-CHIRPS fields it ran under.
   `runoffModel` records the rain → natural-flow model: `gr4j` (model.md
   §2.4a) is the only value, since engine 1.0.0 removed the legacy b023
   recession model (issue #16). `legacy` is a `400`, "the legacy runoff model
@@ -1241,7 +1254,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 | GET | `/projects/:id/runs/:runId/series?key=…&nodeId=…` | – | `{ startDate, values }` (omit `nodeId` for catchment series) | viewer |
 | GET | `/projects/:id/runs/:runId/series/bulk?nodeId=…&offset=…` | – | Every series of one node (the catchment's without `nodeId`) in one response, for the `.xlsx` workbook: see [Export § Bulk run series](#bulk-run-series) | viewer |
 | GET | `/projects/:id/runs/:runId/day?nodeId=…&date=YYYY-MM-DD` | – | One node's every column on one day, for the day trace: `{ date, nodeId, name, kind, previousStorageM3, previousSoilWaterMm, params, columns: { key, label, unit, value }[] }`. `name`, `kind` and `params` (`pctUpstreamToDam`, `pctRunoffToDam`, `divertCapacityM3Day`, `damCapacityM3`, `damInitialPct`, `damMinPct`, `irrigationEfficiency`, `lossReturnFraction`, `damAreaFullM2`, `damAreaExponent`, `damSeepagePerDay`) come from the run's input snapshot (a run from before engine 0.16.0 has its `returnFlowPct` mapped as migration 006 does: e = 1 − r, β = 1, or 1 and 0 when r = 0; `irrigationEfficiency` is the one the run used, so a farm whose crops carry their own, engine ≥ 0.43.0, gets them combined as [model.md §2.3](./model.md#23-irrigation-demand) step 6 does, and `demand` = `crop_requirement` ÷ it); `previousStorageM3` is the dam storage at the end of the day before (the initial storage on the run's first day; `null` for a gauge); `previousSoilWaterMm` is the farm's soil-water store at the end of the day before, in mm (0 on the run's first day; `null` for a gauge or a run from before engine 0.14.0, which has no `soil_water` column). `400` for a date that isn't one or is outside the run, `404` for a node the run doesn't have | viewer |
-| GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (each `null` on the run's first day, when only their total is recorded) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model (a stored run from before engine 1.0.0): `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
+| GET | `/projects/:id/runs/:runId/day?date=YYYY-MM-DD` | – | The same without `nodeId`: the catchment's day, for the runoff-model trace (how rain became natural flow): `{ date, nodeId: null, name: "Catchment", kind: "catchment", runoffModel, areaKm2, params, previousStorageMm, previousStores, columns }`. `columns` are every catchment series (`node_id` NULL) that day; for GR4J they include `rain_used`, `pet`, `aet`, `production_store`, `routing_store`, `uh_store`, `exchange` (only when X2 ≠ 0) and `natural_flow` (m³/day), all depths in mm over the catchment. `runoffModel`, `areaKm2` and `params` (`x1` … `x4`, `warmupDays`) come from the run's `summary.runoff`; `previousStores` is each store at the end of the day before (on the run's first day, each store after the warm-up from `summary.runoff.storesStartMm`, engine ≥ 1.20.0; each `null` there on a run from before, which recorded only their total) and `previousStorageMm` their total (the storage after the warm-up on the first day), so before + rain + exchange − AET − Q = after closes the day. A run without a runoff balance ran the legacy model (a stored run from before engine 1.0.0): `runoffModel: "legacy"`, `areaKm2`, `params`, `previousStorageMm` and `previousStores` `null`, and the columns are the [Flow data] ones (`rain_used`, `is_summer`, `rain_flow`, `base_flow`, `response_flow`, `resultant_flow`, `natural_flow`). `400` for a bad or out-of-run date | viewer |
 | PATCH | `/projects/:id/runs/:runId` | `{ notes?, pinned? }` (at least one) | `200 { run: RunMeta }` with the new note and its stamp, and the pin. `notes` is a string, trimmed, at most 4 000 characters, no NUL; `''` clears it. `pinned` is a boolean: `true` keeps the run past the run cap (below) and blocks its deletion, `false` releases it; pinning leaves the note's stamp alone. `409 { error: "this project already has 10 pinned runs, the most it can keep; unpin one first" }` when pinning an 11th (re-pinning a pinned run is fine); a **cited** run's pin doesn't count against the 10 (it is kept anyway), and unpinning a cited run is `409 { error: "this run is cited by scenario "…", so it stays kept" }`. No other field is accepted (`400`), and nothing else about a run can change: the database grants the app `UPDATE` on `model_run.notes` and `model_run.pinned` only ([data-model.md § Run notes, Pinned runs](./data-model.md)) | editor |
 | DELETE | `/projects/:id/runs/:runId` | – | `204` (the run's stored input series go too, unless another run uses them); `409 { error: "run is published: it is, or was, the published baseline, so it is kept" }` for a run a publication in the history holds ([Publication](#publication)); `409 { error: "this run is cited by scenario "Dam raise", so it is kept" }` for a run something else cites (a [scenario](#scenarios)'s base; later an evidence pack), naming up to three citations you can see (`"this run is cited, so it is kept"` when you can see none; [data-model.md § Cited runs](./data-model.md#stored-run-inputs-021_series_blobsql)); `409 { error: "this run is or was nominated as evidence, so it is kept" }` for a run the evidence history names; `409 { error: "this run is pinned; unpin it before deleting it" }` for a pinned run; `409 { error: "this run can't be deleted" }` when row-level security refuses the delete of a run you can read (never a `404`); `404` only for a run that isn't there (already deleted or trimmed). The check and the delete see one locked row | editor |
 | GET | `/projects/:id/evidence` | – | `{ nominations: Nomination[] }`, **oldest first**; the last is the current nomination, unless it is a withdrawal (then no run is the evidence); `[]` when none. `Nomination = { id, withdrawn, runId, runLabel, runCreatedAt, runoffModel, engineVersion, reason, nominatedAt, nominatedBy }`; a withdrawal has `withdrawn: true` and every run field `null` | viewer |
@@ -1468,8 +1481,11 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
 
 - `summary.runoff` (engine ≥ 0.5.0, GR4J runs only) is the runoff model's water
   balance in mm over the catchment: `{ model, params, warmupDays, areaKm2,
-  rainMm, petMm, aetMm, flowMm, exchangeMm, storageStartMm, storageEndMm }`,
-  with rain − aet − flow + exchange = storageEnd − storageStart. GR4J runs also
+  rainMm, petMm, aetMm, flowMm, exchangeMm, storageStartMm, storesStartMm,
+  storageEndMm }`, with rain − aet − flow + exchange = storageEnd − storageStart.
+  `storesStartMm` (engine ≥ 1.20.0; absent before) is each store after the
+  warm-up, `{ production_store, routing_store, uh_store }`, summing to
+  `storageStartMm`. GR4J runs also
   carry the catchment series `pet`, `aet`, `production_store`, `routing_store`,
   `uh_store` (mm), and `exchange` when X2 ≠ 0.
 - `summary.wr2012` (engine ≥ 0.6.0; only when the project has a WR2012
@@ -1524,7 +1540,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
   'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
   runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
-  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.18.0, lists
+  catchment-rain checks of issue #2, under the project's `settings.dataQuality`
+  limits (engine ≥ 1.20.0; with `zeroRunChirpsCheck` a `zerorun` check can
+  have `days: 0` and no examples when CHIRPS reads every long zero run as
+  dry, so it only lists them); `doublemass`, engine ≥ 0.18.0, lists
   double-mass breaks against CHIRPS, one example per break: the next
   segment's first and last day, its slope ÷ the one before, its shared days),
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms
@@ -2300,7 +2319,7 @@ run; an outlook member is one level in one year, measured over the season.
 The same job then draws the **review triggers** for the season's review
 date (issue #53 R6, [model.md §2.15a](./model.md#215a-review-triggers-from-the-outlook-issue-53-r6)),
 and an editor can **publish** one level to the project's farmers (R5, the
-farmer view E3, migration 104).
+farmer view E3, migration 106).
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |

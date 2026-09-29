@@ -28,6 +28,8 @@ import {
 	ewrRuleTableIssues,
 	GR4J_PARAMS,
 	LOW_FLOW_MEASURES,
+	LOW_VS_CHIRPS_BASELINES,
+	LOW_VS_CHIRPS_MINIMUMS,
 	MAX_STARTS,
 	provenanceError,
 	OBJECTIVES,
@@ -50,6 +52,7 @@ import {
 	FLOW_DAY_FLAGS,
 	ratingError,
 	RATING_SOURCE_MAX,
+	ZERO_RUN_RULES,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -144,6 +147,46 @@ export function patchSettings(stored: unknown, patch: Json): ProjectSettings {
 }
 
 const monthly = z.array(z.number().finite()).length(12);
+
+const dqDays = (min: number) => z.number().int().min(min).max(366);
+/** The zero-run and low-vs-CHIRPS limits (engine RAIN_CHECK_KEYS): also recorded in a fit's forcing. */
+const RainChecks = z.object({
+	zeroRunRule: z.enum(ZERO_RUN_RULES),
+	zeroRunMinWetDays: dqDays(1),
+	zeroRunUsualShare: z.number().gt(0).max(1),
+	zeroRunMinDays: dqDays(1),
+	zeroRunChirpsCheck: z.boolean(),
+	lowVsChirpsRatio: z.number().gt(0).lt(1),
+	lowVsChirpsBaseline: z.enum(LOW_VS_CHIRPS_BASELINES),
+	lowVsChirpsMinimum: z.enum(LOW_VS_CHIRPS_MINIMUMS)
+});
+/** settings.dataQuality, any subset (the engine's resolveDataQuality ranges). */
+const DataQualityPatch = z
+	.object({
+		agreementMinRatio: z.number().gt(0).max(1),
+		agreementMaxRatio: z.number().min(1).max(100),
+		agreementMinDays: dqDays(1),
+		outlierFactorRain: z.number().gt(1).max(1000),
+		outlierFactorFlow: z.number().gt(1).max(1000),
+		flatlineRainDays: dqDays(2),
+		flatlineEvapDays: dqDays(2),
+		flatlineFlowMinDays: dqDays(2),
+		flatlineFlowMaxDays: dqDays(2),
+		...RainChecks.shape
+	})
+	.partial()
+	.strict();
+
+/**
+ * The cross-field rule of settings.dataQuality, on the settings a patch
+ * produces: the flow flat-line cap can't be below its floor. null when fine.
+ */
+export function dataQualityPatchError(settings: Pick<ProjectSettings, 'dataQuality'>): string | null {
+	const dq = settings.dataQuality;
+	return dq.flatlineFlowMaxDays < dq.flatlineFlowMinDays
+		? `settings.dataQuality: the flow flat-line cap (${dq.flatlineFlowMaxDays} days) can't be below its floor (${dq.flatlineFlowMinDays} days)`
+		: null;
+}
 
 /**
  * WR2012 reference data (engine reference/wr2012.ts), entered by the user:
@@ -429,7 +472,7 @@ const GaugeRating = z
 		const err = ratingError(r);
 		if (err) ctx.addIssue({ code: 'custom', message: err });
 	});
-/** settings.qualityFlags (engine ≥ 1.20.0, CR-18/19): the gauged ranges and how the fit scores flagged days. */
+/** settings.qualityFlags (engine ≥ 1.22.0, CR-18/19): the gauged ranges and how the fit scores flagged days. */
 const QualityFlags = z
 	.object({
 		ratings: z.object({ flow_observed_m3s: GaugeRating.optional(), flow_logger_m3s: GaugeRating.optional() }).strict(),
@@ -490,7 +533,7 @@ export const FitRecord = z
 		calibrationStart: isoDate.nullable(),
 		calibrationEnd: isoDate.nullable(),
 		exclusions: ExclusionList,
-		// Engine ≥ 1.20.0 (CR-18/19/22): the quality-flag settings, their summary and the fit on all days. Optional: absent on a record made before them.
+		// Engine ≥ 1.22.0 (CR-18/19/22): the quality-flag settings, their summary and the fit on all days. Optional: absent on a record made before them.
 		qualityFlags: QualityFlags.optional(),
 		dayQuality: DayQuality.nullable().optional(),
 		fitAllDays: ScoredPeriod.nullable().optional(),
@@ -588,7 +631,9 @@ export const FitRecord = z
 					.object({ startDate: isoDate, length: z.number().int().min(0).max(60_000), valuesSha256: z.string().regex(/^[0-9a-f]{64}$/) })
 					.strict()
 					.nullable()
-					.optional()
+					.optional(),
+				// Engine ≥ 1.20.0 (issue #66): the data-quality rain-check limits the fit ran under. Optional, as above; absent = the defaults.
+				rainChecks: RainChecks.strict().optional()
 			})
 			.strict()
 			.optional()
@@ -690,16 +735,12 @@ export const SettingsPatch = z
 		// Per-day quality flags (engine calibrate/dayFlags.ts, CR-18/19): any subset of the group; `ratings` is replaced whole.
 		qualityFlags: QualityFlags.partial(),
 		fitRecord: FitRecord.nullable(),
-		// Gauge-vs-logger thresholds (engine resolveDataQuality). Each bound is
-		// checked on its own (min ≤ 1 ≤ max), so any subset can be patched.
-		dataQuality: z
-			.object({
-				agreementMinRatio: z.number().gt(0).max(1),
-				agreementMaxRatio: z.number().min(1).max(100),
-				agreementMinDays: z.number().int().min(1).max(366)
-			})
-			.partial()
-			.strict(),
+		// Data-quality limits (engine resolveDataQuality): gauge vs logger, and
+		// (engine ≥ 1.20.0, issue #66) outliers, flat-lines, zero-rain runs and
+		// low vs CHIRPS. Each field is checked on its own, so any subset can be
+		// patched; the one cross-field rule (flow flat-line cap ≥ floor) is
+		// checked on the merged result (dataQualityPatchError).
+		dataQuality: DataQualityPatch,
 		// The WR2012 check: any subset of its groups may be patched; each group is whole.
 		wr2012: z
 			.object({

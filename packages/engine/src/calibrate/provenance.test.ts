@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Monthly } from '../calendar';
-import { defaultProjectSettings, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
+import { defaultDataQualitySettings, defaultProjectSettings, rainCheckLimits, type ProjectSettings, type RainSourcePeriod, type ZeroRainSettings } from '../project';
 import type { CalibrationReport, ScoredPeriod } from './calibrate';
 import type { FitScores } from './objective';
 import {
@@ -156,7 +156,16 @@ describe('fit record', () => {
 			validate: true,
 			editedParams: []
 		});
-		expect(r.forcing).toEqual({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', chirpsFitPeriod: 'all', rainSource: [], pe: { kind: 'pan' }, arealRain: null });
+		expect(r.forcing).toEqual({
+			panCoefficient,
+			apanMm,
+			chirpsBiasCorrection: 'monthly',
+			chirpsFitPeriod: 'all',
+			rainSource: [],
+			pe: { kind: 'pan' },
+			arealRain: null,
+			rainChecks: rainCheckLimits(defaultDataQualitySettings())
+		});
 		expect(r.splitSample!.validation.scores.kgePrime).toBe(0.55);
 		expect(r.notes).toEqual(['The record has 2 water years…']);
 		expect(r.marPenalty).toBeNull();
@@ -304,6 +313,24 @@ describe('fit record', () => {
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, pre020).forcingChanged).toBe(true);
 		// A fit recorded before zeroRainRuns was tracked: nothing to compare, so it alone never flags.
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'monthly', zeroRainRuns: { ...zr, mode: 'asRecorded' } }, rec).forcingChanged).toBe(false);
+		// The data-quality rain-check limits (engine ≥ 1.20.0) decide which zero runs are filled and which years the CHIRPS fit drops: a change flags the fit.
+		const dq = defaultDataQualitySettings();
+		expect(rec.forcing!.rainChecks).toEqual(rainCheckLimits(dq));
+		const base = { panCoefficient, apanMm, chirpsBiasCorrection: 'monthly' as const };
+		expect(fitRecordStatus({ ...base, dataQuality: dq }, rec).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, dataQuality: { ...dq, zeroRunChirpsCheck: true } }, rec).forcingChanged).toBe(true);
+		expect(fitRecordStatus({ ...base, dataQuality: { ...dq, lowVsChirpsRatio: 0.4 } }, rec).forcingChanged).toBe(true);
+		// … but not the limits that only flag (outliers, flat-lines, gauge vs logger).
+		expect(fitRecordStatus({ ...base, dataQuality: { ...dq, outlierFactorRain: 8, agreementMinDays: 30 } }, rec).forcingChanged).toBe(false);
+		// A fit recorded before the limits were settings ran the defaults: the defaults now are no change, others are.
+		const pre120 = { ...rec, forcing: { ...rec.forcing!, rainChecks: undefined } };
+		expect(fitRecordStatus({ ...base, dataQuality: dq }, pre120).forcingChanged).toBe(false);
+		expect(fitRecordStatus(base, pre120).forcingChanged).toBe(false);
+		expect(fitRecordStatus({ ...base, dataQuality: { ...dq, zeroRunRule: 'usualRain' } }, pre120).forcingChanged).toBe(true);
+		// A fit made with non-default limits records them.
+		const withDq = fitRecordFromReport(report(), { ...ctx, settings: { ...ctx.settings, dataQuality: { ...dq, zeroRunMinWetDays: 45 } } });
+		expect(withDq.forcing!.rainChecks!.zeroRunMinWetDays).toBe(45);
+		expect(fitRecordStatus({ ...base, dataQuality: dq }, withDq).forcingChanged).toBe(true);
 		// A forcing recorded before chirpsBiasCorrection was added to it: nothing to compare, so it alone never flags.
 		const noMode = { ...rec, forcing: { panCoefficient: [...panCoefficient], apanMm: [...apanMm] } };
 		expect(fitRecordStatus({ panCoefficient, apanMm, chirpsBiasCorrection: 'none' }, noMode).forcingChanged).toBe(false);

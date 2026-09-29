@@ -1120,7 +1120,9 @@ Engine ≥ 0.15.0, [audit B2](./engine-audit.md), CR-20
 as zeros blocks the CHIRPS fallback (§2.4b) and runs the catchment dry, and
 natural flow, demand and the EWR results with it. The issue #2 check (§2.10a)
 finds these stretches: runs of zeros with 60+ days in the series' own six
-wettest months. Up to 0.14 it only warned. A zero run that long in the wet
+wettest months (by default; from engine 1.20.0 the rule and its limits are
+`settings.dataQuality`, §2.10a *Data-quality limits as settings*). Up to 0.14
+it only warned. A zero run that long in the wet
 season is far more likely to be a logger or export gap than weather. Where
 it is real weather, CHIRPS is dry over it too, so filling it adds little
 rain. So a false alarm costs little and a missed gap costs a whole wet season.
@@ -2200,8 +2202,9 @@ series (only when the share is below 1), a sink in the balance check
 `damSeepageLostM3` line (out). The dam itself behaves the same either way.
 
 Not built here (tracked in [followups.md](./followups.md)): capacity loss to
-sediment (%/year) and the survey curve as a scenario `node.set` op (a
-scenario can add a dam with a curve, `node.add`, but not edit one).
+sediment (%/year). A scenario can add a dam with a curve (`node.add`) and,
+from engine 1.20.0, set an existing dam's curve (`node.set` of `damCurve`,
+[scenarios.md § Dam capacity](./scenarios.md)).
 
 **Checks.** The self-checks (`verify/checks.ts`) recompute the area from the
 curve, the monthly evaporation depth, the release under its rule (and that it
@@ -2239,9 +2242,11 @@ AET, S, UH, F, R, Q, with the GR4J step's equations) and
 `LEGACY_RUNOFF_COLUMNS` (the [Flow data] columns R, N, V, S, X, Y, AB, for a stored legacy run from before engine 1.0.0). The
 results' day trace reads them to show the catchment's day, and for GR4J it
 closes the day's store balance: stores the day before + P + F − AET − Q =
-stores at the end of the day, in mm over the catchment. Only the stores'
-total is recorded at the start of a run (after the warm-up), so on a run's
-first day the balance uses the total and each store's starting value is
+stores at the end of the day, in mm over the catchment. From engine 1.20.0
+the run's summary also records each store at the start of the run (after the
+warm-up, `summary.runoff.storesStartMm`, which sum to `storageStartMm`), so a
+run's first day traces store by store too; a run from before kept only their
+total, so there the balance uses the total and each store's starting value is
 unknown.
 
 ### 2.7b EWR attribution: who is charged for a shortfall (engine ≥ 0.17.0, audit Q17)
@@ -4425,7 +4430,8 @@ in both records: present, finite and not negative.
 
 The three thresholds are a project setting, `settings.dataQuality`
 (`agreementMinRatio` 2/3, `agreementMaxRatio` 1.5, `agreementMinDays` 90 by
-default; Settings tab → *Data quality*). They change only which years are
+default; Settings tab → *Data quality*), beside the other checks' limits
+(*Data-quality limits as settings* below). They change only which years are
 flagged, never a model result. An invalid stored value (min ratio outside
 0 < r ≤ 1, max ratio below 1, days not a whole number in 1–366) falls back to
 its default with a run warning. The Time series tab shows the same table
@@ -4471,12 +4477,85 @@ rivers; the check never changes results). With fewer than two distinct values
 the resolution is unknown and a non-zero run needs 14 days. Every number here
 is judgement. The Data tab's per-day flags use the same rule.
 
-The outlier, flat-line and rain limits are engine constants
-(`OUTLIER_FACTOR`, `FLATLINE_MIN_DAYS`, `FLATLINE_FLOW_*`, `ZERO_RUN_MIN_WET_DAYS`,
-`ZERO_RUN_PLAIN_DAYS`, `CLIMATOLOGY_MIN_DAYS_PER_MONTH`, `LOW_VS_CHIRPS_*`,
-`RATIO_BASELINE_MIN_YEARS`, `DOUBLE_MASS_*`), not settings; whether they suit these catchments
-is a question for the hydrologist. Like the other series checks they look at
-the whole stored series, not only the run window.
+**Data-quality limits as settings (engine ≥ 1.20.0, issue #66).** The
+tunable limits of these checks are `settings.dataQuality` beside the
+gauge-vs-logger thresholds (Settings → *Data quality*; `resolveDataQuality`
+in `quality.ts`). Their defaults are the constants they replaced, so a
+project that never sets them runs exactly as before:
+
+| Setting | Default | Range | Changes results? |
+| --- | --- | --- | --- |
+| `outlierFactorRain` / `outlierFactorFlow` | 5 / 10 (× the 99th percentile) | above 1, at most 1000 | no, flags only |
+| `flatlineRainDays` / `flatlineEvapDays` | 5 / 7 days | whole days 2–366 | no |
+| `flatlineFlowMinDays` / `flatlineFlowMaxDays` | 14 / 90 days (the floor and cap of the resolution-aware rule) | whole days 2–366, cap ≥ floor | no |
+| `zeroRunRule` | `'wetDays'` | `'wetDays'` or `'usualRain'` | **yes** |
+| `zeroRunMinWetDays` (`'wetDays'`) | 60 days | whole days 1–366 | **yes** |
+| `zeroRunUsualShare`, `zeroRunMinDays` (`'usualRain'`) | 25 %, 60 days | 0 < share ≤ 1; whole days 1–366 | **yes** |
+| `zeroRunChirpsCheck` | off | on / off | **yes** |
+| `lowVsChirpsRatio` | 50 % of the usual ratio | 0 < ratio < 1 | **yes** |
+| `lowVsChirpsBaseline` | `'record'` (whole-record median) | `'record'` or `'moving'` | **yes** |
+| `lowVsChirpsMinimum` | `'fixed'` (50 mm) | `'fixed'` or `'scaled'` | **yes** |
+
+The zero-run and low-vs-CHIRPS limits change results because a run treats a
+flagged zero run as missing (§2.4c) and the CHIRPS fits leave flagged days and
+years out (§2.4b, §2.4e); so every consumer reads the project's limits: the
+zero-run mask, the CHIRPS factor fit, the rain-source factor fit, the
+double-mass check, the Data tab's checks, shading and daily preview, and the
+fit-range proposal. A fit records them (`FitRecord.forcing.rainChecks`); a
+fit made under other limits reports its forcing changed (a fit recorded
+before 1.20.0 ran the defaults). An invalid stored value falls back to its
+default with a run warning, and a flow flat-line cap below its floor is
+raised to the floor with a warning (the API refuses such a patch). The
+sample-size floors stay constants: `OUTLIER_MIN_POSITIVE` (100),
+`CLIMATOLOGY_MIN_DAYS_PER_MONTH` (56), `ZERO_RUN_PLAIN_DAYS` (180, the rule
+without a climatology), `LOW_VS_CHIRPS_MIN_DAYS` (180),
+`RATIO_BASELINE_MIN_YEARS` (5) and the `DOUBLE_MASS_*` limits. The ingest
+hold (`backend/src/series/hold.ts`) keeps the default outlier factors: it is
+an abuse guard on an API key's pushes, which a project setting must not
+loosen. Run comparison lists a change of any of them ("Data quality …").
+
+The four alternatives come from the simulated hydrologist review in
+[followups.md](./followups.md) (recommendations 2–5). They are built and
+tested on synthetic records but **off by default**: the review asks for them
+to be tried on a semi-arid gauge record with a known drought (e.g. 2015–19)
+before a default changes, and no such record is in the repo. Each is a
+setting a hydrologist can turn on per project:
+
+- *Zero runs judged by the rain they missed* (`zeroRunRule: 'usualRain'`).
+  A run is flagged when the rain the series' own monthly means would put on
+  its days is at least `zeroRunUsualShare` (25 %) of the series' usual annual
+  rain, and it lasts `zeroRunMinDays` (60) or more. A fixed day count flags a
+  semi-arid catchment's long, real dry spells and misses a short gap in the
+  heart of a wet catchment's rainy season; the share of the year's rain lost
+  scales with the climate. Without a climatology the plain 180-day rule
+  still applies.
+- *Zero runs checked against CHIRPS* (`zeroRunChirpsCheck`). CHIRPS over the
+  run, as a share of the rain CHIRPS's own monthly means put on those days
+  (bias cancels in that ratio): at or above 50 % (`ZERO_RUN_CHIRPS_SHARE`)
+  the run is *probably missing data* and stays flagged; below it CHIRPS was
+  dry too, a *long dry spell that may be real*, and the run is listed in the
+  warning but not flagged, so a run keeps it as recorded. With CHIRPS
+  readings on fewer than half the run's days (`ZERO_RUN_CHIRPS_MIN_COVERAGE`),
+  or no CHIRPS climatology, the run can't be judged and stays flagged.
+  Because a flagged run is filled (CR-20), a false alarm is not free: this
+  is the recommendation that matters most once a record's dry spells are
+  real.
+- *A moving baseline for low vs CHIRPS* (`lowVsChirpsBaseline: 'moving'`).
+  Each water year is compared with the median ratio of the judged years
+  within ±5 water years (`LOW_VS_CHIRPS_MOVING_YEARS`), or the record's when
+  fewer than 5 are nearby. The catchment / CHIRPS ratio drifts over decades
+  as a gauge network changes (the double-mass check's breaks); against one
+  record-wide median a whole later era can read "low". The warning names
+  each flagged year's own usual ratio.
+- *A scaled CHIRPS minimum* (`lowVsChirpsMinimum: 'scaled'`). A year is
+  judged only with at least the larger of 50 mm and 25 %
+  (`LOW_VS_CHIRPS_MIN_ANNUAL_SHARE`) of the median annual CHIRPS (each
+  year's CHIRPS on its shared days scaled to 365.25 days, over the years
+  with 180+ shared days). In a wet catchment 50 mm of CHIRPS on a year's
+  shared days is a dry fragment whose ratio is noise.
+
+Like the other series checks they look at the whole stored series, not
+only the run window.
 
 **Why the two rain checks (engine ≥ 0.5.2, issue #2).** Rain used (§2.4,
 column R) is the first *non-blank* of catchment rain, CHIRPS and forecast. A
@@ -5760,8 +5839,9 @@ does: it overstated an enlarged dam's evaporating surface (and understated a
 smaller one's), so it understated yield above the dam's own capacity and
 overstated it below. The larger side still depends on the valley shape above
 today's full-supply level: a surveyed curve for the enlarged dam, entered on
-a scenario (a `node.add` with its `damCurve`; there is no `node.set` for a
-curve yet), is the durable answer. A scenario's `node.set` of `damCapacityM3`
+a scenario (a `node.add` with its `damCurve`, or from engine 1.20.0 a
+`node.set` of an existing dam's `damCurve` beside its `damCapacityM3`), is the
+durable answer. A scenario's `node.set` of `damCapacityM3`
 resizes the dam the same way (scenarios.md § Dam capacity).
 
 **Monotonicity.** Yield is non-decreasing in capacity for a lossless dam
@@ -5993,8 +6073,10 @@ which moved the version to 0.44.0, and model-state snapshots (§2.16,
 [api.md § Seasonal outlooks](./api.md#seasonal-outlooks)) runs the members
 one at a time, and the Runs tab shows the result
 ([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)); the season and the
-planning share are project settings (`settings.outlook`). The farmer view
-is not built yet (design §3.5).
+planning share are project settings (`settings.outlook`). The WUA
+publishes one level to farmers, and each farm page shows that farm's own
+figures at it, *This season* (`views/farmOutlook.ts`, migration 106, issues
+#53 R5 and #122; [ui.md § Farmer view](./ui.md#farmer-view-farm)).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.

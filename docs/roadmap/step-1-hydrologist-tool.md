@@ -352,9 +352,11 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
   - the CHIRPS check is `lowvschirps`: below 50 % of the record's *usual*
     catchment / CHIRPS share (the median), not of CHIRPS itself, so a
     systematic CHIRPS bias doesn't flag every year or hide real gaps;
-  - the thresholds are engine constants like the outlier and flat-line
-    limits, not settings; the hydrologist question on them is in
-    followups.md (*Data-quality limits*).
+  - the thresholds were engine constants like the outlier and flat-line
+    limits; since engine 1.20.0 (issue #66) all of them are
+    `settings.dataQuality`, defaults unchanged, with the hydrologist
+    review's alternatives as opt-in settings (followups.md, *Data-quality
+    limits* and *Data-quality alternatives as defaults*).
 
   The importer prints the zero-run note; the low-vs-CHIRPS check is
   engine-only. The fix itself stays with the data (issue #2 item 1).

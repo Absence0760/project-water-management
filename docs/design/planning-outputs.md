@@ -12,7 +12,7 @@ Built: R1 (`demand.scale`, engine 0.41.0,
 category is what the client wants, O4), R4 in full (§3.4: the engine, the
 settings and the matrix screen), R5 in full (§3.5: the engine core, engine
 0.44.0; the `outlook` job, its settings and the WUA screen; the farmer view
-E3, engine 1.19.0, migration 104), R6 but WP-3.8's rule (§3.6: the engine,
+E3, engine 1.19.0, migration 106), R6 but WP-3.8's rule (§3.6: the engine,
 engine 0.46.0; the job, the review-date setting and the screen) and R7
 (§3.7: the impact report's board; existing *authorised* use when its
 baseline is a full-allocation run).
@@ -219,8 +219,12 @@ level (anything else would change the history the season starts from).
   out from past weather, not a forecast or a promise, in English and
   Afrikaans ([ui.md § Farmer view](../ui.md#farmer-view-farm)). Each
   outlook member carries every farm's own demand and supply for it (engine
-  1.19.0); a farmer reads only their own farms' figures (migration 104,
-  [security.md](../security.md)).
+  1.19.0); a farmer reads only their own farms' figures (migration 106,
+  [security.md](../security.md)). Issue #122 finished the farmer side: the
+  privacy review (own figures only, no catchment figure, so the `k ≥ 5`
+  rule isn't engaged; [farmer-view.md §12](./farmer-view.md)), the
+  `farm-season-outlook` words entry in both languages, the lazily loaded
+  card and its 360 px Afrikaans e2e.
 
 - **Method:** ESP from the run's state on a decision date (a project
   setting, default the start of the irrigation season). For each historical
@@ -291,7 +295,7 @@ WP-3.8's drought restriction rule isn't in the engine yet, so the table's
 mapping to its parameters is a typed shape only
 (`DroughtRestrictionTriggerParameters`, model.md §2.15a).
 
-**Backend and screen: built** (engine 1.19.0, migration 104). The
+**Backend and screen: built** (engine 1.19.0, migration 106). The
 `outlook` job draws the table after the outlook, for the season's review
 date (`settings.outlook.review`, default the engine's `defaultReviewDate`,
 1 January, O3): the bands and start storages from `reviewTriggerBands`,
