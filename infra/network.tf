@@ -38,8 +38,25 @@
 # it (the single-AZ DB would still be the bottleneck).
 # ----------------------------------------------------------------------------
 
+# AZs are chosen by zone ID, not by name or list position. Zone names are
+# shuffled per account (af-south-1a here may be another account's
+# af-south-1b) and the list's order is not a contract, so `names[0..1]` could
+# pick different physical zones in another account or after AWS adds one.
+# Zone IDs (afs1-az1, afs1-az2, ...) name the same physical zone everywhere;
+# the two lowest available IDs are taken, so the subnets only move if one of
+# those zones stops being available. Opt-in zones (Local Zones, Wavelength)
+# are excluded: an RDS subnet group and Lambda ENIs need regular AZs.
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
+
+locals {
+  subnet_zone_ids = slice(sort(data.aws_availability_zones.available.zone_ids), 0, 2)
 }
 
 resource "aws_vpc" "main" {
@@ -51,10 +68,10 @@ resource "aws_vpc" "main" {
 }
 
 resource "aws_subnet" "private" {
-  count             = 2
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
-  availability_zone = data.aws_availability_zones.available.names[count.index]
+  count                = 2
+  vpc_id               = aws_vpc.main.id
+  cidr_block           = cidrsubnet(var.vpc_cidr, 8, count.index + 10)
+  availability_zone_id = local.subnet_zone_ids[count.index]
 
   tags = { Name = "${local.project}-private-${count.index + 1}" }
 }
@@ -231,8 +248,10 @@ resource "aws_vpc_endpoint" "secretsmanager" {
 
 data "aws_iam_policy_document" "secretsmanager_endpoint" {
   statement {
-    sid       = "ReadRdsMasterSecretOnly"
-    actions   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+    sid = "ReadRdsMasterSecretOnly"
+    # GetSecretValue is the one call (config/secretsManager.ts); the migrate
+    # role holds nothing else on the secret either (lambda.tf).
+    actions   = ["secretsmanager:GetSecretValue"]
     resources = [aws_db_instance.main.master_user_secret[0].secret_arn]
     principals {
       type        = "AWS"

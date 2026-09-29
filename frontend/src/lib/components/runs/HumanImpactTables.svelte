@@ -1,15 +1,22 @@
 <script lang="ts">
 	// The human-impact tables of a run (engine ≥ 0.22.0): land cover (WP-1.35),
 	// groundwater (WP-1.34), other water users (WP-1.33) and the units' demand
-	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split out of
-	// RunSummaryView and loaded only for a run that has any of them, so the
-	// Runs tab stays within its chunk budget for every other project.
+	// objects (engine ≥ 1.7.0, issue #54 item 2b). Code-split and loaded only
+	// for a run that has any of them (humanImpacts.ts), on Units & supply
+	// (issue #137) and in the printable report.
 	import { DEMAND_OBJECT_CATEGORY_LABEL, LAND_COVER_CLASSES, type RunSummary } from '@water-management/engine';
 	import { fmtNum, fmtPct } from '$lib/format/number';
 	import { SUPPLY_TARGET } from './results';
 	import { aboveGa, groundwaterByNode } from './groundwater';
 
-	let { summary }: { summary: RunSummary } = $props();
+	let {
+		summary,
+		users = true
+	}: {
+		summary: RunSummary;
+		/** Draw the Other water users table. Units & supply leaves it out when the curtailment table lists them (one copy per page). */
+		users?: boolean;
+	} = $props();
 
 	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
 	const pumping = $derived([...(summary.farms ?? []), ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
@@ -204,7 +211,7 @@
 	{/if}
 {/if}
 
-{#if summary.users?.length}
+{#if users && summary.users?.length}
 	<h3>Other water users</h3>
 	<p class="muted small">Towns, industry and unlisted users taking water from the river (daily averages over the run).</p>
 	<div class="table-wrap">

@@ -166,7 +166,11 @@
 			newest 12 published results and 20 unpublished runs are kept.
 		</li>
 		<li><strong>Background jobs and report requests:</strong> 30 days after they finish. <strong>Earlier versions of uploaded data:</strong> 180 days, or the last 5 versions.</li>
-		<li><strong>Backups:</strong> kept for up to 35 days, so deleted information remains in them until they expire.</li>
+		<li>
+			<strong>Backups:</strong> kept for up to 35 days, so deleted information remains in them until they expire. If the service
+			is shut down for good, one final encrypted copy of the database is kept, in the same place, until we delete it; we will say
+			how long when we announce the shutdown.
+		</li>
 	</ul>
 	<p>
 		When your account is deleted, your name is removed from the project history (it reads “Deleted user”). A few things are kept

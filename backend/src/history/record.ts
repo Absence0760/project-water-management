@@ -197,6 +197,9 @@ export type AuditKind =
 	| 'scenario.deleted'
 	| 'note.deleted'
 	| 'signoff.created'
+	// The hydrologist signed off the calibration rules, or withdrew it (issue #153): the typed name as a signature, the account as the actor.
+	| 'calibration_rules.signed_off'
+	| 'calibration_rules.sign_off_withdrawn'
 	| 'allocation.created'
 	| 'allocation.changed'
 	| 'allocation.deleted'

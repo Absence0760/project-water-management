@@ -1,4 +1,5 @@
 import { LEGAL_VERSION } from '@water-management/engine/legal';
+import { defaultCalibrationRules } from '@water-management/engine';
 import pg from 'pg';
 import { createApp } from '../app.js';
 import { outbox, type Mail } from '../mail/transport.js';
@@ -163,6 +164,24 @@ export async function makeStoredLegacyRun(runId: string) {
  * the outlook job itself is outlooks.db.test.ts's). The season defaults to
  * 2099/2100, so it hasn't ended; no review date.
  */
+/**
+ * A run of the calibration rules still running (108_auto_calibration), as
+ * `userId` (an editor), without its job: for tests that need a real row
+ * behind :cid. Its plan is a stand-in; nothing fits it.
+ */
+export async function plantCalibration(userId: string, projectId: string): Promise<string> {
+	const rules = defaultCalibrationRules();
+	const plan = { rules, engineVersion: 'x', flowKind: 'flow_observed_m3s', validationRecord: null, years: [], ruleExclusions: [], cases: [], notes: [], caseEvaluations: 0 };
+	return withUser(userId, async (db) => {
+		const { rows } = await db.query<{ id: string }>(
+			`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version)
+			 VALUES ($1, 'manual', $2, 1, $3, $4, 'x') RETURNING id`,
+			[projectId, JSON.stringify(rules), '0'.repeat(64), JSON.stringify(plan)]
+		);
+		return rows[0]!.id;
+	});
+}
+
 export async function plantCompleteOutlook(
 	userId: string,
 	projectId: string,
@@ -192,4 +211,3 @@ export async function plantCompleteOutlook(
 		return rows[0]!.id;
 	});
 }
-

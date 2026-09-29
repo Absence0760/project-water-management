@@ -1,6 +1,7 @@
 // The self-checks panel (engine 0.12.0): the model's checks on its own run,
-// the water balance per water year, and the trace of one farm's day with its
-// working columns (docs/ui.md § Self-checks).
+// the water balance per water year (its own Model quality section since
+// issue #137, linked from the self-checks), and the trace of one farm's day
+// with its working columns (docs/ui.md § Self-checks).
 import { createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 
@@ -20,8 +21,12 @@ test('a run shows its self-checks, its water balance and a traced day that close
 	await expect(checks.getByRole('listitem').filter({ hasText: /\bfarms?\b/i })).toHaveCount(0);
 	await expect(checks.getByTestId('checks-engine')).toHaveText(/^Checked by engine \d+\.\d+\.\d+ when the run was made\.$/);
 
+	// The water balance has its own section in Model quality (issue #137): once on the page, linked from here.
+	await expect(page.getByRole('region', { name: 'Water balance by water year' })).toHaveCount(1);
+	await page.locator('#res-checks').getByTestId('checks-balance-link').getByRole('link', { name: 'Water balance' }).click();
 	// 120 days from 2021-10-01: one water year, then the whole run.
-	const balance = page.getByRole('region', { name: 'Water balance by water year' });
+	const balance = page.locator('#res-water-balance').getByRole('region', { name: 'Water balance by water year' });
+	await expect(balance).toBeInViewport();
 	await expect(balance.getByRole('rowheader')).toHaveText(['2021/22', 'Whole run']);
 	// No groundwater, users, storage resets or lost seepage here: the equation names only the columns shown.
 	await expect(balance).toContainText('Start storage + hydrological unit runoff + transfers + rain on dams = consumptive use + dam evaporation + outflow + end storage.');

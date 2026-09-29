@@ -23,10 +23,12 @@
 import type { Context, SQSBatchResponse, SQSEvent } from 'aws-lambda';
 import { z } from 'zod';
 import { assertLambdaEnv } from './config/production.js';
-import { FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
+import { FeedFormatError, FeedUnavailableError, feedErrorMessage } from './feeds/errors.js';
 import { type FetchRequest, type FetchResult, runFetch } from './feeds/fetch.js';
 import { type FeedHttp, feedHttp } from './feeds/http.js';
 import { type IngestResultMessage, MAX_MESSAGE_BYTES, parseFetchRequest, sendToQueue } from './jobs/transport.js';
+import { logEvent } from './logging/logEvent.js';
+import { safeError } from './logging/safeError.js';
 
 // Refuse to start with a local default, FEED_SOURCE=fixtures above all (config/production.ts).
 assertLambdaEnv('fetcher');
@@ -38,6 +40,19 @@ const DEFAULT_BUDGET_MS = 100_000;
 
 const TOO_SLOW = feedErrorMessage(new FeedUnavailableError('it did not answer in time'));
 const INVALID_REQUEST = 'the fetch request was not valid, so nothing was fetched';
+
+/**
+ * A failed fetch's error, as a fixed code for the log (feed_fetch_failed): the
+ * stored message can name the grid cell or station, so it never goes to a log.
+ */
+export function fetchFailureReason(error: string): 'timeout' | 'invalid_request' | 'unavailable' | 'format' | 'internal' | 'other' {
+	if (error === TOO_SLOW) return 'timeout';
+	if (error === INVALID_REQUEST) return 'invalid_request';
+	if (error.startsWith(feedErrorMessage(new FeedUnavailableError('')))) return 'unavailable';
+	if (error.startsWith(feedErrorMessage(new FeedFormatError('')))) return 'format';
+	if (error === feedErrorMessage(new Error())) return 'internal';
+	return 'other';
+}
 
 /** Enough of a fetch message to answer it: the ids the worker routes the answer by. */
 const FetchEnvelope = z.object({ v: z.literal(1), type: z.literal('fetch'), fetchJobId: z.string().uuid(), feedId: z.string().uuid(), feedVersion: z.string().max(40) });
@@ -91,10 +106,10 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 		} else {
 			const env = envelope(record.body);
 			if (!env) {
-				console.warn(JSON.stringify({ event: 'fetch_request_ignored', messageId: record.messageId }));
+				logEvent('warn', { event: 'fetch_request_ignored', messageId: record.messageId });
 				continue;
 			}
-			console.warn(JSON.stringify({ event: 'fetch_request_invalid', messageId: record.messageId, feedId: env.feedId }));
+			logEvent('warn', { event: 'fetch_request_invalid', messageId: record.messageId, feedId: env.feedId });
 			ids = env;
 			result = { ok: false, error: INVALID_REQUEST };
 		}
@@ -102,22 +117,32 @@ export const handler = async (event: SQSEvent, context?: Pick<Context, 'getRemai
 		try {
 			await sendToQueue(process.env.INGEST_RESULTS_QUEUE_URL, 'INGEST_RESULTS_QUEUE_URL', message);
 		} catch (err) {
-			console.error(JSON.stringify({ event: 'fetch_result_send_failed', messageId: record.messageId, error: (err as Error).message }));
+			logEvent('error', { event: 'fetch_result_send_failed', messageId: record.messageId, ...safeError(err) });
 			failures.push({ itemIdentifier: record.messageId });
 			continue;
 		}
+		// The answer went back, but it says the fetch failed: the Lambda itself
+		// succeeded, so its Errors metric never sees this. One line per failed
+		// answer (a retried send logs nothing until it goes through), metric
+		// and alarm in infra/feeds.tf. Ids, the source and a reason code only.
+		if (!result.ok) {
+			logEvent('warn', {
+				event: 'feed_fetch_failed',
+				feedId: ids.feedId,
+				source: req ? req.request.source : null,
+				reason: fetchFailureReason(result.error)
+			});
+		}
 		if (!req) continue;
 		// Ids, the source and the outcome only: never the values or an upstream body.
-		console.log(
-			JSON.stringify({
-				event: 'feed_fetched',
-				feedId: req.feedId,
-				source: req.request.source,
-				ok: result.ok,
-				days: result.ok ? result.values.length : 0,
-				ms: Date.now() - started
-			})
-		);
+		logEvent('info', {
+			event: 'feed_fetched',
+			feedId: req.feedId,
+			source: req.request.source,
+			ok: result.ok,
+			days: result.ok ? result.values.length : 0,
+			ms: Date.now() - started
+		});
 	}
 	// Only the failed sends are retried (the event source reports partial failures).
 	return { batchItemFailures: failures };

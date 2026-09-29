@@ -13,8 +13,10 @@ name: Deploy frontend
 # deploy-backend.yml; its header explains each):
 #
 #   preflight  tag web@semver + newer than the last web release, commit on
-#              main with a green `CI gate`, `production` environment with a
-#              required reviewer, every AWS variable/secret set. No AWS.
+#              main with a green `CI gate` (from ci.yml, under GitHub
+#              Actions), `production` environment with a required reviewer and
+#              a main + release-tags deployment policy, the release-tag
+#              ruleset, every AWS variable/secret set. No AWS.
 #   build      pnpm build + the CSP hash check. No AWS.
 #   deploy     `environment: production` (required reviewer, then OIDC):
 #              S3 sync + CloudFront invalidation.

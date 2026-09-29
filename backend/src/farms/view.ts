@@ -13,7 +13,6 @@ import type { Db } from '../db/tx.js';
 import { withUser } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 import { attachment, collectCsv, dailyCsvLines, dayRange, exportFilename, type DailyColumn } from '../export/csv.js';
-import { nodeColumnHeader } from '../export/run-tables.js';
 import { farmOutlook } from '../outlooks/publication.js';
 import { rank, requireRole, UUID, type Role } from '../projects/access.js';
 import { localDate } from '../projects/timeZone.js';
@@ -30,6 +29,10 @@ const CsvQuery = z
 
 /** The chart series route's window by default: the year to dataUntil (roadmap WP-2.6; a whole run is too much for a phone). */
 export const FARM_SERIES_DEFAULT_DAYS = 365;
+/** The farmer's CSV's window by default: the same year to dataUntil (issue #124); `?from=` reaches further back. */
+export const FARM_CSV_DEFAULT_DAYS = FARM_SERIES_DEFAULT_DAYS;
+/** A farmer's figure in whole m³ (every farm series is m³ or m³/day): full precision reads as noise (0.30000000000000004). */
+export const wholeM3 = (v: number | null): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) || 0 : null);
 /** The widest window one series request answers: ten years, about 40 kB of JSON. */
 export const FARM_SERIES_MAX_DAYS = 3653;
 const SeriesQuery = z
@@ -257,7 +260,11 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 		});
 	})
 	// The farm's own daily figures from the published run: the farm allowlist
-	// only (FARMER_SERIES_KEYS), with the export CSV's rules (export/csv.ts).
+	// only (FARMER_SERIES_KEYS), with the export CSV's rules (export/csv.ts),
+	// shaped for a farmer (issue #124): the year to dataUntil by default,
+	// whole m³, and the series keys as the header, which the farm view words
+	// in the reader's language and lays out for their spreadsheet
+	// (frontend farm/csvNote.ts), so every word stays in the one catalogue.
 	.get('/:id/farm/:nodeId/export.csv', async (c) => {
 		const { id, nodeId } = c.req.param();
 		const q = CsvQuery.parse(c.req.query());
@@ -265,21 +272,22 @@ export const farmViewRoutes = new Hono<AuthEnv>()
 			await requireFarm(db, id, nodeId);
 			const cur = await currentFor(db, id, nodeId);
 			if (!cur?.view) throw notPublished();
-			const { rows } = await db.query<{ key: string; label: string | null; unit: string | null; values: (number | null)[] }>(
-				`SELECT key, meta->>'label' AS label, meta->>'unit' AS unit, "values"
-				 FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = ANY($3::text[])`,
+			const { rows } = await db.query<{ key: string; values: (number | null)[] }>(
+				`SELECT key, "values" FROM run_series WHERE run_id = $1 AND node_id = $2 AND key = ANY($3::text[])`,
 				[cur.run_id, nodeId, FARMER_SERIES_KEYS]
 			);
 			const byKey = new Map(rows.map((r) => [r.key, r]));
 			const columns: DailyColumn[] = FARMER_SERIES_KEYS.flatMap((k) => {
 				const r = byKey.get(k);
-				return r ? [{ header: nodeColumnHeader(k, r.label ?? k, r.unit, 'farm'), values: r.values }] : [];
+				return r ? [{ header: k, values: r.values.map(wholeM3) }] : [];
 			});
 			if (!columns.length) throw notPublished();
 			const start = cur.catchment_view.runStart;
 			// To dataUntil, never into forecast days past it (the projection stops there too).
 			const to = q.to && q.to < cur.view.dataUntil ? q.to : cur.view.dataUntil;
-			const range = dayRange(start, Math.max(...columns.map((col) => col.values.length)), q.from, to);
+			// The year to `to` unless asked for more: a farmer wants this season, not a 15-year record.
+			const from = q.from ?? fromEpochDay(toEpochDay(to) - (FARM_CSV_DEFAULT_DAYS - 1));
+			const range = dayRange(start, Math.max(...columns.map((col) => col.values.length)), from, to);
 			if (!range) throw new ApiError(400, `the window is outside the published figures (${start} … ${cur.view.dataUntil})`);
 			const body = collectCsv(dailyCsvLines(start, columns, range));
 			if (body === null) throw new ApiError(413, 'export too large; narrow it with ?from=YYYY-MM-DD&to=YYYY-MM-DD');

@@ -1,0 +1,18 @@
+# gitleaks config: the default rules, plus reviewed placeholder values.
+#
+# Allowlisted by exact value, never by path, so a real key in the same file
+# still fails. Add a value only after checking it isn't a real secret; a
+# one-off match on a real-looking line goes in .gitleaksignore by fingerprint.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic runtime secrets in the mocked-provider Terraform tests (infra/tests/*.tftest.hcl). Reviewed 2026-09-29."
+regexTarget = "secret"
+regexes = [
+  '''^0123456789abcdef0123456789abcdef0123456789abcdef$''',
+  '''^abcdef0123456789abcdef0123456789abcdef01234567$''',
+  '''^fedcba9876543210fedcba9876543210fedcba9876543210$''',
+  '''^-----BEGIN PRIVATE KEY-----\\ntestonlynotakey\\n-----END PRIVATE KEY-----$''',
+]

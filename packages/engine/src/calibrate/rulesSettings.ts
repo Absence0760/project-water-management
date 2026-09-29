@@ -25,6 +25,7 @@
 // under, so a fit is reproducible and a rule change shows in run comparison.
 // The defaults are drafts until the hydrologist signs them off (#90,
 // "Automated calibration rules"); until then a fit they pick is not evidence.
+import { canonicalJson } from '../manifest';
 import { PAN_COEFFICIENT_PRESETS } from '../project';
 import { CALIBRATION_BOUNDS, DEFAULT_STARTS, MAX_STARTS, type CalibrationBounds } from './params';
 
@@ -43,6 +44,21 @@ export const SELECTION_TEST_LABEL: Record<SelectionTest, string> = {
 	dryWet: 'dry → wet test (wet years)',
 	split: 'split-sample test (other half)',
 	independent: 'the other observed record'
+};
+
+/**
+ * What the server does when new observed or rain data arrives: nothing
+ * ('off', the default), run the rules and keep the report for an editor to
+ * apply ('report'), or also apply the kept fit ('apply'), which it does only
+ * while the rules are signed off (otherwise it reports).
+ */
+export const ON_NEW_DATA = ['off', 'report', 'apply'] as const;
+export type OnNewData = (typeof ON_NEW_DATA)[number];
+
+export const ON_NEW_DATA_LABEL: Record<OnNewData, string> = {
+	off: 'nothing',
+	report: 'run the rules and keep the report',
+	apply: 'run the rules and apply the kept fit (while signed off)'
 };
 
 /** 'project' (the project's own pan coefficient row) or a PAN_COEFFICIENT_PRESETS id. */
@@ -85,7 +101,20 @@ export interface CalibrationRules {
 		/** Every fitted parameter inside Perrin et al.'s (2003) typical range. */
 		typicalParams: boolean;
 	};
-	/** Who signed the rules off, and when (ISO date); null = draft rules, not yet signed off. */
+	/**
+	 * After the rules keep a fit: whether the server re-runs them on new data
+	 * (`onNewData`), and whether applying a kept fit also runs the model and
+	 * the uncertainty ensemble around it (`ensemble`, CR-1: the EWR range of
+	 * the parameter sets that fit nearly as well).
+	 */
+	after: { onNewData: OnNewData; ensemble: boolean };
+	/**
+	 * The hydrologist's sign-off; null = draft rules, not yet signed off.
+	 * `by` is the name the signer typed, as a signature (like a run's
+	 * sign-off); `on` is the date the server recorded it, whatever a client
+	 * sent. The signing account is in the project's audit trail
+	 * (calibration_rules.signed_off), never here.
+	 */
 	signedOff: { by: string; on: string } | null;
 }
 
@@ -108,6 +137,7 @@ export function defaultCalibrationRules(): CalibrationRules {
 		cases: { bounds: ['wide', 'typical'], objectives: ['kgePrime'] },
 		selection: { test: 'dryWet', score: 'kgePrime' },
 		run: { seed: 1, starts: DEFAULT_STARTS, budget: 1500 },
+		after: { onNewData: 'off', ensemble: true },
 		filters: { wr2012Mar: true, typicalParams: true },
 		signedOff: null
 	};
@@ -161,6 +191,8 @@ export function calibrationRulesError(r: CalibrationRules): string | null {
 	if (n > RULE_CASES_MAX) return `the rules ask for ${n} fits, more than ${RULE_CASES_MAX}: each is a full fit with validation`;
 	if (!SELECTION_TESTS.includes(r.selection.test)) return 'unknown selection test';
 	if (!OBJECTIVES.includes(r.selection.score)) return 'unknown selection score';
+	if (!ON_NEW_DATA.includes(r.after.onNewData)) return 'unknown new-data action';
+	if (typeof r.after.ensemble !== 'boolean') return 'the ensemble rule must be on or off';
 	const { seed, starts, budget } = r.run;
 	if (!Number.isInteger(seed) || seed < 0 || seed > RULE_SEED_MAX) return `the seed must be a whole number from 0 to ${RULE_SEED_MAX}`;
 	if (!Number.isInteger(starts) || starts < 1 || starts > MAX_STARTS) return `the starts must be a whole number from 1 to ${MAX_STARTS}`;
@@ -196,6 +228,7 @@ export function resolveCalibrationRules(raw: unknown, warnings: string[] = []): 
 		cases: group('cases'),
 		selection: group('selection'),
 		run: group('run'),
+		after: group('after'),
 		filters: group('filters'),
 		signedOff: isObj(raw.signedOff) ? (raw.signedOff as CalibrationRules['signedOff']) : null
 	};
@@ -209,10 +242,13 @@ export function resolveCalibrationRules(raw: unknown, warnings: string[] = []): 
 }
 
 /** The rules without their revision and sign-off: what decides a fit. */
-export const rulesContent = (r: CalibrationRules) => ({ exclusions: r.exclusions, forcing: r.forcing, cases: r.cases, selection: r.selection, run: r.run, filters: r.filters });
+export const rulesContent = (r: CalibrationRules) => ({ exclusions: r.exclusions, forcing: r.forcing, cases: r.cases, selection: r.selection, run: r.run, after: r.after, filters: r.filters });
 
-/** Two rule sets decide fits the same way (revision and sign-off aside). */
-export const sameRules = (a: CalibrationRules, b: CalibrationRules): boolean => JSON.stringify(rulesContent(a)) === JSON.stringify(rulesContent(b));
+/** Two rule sets decide fits the same way (revision and sign-off aside), whatever order their keys are in. */
+export const sameRules = (a: CalibrationRules, b: CalibrationRules): boolean => canonicalJson(rulesContent(a)) === canonicalJson(rulesContent(b));
+
+/** Two sign-offs are the same one (either may be null). */
+export const sameSignOff = (a: CalibrationRules['signedOff'], b: CalibrationRules['signedOff']): boolean => canonicalJson(a ?? null) === canonicalJson(b ?? null);
 
 const pct = (v: number) => `${Math.round(v * 1000) / 10} %`;
 
@@ -224,6 +260,10 @@ export function rulesLines(r: CalibrationRules): { subject: string; text: string
 		{ subject: 'Forcing', text: r.forcing.pan.map(rulePanLabel).join('; ') },
 		{ subject: 'Fits', text: `${r.cases.bounds.join(' and ')} bounds × ${r.cases.objectives.map((o) => OBJECTIVE_LABELS[o]).join(', ')} (${ruleCaseCount(r)} fits)` },
 		{ subject: 'Keep', text: `the best ${OBJECTIVE_LABELS[r.selection.score]} on the ${SELECTION_TEST_LABEL[r.selection.test]}` },
+		{
+			subject: 'After',
+			text: `on new data, ${ON_NEW_DATA_LABEL[r.after.onNewData]}; ${r.after.ensemble ? 'a kept fit applied also gets a run and its uncertainty ensemble' : 'no ensemble after applying a fit'}`
+		},
 		{ subject: 'Search', text: `seed ${r.run.seed}, ${r.run.starts} start${r.run.starts === 1 ? '' : 's'} per fit, ${r.run.budget} model runs per optimisation` },
 		{
 			subject: 'Filters',
@@ -243,6 +283,6 @@ export function calibrationRulesChanges(a: CalibrationRules, b: CalibrationRules
 		if (l.text !== la[i]!.text) out.push({ subject: `Calibration rules: ${l.subject.toLowerCase()}`, text: `Calibration rules, ${l.subject.toLowerCase()}: ${la[i]!.text} → ${l.text}` });
 	});
 	const signed = (r: CalibrationRules) => (r.signedOff ? `signed off by ${r.signedOff.by} on ${r.signedOff.on}` : 'draft (not signed off)');
-	if (JSON.stringify(a.signedOff) !== JSON.stringify(b.signedOff)) out.push({ subject: 'Calibration rules: sign-off', text: `Calibration rules: ${signed(a)} → ${signed(b)}` });
+	if (!sameSignOff(a.signedOff, b.signedOff)) out.push({ subject: 'Calibration rules: sign-off', text: `Calibration rules: ${signed(a)} → ${signed(b)}` });
 	return out;
 }

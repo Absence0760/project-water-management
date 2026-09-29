@@ -39,6 +39,7 @@ import { acceptIngestResult } from './feeds/schedule.js';
 import { acceptMailEvent } from './mail/suppression.js';
 import { acceptRenderResult } from './reports/schedule.js';
 import { parseWorkerMessage } from './jobs/transport.js';
+import { emitMetricLine, logEvent } from './logging/logEvent.js';
 
 /** CloudWatch namespace of the worker's embedded metrics (infra/jobs.tf alarm). */
 export const METRIC_NAMESPACE = 'water-management/Jobs';
@@ -87,24 +88,24 @@ async function acceptRecord(record: SQSRecord): Promise<void> {
 	// log, never an address.
 	if (fromMailEventsQueue(record)) {
 		const outcome = await acceptMailEvent(record.body);
-		if (typeof outcome === 'string') console.warn(JSON.stringify({ event: 'mail_event_dropped', messageId: record.messageId, reason: outcome }));
-		else console.log(JSON.stringify({ event: 'mail_suppressed', messageId: record.messageId, reason: outcome.reason, people: outcome.suppressed }));
+		if (typeof outcome === 'string') logEvent('warn', { event: 'mail_event_dropped', messageId: record.messageId, reason: outcome });
+		else logEvent('info', { event: 'mail_suppressed', messageId: record.messageId, reason: outcome.reason, people: outcome.suppressed });
 		return;
 	}
 	const message = parseWorkerMessage(record.body);
 	// An unknown message is dropped (logged), never retried into the DLQ:
 	// it can't become valid on a retry.
-	if (!message) console.warn(JSON.stringify({ event: 'job_message_ignored', messageId: record.messageId }));
+	if (!message) logEvent('warn', { event: 'job_message_ignored', messageId: record.messageId });
 	// A fetch result (ingest-results queue): becomes a feed_ingest job, which
 	// the tick runs.
 	else if (message.type === 'ingest') {
 		const outcome = await acceptIngestResult(message);
-		if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'feed_result_dropped', messageId: record.messageId, reason: outcome }));
+		if (outcome !== 'queued') logEvent('warn', { event: 'feed_result_dropped', messageId: record.messageId, reason: outcome });
 	}
 	// A render's outcome (render-results queue): becomes a report_render job.
 	else if (message.type === 'rendered') {
 		const outcome = await acceptRenderResult(message);
-		if (outcome !== 'queued') console.warn(JSON.stringify({ event: 'render_result_dropped', messageId: record.messageId, reason: outcome }));
+		if (outcome !== 'queued') logEvent('warn', { event: 'render_result_dropped', messageId: record.messageId, reason: outcome });
 	}
 	// A wake message needs nothing of its own: the tick below runs the job.
 }
@@ -123,7 +124,7 @@ export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<C
 			} catch (err) {
 				firstError ??= err;
 				failures.push({ itemIdentifier: record.messageId });
-				console.error(JSON.stringify({ event: 'worker_record_failed', messageId: record.messageId, error: err instanceof Error ? err.message : String(err) }));
+				logEvent('error', { event: 'worker_record_failed', messageId: record.messageId, error: err instanceof Error ? err.message : String(err) });
 			}
 		}
 		// Every record failed: the database is down, and so would the tick be.
@@ -133,7 +134,7 @@ export async function handler(event: SQSEvent | ScheduledEvent, context?: Pick<C
 	// Leave a minute for the job already running when the budget runs out.
 	const budgetMs = Math.max(10_000, (context?.getRemainingTimeInMillis() ?? 300_000) - 60_000);
 	const result = await runTick({ budgetMs });
-	console.log(metricLine(result));
+	emitMetricLine(metricLine(result));
 	// An SQS invocation answers with the records to retry (an empty list: none).
 	if (isSqs(event)) return { batchItemFailures: failures };
 	return { claimed: result.claimed, done: result.done, failed: result.failed, dead: result.dead };

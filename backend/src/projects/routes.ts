@@ -17,8 +17,8 @@ import { trySendMail } from '../mail/transport.js';
 import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
-import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch } from './settings.js';
-import { TimeZone } from './timeZone.js';
+import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
+import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
@@ -61,6 +61,8 @@ const summary = (r: ProjectRow) => ({
 	createdAt: r.created_at.toISOString(),
 	updatedAt: r.updated_at.toISOString(),
 	dataUntil: r.data_until,
+	// The project's calendar date (its time zone, 058): the list counts dataUntil's age to it, as the portfolio does.
+	today: localDate(new Date(), r.time_zone),
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });
@@ -285,9 +287,12 @@ export const projectRoutes = new Hono<AuthEnv>()
 			const settings = body.settings ? patchSettings(current.settings, body.settings) : undefined;
 			const dqError = settings && body.settings?.dataQuality ? dataQualityPatchError(settings) : null;
 			if (dqError) throw new ApiError(400, dqError);
-			// An automated fit must have run under the rules saved before it (issue #153).
+			// An automated fit is the server's to write (issue #153): a save only carries the stored one back.
 			const autoError = settings && body.settings?.fitRecord !== undefined ? autoFitRecordError(mergeSettings(current.settings), settings) : null;
 			if (autoError) throw new ApiError(409, autoError);
+			// A new sign-off of the calibration rules is dated by the server, and it and a withdrawal are audited with the account (issue #153).
+			const signOff = settings && body.settings?.calibrationRules !== undefined ? signOffChange(current.settings, settings) : null;
+			if (signOff === 'signed') settings!.calibrationRules = { ...settings!.calibrationRules, signedOff: { by: settings!.calibrationRules.signedOff!.by, on: new Date().toISOString().slice(0, 10) } };
 			// The matrix's Reserve site: a change to a gauge is checked against the network and the rule tables being saved.
 			const site = (body.settings as { outcomes?: { siteNodeId?: string | null } } | undefined)?.outcomes?.siteNodeId;
 			if (settings && typeof site === 'string' && site !== resolveOutcomes(current.settings).siteNodeId) {
@@ -309,6 +314,11 @@ export const projectRoutes = new Hono<AuthEnv>()
 			);
 			mustChange(changed);
 			if (before) await recordModelRevision(db, id, { source: 'settings_patch', before, reason: body.reason });
+			if (signOff === 'signed') {
+				await recordAudit(db, id, 'calibration_rules.signed_off', { revision: settings!.calibrationRules.revision, fullName: settings!.calibrationRules.signedOff!.by });
+			} else if (signOff === 'withdrawn') {
+				await recordAudit(db, id, 'calibration_rules.sign_off_withdrawn', { revision: settings!.calibrationRules.revision });
+			}
 			const fields = [
 				body.name !== undefined && body.name !== current.name && 'name',
 				body.description !== undefined && body.description !== current.description && 'description',

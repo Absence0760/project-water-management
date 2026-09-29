@@ -21,9 +21,9 @@ name: gitleaks
 #   - sops + KMS in the private infra-secrets repo protects the secrets we
 #     mean to keep; it doesn't catch a stray paste.
 #
-# False positives go in `.gitleaks.toml` at the repo root (not yet created;
-# add it on the first false hit), scoped to the matched value rather than the
-# file, so a real key in the same file still fails.
+# False positives go in `.gitleaks.toml` at the repo root, scoped to the
+# matched value rather than the file, so a real key in the same file still
+# fails; a one-off match goes in `.gitleaksignore` by fingerprint.
 
 on:
   workflow_call:

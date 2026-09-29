@@ -75,7 +75,9 @@ test('give a town weekends off and an Easter peak, save, reload, run, and see it
 	await page.getByLabel(/^Run label/).fill('Town with weekends off');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'Town with weekends off' })).toBeVisible();
-	const table = page.getByTestId('demand-objects-table');
+	// On Units & supply's Other uses since issue #137, linked from the Summary.
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	const table = page.getByRole('region', { name: 'Other uses of water' }).getByTestId('demand-objects-table');
 	await expect(table.getByRole('columnheader', { name: 'Days off' })).toBeVisible();
 	const row = table.getByRole('row', { name: /Town/ });
 	// Unit, priority, demand, supplied, %, days short, days off.

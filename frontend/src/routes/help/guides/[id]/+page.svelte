@@ -59,7 +59,8 @@
 			const doc = document.documentElement;
 			const atEnd = window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
 			const tops = ids.map((id) => document.getElementById(id)?.getBoundingClientRect().top ?? Infinity);
-			const i = currentSection(tops, header + 64, atEnd);
+			// The section a link jumped to (the URL's hash) stays marked at the end of the page (lib/help/spy.ts).
+			const i = currentSection(tops, header + 64, atEnd, ids.indexOf(hashId(window.location.hash)));
 			reading = i >= 0 ? ids[i]! : '';
 		};
 		const onScroll = () => {

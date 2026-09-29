@@ -29,6 +29,7 @@ import { loadModel } from '../model/store.js';
 import { requireRole } from '../projects/access.js';
 import { mergeSettings } from '../projects/settings.js';
 import { stampRun } from './stamp.js';
+import { logEvent } from '../logging/logEvent.js';
 
 /**
  * SHA-256 hex of a series' values (engine `seriesDigest`: the values as JSON,
@@ -123,7 +124,7 @@ export async function allocationsForRun(db: Db, projectId: string): Promise<Allo
 export function logSelfCheckFailure(projectId: string, runId: string, output: { summary: { verification?: RunVerification } }): void {
 	const checks = output.summary.verification?.checks.filter((c) => !c.passed).map((c) => c.id) ?? [];
 	if (checks.length === 0) return;
-	console.error(JSON.stringify({ event: 'self_check_failed', projectId, runId, checks }));
+	logEvent('error', { event: 'self_check_failed', projectId, runId, checks });
 }
 
 /**

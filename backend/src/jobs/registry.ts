@@ -21,8 +21,8 @@ import type { z } from 'zod';
 import type { Db } from '../db/tx.js';
 import type { Role } from '../projects/access.js';
 
-/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`). */
-export const JOB_KINDS = ['feed_fetch', 'feed_ingest', 'rerun', 'alert_eval', 'report_render', 'yield', 'sweep', 'outlook'] as const;
+/** Every kind the job table accepts (016_jobs.sql CHECK; 040_yield added `yield`, 062_scenario_sweeps `sweep`, 063_seasonal_outlook `outlook`, 108_auto_calibration `auto_calibration` and `uncertainty`). */
+export const JOB_KINDS = ['feed_fetch', 'feed_ingest', 'rerun', 'alert_eval', 'report_render', 'yield', 'sweep', 'outlook', 'auto_calibration', 'uncertainty'] as const;
 export type JobKind = (typeof JOB_KINDS)[number];
 
 /** A claimed job, as the worker routes it. */
