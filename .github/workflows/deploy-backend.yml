@@ -13,8 +13,10 @@ name: Deploy backend
 #   preflight  no environment, no AWS. scripts/release/preflight.mjs refuses
 #              the release unless the tag is backend@semver and newer than the
 #              last backend release, the commit is on main with a green
-#              `CI gate`, the `production` environment exists WITH a required
-#              reviewer, and every AWS variable/secret is set. Until the AWS
+#              `CI gate` (from ci.yml, under GitHub Actions), the `production`
+#              environment exists WITH a required reviewer and deploys only
+#              from main and the release tags, a tag ruleset protects
+#              backend@*/web@*, and every AWS variable/secret is set. Until the AWS
 #              account is bootstrapped, this is where a release stops, with a
 #              pointer to infra/README.md § Operator steps.
 #   build      no environment, no AWS. Installs deps and packages the four

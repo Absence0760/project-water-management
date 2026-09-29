@@ -132,7 +132,7 @@ pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
 
-pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
+pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating incl. every id-token grant, no PR-head checkout under pull_request_target, CI-gate fan-in, no auto-merge for actions, docker or backend/renderer-deps) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
 pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
