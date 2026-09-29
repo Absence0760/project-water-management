@@ -2671,7 +2671,11 @@ which checks every catchment tab).
   the **dam evaporation factor** (× A-pan, `settings.lakeEvapFactor`, default
   0.75, 0 off; the hint warns that WR90 lake factors are S-pan based;
   [model.md §2.7a](./model.md#27a-dam-evaporation-rain-on-the-dam-and-seepage-engine--0150-audit-n2)),
-  and days in February.
+  and, behind an **Advanced** disclosure (issue #174: 28.25 is kept for
+  workbook parity and rarely changed), days in February. The closed
+  disclosure's summary names the value ("Advanced: days in February,
+  28.25") and adds "(not the default 28.25)" in amber when it differs, so a
+  changed value is never hidden.
 - **Calibration is four panels**, each its own menu entry, rather than one
   long one: Flow calibration, Rain gaps and CHIRPS, Calibration record and
   Fit automatically, in that order.

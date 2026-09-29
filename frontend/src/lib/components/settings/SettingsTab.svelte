@@ -39,7 +39,8 @@
 		type SeriesProvenance,
 		type ApanDailyFingerprint,
 		type AllocationMode,
-		type SeriesMeta
+		type SeriesMeta,
+		defaultProjectSettings
 	} from '@water-management/engine';
 	import { apanDailyOfValues } from '$lib/series/provenance';
 	import { applyReport } from '$lib/calibration/fit';
@@ -216,6 +217,10 @@
 		(editor?.model.nodes ?? []).filter((n) => n.kind === 'farm').reduce((t, n) => t + (n.areaKm2 || 0), 0)
 	);
 	const ewrAnnual = $derived(annualMm3(s.ewrPragmaticM3PerDay, s.februaryDays));
+	// Days in February sits behind an advanced disclosure (issue #174); its summary names the value, and says when it
+	// isn't the default, so a changed value is never hidden.
+	const FEB_DEFAULT = defaultProjectSettings().februaryDays;
+	const febChanged = $derived(Math.abs((s.februaryDays ?? FEB_DEFAULT) - FEB_DEFAULT) > 1e-9);
 	const apanAnnual = $derived(s.apanMm.reduce((t, v) => t + (v || 0), 0));
 	const panOutOfRange = $derived(panCoefficientOutOfRange(s.panCoefficient));
 
@@ -465,13 +470,18 @@
 					Vary it by month <HelpTip key="settings.lakeEvapFactorMonthly" />
 				</label>
 			</div>
+		</div>
+		<details class="advanced" data-testid="feb-advanced">
+			<summary>
+				Advanced: days in February, {fmtNum(s.februaryDays, 2, true)}{#if febChanged}{' '}<span class="changed">(not the default {fmtNum(FEB_DEFAULT, 2)})</span>{/if}
+			</summary>
 			<div class="field">
 				<span class="lbl"><label for="st-feb">Days in February</label><HelpTip key="settings.februaryDays" /></span>
 				<NumberInput id="st-feb" min={28} max={29} step={0.01} disabled={readonly} bind:value={s.februaryDays} aria-describedby="st-feb-h" />
 				<span class="hint" id="st-feb-h">Converts monthly volumes to per-day figures. 28.25 averages leap years, as the workbook does.</span>
 				<FieldHistoryLine field="settings:februaryDays" />
 			</div>
-		</div>
+		</details>
 	</section>
 
 	<!-- Flow generation ------------------------------------------------------------>
@@ -1297,6 +1307,22 @@
 	}
 	.ewr p {
 		margin: 0;
+	}
+	.advanced {
+		margin-top: 0.75rem;
+	}
+	.advanced summary {
+		cursor: pointer;
+		font-size: 0.875rem;
+		color: var(--text-2);
+	}
+	.advanced > .field {
+		margin-top: 0.5rem;
+		max-width: 75ch;
+	}
+	.changed {
+		color: var(--warning);
+		font-weight: 600;
 	}
 	.report {
 		margin-top: 1rem;

@@ -60,6 +60,32 @@ test('the high/low MAP split shows only while that flow-share method is chosen',
 	await expect(split.getByLabel('High (%)')).toHaveValue('81');
 });
 
+test('days in February is behind an advanced disclosure whose summary names its value, and says when it isn’t the default', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings February');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const advanced = page.getByTestId('feb-advanced');
+	const summary = advanced.locator('summary');
+	const feb = page.getByLabel('Days in February', { exact: true });
+
+	await expect(summary).toHaveText('Advanced: days in February, 28.25');
+	await expect(feb).toBeHidden();
+	await summary.click();
+	await feb.fill('28');
+	await feb.press('Tab');
+	await expect(summary).toHaveText('Advanced: days in February, 28 (not the default 28.25)');
+	await page.getByRole('button', { name: 'Save settings' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
+
+	// Closed after a reload, the changed value still shows in the summary; opened, it is editable.
+	await page.reload();
+	await expect(summary).toHaveText('Advanced: days in February, 28 (not the default 28.25)');
+	await expect(feb).toBeHidden();
+	await summary.click();
+	await expect(feb).toHaveValue('28');
+	await expect(feb).toBeEditable();
+});
+
 test('discarding settings restores the saved values', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings discard');
