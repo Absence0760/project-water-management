@@ -2483,9 +2483,10 @@ border included, and a spacer row exists only when it has height, so the
 first day starts right under the header and the last day sits at the foot of
 the box on a fifteen-year record; the pinned date keeps the row's hover, and
 the scroll box is a focusable, named region, so it scrolls from the keyboard
-(`series-preview.spec.ts`, with a11y scans at desktop and phone). This is a read-only view of what's already loaded; a CSV
-export of the same model-used columns is tracked separately
-([followups.md](./followups.md)).
+(`series-preview.spec.ts`, with a11y scans at desktop and phone). This is a read-only view of what's already loaded. Each series' own
+**CSV** download on its row carries the same checks and, from the latest run
+that read the series, the columns that run used (docs/api.md § Export,
+`backend/src/export/series-columns.ts`, issue #66).
 
 The download menus (`export/DownloadMenu.svelte`) open fixed to the window,
 below their button or above it when there's no room
@@ -3791,8 +3792,8 @@ read it before.
   and says it keeps no stores, so there is no store balance to close.
   A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
-  Not yet: an Excel audit workbook, and
-  model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+  Not yet: an Excel audit workbook. (The Data tab's series downloads carry
+  the model's columns since engine 1.27.0: docs/api.md § Export.)
 - **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
   flow invasive plants and forestry took, its share of natural flow, the
   low-flow threshold, and per class the condensed area, reduction and mm/yr
