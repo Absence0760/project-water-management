@@ -275,15 +275,12 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	await form.getByRole('button', { name: 'Add change' }).click();
 	await expect(changes(page).getByRole('listitem')).toHaveCount(2);
 	await expect(changes(page).getByRole('listitem').nth(1)).toContainText('Upper farm: Dam survey curve none (power law) → 3 survey rows, 180\u202f000 m³ at the top');
-	// The form with the paste box open (the next change starts from the curve now set) passes axe, and fits a phone.
+	// The form with the paste box open (the next change starts from the curve now set) passes axe.
 	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
 	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
 	await expect(rows).toHaveValue('0, 0, 0\n3, 35000, 60000\n6.5, 52000, 180000');
 	await expect(rows).toHaveAccessibleDescription(/^Level \(m\), area \(m²\), volume \(m³\), one row per line/);
 	await expectNoViolations(page);
-	await page.setViewportSize({ width: 390, height: 844 });
-	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-	await page.setViewportSize({ width: 1280, height: 720 });
 
 	// It runs on the curve as entered: the comparison's input diff names it.
 	await page.getByRole('button', { name: 'Run scenario' }).click();
@@ -291,6 +288,19 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
 	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('dam survey curve none (power law) → 3 rows');
+});
+
+test('the survey curve paste box fits a phone, with no sideways scroll, and passes axe', async ({ page, owner }) => {
+	void owner;
+	await page.setViewportSize({ width: 390, height: 844 });
+	const { project, scenarioId } = await seedScenario(page, 'Scenario survey on a phone');
+	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
+	const form = page.getByRole('form', { name: 'Add a change' });
+	await form.getByLabel('Node').selectOption({ label: 'Upper farm' });
+	await form.getByLabel('Field').selectOption({ label: 'Dam survey curve' });
+	await expect(form.getByLabel('Dam survey curve')).toBeVisible();
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+	await expectNoViolations(page);
 });
 
 test('a trigger farm goes straight to run of river, one change at a time: the half-made edit says why, the finished one applies (docs/scenarios.md § Edit groups)', async ({ page, owner }) => {
