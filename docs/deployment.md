@@ -434,6 +434,65 @@ is not pinned to this repo's `production` environment (a postcondition in
 `oidc.tf`), or if a sops secret is malformed or missing (the variables'
 validations in `variables.tf`, and `tf.sh`, which names a missing key).
 
+### Decide before the first apply
+
+**The database's KMS key: `rds_customer_managed_key` (default `true`).**
+Confirm it, or set `false` in `terraform.tfvars`, before the first apply.
+It can't be changed on a live instance.
+
+- `true`: a customer-managed key (CMK) encrypts the database, its logs,
+  automated backups and snapshots (`infra/kms.tf`, `alias/water-management-rds`).
+- `false`: RDS's AWS-managed `aws/rds` key, as before.
+
+Why it's decided up front: RDS fixes an instance's key at creation. Changing
+it later means a manual snapshot, a copy of it under the new key, and a
+restore to a new instance with a new endpoint, plus downtime and a cut-over
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html),
+[re:Post: change the key](https://repost.aws/knowledge-center/update-encryption-key-rds)).
+Flipping the variable on a live stack would force that replacement, and the
+instance's `prevent_destroy` refuses it at plan time.
+
+Recommendation: **keep `true`.** This account is a sub-account in an AWS
+Organization and holds personal information (farm names, contacts, sign-in
+data). A CMK keeps these options open for about $1–3 a month:
+
+| | CMK (`true`, default) | `aws/rds` (`false`) |
+| --- | --- | --- |
+| Cost | $1/month, +$1 at each of the first two yearly rotations (so $3 from year 3); RDS's key requests stay inside KMS's 20,000/month free tier ([KMS pricing](https://aws.amazon.com/kms/pricing/)) | free |
+| Share a snapshot with another account (a restore test in another account, or handing the stack to the client's own AWS account) | yes, after adding that account to the key policy | no: "You can't share a snapshot that has been encrypted using the AWS managed key" ([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)); you'd first copy the snapshot under a CMK |
+| AWS Backup cross-account copy (a backup vault in another Organization account, the defence against this account being compromised or closed) | yes, once the key is shared with the destination account | no: RDS needs a CMK "because AWS managed key policies are immutable and cannot be shared cross-account" ([AWS Backup: cross-account copies](https://docs.aws.amazon.com/aws-backup/latest/devguide/create-cross-account-backup.html)) |
+| Audit and control | key policy limits use to RDS in this region and account (`kms:ViaService`, [RDS key management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.Keys.html)); every use in CloudTrail; can be revoked | AWS controls the policy |
+| Rotation | automatic, yearly (`enable_key_rotation`) | automatic, managed by AWS |
+| Performance Insights (off today) | would use the same key; the PI key can't be changed once PI is on ([PI key policy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights.access-control.cmk-policy.html)) | `aws/rds` |
+
+**The risk a CMK adds is the key itself.** If the key is disabled, RDS stops
+the instance about 2 hours later (`inaccessible-encryption-credentials-recoverable`).
+Re-enabling the key and starting the instance within 7 days recovers it.
+After that the instance is terminal, and a restore needs the key enabled
+again. If the key is deleted, the database, every automated backup and every
+snapshot are unrecoverable
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)).
+Guards in `kms.tf`: `prevent_destroy` on the key, the maximum 30-day
+deletion window (`aws kms cancel-key-deletion` undoes a scheduled deletion
+in that window), and no principal but RDS can use the key. Nothing alarms on
+a key being disabled or scheduled for deletion yet. That needs CloudTrail
+events routed to the alerts topic (an EventBridge rule on
+`DisableKey`/`ScheduleKeyDeletion`), which the stack doesn't have yet.
+
+What the key covers and what it doesn't: only the RDS instance and what RDS
+derives from it (storage, logs on the instance, backups, snapshots). The RDS
+master secret and the runtime secrets stay on `aws/secretsmanager`, so the
+Lambdas' roles need no `kms:Decrypt`, and a restore re-creates the master
+secret anyway (§ Restoring the database). The report and frontend buckets
+stay on SSE-S3 ([security.md § Accepted IaC findings](./security.md#accepted-iac-findings)).
+One key with one job means a mistake with it affects only the database.
+
+A cross-account backup copy isn't built. When it is, add a statement to
+`data.aws_iam_policy_document.rds_kms` that grants the destination account
+`kms:Decrypt`, `kms:DescribeKey` and `kms:CreateGrant`. Also add an AWS Backup
+plan and vault, and turn on cross-account backup in the Organization's
+management account.
+
 Only apply (`./scripts/tf.sh apply`) after the plan has been reviewed and the operator has
 said go. Then push the outputs to the repository's GitHub Actions variables
 and secrets:
@@ -1642,8 +1701,9 @@ CloudFront, S3, Lambda and SES sending are cents. WAF is ~$8/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
-the report renderer run outside the VPC for the same reason. Total ≈ $51/month in
-us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
+the report renderer run outside the VPC for the same reason. The database's
+customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $52/month in
+us-east-1, ≈ $59–64 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
 request charges have no ceiling; the `cloudfront-requests` alarm (us-east-1)
 fires within 5 minutes of a flood, long before the budgets' billing data

@@ -175,6 +175,12 @@ variable "db_multi_az" {
   default     = false
 }
 
+variable "rds_customer_managed_key" {
+  description = "Encrypt the database, its backups and snapshots with a customer-managed KMS key (kms.tf) instead of the AWS-managed aws/rds key. Decide before the first apply: flipping it on a live stack forces a new DB instance, which prevent_destroy refuses. On by default: ~$1-3/month, and only a CMK allows cross-account snapshot sharing and AWS Backup cross-account copies (docs/deployment.md § Decide before the first apply)."
+  type        = bool
+  default     = true
+}
+
 variable "db_log_retention_days" {
   description = "CloudWatch retention for the exported PostgreSQL logs."
   type        = number

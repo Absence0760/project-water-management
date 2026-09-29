@@ -80,6 +80,14 @@ The checklist for these is issue #62; the history scrub is #63.
       first deploy, before client data, prove RDS events reach the alerts
       topic with the reboot and `--rds-event-test` (step 10c): the topic
       policy's `aws:SourceArn` condition can't be proven by a plan.
+- [ ] **Confirm the database's KMS key before the first apply (#126,
+      2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
+      customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
+      sharing and AWS Backup cross-account copies possible, for $1–3 a month.
+      Keep it, or set `false` for the AWS-managed `aws/rds` key, in
+      `terraform.tfvars`. It can't be changed once the instance exists
+      (deployment.md § Decide before the first apply). Disabling the key,
+      scheduling its deletion or changing its policy alarms (`kms.tf`).
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses

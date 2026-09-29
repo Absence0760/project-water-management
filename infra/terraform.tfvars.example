@@ -70,6 +70,11 @@ migrate_reserved_concurrency = 1
 # db_backup_retention_days    = 7
 # db_multi_az                 = false
 
+# The database's KMS key. Decide before the first apply: it can't be changed
+# on a live instance (docs/deployment.md § Decide before the first apply).
+# true (default): a customer-managed key, kms.tf; false: AWS-managed aws/rds.
+rds_customer_managed_key = true
+
 # Email (SES, ses.tf). Mail goes out as no-reply@<domain_name>.
 # DMARC starts at p=none; set a report mailbox, read a few weeks of reports,
 # then move to quarantine (docs/deployment.md § Email). Empty omits rua; a
