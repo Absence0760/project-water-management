@@ -3777,8 +3777,9 @@ read it before.
      **notes on how the input data were handled** (CHIRPS bias correction,
      rain treated as missing, accumulations spread, zero-rain runs, flat
      stretches). Then one line of **model checks** (`credibility`): the
-     self-checks, the plausibility findings, the WR2012 flag and the calibration
-     fit (called in-sample only when it is, below), each in words with a coloured edge and a link to its panel.
+     self-checks, the plausibility findings and the WR2012 flag, each in words
+     with a coloured edge and a link to its panel (not the calibration fit:
+     it has no verdict and the NSE card below says it, issue #177).
   2. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
      where the parameters came from), the **water balance** by water year
@@ -3885,16 +3886,15 @@ read it before.
   server refuses with `409`); the run header repeats the badge as a link to
   the section. Viewers see the status and the notice, no actions. The farm
   page farmers read it on is WP-2.6's (`routes/farm/`).
-- **Summary** (the "Run summary" region): it opens with one to three plain
+- **Summary** (the "Run summary" region): it opens with one or two plain
   sentences (`runs/runSentence.ts`, built only from the stored summary so they
   always agree with the cards): the river measure the cards lead with (Reserve
   rules met in X % of months at the headline site when there is a rule table,
   else the % of days below the pragmatic EWR at the outflow gauge), then the
   farms (how many got less than 95 % of their demand and the lowest one, or
-  "Every hydrological unit got at least 95 %"; left out when the run has no farms), then,
-  only when the run was scored against observed flow, the NSE and PBIAS with
-  PBIAS in `rating.ts`'s plain words (NSE unrated), "in-sample" only when the
-  parameters were fitted on those days, else with the reason in brackets. Then the headline cards give mean natural
+  "Every hydrological unit got at least 95 %"; left out when the run has no farms). The
+  calibration fit is left to the NSE and PBIAS cards (a sentence repeating
+  them was dropped, issue #177; the printable report draws the same cards). Then the headline cards give mean natural
   flow and simulated outflow in m³/s and Mm³/a, EWR days not met (when the
   project has a Reserve rule table, a **Reserve rules met** card comes first:
   the share of months met at the outlet, else the first site, with "X of Y
@@ -4865,13 +4865,17 @@ them scenarios).
 - **Scenario against its base** (`ScenarioCompare.svelte`): the latest run of
   the scenario against the base run *that run* was made on (so an older run
   of a rebased scenario is still compared with its own base), through
-  `GET /compare/runs`: headline results, the farms table and the per-node
+  `GET /compare/runs`: headline results (the water balance only, without
+  the Compare page's calibration and WR2012 tables: the scenario run is
+  scored against the real gauge, so its fit is no outcome of the what-if,
+  and an unbuilt dam would score "worse"; issue #177), the farms table and the per-node
   daily overlay (the compare page's `CompareOverlay` and `overlay.ts`, issue
   #8). A feature the scenario adds or removes shows against 0 in the run
   without it: a river-first farm's *Pumped from the river* series (the base
   drawn as zeros, "run B only") and farm column ("A: none (0)"), under
-  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab; for an
-  applicant, who has no workspace tabs, the `/compare` page). A note says when the changes were
+  [run-comparison.md § Series and metrics only one run has](./run-comparison.md#series-and-metrics-only-one-run-has); with **Open the full comparison** (the Compare runs tab). Only the
+  assessors see this section; an applicant gets a note instead
+  ([§ Applications](#applications-wp-33)). A note says when the changes were
   edited since that run. Under the comparison, the scenario run's
   **Validation statement**, folded shut (the same `ValidationPanel` as a
   run's Record group, § Runs & results).
@@ -5710,7 +5714,8 @@ published.
   (hidden without one) with the days-left line, or the no-stop-level
   wording; "Looking back", the model's card (dashed, neutral "Model: …"
   chip, never the notice's fills), a single link line under a `restricted`
-  notice; the last 12 months (inline SVG bars at the rendered width, a
+  notice and when the river asked for no cut, since its % would only repeat
+  the water-received card's (`cards.ts` `lookingBackFolds`, issue #177); the last 12 months (inline SVG bars at the rendered width, a
   summary sentence and a full table behind "Show the numbers"); last
   season; the farm on the river (counts, the outlet's last 30 days, the
   privacy sentence and "Who can see my hydrological unit", which loads the people by name

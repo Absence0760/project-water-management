@@ -1,14 +1,14 @@
 // How far to trust a run, read at the top of its summary: the run's warnings
 // split into what to check before relying on it and notes on how its data
 // were handled, and one line of model checks (self-checks, plausibility,
-// WR2012, the fit) each linking to its panel further down. An assessor and a
-// hydrologist both asked for this before the river results.
+// WR2012) each linking to its panel further down. An assessor and a
+// hydrologist both asked for this before the river results. The fit is not
+// one of them: it has no verdict and the NSE card says it (issue #177).
 import type { RunSummary } from '@water-management/engine';
 import { fmtNum } from '$lib/format/number';
 import { checksHeadline } from './checks';
 import { findings } from './plausibility';
 import { FLAG_LABEL } from './wr2012';
-import { calibrationSample } from '$lib/components/calibration/sample';
 
 /**
  * Warnings that report how the engine handled the input data, as it was set
@@ -41,7 +41,7 @@ export interface CredibilityItem {
 	href: string;
 }
 
-type CredibilityInput = Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012' | 'calibration'>;
+type CredibilityInput = Pick<RunSummary, 'verification' | 'plausibility' | 'wr2012'>;
 
 export function credibility(summary: CredibilityInput): CredibilityItem[] {
 	const out: CredibilityItem[] = [];
@@ -73,18 +73,5 @@ export function credibility(summary: CredibilityInput): CredibilityItem[] {
 			href: '#res-wr2012'
 		});
 	}
-	const cal = summary.calibration;
-	// "in-sample" only when the parameters were fitted on these days (issue #45).
-	const qualifier = calibrationSample(cal).qualifier;
-	out.push(
-		cal && cal.days > 0 && cal.nse != null
-			? {
-					label: 'Fit',
-					text: `NSE ${fmtNum(cal.nse, 2)} over ${fmtNum(cal.days)} observed days${qualifier ? ` (${qualifier})` : ''}`,
-					tone: 'none',
-					href: '#res-calibration'
-				}
-			: { label: 'Fit', text: 'not scored: no observed flow in the calibration window', tone: 'none', href: '#res-calibration' }
-	);
 	return out;
 }

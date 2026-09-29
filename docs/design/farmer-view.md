@@ -106,7 +106,7 @@ farmer meters and the one curtailment works in. The help entry says so.
 | --- | --- | --- |
 | Notice card: level, title, text, who and when | `run_publication.restriction_level` (`none`, `advisory`, `restricted`), `restriction_pct`, `notice` (by language, 081), `published_at` | Shown **first** whenever the level isn't `none`. The WUA writes the text; the app never writes restriction wording itself. With no text, the percentage alone reads as a cut, "Set by the WUA: a 20 % cut in registered water use.", the same words as the alert email (issue #51), never "20 % of registered use", which reads as an allowance |
 | "No restriction from the WUA" (success tokens, check icon) | level `none` | The official answer stays first and loud even when there's nothing to say (§11 F8) |
-| Model card "Looking back: 1 Oct to 10 Jan", chip "Model: watch", "If you had pumped less on the days the river needed it, you would have had about 83 % of the water you needed." | **E7**: (`CF.suppliedM3Day` − \|`CF.ewrSupplyCutM3Day`\|) ÷ `CF.demandM3Day` [(3 179 − 121) ÷ 3 691 = 83 %] | whole %. Band §6.2. Past tense. Under a `restricted` notice the card collapses to one link line, so only the WUA's percentage competes for attention |
+| Model card "Looking back: 1 Oct to 10 Jan", chip "Model: watch", "If you had pumped less on the days the river needed it, you would have had about 83 % of the water you needed." | **E7**: (`CF.suppliedM3Day` − \|`CF.ewrSupplyCutM3Day`\|) ÷ `CF.demandM3Day` [(3 179 − 121) ÷ 3 691 = 83 %] | whole %. Band §6.2. Past tense. Under a `restricted` notice the card collapses to one link line, so only the WUA's percentage competes for attention; so it does when the river asked for no cut, as its % then repeats the Supply card's (issue #177) |
 | "The model's estimate, not an official restriction" | fixed text (D10) | Always on the model card |
 | "Why?" step 1: even share 89 %, you 86 %, "about 118 m³ a day less" | `CF.equitableFraction` (K_tot), `CF.fractionSupplied`, `CF.reduceGainM3Day` (N) | Only at ≥ `k` other holders (§10.3). "It isn't part of the 83 %." Never worded as water to gain |
 | "Why?" step 2: "below its reserve at Sandspruit Outlet on 52 days and at Melkhout Gauge on 44", "water taken upstream was part of the reason on every one of those days" | `ewrSites[].daysNotMet` over the season for the sites the farm is upstream of; the charged/natural split per day (E5) | "Part of the reason" only on days with a charged part; otherwise "on N of them only because of low rain" |
@@ -268,7 +268,7 @@ roadmap's "desktop is the same column"). Cards, top to bottom:
 5. **Your dam** (none without a dam), with the days-left line and a link to
    the dam screen.
 6. **Looking back** (the model card: dashed border, neutral "Model: watch"
-   chip), linking to "Why?". A single link line under a `restricted` notice.
+   chip), linking to "Why?". A single link line under a `restricted` notice, and when the river asked for no cut (issue #177).
 7. **Next 14 days** (hidden until WP-2.12).
 8. **Last 12 months** chart, with "Show the numbers".
 9. **Compared with last season.**

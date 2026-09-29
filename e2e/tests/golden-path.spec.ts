@@ -267,8 +267,12 @@ test('A-pan and EWR, entered in Settings, feed the run’s summary, and the run 
 
 	const summary = runSummary(page);
 	await expect(summary.getByRole('heading', { name: 'Catchment' })).toBeVisible();
-	// The plain-words summary above the cards: no rule table, so the pragmatic EWR at the gauge, then the farms and the fit.
-	await expect(summary.getByText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day).* hydrological units? got .* Calibration fit over [\d ]+ observed days \(parameters not fitted\): NSE/)).toBeVisible();
+	// The plain-words summary above the cards: no rule table, so the pragmatic EWR at the gauge, then the farms. The fit is
+	// left to the NSE and PBIAS cards below it (issue #177).
+	const lede = summary.getByText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days|met the EWR on every day)/);
+	await expect(lede).toHaveText(/^Flow at the outflow gauge (was below the EWR on [\d.]+% of days \([\d\s]+ days\)|met the EWR on every day of the run)\. .*hydrological units? got .*\.$/);
+	await expect(lede).not.toContainText('Calibration');
+	await expect(summary.getByText('Calibration NSE', { exact: true })).toBeVisible();
 
 	// --- reload: the run is stored ---------------------------------------------------
 	await page.reload();

@@ -31,7 +31,6 @@ const cal = (over: Partial<CalibrationStats> = {}): CalibrationStats => ({
 const base = (over: Partial<SentenceInput> = {}): SentenceInput => ({
 	farms: [farm('Ridge farm', 1), farm('Middle farm', 0.97), farm('River farm', 0.96)],
 	catchment: catchment(73, 0.1),
-	calibration: null,
 	...over
 });
 
@@ -110,37 +109,20 @@ describe('runSentence: the farms', () => {
 });
 
 describe('runSentence: calibration', () => {
-	it('is left out without calibration, or with no observed day or statistic', () => {
-		expect(runSentences(base())).toHaveLength(2);
-		expect(runSentences(base({ calibration: cal({ days: 0 }) }))).toHaveLength(2);
-		expect(runSentences(base({ calibration: cal({ nse: null, pbias: null }) }))).toHaveLength(2);
-	});
-
-	it('gives NSE and PBIAS as the cards do, PBIAS in the app’s plain words, NSE unrated', () => {
-		expect(runSentences(base({ calibration: cal({ fitStatus: 'fitted' }) }))[2]).toBe(
-			'Calibration fit, in-sample over 730 observed days: NSE 0.72, PBIAS +3.1% (model under-estimates total flow).'
-		);
-		expect(runSentences(base({ calibration: cal({ nse: -0.4, pbias: -12, fitStatus: 'fitted' }) }))[2]).toBe(
-			'Calibration fit, in-sample over 730 observed days: NSE -0.40, PBIAS -12.0% (model over-estimates total flow).'
-		);
-		expect(runSentences(base({ calibration: cal({ pbias: null }) }))[2]).toMatch(/: NSE 0\.72\.$/);
-	});
-
-	it('says in-sample only when the parameters were fitted on these days (issue #45)', () => {
-		expect(runSentences(base({ calibration: cal({ fitStatus: 'notFitted' }) }))[2]).toMatch(/^Calibration fit over 730 observed days \(parameters not fitted\): NSE 0\.72/);
-		expect(runSentences(base({ calibration: cal({ fitStatus: 'edited' }) }))[2]).toMatch(/\(parameters edited since the fit\):/);
-		// A run made before the status was recorded claims neither.
-		expect(runSentences(base({ calibration: cal() }))[2]).toMatch(/^Calibration fit over 730 observed days: NSE/);
-		for (const s of ['notFitted', 'edited', 'otherPeriod', undefined] as const) {
-			expect(runSentences(base({ calibration: cal({ fitStatus: s }) }))[2]).not.toMatch(/in-sample/);
+	it('leaves the fit to the NSE and PBIAS cards (issue #177)', () => {
+		// A stored summary carries its calibration; the sentence never repeats it.
+		for (const c of [cal({ fitStatus: 'fitted' }), cal({ fitStatus: 'notFitted' }), cal()]) {
+			const summary = { ...base(), calibration: c };
+			expect(runSentences(summary)).toHaveLength(2);
+			expect(runSentence(summary)).not.toMatch(/Calibration|NSE|PBIAS/);
 		}
 	});
 });
 
 describe('runSentence', () => {
-	it('joins the sentences in order: river, farms, calibration', () => {
-		expect(runSentence(base({ farms: [farm('A', 1), farm('B', 0.5)], calibration: cal({ fitStatus: 'fitted' }) }))).toBe(
-			'Flow at the outflow gauge was below the EWR on 10.0% of days (73 days). 1 of 2 hydrological units got less than 95% of its demand: B at 50.0%. Calibration fit, in-sample over 730 observed days: NSE 0.72, PBIAS +3.1% (model under-estimates total flow).'
+	it('joins the sentences in order: river, farms', () => {
+		expect(runSentence(base({ farms: [farm('A', 1), farm('B', 0.5)] }))).toBe(
+			'Flow at the outflow gauge was below the EWR on 10.0% of days (73 days). 1 of 2 hydrological units got less than 95% of its demand: B at 50.0%.'
 		);
 	});
 });

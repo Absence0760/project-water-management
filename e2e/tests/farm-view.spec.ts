@@ -453,3 +453,37 @@ test('many farms in one catchment fold the switcher; the notice stays on the fir
 	await expectNoSidewaysScroll(fp);
 	await expectNoViolations(fp);
 });
+
+// Issue #177: with no cut asked of the farm, the model's "you had about X %" only repeats the Supply
+// card, so "Looking back" folds to its link line, as under a restriction. The seeded Vaalbank (the
+// first test) is the positive control: the river asked it to pump less, and its card shows.
+test('the model card folds to its link line when the river asked for no cut', async ({ page, owner, signIn: signInAs }) => {
+	void owner;
+	const req = page.context().request;
+	const project = await createProject(req, 'No cut catchment');
+	const model = sampleModel();
+	await putModel(req, project.id, model);
+	// No pragmatic EWR, so the river never asks anyone to pump less.
+	await updateSettings(req, project.id, { apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110], ewrPragmaticM3PerDay: Array(12).fill(0) });
+	await putSeries(req, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: syntheticRain(120) });
+	await putSeries(req, project.id, { kind: 'flow_observed_m3s', unit: 'm³/s', startDate: '2021-10-01', values: syntheticFlow(120) });
+	const runId = await createRun(req, project.id, 'Baseline');
+	const pub = await req.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId, restriction: { level: 'none' } } });
+	expect(pub.status(), await pub.text()).toBe(201);
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	const farmer = await signInAs('No-cut farmer');
+	const add = await req.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } });
+	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, project.id);
+	// The premise, as the farmer's own view has it: no day charged to the farm.
+	const view = (await (await farmer.page.request.get(`${API_URL}/projects/${project.id}/farm/${upper.id}`)).json()) as { farm: { river: { chargedDays: number } } };
+	expect(view.farm.river.chargedDays).toBe(0);
+
+	const fp = farmer.page;
+	await fp.setViewportSize(PHONE);
+	await fp.goto(`/farm/${project.id}`);
+	await expect(fp.getByRole('region', { name: 'Water you received this season' })).toBeVisible();
+	await expect(fp.getByRole('link', { name: 'The model’s look back and what you can do' })).toHaveAttribute('href', new RegExp(`/farm/${project.id}/why`));
+	await expect(fp.getByRole('region', { name: /^Looking back/ })).toHaveCount(0);
+	await expectNoViolations(fp);
+});

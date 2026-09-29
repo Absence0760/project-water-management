@@ -120,7 +120,11 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 	await page.getByRole('button', { name: 'Run scenario' }).click();
 	const compare = page.getByRole('region', { name: 'Scenario against its base' });
 	await expect(compare.getByText(/^A: Baseline \(base, run .+\) · B: Upper dam \+20 % \(this scenario, run .+\)\. Every change is B − A\.$/)).toBeVisible();
-	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
+	const headline = compare.getByRole('region', { name: 'Headline results' });
+	await expect(headline.getByRole('heading', { name: 'Water balance' })).toBeVisible();
+	// The water balance only: a what-if's fit against the real gauge is no outcome of the scenario (issue #177).
+	await expect(headline.getByRole('heading', { name: 'Calibration against observed flow' })).toHaveCount(0);
+	await expect(headline.getByRole('heading', { name: /^WR2012 check/ })).toHaveCount(0);
 	const overlay = compare.getByRole('region', { name: 'Daily series' });
 	await overlay.getByLabel('Node').selectOption({ label: 'Upper farm' });
 	await overlay.getByLabel('Series').selectOption('dam_storage');

@@ -1,15 +1,17 @@
 <script lang="ts">
-	// Headline numbers for both runs with the change B − A. Compare runs passes
-	// `water={false}`: its What changes table carries the water balance rows
-	// (compare/summary.ts outcomeRows, issue #175), so only the calibration and
-	// WR2012 tables show here.
+	// Headline numbers for both runs with the change B − A, in two optional
+	// halves. `water={false}`: Compare runs, whose What changes table carries
+	// the water balance rows (compare/summary.ts outcomeRows, issue #175).
+	// `fit={false}`: a scenario against its base, whose run is scored against
+	// the *real* gauge, so its NSE is not an outcome of the what-if
+	// (ScenarioCompare, issue #177).
 	import { SUPPLY_TARGET, type MetricDelta, type RunComparison } from '@water-management/engine';
 	import { fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
 	import { calibrationSample } from '$lib/components/calibration/sample';
 
-	let { comparison, water: showWater = true }: { comparison: RunComparison; water?: boolean } = $props();
+	let { comparison, water: showWater = true, fit = true }: { comparison: RunComparison; water?: boolean; fit?: boolean } = $props();
 
 	interface Row {
 		label: string;
@@ -90,30 +92,32 @@
 	</div>
 {/snippet}
 
-<div class="cols" class:one={!showWater}>
+<div class="cols" class:one={!showWater || !fit}>
 	{#if showWater}
 		<div>
 			<h3>Water balance</h3>
 			{@render table(water, 'Headline water balance for both runs')}
 		</div>
 	{/if}
-	<div>
-		<h3>Calibration against observed flow</h3>
-		{#if calibration.length}
-			<p class="muted small in-sample">
-				{sampleCaption[0]!.toUpperCase() + sampleCaption.slice(1)}: in-sample means scored on the days the parameters were fitted
-				on. The validation scores of the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the
-				EWR test against observed flow</a> below is a check the fit didn't optimise.
-			</p>
-			{@render table(calibration, `Calibration statistics for both runs, ${sampleCaption}`)}
-		{:else}
-			<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
-		{/if}
-		{#if wr2012.length}
-			<h3>WR2012 check <span class="u">· simulated natural ÷ scaled WR2012</span></h3>
-			{@render table(wr2012, 'WR2012 check for both runs')}
-		{/if}
-	</div>
+	{#if fit}
+		<div>
+			<h3>Calibration against observed flow</h3>
+			{#if calibration.length}
+				<p class="muted small in-sample">
+					{sampleCaption[0]!.toUpperCase() + sampleCaption.slice(1)}: in-sample means scored on the days the parameters were fitted
+					on. The validation scores of the fit behind each run's parameters are under Fit and validation; <a href="#ewr-agreement-h">the
+					EWR test against observed flow</a> below is a check the fit didn't optimise.
+				</p>
+				{@render table(calibration, `Calibration statistics for both runs, ${sampleCaption}`)}
+			{:else}
+				<p class="muted">Neither run has observed flow overlapping its simulation period.</p>
+			{/if}
+			{#if wr2012.length}
+				<h3>WR2012 check <span class="u">· simulated natural ÷ scaled WR2012</span></h3>
+				{@render table(wr2012, 'WR2012 check for both runs')}
+			{/if}
+		</div>
+	{/if}
 </div>
 
 <style>
