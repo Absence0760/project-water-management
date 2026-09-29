@@ -13,8 +13,9 @@
 # message costs at most one schedule interval, never a job. A message the
 # worker fails on 5 times lands in the DLQ, which alarms.
 #
-# The worker is in the private VPC (it talks to Postgres) and reaches SQS
-# through ONE interface endpoint whose policy admits only these two roles and
+# The worker is in the private VPC (it talks to Postgres), reads its runtime
+# secret through the Secrets Manager endpoint (network.tf, secrets.tf), and
+# reaches SQS through ONE interface endpoint whose policy admits only these two roles and
 # this one queue: no NAT. The API reaches it through the same endpoint to
 # send wake-ups.
 #
@@ -158,15 +159,15 @@ resource "aws_lambda_function" "worker" {
 
   environment {
     variables = {
-      DATABASE_URL        = local.worker_database_url
-      DB_POOL_MAX         = "2"
-      NODE_EXTRA_CA_CERTS = local.rds_ca_path
-      # A re-run job stores a run, which the backend stamps under a key derived
-      # from the session secret (backend/src/runs/stamp.ts, docs/security.md
-      # § Run stamps). The worker never signs or reads a session.
-      AUTH_JWT_SECRET = local.auth_jwt_secret
-      JOB_TRANSPORT   = "sqs"
-      JOBS_QUEUE_URL  = aws_sqs_queue.jobs.url
+      # DATABASE_URL, AUTH_JWT_SECRET (run stamps) and ALERTS_TOKEN_SECRET
+      # are in the runtime secret, never here: this block is readable by any
+      # GetFunctionConfiguration caller (secrets.tf).
+      RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["worker"].arn
+      RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["worker"].version_id
+      DB_POOL_MAX            = "2"
+      NODE_EXTRA_CA_CERTS    = local.rds_ca_path
+      JOB_TRANSPORT          = "sqs"
+      JOBS_QUEUE_URL         = aws_sqs_queue.jobs.url
       # Data feeds (feeds.tf): no internet here, so fetches go to the fetcher.
       FEED_FETCHER             = "sqs"
       FETCH_REQUESTS_QUEUE_URL = aws_sqs_queue.fetch_requests.url
@@ -181,12 +182,11 @@ resource "aws_lambda_function" "worker" {
       SITE_URL                  = local.site_origin
       SES_CONFIGURATION_SET     = aws_sesv2_configuration_set.main.configuration_set_name
       # Alert emails (WP-2.13, docs/deployment.md § Alerts). Only the worker
-      # signs unsubscribe links; the API checks a link by its hash alone.
-      # Rotating the secret (taint the resource) breaks every link in mails
-      # already sent. ALERTS_ENABLED is the kill switch (runbook: alert storm).
-      ALERTS_TOKEN_SECRET = random_password.alerts_token_secret.result
-      ALERTS_ENABLED      = var.alerts_enabled ? "true" : "false"
-      ALERTS_DAILY_CAP    = "5"
+      # signs unsubscribe links (ALERTS_TOKEN_SECRET, in its runtime secret);
+      # the API checks a link by its hash alone. ALERTS_ENABLED is the kill
+      # switch (runbook: alert storm).
+      ALERTS_ENABLED   = var.alerts_enabled ? "true" : "false"
+      ALERTS_DAILY_CAP = "5"
       # SES bounces and complaints (ses.tf): a record is read as one only
       # when it came from this queue (lambda-worker.ts fromMailEventsQueue).
       MAIL_EVENTS_QUEUE_ARN = aws_sqs_queue.mail_events.arn
@@ -197,7 +197,9 @@ resource "aws_lambda_function" "worker" {
     aws_cloudwatch_log_group.worker,
     aws_iam_role_policy_attachment.worker_lambda_vpc,
     aws_iam_role_policy.worker_lambda,
+    aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.sqs,
+    aws_vpc_endpoint.secretsmanager,
   ]
 
   lifecycle {
@@ -276,7 +278,7 @@ resource "aws_lambda_permission" "worker_tick" {
 
 resource "aws_security_group" "worker_lambda" {
   name        = "${local.project}-worker-lambda"
-  description = "Worker Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
+  description = "Worker Lambda ENIs: egress to Postgres and the SQS, SES and Secrets Manager endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-worker-lambda" }
 }

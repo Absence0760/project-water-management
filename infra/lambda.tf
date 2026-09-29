@@ -3,7 +3,9 @@
 # third, the background-job worker, lives in jobs.tf):
 #
 #   - `water-management-backend` — the Hono API (backend/src/lambda.ts).
-#     Connects as the RLS-bound `water_app` role. Exposed only through the
+#     Connects as the RLS-bound `water_app` role. Its secrets (the session
+#     key, DATABASE_URL, the CloudFront header) come from its runtime secret
+#     in Secrets Manager at cold start, never its environment (secrets.tf). Exposed only through the
 #     Function URL, which only CloudFront reaches in practice (shared secret).
 #   - `water-management-migrate` — applies backend/migrations as the schema
 #     owner and creates / re-passwords `water_app`
@@ -81,9 +83,11 @@ resource "aws_iam_role" "lambda" {
 }
 
 # Logs + the EC2 ENI permissions a VPC Lambda needs. The API reads its config
-# from environment variables; its only AWS calls are SES SendEmail, granted
-# separately and scoped to one identity + From address (ses.tf), and SQS
-# SendMessage to the jobs queue (jobs.tf).
+# from environment variables and its secrets from its own runtime secret
+# (GetSecretValue on that one ARN, secrets.tf, through the endpoint in
+# network.tf); its other AWS calls are SES SendEmail, granted separately and
+# scoped to one identity + From address (ses.tf), and SQS SendMessage to the
+# jobs queue (jobs.tf).
 resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   role       = aws_iam_role.lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
@@ -116,12 +120,14 @@ resource "aws_lambda_function" "backend" {
 
   environment {
     variables = {
-      DATABASE_URL             = local.database_url
-      AUTH_JWT_SECRET          = local.auth_jwt_secret
-      CLOUDFRONT_SHARED_SECRET = random_password.cloudfront_shared_secret.result
-      ALLOWED_ORIGINS          = local.site_origin
-      COOKIE_SECURE            = "true"
-      NODE_EXTRA_CA_CERTS      = local.rds_ca_path
+      # DATABASE_URL, AUTH_JWT_SECRET and CLOUDFRONT_SHARED_SECRET are in the
+      # runtime secret, never here: this block is readable by any
+      # GetFunctionConfiguration caller (secrets.tf).
+      RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["api"].arn
+      RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["api"].version_id
+      ALLOWED_ORIGINS        = local.site_origin
+      COOKIE_SECURE          = "true"
+      NODE_EXTRA_CA_CERTS    = local.rds_ca_path
 
       # Email (ses.tf, docs/deployment.md § Email). MAIL_TRANSPORT must be set:
       # the default `log` sends nothing.
@@ -146,8 +152,10 @@ resource "aws_lambda_function" "backend" {
     aws_iam_role_policy_attachment.lambda_vpc,
     aws_iam_role_policy.lambda_ses,
     aws_iam_role_policy.lambda_jobs_send,
+    aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.ses,
     aws_vpc_endpoint.sqs,
+    aws_vpc_endpoint.secretsmanager,
   ]
 
   lifecycle {
@@ -216,9 +224,9 @@ resource "aws_iam_role_policy_attachment" "migrate_lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-# Read the RDS-managed master secret — and nothing else. The secret is
-# encrypted with the AWS-managed aws/secretsmanager key, which needs no
-# explicit kms:Decrypt grant.
+# Read the RDS-managed master secret. The secret is encrypted with the
+# AWS-managed aws/secretsmanager key, which needs no explicit kms:Decrypt
+# grant. Its only other read is its own runtime secret (secrets.tf).
 data "aws_iam_policy_document" "migrate_lambda" {
   statement {
     sid       = "ReadRdsMasterSecret"
@@ -263,18 +271,21 @@ resource "aws_lambda_function" "migrate" {
 
   environment {
     variables = {
-      DB_HOST             = aws_db_instance.main.address
-      DB_PORT             = tostring(aws_db_instance.main.port)
-      DB_NAME             = aws_db_instance.main.db_name
-      MASTER_SECRET_ARN   = aws_db_instance.main.master_user_secret[0].secret_arn
-      WATER_APP_PASSWORD  = local.db_app_password
-      NODE_EXTRA_CA_CERTS = local.rds_ca_path
+      DB_HOST           = aws_db_instance.main.address
+      DB_PORT           = tostring(aws_db_instance.main.port)
+      DB_NAME           = aws_db_instance.main.db_name
+      MASTER_SECRET_ARN = aws_db_instance.main.master_user_secret[0].secret_arn
+      # WATER_APP_PASSWORD is in the runtime secret (secrets.tf), never here.
+      RUNTIME_SECRET_ARN     = aws_secretsmanager_secret.runtime["migrate"].arn
+      RUNTIME_SECRET_VERSION = aws_secretsmanager_secret_version.runtime["migrate"].version_id
+      NODE_EXTRA_CA_CERTS    = local.rds_ca_path
     }
   }
 
   depends_on = [
     aws_cloudwatch_log_group.migrate,
     aws_iam_role_policy_attachment.migrate_lambda_vpc,
+    aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.secretsmanager,
   ]
 

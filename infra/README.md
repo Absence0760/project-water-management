@@ -17,7 +17,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                                    deploy-backend.yml ──invoke──► migrate Lambda ─────┤
                                                                    │ owner creds       ▼
                                                    Secrets Manager ◄┘ (VPC endpoint)  RDS PostgreSQL 17
-                                                   (RDS-managed master secret)        db.t4g.micro, single-AZ
+                                                   (RDS master; runtime secrets)      db.t4g.micro, single-AZ
                                                                                       ▲
    API ──SendMessage (SQS VPC endpoint)──► SQS jobs ──► worker Lambda ────────────────┤ water_app, RLS as
    EventBridge rate(5 minutes) ─────────────────────────► (jobs.tf)                      the job's acting user
@@ -31,6 +31,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
                      (each queue: a DLQ after 5 receives; alarms)
 ```
 
+- **Runtime secrets.** The API, worker and migrate Lambdas each read their own
+  Secrets Manager secret once per cold start (through the same endpoint);
+  no secret is in any Lambda's environment ([§ Secrets](#secrets-estate-pattern-private-infra-secrets--sops-rds-managed-master)).
 - **Single origin.** The browser only calls the site's own domain. `/api/*` is
   proxied by CloudFront to the Lambda Function URL, so the session cookie is
   first-party and CORS never comes into play (the Function URL has no CORS
@@ -55,8 +58,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert
   emails; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
-  (the migrate Lambda only; its endpoint policy allows reading the RDS master
-  secret and nothing else) and **SQS** (from the API and the worker; its
+  (the migrate Lambda's RDS master secret, and the API, worker and migrate
+  Lambdas' runtime secrets; its endpoint policy lets each role read only its
+  own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
   endpoint policy, `jobs.tf`, names only those two roles and six queues: the
   API may only send to `jobs`; the worker uses `jobs`, sends
   `fetch-requests` and `render-requests`, and consumes `ingest-results`,
@@ -149,8 +153,8 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | --- | --- |
 | `main.tf` | Versions, S3 backend (partial), providers (`aws`, `aws.us_east_1`), tags |
 | `variables.tf` | Inputs. Only `aws_region`, `route53_zone_id` and `github_repo` are required |
-| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`) |
-| `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group |
+| `secrets.tf` | `data "sops_file"` → `../../infra-secrets/water-management/prod.sops.yaml` (override with `secrets_file`); the API, worker and migrate Lambdas' runtime secrets in Secrets Manager, each role's read of its own |
+| `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
@@ -208,9 +212,27 @@ scale. An alarm fires at 60 connections.
 | Secret | Source | In Terraform state? |
 | --- | --- | --- |
 | RDS master (`water`, schema owner) | `manage_master_user_password`: RDS generates it, stores it in Secrets Manager and rotates it (every 7 days by default) | **No.** Only the migrate Lambda reads it, at run time |
-| `water_app` password | sops `db_app_password` → API `DATABASE_URL` + migrate `WATER_APP_PASSWORD` | Yes |
-| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → API and worker env (the worker's re-run job stamps the runs it stores) | Yes |
-| CloudFront shared secret | `random_password` | Yes |
+| `water_app` password | sops `db_app_password` → the API's and worker's runtime secrets (`DATABASE_URL`) + the migrate Lambda's (`WATER_APP_PASSWORD`) | Yes |
+| `AUTH_JWT_SECRET` | sops `auth_jwt_secret` → the API's and worker's runtime secrets (the worker's re-run job stamps the runs it stores) | Yes |
+| CloudFront shared secret | `random_password` → the API's runtime secret, and CloudFront's origin header | Yes |
+| Alert unsubscribe-token secret | `random_password` → the worker's runtime secret | Yes |
+
+**No secret sits in a Lambda's environment** (issue #126). Environment
+variables come back in plain text from `lambda:GetFunctionConfiguration`,
+which the deploy role holds and AWS's `ReadOnlyAccess` grants, so any reader
+could have forged a session. Instead `secrets.tf` gives each of the API,
+worker and migrate Lambdas its own Secrets Manager secret
+(`water-management/runtime/<role>`), a JSON object with exactly the keys that
+Lambda uses, and its environment holds only `RUNTIME_SECRET_ARN` and
+`RUNTIME_SECRET_VERSION`. `backend/src/config/runtimeSecrets.ts` reads it once
+per cold start, before the config checks, and refuses to start on a missing
+or extra key. One secret per Lambda rather than one shared, so each role reads
+only what it uses: the worker never holds the CloudFront secret, the API never
+holds the unsubscribe key, migrate holds only the password it sets. The fetcher
+and renderer hold no secret. The residual copy outside Secrets Manager is the
+CloudFront secret in the distribution's origin header, readable with
+`cloudfront:GetDistributionConfig`; it only lets a caller past the WAF to the
+Function URL, where the app's own auth still applies.
 
 This follows the estate. project-flakey uses the same RDS-managed master plus
 app secrets from sops. The state bucket is SSE-encrypted, private to this
@@ -219,11 +241,10 @@ sops protects secrets in git, not in state. The master is kept out of state
 because it is the one credential that bypasses RLS. The cost of that choice is
 the Secrets Manager VPC endpoint (~$7.30/month). The alternative, a
 sops-supplied master password in the migrate Lambda's env, would save that but
-put the owner credential in state and in the Lambda config. If you ever want
-to go further, the API could read its two secrets from Secrets Manager at cold
-start (populated write-only from `ephemeral "sops_file"`), which would take
-them out of state too. That needs an app change and endpoint access from the
-API security group.
+put the owner credential in state and in the Lambda config. The runtime
+secrets now share that endpoint. To go further, the secret versions could be
+written write-only (`secret_string_wo` from an `ephemeral "sops_file"`), which
+would take the sops values out of state too.
 
 The migrate Lambda sets `water_app`'s password as a **SCRAM-SHA-256
 verifier** computed in the Lambda, so the plaintext never reaches Postgres or
@@ -308,14 +329,14 @@ Idle to light use, on-demand, us-east-1:
 | ECR: the renderer image (~0.7 GB compressed; up to 10 releases kept, mostly shared layers) | ~0.10–0.30 |
 | S3 reports bucket (PDFs of ~1 MB, 7 days) | ~0 |
 | SES sending ($0.10 / 1,000 emails) | ~0 |
-| Secrets Manager (RDS master secret) | 0.40 |
+| Secrets Manager (the RDS master secret + the API, worker and migrate runtime secrets, `secrets.tf`; reads are one per cold start, $0.05 / 10,000) | 1.60 |
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
 | CloudWatch: 34 alarms (incl. the CloudFront request-flood and WAF blocked-requests alarms in us-east-1, the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.40 |
 | Budgets (monthly + daily: an account's first two are free) and Cost Anomaly Detection (free) | 0 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
-| **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
+| **Total** | **≈ $51** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20, the runtime secrets $1.20) |
 
 **Request charges have no ceiling.** Every request the WAF allows costs WAF
 $0.60/M plus CloudFront $0.010 per 10k HTTPS ($1.00/M at US/EU edges, ~$2.20/M
@@ -501,6 +522,14 @@ Claude does not run any of these, and none of them print a secret. Replace
     "rendering".
 
 ### Rotating secrets
+
+Every secret below reaches its Lambdas through their runtime secrets
+(`secrets.tf`). An apply that changes one writes a new secret version, which
+changes `RUNTIME_SECRET_VERSION` in each affected Lambda's configuration, so
+every running instance is replaced by a cold start that reads the new value:
+there is no separate restart step. A value changed by hand in the console is
+**not** picked up (each Lambda reads the version Terraform pinned); change it
+at its source and apply instead.
 
 - **`db_app_password`:** edit it with sops, apply, and invoke the migrate
   Lambda straight away. The API fails DB logins until you do:
