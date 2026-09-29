@@ -40,6 +40,9 @@ function runSensitivity(job: SensitivityJob) {
 }
 
 self.onmessage = (e: MessageEvent<FitRequest | EnsembleJob | SensitivityJob>) => {
+	// A dedicated worker only hears the page that made it (its messages carry
+	// an empty origin); refuse anything that names another origin.
+	if (e.origin && e.origin !== self.location.origin) return;
 	const req = e.data;
 	if ('kind' in req) return req.kind === 'sensitivity' ? runSensitivity(req) : runJob(req);
 	let last = 0;
