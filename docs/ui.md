@@ -5524,14 +5524,22 @@ exists, says so with a link to Runs & results.
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, then four static groups, *Start here*,
+(`help/HelpNav.svelte`: the overview, then four groups, *Start here*,
 *How it works*, *How to* and *Reference*, the last the glossary's index and
 one link per topic) marks the page you're on (`aria-current`). Each group's
 name is a heading (`h2`, not a link) and names its list; its links are
-indented under a thin rule, so a group reads as a block (issue #162). The
-contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
-against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window). The column fits the window exactly
+indented under a thin rule, so a group reads as a block (issue #162). One
+group shows its pages at a time: the heading holds a disclosure button
+(`aria-expanded`, a chevron), the group holding the page you're on opens by
+itself as you move between pages, and opening another closes it (on the
+overview and search the last one opened stays open). With all four open the
+list was ~1180 px tall, so the sticky column scrolled inside itself at
+1440×960 and 1280×800; with one open it is ~570 px at most and fits both
+(`help.spec.ts` checks each group, opened from the keyboard, and that together
+they reach every link). The contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
+against the app sidebar, beside the text, sticky while you read, scrolling on their own only in a
+window shorter than the overview plus the longest group (~620 px), where the alternative is
+clipping links. The column fits the window exactly
 (the page's top gutter above it and below it), and the reading space at the end of a long page belongs
 to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
 guide) doesn't scroll. They

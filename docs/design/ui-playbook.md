@@ -171,6 +171,15 @@ section it belongs to, with the example that taught it.
   it a heading with its links indented under a rule. A contents list that
   grew a nested list of the terms on screen (three levels, moving while you
   read) was replaced by one page per topic and search (issue #162).
+- **A sticky side menu fits the window by showing less, not by scrolling.**
+  Help's contents listed all four groups' 30 pages, ~1180 px, in a sticky
+  column capped at the window's height, so it scrolled inside itself at
+  1440×960 and 1280×800: a second scrollbar beside the page's, with the
+  lower groups out of sight. Show one group's pages at a time (the heading a
+  disclosure button, the current page's group open by itself, opening one
+  closes the rest) so the column's tallest state fits the smallest supported
+  window; keep `overflow-y: auto` only as the fallback for a window shorter
+  than that, never a scrollbar that hides links (`help.spec.ts`).
 - **Position the box that scrolls.** A list that scrolls inside its card
   must be `position: relative` (or otherwise positioned) when anything
   inside it is absolutely positioned. The Projects list fitted its card to
