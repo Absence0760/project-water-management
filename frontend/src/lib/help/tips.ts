@@ -696,6 +696,13 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.qualityFlags']
 	},
 	{
+		id: 'calibration-rules',
+		term: 'Calibration rules (automated calibration)',
+		short: 'Rules saved before any fit is seen: which years to leave out, which fits to try and which one to keep. The fit then picks itself.',
+		category: 'fit',
+		fields: ['settings.calibrationRules']
+	},
+	{
 		id: 'fit-record',
 		term: 'Fit record',
 		short: 'What “Apply to form” stores with fitted parameters: how the fit was made and how it scored on days it never saw.',

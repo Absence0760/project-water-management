@@ -4,6 +4,9 @@
 	// quality flags' Save blocker (`error`) is set once its fields load: nothing can be edited before.
 	const loadQualityFlags = () => import('./QualityFlagsFields.svelte');
 	const loadFlowGapFill = () => import('./FlowGapFillFields.svelte');
+	// Automated calibration's rules and run (issue #153): their own chunks, for the same reason.
+	const loadCalibrationRules = () => import('./CalibrationRulesFields.svelte');
+	const loadAutoFit = () => import('$lib/components/calibration/AutoFitPanel.svelte');
 </script>
 
 <script lang="ts">
@@ -183,9 +186,10 @@
 	const outlookErr = $derived(outlookError(s.outlook));
 	let wr2012Error = $state<string | null>(null);
 	let qualityFlagsErr = $state<string | null>(null);
+	let rulesErr = $state<string | null>(null);
 	let reserveError = $state<string | null>(null);
 	const blocked = $derived(
-		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
+		!!dateError || !!calWindowError || !!exclusionsError || !!qualityFlagsErr || !!rulesErr || !!zeroRainError || !!fitPeriodError || !!rainSourceError || !!peError || !!arealError || !!reportError || !!dqError || !!wr2012Error || !!reserveError || !!autoError || !!outError || !!outlookErr
 	);
 	// What blocks Save, by group, so the save bar can link to each one.
 	const blockers = $derived(
@@ -193,6 +197,7 @@
 			{ id: 'set-record', message: calWindowError },
 			{ id: 'set-record', message: exclusionsError },
 			{ id: 'set-record', message: qualityFlagsErr },
+			{ id: 'set-fit', message: rulesErr },
 			{ id: 'set-rain', message: fitPeriodError },
 			{ id: 'set-rain', message: zeroRainError },
 			{ id: 'set-rain', message: rainSourceError },
@@ -239,8 +244,12 @@
 	}
 
 	/** Writes a fit's parameters, and its record, into the form (unsaved). */
-	function applyFit(report: CalibrationReport, record: FitRecord) {
-		s = { ...applyReport(s, report), fitRecord: record };
+	// The rules as saved: automated calibration runs only on these (issue #153).
+	const savedRules = $derived((JSON.parse(saved) as ProjectSettings).calibrationRules);
+
+	/** A fit into the form with its record, and (automated calibration) the pan coefficient it was fitted under. */
+	function applyFit(report: CalibrationReport, record: FitRecord, pan: { values: number[]; source: string } | null = null) {
+		s = { ...applyReport(s, report), fitRecord: record, ...(pan ? { panCoefficient: [...pan.values], panCoefficientSource: pan.source } : {}) };
 		if (report.model === 'gr4j' && s.gr4j.x2 !== 0) x2Open = true;
 	}
 
@@ -855,6 +864,26 @@
 				apanDaily={apanNow}
 				observedOrigin={observedOrigins ? (observedOrigins[s.fitRecord.flowKind as CalibrationFlowKind] ?? null) : undefined}
 			/>
+		{/if}
+		<!-- Automated calibration (issue #153): its rules, saved with the form, then the run under the saved rules. -->
+		{#if s.calibrationRules}
+			<Lazy load={loadCalibrationRules}>
+				{#snippet children(CalibrationRulesFields)}<CalibrationRulesFields bind:value={s.calibrationRules} bind:error={rulesErr} {readonly} />{/snippet}
+			</Lazy>
+			<Lazy load={loadAutoFit}>
+				{#snippet children(AutoFitPanel)}
+					<AutoFitPanel
+						projectId={project.id}
+						settings={() => $state.snapshot(s) as unknown as ProjectSettings}
+						{savedRules}
+						formRules={s.calibrationRules}
+						model={() => (editor?.dirty ? editor.snapshot() : undefined)}
+						hasObserved={seriesKinds === null || seriesKinds.some((k) => (CALIBRATION_FLOW_KINDS as readonly string[]).includes(k))}
+						{readonly}
+						onApply={applyFit}
+					/>
+				{/snippet}
+			</Lazy>
 		{/if}
 	</div>
 
