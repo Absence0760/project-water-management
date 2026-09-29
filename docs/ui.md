@@ -2898,7 +2898,10 @@ which checks every catchment tab).
     3 water years shows the bare score. Below it, a **benchmarks** table
     (`data-testid="fit-benchmarks"`) scores the model, the mean flow every
     day and the day-of-year climatology (±7 days) on the fit's objective,
-    over the same columns, and a warning sentence
+    over the same columns, with how to read it in its foot (judge by the
+    validation columns; the model should clearly beat the mean flow, and in a
+    seasonal catchment the climatology; `fit-benchmarks-note`, a note at the
+    panel's end until issue #174), and a warning sentence
     (`data-testid="fit-climatology-warning"`) names the fitted or validation
     periods where the model scores no better than the climatology. A report
     made before 1.19.0 has neither. The formatting lives in

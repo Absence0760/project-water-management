@@ -32,6 +32,13 @@ test('fitting GR4J fills the form, and only Save stores it', async ({ page, owne
 		await expect(scores.getByRole('columnheader', { name: new RegExp(`^${col}`) })).toBeVisible();
 	}
 	await expect(scores.getByRole('rowheader', { name: /^KGE′/ })).toBeVisible();
+	// The benchmarks table ends with how to read it (issue #174: once, in the table, not as a note at the panel's end).
+	const bench = fit.getByTestId('fit-benchmarks');
+	await expect(bench.getByRole('rowheader', { name: 'Mean flow every day' })).toBeVisible();
+	await expect(bench.getByTestId('fit-benchmarks-note')).toHaveText(
+		'Judge the fit by the validation columns: they score days the parameters never saw. The model should clearly beat the mean flow every day, and in a strongly seasonal catchment the day-of-year climatology too.'
+	);
+	await expect(fit.getByText(/KGE of the mean flow is/)).toHaveCount(0);
 	// 120 days of record: no water years to test wet-year behaviour on, and the page says so.
 	await expect(fit.getByText(/too few to fit on dry years and test on wet ones/)).toBeVisible();
 

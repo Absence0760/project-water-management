@@ -391,6 +391,15 @@
 									</tr>
 								{/each}
 							</tbody>
+							<!-- How to read it, once, at the table's foot (it was a note at the end of the panel, issue #174). -->
+							<tfoot>
+								<tr>
+									<td colspan={benchCols.length + 1} class="muted small note" data-testid="fit-benchmarks-note">
+										Judge the fit by the validation columns: they score days the parameters never saw. The model should clearly beat the mean
+										flow every day, and in a strongly seasonal catchment the day-of-year climatology too.
+									</td>
+								</tr>
+							</tfoot>
 						</table>
 					</div>
 					{#if climWarning}<p class="alert alert-warning small" data-testid="fit-climatology-warning">{climWarning}</p>{/if}
@@ -442,10 +451,6 @@
 						<p class="muted small">{representativenessKey(rep)} Any limit this implies is listed with the notes above.</p>
 					</section>
 				{/if}
-				<p class="muted small">
-					Judge the fit by the validation columns: they score days the parameters never saw. KGE of the mean flow is −0.41, so a
-					model should clearly beat that; in a strongly seasonal catchment it should also beat the day-of-year climatology.
-				</p>
 				{#if !readonly}
 					<div class="row">
 						<button type="button" class="btn btn-primary" onclick={apply}>Apply to form</button>
@@ -532,6 +537,12 @@
 		text-align: left;
 		font-weight: 500;
 		padding-bottom: 0.25rem;
+	}
+	.scores tfoot .note {
+		white-space: normal;
+		text-align: left;
+		font-weight: 400;
+		padding-top: 0.4rem;
 	}
 	.scores th.val,
 	.scores td.val {
