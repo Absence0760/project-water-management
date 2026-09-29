@@ -5,7 +5,7 @@
 // Pure, so it is unit-tested apart from the page.
 import type { PortfolioProject, ProjectSummary } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
-import { comparePortfolio, curtailmentHref, ewrText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+import { ageText, comparePortfolio, curtailmentHref, ewrText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
 
 export type Outcomes = ReadonlyMap<string, PortfolioProject>;
 
@@ -28,8 +28,8 @@ const NONE: Attention = { score: 0, reasons: [] };
 
 /**
  * What needs attention in one catchment, worst first: a red EWR, units short
- * this week, alerts firing, an amber EWR, failing feeds, newer rain than the
- * figures, figures over 7 days old (the portfolio's "stale"). A catchment
+ * in the figures' last week, alerts firing, an amber EWR, failing feeds, newer
+ * rain than the figures, figures over STALE_DAYS ($lib/format/age) old (the portfolio's "stale"). A catchment
  * without figures (not run, or a role that gets none) needs nothing here.
  */
 export function attention(o: PortfolioProject | undefined, base = ''): Attention {
@@ -42,7 +42,8 @@ export function attention(o: PortfolioProject | undefined, base = ''): Attention
 	if (o.ewr.status === 'amber') out.push({ score: 30 + (o.ewr.fraction30 ?? 0) * 10, text: ewrText(o), tone: 'warn' });
 	if (o.feeds.failing > 0) out.push({ score: 20, text: feedsText(o), tone: 'warn' });
 	if (o.behindData) out.push({ score: 10, text: 'Newer rain not in the figures', tone: 'warn' });
-	if (o.stale && o.figuresAgeDays != null) out.push({ score: 5, text: `Figures ${fmtNum(o.figuresAgeDays)} days old`, tone: 'warn' });
+	if (o.stale && o.figuresUntil && o.figuresAgeDays != null)
+		out.push({ score: 5, text: `Figures ${ageText(o)}`, tone: 'warn' });
 	if (!out.length) return NONE;
 	out.sort((a, b) => b.score - a.score);
 	return { score: out.reduce((n, r) => n + r.score, 0), reasons: out.map(({ score: _s, ...r }) => r) };

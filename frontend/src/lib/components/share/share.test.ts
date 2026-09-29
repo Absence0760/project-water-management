@@ -95,12 +95,23 @@ describe('the words', () => {
 
 	it('gives the reserve at the outlet (unnamed) and each gauge, counts only', () => {
 		process.env.TZ = 'Pacific/Kiritimati';
-		const rows = reserveRows(view().publication.catchmentView).map((r) => ({ ...r, last30: sp(r.last30), season: sp(r.season) }));
+		const rows = reserveRows(view().publication.catchmentView, '2024-01-12').map((r) => ({ ...r, last30: sp(r.last30), season: sp(r.season) }));
 		expect(rows).toEqual([
 			{ place: 'At the catchment outlet', state: 'partly', last30: 'Below its reserve on 3 of the last 30 days.', season: '12 of 102 days below it this season (since 1 Oct 2023).' },
 			{ place: 'At Middle weir', state: 'met', last30: 'Kept its reserve on every one of the last 30 days.', season: '0 of 102 days below it this season (since 1 Oct 2023).' },
 			{ place: 'At Top weir', state: 'missed', last30: 'Below its reserve on all of the last 30 days.', season: '50 of 102 days below it this season (since 1 Oct 2023).' }
 		]);
+	});
+
+	it('says the 30 days to the data’s last day once it is over a week old, not "the last 30 days"', () => {
+		const rows = reserveRows(view().publication.catchmentView, '2024-01-18').map((r) => sp(r.last30));
+		expect(rows).toEqual([
+			'Below its reserve on 3 of the 30 days to 10 Jan 2024.',
+			'Kept its reserve on every one of the 30 days to 10 Jan 2024.',
+			'Below its reserve on all of the 30 days to 10 Jan 2024.'
+		]);
+		// A week old is still current.
+		expect(sp(reserveRows(view().publication.catchmentView, '2024-01-17')[0]!.last30)).toBe('Below its reserve on 3 of the last 30 days.');
 	});
 
 	it('counts the farms without naming one', () => {

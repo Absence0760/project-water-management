@@ -178,7 +178,7 @@
 				<p class="muted small saved" role="status">{thresholdsSaved ?? ''}</p>
 			</form>
 		{:else}
-			<p class="muted small">Only admins can change them.</p>
+			<p class="muted small">Only owners can change them.</p>
 		{/if}
 	</section>
 

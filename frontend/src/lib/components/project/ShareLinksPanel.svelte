@@ -4,6 +4,7 @@
 	// project, copies it once (the token isn't kept, so it can't be shown
 	// again), sees when each was last opened, and withdraws one. Owners only:
 	// OverviewTab renders this for an owner, and the API answers anyone else 403.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { api, SHARE_LABEL_MAX, type ShareLink } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
@@ -75,7 +76,7 @@
 	}
 
 	async function revoke(id: string, name: string) {
-		if (!confirm(revokeQuestion(name))) return;
+		if (!(await confirmDialog({ title: 'Withdraw this link?', message: revokeQuestion(name), confirmLabel: 'Withdraw link', danger: true }))) return;
 		busy = id;
 		error = null;
 		try {

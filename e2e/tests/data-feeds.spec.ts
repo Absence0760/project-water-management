@@ -13,6 +13,7 @@ import { API_URL } from '../support/env.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 // One at a time: runJobsTick runs the whole e2e database's worker tick, and a
 // tick also queues every due feed (a new feed is due at once), so a tick in
@@ -228,8 +229,8 @@ test('a series of another CHIRPS version: the form asks to replace it whole or u
 	await feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' }).click();
 	await expect(panel.getByRole('status').filter({ hasText: 'Replacement withdrawn' })).toBeVisible();
 	await expect(feed.getByTestId('feed-version-conflict')).toHaveText(/^The series holds CHIRPS v2\.0 and this feed writes CHIRPS sat v3\.0, so every fetch is refused/);
-	page.once('dialog', (d) => void d.accept());
 	await feed.getByRole('button', { name: 'Replace the series: Rainfall — CHIRPS' }).click();
+	await answerConfirm(page, true, 'Replace “Rainfall — CHIRPS”?');
 	await expect(panel.getByRole('status').filter({ hasText: 'Replacement confirmed: the feed backfills the new record' })).toBeVisible();
 	await expect(feed.getByRole('button', { name: /^Replace the series/ })).toHaveCount(0);
 	await expect(feed.getByRole('button', { name: 'Withdraw the replacement: Rainfall — CHIRPS' })).toBeVisible();
@@ -302,9 +303,9 @@ test('the panel works from the keyboard: focus follows the form, a bad field is 
 	await expect(run).toBeFocused();
 
 	// Removing takes the feed's buttons away: focus lands on the section heading, not the page body.
-	page.once('dialog', (d) => void d.accept());
 	await feed.getByRole('button', { name: 'Remove feed: Rainfall — CHIRPS' }).focus();
 	await page.keyboard.press('Enter');
+	await answerConfirm(page, true, 'Remove this feed?');
 	await expect(panel.getByText('No feeds yet.')).toBeVisible();
 	await expect(panel.getByRole('heading', { name: 'Data feeds', level: 2 })).toBeFocused();
 });

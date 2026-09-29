@@ -22,7 +22,7 @@ async function assertNotLastAdmin(db: Db, teamId: string, userId: string) {
 		 FROM team_member WHERE team_id = $1`,
 		[teamId, userId]
 	);
-	if (rows[0]?.target_is_admin && rows[0].admins <= 1) throw new ApiError(409, 'a team must keep at least one admin');
+	if (rows[0]?.target_is_admin && rows[0].admins <= 1) throw new ApiError(409, 'a team must keep at least one owner');
 }
 
 /** The project role a team role gives on every team project (app_project_role, 008_team_viewer). */

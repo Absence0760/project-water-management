@@ -116,6 +116,11 @@ draw the reader's own locale. A revision line saved before the change
 ("750,000 m³") still matches today's diff for the History attribution
 (`backend/src/history/attribute.ts`).
 
+A chart's value axis writes its ticks short (`charts/series.ts`
+`fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
+decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
+noise rather than a flow, does it fall back to an exponent.
+
 ## Landing page
 
 `/` for a signed-out visitor, and `/welcome` for anyone (issue #57;
@@ -153,19 +158,25 @@ other signed-out route still goes to `/login?next=`.
   the hero's reserve tag, the story's charts (the river's on a square-root
   scale, which its unit says), the what-if (each bar labelled **Today** or
   **This plan**; the plan's supply in the app's supply bands), and *Why trust
-  it*'s three figures under "In the example catchment", the last the run's
-  calibration NSE. The art, the motion rules and the
+  it*'s three figures under "From Kleinberg, an invented example
+  catchment:", the last the run's calibration NSE in plain words ("fit to
+  the measured river flow (1 is perfect)"). The art, the motion rules and the
   pipeline that makes them: [design/landing-art.md](./design/landing-art.md).
 
 ## Legal pages
 
 `/privacy` (the privacy notice) and `/terms` (terms of use),
 `routes/privacy`, `routes/terms`, framed by `lib/components/legal/LegalPage.svelte`:
-a slim header with the way home and **Open the app** (to `/login`, which sends
-a signed-in reader on to their projects: a static page can't know the session,
-so it doesn't claim "Sign in"), a contents list (folded behind a
-**Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
-the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
+a slim header whose logo is the way home (no second button), then the Help
+shell's layout at its 1480 px width: from 900 px the contents list is a
+sticky column on the left, like the Help menu, with the title and text
+beside it (paragraphs keep a ~68ch measure; the extra width goes to the
+contents, and only tables use the column's width). Below 900 px the contents
+sit above the text, folded behind a **Contents (13 sections)** disclosure
+(the privacy notice) on a phone, where the list alone filled the first
+screen, and open from 601 px. The footer's links (Home, the three pages, and
+**Contact**, which goes to the terms' contact section, `/terms#contact`, so
+the address is written once) start in line with the text column. Prerendered like `/welcome` (static HTML, open to
 anyone signed in or out, rendered before the session is known). Each has its
 own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
 `app.html`'s fallback title sits after the page's head, since the document's
@@ -184,10 +195,28 @@ included): a bordered box, **The main things you agree to**, with the four
 points in the reader's language (and, in another language, "The Terms are
 in English; this summary is in your language"), then a required, unticked
 checkbox, "I have read the main points above and accept the Terms of use
-and Privacy notice", whose label links both pages. The browser won't submit
-the form until it is ticked. With the box at body size the sign-up form is taller
-than a window, so it is the one sign-in page that scrolls (to the end of the
-form and no further; `auth-pages.spec.ts`).
+and Privacy notice", whose label links both pages (in the link colour and
+underlined, so they don't read as the label's text; WCAG 1.4.1). The browser won't submit
+the form until it is ticked. The points sit in their own scroll box under the
+box's heading, with **Read the full terms** beside it (issue #162;
+`TermsSummary` `contained`): on a window 901 px wide or more the sign-up card
+(`AuthCard` `fit`) is a column the window's height, and the box gives up
+height until the form fits, so the page doesn't scroll at 1440×900 or
+1280×800 (in English and Afrikaans, a dead invitation's warning included)
+and the box, the tick and the button are on screen together. It shows the
+whole list whenever the window has room, and never less than its heading and
+one line of points, the fade and the link saying there is more (the floor
+follows the heading's height, one line or two where the link wraps under it;
+it was two lines of points until CI's wider fonts overflowed Afrikaans with a
+dead invitation at 1280×800 by 9 px); below that the page scrolls after all. On a
+phone the page scrolls and the box is at most 12rem. While the points overflow
+the box is a focusable group named by its heading (the scroll-region watcher,
+`lib/a11y/scrollRegions.ts`), so Tab reaches it and the arrow keys scroll it,
+and a fade at its foot says there is more below (`auth-pages.spec.ts`). The
+sign-in pages' space above the title is 3vh and 1rem (was 6vh and 2rem), and
+their form 440 px wide (was 380), to make that room; the title still sits in
+the same place on every one of them. On the sign-up card only, the gaps under
+the title and between the fields are tighter (0.5rem).
 
 **Re-acceptance notice.** When the terms change (`LEGAL_VERSION`), a
 signed-in account whose `termsCurrent` is false (it accepted an older
@@ -231,7 +260,7 @@ closes a finding a reader would care about, update `departures.ts`. The
 `/verify-email` and `/alerts/unsubscribe` share one frame,
 `lib/components/layout/AuthCard.svelte` (translated, § Language): the navy
 brand panel with the catchment drawing on the left (55 %), the form on the
-right, 380 px wide. They are forms, not dashboards: each fits a 1280 × 800
+right, 440 px wide. They are forms, not dashboards: each fits a 1280 × 800
 window with no page scroll, in every state (the longest is the sign-up form
 under a dead-invitation warning).
 
@@ -361,13 +390,14 @@ fetched the first time that tab opens (started alongside the data load when
 the URL names the tab, and warmed when its link is hovered or focused), with
 the standard "Loading…" state in the meantime
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
-The tabs are grouped into three sections, in this order: **Build the
-model** (Network, Crops & demand, Transfers, Data, Settings & calibration),
-**Review** (Project, Applications, History) and, at the bottom,
-**Outcomes** (Summary, River & reserve, Hydrological units, Runs & results, Dams,
-Compare runs, Scenarios, Allocations). Issue #17's option A put Outcomes
-first; the operator moved it last on 2026-09-27. The Summary is still the
-tab a project opens on. The sections are
+The tabs are grouped into three sections, in this order: **Outcomes**
+(Summary, River & reserve, Hydrological units, Runs & results, Dams,
+Compare runs, Scenarios, Allocations), **Build the model** (Network, Crops &
+demand, Transfers, Data, Settings & calibration) and **Review** (Project,
+Applications, History). Outcomes leads because the Summary is the tab a
+project opens on (issue #17's option A; moved last on 2026-09-27 and back to
+the top by issue #162), and Help's "Getting around a project" names them in
+the same order (`tour.test.ts` fails if the two part). The sections are
 `NAV_SECTIONS` in `lib/workspace/tabs.ts`, and `navSections(shown)` splits
 whatever tabs a role sees into them (empty sections are dropped; a tab no
 section lists joins *Build the model*). Each tab's name is `TAB_LABELS` in
@@ -474,8 +504,49 @@ while open (`stripTabs`), and the Summary's checklist still links to it (it
 gets the role's tabs, not yours).
 
 The model tabs (Network, Crops, Transfers) edit one in-memory model
-(`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom.
-Settings has its own save button, which sits above that bar.
+(`lib/model/editor.svelte.ts`) and share the fixed save bar at the bottom
+(`model/SaveBar.svelte`). The Project page's details (name, description,
+time zone, WUA name; issue #162 item 12) go through the same bar: the page
+holds them (`project/detailsDraft.svelte.ts`), so they survive a tab change,
+and **Save changes** saves whatever is unsaved (the details, then the
+model), **Discard** puts both back. The bar says what is unsaved ("Unsaved
+changes to the project details", "… to the model and the project
+details"; its region is named *Unsaved project details* while only the
+details are), and an empty name or time zone blocks it with the reason. The
+optional reason field shows only with model edits (it goes into History with
+them). Every other card on the Project page acts at once. Settings has its
+own save button, which sits above that bar.
+
+**Leaving with unsaved changes** (issue #162 items 11 and 13;
+`lib/nav/unsaved.ts`, `lib/nav/leaveGuard.ts`). Unsaved work registers
+itself while it is on screen (`guardUnsaved`): the model's edits and the
+project details (the workspace page), override mode's unrecorded edits, a
+half-filled **Add a change** form or a typed but unsaved scenario rename,
+and a name typed into the **New scenario** dialog. A navigation that would
+drop any of it (another page for the page-level work; another tab or
+scenario for a scenario's) is cancelled and the app's own dialog asks,
+naming what is unsaved and where the link goes: "You have unsaved changes
+(model edits). Leave and go to All projects? They will be lost."
+(`lib/nav/destination.ts` names the sidebar's pages, a section as "the
+Network page", another scenario or project). **Stay** (focused first, and
+Esc) keeps everything; **Leave without saving** makes the navigation again,
+let through once; Back and Forward are retaken the same way. A tab change
+within the project keeps the page's own edits and doesn't ask. Only closing
+the tab or reloading shows the browser's own "Leave site?" box, which no
+page can restyle.
+
+**Confirmation questions.** Every question the app asks (delete a run,
+revoke a link, submit an application, remove a farmer, discard a file…)
+is the app's own dialog, never the browser's `confirm()` box
+(`common/confirm.svelte.ts`: `await confirmDialog({ title, message,
+confirmLabel, cancelLabel, danger })` answers true or false). One host,
+`common/ConfirmHost.svelte`, sits in the root layout and shows the questions
+one at a time: an `alertdialog` with the question as its title, the detail
+under it, **Cancel** first (it takes the focus, so Enter keeps what a
+destructive question would remove) and a confirm button named for the action
+(red when it destroys something). Esc answers Cancel; focus returns to what
+asked. The farm view's note delete passes its words translated.
+`lib/noBrowserConfirm.test.ts` fails if `confirm(` comes back in app code.
 
 **A part that fails to download.** Every tab but Overview, the Add data
 dialog and several panels download on first use. If one can't (a network
@@ -499,10 +570,11 @@ account menu, the "Rain up to" dropdown, the download menu and the dialogs.
 Help tips, the account menu and the "Rain up to" dropdown also close on a
 click outside. The one exception guards
 unsaved input: while **Add data** holds a file that is read but not uploaded
-(or is uploading), Escape and ✕ ask before discarding it. Help-tip bubbles
+(or is uploading), Escape and ✕ ask before discarding it (the confirmation
+dialog above; Dialog's `beforeclose` may answer later). Help-tip bubbles
 render in the browser's top layer (a manual popover placed against the
 button), so a scrolling table or a sticky header can't clip or cover them.
-Every `Dialog.svelte` dialog also has a **✕** in its top-right corner
+Every `Dialog.svelte` dialog but the confirmation question also has a **✕** in its top-right corner
 (`aria-label="Close dialog"`, tooltip "Close (Esc)") for people who don't know
 Escape closes it. It is last in the DOM, so opening a dialog still focuses its
 first field (New project, New team).
@@ -521,7 +593,7 @@ drawn by the page above the open tab, in place of the old project row (name,
 role, freshness, Add data) and each tab's own header:
 
 - **The title** is the section's name (`TAB_LABELS`), the page's only `h1`.
-  **Unsaved changes** shows beside it while the model has edits (editors).
+  **Unsaved changes** shows beside it while the model or the project details have edits (editors).
 - **A one-line context** under it. A tab gives its own through
   `fillHeader({ context, actions })` (`workspace/headerSlot.svelte.ts`,
   called from an `$effect`, like the sidebar's slot): the Summary names the
@@ -592,16 +664,48 @@ role, freshness, Add data) and each tab's own header:
   header its context ("Baseline “…” against one what-if · …"); the
   standalone `/compare` page keeps its own `h1`.
 
+## Data age and stale wording
+
+One module, `lib/format/age.ts` (issue #162), says how old data is, the
+same way on every screen:
+
+- **The threshold** is `STALE_DAYS`, the engine's `FARM_VIEW_STALE_DAYS`
+  (7), which the backend's portfolio and farm view count stale by too.
+  `series/freshness.ts` re-exports it; nothing else defines its own.
+- **An age** is `dateAge`: "31 Dec 2024 (20 months ago)". `agoText` counts
+  "today", "yesterday", days under 60, months under 730 days, then years
+  (`ageSpan`, never "1 months"); the farmer pages count with the same
+  `ageSpan` in their own words (`farm/format.ts` `agoWords`, through the
+  catalogue). A run's "ran … ago" uses `agoText` too.
+- **Relative words** ("today", "this week", "last 30 days") are only true
+  while the data they describe reaches today. `windowText` keeps them while
+  the window's last day is at most `STALE_DAYS` old and swaps in its date
+  after: "3 of 3 hydrological units short in the week to 31 Dec 2024",
+  "Dams on 31 Dec 2024", "EWR, 30 days to 31 Dec 2024". A label over several
+  catchments (a column header, a total) uses `sharedWindowText`: the
+  relative words while none is stale, the shared date when every stale one
+  ends on the same day, else a neutral "EWR, last 30 days of figures" (each
+  row then says its own date). Where this applies: the project list (header
+  line, EWR column, units short, Needs attention), the teams list, team page
+  and portfolio, the Summary's Dams card, Hydrological units' "Short this
+  week" tile, header line and cards, and on the farmer pages and `/share`
+  the "Last 30 days" supply line, the dam's 30-day fact and the river's
+  reserve count (`farm/cards.ts` `staleUntil`, stale as the dates line is).
+  The reporting-window picker's "Last 7 days" keeps its name: its dates
+  follow it.
+- **"edited <date>"** on a project row is when the project itself last
+  changed (`updated_at`: the model, its settings, allocations), not how
+  current its data is; the **Data** column says that.
+
 ## Header: data freshness and "Add data"
 
-- **Rain up to 14 Jun 2026 · 12 days ago**: the latest end of the
+- **Rain up to 14 Jun 2026 (12 days ago)**: the latest end of the
   **recorded rain** (catchment or CHIRPS, `isRecordedRain`), which is what a
   run is driven by. A forecast runs into the future and observed flow only
   scores a run, so neither counts: either would read "up to date" while the
   rain lags. With no recorded rain it reads "No recorded rain yet". Click it
   for every series' end date. It turns amber when the recorded rain is more
-  than 7 days old (`STALE_DAYS` in
-  `series/freshness.ts`; a candidate for a project setting). Ages count
+  than 7 days old (`STALE_DAYS`, [Data age and stale wording](#data-age-and-stale-wording)). Ages count
   calendar days up to the viewer's **local** date (`localIsoDate`); the
   project list's badge (`projects/freshness.ts`) counts the same way from its
   own `daysSince`, so the two never differ by a day around midnight. Series
@@ -614,7 +718,7 @@ role, freshness, Add data) and each tab's own header:
   upload button (**Upload**, **Upload and merge** or **Upload and replace**;
   `UploadForm`'s `external` mode, the button submitting the form through its
   `form` attribute). With a file read but not uploaded, **Cancel**, the close
-  button and Esc ask "Discard the file you haven't uploaded yet?" first
+  button and Esc ask "Discard the file?" first (the confirmation dialog)
   (Dialog's `beforeclose`, which handles Esc itself so Chrome can't skip the
   question). Closing gives focus back to what opened it
   (`e2e/tests/add-data-dialog.spec.ts`). It reads a
@@ -677,18 +781,21 @@ put the results first; its first screen follows board A1 of the redesign
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads, then Needs attention: there is nothing to summarise yet, so there
-   is no KPI row, chart or supply list.
+   is no KPI row, reserve strip or supply list.
 2. **The first screen, once there is a run**: the **Latest run** KPI row
-   (four cards, the mean outflow in the line under them), then two columns:
-   the **Flow vs reserve** chart on the left, and on the right (a column
-   280–340 px wide) **Needs attention** above **Supply by farm**. From
-   1100 × 620 px (`FIT_QUERY` in `OverviewTab.svelte`) the block is exactly
-   the height left in the window below its own top edge (measured with a
-   `ResizeObserver` on `body`, as the Network's map, less the save bar
-   when it shows; at least 560 px): the chart fills what the KPIs leave, the
-   side column's cards scroll inside themselves, and the page doesn't need
-   scrolling to see any of it. Narrower, the columns stack and the chart is
-   240 px tall; on a phone the KPIs are 2 × 2.
+   (four cards, the mean outflow in the line under them), the **Days below
+   the reserve** strip across the page under it, then **Needs attention**
+   beside **Supply by farm** (two equal columns from 900 px, one alone
+   takes the width; stacked below 900 px). From 1100 × 620 px (`FIT_QUERY`
+   in `OverviewTab.svelte`) the block is exactly the height left in the
+   window below its own top edge (measured with a `ResizeObserver` on
+   `body`, as the Network's map, less the save bar when it shows; at least
+   560 px): the two cards fill what the KPIs and the strip leave and scroll
+   inside themselves. On a phone the KPIs are 2 × 2.
+   Until issue #162 the Summary drew the full **Flow vs reserve** chart here,
+   filling what the KPIs left; River & reserve draws the same chart, larger
+   and with more controls, so the Summary now shows the strip and links
+   there instead: the flow chart is drawn once, on River & reserve.
 3. **Below the first screen**, compact: the active alerts
    ([§ Alerts](#alerts)) beside the published baseline (two columns once the
    tab is 56rem wide, a container query; stacked below that), each panel
@@ -704,32 +811,23 @@ put the results first; its first screen follows board A1 of the redesign
    and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
    sent there, replacing the history entry so Back skips it.
 
-- **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
-  record is in: the Runs tab's *EWR vs simulated outflow* chart
-  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) with a
-  **30 days / 1 year / All** switch (LineChart's `windows`: each window ends
-  on the run's last day, it opens on a year, the pressed button is the window
-  shown and a drag-zoom releases it), shading a forecast run's forecast days.
-  The **days below the reserve are shaded** (LineChart's `shade`), from the
-  run's own `ewr_shortfall` series (`overview/summaryChart.ts`
-  `belowReserve`: negative on a day the engine counted as EWR not met), so
-  the caption's count ("Shaded: the 23 days the outflow was below the pragmatic
-  EWR line") is the EWR card's; a run that always met it says so. When the
-  outlet has a Reserve rule table the chart also draws its requirement
-  (the run's catchment-level `ewr_rule` series, `EWR_RULE_KEY`) as a second
-  step line, *Reserve rule requirement*, and the caption says it is each
-  month's requirement judged month by month, so the chart shows the line the
-  "Reserve rules met" headline is judged by, not only the pragmatic EWR
-  (issue #51; the printed report's EWR chart too). A rule table at another
-  site isn't drawn: this chart's flow is the outlet's. On the
-  first screen it fills its panel (`fill`: the plot gets the panel's height
-  less the chart's own head, legend and caption, measured from the drawn
-  chart). It is its own chunk, since it pulls in uPlot, so the page's first
-  paint doesn't wait for it. Its series come through the Runs tab's
-  `cachedSeries`, and it fetches only the series the run stored ("This run
-  stored no outflow or EWR series." otherwise). Beside its heading, **More on
-  River & reserve** opens [River & reserve](#river--reserve) for that run
-  (`riverHref`, `river/links.ts`), where the same chart is larger.
+- **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
+  `overview/reserveStrip.ts`), once the latest run's record is in: the days
+  below the pragmatic EWR at the outlet in each of the run's last twelve
+  months (`recentMonths`, from the run summary's monthly grid,
+  `RunSummary.ewrCompliance`, so it draws with the cards: no series to fetch,
+  no chart library), oldest first. Each month is a small bar (its height the
+  share of the month's days below, in the warning colour of the flow chart's
+  shading), the count above it and the month under it, the year under the
+  first month and each January; each is a list item whose words ("Jan 2024:
+  below the EWR on 12 of 31 days") are what a screen reader and the tooltip
+  get. A line under the heading says what it counts and the span ("… (EWR
+  not met), the run's last 12 months: Jan 2024 – Dec 2024"). On a forecast
+  run it stops before the month the forecast starts in, as the cards are the
+  history's. Six a row on a phone. A run made before the monthly grid says
+  so. Beside its heading, **More on River & reserve** opens [River &
+  reserve](#river--reserve) for that run (`riverHref`, `river/links.ts`),
+  where the **Flow vs reserve** chart is.
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
   % of its demand supplied, fullest first and emptiest last, in the Network's
@@ -757,7 +855,7 @@ put the results first; its first screen follows board A1 of the redesign
   a different run, a line under the context names and links it, so the two
   can't be confused. A context line gives the label, the run period
   (`fmtDay`, e.g. "1 Oct 2021 – 28 Jan 2022"), the engine version and "ran …
-  ago" (`describeAge`, by the viewer's calendar), with badges for a legacy run
+  ago" (`agoText`, by the viewer's calendar), with badges for a legacy run
   (a stored run from before engine 1.0.0: *Workbook comparison*, plus a note
   that its figures are for workbook comparison only, not evidence, and that
   engine 1.0.0 removed the model, so it can't be re-run and a new run uses
@@ -769,7 +867,8 @@ put the results first; its first screen follows board A1 of the redesign
   M farms below" `SUPPLY_TARGET`); *Calibration NSE* ("calibration period
   (in-sample)" only when the parameters were fitted on those days, otherwise
   why not, as on the Runs tab; "–" without observed flow). They show in the
-  order Reserve · Irrigation supplied · **Dams today** · NSE. *Dams today*
+  order Reserve · Irrigation supplied · **Dams today** · NSE (**Dams on
+  31 Dec 2024** once the run's last day is more than a week old). *Dams today*
   (`latestRun.ts` `damsHeadline`, `damLevels.ts` `damsToday`) is all dams'
   storage at the end of the run as a share of their total capacity (weighted
   by capacity), with its change over the run's last 30 days ("▼ −9 pp in 30
@@ -943,8 +1042,8 @@ it scrolls, and isn't fitted to the window.
   a focused tile gets an outline.
 - **Import record** (`project/ImportReportPanel.svelte`, 017_project_import),
   under Project details, only for a project imported through the import dialog
-  (it fetches `GET /projects/:id/import-report`; a `404 no import report`
-  shows nothing). "Imported from the b023 workbook *file* on *date time* by
+  (it fetches `GET /projects/:id/import-report`; `{ report: null }` shows
+  nothing, and no request fails for a project that wasn't imported). "Imported from the b023 workbook *file* on *date time* by
   *name*.", the importer and web build, then the review's two lists, shared
   with it (`import/ImportReportLists.svelte`): **Importer notes** and the
   **Unmapped report** (a workbook's only), each with its count sentence and
@@ -955,7 +1054,7 @@ it scrolls, and isn't fitted to the window.
   came from the file and renders as text only.
 - **Time zone** (Project details, under Description; issue #45): the
   project's IANA zone, `Africa/Johannesburg` unless changed, typed or picked
-  from the browser's list of zones, saved with **Save details** (editors;
+  from the browser's list of zones, saved with the page's **Save changes** bar (editors;
   read-only for viewers). Every download of the project (CSV, JSON, the
   .xlsx workbook, the server report PDF) is dated by the calendar day there,
   so an export made just after local midnight carries today's date, not
@@ -965,8 +1064,8 @@ it scrolls, and isn't fitted to the window.
   digest). A zone the server doesn't know is refused with its error.
 - **WUA name** (Project details, under Time zone; issue #74): the name of
   the Water User Association the farm pages tell a farmer to contact
-  ("Questions? Contact Vaalbank WUA."), saved with **Save details**
-  (editors); empty keeps "your WUA". Not the team's name, which may be a
+  ("Questions? Contact Vaalbank WUA."), saved with the page's **Save
+  changes** bar (editors); empty keeps "your WUA". Not the team's name, which may be a
   consultancy's.
 - **Layout**: the facts in one row of eight (4 × 2 on a narrower page, 2 × 4
   on a phone), then Project details, the import record, recent notes and
@@ -1057,12 +1156,14 @@ well as team ones and loads beside the list (the rows show first, with
 and the list still works). The wording comes from the portfolio's helpers
 (`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same on
 both pages. Columns: **Catchment** (the name, then owner/team for *Shared
-with me*, your role and the updated date, and the description on one
-line), **EWR, last 30 days** (the pill in words and colour, and *Published*
-or *Latest run* with the figures' last day), **Hydrological units short** ("2 of 8 units
-short this week", a link to that run's curtailment on Hydrological units;
+with me*, your role and "edited <date>", when the project itself last
+changed, and the description on one line), **EWR, last 30 days** (the pill
+in words and colour, and *Published* or *Latest run* with the figures' age,
+"to 31 Dec 2024 (20 months ago)"; the header names the date instead once the
+figures are stale), **Hydrological units short** ("2 of 8 units
+short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
 *Not published* until a run is published), **Lowest dam**, **Data** (the
-rain freshness badge, *Newer rain not in the figures*, the feeds' health)
+rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in the figures*, the feeds' health)
 and **Last run** (its age, then the date or when it was published). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
@@ -1071,7 +1172,7 @@ to your role").
 `projects/outcomes.ts` `attention`): the catchments in view to look at
 first, most urgent first: a red EWR, hydrological units short this week, alerts firing,
 an amber EWR, failing or stale feeds, newer rain than the figures, figures
-over 7 days old (the portfolio's *stale*). Up to four cards (two a row on a
+over 7 days old (the portfolio's *stale*: "Figures to 31 Dec 2024 (20 months ago)"). Up to four cards (two a row on a
 mid-width page, three stacked on a phone), each naming its reasons in words
 with the colour only repeating them; the count says "3 of 50", and **Show
 all N, most urgent first** (or **Sort the list by it**) sets
@@ -1247,6 +1348,20 @@ Laid out for the app frame (issue #17): the layouts answer to the page's own
 width through container queries, not the window's, since the sidebar takes
 240 px.
 
+**Role names** (issue #162): the UI uses one set of names for team and
+project roles, **Viewer / Editor / Owner**. A team role is shown by the
+project role it gives on every team project, so the API's team `member`
+reads "editor" and its `admin` "owner" (a project `contributor` reads
+"applicant"). Only the words differ; the API and database keep their values.
+Every role label goes through `roleLabel` / `roleTitle`
+(`lib/api/roleLabels.ts`): the team pages' badges, role pickers, roles key
+and add messages, the Members panel, pending invites, the project list's
+role and the History tab's member lines. The invite email names the role the
+same way (`roleName`, `backend/src/mail/templates.ts`). With one set of names
+the Project page no longer spells out "team admins are owners…": its Team
+panel says team members keep their team role on the project. Below,
+"admin" and "member" are the API's team roles.
+
 **`/teams`** shows each team as a card: its name (opens the team) and your
 role, then **Projects**, **Members**, **Farms short this week** (added up
 over the projects whose count is known, "2 of 14 farms"; "–" when none is)
@@ -1275,10 +1390,10 @@ alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): name
 with the email under it, role, Remove; the add-by-email form, pending
 invites and the roles list. Admins pick each member's role from
-**viewer / member / admin** (the sole admin's viewer and member options are
-disabled), and the page explains each role in a short list under the table:
-viewers read every team project, members edit them, admins own them and
-manage the team. A team viewer doesn't get "New project"; the
+**viewer / editor / owner** (the API's `viewer` / `member` / `admin`; the
+sole admin's viewer and editor options are disabled), and the page explains
+each role in a short list under the table: viewers read every team project,
+editors edit them, owners own them and manage the team. A team viewer doesn't get "New project"; the
 New project dialog and the Summary's *Move to* list offer only teams where
 you're a member or admin, and copying a team project you only view makes a
 personal copy (the Copy dialog says so).
@@ -1287,7 +1402,7 @@ personal copy (the Copy dialog says so).
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
 reading path: **Team name** (admins; *Rename*), **Portfolio traffic lights**
 (below), and **Leave or delete** (*Leave team* for everyone, the only admin
-told to hand over first; *Delete team* for admins, which closes the sheet
+told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
 and asks in a confirmation dialog). The URL opens it (the portfolio's
 "Change them on the team page" links there), and closing it drops the
 parameter in place, so Back closes it.
@@ -1300,7 +1415,7 @@ still to be confirmed by the hydrologist*. Admins get two number inputs,
 *Green below (%)* and *Amber below (%)*, checked as the API checks them (both
 0–100, green below amber; the message sits under the inputs, which carry
 `aria-invalid`), *Save thresholds* (disabled while invalid or unchanged) and,
-once the team has its own, *Use the defaults*. Anyone else sees "Only admins
+once the team has its own, *Use the defaults*. Anyone else sees "Only owners
 can change them." A change shows in each team project's History tab
 (`team_thresholds.changed`).
 
@@ -1321,15 +1436,18 @@ Portfolio](./api.md#portfolio)):
   alone: "Red: EWR not met 9 of 30 days", "Green: EWR met all 30 days", or
   "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
   run it again" (dashed outline). Under it, how old the figures are
-  ("Figures to 29 Dec 2023, 1,002 days ago") and a *Stale* flag past 7 days.
-- **Hydrological units short**: "2 of 8 hydrological units short this week" (a link to the
+  ("Figures to 29 Dec 2023 (2 years ago)", `dateAge`) and a *Stale* flag past 7 days.
+  The column's and the total's label is "EWR, last 30 days" only while the
+  figures are current ([Data age and stale wording](#data-age-and-stale-wording)).
+- **Hydrological units short**: "2 of 8 hydrological units short this week", or
+  "… in the week to 31 Dec 2024" once the figures are stale (a link to the
   Curtailment panel of that run on [Hydrological units](#hydrological-units), over the
   last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
   scrolls there once the run's results render and moves focus to the table's
   heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
   until a run is published" without a publication.
 - **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
-  recorded rain to …, a *Newer data not in the figures* flag, and the feeds'
+  recorded rain to … with its age ("Rain to 31 Dec 2024 (20 months ago)"), a *Newer data not in the figures* flag, and the feeds'
   health.
 - **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
   from `alertsFiring` ([§ Alerts](#alerts)).
@@ -1346,7 +1464,7 @@ opens the address is sent to their farm view (`/farm`), as the project list
 does. The intro states the thresholds the statuses were judged by (the API's
 `thresholds`, the team's or the defaults) and whose they are; an admin gets
 a link to change them in the team page's settings sheet (§ Teams,
-`?settings=1`), anyone else is told a team admin can.
+`?settings=1`), anyone else is told a team owner can.
 
 A dashboard (issue #17). The header carries *Team page* and, for members
 and admins, *New project in this team*; under it five tiles: **EWR, last 30
@@ -2092,8 +2210,16 @@ The long workspace pages share one in-page menu, `common/SectionNav.svelte`
 results**, **River & reserve**, **Hydrological units** and **Data**. Each page
 gives it its sections in groups (a `nav` labelled "Settings sections",
 "Result sections", "River sections", "Hydrological units sections", "Data
-sections"); each group is a list named for screen readers, set apart by a
-wider gap. The dashboards that fit the window (Summary, Network, Crops,
+sections"); each group is a list named for screen readers. With
+`groupNames` the bar shows the names too: a small muted label before each
+group's first link, in the same item, so the two wrap together and the fit
+counts both, and a wider gap before it. Without it the links are evenly
+spaced: a wider gap with no name on it read as a spacing bug (issue #162).
+Hydrological units and Data show their names. Settings & calibration, Runs
+& results and River & reserve don't, and space their links evenly: with the
+names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
+last links went into More and River's bar took a second row at 1440 px (in
+CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Summary, Network, Crops,
 Dams, Transfers, Scenarios) and the pages with at most two panels past their
 first screen at 1440×960 (Allocations, Project, Compare runs, Applications)
 have none (surveyed 2026-09-27 with the example catchments); History is left
@@ -2156,7 +2282,7 @@ with the table the data needs).
   to** is the column straight after the series. (Until 2026-09-26 any row
   older than 31 days, flow included, was amber, which disagreed with the
   badge.) Ages read "2 months ago" from 60 days and "2 years ago" from 730
-  (`describeAge`; those two days used to read "1 months" / "1 years").
+  (`agoText` in `lib/format/age.ts`; those two days used to read "1 months" / "1 years").
 - **Picking a series**: clicking a row (or its **View** button) charts it
   through the URL (`series=<id>`, `withParam`), so the link can be shared
   and Back returns to the series before. Without `series=` (or with one that
@@ -2439,7 +2565,8 @@ section header, which it fills (`fillHeader`) like the other sections.
   `#set-quality`, `#set-outcomes`, `#set-outlook`, `#set-auto`, then after the
   form `#set-feeds`, `#set-api-keys` (owners only) and `#set-report-schedules`;
   listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
-  named for screen readers and set apart by a wider gap: **Model inputs**
+  named for screen readers only, its links evenly spaced (the names on the
+  bar would push links into More at 1280 px, issue #162): **Model inputs**
   (Demand … Simulation period), **How results are read** (Data quality,
   Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
   and reports**. It is the shared in-page menu
@@ -3180,9 +3307,14 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   what the page is for.
 - **Tiles** (`riverKpis`), each with its change from the previous run where
   both runs have the figure (`Delta`, as on the Summary):
-  *Reserve met* (share of days the outflow met the pragmatic EWR at the
-  outflow gauge, "N of M days", and with a rule table "Reserve rules: x% of
-  months"; flagged above 5 % of days not met); *Days below the reserve* (the
+  *EWR not met* (share of days the outflow was below the pragmatic EWR at
+  the outflow gauge, "N of M days", and with a rule table "Reserve rules: x%
+  of months"; flagged above 5 % of days; a fall is the better change). It
+  is the Summary's *EWR not met* card word for word: both take their term,
+  value and count from `ewr/notMet.ts` `ewrNotMet`, since until issue #162
+  this tile framed the same figure the other way round ("Reserve met 21.2%"
+  against the Summary's "EWR not met 78.8%"). "Not met" is the framing the
+  flow chart's shading, the EWR by month grid and the projects list use; *Days below the reserve* (the
   count, and how many in an average year; the change compares the per-year
   figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
   % of natural, moved here from the line under the Summary's cards, same
@@ -3190,11 +3322,17 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   year with the largest share of days below the EWR over the run, from the
   EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
   EWR was met every day; its change is that same month in the previous run).
-- **First screen.** The Summary's **Flow vs reserve** chart
+- **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
-  shaded and counted in its caption, a forecast run's band). It keeps the two
-  controls the Runs tab's EWR chart had, which the Summary's copy leaves off
+  shaded and counted in its caption, a forecast run's band). The Summary
+  drew it too until issue #162 and now shows the days below by month and
+  links here. Its shading comes from the run's own `ewr_shortfall` series
+  (`overview/summaryChart.ts` `belowReserve`: negative on a day the engine
+  counted as EWR not met), so the caption's count is the *EWR not met*
+  tile's; with a Reserve rule table at the outlet it also draws the
+  requirement (`EWR_RULE_KEY`) as a second step line (issue #51). It keeps
+  the two controls the Runs tab's EWR chart had
   (`FlowVsReserve` `units` and `pannable`): the **m³/s ↔ m³/day** switch
   (the shading is days, so it is the same in both units) and **◀ Earlier /
   Later ▶**, which step by the window picked (a year, or 30 days) with that
@@ -3203,10 +3341,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   below the reserve, each water year** (`#res-reserve-years`, Compare runs'
   `ReserveYearsChart` with this one run: the engine's
   `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
-  a table behind *Show as a table*). From 1100 × 620 the tiles and this row
+  a table behind *Show as a table*; about six years labelled, always the
+  last, and a label near an edge moved in so it is never cut off,
+  `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
+  "2024/2…"). From 1100 × 620 the tiles and this row
   are exactly the height left below their top (measured with a
   ResizeObserver, less the save bar), the chart filling what the tiles
-  leave, as the Summary's first screen does; narrower, the two stack.
+  leave; narrower, the two stack.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
   **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
@@ -3222,13 +3363,15 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   panels: **Flow vs reserve**, **Days below, by year**, **Reserve
   compliance** (with a rule table), **EWR by month**, **Uncertainty**,
   **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
-  above (`river/river.ts`, `riverNavGroups`), in three groups named for
-  screen readers (The reserve; How sure, and what if; Water balance).
+  above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
+  How sure, and what if; Water balance, named for screen readers, its links
+  evenly spaced (issue #162: the wider gaps between unnamed groups read as
+  spacing bugs, and the names on the bar take it to a second row at 1440 px).
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on
   Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
-  replaced by the same link here. The Summary's flow chart and outflow line
+  replaced by the same link here. The Summary's reserve strip and outflow line
   and the run headline's "by month of the year" link here too.
 - **No run yet:** the header, a "No run yet" panel saying what the page will
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an
@@ -3259,7 +3402,10 @@ read it before.
   goes to `?tab=runs&run=<id>`.
 - **Header.** The shared section header; the context line (`supplySummary`)
   is "8 units · 3 short this week · run “Baseline”, ran today", with the
-  unit count alone before a run.
+  unit count alone before a run. Once that week's last day is more than a
+  week old, "this week" becomes "in the week to 31 Dec 2024" here, on the
+  tile and on the cards ("Short on 2 of the 7 days to 31 Dec 2024";
+  `weekText`, [Data age and stale wording](#data-age-and-stale-wording)).
 - **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
   Summary card's figure and its change from the previous run, from
   `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
@@ -4303,7 +4449,10 @@ gives it an `h1` and **Back to runs**). The full reference is
   With no second what-if the third column is a dashed **+ Add a second
   what-if** card; What-if 2 has **Remove**. Focus moves to the new card's run
   select on add, and back to the add button on remove.
-- **What changes** (left, ~55 %): the outcomes table (reserve met, days
+- **What changes** (left, ~55 %): the outcomes table (*EWR not met*, the
+  share of days, worded as the Summary's card and River & reserve's tile
+  from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
+  #162; days
   below the reserve per average year, irrigation supplied, farms below 95 %,
   up to two most-changed farms, dam storage at the end of the run (when a
   run has a dam), mean outflow, calibration NSE when there is one), each what-if cell its value over its `Delta`, the unit on its own
@@ -4424,7 +4573,8 @@ them scenarios).
   the map's Grids menu and farm links open the page's grid modal and farm
   drawer, which edit and save the catchment's model, and neither opens over
   the Scenarios tab. A navigation that stays on the scenario doesn't ask
-  about unrecorded edits; leaving it does. **Edits to record**
+  about unrecorded edits; leaving it does (the leave guard, above), and
+  **Close override mode** with edits asks "Close override mode?" first. **Edits to record**
   (sticky at the foot on wide screens) lists each edit as the change it will
   be, in the same words as the Changes list; **Record N changes** appends
   them (one Undo takes them back), **Discard edits** reverts. An edit no
@@ -5070,11 +5220,14 @@ exists, says so with a link to Runs & results.
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, every guide by group, *Start here*,
-*How it works*, *How to*, and the glossary) marks the page you're on
-(`aria-current`). From 900 px the contents are a 13rem column in the page,
+(`help/HelpNav.svelte`: the overview, then four static groups, *Start here*,
+*How it works*, *How to* and *Reference*, the last the glossary's index and
+one link per topic) marks the page you're on (`aria-current`). Each group's
+name is a heading (`h2`, not a link) and names its list; its links are
+indented under a thin rule, so a group reads as a block (issue #162). The
+contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window, or the glossary's term list). The column fits the window exactly
+taller than the window (a short window). The column fits the window exactly
 (the page's top gutter above it and below it), and the reading space at the end of a long page belongs
 to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
 guide) doesn't scroll. They
@@ -5119,12 +5272,16 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   header and each page's actions in it, the notice line, the Grids menu's grid
   modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
-  An old `/help#<term>` link goes on to `/help/glossary#<term>`.
+  An old `/help#<term>` link goes on to the term's glossary topic page.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
-  `help-main`, a sticky rail right of the 42rem article instead, so the
-  article keeps its reading width and the right-hand space is used). The list
+  `help-main`, a sticky rail pinned to the column's right edge instead). A
+  guide spans the Help column like the overview (issue #162): body text,
+  notes and lists keep a 44rem reading measure, while diagrams, picture
+  tours, formulas and the terms table take the column's whole width (a
+  diagram is drawn at most 1.3 times its viewBox width, centred, so a small
+  one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
   heading past a line near the top, `lib/help/spy.ts`, or the last section at
   the end of the page; nothing while the intro shows), and a link to one
@@ -5132,7 +5289,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
   stores under the ground, the outlet gauge, the transfer, the EWR reach), the
-  glossary terms it uses, related guides and previous / next. Guide text is
+  glossary terms it uses and related guides. There is no previous / next
+  pager (the contents already mark where you are). Guide text is
   plain strings with a small markup (`**UI label**`, `[[glossary-id]]`,
   `[[guide:id|label]]`) rendered by `help/RichText.svelte` via `inline()`, so
   nothing is rendered as HTML; a term link reads in lower case mid-sentence
@@ -5145,8 +5303,11 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   drawing is never drawn so small that its smallest text is under 9.5 px
   (`Diagram` sizes its `min-width` from the SVG's viewBox and smallest font
   once it is on the page); narrower than that it scrolls sideways (a
-  `data-scroll-region`): on a phone, and at 1440 for the five diagrams wider
-  than 660 units (the model pipeline shrank its notes to 7 px there). A label
+  `data-scroll-region`): on a phone, or in a column too narrow for the
+  widest drawings (the model pipeline, 920 units wide, shrank its notes to
+  7 px in the old 42rem guide column). It is also never drawn wider than 1.3
+  times its viewBox, centred in its frame, now that a guide's figures span
+  the Help column. A label
   on the figure's ground beside a wire (not in a box) is `.lbl`: a halo in
   `--surface`. A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
@@ -5160,11 +5321,25 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   (`alt=""`), since the bubble is a live region and its text says what the
   picture shows, and it has a fixed size so the bubble is placed correctly
   before it loads.
-- **Glossary** (`/help/glossary`): every entry (`lib/help/content.ts` joins
-  `tips.ts`, `articles.ts` and `farmer.ts`), grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
-  the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the
-  contents which topic and term are on screen; the contents list the current
-  topic's terms and keep the current one in view inside their column. The
+- **Glossary**: every entry (`lib/help/content.ts` joins `tips.ts`,
+  `articles.ts` and `farmer.ts`), one page per topic (issue #162; it was one
+  54,000 px page). `/help/glossary` is the index: each topic with its count
+  and its terms, linked. A topic is `/help/glossary/<topic>`, the slugs in
+  `lib/help/glossaryLinks.ts` (`TOPIC_SLUGS`; they are URLs, so a renamed one
+  needs a redirect), with a stable anchor per term
+  (`/help/glossary/<topic>#<id>`, `glossaryPath`) that the ⓘ help tips,
+  guides, search and "See also" link to. Its "On this page" rail lists the
+  topic's terms and marks the one being read (`lib/help/spy.ts`), pinned to
+  the column's right edge as on a guide; it scrolls on its own when the topic
+  has more terms than the window holds. Search is the way to find one term.
+  An old link to the one-page glossary (`/help/glossary#<id>`), or a term
+  linked under the wrong topic, goes on to its topic page
+  (`glossaryLinks.test.ts` fails on any app link still written the old way).
+  An entry shows its short and full text, units, where it applies, other
+  names and related terms, but not its `source` (a workbook sheet,
+  `docs/model.md §…`, an audit finding, an issue): that is for maintainers,
+  kept in the data, and `content.test.ts` fails if the reader-facing text
+  names a developer document or issue. The
   legacy runoff model's six terms (peak coefficient, season factors, summer
   months, winter thresholds, recession curve, pulse index) became one
   **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
@@ -5223,7 +5398,9 @@ published.
   minimum height, so a page that fits doesn't scroll (the confirm-your-email
   banner sits above it).
 - **Main page, top to bottom:** the name and the dates line ("Published by
-  the WUA on …. Data up to …", amber with its age when stale); the WUA's
+  the WUA on …. Data up to …", amber with its age when stale: "Data up to
+  10 Jan 2024 (9 days ago)"; while stale, "Last 30 days" on the cards below
+  becomes "30 days to 10 Jan 2024"); the WUA's
   notice first (warning or danger fill, icon and level in words), or "No
   restriction from the WUA", then the estimate line (below). The notice is in the language the reader
   chose (the WUA's own Afrikaans follows the switch at once, even while

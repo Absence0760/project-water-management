@@ -62,17 +62,19 @@ describe('attention', () => {
 				feeds: { total: 3, ok: 2, failing: 1 },
 				behindData: true,
 				stale: true,
+				figuresUntil: '2026-09-15',
 				figuresAgeDays: 12
 			}),
 			'/base'
 		);
 		expect(a.reasons).toEqual([
 			{ text: 'Red: EWR not met 9 of 30 days', tone: 'danger' },
-			{ text: '2 of 4 hydrological units short this week', tone: 'danger', href: '/base/projects/p1?tab=supply&run=run-1&window=last7#res-curtailment' },
+			// Stale figures: the week is the figures' last one, by its date, not "this week".
+			{ text: '2 of 4 hydrological units short in the week to 15 Sep 2026', tone: 'danger', href: '/base/projects/p1?tab=supply&run=run-1&window=last7#res-curtailment' },
 			{ text: '1 alert firing', tone: 'warn' },
 			{ text: '1 of 3 feeds failing or stale', tone: 'warn' },
 			{ text: 'Newer rain not in the figures', tone: 'warn' },
-			{ text: 'Figures 12 days old', tone: 'warn' }
+			{ text: 'Figures to 15 Sep 2026 (12 days ago)', tone: 'warn' }
 		]);
 	});
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { escapeHtml, farmerInviteMail, inviteMail, listText, reportReadyMail, resetPasswordMail, siteLink, sitePage, verifyEmailMail } from './templates.js';
+import { escapeHtml, farmerInviteMail, inviteMail, listText, reportReadyMail, resetPasswordMail, roleName, siteLink, sitePage, verifyEmailMail } from './templates.js';
 import { en } from './i18n/en.js';
 
 const TOKEN = 'abcDEF123_-abcDEF123_-abcDEF123_-abcDEF1234';
@@ -64,7 +64,7 @@ describe('email templates', () => {
 		expect(mail.html).not.toContain('<img');
 		expect(mail.html).toContain('Eve &lt;script&gt;');
 		expect(mail.html).toContain('&quot;&gt;&lt;img src=x onerror=alert(1)&gt;');
-		expect(mail.text).toContain('the team “"><img src=x onerror=alert(1)>” as an admin');
+		expect(mail.text).toContain('the team “"><img src=x onerror=alert(1)>” as an owner');
 	});
 
 	it('asks an existing unverified account to confirm, and says how to take a squatted address back', () => {
@@ -80,7 +80,16 @@ describe('email templates', () => {
 		expect(t('viewer')).toContain('as a viewer');
 		expect(t('editor')).toContain('as an editor');
 		expect(t('owner')).toContain('as an owner');
-		expect(t('member')).toContain('as a member');
+		expect(t('contributor')).toContain('as an applicant');
+		expect(t('steward')).toContain('as a steward');
+	});
+
+	it('names a team role by the project role it gives, as the app does (#162)', () => {
+		const t = (role: string) => inviteMail('x@example.com', url, 'A', { kind: 'team', name: 'T', role }).text;
+		expect(t('viewer')).toContain('as a viewer.');
+		expect(t('member')).toContain('as an editor.');
+		expect(t('admin')).toContain('as an owner.');
+		expect(roleName('member')).toBe('editor');
 	});
 
 	it('escapeHtml covers the five HTML metacharacters', () => {

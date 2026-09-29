@@ -4,6 +4,7 @@
 	// many from a CSV) and choose their farms; an address without an account
 	// waits as a pending invite, listed here for owners, until it signs up. A
 	// farmer is removed like any member (their links go with the membership).
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount } from 'svelte';
 	import { api, type Farmer, type FarmerEntry, type InvitedFarmer } from '$lib/api';
 	import { emailAuthApi } from '$lib/api/emailAuth';
@@ -94,7 +95,13 @@
 	}
 
 	async function remove(f: Farmer) {
-		if (!confirm(`Remove ${f.displayName} (${f.email}) as a farmer? They lose access to ${farmNames(f, farms).join(', ') || 'their hydrological units'}.`)) return;
+		const ok = await confirmDialog({
+			title: 'Remove this farmer?',
+			message: `Remove ${f.displayName} (${f.email}) as a farmer? They lose access to ${farmNames(f, farms).join(', ') || 'their hydrological units'}.`,
+			confirmLabel: 'Remove farmer',
+			danger: true
+		});
+		if (!ok) return;
 		busy = f.userId;
 		error = null;
 		try {
@@ -130,7 +137,7 @@
 	}
 
 	async function revoke(inv: InvitedFarmer) {
-		if (!confirm(`Revoke the invitation to ${inv.email}? The link in their email stops working.`)) return;
+		if (!(await confirmDialog({ title: 'Revoke this invitation?', message: `Revoke the invitation to ${inv.email}? The link in their email stops working.`, confirmLabel: 'Revoke invitation', danger: true }))) return;
 		busy = inv.inviteId;
 		error = message = null;
 		try {

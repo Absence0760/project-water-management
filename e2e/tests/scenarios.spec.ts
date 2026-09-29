@@ -15,6 +15,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const NAME = 'Upper dam +20 %';
 const RAISE = 'Upper farm: Dam capacity 150\u202f000 m³ → 180\u202f000 m³';
@@ -128,7 +129,9 @@ test('an editor raises a dam 20 % in a scenario, runs it and compares it with it
 
 	// The list and the Runs tab know the run came from the scenario, and the base is kept.
 	await expect(page.getByRole('button', { name: new RegExp(`^${NAME.replace('+', '\\+')}`) })).toContainText(/1 change · on Baseline · run /);
+	// The refused change is still in the form: leaving the scenario asks first (the leave guard, issue #162).
 	await page.getByRole('link', { name: 'Runs & results' }).click();
+	await answerConfirm(page, true, 'You have unsaved changes (a change not yet added to the scenario). Leave and go to the Runs & results page?');
 	const runsList = page.getByRole('region', { name: 'Runs', exact: true });
 	const row = (label: string) => runsList.getByRole('listitem').filter({ has: page.getByRole('button', { name: new RegExp(`^${label}`) }) });
 	await expect(row('Upper dam').getByText('Scenario', { exact: true })).toBeVisible();
@@ -287,6 +290,8 @@ test('a dam raise carries the enlarged dam\'s own survey curve, pasted as the Ne
 	const compare = page.getByRole('region', { name: 'Scenario against its base' });
 	await expect(compare.getByRole('region', { name: 'Headline results' })).toBeVisible();
 	await page.getByRole('link', { name: 'Open the full comparison' }).click();
+	// The form still holds the curve opened for axe: leaving the scenario asks first (the leave guard).
+	await answerConfirm(page, true, 'a change not yet added to the scenario');
 	await expect(page.getByRole('region', { name: 'What changed' })).toContainText('dam survey curve none (power law) → 3 rows');
 });
 
@@ -439,8 +444,8 @@ test('submitting freezes a scenario; withdrawn, it can be deleted and its base i
 	void owner;
 	const { project, scenarioId } = await seedScenario(page, 'Scenario status');
 	await page.goto(`/projects/${project.id}?tab=scenarios&scenario=${scenarioId}`);
-	page.on('dialog', (d) => d.accept());
 	await page.getByRole('button', { name: 'Submit', exact: true }).click();
+	await answerConfirm(page, true, 'Its changes, base run and nodes are then frozen.');
 	// The status in the scenario's head (the list row shows the same pill).
 	const scenario = page.getByRole('region', { name: NAME, exact: true });
 	await expect(scenario.getByText('Submitted', { exact: true })).toBeVisible();
@@ -450,6 +455,7 @@ test('submitting freezes a scenario; withdrawn, it can be deleted and its base i
 	await page.getByRole('button', { name: 'Withdraw', exact: true }).click();
 	await expect(scenario.getByText('Withdrawn', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Delete scenario' }).click();
+	await answerConfirm(page, true, 'Its runs stay, as ordinary runs.');
 	await expect(page.getByTestId('scenarios-empty')).toBeVisible();
 	await expect(page).not.toHaveURL(/scenario=/);
 	// The base is no longer cited: the Runs tab (its list reloaded after the delete) offers to delete it again.
@@ -457,6 +463,7 @@ test('submitting freezes a scenario; withdrawn, it can be deleted and its base i
 	const baseline = page.getByRole('region', { name: 'Runs', exact: true }).getByRole('listitem').filter({ hasText: /^Baseline/ });
 	await expect(baseline.getByText('Scenario base', { exact: true })).toHaveCount(0);
 	await baseline.getByRole('button', { name: /^Delete run Baseline/ }).click();
+	await answerConfirm(page, true);
 	await expect(page.getByRole('region', { name: 'Runs', exact: true }).getByRole('listitem')).toHaveCount(0);
 });
 

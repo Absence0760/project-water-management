@@ -11,6 +11,7 @@ import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const run = promisify(execFile);
 const SCRIPT = fileURLToPath(new URL('../../scripts/ingest/push-fixture.mjs', import.meta.url));
@@ -84,8 +85,8 @@ test('an owner makes a key, a gateway pushes days with it, History names the key
 	// The list shows it was used; a revoke stops the next push.
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	await expect(lastUsed).not.toHaveText('Never');
-	page.once('dialog', (d) => d.accept());
 	await row.getByRole('button', { name: 'Revoke Weir gateway' }).click();
+	await answerConfirm(page, true, 'Revoke the API key “Weir gateway”?');
 	await expect(row).toContainText('Revoked');
 	await expect(row.getByRole('button', { name: 'Revoke Weir gateway' })).toHaveCount(0);
 	const refused = await push(secret);

@@ -111,6 +111,16 @@ section it belongs to, with the example that taught it.
   page's top gutter and ends as far from the bottom
   (`max-height: calc(100vh - 2 × gutter)`); the end-of-page reading space goes
   on the text column (`help-pages.spec.ts` checks the page and the column).
+- **A reading page spans its column; the measure is on the text.** Help's
+  guides and glossary sat in a 42rem article with the "On this page" rail
+  beside it, leaving 200–350 px empty at 1440 (issue #162). Cap body text,
+  notes and lists at a reading measure (44rem) and let figures, diagrams and
+  tables take the column; pin a side rail to the column's right edge.
+- **Navigation groups are headings, not items; a menu doesn't change as you
+  scroll.** A group name styled like its links reads as one of them; make
+  it a heading with its links indented under a rule. A contents list that
+  grew a nested list of the terms on screen (three levels, moving while you
+  read) was replaced by one page per topic and search (issue #162).
 - **Position the box that scrolls.** A list that scrolls inside its card
   must be `position: relative` (or otherwise positioned) when anything
   inside it is absolutely positioned. The Projects list fitted its card to
@@ -451,6 +461,8 @@ section it belongs to, with the example that taught it.
 | Sidebar content for a page | `layout/sidebar.svelte.ts` `fillSidebar` |
 | Overlays in the URL | `lib/workspace/overlays.ts`: `withParam`, `withoutParam`, `overlayHref`, `GRIDS` / `GRID_TAB` (a new grid is one entry plus a branch in `model/GridModal.svelte`) |
 | Modals and sheets | `common/Dialog.svelte`: `full` (+ `keepInputs`), `side` (+ `wide`, body scrolls, actions pinned), `subhead` slot for what must not scroll, `beforeclose` to ask before Esc or the close button throws input away |
+| Asking before an action (delete, revoke, submit, discard) | `await confirmDialog({ title, message, confirmLabel, danger })` (`common/confirm.svelte.ts`, shown by the root layout's `ConfirmHost`): never the browser's `confirm()`, which `lib/noBrowserConfirm.test.ts` refuses. Title the question, name the button after the action; e2e answers it with `answerConfirm` (`e2e/support/confirm.ts`) |
+| Unsaved input a navigation would drop | `guardUnsaved({ dirty, what, leaves })` (`lib/nav/unsaved.ts`) during component init: the root layout's leave guard asks once, naming it and the destination. A form's state that must outlive a tab change belongs to the page (`project/detailsDraft.svelte.ts`) and its save bar |
 | Saving from a modal | `model/ModelSaveRow.svelte` (a modal hides the save bar) |
 | Grids inside a modal | the existing component unchanged (`CropsTab sections` → `CropGrids`, `NetworkTab only="table"`), never a fork |
 | A small chart in a row or card (sparkline) | `charts/Sparkline.svelte` (the compact pattern, § 3 "Label every chart"; `caption` required) |

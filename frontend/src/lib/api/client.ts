@@ -109,9 +109,6 @@ import type {
 	YieldResult
 } from './types';
 
-/** GET /projects/:id/import-report's 404 message when the project has no report (projects/routes.ts). */
-const NO_IMPORT_REPORT = 'no import report';
-
 export class ApiError extends Error {
 	readonly status: number;
 	readonly details: unknown;
@@ -320,14 +317,16 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			remove: (id: string) => request<void>('DELETE', p(id)),
 			/**
 			 * What the importer flagged when the project was imported; null when it
-			 * wasn't (the server's 404 "no import report"). Any other 404 (no such
-			 * project, or not a member) still throws.
+			 * wasn't (the server's `200 { report: null }`). A 404 (no such project,
+			 * or not a member) throws, except the older backend's `404 no import
+			 * report`, which also means none: web@ and backend@ release separately,
+			 * so this frontend may be served against a backend from before #162.
 			 */
 			importReport: (id: string) =>
-				request<{ report: StoredImportReport }>('GET', `${p(id)}/import-report`).then(
+				request<{ report: StoredImportReport | null }>('GET', `${p(id)}/import-report`).then(
 					(r) => r.report,
 					(e: unknown) => {
-						if (e instanceof ApiError && e.status === 404 && e.message === NO_IMPORT_REPORT) return null;
+						if (e instanceof ApiError && e.status === 404 && e.message === 'no import report') return null;
 						throw e;
 					}
 				),

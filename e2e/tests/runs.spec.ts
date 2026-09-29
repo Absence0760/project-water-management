@@ -1,5 +1,6 @@
 import { createRun, putModel, putSeries, seedRunnableProject, syntheticFlow, syntheticRain, updateSettings } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 test('running the model shows the run with a farm summary and a chart', async ({ page, owner }) => {
 	void owner;
@@ -482,10 +483,10 @@ test('a run deleted while the list is still loading stays deleted', async ({ pag
 			served++;
 		}
 	);
-	page.on('dialog', (d) => d.accept());
 	await page.getByRole('link', { name: 'Runs & results' }).click();
 	const list = page.getByRole('region', { name: 'Runs', exact: true });
 	await list.getByRole('listitem').filter({ hasText: /^Baseline/ }).getByRole('button', { name: /^Delete run Baseline/ }).click();
+	await answerConfirm(page, true);
 	await expect(list.getByRole('listitem')).toHaveCount(0);
 
 	// The list read before the delete answers now: the tab sees it is stale and reads again.

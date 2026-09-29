@@ -1,5 +1,6 @@
 import { createProject, putSeries } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
+import { answerConfirm, confirmBox } from '../support/confirm.ts';
 
 // Popups close on Escape, except when closing would throw away unsaved input.
 
@@ -45,19 +46,16 @@ test('Add data closes on Escape, but asks first when a file is read and not uplo
 	});
 	await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled();
 
-	let asked = '';
-	page.once('dialog', (d) => {
-		asked = d.message();
-		void d.dismiss();
-	});
+	// Escape asks (the app's question); Escape again answers it: keep the file.
 	await page.keyboard.press('Escape');
-	await expect.poll(() => asked).toBe("Discard the file you haven't uploaded yet?");
+	await expect(confirmBox(page)).toContainText('Discard the file?');
+	await page.keyboard.press('Escape');
+	await expect(confirmBox(page)).toBeHidden();
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByRole('button', { name: 'Upload' })).toBeEnabled();
 
-	// Confirming discards and closes. (The first prompt is handled above, so
-	// this listener can only see the second.)
-	page.once('dialog', (d) => void d.accept());
+	// Confirming discards and closes.
 	await page.keyboard.press('Escape');
+	await answerConfirm(page, true, 'Discard the file?');
 	await expect(dialog).toBeHidden();
 });

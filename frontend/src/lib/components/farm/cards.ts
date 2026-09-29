@@ -15,9 +15,20 @@ import { STALE_DAYS } from '$lib/components/series/freshness';
 import { i18n, msg, t, tRich, type Msg } from '$lib/i18n/locale.svelte';
 import type { Rich } from '$lib/i18n/rich';
 import { languageName, LEVEL_WORDS, pickNotice, splitNotice, WRITTEN_ONLY_IN, type NoticeVm } from './notice';
-import { count, DAYS, daysBetween, FARMS, fmtDay, fmtDayMonth, fmtMonthShort, fmtPct, fmtStampDay, fmtStampTime, fmtVolume, joinAnd, POINTS, type VolumeUnit, WEEKS } from './format';
+import { agoWords, count, DAYS, daysBetween, FARMS, fmtDay, fmtDayMonth, fmtMonthShort, fmtPct, fmtStampDay, fmtStampTime, fmtVolume, joinAnd, POINTS, type VolumeUnit, WEEKS } from './format';
 
 // ---- The dates line (§2, §6.1 item 2) ---------------------------------------
+
+/** The server said the figures are stale, or they are now older than STALE_DAYS (a saved copy ages on the phone). */
+export const isFarmStale = (view: FarmView, today: string): boolean => view.stale || daysBetween(view.farm.dataUntil, today) > STALE_DAYS;
+
+/**
+ * The figures' last day once they are stale, else null. "Last 30 days" is
+ * only true while the data is current: past that the cards name the day
+ * their 30 days end on ("30 days to 10 Jan 2024"), as the workspace does
+ * ($lib/format/age).
+ */
+export const staleUntil = (view: FarmView, today: string): string | null => (isFarmStale(view, today) ? view.farm.dataUntil : null);
 
 export interface DatesLine {
 	text: string;
@@ -32,11 +43,10 @@ export interface DatesLine {
  */
 export function datesLine(view: FarmView, today: string): DatesLine {
 	const until = view.farm.dataUntil;
-	const age = daysBetween(until, today);
-	const stale = view.stale || age > STALE_DAYS;
-	const v = { published: fmtStampDay(view.publication.publishedAt), until: fmtDay(until), age: count(DAYS, age) };
+	const stale = isFarmStale(view, today);
+	const v = { published: fmtStampDay(view.publication.publishedAt), until: fmtDay(until), age: agoWords(daysBetween(until, today)) };
 	// i18n-section: farm.dates
-	let text = t(stale ? 'Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.' : 'Published by the WUA on {published}. Data up to {until}.', v);
+	let text = t(stale ? 'Published by the WUA on {published}. Data up to {until} ({age}). Ask your WUA if newer figures are coming.' : 'Published by the WUA on {published}. Data up to {until}.', v);
 	if (view.publication.nextExpectedOn) text += ` ${t('Next update expected around {date}.', { date: fmtDay(view.publication.nextExpectedOn) })}`;
 	return { text, stale };
 }
@@ -149,7 +159,7 @@ export interface SupplyVm {
 	efficiency: string;
 }
 
-export function supplyCard(farm: FarmProjection, unit: VolumeUnit): SupplyVm {
+export function supplyCard(farm: FarmProjection, unit: VolumeUnit, staleEnd: string | null = null): SupplyVm {
 	const s = farm.season;
 	const l = farm.last30;
 	const eff = farm.irrigationEfficiency;
@@ -159,12 +169,17 @@ export function supplyCard(farm: FarmProjection, unit: VolumeUnit): SupplyVm {
 		// i18n-section: farm.supply
 		volumes: t('{got} of {need} since {from}', { got: fmtVolume(s.suppliedM3, unit), need: fmtVolume(s.demandM3, unit), from: fmtDayMonth(s.from) }),
 		short: shortLine(farm),
-		last30:
-			l.fraction == null
-				? [t('Last 30 days: very little water needed')]
-				: tRich('Last 30 days: **{pct}** · {got} of {need}', { pct: fmtPct(l.fraction), got: fmtVolume(l.suppliedM3, unit), need: fmtVolume(l.demandM3, unit) }),
+		last30: last30Line(l, unit, staleEnd),
 		efficiency: t('Worked out by the model, not read from your meter. It assumes {pct} of the water you pump reaches the crop ({system}). Wrong? Tell your WUA.', { pct: fmtPct(eff), system: systemName(eff) })
 	};
+}
+
+/** "Last 30 days: **86 %** · …", or "30 days to 10 Jan 2024: …" once the figures are stale (staleUntil). */
+function last30Line(l: FarmProjection['last30'], unit: VolumeUnit, staleEnd: string | null): Rich {
+	const v = { pct: l.fraction == null ? '' : fmtPct(l.fraction), got: fmtVolume(l.suppliedM3, unit), need: fmtVolume(l.demandM3, unit), date: staleEnd ? fmtDay(staleEnd) : '' };
+	// i18n-section: farm.supply
+	if (l.fraction == null) return [staleEnd ? t('30 days to {date}: very little water needed', v) : t('Last 30 days: very little water needed')];
+	return staleEnd ? tRich('30 days to {date}: **{pct}** · {got} of {need}', v) : tRich('Last 30 days: **{pct}** · {got} of {need}', v);
 }
 
 // ---- Your dam (§3 Q3) --------------------------------------------------------
@@ -338,10 +353,19 @@ export function positionLine(view: FarmView): string {
 	return t('{up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every hydrological unit.', { up: upText, down: downText, count: count(FARMS, n) });
 }
 
-/** "River at Sandspruit Outlet: below its reserve on all of the last 30 days." A count, never a flow volume. */
-export function outletLine(view: FarmView): Rich {
+/**
+ * "River at Sandspruit Outlet: below its reserve on all of the last 30 days."
+ * A count, never a flow volume. Once the figures are stale (staleUntil), the
+ * days are the ones "to 10 Jan 2024", not "the last".
+ */
+export function outletLine(view: FarmView, staleEnd: string | null = null): Rich {
 	const o = view.outlet30;
-	const v = { name: o.name, days: count(DAYS, o.days), n: o.daysNotMet };
+	const v = { name: o.name, days: count(DAYS, o.days), n: o.daysNotMet, date: staleEnd ? fmtDay(staleEnd) : '' };
+	// i18n-section: farm.river
+	if (staleEnd) {
+		if (o.daysNotMet <= 0) return tRich('River at {name}: kept its reserve on every one of the {days} to {date}.', v);
+		return tRich(o.daysNotMet >= o.days ? 'River at {name}: below its reserve on **all of the {days} to {date}**.' : 'River at {name}: below its reserve on **{n} of the {days} to {date}**.', v);
+	}
 	if (o.daysNotMet <= 0) return tRich('River at {name}: kept its reserve on every one of the last {days}.', v);
 	return tRich(o.daysNotMet >= o.days ? 'River at {name}: below its reserve on **all of the last {days}**.' : 'River at {name}: below its reserve on **{n} of the last {days}**.', v);
 }

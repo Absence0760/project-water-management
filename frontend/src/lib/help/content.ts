@@ -7,7 +7,7 @@
 //                articles-data.ts the same for the "Input data" topic (its own chunk).
 //   farmer.ts    the farm view's words, whole (/farm/words loads only those).
 //
-// Every /help page loads this (the help sidebar lists the glossary's terms),
+// Every /help page loads this (the help sidebar lists the glossary's topics),
 // so the /help pages get every entry; nothing outside /help imports it.
 
 import { ARTICLES as TOPIC_ARTICLES } from './articles';

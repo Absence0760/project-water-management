@@ -378,6 +378,8 @@
      Its groups (model inputs, how results are read, what runs by itself) replace the old intro line;
      the header's context says where the parameters came from. Outside the form, so it stays stuck
      down the panels after it too (inside, it scrolled away at Data feeds). -->
+<!-- No visible group names: with them its seventeen links no longer fit two rows at 1280 px, so its
+     links are evenly spaced instead (common/SectionNav, issue #162). -->
 <SectionNav groups={navGroups} label="Settings sections" />
 
 <form onsubmit={save} novalidate>

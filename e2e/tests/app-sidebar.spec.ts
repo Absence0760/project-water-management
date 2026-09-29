@@ -11,15 +11,8 @@ import { expect, test } from '../support/fixtures.ts';
 
 // Long enough to wrap to two lines in the sidebar (the name is clamped to two).
 const LONG_NAME = 'Upper Catchment Irrigation Board Demonstration Sidebar';
+// Outcomes first, then Build the model, then Review (issue #162, item 22).
 const OWNER_TABS = [
-	'Network',
-	'Crops & demand',
-	'Transfers',
-	'Data',
-	'Settings & calibration',
-	'Project',
-	'Applications',
-	'History',
 	'Summary',
 	'River & reserve',
 	'Hydrological units',
@@ -27,7 +20,15 @@ const OWNER_TABS = [
 	'Dams',
 	'Compare runs',
 	'Scenarios',
-	'Allocations'
+	'Allocations',
+	'Network',
+	'Crops & demand',
+	'Transfers',
+	'Data',
+	'Settings & calibration',
+	'Project',
+	'Applications',
+	'History'
 ];
 /** One sidebar row (the rows are 34 px): the room left for one more section. */
 const ROW = 34;

@@ -1,5 +1,5 @@
 // Which section of a reading page is being read, for an "On this page" list
-// that marks it (a guide's rail). The glossary keeps its own two-level spy.
+// that marks it (a guide's rail, a glossary topic's rail).
 
 /**
  * The index of the section being read: the last one whose heading's top

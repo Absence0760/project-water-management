@@ -34,16 +34,19 @@ function cmp(o: {
 const ctx = (n: number) => ({ samePeriod: Array(n).fill(true), engineChanged: Array(n).fill(false) });
 
 describe('outcomeRows', () => {
-	it('gives each outcome the baseline and every what-if, with reserve met and days a year derived from the share of days', () => {
+	it('gives each outcome the baseline and every what-if, with EWR not met and days a year from the share of days', () => {
 		const rows = outcomeRows([cmp({ ewrShare: [0.13, 0.166] }), cmp({ ewrShare: [0.13, 0.139] })]);
-		const met = rows.find((r) => r.id === 'reserveMet')!;
-		expect(met.base).toBeCloseTo(0.87);
-		expect(met.whatIfs.map((m) => m.b)).toEqual([expect.closeTo(0.834), expect.closeTo(0.861)]);
-		expect(met.whatIfs[0]!.delta).toBeCloseTo(-0.036);
+		// Framed as the Summary and River & reserve frame it (issue #162): the share not met, a rise is worse.
+		const notMet = rows.find((r) => r.id === 'ewrNotMet')!;
+		expect(notMet.label).toBe('EWR not met');
+		expect(notMet.spec).toEqual({ format: 'fraction', better: 'lower' });
+		expect(notMet.base).toBeCloseTo(0.13);
+		expect(notMet.whatIfs.map((m) => m.b)).toEqual([expect.closeTo(0.166), expect.closeTo(0.139)]);
+		expect(notMet.whatIfs[0]!.delta).toBeCloseTo(0.036);
 		const days = rows.find((r) => r.id === 'reserveDays')!;
 		expect(days.base).toBeCloseTo(0.13 * DAYS_PER_YEAR);
 		expect(days.whatIfs[0]!.delta).toBeCloseTo(0.036 * DAYS_PER_YEAR);
-		expect(rows.map((r) => r.id)).toEqual(['reserveMet', 'reserveDays', 'supplied', 'farmsBelow', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'reserveDays', 'supplied', 'farmsBelow', 'outflow']);
 	});
 
 	it('adds rows for the (at most two) farms most changed, matched on the baseline node, and NSE only with calibration', () => {
@@ -101,7 +104,7 @@ describe('dam storage (issue #55 figures)', () => {
 			{ a: 0.6, b: 0.48, delta: -0.12 },
 			{ a: 0.6, b: 0.63, delta: 0.03 }
 		]);
-		expect(rows.map((r) => r.id)).toEqual(['reserveMet', 'reserveDays', 'supplied', 'farmsBelow', 'dams', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'reserveDays', 'supplied', 'farmsBelow', 'dams', 'outflow']);
 		const dams = rows.find((r) => r.id === 'dams')!;
 		expect(dams).toMatchObject({ label: 'Dam storage, end of run', unit: '% of capacity', base: 0.6, spec: { format: 'fraction', better: 'neutral' } });
 		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2)).map((x) => x.text)).toEqual([

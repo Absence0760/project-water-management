@@ -1599,6 +1599,11 @@ may belong to a team (`project.team_id`):
 | `member` | `editor` |
 | `admin` | `owner` (and manages the team: rename, members, delete) |
 
+The mapping is one to one, so the UI shows a team role by the project role it
+gives: Viewer, Editor, Owner, one set of names for teams and projects
+(`frontend/src/lib/api/roleLabels.ts`, issue #162). The enum values above are
+what the database and API store and send; only the display names are shared.
+
 Direct project membership still works on top — the **effective role is the
 higher of the two** (`app_project_role()`). Every project policy goes through
 `app_has_role()`, which uses the effective role, so team access applies to all

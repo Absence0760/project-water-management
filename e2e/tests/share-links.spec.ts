@@ -11,6 +11,7 @@ import { API_URL } from '../support/env.ts';
 import { createRun, putModel, seedRunnableProject, type Model } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 const PHONE = { width: 360, height: 740 };
 const words = await siteWords('af');
@@ -82,7 +83,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 		'A model estimate that can be wrong, not a measurement, licence or restriction. As far as the law allows, the operator of this software accepts no responsibility to anyone who relies on this page.'
 	);
 	await expect(notice).toContainText('Irrigate at night and cut back where you can.');
-	await expect(reserve.getByText(/(Below|Kept) its reserve on .* the last 30\sdays\./)).toBeVisible();
+	// The seeded record is long past, so the 30 days are named by their last day (issue #162).
+	await expect(reserve.getByText(/(Below|Kept) its reserve on .* the 30\sdays\sto\s\d{1,2}\s\w{3,4}\s\d{4}\./)).toBeVisible();
 	await expect(shared.getByRole('region', { name: 'River flow each month, in m³ a day' })).toBeVisible();
 	// No farm, no note, anywhere on the page.
 	const text = await shared.locator('body').innerText();
@@ -116,8 +118,8 @@ test('an owner shares the published baseline; it opens signed out on a phone, an
 	await expect(row).not.toContainText('Never');
 
 	// Withdraw it: the confirm, then the link is dead for whoever holds it.
-	page.once('dialog', (d) => d.accept());
 	await row.getByRole('button', { name: 'Withdraw Catchment forum' }).click();
+	await answerConfirm(page, true, 'Withdraw the link “Catchment forum”?');
 	await expect(row).toContainText('Withdrawn');
 	await expect(row.getByRole('button', { name: /^Withdraw/ })).toHaveCount(0);
 

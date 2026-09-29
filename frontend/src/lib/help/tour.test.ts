@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { HELP } from './content';
 import { NAV_SECTIONS, TAB_LABELS } from '$lib/workspace/tabs';
-import { DIAGRAM_IDS, GUIDES, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline } from './guides';
+import { DIAGRAM_IDS, GUIDES, SETUP_STEPS, SETUP_TABS, TAB_TITLES, guideFor, inline, plainText } from './guides';
 import { SHOTS, SHOT_ALT, TIP_PICTURES, pictureSrc, type ShotId } from './pictures';
 import { TOUR } from './tour';
 
@@ -83,5 +83,24 @@ describe('setup path', () => {
 	it("follows the workspace's Build the model section, whose order the help describes", () => {
 		const model = NAV_SECTIONS.find((sec) => sec.id === 'model')!.tabs as readonly string[];
 		expect(SETUP_TABS.filter((id) => model.includes(id))).toEqual([...model]);
+	});
+
+	it('"Getting around a project" names the sidebar’s sections, and their tabs, in the sidebar’s order', () => {
+		const section = guideFor('the-whole-process')!.sections.find((s) => s.heading === 'Getting around a project')!;
+		const block = section.blocks.find((b) => b.type === 'p' && b.text.includes('grouped in three sections'));
+		expect(block).toBeDefined();
+		const text = plainText((block as { text: string }).text);
+		let at = 0;
+		for (const s of NAV_SECTIONS) {
+			const found = text.indexOf(s.label, at);
+			expect(found, `${s.label} after position ${at}`).toBeGreaterThanOrEqual(at);
+			at = found + s.label.length;
+			for (const id of s.tabs) {
+				const label = TAB_LABELS[id];
+				const f = text.indexOf(label, at);
+				expect(f, `${label} under ${s.label}`).toBeGreaterThanOrEqual(at);
+				at = f + label.length;
+			}
+		}
 	});
 });

@@ -3,13 +3,13 @@
 /* eslint-disable */
 export const DATA = {
 	"source": "Invented example catchment (Kleinberg); every figure is synthetic.",
-	"engineVersion": "1.15.0",
+	"engineVersion": "1.23.0",
 	"period": {
 		"start": "2010-01-01",
 		"end": "2024-12-31"
 	},
 	"hero": {
-		"reserveMetPct": 41.6,
+		"reserveNotMetPct": 58.5,
 		"farms": 4,
 		"dams": 4,
 		"years": 15,
@@ -138,34 +138,34 @@ export const DATA = {
 				100,
 				100,
 				100,
-				99.4,
-				98.1,
-				96.3,
-				94.1,
-				91.4,
-				88.1,
-				84.5,
-				80.9,
-				77.2,
-				73.9,
-				70.5,
-				67.1,
-				63.8,
-				61.6,
+				99.3,
+				97.9,
+				95.9,
+				93.6,
+				90.7,
+				87.2,
+				83.6,
+				79.8,
+				75.9,
+				72.5,
+				69,
+				65.4,
+				62,
 				59.7,
-				58.9,
-				57.1,
-				56,
+				57.7,
+				56.9,
+				55,
+				53.8,
+				54,
+				53.4,
+				53.7,
+				54.1,
 				56.2,
-				55.7,
-				55.9,
-				56.4,
-				58.5,
-				60.3,
-				63.8,
-				70.8,
-				82.1,
-				99.5,
+				58,
+				61.5,
+				68.5,
+				79.8,
+				99.2,
 				100,
 				100,
 				100,
@@ -187,36 +187,36 @@ export const DATA = {
 			"name": "Rustenvrede",
 			"demand": [
 				0,
-				1526,
-				1356,
-				2357,
-				2942,
-				3263,
-				3994,
-				3994,
-				4195,
-				4696,
-				4696,
-				4696,
-				4696,
-				4857,
-				4884,
-				4884,
-				4884,
-				4609,
-				4242,
-				4242,
-				4242,
-				3748,
-				2935,
-				2587,
-				1515,
-				3091,
-				1035,
-				1168,
-				1553,
-				587,
-				361,
+				1582,
+				1405,
+				2443,
+				3049,
+				3382,
+				4140,
+				4140,
+				4348,
+				4868,
+				4868,
+				4868,
+				4868,
+				5035,
+				5063,
+				5063,
+				5063,
+				4777,
+				4397,
+				4397,
+				4397,
+				3886,
+				3042,
+				2682,
+				1570,
+				3204,
+				1073,
+				1211,
+				1610,
+				608,
+				375,
 				0,
 				0,
 				0,
@@ -236,36 +236,36 @@ export const DATA = {
 				0,
 				0,
 				0,
-				105,
+				108,
 				0
 			],
 			"supplied": [
 				0,
-				1526,
-				1356,
-				2357,
-				2942,
-				3263,
-				3994,
-				3994,
-				4195,
-				4696,
-				4696,
-				4696,
-				4696,
-				4857,
-				4884,
-				4884,
-				4884,
-				976,
-				595,
-				498,
-				454,
-				424,
+				1582,
+				1405,
+				2443,
+				3049,
+				3382,
+				4140,
+				4140,
+				4348,
+				4868,
+				4868,
+				4868,
+				4868,
+				5035,
+				5063,
+				5063,
+				3723,
+				778,
+				606,
+				499,
+				455,
+				425,
 				407,
-				388,
-				413,
-				326,
+				389,
+				414,
+				327,
 				191,
 				506,
 				272,
@@ -290,7 +290,7 @@ export const DATA = {
 				0,
 				0,
 				0,
-				105,
+				108,
 				0
 			]
 		},
@@ -298,22 +298,22 @@ export const DATA = {
 			"flow": [
 				1.863,
 				1.071,
-				0.775,
-				0.608,
-				0.328,
-				0.198,
-				0.077,
-				0.02,
-				0.002,
-				0.002,
-				0.002,
-				0.002,
-				0.002,
+				0.774,
+				0.607,
+				0.327,
+				0.196,
+				0.076,
+				0.019,
 				0.003,
 				0.003,
 				0.003,
 				0.003,
-				0.001,
+				0.003,
+				0.003,
+				0.003,
+				0.003,
+				0.002,
+				0,
 				0,
 				0,
 				0,
@@ -332,7 +332,7 @@ export const DATA = {
 				0,
 				0,
 				0.057,
-				1.661,
+				1.638,
 				2.27,
 				5.409,
 				3.666,
@@ -410,7 +410,7 @@ export const DATA = {
 		"farm": "Bergwater",
 		"baseHa": 60,
 		"baseDamM3": 400000,
-		"baseSupplied": 79.7,
+		"baseSupplied": 80.1,
 		"extraHa": [
 			0,
 			10,
@@ -430,191 +430,191 @@ export const DATA = {
 		"grid": [
 			[
 				{
-					"reserveDays": 213.4,
-					"supplied": 79.7,
-					"suppliedKm3": 608
+					"reserveDays": 213.7,
+					"supplied": 80.1,
+					"suppliedKm3": 611
 				},
 				{
-					"reserveDays": 214.1,
-					"supplied": 89.2,
-					"suppliedKm3": 681
+					"reserveDays": 214.3,
+					"supplied": 89.6,
+					"suppliedKm3": 684
 				},
 				{
-					"reserveDays": 214.6,
-					"supplied": 97.1,
-					"suppliedKm3": 741
+					"reserveDays": 214.8,
+					"supplied": 97.3,
+					"suppliedKm3": 742
 				},
 				{
-					"reserveDays": 215,
-					"supplied": 99.2,
+					"reserveDays": 215.2,
+					"supplied": 99.3,
 					"suppliedKm3": 757
 				},
 				{
-					"reserveDays": 215.1,
+					"reserveDays": 215.3,
 					"supplied": 99.6,
 					"suppliedKm3": 760
 				}
 			],
 			[
 				{
-					"reserveDays": 214,
-					"supplied": 72.6,
-					"suppliedKm3": 627
+					"reserveDays": 214.3,
+					"supplied": 72.9,
+					"suppliedKm3": 631
 				},
-				{
-					"reserveDays": 214.8,
-					"supplied": 81,
-					"suppliedKm3": 701
-				},
-				{
-					"reserveDays": 215.1,
-					"supplied": 89.4,
-					"suppliedKm3": 773
-				},
-				{
-					"reserveDays": 215.9,
-					"supplied": 96.6,
-					"suppliedKm3": 835
-				},
-				{
-					"reserveDays": 216.1,
-					"supplied": 99.1,
-					"suppliedKm3": 856
-				}
-			],
-			[
 				{
 					"reserveDays": 214.9,
-					"supplied": 66.8,
-					"suppliedKm3": 646
+					"supplied": 81.4,
+					"suppliedKm3": 704
 				},
 				{
 					"reserveDays": 215.5,
-					"supplied": 74.5,
-					"suppliedKm3": 719
+					"supplied": 89.7,
+					"suppliedKm3": 776
 				},
 				{
-					"reserveDays": 216.1,
-					"supplied": 82,
-					"suppliedKm3": 792
+					"reserveDays": 216.2,
+					"supplied": 96.8,
+					"suppliedKm3": 837
 				},
 				{
-					"reserveDays": 216.7,
-					"supplied": 89.4,
-					"suppliedKm3": 864
-				},
-				{
-					"reserveDays": 217.1,
-					"supplied": 96,
-					"suppliedKm3": 928
+					"reserveDays": 216.5,
+					"supplied": 99.1,
+					"suppliedKm3": 857
 				}
 			],
 			[
 				{
-					"reserveDays": 215.5,
-					"supplied": 62.1,
-					"suppliedKm3": 663
+					"reserveDays": 215.2,
+					"supplied": 67.2,
+					"suppliedKm3": 649
+				},
+				{
+					"reserveDays": 215.8,
+					"supplied": 74.8,
+					"suppliedKm3": 723
 				},
 				{
 					"reserveDays": 216.3,
-					"supplied": 69.1,
-					"suppliedKm3": 737
+					"supplied": 82.3,
+					"suppliedKm3": 795
 				},
 				{
-					"reserveDays": 216.7,
-					"supplied": 75.9,
-					"suppliedKm3": 811
+					"reserveDays": 217,
+					"supplied": 89.8,
+					"suppliedKm3": 867
 				},
 				{
-					"reserveDays": 217.5,
-					"supplied": 82.7,
-					"suppliedKm3": 883
-				},
-				{
-					"reserveDays": 217.9,
-					"supplied": 89.4,
-					"suppliedKm3": 955
+					"reserveDays": 217.3,
+					"supplied": 96.3,
+					"suppliedKm3": 930
 				}
 			],
 			[
 				{
-					"reserveDays": 216.2,
-					"supplied": 58.1,
-					"suppliedKm3": 680
+					"reserveDays": 215.8,
+					"supplied": 62.4,
+					"suppliedKm3": 666
 				},
 				{
-					"reserveDays": 216.9,
-					"supplied": 64.5,
-					"suppliedKm3": 754
+					"reserveDays": 216.5,
+					"supplied": 69.4,
+					"suppliedKm3": 740
 				},
 				{
-					"reserveDays": 217.4,
-					"supplied": 70.8,
-					"suppliedKm3": 828
-				},
-				{
-					"reserveDays": 218,
-					"supplied": 77,
-					"suppliedKm3": 900
-				},
-				{
-					"reserveDays": 218.5,
-					"supplied": 83.2,
-					"suppliedKm3": 973
-				}
-			],
-			[
-				{
-					"reserveDays": 216.8,
-					"supplied": 54.7,
-					"suppliedKm3": 695
+					"reserveDays": 217.1,
+					"supplied": 76.2,
+					"suppliedKm3": 814
 				},
 				{
 					"reserveDays": 217.7,
-					"supplied": 60.6,
-					"suppliedKm3": 770
+					"supplied": 83,
+					"suppliedKm3": 886
 				},
 				{
-					"reserveDays": 217.9,
-					"supplied": 66.4,
-					"suppliedKm3": 844
-				},
-				{
-					"reserveDays": 218.7,
-					"supplied": 72.2,
-					"suppliedKm3": 917
-				},
-				{
-					"reserveDays": 218.9,
-					"supplied": 77.9,
-					"suppliedKm3": 990
+					"reserveDays": 218,
+					"supplied": 89.7,
+					"suppliedKm3": 958
 				}
 			],
 			[
 				{
-					"reserveDays": 217.3,
-					"supplied": 51.8,
-					"suppliedKm3": 710
+					"reserveDays": 216.4,
+					"supplied": 58.4,
+					"suppliedKm3": 683
 				},
 				{
-					"reserveDays": 218.1,
-					"supplied": 57.2,
-					"suppliedKm3": 785
+					"reserveDays": 217.1,
+					"supplied": 64.8,
+					"suppliedKm3": 757
+				},
+				{
+					"reserveDays": 217.7,
+					"supplied": 71,
+					"suppliedKm3": 831
+				},
+				{
+					"reserveDays": 218.4,
+					"supplied": 77.3,
+					"suppliedKm3": 903
+				},
+				{
+					"reserveDays": 218.7,
+					"supplied": 83.4,
+					"suppliedKm3": 975
+				}
+			],
+			[
+				{
+					"reserveDays": 217.1,
+					"supplied": 55,
+					"suppliedKm3": 698
+				},
+				{
+					"reserveDays": 217.7,
+					"supplied": 60.8,
+					"suppliedKm3": 773
 				},
 				{
 					"reserveDays": 218.3,
-					"supplied": 62.6,
-					"suppliedKm3": 859
+					"supplied": 66.6,
+					"suppliedKm3": 847
 				},
 				{
-					"reserveDays": 219.1,
-					"supplied": 68,
-					"suppliedKm3": 933
+					"reserveDays": 218.9,
+					"supplied": 72.4,
+					"suppliedKm3": 920
 				},
 				{
-					"reserveDays": 219.5,
-					"supplied": 73.3,
-					"suppliedKm3": 1006
+					"reserveDays": 219.3,
+					"supplied": 78.1,
+					"suppliedKm3": 992
+				}
+			],
+			[
+				{
+					"reserveDays": 217.6,
+					"supplied": 52,
+					"suppliedKm3": 713
+				},
+				{
+					"reserveDays": 218.1,
+					"supplied": 57.4,
+					"suppliedKm3": 788
+				},
+				{
+					"reserveDays": 218.8,
+					"supplied": 62.8,
+					"suppliedKm3": 862
+				},
+				{
+					"reserveDays": 219.3,
+					"supplied": 68.2,
+					"suppliedKm3": 935
+				},
+				{
+					"reserveDays": 219.7,
+					"supplied": 73.5,
+					"suppliedKm3": 1008
 				}
 			]
 		]

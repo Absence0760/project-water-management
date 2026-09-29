@@ -46,6 +46,19 @@ describe('the terms summary', () => {
 		expect(body).toContain(t(SUMMARY_LANGUAGE_NOTE));
 	});
 
+	it('contained (the sign-up form): the points in their own scroll box, with the full terms linked beside the heading', () => {
+		const html = render(TermsSummary, { props: { contained: true } }).body;
+		const body = text(html);
+		expect(body).toContain(SUMMARY_TITLE);
+		for (const p of SUMMARY_POINTS) expect(body).toContain(p);
+		expect(html).toMatch(/<a class="full[^"]*" href="[^"]*\/terms">Read the full terms<\/a>/);
+		// The app's scroll-region watcher makes it a focusable, named group while it overflows.
+		expect(html).toMatch(/<div class="scroll[^"]*" data-scroll-region/);
+		expect(html.indexOf('Read the full terms')).toBeLessThan(html.indexOf('data-scroll-region'));
+		// Not contained (the re-acceptance notice): the plain box, no link.
+		expect(render(TermsSummary).body).not.toContain('data-scroll-region');
+	});
+
 	it('is the short version at the top of /terms, in English', () => {
 		const terms = readFileSync(new URL('../../../routes/terms/+page.svelte', import.meta.url), 'utf8');
 		expect(terms).toContain("import { SUMMARY_POINTS } from '$lib/components/legal/termsSummary';");

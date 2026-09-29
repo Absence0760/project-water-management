@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { holdAnchor, READER_INPUT, type AnchorEnv } from './anchor';
+import { hashId, holdAnchor, READER_INPUT, type AnchorEnv } from './anchor';
+
+describe('hashId', () => {
+	it('decodes the id, and gives none for no hash or a malformed one', () => {
+		expect(hashId('#dam-capacity')).toBe('dam-capacity');
+		expect(hashId('#caf%C3%A9')).toBe('café');
+		expect(hashId('')).toBe('');
+		expect(hashId('#%E0')).toBe('');
+	});
+});
 
 function setup() {
 	const target = new EventTarget();
