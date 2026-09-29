@@ -106,101 +106,145 @@ function heldOutScore(r: CalibrationReport, rules: CalibrationRules): { score: n
 	return { score: null, missing: test ? `no ${rules.selection.score} score on the ${SELECTION_TEST_LABEL[rules.selection.test]}` : `the record doesn’t allow the ${SELECTION_TEST_LABEL[rules.selection.test]}` };
 }
 
-/** Run the project's calibration rules (settings.calibrationRules) end to end. Throws when there is nothing to calibrate, or the rules refuse. */
-export function autoCalibrate(input: ModelInput, opts: AutoCalibrateOptions = {}): AutoCalibrationReport {
-	// Read merged over the defaults; each case's input keeps the raw settings, as calibrate() takes them.
+/**
+ * What a run of the rules fixes before any fit (JSON, so a server job can
+ * store it and fit the cases one job at a time): the rules, the record fitted
+ * and the other one, the water years the exclusion rule leaves out, and the
+ * cases in order.
+ */
+export interface AutoCalibrationPlan {
+	rules: CalibrationRules;
+	engineVersion: string;
+	flowKind: string;
+	validationRecord: CalibrationFlowKind | null;
+	years: FlaggedYearShare[];
+	ruleExclusions: CalibrationExclusion[];
+	cases: Pick<AutoCase, 'pan' | 'bounds' | 'objective' | 'label'>[];
+	/** The rules' own warnings (an invalid stored set fell back to the defaults). */
+	notes: string[];
+	/** Model runs one case makes at most: every start, both validation fits, and the fit without the WR2012 penalty when it is on. */
+	caseEvaluations: number;
+}
+
+/** Plan a run of the project's rules (settings.calibrationRules). Throws when there is nothing to calibrate, or the rules refuse. */
+export function planAutoCalibration(input: ModelInput): AutoCalibrationPlan {
 	const settings = mergeSettings(input.settings, []);
 	const notes: string[] = [];
 	const rules = resolveCalibrationRules(input.settings.calibrationRules, notes);
-	const { seed, starts, budget } = rules.run;
-
 	// The exclusions come from the flags of the record fitted to, over the window as the settings have it.
 	const pb = prepareCalibration(input);
 	const other = CALIBRATION_FLOW_KINDS.find((k) => k !== pb.flowKind && input.series?.[k]) ?? null;
 	const refusal = autoCalibrationRefusal(settings, rules, other);
 	if (refusal) throw new Error(refusal);
 	const flagged = flaggedYearExclusions(pb.flowFlags!, pb.windowDays!, pb.startDate, rules.exclusions.maxFlaggedShare);
-	const ruleRanges = exclusionRanges(flagged.exclusions).map(({ start, end }) => ({ start, end }));
-
-	const combos: Pick<AutoCase, 'pan' | 'bounds' | 'objective'>[] = [];
+	const cases: AutoCalibrationPlan['cases'] = [];
 	for (const id of rules.forcing.pan)
 		for (const bounds of rules.cases.bounds)
-			for (const objective of rules.cases.objectives) combos.push({ pan: { id, label: rulePanLabel(id), values: rulePanValues(id) }, bounds, objective });
-
-	let cancelled = false;
-	const cases: AutoCase[] = [];
-	for (const [i, c] of combos.entries()) {
-		const label = `${c.pan.label} · ${c.bounds} bounds · ${c.objective}`;
-		const caseInput: ModelInput = c.pan.values ? { ...input, settings: { ...input.settings, panCoefficient: c.pan.values as unknown as ProjectSettings['panCoefficient'] } } : input;
-		let report: CalibrationReport | null = null;
-		let error: string | null = null;
-		try {
-			report = calibrate(caseInput, {
-				model: 'gr4j',
-				objective: c.objective,
-				bounds: c.bounds,
-				seed,
-				starts,
-				budget,
-				validate: true,
-				exclusions: ruleRanges,
-				...(other ? { validationRecord: other } : {}),
-				onProgress: opts.onProgress ? (progress) => opts.onProgress!({ caseIndex: i, cases: combos.length, progress }) : undefined
-			});
-		} catch (e) {
-			error = `the fit failed: ${e instanceof Error ? e.message : String(e)}`;
-		}
-		if (report?.cancelled) {
-			cancelled = true;
-			error = 'cancelled';
-		}
-		let naturalMarMm3: number | null = null;
-		const filters: FilterResult[] = [];
-		let held: { score: number | null; missing?: string } = { score: null };
-		if (report && !error) {
-			// A run that fails with the fitted parameters fails this case only, never the fits already made.
-			try {
-				const out = runModel({ ...caseInput, settings: { ...caseInput.settings, gr4j: { ...settings.gr4j, ...report.params } } });
-				naturalMarMm3 = naturalMar(out);
-				if (rules.filters.wr2012Mar) filters.push(wr2012MarFilter(out.summary.wr2012, settings.wr2012.calibrationPenalty));
-				if (rules.filters.typicalParams) filters.push(typicalParamsFilter(report.params, report.free));
-				held = heldOutScore(report, rules);
-			} catch (e) {
-				error = `the run with the fitted parameters failed: ${e instanceof Error ? e.message : String(e)}`;
+			for (const objective of rules.cases.objectives) {
+				const pan = { id, label: rulePanLabel(id), values: rulePanValues(id) };
+				cases.push({ pan, bounds, objective, label: `${pan.label} · ${bounds} bounds · ${objective}` });
 			}
-		}
-		cases.push({ ...c, label, report, error, naturalMarMm3, filters, score: held.score, eligible: false, reasons: held.missing ? [held.missing] : [] });
-		if (cancelled) break;
-	}
+	const penalty = settings.wr2012.calibrationPenalty.enabled && !!settings.wr2012.reference;
+	return {
+		rules,
+		engineVersion: ENGINE_VERSION,
+		flowKind: pb.flowKind,
+		validationRecord: other,
+		years: flagged.years,
+		ruleExclusions: flagged.exclusions,
+		cases,
+		notes,
+		caseEvaluations: rules.run.budget * (rules.run.starts + 2 + (penalty ? 1 : 0))
+	};
+}
 
+/** Fit case `i` of a plan with validation, run the model with the fit for its MAR and filters, and score it on the rules' test. */
+export function runAutoCase(input: ModelInput, plan: AutoCalibrationPlan, i: number, onProgress?: (p: CalibrationProgress) => boolean | void): AutoCase {
+	const settings = mergeSettings(input.settings, []);
+	const { rules } = plan;
+	const c = plan.cases[i]!;
+	const ruleRanges = exclusionRanges(plan.ruleExclusions).map(({ start, end }) => ({ start, end }));
+	const caseInput: ModelInput = c.pan.values ? { ...input, settings: { ...input.settings, panCoefficient: c.pan.values as unknown as ProjectSettings['panCoefficient'] } } : input;
+	let report: CalibrationReport | null = null;
+	let error: string | null = null;
+	try {
+		report = calibrate(caseInput, {
+			model: 'gr4j',
+			objective: c.objective,
+			bounds: c.bounds,
+			seed: rules.run.seed,
+			starts: rules.run.starts,
+			budget: rules.run.budget,
+			validate: true,
+			exclusions: ruleRanges,
+			...(plan.validationRecord ? { validationRecord: plan.validationRecord } : {}),
+			...(onProgress ? { onProgress } : {})
+		});
+	} catch (e) {
+		error = `the fit failed: ${e instanceof Error ? e.message : String(e)}`;
+	}
+	if (report?.cancelled) error = 'cancelled';
+	let naturalMarMm3: number | null = null;
+	const filters: FilterResult[] = [];
+	let held: { score: number | null; missing?: string } = { score: null };
+	if (report && !error) {
+		// A run that fails with the fitted parameters fails this case only, never the fits already made.
+		try {
+			const out = runModel({ ...caseInput, settings: { ...caseInput.settings, gr4j: { ...settings.gr4j, ...report.params } } });
+			naturalMarMm3 = naturalMar(out);
+			if (rules.filters.wr2012Mar) filters.push(wr2012MarFilter(out.summary.wr2012, settings.wr2012.calibrationPenalty));
+			if (rules.filters.typicalParams) filters.push(typicalParamsFilter(report.params, report.free));
+			held = heldOutScore(report, rules);
+		} catch (e) {
+			error = `the run with the fitted parameters failed: ${e instanceof Error ? e.message : String(e)}`;
+		}
+	}
+	return { ...c, report, error, naturalMarMm3, filters, score: held.score, eligible: false, reasons: held.missing ? [held.missing] : [] };
+}
+
+/** The report once every case is fitted (or the run stopped): which may be kept, the one kept, and the notes. */
+export function finishAutoCalibration(plan: AutoCalibrationPlan, fitted: readonly AutoCase[], cancelled = false): AutoCalibrationReport {
+	const { rules } = plan;
+	const cases = fitted.map((c) => ({ ...c }));
 	const verdict = selectCase(cases.map((c) => ({ error: c.error, score: c.score, scoreMissing: c.reasons[0], filters: c.filters })));
 	cases.forEach((c, i) => {
 		c.eligible = verdict.eligible[i]!;
 		c.reasons = verdict.reasons[i]!;
 	});
 	const chosen = cancelled ? null : verdict.chosen;
-
+	const notes = [...plan.notes];
 	if (!rules.signedOff)
 		notes.push('These are draft rules, not yet signed off by the hydrologist: the fit they keep is not evidence until they are (Settings → Calibration rules).');
 	if (rules.filters.wr2012Mar && cases.some((c) => c.filters.some((f) => f.id === 'wr2012Mar' && f.status === 'notApplicable')))
 		notes.push('The WR2012 MAR filter could not be applied: there is no WR2012 reference in Settings.');
-	if (flagged.exclusions.length) notes.push(`The exclusion rule left out ${flagged.exclusions.length} water year${flagged.exclusions.length === 1 ? '' : 's'}.`);
+	if (plan.ruleExclusions.length) notes.push(`The exclusion rule left out ${plan.ruleExclusions.length} water year${plan.ruleExclusions.length === 1 ? '' : 's'}.`);
 	if (cancelled) notes.push('Cancelled: no fit is kept.');
 	else if (chosen === null) notes.push('No fit passed the rules, so none is kept. The reasons are listed with each fit; the rules, not the result, are what to change.');
-
 	return {
 		rules,
-		engineVersion: ENGINE_VERSION,
-		seed,
-		starts,
-		budget,
-		flowKind: pb.flowKind,
-		validationRecord: other,
-		years: flagged.years,
-		ruleExclusions: flagged.exclusions,
+		engineVersion: plan.engineVersion,
+		seed: rules.run.seed,
+		starts: rules.run.starts,
+		budget: rules.run.budget,
+		flowKind: plan.flowKind,
+		validationRecord: plan.validationRecord,
+		years: plan.years,
+		ruleExclusions: plan.ruleExclusions,
 		cases,
 		chosen,
 		notes,
 		cancelled
 	};
+}
+
+/** Run the project's calibration rules end to end in one go (plan, every case, finish). Throws when there is nothing to calibrate, or the rules refuse. */
+export function autoCalibrate(input: ModelInput, opts: AutoCalibrateOptions = {}): AutoCalibrationReport {
+	const plan = planAutoCalibration(input);
+	const cases: AutoCase[] = [];
+	for (let i = 0; i < plan.cases.length; i++) {
+		const c = runAutoCase(input, plan, i, opts.onProgress ? (progress) => opts.onProgress!({ caseIndex: i, cases: plan.cases.length, progress }) : undefined);
+		cases.push(c);
+		if (c.error === 'cancelled') return finishAutoCalibration(plan, cases, true);
+	}
+	return finishAutoCalibration(plan, cases);
 }
