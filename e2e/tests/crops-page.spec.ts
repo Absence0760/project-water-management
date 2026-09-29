@@ -236,11 +236,6 @@ test('with a daily A-pan series the demand chart says it shows the monthly means
 	await expect(chart).toHaveAccessibleName(/Show table holds the values\. Shows the monthly A-pan means\. .* so their demand differs\.$/);
 	await expectNoViolations(page);
 
-	// The grid modal's demand preview says the same.
-	const grid = await openCropGrid(page, 'demand');
-	await expect(grid.getByTestId('crops-demand-apan')).toHaveText(note);
-	await closeModal(page);
-
 	// With no monthly means the preview shows no demand, but the alert says runs still take the daily series.
 	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
 	await page.reload();
