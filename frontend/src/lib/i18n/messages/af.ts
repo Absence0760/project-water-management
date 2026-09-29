@@ -1149,6 +1149,8 @@ export const af: Catalogue = {
 	'3e1ec91d': 'van die water wat jy hierdie seisoen nodig gehad het',
 	// dam full
 	'07095e7e': 'dam vol',
+	// The season outlook could not be loaded. Check your connection, then reload the page.
+	'50e81dc9': 'Die seisoensvooruitsig kon nie gelaai word nie. Kyk jou verbinding na en herlaai dan die bladsy.',
 	// More
 	'4f34d900': 'Meer',
 	// Download my figures (CSV)

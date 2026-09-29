@@ -5851,8 +5851,10 @@ which moved the version to 0.44.0, and model-state snapshots (§2.16,
 [api.md § Seasonal outlooks](./api.md#seasonal-outlooks)) runs the members
 one at a time, and the Runs tab shows the result
 ([ui.md § Seasonal outlook](./ui.md#seasonal-outlook)); the season and the
-planning share are project settings (`settings.outlook`). The farmer view
-is not built yet (design §3.5).
+planning share are project settings (`settings.outlook`). The WUA
+publishes one level to farmers, and each farm page shows that farm's own
+figures at it, *This season* (`views/farmOutlook.ts`, migration 106, issues
+#53 R5 and #122; [ui.md § Farmer view](./ui.md#farmer-view-farm)).
 
 **The season.** A decision date (the season's first day; the state is the
 end of the day before) and a season end, inclusive, at most 366 days.
