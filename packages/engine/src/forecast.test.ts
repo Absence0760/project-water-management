@@ -10,7 +10,7 @@ import { RAIN_SOURCE_CODE } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { randomInput } from './testing/fuzz';
 import { checkRainSource } from './verify/checks';
-import { checkForecastPrefix } from './testing/forecastInvariants';
+import { checkForecastPrefix, summaryDifference } from './testing/forecastInvariants';
 
 const START = '2020-01-01';
 
@@ -185,5 +185,25 @@ describe('flow-duration table of a forecast run (issue #51)', () => {
 		expect(beforeForecast(v, '2020-01-01', '2020-01-03')).toEqual([1, 2]);
 		expect(beforeForecast(v, '2020-01-01', undefined)).toBe(v);
 		expect(beforeForecast(v, '2020-01-01', '2020-02-01')).toBe(v);
+	});
+});
+
+describe('summaryDifference (names the figure a prefix-stability failure is about)', () => {
+	const run = () => runModelChecked(withRain(record(200)));
+
+	it('is null for two runs of one input, and ignores the forecast, forecastRain and warnings figures', () => {
+		const a = run();
+		const b = run();
+		expect(summaryDifference(a, b)).toBeNull();
+		const moved = { ...b, summary: { ...b.summary, warnings: [...b.summary.warnings, 'extra'], forecastRain: { days: 1 } as never } };
+		expect(summaryDifference(a, moved as ModelOutput)).toBeNull();
+	});
+
+	it('names the first figure that differs and where', () => {
+		const a = run();
+		const b = { ...a, summary: { ...a.summary, wr2012: { changed: true } as never } };
+		expect(summaryDifference(a, b as ModelOutput)).toMatch(/^summary\.wr2012 differs from character \d+: /);
+		const gone = { ...a, summary: { ...a.summary, farms: undefined as never } };
+		expect(summaryDifference(a, gone as ModelOutput)).toMatch(/^summary\.farms differs/);
 	});
 });

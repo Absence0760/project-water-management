@@ -9,7 +9,7 @@ import { SUPPLY_TARGET, type FarmSummary, type InputChange, type InputChangeArea
 import { fmtNum, fmtPct } from '$lib/format/number';
 import type { MetricSpec } from './delta';
 
-/** Days in an average year, for "days below the reserve a year" from the share of days. */
+/** Days in an average year, for the takeaways' "days a year below the EWR" from the share of days. */
 export const DAYS_PER_YEAR = 365.25;
 
 export interface OutcomeRow {
@@ -24,12 +24,6 @@ export interface OutcomeRow {
 }
 
 const NONE: MetricDelta = { a: null, b: null, delta: null };
-
-const scale = (m: MetricDelta, k: number): MetricDelta => ({
-	a: m.a === null ? null : m.a * k,
-	b: m.b === null ? null : m.b * k,
-	delta: m.delta === null ? null : m.delta * k
-});
 
 /** Farms whose supply moves at least this much in some what-if get a row of their own (fraction points). */
 export const FARM_ROW_MIN_CHANGE = 0.01;
@@ -112,17 +106,9 @@ export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
  * side of any comparison has one.
  */
 export function outcomeRows(comparisons: readonly RunComparison[], dams: readonly MetricDelta[] = []): OutcomeRow[] {
-	const rows: OutcomeRow[] = [
+	return [
 		// Framed as the Summary's card and River & reserve's tile (ewr/notMet.ts, issue #162): the share not met, lower is better.
 		row('ewrNotMet', EWR_NOT_MET, '% of days', { format: 'fraction', better: 'lower' }, (c) => c.catchment.ewrFractionDaysNotMet, comparisons),
-		row(
-			'reserveDays',
-			'Days below the reserve, average year',
-			'days',
-			{ format: 'days', better: 'lower' },
-			(c) => scale(c.catchment.ewrFractionDaysNotMet, DAYS_PER_YEAR),
-			comparisons
-		),
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
 		row('farmsBelow', `Hydrological units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'hydrological units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
 		...farmRows(comparisons),
@@ -141,10 +127,6 @@ export function outcomeRows(comparisons: readonly RunComparison[], dams: readonl
 			: []),
 		row('outflow', 'Mean outflow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanSimulatedOutflowM3Day, comparisons)
 	];
-	if (comparisons.some((c) => c.calibration && c.calibration.nse.a !== null)) {
-		rows.push(row('nse', 'Calibration NSE', '', { format: 'ratio', better: 'higher', digits: 2 }, (c) => c.calibration?.nse ?? null, comparisons));
-	}
-	return rows;
 }
 
 // ---------------------------------------------------------------------------
@@ -158,13 +140,13 @@ export interface Takeaway {
 
 /**
  * What counts as material, so a takeaway never reports noise: a whole day a
- * year below the reserve, a percentage point of the demand supplied, one farm
+ * year below the EWR, a percentage point of the demand supplied, one farm
  * crossing the supply target, five points of one farm's supply, 5 % of the
  * mean outflow. The dam storage row has no takeaway: a what-if that raises
  * a dam ends emptier as a share of the bigger dam while holding more, so the
  * row shows the change without a verdict.
  */
-export const MATERIAL = { reserveDays: 1, suppliedPp: 1, farmPp: 5, outflowShare: 0.05 } as const;
+export const MATERIAL = { ewrDays: 1, suppliedPp: 1, farmPp: 5, outflowShare: 0.05 } as const;
 
 const plural = (n: number, one: string, many = `${one}s`) => `${fmtNum(n, 0)} ${n === 1 ? one : many}`;
 
@@ -178,25 +160,27 @@ export interface TakeawayContext {
 /**
  * Plain-language takeaways from the outcomes table, what-if by what-if, each
  * only when the change is material (MATERIAL). The wording says what the
- * change does ("What-if 1 costs the reserve 13 more days a year"); the words
+ * change does ("What-if 1 puts the river below the EWR on 13 more days a
+ * year", from the EWR-not-met share × DAYS_PER_YEAR); the words
  * carry the direction, so tone (colour) is never the only cue.
  */
 export function takeaways(rows: readonly OutcomeRow[], names: readonly string[], ctx: TakeawayContext): Takeaway[] {
 	const out: Takeaway[] = [];
 	const get = (id: string) => rows.find((r) => r.id === id);
-	const reserve = get('reserveDays');
-	const reserveDelta = (i: number) => {
-		const d = reserve?.whatIfs[i]?.delta;
-		return d === null || d === undefined ? null : Math.round(d);
+	const notMet = get('ewrNotMet');
+	// The pragmatic EWR's days not met (ewrFractionDaysNotMet), not the Reserve's rule months: say "EWR", never "reserve".
+	const ewrDaysDelta = (i: number) => {
+		const d = notMet?.whatIfs[i]?.delta;
+		return d === null || d === undefined ? null : Math.round(d * DAYS_PER_YEAR);
 	};
 	names.forEach((name, i) => {
 		const before = out.length;
-		const rd = reserveDelta(i);
-		if (rd !== null && Math.abs(rd) >= MATERIAL.reserveDays) {
+		const rd = ewrDaysDelta(i);
+		if (rd !== null && Math.abs(rd) >= MATERIAL.ewrDays) {
 			out.push(
 				rd > 0
-					? { tone: 'worse', text: `${name} costs the reserve ${plural(rd, 'more day')} a year` }
-					: { tone: 'better', text: `${name} gives the reserve back ${plural(-rd, 'day')} a year` }
+					? { tone: 'worse', text: `${name} puts the river below the EWR on ${plural(rd, 'more day')} a year` }
+					: { tone: 'better', text: `${name} puts the river below the EWR on ${plural(-rd, 'fewer day')} a year` }
 			);
 		}
 		const sd = get('supplied')?.whatIfs[i]?.delta;
@@ -233,12 +217,12 @@ export function takeaways(rows: readonly OutcomeRow[], names: readonly string[],
 		if (ctx.samePeriod[i] === false) out.push({ tone: 'neutral', text: `${name} covers other dates than the baseline, so part of its change comes from the period` });
 		if (ctx.engineChanged[i]) out.push({ tone: 'neutral', text: `${name} ran on another engine version, so part of its change may come from the model itself` });
 	});
-	// Two what-ifs that both cost the reserve: say which costs less, and by how much.
-	const r1 = reserveDelta(0);
-	const r2 = reserveDelta(1);
-	if (names.length === 2 && r1 !== null && r2 !== null && r1 >= MATERIAL.reserveDays && r2 >= MATERIAL.reserveDays && r1 !== r2) {
+	// Two what-ifs that both cost the EWR days: say which costs less, and by how much.
+	const r1 = ewrDaysDelta(0);
+	const r2 = ewrDaysDelta(1);
+	if (names.length === 2 && r1 !== null && r2 !== null && r1 >= MATERIAL.ewrDays && r2 >= MATERIAL.ewrDays && r1 !== r2) {
 		const [less, more, a, b] = r1 < r2 ? [names[0]!, names[1]!, r1, r2] : [names[1]!, names[0]!, r2, r1];
-		out.push({ tone: 'neutral', text: `${less} costs the reserve less than ${more}: ${fmtNum(a, 0)} against ${fmtNum(b, 0)} more days a year` });
+		out.push({ tone: 'neutral', text: `${less} costs the EWR less than ${more}: ${fmtNum(a, 0)} against ${fmtNum(b, 0)} more days a year below it` });
 	}
 	return out;
 }

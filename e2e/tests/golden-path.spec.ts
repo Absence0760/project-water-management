@@ -22,6 +22,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { addCrop } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
+import { openAddData, uploadedNote } from '../support/addData.ts';
 
 const fixture = (name: string) => fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url));
 const tab = (page: Page, name: string) => page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name });
@@ -150,29 +151,32 @@ test('a new user builds a catchment through the UI, runs it and reads the result
 	// The run needs evaporation: here a daily A-pan record (the monthly means in
 	// Settings are the other way, which the A-pan and EWR test below takes).
 	await tab(page, 'Data').click();
-	const upload = page.getByRole('region', { name: 'Upload CSV' });
+	let upload = await openAddData(page);
 	await upload.getByLabel('Kind').selectOption({ label: 'Rainfall — catchment' });
 	await upload.getByLabel('CSV file').setInputFiles(fixture('rainfall-2y.csv'));
 	await expect(upload.getByRole('definition').nth(0)).toHaveText('2020-10-01 → 2022-09-30');
 	await upload.getByRole('button', { name: 'Upload' }).click();
-	await expect(upload.getByRole('status')).toHaveText('Uploaded 730 days to “Rainfall — catchment”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “Rainfall — catchment”.');
 
+	upload = await openAddData(page);
 	await upload.getByLabel('Kind').selectOption({ label: 'Flow — observed gauge' });
 	await upload.getByLabel('CSV file').setInputFiles(fixture('observed-flow-2y.csv'));
 	await upload.getByLabel(/^Name/).fill('D outlet weir');
 	await upload.getByRole('button', { name: 'Upload' }).click();
-	await expect(upload.getByRole('status')).toHaveText('Uploaded 730 days to “D outlet weir”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “D outlet weir”.');
 
+	upload = await openAddData(page);
 	await upload.getByLabel('Kind').selectOption({ label: 'Evaporation — A-pan, daily' });
 	await upload.getByLabel('CSV file').setInputFiles(fixture('apan-2y.csv'));
 	await upload.getByRole('button', { name: 'Upload' }).click();
-	await expect(upload.getByRole('status')).toHaveText('Uploaded 730 days to “Evaporation — A-pan, daily”.');
+	await expect(uploadedNote(page)).toHaveText('Uploaded 730 days to “Evaporation — A-pan, daily”.');
 	await expect(page.getByRole('region', { name: 'Input time series' }).getByRole('row')).toHaveCount(4);
 
 	// --- run the model ---------------------------------------------------------------
 	await tab(page, 'Runs & results').click();
 	await page.getByLabel(/^Run label/).fill('Catchment D baseline');
-	await page.getByRole('button', { name: 'Run model' }).click();
+	// Exact: the uploads' line under the header offers its own "Re-run model".
+	await page.getByRole('button', { name: 'Run model', exact: true }).click();
 
 	const runs = runsList(page);
 	await expect(runs.getByRole('button', { name: /^Catchment D baseline/ })).toHaveAttribute('aria-current', 'true');

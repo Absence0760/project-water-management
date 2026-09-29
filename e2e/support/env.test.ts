@@ -2,7 +2,7 @@
 // e2e has no unit-test framework of its own).
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { slotFor } from './env.ts';
+import { buildDirsFor, slotFor } from './env.ts';
 
 test('the main checkout and CI use slot 0 (:3101, :7801, water_e2e)', () => {
 	assert.equal(slotFor('/home/me/github/project-water-management', false), 0);
@@ -21,4 +21,10 @@ test('E2E_SLOT overrides the derived slot, and a bad value is refused', () => {
 	assert.equal(slotFor('/any', false, '42'), 42);
 	assert.equal(slotFor('/any', true, ''), slotFor('/any', true));
 	for (const bad of ['99', '-1', '1.5', 'abc']) assert.throws(() => slotFor('/any', false, bad), /E2E_SLOT/);
+});
+
+test('slot 0 builds the site into build-e2e (CI uploads that path); any other slot into its own folders', () => {
+	assert.deepEqual(buildDirsFor(0), { build: 'build-e2e', kit: '.svelte-kit-e2e' });
+	assert.deepEqual(buildDirsFor(76), { build: 'build-e2e-76', kit: '.svelte-kit-e2e-76' });
+	assert.notEqual(buildDirsFor(3).build, buildDirsFor(4).build);
 });

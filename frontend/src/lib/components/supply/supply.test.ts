@@ -4,7 +4,7 @@ import type { RunMeta } from '$lib/api/types';
 import { supplyBars } from '$lib/components/overview/supplyBars';
 import { SUPPLY_TARGET } from '$lib/components/runs/results';
 import { SUPPLY_ANCHORS, supplyAnchor, supplyHref } from './links';
-import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, SUPPLY_NAV, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
+import { cardFacts, daysShort, pickUnit, previousRunOf, shortRanges, supplyNav, supplySummary, supplyTotals, unitCards, weekText, weekWindow, type UnitCard } from './supply';
 
 const farm = (nodeId: string, fraction: number, demand = 100): FarmSummary => ({
 	nodeId,
@@ -33,8 +33,13 @@ describe('links', () => {
 	});
 
 	it('the On this page menu links every panel, in page order, and nothing else', () => {
-		expect(SUPPLY_NAV.flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
-		expect(SUPPLY_NAV.map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
+		expect(supplyNav(true).flatMap((g) => g.sections.map((s) => s.id))).toEqual([...SUPPLY_ANCHORS]);
+		expect(supplyNav(true).map((g) => g.label)).toEqual(['Each hydrological unit', 'Tables for this run']);
+	});
+
+	it('lists Other uses last, and only for a run that has any (issue #137)', () => {
+		expect(supplyNav(true).at(-1)!.sections.at(-1)).toEqual({ id: 'res-other-uses', label: 'Other uses' });
+		expect(supplyNav(false).flatMap((g) => g.sections.map((s) => s.id))).toEqual(SUPPLY_ANCHORS.filter((a) => a !== 'res-other-uses'));
 	});
 });
 
@@ -129,17 +134,16 @@ describe('pickUnit', () => {
 describe('supplyTotals', () => {
 	const farms = [farm('a', 1), farm('b', 0.5), farm('c', SUPPLY_TARGET - 0.001)];
 	const s = summary(farms, { curtailment: { farms: [{ nodeId: 'b', totalChangeM3Day: -1 }] } as unknown as RunSummary['curtailment'] });
-	it('counts the hydrological units below the target (as the Summary), short this week and to cut, and adds up the shortfall', () => {
+	it('counts the hydrological units below the target (as the Summary), and short this week, and adds up the shortfall', () => {
 		const cards = unitCards(s, new Set(), new Map(), new Map([['b', 2], ['a', 0]]));
 		const t = supplyTotals(s, cards, true);
-		expect(t).toMatchObject({ units: 3, below: 2, weekShort: 1, mustCut: 1 });
+		expect(t).toMatchObject({ units: 3, below: 2, weekShort: 1 });
 		expect(t.shortfallM3Day).toBeCloseTo(50 + 100 * (1 - (SUPPLY_TARGET - 0.001)));
 		expect(t.shortfallMm3a).toBeCloseTo((t.shortfallM3Day * 365.25) / 1e6);
 	});
-	it('leaves this week unknown until the deficits are in, and the cut without a curtailment table', () => {
+	it('leaves this week unknown until the deficits are in', () => {
 		const t = supplyTotals(summary(farms), unitCards(summary(farms), new Set(), new Map(), null), false);
 		expect(t.weekShort).toBeNull();
-		expect(t.mustCut).toBeNull();
 	});
 });
 

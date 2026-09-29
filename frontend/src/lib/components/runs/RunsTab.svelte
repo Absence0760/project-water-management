@@ -24,6 +24,7 @@
 	import RunCharts from './RunCharts.svelte';
 	import RunSummaryView from './RunSummaryView.svelte';
 	import SelfChecksPanel from './SelfChecksPanel.svelte';
+	import WaterBalanceTable from './WaterBalanceTable.svelte';
 	import RunoffPanel from './RunoffPanel.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import RunNotes from './RunNotes.svelte';
@@ -644,7 +645,7 @@
 					</div>
 				</div>
 				<section id="res-summary" aria-label="Run summary">
-					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} />
+					<RunSummaryView summary={detail.run.summary} days={historyDays(detail.run)} reserveHref={riverHref(detail.run.id, 'res-reserve')} otherUsesHref={(hash) => supplyHref(shownRunId, { hash })} />
 				</section>
 			</section>
 			{#if summary.forecast}
@@ -678,6 +679,10 @@
 						{#if summary.dataQuality?.observedAgreement?.flaggedYears.length}
 							<div class="agree"><AgreementTable agreement={summary.dataQuality.observedAgreement} headingLevel={3} /></div>
 						{/if}
+					</div>
+					<!-- The water balance per water year (issue #137): the table a hydrologist hands a client first. -->
+					<div class="panel" id="res-water-balance">
+						<WaterBalanceTable {summary} />
 					</div>
 					{#if summary.runoff}
 						<div class="panel" id="res-runoff">
@@ -751,6 +756,7 @@
 							endDate={shownRun.endDate}
 							engineVersion={shownRun.engineVersion}
 							nodes={traceNodes}
+							balanceHref="#res-water-balance"
 						/>
 					</section>
 				{/snippet}

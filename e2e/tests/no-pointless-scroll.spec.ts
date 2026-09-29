@@ -5,7 +5,7 @@
 import type { Page } from '@playwright/test';
 import { createProject, createRun, seedRunnableProject } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
-import { monthsCard } from '../support/transfers.ts';
+import { rulesCard } from '../support/transfers.ts';
 
 /** The page's gutter below its content (app.css `.page`, 1rem at the 14 px root). */
 const GUTTER = 14;
@@ -71,7 +71,7 @@ test('every workspace tab and app page keeps only a gutter below its content, wi
 	}
 });
 
-test('with unsaved model edits the save bar never covers the last row, on a fitted page or a long one', async ({ page, owner }) => {
+test('with unsaved model edits the save bar never covers the last row, on a short page or a long one', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedRunnableProject(page.request, 'Save bar clearance');
@@ -81,10 +81,10 @@ test('with unsaved model edits the save bar never covers the last row, on a fitt
 	await expect(bar).toBeVisible();
 	const barTop = async () => (await bar.boundingBox())!.y;
 
-	// Transfers fits the window: its last card ends above the bar, and the page still doesn't scroll.
+	// Transfers with two rules is short: its rules card ends above the bar, and the page still doesn't scroll.
 	await expect.poll(async () => {
-		const months = (await monthsCard(page).boundingBox())!;
-		return months.y + months.height - (await barTop());
+		const rules = (await rulesCard(page).boundingBox())!;
+		return rules.y + rules.height - (await barTop());
 	}).toBeLessThanOrEqual(0);
 	await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(0);
 

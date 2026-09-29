@@ -81,9 +81,8 @@ Above the detail, for the baseline and every what-if at once
   a what-if than an edit to the model) and a link to **all N changes**,
   which switches the full comparison to that what-if and scrolls to *What
   changed*. A what-if with no input changes says so (or names its scenario).
-- **What changes** (`outcomeRows`): reserve met (1 − the share of days the
-  EWR wasn't met), days below the reserve in an average year (that share ×
-  365.25, so runs of different lengths compare), irrigation supplied (share
+- **What changes** (`outcomeRows`): EWR not met (the share of days the
+  EWR wasn't met, so runs of different lengths compare), irrigation supplied (share
   of demand), farms below 95 % supplied, a row for each of the (at most two)
   farms whose supply moves by at least 1 point in some what-if (matched on
   the baseline's node, so a farm missing from one what-if's comparison is
@@ -94,19 +93,24 @@ Above the detail, for the baseline and every what-if at once
   model's capacities, so a raised dam is a share of its new size; "–" for a
   run saved before those figures; no better/worse verdict and no takeaway,
   since a bigger dam can end emptier as a share yet hold more;
-  `damStorageShare`, `compareDamStorage`), mean outflow and, when either run
-  has it, calibration NSE. Each what-if cell has its value and its change from the baseline
+  `damStorageShare`, `compareDamStorage`) and mean outflow. No days-a-year
+  row (it was the EWR share × 365.25, the same number again) and no
+  calibration NSE (a what-if's fit to the real gauge is not an outcome;
+  Headline results → Calibration has it for calibration comparisons). Each what-if cell has its value and its change from the baseline
   through the same `Delta` / `formatDelta` as the detail tables (sign, ▲/▼,
   and "better"/"worse" in words).
 - **Takeaways** (`takeaways`), what-if by what-if, only for material
-  changes (`MATERIAL`: a whole day a year below the reserve, a point of the
+  changes (`MATERIAL`: a whole day a year below the EWR, from the EWR
+  not met share × 365.25, a point of the
   demand supplied, a farm crossing 95 %, 5 points of one farm's supply, 5 %
-  of the mean outflow): "What-if 1 costs the reserve 13 more days a year",
-  "What-if 2 gives the reserve back 2 days a year", "What-if 1 leaves 1 more
+  of the mean outflow): "What-if 1 puts the river below the EWR on 13 more
+  days a year", "What-if 2 puts the river below the EWR on 2 fewer days a
+  year" (the pragmatic EWR's days, not the Reserve's rule months, so never
+  "reserve"), "What-if 1 leaves 1 more
   farm below 95% supplied", "Under What-if 1, Farm 4 gets −12 pp of its
   demand", "What-if 1 lowers the mean outflow by 10%". A what-if with none
-  "makes no material change to these outcomes". When both what-ifs cost the
-  reserve, one line says which costs less and by how much. A what-if over
+  "makes no material change to these outcomes". When both what-ifs add days
+  below the EWR, one line says which costs less and by how much. A what-if over
   other dates, or on another engine version, gets a line saying part of its
   change comes from that.
 - **Days below the reserve, each year** (`ReserveYearsChart.svelte`, a chunk

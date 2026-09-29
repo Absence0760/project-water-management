@@ -6,7 +6,8 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
+	import { projectToday } from '$lib/components/projects/freshness';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import Lazy from '$lib/components/common/Lazy.svelte';
@@ -195,34 +196,15 @@
 	});
 
 	// --- the first screen (issue #17 A1, issue #162): the KPIs, the reserve strip under them (the
-	// flow chart itself is River & reserve's), then Needs attention beside Supply by farm. On a
-	// wide, tall enough window it is exactly the height left below its own top edge (measured, not
-	// assumed, as the Network's map), the two cards filling what the KPIs and the strip leave and
-	// scrolling inside themselves; the rest of the Summary follows below it.
-	const FIT_QUERY = '(min-width: 1100px) and (min-height: 620px)';
-	let fit = $state(false);
-	$effect(() => {
-		const mq = matchMedia(FIT_QUERY);
-		const on = () => (fit = mq.matches);
-		on();
-		mq.addEventListener('change', on);
-		return () => mq.removeEventListener('change', on);
-	});
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
+	// flow chart itself is River & reserve's), then Needs attention and the active alerts beside
+	// Supply by farm. It flows with the page (one scroll, the window's): it used to be sized to the
+	// window with the cards scrolling inside themselves, which hid everything below it with no cue
+	// that it was there. Supply by farm shows its emptiest units and a "Show all" instead.
 	const runFarms = $derived(shown?.summary.farms ?? []);
 	const modelFarmIds = $derived(new Set(editor.model.nodes.filter((n) => n.kind === 'farm').map((n) => n.id)));
 
-	const today = localIsoDate();
+	// The project's calendar date, as in the header and on the project list (issue #137).
+	const today = $derived(projectToday(project.timeZone));
 	const attentionItems = $derived(
 		attention({
 			model: editor.model,
@@ -258,7 +240,7 @@
 	<SetupChecklist {steps} tabs={visibleTabs} />
 	{#if attentionItems.length}<div class="pre-run"><NeedsAttention items={attentionItems} /></div>{/if}
 {:else}
-	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+	<div class="first">
 		<LatestRun
 			meta={pick.latest}
 			run={latestRun}
@@ -278,25 +260,32 @@
 				more={{ href: riverHref(shown.id), label: 'More on River & reserve' }}
 			/>
 		{/if}
-		{#if attentionItems.length || runFarms.length}
-			<div class="cols" class:solo={!attentionItems.length || !runFarms.length}>
+		<!-- What to act on (Needs attention, then the alerts firing now) beside Supply by farm; one
+		     column alone takes the width. -->
+		<div class="cols" class:solo={!runFarms.length}>
+			<div class="act">
 				<NeedsAttention items={attentionItems} />
-				{#if runFarms.length}
-					<Lazy load={loadSupply}>
-						{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
-					</Lazy>
-				{/if}
+				<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
+				<AlertsPanel projectId={project.id} {canEdit} />
 			</div>
-		{/if}
+			{#if runFarms.length}
+				<Lazy load={loadSupply}>
+					{#snippet children(SupplyByFarm)}<SupplyByFarm farms={runFarms} {modelFarmIds} more={{ href: supplyHref(shown!.id), label: 'More on Hydrological units' }} />{/snippet}
+				</Lazy>
+			{/if}
+		</div>
 	</div>
 {/if}
 
-<!-- Below the first screen, compact (issue #17): the alerts firing now, beside what stakeholders
-     and farmers see, then where the rest lives, then the setup line. -->
+<!-- Below the first screen, compact (issue #17): what stakeholders and farmers see, then where the
+     rest lives, then the setup line. Before the first run there is no first screen, so the alerts
+     sit here beside the published baseline. -->
 <div class="below">
-	<div class="pair">
-		<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
-		<AlertsPanel projectId={project.id} {canEdit} />
+	<div class="pair" class:solo={!!pick}>
+		{#if !pick}
+			<!-- Alerts firing now, and (editors) which alert emails the catchment sends (WP-2.13). -->
+			<AlertsPanel projectId={project.id} {canEdit} />
+		{/if}
 		<!-- What stakeholders and farmers see: the published run and the WUA's notice (WP-2.3). -->
 		<PublishedBaseline projectId={project.id} {runs} {canEdit} />
 	</div>
@@ -325,7 +314,9 @@
 	.pre-run {
 		margin-bottom: 1rem;
 	}
-	/* Needs attention beside Supply by farm, each half the width; one alone takes it all. */
+	/* Needs attention and the alerts beside Supply by farm, each half the width; one alone takes it
+	   all. Each card is as tall as its content (no card scrolls inside itself), so the columns may
+	   end at different heights. */
 	.cols {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -339,30 +330,22 @@
 		margin: 0;
 		min-width: 0;
 	}
+	.act {
+		display: grid;
+		gap: 1rem;
+		min-width: 0;
+	}
+	.act > :global(.panel) {
+		margin: 0;
+	}
 	@media (max-width: 899px) {
 		.cols {
 			grid-template-columns: minmax(0, 1fr);
 		}
 	}
-	/* Wide and tall enough: the first screen is the height left in the window
-	   below its top (less the save bar when it shows); the two cards take what
-	   the KPIs and the strip leave, each scrolling inside itself. */
-	.first.fit {
-		height: max(560px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		grid-template-rows: auto auto minmax(0, 1fr);
-	}
-	.fit .cols {
-		min-height: 0;
-		height: 100%;
-		align-items: stretch;
-	}
-	.fit .cols > :global(.attention),
-	.fit .cols > :global(.supply) {
-		min-height: 0;
-		overflow: auto;
-	}
-	/* The alerts beside the published baseline once the tab is wide enough for two (a container
-	   query: the sidebar takes 240 px), each unchanged; stacked below that. */
+	/* Before the first run, the alerts beside the published baseline once the tab is wide enough
+	   for two (a container query: the sidebar takes 240 px), each unchanged; stacked below that.
+	   With a run the alerts are in the first screen and the baseline has the row to itself. */
 	.below {
 		container: summary-below / inline-size;
 	}
@@ -377,7 +360,7 @@
 		margin: 0;
 	}
 	@container summary-below (min-width: 56rem) {
-		.pair {
+		.pair:not(.solo) {
 			grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 			align-items: stretch;
 		}

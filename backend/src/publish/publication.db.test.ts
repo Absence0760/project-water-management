@@ -414,6 +414,38 @@ describe('what a farmer reads', () => {
 		expect((await csv(farmer, `/projects/${projectId}/farm/${farms[0]!.id}/export.csv?from=2030-01-01`)).status).toBe(400);
 	});
 
+	// Issue #124: the farmer's file is the last year, in whole m³, headed by
+	// the series keys (the farm view words them in the reader's language).
+	it('gives the farmer the last 365 days to dataUntil by default, whole m³, headed by the series keys', async () => {
+		const path = `/projects/${projectId}/farm/${farms[0]!.id}/export.csv`;
+		const res = await csv(farmer, path);
+		expect(res.status).toBe(200);
+		const [header, ...days] = res.text.replace(/^﻿/, '').trim().split('\r\n');
+		expect(header).toBe('date,demand,supplied,deficit,dam_storage,spill,transfer');
+		expect(days).toHaveLength(365);
+		expect(days[0]!.startsWith('2022-12-30,')).toBe(true);
+		expect(days.at(-1)!.startsWith('2023-12-29,')).toBe(true);
+		// Every figure is a whole number, and each is its full-precision value
+		// rounded: the series route answers the same year unrounded.
+		const cols = header!.split(',').slice(1);
+		let fractional = 0;
+		for (const [c, key] of cols.entries()) {
+			const s = await farmer.call('GET', `/projects/${projectId}/farm/${farms[0]!.id}/series?key=${key}`);
+			expect(s.status, key).toBe(200);
+			expect(s.body.startDate, key).toBe('2022-12-30');
+			const exact = s.body.values as (number | null)[];
+			fractional += exact.filter((v) => v !== null && !Number.isInteger(v)).length;
+			const cells = days.map((d) => d.split(',')[c + 1]!);
+			expect(cells.every((v) => /^-?\d*$/.test(v)), key).toBe(true);
+			expect(cells, key).toEqual(exact.map((v) => (v === null ? '' : String(Math.round(v) || 0))));
+		}
+		// Positive control: there was something to round.
+		expect(fractional).toBeGreaterThan(0);
+		// `from` still reaches the whole record, from the run's first day.
+		const all = await csv(farmer, `${path}?from=2000-01-01`);
+		expect(all.text.replace(/^﻿/, '').trim().split('\r\n')).toHaveLength(1 + DAYS);
+	});
+
 	// WP-2.16 abuse case "a farmer using a removed membership": access is
 	// re-checked on every request (RLS reads project_member each transaction),
 	// so a removed farmer's still-valid session reads nothing from the next

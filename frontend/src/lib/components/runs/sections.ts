@@ -37,13 +37,17 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 				{ id: 'res-fdc', label: 'Flow duration' },
 				// The calibration statistics and the fit record.
 				{ id: 'res-calibration', label: 'Calibration' },
+				// The water balance per water year, every run (issue #137; it was only under Self-checks).
+				{ id: 'res-water-balance', label: 'Water balance' },
 				// Runoff model balance: conceptual models (GR4J) only.
 				...(summary.runoff ? [{ id: 'res-runoff', label: 'Runoff model' }] : []),
 				// WR2012 check: only when the project has a reference.
 				...(summary.wr2012 ? [{ id: 'res-wr2012', label: 'WR2012 check' }] : []),
 				{ id: 'res-ewr-agreement', label: 'EWR vs observed' },
 				// Hydrologist plausibility checks: runs made by engine ≥ 0.25.0.
-				...(summary.plausibility ? [{ id: 'res-plausibility', label: 'Plausibility checks' }] : [])
+				// "Plausibility", as the Summary's model-checks line says it: the panel's heading keeps "checks",
+				// and the shorter word keeps the whole menu on two rows at 1280 px beside the runs rail (issue #137).
+				...(summary.plausibility ? [{ id: 'res-plausibility', label: 'Plausibility' }] : [])
 			]
 		},
 		{
@@ -61,7 +65,9 @@ export function resultGroups(summary: SectionInput): ResultGroup[] {
 			label: 'Dig deeper',
 			sections: [
 				{ id: 'res-checks', label: 'Self-checks' },
-				{ id: 'res-explore', label: 'Explore outputs' }
+				// "Outputs", the panel's Explore outputs: with Water balance added, the longer word pushed the last link
+				// into More at 1280 px beside the runs rail (issue #137).
+				{ id: 'res-explore', label: 'Outputs' }
 			]
 		}
 	];

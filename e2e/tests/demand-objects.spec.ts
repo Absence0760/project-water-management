@@ -54,8 +54,11 @@ test('add a town demand to a hydrological unit, save, reload, run, and see what 
 	await page.getByLabel(/^Run label/).fill('With a town');
 	await page.getByRole('button', { name: 'Run model' }).click();
 	await expect(page.getByRole('heading', { level: 2, name: 'With a town' })).toBeVisible();
-	await expect(page.getByRole('heading', { level: 3, name: 'Demand objects' })).toBeVisible();
-	const row = page.getByTestId('demand-objects-table').getByRole('row', { name: /Town/ });
+	// On Units & supply's Other uses since issue #137, linked from the Summary.
+	await page.getByTestId('other-uses-link').getByRole('link', { name: 'Other uses on Units & supply' }).click();
+	const uses = page.getByRole('region', { name: 'Other uses of water' });
+	await expect(uses.getByRole('heading', { level: 3, name: 'Demand objects' })).toBeVisible();
+	const row = uses.getByTestId('demand-objects-table').getByRole('row', { name: /Town/ });
 	await expect(row.getByRole('cell').nth(0)).toHaveText('Upper farm');
 	await expect(row.getByRole('cell').nth(2)).toHaveText('400');
 	const supplied = ungroup(await row.getByRole('cell').nth(3).innerText());

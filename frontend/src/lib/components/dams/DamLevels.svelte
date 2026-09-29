@@ -88,7 +88,7 @@
 				</div>
 				{#if levels.length > FIRST}
 					<button type="button" class="btn btn-sm more" aria-expanded={showAll} onclick={() => (showAll = !showAll)}>
-						{showAll ? `Show the ${FIRST} emptiest` : `Show all ${levels.length} dams`}
+						{showAll ? `Show the ${FIRST} emptiest rows` : `Show all ${levels.length} rows`}
 					</button>
 				{/if}
 				<p class="muted small key">
@@ -102,6 +102,11 @@
 {/if}
 
 <style>
+	/* The page is the one scroll: the table grows with its rows (at most 8 until "Show all") instead of
+	   scrolling inside the global 70vh cap; it still scrolls sideways on a narrow screen. */
+	.table-wrap {
+		max-height: none;
+	}
 	.dams h2 {
 		margin: 0;
 		font-size: 1.05rem;

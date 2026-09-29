@@ -5,15 +5,18 @@ import { expect } from '@playwright/test';
 import { createProject, putModel, sampleModel, type Model } from './api.ts';
 
 export const rulesCard = (page: Page) => page.getByRole('region', { name: 'Transfer rules' });
-export const monthsCard = (page: Page) => page.getByRole('region', { name: 'When water moves' });
-/** Each month's line as a screen reader hears it ("Nov: 1 rule, up to 864 m³ a day"). */
-export const monthSentences = (page: Page) => monthsCard(page).getByRole('listitem').locator('.visually-hidden').allTextContents();
 
 /**
  * Opens the Transfers page and waits for the tab itself, not just the page's title: the section header (and
- * its rule count) render as soon as the model loads, while the rules and months come from a code-split
+ * its rule count) render as soon as the model loads, while the rules come from a code-split
  * chunk that arrives after. The rules card is drawn in every state (rules, none yet, too few units).
  */
+/** The rules card's table box: its scroll size against its visible size, both ways. */
+export const rulesWrapBox = (page: Page) =>
+	rulesCard(page)
+		.locator('.table-wrap')
+		.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth }));
+
 export async function openTransfers(page: Page, projectId: string) {
 	await page.goto(`/projects/${projectId}?tab=transfers`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Transfers' })).toBeVisible();

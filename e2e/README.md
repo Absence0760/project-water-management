@@ -31,7 +31,8 @@ pnpm -C e2e e2e:list      # list the tests without running them
    checkout's API URL (`http://localhost:3101`) baked in as `PUBLIC_API_URL` (it
    is `$env/static/public`), written to `frontend/build-e2e/` (with
    `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
-   gitignored) so the production output in `frontend/build/` is never touched,
+   gitignored; any slot but 0 uses `build-e2e-<slot>/` and
+   `.svelte-kit-e2e-<slot>/`) so the production output in `frontend/build/` is never touched,
    then served by `support/static-server.ts` (`support/site.ts`), which routes
    every request through CloudFront's own `spa_rewrite` function, loaded from
    `infra/s3_cloudfront.tf`, so e2e gets production's answers: the SPA fallback
@@ -59,8 +60,10 @@ in two worktrees at the same time:
 | Main checkout (`.git` is a directory), and CI | 0 | :3101 | :7801 | `water_e2e` |
 | A git worktree (`.git` is a file) | 1–98, from a hash of its path | :3101 + slot | :7801 + slot | `water_e2e_<slot>` |
 
-`E2E_SLOT=<0–98> pnpm test:e2e` picks one by hand. Each checkout also builds
-into its own `frontend/build-e2e/`. If two checkouts ever land on the same
+`E2E_SLOT=<0–98> pnpm test:e2e` picks one by hand. Each slot also builds
+into its own folder (`frontend/build-e2e/` for slot 0, `frontend/build-e2e-<slot>/`
+otherwise, `env.ts` `buildDirsFor`), so parallel runs in one checkout on
+different slots never replace the site another is serving. If two checkouts ever land on the same
 slot, the second run stops at start-up on a port that is already in use,
 before it touches the database: Playwright starts its web servers before the
 global setup. Set `E2E_SLOT` in one of them. The two runs still share one

@@ -213,26 +213,33 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 });
 
 test.describe('data age under a skewed time zone', () => {
-	// Overrides the suite's pinned UTC on purpose (project rule 7): at 12:30 UTC
-	// on 6 Feb it is already 02:30 on 7 Feb in UTC+14, so a UTC "today" would
-	// be a day behind the viewer's calendar.
-	test.use({ timezoneId: 'Pacific/Kiritimati' });
+	// Overrides the suite's pinned UTC on purpose (project rule 7). The viewer is in UTC−11 and the project
+	// in UTC+14: 25 hours apart, so their calendar days always differ, and a badge counting to the viewer's
+	// day would be off by a day or two. Everything counts to the project's day (issue #137). The server's
+	// clock can't be faked, so the data ends ten of the project's days before its real today.
+	test.use({ timezoneId: 'Pacific/Pago_Pago' });
 
-	test('the project list and the workspace header count the same local days', async ({ page, owner }) => {
+	test('the project list and the workspace header count the same days, to the project\'s calendar', async ({ page, owner }) => {
 		void owner;
 		const p = await createProject(page.request, 'Skewed clock');
-		// 120 days from 2021-10-01: the data runs to 2022-01-28.
-		await putSeries(page.request, p.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: '2021-10-01', values: Array(120).fill(1) });
-		await page.clock.setFixedTime(new Date('2022-02-06T12:30:00Z'));
+		expect((await page.request.patch(`${API_URL}/projects/${p.id}`, { data: { timeZone: 'Pacific/Kiritimati' } })).status()).toBe(200);
+		const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Kiritimati' }).format(new Date());
+		const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000);
+		const end = day(-10);
+		const start = day(-129);
+		await putSeries(page.request, p.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start.toISOString().slice(0, 10), values: Array(120).fill(1) });
+		// As the app writes a day (fmtDay): its own month names, never ICU's (which writes "Sept" on some builds).
+		const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+		const shown = `${end.getUTCDate()} ${MONTHS[end.getUTCMonth()]} ${end.getUTCFullYear()}`;
 
 		await page.goto('/');
 		// The row carries the badge twice (wide and narrow layouts); one is shown.
-		const badge = row(page, 'Skewed clock').getByTitle('Recorded rain (catchment or CHIRPS) runs to 28 Jan 2022').filter({ visible: true });
-		await expect(badge).toHaveText('Rain to 28 Jan 2022 (10 days ago)');
+		const badge = row(page, 'Skewed clock').getByTitle(`Recorded rain (catchment or CHIRPS) runs to ${shown}`).filter({ visible: true });
+		await expect(badge).toHaveText(`Rain to ${shown} (10 days ago)`);
 
 		await page.goto(`/projects/${p.id}`);
 		// Stale (> 7 days), so a hidden ", older than 7 days" follows.
-		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText('Rain up to 28 Jan 2022 (10 days ago), older than 7 days');
+		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(`Rain up to ${shown} (10 days ago), older than 7 days`);
 	});
 });
 

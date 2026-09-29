@@ -52,7 +52,8 @@
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
 	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
-	import { fmtDay, localIsoDate } from '$lib/format/number';
+	import { fmtDay } from '$lib/format/number';
+	import { projectToday } from '$lib/components/projects/freshness';
 	import { kindLabel } from '$lib/series/kinds';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import { fetchProjectPage, takeProjectPage } from '$lib/workspace/firstLoad';
@@ -65,7 +66,7 @@
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, withoutParam } from '$lib/workspace/overlays';
+	import { GRID_TAB, isGridId, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -149,14 +150,16 @@
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
+	// A daily A-pan series: runs use it before the monthly means, which the Crops demand preview shows (issue #173).
+	const apanDaily = $derived(series?.some((x) => x.kind === 'evap_apan_mm' && !x.siteNodeId) ?? false);
 	let runs = $state<RunMeta[] | null>(null);
 	let saveBarHeight = $state(0);
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
 	let saveReason = $state('');
 
 	// --- data freshness, "Add data" (button or drop a CSV anywhere) ------------
-	// The viewer's calendar date, as on the project list (projects/freshness.ts).
-	const today = localIsoDate();
+	// The project's calendar date (its time zone), as on the project list and the portfolio (issue #137).
+	const today = $derived(projectToday(project?.timeZone));
 	const fresh = $derived(freshness(series ?? [], today));
 
 	// The "Data up to" dropdown closes on Escape (focus back on its summary)
@@ -200,6 +203,15 @@
 		addMounted = true;
 		addOpen = true;
 	}
+	// `?add=data` (the project list's Add data link): the dialog opens once the role is known, for an
+	// editor, and the param goes so Back or a reload doesn't reopen it.
+	$effect(() => {
+		if (page.url.searchParams.get('add') !== 'data' || !project) return;
+		untrack(() => {
+			if (canEdit) openAddData();
+			void goto(withoutParam(page.url, 'add'), { replaceState: true, noScroll: true, keepFocus: true });
+		});
+	});
 	const hasFiles = (e: DragEvent) => canEdit && !!e.dataTransfer && [...e.dataTransfer.types].includes('Files');
 	function onDragEnter(e: DragEvent) {
 		if (!hasFiles(e)) return;
@@ -228,6 +240,8 @@
 		// The merge or replace says when the automatic re-run it queued is due (absent from an older API).
 		if (project && r.meta.rerunQueuedFor !== undefined) project = { ...project, rerunQueuedFor: r.meta.rerunQueuedFor };
 		await loadLists();
+		// On the Data tab the upload is charted, as picking its row would (`series=`).
+		if (tab === 'series') void goto(withParam(page.url, 'series', r.meta.id), { replaceState: true, noScroll: true, keepFocus: true });
 		const what = r.meta.name || kindLabel(r.meta.kind);
 		banner = {
 			text: r.added || r.changed ? `${r.message.replace(/\.$/, '')}.` : `No new days for “${what}”: the file matched what is stored.`,
@@ -709,7 +723,7 @@
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
 					<Lazy load={LOAD.crops}>
-						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} />{/snippet}
+						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} {apanDaily} />{/snippet}
 					</Lazy>
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
@@ -740,8 +754,10 @@
 								initial={series}
 								{runs}
 								settings={project!.settings}
+								timeZone={project!.timeZone}
 								gauges={editor.model.nodes.filter((n) => n.kind === 'gauge' && n.downstreamNodeId !== null)}
 								onSeriesChange={(l) => (series = l)}
+								onadddata={() => openAddData()}
 							/>
 						{/snippet}
 					</Lazy>
@@ -852,6 +868,7 @@
 							bind:reason={saveReason}
 							{projectId}
 							{runs}
+							{apanDaily}
 						/>
 					{/snippet}
 				</Lazy>
