@@ -1654,7 +1654,8 @@ note's link on the Summary, `notes.ts` `noteHref`).
   previous page"). A drawing that fits its page prints as one picture, as
   before, and the screen never bands.
 - **Colour hydrological units by** (the Catchment map card's header, offered once there is
-  a farm; component state, not kept in the URL). Rules in
+  a farm and a run; component state, not kept in the URL, so no old link can
+  name a removed mode). Rules in
   `network/farmColour.ts`; each mode gives every farm a band, the words for its
   second label line, the legend entries and a caption sentence, so nothing is
   colour-only (the words are also in the node's tooltip and the drainage-tree
@@ -1677,15 +1678,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
     **under 30 % or at its minimum level**; no dam (< 1 m³) dashed, not in
     the run hatched. Label: "64% full" or "10%, at its minimum". Capacity and
     minimum come from the run's own model.
-  - **Irrigated area** (no run needed; follows unsaved edits at once): each
-    farm's planted hectares, in one hue over three steps (thirds of the
-    largest farm's area, since more area is neither good nor bad) and
-    "nothing planted" dashed. Label: "20.0 ha planted".
+  - *Irrigated area* was a third mode until issue #174: its three bands were
+    thirds of the largest farm's area, arbitrary cut-offs, and Crops & demand
+    and the node card already show each unit's hectares. With it gone the
+    control needs a run, since both modes read one.
 
   The caption names the run ("… in run “test”, ran today"; with unsaved
   edits it adds that the colours show the run, not the edits). The **All
-  nodes** list's dots take the same bands (hollow for no dam / nothing
-  planted / no demand). Gauges and other water users are never coloured.
+  nodes** list's dots take the same bands (hollow for no dam / no demand). Gauges and other water users are never coloured.
   Selection, hover and drop states live on the halo and opacity, so they're
   unchanged. The printable report colours by supply the same way
   (`supplyColouring`).

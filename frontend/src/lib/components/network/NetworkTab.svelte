@@ -12,7 +12,7 @@
 	import { farmPlanting } from '$lib/components/crops/farmDrawer';
 	import { fmtDate } from '$lib/format/number';
 	import { ranAgo, supplyByNode } from './supplyColour';
-	import { areaColouring, damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
+	import { damColouring, supplyColouring, type ColourMode, type Colouring } from './farmColour';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import MoveControls from '$lib/components/model/MoveControls.svelte';
@@ -160,7 +160,6 @@
 
 	const colouring = $derived.by((): Colouring | null => {
 		if (colourBy === 'none' || !farms.length) return null;
-		if (colourBy === 'area') return areaColouring(editor.model);
 		if (!latestRun || supplyRun?.id !== latestRun.id) return null;
 		const run = { name: latestRun.label || fmtDate(latestRun.createdAt, true), ago: ranAgo(latestRun.createdAt) };
 		if (colourBy === 'supply') return supplyColouring(nodes, supplyRun.summary, run, editor.dirty);
@@ -432,14 +431,14 @@
 {/snippet}
 
 {#snippet colourByControl()}
-	{#if farms.length}
+	<!-- Every mode is a run's (supply, dam level), so with no run there is nothing to pick (irrigated area went, issue #174). -->
+	{#if farms.length && latestRun}
 		<div class="colour-by">
 			<label for="sch-colour">Colour hydrological units by</label>
 			<select id="sch-colour" bind:value={colourBy}>
 				<option value="none">Nothing</option>
-				{#if latestRun}<option value="supply">Supply, latest run</option>{/if}
-				{#if latestRun && farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
-				<option value="area">Irrigated area</option>
+				<option value="supply">Supply, latest run</option>
+				{#if farms.some((f) => f.damCapacityM3 >= 1)}<option value="dam">Dam level, end of latest run</option>{/if}
 			</select>
 			{#if colourBy === 'supply' || colourBy === 'dam'}
 				<span class="muted small" role="status">
@@ -1211,7 +1210,7 @@
 	.dot[data-band='low'] {
 		background: var(--danger);
 	}
-	/* No dam, nothing planted, no demand: hollow, as the dashed symbol on the map. */
+	/* No dam, no demand: hollow, as the dashed symbol on the map. */
 	.dot[data-band='none'] {
 		background: transparent;
 		box-shadow: inset 0 0 0 1.5px var(--text-muted);
@@ -1220,16 +1219,6 @@
 		background: transparent;
 		box-shadow: inset 0 0 0 1.5px var(--text-muted);
 		border-radius: 2px;
-	}
-	.dot[data-band='area1'] {
-		background: color-mix(in srgb, var(--accent) 35%, var(--surface));
-		box-shadow: inset 0 0 0 1px var(--accent);
-	}
-	.dot[data-band='area2'] {
-		background: color-mix(in srgb, var(--accent) 65%, var(--surface));
-	}
-	.dot[data-band='area3'] {
-		background: var(--accent);
 	}
 	@media (max-width: 899px) {
 		.map-layout {
