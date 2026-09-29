@@ -6,10 +6,11 @@
 	// links to its node on
 	// the Network and, for a farm's dam, the farm drawer) beside the picked
 	// dam's storage chart (`dam=<nodeId>`, 30 days / 1 year / All, % full or
-	// m³), then the Dam levels table, moved here from the Summary. On a wide,
-	// tall enough page the cards and the chart are exactly the height left in
-	// the window (measured, as the Summary's first screen), the cards scrolling
-	// inside their column. Before a run the cards show each dam's capacity.
+	// m³), then the Dam levels table, moved here from the Summary. The page
+	// flows in the window's one scroll: the emptiest few cards show, the rest
+	// behind "Show all N dams" (no card list scrolls inside itself), and on a
+	// wide page the chart sticks beside the cards as they are read down.
+	// Before a run the cards show each dam's capacity.
 	// The levels come from overview/damLevels.ts, the loader the Summary's
 	// Dams today card and the Network's colour by dam level share; the series
 	// come through the Runs tab's cache.
@@ -32,7 +33,7 @@
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
 	import DamLevels from './DamLevels.svelte';
-	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
+	import { changeWords, damCards, damsSummary, fmtVolume, foldCards, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 
 	let {
 		projectId,
@@ -169,10 +170,8 @@
 
 	// --- picking a dam: a link (`dam=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
 	let pageW = $state(0);
-	let innerH = $state(0);
 	// The same width as the container query that sets the two columns (56rem).
 	const side = $derived(pageW >= 896);
-	const fit = $derived(side && innerH >= 620 && !!latest);
 	let chartEl: HTMLElement | undefined = $state();
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -186,45 +185,18 @@
 	let unit = $state<StorageUnit>('pct');
 	const pickedSeries = $derived(picked ? (storage.get(picked.nodeId) ?? null) : null);
 	const chartSeries = $derived(picked && pickedSeries ? storageChartSeries(pickedSeries, picked.capacityM3, picked.minPct, unit) : []);
-	const FIXED_H = 260;
-	const MIN_H = 180;
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-	// Filling: the plot gets what the slot leaves after the chart's own head, legend and caption (FlowVsReserve's way).
-	let slot: HTMLDivElement | undefined = $state();
-	let fig: HTMLDivElement | undefined = $state();
-	let fillH = $state(FIXED_H);
-	$effect(() => {
-		if (!fit || !slot || !fig) return;
-		const s = slot;
-		const f = fig;
-		const measure = () => {
-			const wrap = f.querySelector<HTMLElement>('.u-wrap');
-			if (!wrap) return;
-			const target = Math.max(MIN_H, Math.floor(s.clientHeight - (f.offsetHeight - wrap.offsetHeight)));
-			if (Math.abs(target - fillH) > 2) fillH = target;
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(s);
-		ro.observe(f);
-		return () => ro.disconnect();
-	});
-	const chartH = $derived(fit ? fillH : FIXED_H);
+	// A fixed plot height: taller beside the cards, where it sits level with the first few.
+	const chartH = $derived(side ? 420 : 260);
+
+	// --- the fold: the emptiest few cards (and the picked one), the rest behind "Show all N dams" ---
+	let open = $state(false);
+	// Beside the chart, three cards sit about level with it; stacked, two rows keep the chart near the first
+	// screen; before a run the cards are small (capacity only), so more fit.
+	const cap = $derived(!latest ? 8 : side ? 3 : 4);
+	const fold = $derived(foldCards(cards, latest ? (picked?.nodeId ?? null) : null, open, cap));
 	// The section header (workspace/SectionHeader) carries the title; the tab gives it the summary line and Open in Runs.
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
-
-<svelte:window bind:innerHeight={innerH} />
 
 {#snippet headerContext()}<span data-testid="dams-summary">{summary}</span>{/snippet}
 {#snippet headerActions()}{#if latest}<a class="btn" href={runHref(latest.id)}>Open in Runs</a>{/if}{/snippet}
@@ -257,7 +229,7 @@
 			</p>
 		{/if}
 
-		<div class="first" class:fit class:with-chart={!!latest} bind:this={firstEl} style:--first-top="{firstTop}px">
+		<div class="first" class:with-chart={!!latest}>
 			<section class="list" aria-labelledby="dam-cards-h">
 				<h3 id="dam-cards-h" class="visually-hidden">Each dam</h3>
 				{#if total}
@@ -265,8 +237,8 @@
 						All dams together: <strong>{pct(total.pct)} full</strong> on {fmtDay(total.endDate)}{#if total.change !== null}, {changeWords({ endPct: total.pct, agoPct: total.pct - total.change }, AGO_DAYS)!.text}{/if}
 					</p>
 				{/if}
-				<ul class="cards" aria-label="Dams">
-					{#each cards as c (c.nodeId)}
+				<ul class="cards" id="dam-cards" aria-label="Dams">
+					{#each fold.shown as c (c.nodeId)}
 						{@const band = c.level ? levelBand(c.level) : null}
 						{@const chg = c.level ? changeWords(c.level, AGO_DAYS) : null}
 						{@const spark = sparks.get(c.nodeId)}
@@ -322,6 +294,11 @@
 						</li>
 					{/each}
 				</ul>
+				{#if open || fold.hidden}
+					<button type="button" class="btn btn-sm more" aria-expanded={open} aria-controls="dam-cards" onclick={() => (open = !open)}>
+						{open ? `Show the ${cap} emptiest` : `Show all ${cards.length} dams`}
+					</button>
+				{/if}
 			</section>
 
 			{#if latest}
@@ -342,21 +319,17 @@
 								<strong>{pct(l.endPct)} full</strong> on {fmtDay(l.endDate)} ({fmtNum((l.endPct / 100) * l.capacityM3)} of {fmtNum(l.capacityM3)} m³) ·
 								lowest in its last year {pct(l.lowPct)} on {fmtDay(l.lowDate)}{#if l.minPct > 0}{` · ${fmtNum(l.daysAtMin)} day${l.daysAtMin === 1 ? '' : 's'} at its minimum level (${pct(l.minPct)})`}{/if}
 							</p>
-							<div class="slot" bind:this={slot}>
-								<div bind:this={fig}>
-									<LineChart
-										title="{picked.name} storage"
-										unit={unit === 'pct' ? '% of capacity' : 'm³'}
-										height={chartH}
-										series={chartSeries}
-										recentDays={FLOW_OPEN_DAYS}
-										windows={FLOW_WINDOWS}
-										band={forecastBand(run?.summary.forecast?.from)}
-										pannable={false}
-										caption="Dashed: the dam's capacity{picked.minPct > 0 ? ' and its minimum operating level' : ''}."
-									/>
-								</div>
-							</div>
+							<LineChart
+								title="{picked.name} storage"
+								unit={unit === 'pct' ? '% of capacity' : 'm³'}
+								height={chartH}
+								series={chartSeries}
+								recentDays={FLOW_OPEN_DAYS}
+								windows={FLOW_WINDOWS}
+								band={forecastBand(run?.summary.forecast?.from)}
+								pannable={false}
+								caption="Dashed: the dam's capacity{picked.minPct > 0 ? ' and its minimum operating level' : ''}."
+							/>
 						{:else}
 							<p class="muted">{picked?.name ?? 'This dam'} isn't in the latest run: add it before the next run, or pick another dam.</p>
 						{/if}
@@ -543,6 +516,9 @@
 	.small {
 		font-size: 0.85rem;
 	}
+	.more {
+		align-self: flex-start;
+	}
 	.chart-panel {
 		margin: 0;
 		min-width: 0;
@@ -569,25 +545,10 @@
 		.with-chart .cards {
 			grid-template-columns: minmax(0, 1fr);
 		}
-	}
-	/* Wide and tall enough: the block is the height left in the window (less the save bar), the chart fills its
-	   panel and the cards scroll inside their column. */
-	.first.fit {
-		height: max(480px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		align-items: stretch;
-	}
-	.fit .list {
-		overflow: auto;
-		/* Room for the picked card's outline and the focus ring inside the scroller. */
-		padding: 3px;
-		margin: -3px;
-	}
-	.fit .chart-panel {
-		min-height: 0;
-	}
-	.fit .slot {
-		flex: 1 1 0;
-		min-height: 0;
-		overflow: hidden;
+		/* The chart stays in view beside the cards as they are read down (the window scrolls; nothing inside does). */
+		.with-chart .chart-panel {
+			position: sticky;
+			top: calc(var(--header-h, 0px) + 0.75rem);
+		}
 	}
 </style>

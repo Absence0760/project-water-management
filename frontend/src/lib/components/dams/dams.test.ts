@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { DamLevel } from '$lib/components/overview/damLevels';
-import { changeWords, damCards, damsSummary, fmtVolume, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
+import { changeWords, damCards, damsSummary, fmtVolume, foldCards, modelDams, pickDam, storageChartSeries, storageSpark } from './dams';
 
 const level = (nodeId: string, endPct: number, over: Partial<DamLevel> = {}): DamLevel => ({
 	nodeId,
@@ -67,6 +67,28 @@ describe('pickDam', () => {
 		expect(pickDam(cards, null)?.nodeId).toBe('b');
 		expect(pickDam(cards, 'nope')?.nodeId).toBe('b');
 		expect(pickDam([], 'a')).toBeNull();
+	});
+});
+
+describe('foldCards', () => {
+	const many = Array.from({ length: 10 }, (_, i) => ({ nodeId: `d${i}` }));
+	const ids = (r: { shown: { nodeId: string }[] }) => r.shown.map((c) => c.nodeId);
+	it('shows the first few, emptiest first, and counts the rest', () => {
+		const r = foldCards(many, null, false, 4);
+		expect(ids(r)).toEqual(['d0', 'd1', 'd2', 'd3']);
+		expect(r.hidden).toBe(6);
+	});
+	it('keeps the picked dam in view when it is further down', () => {
+		const r = foldCards(many, 'd7', false, 4);
+		expect(ids(r)).toEqual(['d0', 'd1', 'd2', 'd3', 'd7']);
+		expect(r.hidden).toBe(5);
+		expect(ids(foldCards(many, 'd2', false, 4))).toHaveLength(4);
+	});
+	it('shows everything when open, or when only one card would fold away', () => {
+		expect(foldCards(many, null, true, 4)).toEqual({ shown: many, hidden: 0 });
+		expect(foldCards(many.slice(0, 5), null, false, 4).hidden).toBe(0);
+		expect(foldCards(many.slice(0, 6), null, false, 4).hidden).toBe(2);
+		expect(foldCards([], null, false, 4)).toEqual({ shown: [], hidden: 0 });
 	});
 });
 

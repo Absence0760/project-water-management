@@ -78,7 +78,7 @@ section it belongs to, with the example that taught it.
   header. Notices (viewer, new data, upload result) are one slim
   line under it. The same frame shows with no data.
 - **Dashboards fit the window; reading pages scroll.** A dashboard (Network,
-  Crops, Dams, River & reserve, Hydrological units, the portfolio) is
+  Crops, River & reserve, Hydrological units, the portfolio) is
   exactly the height left below its top edge: measure the top and whatever
   sits below with a `ResizeObserver` on `body`, then
   `height: max(<floor>px, calc(100vh - top - below))`, only above a size
@@ -105,7 +105,15 @@ section it belongs to, with the example that taught it.
   Summary's Supply by unit and the Dams page's Dam levels show eight), and
   let the next card's top edge show inside the window
   (`overview.spec.ts` checks no Summary card scrolls and the alerts' heading is
-  inside 1440×960 with thirty units).
+  inside 1440×960 with thirty units). The Dams page had copied the same fit
+  (cards scrolling in their column, Dam levels under the fold) and flows now
+  too: three cards beside a fixed 420 px chart, **Show all N dams** under
+  them, the chart panel `position: sticky` so it stays beside an opened list
+  as the window scrolls, and the table's `.table-wrap` uncapped
+  (`max-height: none`) so it doesn't scroll in its box either. Two
+  disclosures on one page need different names: the table's became
+  **Show all N rows** (`dams-page.spec.ts` checks no element on the page
+  scrolls vertically inside itself, collapsed and opened, wide and phone).
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
@@ -154,9 +162,12 @@ section it belongs to, with the example that taught it.
   grid's bottom edge; test the fit mid-page. Stacked on a phone, cap the
   list (20rem, scrolling inside) so twenty runs don't push the results
   a screen down.
-- **Cards or list on one side, the picked item's detail on the other.** Dams
-  and Hydrological units: a scrolling column of items (worst first), the picked
-  item's chart filling the rest, the pick in the URL so Back works. When
+- **Cards or list on one side, the picked item's detail on the other.**
+  Hydrological units: a scrolling column of items (worst first), the picked
+  item's chart filling the rest, the pick in the URL so Back works. Dams
+  does the same without the fit: the worst few cards, **Show all N**, a
+  sticky chart beside them; a folded list keeps the picked item's card in
+  view (`dams/dams.ts` `foldCards`), so a shared `dam=` link shows its card. When
   the items are genuinely tabular (Data: last date, period, % missing,
   coverage, per-row actions), keep the table and stack it over the chart
   instead: the table capped at a share of the fitted height (55 %) with its
