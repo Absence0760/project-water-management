@@ -4,7 +4,8 @@
 # the DATABASE_URL shape, the single-origin CloudFront wiring, WAF + security
 # headers + CSP, private S3, SES identity / DNS / least-privilege send, the
 # background-job queues / worker / SQS endpoint policy, the data-feed queues and the fetcher outside the VPC,
-# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin, and the plan-time rejection of
+# the report bucket / renderer image and Lambda / render queues, the SES bounce/complaint chain to the worker, the alarms, the deploy role's trust pin,
+# the runtime secrets (in Secrets Manager, never a Lambda environment), and the plan-time rejection of
 # malformed secrets.
 #
 #   pnpm check:infra          (bin/check-infra.sh: fmt + validate + test)
@@ -395,6 +396,60 @@ override_resource {
   }
 }
 
+# Runtime secrets (secrets.tf, issue #126): distinct known ARNs, so each
+# role's grant and each endpoint statement can be matched to its own secret.
+override_resource {
+  target          = aws_iam_role.migrate_lambda
+  override_during = plan
+  values = {
+    id  = "water-management-migrate-lambda"
+    arn = "arn:aws:iam::000000000000:role/water-management-migrate-lambda"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.api_lambda
+  override_during = plan
+  values = {
+    id = "sg-00000000000000api"
+  }
+}
+
+override_resource {
+  target          = aws_security_group.vpce
+  override_during = plan
+  values = {
+    id = "sg-000000000000vpce"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["api"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/api-AaAaAa"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["worker"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/worker-WwWwWw"
+  }
+}
+
+override_resource {
+  target          = aws_secretsmanager_secret.runtime["migrate"]
+  override_during = plan
+  values = {
+    id  = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
+    arn = "arn:aws:secretsmanager:af-south-1:000000000000:secret:water-management/runtime/migrate-MmMmMm"
+  }
+}
+
 variables {
   aws_region      = "af-south-1"
   route53_zone_id = "Z0000000000000000000"
@@ -423,8 +478,8 @@ run "production_guardrails" {
     error_message = "API Lambda concurrency must be capped by default (spend + DB connections)."
   }
   assert {
-    condition     = startswith(aws_lambda_function.backend.environment[0].variables["DATABASE_URL"], "postgresql://water_app:") && endswith(aws_lambda_function.backend.environment[0].variables["DATABASE_URL"], "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
-    error_message = "DATABASE_URL must connect as water_app to the RDS endpoint with sslmode=verify-full."
+    condition     = startswith(local.runtime_secrets.api.DATABASE_URL, "postgresql://water_app:") && endswith(local.runtime_secrets.api.DATABASE_URL, "@water-management.abc123.af-south-1.rds.amazonaws.com:5432/water?sslmode=verify-full")
+    error_message = "DATABASE_URL (in the API's runtime secret) must connect as water_app to the RDS endpoint with sslmode=verify-full."
   }
   assert {
     condition     = aws_lambda_function.backend.environment[0].variables["ALLOWED_ORIGINS"] == "https://water-management.jaredhoward.com"
@@ -516,6 +571,146 @@ run "production_guardrails" {
   assert {
     condition     = aws_acm_certificate.frontend.domain_name == "water-management.jaredhoward.com"
     error_message = "Certificate must cover the child-zone hostname."
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Runtime secrets (secrets.tf, issue #126): Secrets Manager, never a Lambda
+# environment, which any GetFunctionConfiguration caller can read.
+# ---------------------------------------------------------------------------
+
+run "runtime_secrets" {
+  command = plan
+
+  # The denylist, across every Lambda: no secret in any environment block.
+  # (The renderer exists only with an image tag; reports_renderer_created_from_its_image
+  # checks its block the same way.)
+  assert {
+    condition = alltrue(flatten([
+      for f in [aws_lambda_function.backend, aws_lambda_function.worker, aws_lambda_function.migrate, aws_lambda_function.fetcher] : [
+        for k in keys(f.environment[0].variables) : !contains(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET", "ALERTS_TOKEN_SECRET", "WATER_APP_PASSWORD"], k) && !can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", k))
+      ]
+    ]))
+    error_message = "No Lambda environment block may hold a secret (the session key, DATABASE_URL, the CloudFront header, the unsubscribe key, the water_app password): they belong in the runtime secret (secrets.tf)."
+  }
+  # Positive control: the denylist would see a secret if one were there.
+  assert {
+    condition     = contains(keys(local.runtime_secrets.api), "AUTH_JWT_SECRET") && contains(keys(local.runtime_secrets.migrate), "WATER_APP_PASSWORD") && can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", "ALERTS_TOKEN_SECRET"))
+    error_message = "The runtime secrets must hold the values the denylist keeps out of the environments."
+  }
+
+  # Exactly the keys each role uses (RUNTIME_SECRETS in backend/src/config/runtimeSecrets.ts).
+  assert {
+    condition = (
+      toset(keys(local.runtime_secrets)) == toset(["api", "migrate", "worker"]) &&
+      toset(keys(local.runtime_secrets.api)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "CLOUDFRONT_SHARED_SECRET"]) &&
+      toset(keys(local.runtime_secrets.worker)) == toset(["AUTH_JWT_SECRET", "DATABASE_URL", "ALERTS_TOKEN_SECRET"]) &&
+      toset(keys(local.runtime_secrets.migrate)) == toset(["WATER_APP_PASSWORD"])
+    )
+    error_message = "Each runtime secret holds exactly its Lambda's keys: the edge secret for the API only, the unsubscribe key for the worker only, the water_app password for migrate only."
+  }
+  assert {
+    condition     = local.runtime_secrets.migrate.WATER_APP_PASSWORD == local.db_app_password && local.runtime_secrets.api.AUTH_JWT_SECRET == local.auth_jwt_secret
+    error_message = "The runtime secrets carry the values from their sources (sops)."
+  }
+
+  # Each Lambda names its own secret and the version Terraform wrote (a new
+  # version changes the variable, so a rotation cold-starts every instance).
+  assert {
+    condition = (
+      aws_lambda_function.backend.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["api"].arn &&
+      aws_lambda_function.worker.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["worker"].arn &&
+      aws_lambda_function.migrate.environment[0].variables["RUNTIME_SECRET_ARN"] == aws_secretsmanager_secret.runtime["migrate"].arn
+    )
+    error_message = "The API, worker and migrate Lambdas must each name their own runtime secret."
+  }
+  assert {
+    condition = alltrue([for f in [aws_lambda_function.backend, aws_lambda_function.worker, aws_lambda_function.migrate] :
+      contains(keys(f.environment[0].variables), "RUNTIME_SECRET_VERSION")
+    ])
+    error_message = "Each Lambda with a runtime secret must pin its version (RUNTIME_SECRET_VERSION), so a rotation reaches it."
+  }
+  assert {
+    condition     = !contains(keys(aws_lambda_function.fetcher.environment[0].variables), "RUNTIME_SECRET_ARN")
+    error_message = "The fetcher holds no secret."
+  }
+  assert {
+    condition     = alltrue([for k, v in aws_secretsmanager_secret.runtime : v.name == "water-management/runtime/${k}"])
+    error_message = "Runtime secrets are named water-management/runtime/<role>."
+  }
+
+  # IAM: each role reads its own secret, and only that one. (Positive control
+  # first: the overrides give the three secrets distinct ARNs, so matching a
+  # grant to "its own" secret can fail.)
+  assert {
+    condition     = length(toset([for s in aws_secretsmanager_secret.runtime : s.arn])) == 3
+    error_message = "The test's secret ARN overrides must be distinct, or the per-role checks below prove nothing."
+  }
+  assert {
+    condition = alltrue([for role, d in data.aws_iam_policy_document.runtime_secret :
+      length(d.statement) == 1 && toset(d.statement[0].actions) == toset(["secretsmanager:GetSecretValue"]) && toset(d.statement[0].resources) == toset([aws_secretsmanager_secret.runtime[role].arn])
+    ])
+    error_message = "Each runtime-secret policy grants GetSecretValue on its own secret's ARN only."
+  }
+  assert {
+    condition = (
+      aws_iam_role_policy.runtime_secret["api"].role == aws_iam_role.lambda.id &&
+      aws_iam_role_policy.runtime_secret["worker"].role == aws_iam_role.worker_lambda.id &&
+      aws_iam_role_policy.runtime_secret["migrate"].role == aws_iam_role.migrate_lambda.id
+    )
+    error_message = "Each runtime-secret policy is attached to its own Lambda's role."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.migrate_lambda.statement :
+      toset(s.resources) == toset([aws_db_instance.main.master_user_secret[0].secret_arn])
+    ])
+    error_message = "The migrate role's own policy reads the RDS master secret and nothing else (its runtime secret is granted separately)."
+  }
+  assert {
+    condition     = length([for s in data.aws_iam_policy_document.github_deploy.statement : s if anytrue([for a in s.actions : startswith(a, "secretsmanager:")])]) == 0
+    error_message = "The deploy role must not read any secret (it may read function configuration, which is why secrets left it)."
+  }
+
+  # The Secrets Manager endpoint: exactly the owning role per secret.
+  assert {
+    condition = (
+      length(data.aws_iam_policy_document.secretsmanager_endpoint.statement) == 4 &&
+      alltrue([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement :
+        length(s.resources) == 1 && length(s.principals) == 1 && length(one(s.principals).identifiers) == 1 &&
+        alltrue([for a in s.actions : !strcontains(a, "*")]) &&
+        (
+          (one(s.resources) == aws_db_instance.main.master_user_secret[0].secret_arn && one(one(s.principals).identifiers) == aws_iam_role.migrate_lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["api"].arn && one(one(s.principals).identifiers) == aws_iam_role.lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["worker"].arn && one(one(s.principals).identifiers) == aws_iam_role.worker_lambda.arn) ||
+          (one(s.resources) == aws_secretsmanager_secret.runtime["migrate"].arn && one(one(s.principals).identifiers) == aws_iam_role.migrate_lambda.arn)
+        )
+      ])
+    )
+    error_message = "The Secrets Manager endpoint policy must let each role read only its own secret: migrate the RDS master and its runtime secret, the API and worker their runtime secrets."
+  }
+  assert {
+    condition = toset(flatten([for s in data.aws_iam_policy_document.secretsmanager_endpoint.statement : [for p in s.principals : p.identifiers]])) == toset([
+      aws_iam_role.lambda.arn, aws_iam_role.worker_lambda.arn, aws_iam_role.migrate_lambda.arn,
+    ])
+    error_message = "Only the API, worker and migrate roles may use the Secrets Manager endpoint."
+  }
+
+  # Network: the API and worker reach the endpoint (443 both ways), as migrate does.
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.vpce_from_api.referenced_security_group_id == aws_security_group.api_lambda.id &&
+      aws_vpc_security_group_ingress_rule.vpce_from_worker.referenced_security_group_id == aws_security_group.worker_lambda.id &&
+      aws_vpc_security_group_egress_rule.api_to_vpce.referenced_security_group_id == aws_security_group.vpce.id &&
+      aws_vpc_security_group_egress_rule.worker_to_vpce.referenced_security_group_id == aws_security_group.vpce.id &&
+      alltrue([for r in [aws_vpc_security_group_ingress_rule.vpce_from_api, aws_vpc_security_group_ingress_rule.vpce_from_worker, aws_vpc_security_group_egress_rule.api_to_vpce, aws_vpc_security_group_egress_rule.worker_to_vpce] :
+        r.from_port == 443 && r.to_port == 443 && r.ip_protocol == "tcp"
+      ])
+    )
+    error_message = "The API and worker must reach the Secrets Manager endpoint on 443 (their runtime secrets), and nothing wider."
+  }
+  assert {
+    condition     = aws_vpc_endpoint.secretsmanager.private_dns_enabled && aws_vpc_endpoint.secretsmanager.security_group_ids == toset([aws_security_group.vpce.id])
+    error_message = "Secrets Manager is reached through its private-DNS interface endpoint, guarded by the vpce security group."
   }
 }
 
@@ -990,8 +1185,8 @@ run "background_jobs" {
   }
   assert {
     condition = (
-      startswith(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "postgresql://water_app:") &&
-      strcontains(aws_lambda_function.worker.environment[0].variables["DATABASE_URL"], "sslmode=verify-full") &&
+      startswith(local.runtime_secrets.worker.DATABASE_URL, "postgresql://water_app:") &&
+      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full") &&
       aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
       aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
     )
@@ -1106,14 +1301,14 @@ run "background_jobs" {
   # --- Alert emails (WP-2.13) -------------------------------------------------------
   assert {
     condition = (
-      contains(keys(aws_lambda_function.worker.environment[0].variables), "ALERTS_TOKEN_SECRET") &&
+      contains(keys(local.runtime_secrets.worker), "ALERTS_TOKEN_SECRET") &&
       random_password.alerts_token_secret.length >= 32 && !random_password.alerts_token_secret.special &&
       aws_lambda_function.worker.environment[0].variables["ALERTS_ENABLED"] == "true"
     )
     error_message = "The worker signs unsubscribe links (ALERTS_TOKEN_SECRET, ≥ 32 characters) and sends alerts unless the kill switch is off."
   }
   assert {
-    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "ALERTS_TOKEN_SECRET")
+    condition     = !contains(keys(aws_lambda_function.backend.environment[0].variables), "ALERTS_TOKEN_SECRET") && !contains(keys(local.runtime_secrets.api), "ALERTS_TOKEN_SECRET")
     error_message = "Only the worker holds the unsubscribe-token secret: the API checks a token by its hash alone."
   }
   assert {
@@ -1624,7 +1819,9 @@ run "reports_renderer_created_from_its_image" {
       aws_lambda_function.renderer[0].environment[0].variables["STORAGE"] == "s3" &&
       tonumber(aws_lambda_function.renderer[0].environment[0].variables["REPORT_RENDER_TIMEOUT_MS"]) < 120000 &&
       !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "DATABASE_URL") &&
-      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET")
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "AUTH_JWT_SECRET") &&
+      !contains(keys(aws_lambda_function.renderer[0].environment[0].variables), "RUNTIME_SECRET_ARN") &&
+      alltrue([for k in keys(aws_lambda_function.renderer[0].environment[0].variables) : !can(regex("PASSWORD|PRIVATE_KEY|TOKEN$|SECRET$", k))])
     )
     error_message = "The renderer opens the public site, stores to S3, stops before Lambda's timeout, and holds no database URL or secret."
   }

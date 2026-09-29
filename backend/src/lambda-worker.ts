@@ -33,6 +33,7 @@
 // Like lambda.ts, this must never import a module that loads dotenv.
 import type { Context, ScheduledEvent, SQSBatchResponse, SQSEvent, SQSRecord } from 'aws-lambda';
 import { assertLambdaEnv } from './config/production.js';
+import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
 import { runTick, type TickResult } from './jobs/runner.js';
 import { acceptIngestResult } from './feeds/schedule.js';
 import { acceptMailEvent } from './mail/suppression.js';
@@ -70,7 +71,9 @@ export function metricLine(r: TickResult, now = Date.now()): string {
 	});
 }
 
-// Refuse to start with a local default (config/production.ts).
+// The secrets first, once per cold start (config/runtimeSecrets.ts, as in
+// lambda.ts), then refuse to start with a local default (config/production.ts).
+await loadRuntimeSecrets('worker');
 assertLambdaEnv('worker');
 
 const isSqs = (event: unknown): event is SQSEvent => Array.isArray((event as SQSEvent | undefined)?.Records);
