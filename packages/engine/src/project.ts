@@ -2126,6 +2126,13 @@ export interface RunoffBalance {
 	/** Net groundwater exchange (+ = gained); 0 when X2 = 0. */
 	exchangeMm: number;
 	storageStartMm: number;
+	/**
+	 * Each store at the start of the run's first day, after the warm-up (or
+	 * the saved state a warm start resumes from), by its series key
+	 * (production_store, routing_store, uh_store); they sum to storageStartMm.
+	 * Engine ≥ 1.20.0; absent before, when only the total was kept.
+	 */
+	storesStartMm?: Record<string, number>;
 	storageEndMm: number;
 }
 
