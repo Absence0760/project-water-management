@@ -1992,16 +1992,34 @@ The plumbing is built (catalogues, switch, `app_user.locale` /
       groundwater stay under the run summary. Still open: the users table
       and the curtailment panel's *Other water users* table on the same page
       (whole-run means vs the reporting window's cut).
-- [ ] **The water balance by water year is reachable only under Dig deeper ›
-      Self-checks** (hydrologist persona, issue #51, 2026-09-28; remainder of
-      F13). It is the first table a hydrologist hands a client, and
-      `runs/SelfChecksPanel.svelte` (line ~117) is the only place it shows.
-      **Durable fix:** a *Water balance* section in Model quality
-      (`runs/sections.ts`) showing the same table, from the component the
-      self-check uses, with the self-check line linking to it; pin the table
-      with an e2e spec first, as the playbook asks for moved UI.
-      **Trigger:** with the item above, or the next Model quality change
-      (UI batch #76).
+- [ ] **Two water balances by water year, and the client's one is under
+      Dig deeper › Self-checks** (hydrologist persona, issue #51, 2026-09-28;
+      remainder of F13; reworded 2026-09-29 after issue #175's overlap check).
+      `runs/SelfChecksPanel.svelte` (line ~117) draws the per-unit column-V
+      balance by water year (`runs/checks.ts` `BALANCE_COLUMNS`, Mm³), and
+      River & reserve's Water account (`reliability/WaterAccountPanel.svelte`,
+      `reliability.ts` `ACCOUNT_LINES`, m³) draws the catchment's for the same
+      water years. About ten of the self-check's thirteen terms are the
+      account's too (rain on dams, groundwater, transfers, consumptive use,
+      other users, dam evaporation, seepage lost, stream depletion, off-take
+      losses, outflow, change in storage, residual); the self-check starts
+      from unit runoff (after land cover and flow shares) where the account
+      starts from natural flow and lists land cover and unallocated flow as
+      outs, and only the self-check has rain (mm), the runoff coefficient and
+      start and end storage. Building a third copy in Model quality (the
+      earlier plan) would make it worse.
+      **Durable fix:** the Water account becomes the one client-facing
+      balance: add rain (mm), the runoff coefficient and start and end
+      storage lines to it, and an **m³ / Mm³** switch (the self-check's
+      unit). The Self-checks panel shrinks to the closure check: each water
+      year's residual (column V and the account's), pass or fail, with a link
+      to the Water account (`riverHref(run, 'res-water-account')`); the
+      summary CSV and the `.xlsx` export keep both tables. Pin the account's
+      rendered lines with an e2e spec first, as the playbook asks for moved
+      UI, and update ui.md § Water account and § Self-checks and the
+      *Water account* / self-checks help articles.
+      **Trigger:** the next change to the Water account or the Self-checks
+      panel, or a client asking for the water balance table (UI batch #76).
 
 ## Roles and what each member sees
 
