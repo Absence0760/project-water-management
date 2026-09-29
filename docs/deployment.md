@@ -463,12 +463,33 @@ the real plan stays an operator step
   deploy workflow (the workflow guard's `no-cache` rule), since a cache is
   written by other runs and the build ships with deploy credentials.
 
+### A failed migration
+
+The deploy log is public (the repo is), so the *Run migrations* step prints
+only names and codes, never the error: the code (`integrity`,
+`migration_failed`, `lock_timeout`, `statement_timeout`, or `setup_failed`
+for anything around the migrations, such as reading the master secret,
+connecting or syncing `water_app`), the file it stopped on, what that run had
+applied and what is still pending, and the CloudWatch log group
+(`/aws/lambda/<migrate function>`), stream and request id. The error itself,
+Postgres's text included, is in that CloudWatch stream, logged as
+`migrate failed:`; read it there (the AWS console, or
+`aws logs tail /aws/lambda/<migrate function> --since 1h --profile <project profile>`).
+A timeout or crash prints `unknown` for everything but the log group. The
+step never invokes with `--log-type Tail`, and the workflow guard
+(`pnpm check:workflows`, rule `no-tail`) refuses any workflow that does or
+reads `LogResult`. The payload itself carries the summary alone
+(`MigrateFailure` in `backend/src/lambda-migrate.ts`), and the step prints a
+field only if it has the shape it should (a `NNN_name.sql`, a lowercase code,
+a log stream name).
+
 ### Migration integrity
 
 The migrate Lambda refuses to apply anything, and the deploy stops before
 the new code ships, when `schema_migrations` disagrees with the migrations in
-the release ([data-model.md § Migrations](./data-model.md#migrations)). Its
-error names each file:
+the release ([data-model.md § Migrations](./data-model.md#migrations)). The
+deploy log shows code `integrity` and the files; its error, in CloudWatch
+(§ A failed migration), names each file:
 
 - **"… was applied but its contents have changed"**: someone edited a
   migration production already ran. The database is fine; the release is
@@ -522,10 +543,19 @@ that finds the map beside it), or feed the minified line:column to any source-ma
 
 The dependency guards at the end of the script (no dotenv, no playwright-core
 in the API/worker/fetcher, no `pg` in the fetcher/renderer) read esbuild's
-`--metafile` input list, not the bundle text: minifying drops the
-`// node_modules/…` comments the old greps matched, which would have made the
-`pg` check pass silently. Each guard first checks the metafile names the
-bundle's entry point, so a missing or reshaped metafile fails the build.
+`--metafile`, not the bundle text: minifying drops the `// node_modules/…`
+comments the old greps matched, which would have made the `pg` check pass
+silently. The rules live in `scripts/guards/check_lambda_bundle.mjs` (tests:
+`pnpm test:guards`). A bundled package shows as an *input*; an
+`--external` one never does, only as an import left in the *output*
+(`outputs[…].imports`, with its `kind`). playwright-core is external in
+every bundle, so the guard reads the output imports and refuses any import
+of it but a `dynamic-import`: the lazy `await import('playwright-core')` in
+`src/reports/render.ts`, which the API and worker bundles reach and which runs
+only where the package is installed. A static import would crash the Lambda
+at load (issue #126: the first version checked only the inputs, so it could
+never fire). Each guard first checks the metafile names the bundle's entry
+point and an output, so a missing or reshaped metafile fails the build.
 
 ### Releasing
 
@@ -647,11 +677,19 @@ plan-only until the first deploy):
   worker's logs, then redrive or purge the DLQ.
 - **Alarms** (to the alerts SNS topic): DLQ depth > 0; worker errors > 0;
   worker throttles > 0 (it hit its reserved concurrency);
-  the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
+  `worker-heartbeat`, fewer than 1 worker invocation in 15 minutes (three
+  ticks), with missing data treated as breaching, so a worker that has
+  stopped altogether (the tick rule disabled, reserved concurrency set to 0)
+  alarms even though it emits no backlog metric; `worker-tick-failed`,
+  EventBridge `FailedInvocations` > 0 on the tick rule (the invoke
+  permission or target broken); the oldest due job waiting longer than `jobs_backlog_alarm_seconds`
   (default 15 minutes; each tick logs `OldestDueJobAgeSeconds` as a
   CloudWatch embedded metric in `water-management/Jobs`); and any dead job
   (a metric filter on the worker's `job_dead` log line). A project with the
   `job_dead` alert on also emails its owners ([§ Alert emails](#alert-emails)).
+  On a first deploy the worker is Terraform's stub, which throws on every
+  tick until the first backend release: `worker-errors` fires then, but
+  the heartbeat stays OK (a failed invocation still counts).
 - **Cost:** a few cents of Lambda and SQS at this volume (the tick is ~8 600
   short invocations a month), plus the SQS endpoint's ~$7.30/month per AZ.
 

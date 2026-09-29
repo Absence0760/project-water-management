@@ -15,7 +15,7 @@
 	import { supplyHref } from '$lib/components/supply/links';
 	import { checklist } from './checklist';
 	import LatestRun from './LatestRun.svelte';
-	import { DAMS_HREF, pickRuns, ranAgo, type DamsState } from './latestRun';
+	import { DAMS_HREF, historyEnd, pickRuns, ranAgo, type DamsState } from './latestRun';
 	import { damLevelsFromSummary, damsInRun, damsToday, loadDamLevels, type DamLevel } from './damLevels';
 	import { projectAnchor, projectHref } from '$lib/components/project/links';
 	import NeedsAttention from './NeedsAttention.svelte';
@@ -161,7 +161,9 @@
 			);
 			damsTotal = list.length;
 			// A run from engine ≥ 1.2.0 carries the figures in its summary (issue #55): no series to fetch.
-			const fromSummary = damLevelsFromSummary(list, run.summary.farms, run.endDate);
+			// A forecast run's figures are its record's: dated the day before the forecast (issue #51).
+			const forecastFrom = run.summary.forecast?.from ?? null;
+			const fromSummary = damLevelsFromSummary(list, run.summary.farms, historyEnd({ startDate: run.startDate, endDate: run.endDate, forecastFrom }));
 			if (fromSummary) {
 				damLevels = fromSummary;
 				damsLoading = false;
@@ -172,7 +174,10 @@
 			const current = () => damsKey === key;
 			loadDamLevels(
 				list,
-				(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(project.id, id, 'dam_storage', nodeId))
+				(nodeId) => cachedSeries(id, 'dam_storage', nodeId, () => api.runs.series(project.id, id, 'dam_storage', nodeId)),
+				4,
+				undefined,
+				forecastFrom
 			)
 				.then((l) => {
 					if (current()) damLevels = l;

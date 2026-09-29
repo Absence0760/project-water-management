@@ -105,7 +105,7 @@
 		border: 1px solid var(--border);
 		border-radius: var(--radius);
 		background: var(--surface-2);
-		font-size: 0.85rem;
+		font-size: 1rem;
 		color: var(--text-2);
 		overflow-wrap: anywhere;
 	}

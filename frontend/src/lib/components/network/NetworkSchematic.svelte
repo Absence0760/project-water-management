@@ -410,7 +410,20 @@
 	<p class="muted">Add nodes to see how water flows through the catchment.</p>
 {:else}
 	<div class="sch" class:fill>
-	<div class="scroller" class:fill class:banded={views.length > 1} data-scroll-region data-scroll-label="Schematic drawing" bind:clientWidth={boxW} bind:clientHeight={boxH}>
+	<!-- data-fit: the box size (and the media state) the drawing on screen was laid out for. A resize
+	     reaches the layout a frame or more later (the box's ResizeObserver, the media query's change
+	     event), so the drawing is settled only once this matches the box as it is now (e2e waits on
+	     that, support/diagrams.ts mapFitted). -->
+	<div
+		class="scroller"
+		class:fill
+		class:banded={views.length > 1}
+		data-scroll-region
+		data-scroll-label="Schematic drawing"
+		data-fit="{boxW}x{boxH}{wide.current ? ' wide' : ''}"
+		bind:clientWidth={boxW}
+		bind:clientHeight={boxH}
+	>
 		{#if views.length === 1}
 			{@render drawing(views[0]!, uid)}
 		{:else}

@@ -36,7 +36,7 @@ sides share.
   `db` (needs Postgres), `perf` (same wall-clock-budget caveat as the
   engine's) and `perf-db` (wall-clock budgets against Postgres,
   `*.db.perf.test.ts`, with the db project's global setup; the portfolio
-  query's and the RLS role check's).
+  query's, the RLS role check's and the Step 2 60-farm load checks).
 - **frontend/**: SvelteKit 2 (Svelte 5) **SPA** (`adapter-static` with a fallback
   `index.html`; `ssr = false`, `prerender = false`, except the public landing
   page at `/welcome`, prerendered, architecture.md), Vite, TypeScript, uPlot
@@ -116,7 +116,7 @@ pnpm test:engine | test:frontend | test:backend   # test:backend includes the ro
 pnpm test:backend:db        # API + RLS tests, catalogue guards (water_test; needs dev:db:up)
 pnpm test:engine:perf       # engine wall-clock budgets (median of 7, serial); run alone, not in CI/pnpm test
 pnpm test:backend:perf      # backend wall-clock budgets (same caveat)
-pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check); needs dev:db:up, alone, never beside test:backend:db
+pnpm test:backend:perf:db   # backend budgets against Postgres (portfolio: 10 × 60 farms < 500 ms; the no-user role check; 60-farm runs < 10 s, ~4 min); needs dev:db:up, alone, never beside test:backend:db
 pnpm test:e2e               # Playwright, incl. the new-catchment golden path (first run: test:e2e:install; also test:e2e:ui, check:e2e; server-report.spec.ts needs dev:s3:up + dev:mail:up, alerts-mailpit.spec.ts dev:mail:up)
 
 pnpm seed:examples          # 3 invented example catchments + team + 2 demo users (demo@ / analyst@example.com) + 2 demo farmers (farmer1@ / farmer2@example.com) + a demo applicant (applicant@example.com), password demo-password
@@ -267,8 +267,9 @@ Prefer reading these over guessing. Update them when behaviour changes.
   out. The same pair for the job worker: `jobs/worker.ts` (local, dotenv) and
   `lambda-worker.ts` (AWS, never dotenv), and `lambda-fetcher.ts` and
   `lambda-renderer.ts` are AWS only; `infra/scripts/package-lambdas.sh`
-  refuses a Lambda bundle that contains dotenv, and keeps `playwright-core`
-  out of every bundle but the renderer's.
+  refuses a Lambda bundle that contains dotenv, and any static import of
+  `playwright-core` in a bundle but the renderer's (the lazy `import()` in
+  `reports/render.ts` is the one allowed path; `scripts/guards/check_lambda_bundle.mjs`).
 - **Static SPA frontend only.** No SSR adapters. Routes render client-side from
   the fallback `index.html` (CloudFront maps 404s to it). `PUBLIC_API_URL` is
   `http://localhost:3001` in dev and `/api` in production (CloudFront proxy).

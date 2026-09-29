@@ -39,7 +39,8 @@ export function forecastCard(farm: FarmProjection, today: string): ForecastVm | 
 				: f.minDamDate
 					? t('Lowest dam level expected: about {pct} around {date}', { pct: fmtPct(f.minDamPct), date: fmtDayMonth(f.minDamDate) })
 					: t('Lowest dam level expected: about {pct}', { pct: fmtPct(f.minDamPct) }),
-		short: f.deficitDays === 0 ? t('The model doesn’t expect you to be short on any of these {days} days.', { days: f.days }) : t('You may be short on {n} of the {days} days.', { n: f.deficitDays, days: f.days }),
+		// Counted, so a one-day forecast isn't "1 days" (issue #51).
+		short: f.deficitDays === 0 ? t('The model doesn’t expect you to be short on any of these {days}.', { days: count(DAYS, f.days) }) : t('You may be short on {n} of the {days}.', { n: f.deficitDays, days: count(DAYS, f.days) }),
 		fine: `${t('From the rain forecast of {made}, for {from} to {to}.', { made: fmtDayMonth(f.madeOn), from: fmtDayMonth(f.from), to: fmtDayMonth(f.to) })} ${forecastFine()}`,
 		old: age > FORECAST_OLD_DAYS ? t('This forecast is {age} old. Your WUA may publish a newer one.', { age: count(DAYS, age) }) : null
 	};

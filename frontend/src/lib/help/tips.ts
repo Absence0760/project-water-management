@@ -121,6 +121,21 @@ export const TIPS: HelpTipText[] = [
 		fields: ['settings.assuranceAnnualThreshold']
 	},
 	{
+		id: 'allocation-mode',
+		term: 'Allocation mode',
+		short: 'What registered volumes do to a run: compare only (default), cap each unit’s yearly use at them, or scale its demand to them.',
+		category: 'results',
+		fields: ['settings.allocationMode']
+	},
+	{
+		id: 'allocation-band',
+		term: 'Allocation comparison band',
+		short: 'How far modelled use may sit from a registered volume and still count as within it: ±10 % by default.',
+		units: '%',
+		category: 'results',
+		fields: ['settings.allocationTolerance']
+	},
+	{
 		id: 'stress-class',
 		term: 'Stress class',
 		short: 'A month’s supply as a class: Low (≥ 95 % of demand supplied), Moderate (≥ 85 %), High (≥ 70 %), Severe (≥ 50 %) or Critical.',

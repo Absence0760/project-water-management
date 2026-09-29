@@ -69,6 +69,8 @@ export const af: Catalogue = {
 	'fb655347': 'datavoere wat misluk',
 	// Dam running low: {farm}
 	'21b1fd3a': 'Dam raak laag: {farm}',
+	// Warns when the model puts your dam below {pct}. Your WUA sets this level.
+	'c81abae4': 'Waarsku wanneer die model bereken dat jou dam onder {pct} is. Jou WGV bepaal hierdie vlak.',
 	// You won’t get any alert emails for {project} any more.
 	'd14653a3': 'Jy sal nie meer waarskuwings-e-posse vir {project} kry nie.',
 	// You won’t get {kind} emails for {project} any more.
@@ -211,8 +213,10 @@ export const af: Catalogue = {
 	'19024a1a': 'Volgende bywerking word omstreeks {date} verwag.',
 	// Notice from the WUA · {level}
 	'692d3ef2': 'Kennisgewing van die WGV · {level}',
-	// Set by the WUA: {pct} of registered use.
-	'091d4149': 'Deur die WGV bepaal: {pct} van geregistreerde gebruik.',
+	// Set by the WUA: a {pct} cut in registered water use.
+	'2b8f408b': 'Deur die WGV bepaal: ’n besnoeiing van {pct} op geregistreerde watergebruik.',
+	// A former member
+	'1062f5ed': '’n Voormalige lid',
 	// No restriction from the WUA
 	'82c3a5ec': 'Geen beperking van die WGV nie',
 	// drip
@@ -435,6 +439,8 @@ export const af: Catalogue = {
 	'531d4239': 'Nog geen damvlakke nie.',
 	// Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.
 	'f8cd4d40': 'Damvlak aan die einde van elke maand, {from} tot {to}. Laagste {low} aan die einde van {lowMonth}, hoogste {high} aan die einde van {highMonth}, en {latest} op {to}. Die syfers is in die tabel hieronder.',
+	// Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} at the end of {to}. The numbers are in the table below.
+	'79af4301': 'Damvlak aan die einde van elke maand, {from} tot {to}. Laagste {low} aan die einde van {lowMonth}, hoogste {high} aan die einde van {highMonth}, en {latest} aan die einde van {to}. Die syfers is in die tabel hieronder.',
 	// no change
 	'547b9d7a': 'geen verandering',
 	// up {amount}
@@ -495,10 +501,10 @@ export const af: Catalogue = {
 	'45d78280': 'Laagste damvlak verwag: ongeveer {pct} rondom {date}',
 	// Lowest dam level expected: about {pct}
 	'eafa9db3': 'Laagste damvlak verwag: ongeveer {pct}',
-	// The model doesn’t expect you to be short on any of these {days} days.
-	'f0f4c8d4': 'Die model verwag nie dat jy op enige van hierdie {days} dae te min water sal hê nie.',
-	// You may be short on {n} of the {days} days.
-	'9d644bd9': 'Jy kan dalk op {n} van die {days} dae te min water hê.',
+	// The model doesn’t expect you to be short on any of these {days}.
+	'e88a6dd3': 'Die model verwag nie dat jy op enige van hierdie {days} te min water sal hê nie.',
+	// You may be short on {n} of the {days}.
+	'df8db68c': 'Jy kan dalk op {n} van die {days} te min water hê.',
 	// From the rain forecast of {made}, for {from} to {to}.
 	'd81d6b5a': 'Volgens die reënvoorspelling van {made}, vir {from} tot {to}.',
 	// This forecast is {age} old. Your WUA may publish a newer one.
@@ -527,8 +533,6 @@ export const af: Catalogue = {
 	'4d2d5d68': 'Stoor',
 	// Cancel
 	'35afca3b': 'Kanselleer',
-	// A former member
-	'1062f5ed': '’n Voormalige lid',
 	// edited
 	'6df599e8': 'gewysig',
 	// Edited {date}
@@ -589,6 +593,14 @@ export const af: Catalogue = {
 	'7c027098': 'Nie gewys nie: met so min hidrologiese eenhede in die opvanggebied kan dit ’n buurman se syfers verklap.',
 	// about an even share
 	'8babe8ec': 'ongeveer ’n gelyke deel',
+	// much less than an even share (about {amount})
+	'2ba3b1c4': 'baie minder as ’n gelyke deel (ongeveer {amount})',
+	// much more than an even share (about {amount})
+	'791611d4': 'baie meer as ’n gelyke deel (ongeveer {amount})',
+	// less than an even share (about {amount})
+	'1fb9de6d': 'minder as ’n gelyke deel (ongeveer {amount})',
+	// more than an even share (about {amount})
+	'f8c02205': 'meer as ’n gelyke deel (ongeveer {amount})',
 	// a little less than an even share (about {amount})
 	'8bf5fde0': '’n bietjie minder as ’n gelyke deel (ongeveer {amount})',
 	// a little more than an even share (about {amount})
@@ -703,6 +715,8 @@ export const af: Catalogue = {
 	'bc8fde2e': 'Reserwe behou op {pct} % van die dae',
 	// Example catchment, {years} years
 	'828ebfcc': 'Voorbeeld-opvanggebied, {years} jaar',
+	// Pause the animation
+	'30f19c54': 'Pouseer die animasie',
 	// How it works
 	'd03ba450': 'Hoe dit werk',
 	// Build the network

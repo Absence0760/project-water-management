@@ -5,6 +5,8 @@
 // preview all start here. A module of its own so the preview doesn't load
 // the network simulation and the checks (issue #9).
 import { resolveDataQuality } from './quality';
+import { DEFAULT_ALLOCATION_TOLERANCE } from './allocations/compare';
+import { resolveAllocationMode } from './allocations/mode';
 import {
 	accumulationWarnings,
 	applyAccumulations,
@@ -519,6 +521,12 @@ function mergeSettings(raw: ModelInput['settings'], warnings: string[]): Project
 	if (!(LOW_FLOW_MEASURES as readonly unknown[]).includes(s.lowFlowMeasure)) {
 		if (s.lowFlowMeasure !== undefined) warnings.push(`unknown low-flow measure "${String(s.lowFlowMeasure)}"; using total`);
 		s.lowFlowMeasure = 'total';
+	}
+	// Allocations (engine ≥ 1.18.0, issue #72): an unknown mode only compares; a tolerance outside [0, 1) takes the default.
+	s.allocationMode = resolveAllocationMode(s.allocationMode, warnings);
+	if (!(typeof s.allocationTolerance === 'number' && s.allocationTolerance >= 0 && s.allocationTolerance < 1)) {
+		if (s.allocationTolerance !== undefined) warnings.push(`allocation tolerance "${String(s.allocationTolerance)}" is not a fraction in [0, 1); using ${DEFAULT_ALLOCATION_TOLERANCE}`);
+		s.allocationTolerance = DEFAULT_ALLOCATION_TOLERANCE;
 	}
 	if (!['area', 'hiLo', 'manual'].includes(s.flowShareMethod)) {
 		warnings.push(`unknown flow share method "${String(s.flowShareMethod)}"; using area`);

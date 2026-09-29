@@ -1566,9 +1566,10 @@ doesn't flood storage, and it doesn't evict the modeller's runs.
 - **Publication stays a human act by default** (D5). An auto run shows the
   editor "New auto run: publish?" with the diff against the published run.
   Optional per project: `autoRun.publish = 'never' | 'if_no_new_warnings'`.
-- **Partial recompute: not built.** The engine takes a fraction of a second for a full record. At
-  60 farms a run writes ~800 series (~30–50 MB before TOAST compression),
-  which dominates, and a partial engine recompute wouldn't reduce it. **Leave
+- **Partial recompute: not built.** The engine takes about a second for a
+  full record at 60 farms. A run writes 1,937 series (15.9 MB stored, after
+  TOAST compression; measured in WP-2.16), and storing them takes about 5 s,
+  which dominates, so a partial engine recompute wouldn't reduce it. **Leave
   room:** if runs get slow, first store only the tail of auto runs
   (`run_series` from the first changed day, with the published run as the
   base). Measure first.
@@ -2246,7 +2247,30 @@ proven by the test named; 🔧 fixed in this pass (with its test); ⏳ pending
 | Privacy notice, lawful basis, operator agreement, region, deleted-note bodies, backups | ⏳ | followups.md § POPIA and the Step 2 release (client / information officer) |
 | Runbooks (§8) | ✅ | [deployment.md § Runbooks](../deployment.md#runbooks) (alert storm: runbook 3, WP-2.13) |
 | `/audit/auth`, `/audit/xss`, `/audit/gdpr` over the built surfaces | ✅ | The threat and deletion rows above (the unsubscribe: [security.md § Alerts](../security.md#alerts)) |
-| Personas (§9) and load checks | ⏳ | Now that WP-2.5, WP-2.12 and WP-2.13 are built (three personas judge those); issue #51 |
+| Personas (§9) and load checks | ✅ | §9 "Build verdicts" (issue #51); the load checks below |
+
+*Load checks* (issue #51, 2026-09-28; `backend/src/runs/load.db.perf.test.ts`,
+run alone with `pnpm -C backend exec vitest run --project perf-db
+src/runs/load.db.perf.test.ts`, ~4 min). A synthetic catchment of 60 farms
+under one outlet weir, ten years of daily rain (3,652 days), on a 4-core
+container with Postgres 17 in docker. The API and worker Lambdas run at
+1024 MB, about 0.58 of a vCPU; the calls run in-process, so the Node CPU time
+they use is scaled to that and the Postgres time isn't.
+
+| Check | Measured | Scaled to 1024 MB Lambda | Budget |
+| --- | --- | --- | --- |
+| Manual run through the API (median of 3) | 5.9 s (3.8 s of it Node CPU) | ≈ 8.7 s | 10 s (the §12 risk row's trigger; the Lambda's timeout is 30 s) |
+| Where it goes (one run, split) | prepare 0.03 s, engine 0.7–1.0 s, store 5.0 s (2.2–2.5 s of it Node CPU) | | |
+| Auto re-run in the worker (a tick, median of 30) | 5.2 s, max 5.7 s (2.8 s Node CPU) | ≈ 7.3 s | 10 s (the worker's timeout is 300 s) |
+| Stored per run | 1,937 series, 15.9 MB | | |
+| Project `run_series` over 30 simulated days | 63.5 MB on day 1, 63.6 MB on day 30 (3 manual + 1 auto, every day) | | flat (< 5 % growth) |
+
+Both pass. Manual runs stay synchronous: 8.7 s is under the 10 s trigger,
+but it's an estimate from another machine, so the deployed Lambda's p95
+duration is the real check (§12 risk row). The time goes to storing the
+run's series, not the engine: the durable fix, if needed, is fewer or
+smaller stored series (store only an auto run's tail, planned-work "Run
+storage in S3"), before a job queue for manual runs.
 
 **Size.** S. **Depends on.** Everything above.
 
@@ -2384,9 +2408,35 @@ Run before building (the need) and again at WP-2.16 (the build).
 | `adversary` | – | No cross-farm read, key escalation, share-link overreach or unsubscribe abuse |
 | `accessibility-user`, `international-user` | – | WCAG 2.2 AA in both languages at 360 px; af-ZA number and date formats are correct |
 
-**Need verdicts** (fill in when run):
-- farmer: _pending_
-- wua-manager: _pending_
+**Need verdicts** (recorded at WP-2.16, from the first pass of issue #51,
+2026-09-28 at 17098cb2; the need wasn't judged separately before building):
+- farmer: **Adopt if…**, for the farmer view, privacy between farms and the
+  Afrikaans; the "if" was the restriction wording (fixed, below).
+- wua-manager: **Adopt if…**: it replaces "state now / who's short / what we
+  announced", not WAS water accounting.
+
+**Build verdicts** (WP-2.16, issue #51). The first pass ran all six personas
+at 17098cb2 (2026-09-28); the fixes landed in PRs #127, #129, #130, #134 and
+#135; a re-check at 81db5ed (main after #129, and #130's branch for
+accessibility) judged each bar again. The full reports are the gitignored
+`reviews/persona-*.md`.
+
+| Persona | First pass | Fixed in | Re-check | Bar |
+| --- | --- | --- | --- | --- |
+| `farmer` | Adopt if…: privacy passed, 360 px passed in en and af; one High: the WUA's restriction % read as an allowance where it meant a cut | #129 ("a 20 % cut in registered water use" on the farm page, `/share`, the alert email, in en and af) | **Adopt**; no Critical or High; the staff alert list's bare "20 %" fixed here | ✅ |
+| `wua-manager` | Adopt if…; the simulated week broke on two Highs: a stale forecast run fired a false EWR alert; the report PDF wouldn't render for a requester who hadn't accepted the current terms | #134 | **Adopt if…**: the week runs without the modeller; no Critical or High | ✅ |
+| `hydrologist` | Adopt if…: need met, CHIRPS documented; forecast days leaked into the FDC, the automatic fit and firm yield | #127; the re-check found the same leak in days below the Reserve per water year, the allocations comparison, the Dams page and the report window's whole record, all fixed here | **Adopt if…** → met with this PR | ✅ |
+| `adversary` | No cross-farm read, share-link overreach or unsubscribe abuse; key escalation failed on a High: an ingest key could create a series that became the model input, unheld | #135 (`100_key_series_kind`, `heldFor`) | Met for creation. A key's pushes into a series with fewer than 100 non-zero days are checked for negatives only (a documented limit, security.md § API keys); the 409 no longer tells people to seed a series with one day (fixed here); whether to hold those pushes too is an operator decision, [#93](https://github.com/Absence0760/project-water-management/issues/93) | ✅ (limit documented, decision open) |
+| `accessibility-user` | Not yet: no Critical or High, axe clean in both languages at 360 and 320 px; 5 Mediums (2.2.2, 2.4.2, 1.4.11, 2.4.3, 1.4.10) | #130 | **Met once #130 merges**: all five fixed and pinned by e2e; none left | ✅ with #130 |
+| `international-user` | Mostly met: af-ZA formats correct; a notice date in UTC, an English "a former member", the farmer CSV | #129; the CSV is [#124](https://github.com/Absence0760/project-water-management/issues/124) | **Met**; the CSV stays #124 (trigger: before farmers are invited) | ✅ |
+
+Carried, not blocking a bar (followups.md § POPIA and the Step 2 release):
+the Afrikaans needs a native speaker's review (Q5 below); the WUA's % is
+hidden on the farm page and `/share` when the WUA writes notice text, while
+the email shows it; a firing EWR-forecast alert shows no "stale" note while
+its forecast is behind the rain and no new one is made; no log of
+restriction decisions for members or the CMA; a guard listing every view
+over a run's stored series, so a new one can't miss `beforeForecast`.
 
 **Questions for the client**
 1. Confidentiality between farms (plan.md Q15): may a farmer see neighbours'
@@ -2459,8 +2509,8 @@ Step 2 is done, and Step 3 can open, when **all** of these hold:
 | Modelled restriction figures are read as official and cause disputes | Medium | High | The official notice is separate from the modelled band; agreed wording (D10); publication by a named person; auto-publish off |
 | Feed sources change format or disappear (DWS HTML, CHIRPS paths) | High | Medium | Strict parsers that fail loudly; health UI and staleness alerts; manual CSV and API-key paths stay first-class |
 | CHIRPS bias against calibration rain degrades results after the catchment series ends | Medium | Medium | Rain-source priority unchanged; `rain_source` visible in charts and CSV; hydrologist decision D7 on scaling |
-| DB growth from 60-farm runs (≈ 800 series per run) | Medium | Medium | Auto runs replace each other; the publication cap of 12; measure in WP-2.16. Trigger for moving `run_series` to S3 (planned-work "Run storage in S3"): DB > 60 % of allocated storage |
-| Synchronous manual runs at 60 farms approach the 30 s API budget | Low–Medium | Medium | Measure in WP-2.16; if > 10 s, route manual runs through the job queue too (the worker has a 300 s budget) |
+| DB growth from 60-farm runs (measured in WP-2.16: 1,937 series, 15.9 MB per run) | Medium | Medium | Auto runs replace each other (one kept per automatic trigger; flat over 30 simulated days); the publication cap of 12. The kept runs of one 60-farm project (20 manual, the automatic ones, up to 12 published, plus pinned and cited runs) come to ~0.6 GB, so the 20 GiB default holds about 20 such projects before the trigger below. Trigger for moving `run_series` to S3 (planned-work "Run storage in S3"): DB > 60 % of allocated storage |
+| Synchronous manual runs at 60 farms approach the 30 s API budget | Low–Medium | Medium | Measured in WP-2.16: 5.9 s here, ≈ 8.7 s scaled to the API Lambda's 0.58 vCPU, under the 10 s trigger but with little headroom. Re-measure on the deployed Lambda (the p95-duration alarm fires at 80 % of the timeout, `infra/alarms.tf`); if a 60-farm run passes 10 s there, route manual runs through the job queue too (the worker has a 300 s budget). Storing the series (~5 s of it) is the part to cut first |
 | Translation drift, or poor-quality Afrikaans | Medium | Medium | Typed keys; the help `sourceHash` test; a named reviewer; no unreviewed machine translation |
 | Alert fatigue, or SES complaints hurting deliverability | Medium | Medium | Hysteresis, daily cap, digest, one-click unsubscribe, suppression handling |
 | Scope: 16 WPs for one developer | High | Medium | The shortest path to the exit criteria (§6 end) first; fetchers, forecast, portfolio and report may trail the first live catchment |

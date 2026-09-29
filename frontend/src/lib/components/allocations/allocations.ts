@@ -4,8 +4,8 @@
 // The wording never says "lawful", "unlawful", "compliant" or "illegal": the
 // app compares modelled use with a registered volume and leaves the finding to
 // the authority (docs/allocations.md § What the comparison is not).
-import { allocationStatus, type AllocationComparison, type AllocationStatus, type AllocationYear } from '@water-management/engine';
-import type { AllocationAuthorisation, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
+import { allocationStatus, type AllocationComparison, type AllocationMode, type AllocationStatus, type AllocationYear } from '@water-management/engine';
+import type { Allocation, AllocationAuthorisation, AllocationPreviewRow, AllocationPurpose, AllocationWaterSourceKind } from '$lib/api/types';
 import { fmtNum } from '$lib/format/number';
 
 export const AUTHORISATION_LABEL: Record<AllocationAuthorisation, string> = {
@@ -37,6 +37,61 @@ export const STATUS_LABEL: Record<AllocationStatus, string> = {
 	under: 'Below registered',
 	unregistered: 'No registered volume',
 	none: 'No use, none registered'
+};
+
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** The calendar months in water-year order (Oct … Sep), as the form lists them. */
+export const WATER_YEAR_MONTHS = [10, 11, 12, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+export const monthShort = (m: number) => MONTH_SHORT[m - 1] ?? String(m);
+
+/**
+ * A licence's months of use in words (103, issue #72): runs of consecutive
+ * months, over the new year too ("Oct–Mar"), from the first in the water
+ * year; "all year" for twelve; '' for none stated.
+ */
+export function monthsText(months: readonly number[] | null | undefined): string {
+	if (!months?.length) return '';
+	const set = new Set(months);
+	if (set.size >= 12) return 'all year';
+	const next = (m: number) => (m % 12) + 1;
+	const starts = WATER_YEAR_MONTHS.filter((m) => set.has(m) && !set.has(m === 1 ? 12 : m - 1));
+	return starts
+		.map((s) => {
+			let e: number = s;
+			while (set.has(next(e))) e = next(e);
+			return e === s ? monthShort(s) : `${monthShort(s)}–${monthShort(e)}`;
+		})
+		.join(', ');
+}
+
+/** A volume's licence conditions in one line for the list, or null when it states none. */
+export function conditionsSummary(a: Pick<Allocation, 'months' | 'maxRateM3s' | 'conditions'>): string | null {
+	const parts = [
+		a.months?.length ? `${monthsText(a.months)} only` : '',
+		a.maxRateM3s !== null && a.maxRateM3s !== undefined ? `at most ${fmtNum(a.maxRateM3s, 3, true)} m³/s` : '',
+		a.conditions?.length ? `${a.conditions.length} condition${a.conditions.length === 1 ? '' : 's'}` : ''
+	].filter(Boolean);
+	return parts.length ? parts.join(' · ') : null;
+}
+
+/** The form's conditions box, one condition a line: trimmed, blank lines dropped. */
+export const conditionsFromText = (text: string): string[] =>
+	text
+		.split(/\r?\n/)
+		.map((c) => c.trim())
+		.filter(Boolean);
+
+/**
+ * What a run's allocation mode (engine ≥ 1.18.0, Settings) did to its use,
+ * said above the comparison; null for 'none', where the comparison is the
+ * whole story.
+ */
+export const MODE_NOTE: Record<AllocationMode, string | null> = {
+	none: null,
+	cap: 'This run capped each unit’s use at its registered volume per water year (allocation mode “cap”), so its modelled use can’t be above it. A unit with no registered volume wasn’t capped.',
+	fullAllocation:
+		'This run is a full allocation: each unit with a registered volume had its demand scaled so it asks for exactly that volume every water year. It shows what the river would look like if every registered user took their entitlement, not what they take.'
 };
 
 /** "2021/22". */
@@ -187,8 +242,8 @@ export const MATCHED_BY_LABEL: Record<NonNullable<AllocationPreviewRow['matchedB
 
 /** The CSV template's header line (backend TEMPLATE_HEADERS) and one invented example row. */
 export const TEMPLATE_CSV =
-	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference\r\n' +
-	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace\r\n';
+	'registration_no,property_ref,farm,holder,authorisation,purpose,water_source,volume_m3_year,storage_m3,valid_from,valid_to,reference,months,max_rate_m3s,conditions\r\n' +
+	'EXAMPLE-001,Portion 1 of Example 1,Farm A,Example Holdings,licence,irrigation,surface,120000,150000,2020-01-01,2040-12-31,example row: replace,Oct-Mar,0.05,No abstraction below 0.2 m3/s at the weir | Meter and report monthly\r\n';
 
 /** The first 12 hex digits of a SHA-256, for display beside the full hash in a title. */
 export const shortHash = (sha: string) => sha.slice(0, 12);

@@ -10,6 +10,7 @@ import { expectNoSidewaysScroll } from '../support/reflow.ts';
 import { monthsCard, monthSentences, openTransfers, rulesCard, seedManyTransfers } from '../support/transfers.ts';
 
 const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
+const saveBar = (page: import('@playwright/test').Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
 test('the header carries the count and the actions; When water moves adds up the enabled rules by month', async ({ page, owner }) => {
 	void owner;
@@ -58,7 +59,7 @@ test('the header carries the count and the actions; When water moves adds up the
 	await expect.poll(async () => (await monthSentences(page))[1]).toBe('Nov: no rule runs');
 
 	await saveModelChanges(page);
-	await expect(page.getByRole('region', { name: 'Unsaved model changes' })).toBeHidden();
+	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
 	await expect(page.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true })).toHaveValue('0.02');
 	await expect(page.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toHaveValue('');
@@ -88,7 +89,10 @@ test('each month has its own rate: a workbook rule shows its rate in its months,
 	// The button puts the largest rate in every month.
 	await page.getByRole('button', { name: '0.01 in every month', exact: true }).click();
 	for (const m of ['Oct', 'Nov', 'Apr', 'Sep']) await expect(rate(m)).toHaveValue('0.01');
+	// The page has taken the save in (the bar goes once the editor holds what the server returned), so the
+	// reload leaves a saved page, not one still mid-save behind its unsaved-changes guard.
 	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
 	await expect(rate('Sep')).toHaveValue('0.01');
 	await expect.poll(async () => (await monthSentences(page))[11]).toBe('Sep: 1 rule, up to 864 m³ a day');
@@ -110,7 +114,10 @@ test('a rule can be a river off-take: its fields show in place of the minimum st
 	await page.getByLabel('Conveyance losses of transfer 1, %', { exact: true }).fill('10');
 	await page.getByLabel('How much transfer 1 takes', { exact: true }).selectOption('capacity');
 	await page.getByLabel('transfer 1 leaves the EWR in the river', { exact: true }).check();
+	// The page has taken the save in (the bar goes once the editor holds what the server returned), so the
+	// reload leaves a saved page, not one still mid-save behind its unsaved-changes guard.
 	await saveModelChanges(page);
+	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
 	await expect(page.getByLabel('Where transfer 1 takes its water', { exact: true })).toHaveValue('river');
 	await expect(page.getByLabel('Hands-off flow for transfer 1, m³/day', { exact: true })).toHaveValue('250');

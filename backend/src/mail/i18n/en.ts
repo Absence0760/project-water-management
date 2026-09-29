@@ -75,7 +75,9 @@ export const en = {
 	'mail.alert.digest.subject': 'Your alerts for {project} — {product}',
 	'mail.alert.digest.heading': 'Your alerts for {project}',
 	'mail.alert.digest.intro': 'Since the last summary:',
-	'mail.alert.digest.more': '…and {more} more alerts. Open the catchment to see them all.',
+	// Counted (tr.tn): `.one` for 1 in English, `.other` otherwise; a language adds the forms its plural rules need.
+	'mail.alert.digest.more.one': '…and {more} more alert. Open the catchment to see it.',
+	'mail.alert.digest.more.other': '…and {more} more alerts. Open the catchment to see them all.',
 	'mail.alert.digest.why': 'You get this daily summary because you chose daily alerts for {project}, or had more than {cap} alert emails in a day.',
 	'mail.alert.digest.unsubscribe': 'Stop all alert emails for this catchment',
 
@@ -96,17 +98,21 @@ export const en = {
 	'mail.alert.ewr.body':
 		'On the rain forecast of {madeOn}, the model expects the river’s ecological reserve (EWR) at the outlet to be missed on {days} of the {of} forecast days ({from} to {to}). The alert is set at {threshold} days. Forecasts change.',
 	'mail.alert.stale.what': 'Data feed behind',
-	'mail.alert.stale.body': 'These data feeds are more than {threshold} days later than usual:',
-	'mail.alert.stale.line': '{feed}: newest day {newest}, {overdue} days late',
+	'mail.alert.stale.body.one': 'These data feeds are more than {threshold} day later than usual:',
+	'mail.alert.stale.body.other': 'These data feeds are more than {threshold} days later than usual:',
+	'mail.alert.stale.line.one': '{feed}: newest day {newest}, {overdue} day late',
+	'mail.alert.stale.line.other': '{feed}: newest day {newest}, {overdue} days late',
 	'mail.alert.failing.what': 'Data feed failing',
 	'mail.alert.failing.body': 'These data feeds have failed {threshold} or more times in a row:',
-	'mail.alert.failing.line': '{feed}: {failures} failures in a row',
+	'mail.alert.failing.line.one': '{feed}: {failures} failure in a row',
+	'mail.alert.failing.line.other': '{feed}: {failures} failures in a row',
 	'mail.alert.jobs.what': 'Background jobs failed',
-	'mail.alert.jobs.body': '{count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment.',
+	'mail.alert.jobs.body.one': '{count} background job failed for good in the last 24 hours. See the jobs list in the catchment.',
+	'mail.alert.jobs.body.other': '{count} background jobs failed for good in the last 24 hours. See the jobs list in the catchment.',
 	'mail.alert.restriction.what': 'New restriction notice',
 	'mail.alert.restriction.liftedWhat': 'Restriction lifted',
 	'mail.alert.restriction.body': 'The WUA published a notice for {project} on {date}: {level}.',
-	'mail.alert.restriction.bodyPct': 'The WUA published a notice for {project} on {date}: {level}, {pct} less water.',
+	'mail.alert.restriction.bodyPct': 'The WUA published a notice for {project} on {date}: {level}, a {pct} cut in registered water use.',
 	'mail.alert.restriction.lifted': 'The WUA lifted the restriction for {project} on {date}.',
 	'mail.alert.restriction.notice': 'The WUA’s notice: “{notice}”',
 	'mail.alert.restriction.level.none': 'no restriction',
@@ -138,6 +144,12 @@ export const sections: Record<string, string> = {
 	'mail.alert.kind': 'Alert emails: the name of a kind of alert, inside “You get this email because you get {kind} alerts for {project}”.'
 };
 
+/**
+ * A counted message: its forms are keys `<base>.<category>` (Intl.PluralRules'
+ * `one`, `other`, …), picked by `MailTranslator.tn`.
+ */
+export type MailPluralBase = { [K in MailKey]: K extends `${infer B}.other` ? B : never }[MailKey];
+
 /** Notes for single keys, where the section doesn't say enough. */
 export const notes: Partial<Record<MailKey, string>> = {
 	'mail.farmer.yourFarm': 'Stands in for {farms} when the invite names no hydrological unit.',
@@ -145,7 +157,8 @@ export const notes: Partial<Record<MailKey, string>> = {
 	'mail.alert.subject': 'The alert email’s subject line: {what} is the alert (“Dam low on Vaalbank”), {project} the catchment.',
 	'mail.alert.model.dam.staff': 'Under a dam alert sent to the WUA’s staff, not the farmer: the same as mail.alert.model, about a member’s dam.',
 	'mail.alert.model.staff': 'Under the river-flow forecast alert, which only the WUA’s staff get.',
-	'mail.alert.stale.line': 'One line per data feed; {overdue} is a number of days.',
+	'mail.alert.stale.line.one': 'One line per data feed; {overdue} is 1 (a day).',
+	'mail.alert.stale.line.other': 'One line per data feed; {overdue} is a number of days.',
 	'mail.alert.restriction.body': '{level} is one of the level lines below.',
-	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s percentage, like “20 %”.'
+	'mail.alert.restriction.bodyPct': '{level} is one of the level lines below; {pct} is the WUA’s cut, like “20 %”: use that much less than the registered water use. The farm page says it the same way.'
 };

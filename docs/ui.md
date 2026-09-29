@@ -166,7 +166,11 @@ a signed-in reader on to their projects: a static page can't know the session,
 so it doesn't claim "Sign in"), a contents list (folded behind a
 **Contents (13 sections)** disclosure (the privacy notice) on a phone, where the list alone filled
 the first screen; open from 601 px), a readable column, and footer links. Prerendered like `/welcome` (static HTML, open to
-anyone signed in or out, rendered before the session is known). English
+anyone signed in or out, rendered before the session is known). Each has its
+own `<title>` (*Privacy notice · Water Management*, …) in the HTML itself:
+`app.html`'s fallback title sits after the page's head, since the document's
+title is the first `<title>` and these pages run no script to correct it
+(WCAG 2.4.2; `legal.spec.ts`). English
 only: the English text binds; the link labels to them are translated. Linked
 from the landing footer, under every sign-in form (a **Legal** nav in
 `AuthCard`), and in the sign-up form's assent checkbox. The Terms open with
@@ -260,14 +264,28 @@ under a dead-invitation warning).
   password → *Check your email* and back, reset → done or a dead link,
   unsubscribe → done or a dead link, *Sign out and accept* on an invitation
   for someone else), focus moves to the title (`focusAuthTitle`), since the
-  button that had it is gone.
+  button that had it is gone. The same holds outside the card: **I
+  understand** on the farm notice, **Accept the new terms** and the
+  confirm-email banner's **Dismiss** each remove themselves, and focus moves
+  to the new page's `h1`, or `#main` while it loads (`focusPageStart`,
+  `lib/a11y/focusPage.ts`; WCAG 2.4.3).
+- **Text** is 14 px at least (1rem of the 14 px root): labels, hints, the
+  *Forgot password?* and legal links (issue #51; `layout/authTextFloor.test.ts`
+  scans the styles, `auth-pages.spec.ts` measures every visible text in
+  English and Afrikaans).
+- **Motion.** The panel's drawing (`CatchmentScene.svelte`) moves for under
+  5 s after the page opens, then holds still (WCAG 2.2.2), and not at all
+  under reduced motion.
 - **Phones (below 900 px):** one column, the drawing an 84 px band above
   the form, so the title and first field sit in the top quarter of the
   screen, above the keyboard.
 - **Password fields** (`common/PasswordInput.svelte`, also on the account
   page) have a **Show / Hide** button inside, named *Show password* /
   *Hide password* from its content, so the field stays the only control
-  labelled "Password".
+  labelled "Password". The wrapper draws the field's border and focus ring
+  and lays the input and the button side by side, so the button takes its
+  own width and never covers the text (Afrikaans *Versteek* overran a fixed
+  reserve once; issue #51).
 
 `auth-pages.spec.ts` pins the fit, the title's place and focus at all three
 sizes in both themes, with axe scans at desktop and phone size;
@@ -812,7 +830,9 @@ for every workspace tab. Its own chunk.
   the dams the run stored storage for (`damsInRun`, capacity and minimum
   level from the run's own model), each dam's daily series fetched through
   the Runs cache four at a time (`loadDamLevels`) and kept for the sparklines
-  and the chart.
+  and the chart. On a forecast run the levels, the cards and their sparklines
+  are the record's, up to the day before the forecast, like the Summary's
+  (issue #51); the chart shows the forecast days in their band.
 - **Cards** (`damCards`), emptiest first (the levels' order), then any dam
   without a level in node order: the name, capacity, % full at the end of the
   run, "below 30%" / "at its minimum level" in words, the change over the
@@ -1373,6 +1393,14 @@ note's link on the Summary, `notes.ts` `noteHref`).
     its top row rather than centring that row above the box's edge, where
     nothing can scroll to it (Sandspruit's top row was cut off at 1440 × 960).
     The side column is `clamp(17rem, 24vw, 22rem)`.
+  - **Fit signal:** a resize reaches the drawing a frame or more later (the
+    box's size through a ResizeObserver, the 900 px breakpoint through its
+    media query's change event, the layout's height through the measured top),
+    so the schematic's scroller carries `data-fit` (`<width>x<height>`, plus
+    ` wide` from 900 px): the box the drawing on screen was laid out for. It
+    is settled once that matches the box as it is now and `--map-top` matches
+    the layout's top; e2e waits on that (`waitForMapFit`, e2e/support/diagrams.ts)
+    before measuring the map (issue #138).
   - **Legend line:** the shapes, the supply bands present, the run they come
     from ("Hydrological units coloured by … in run “test”, ran today", read out) and the
     drag hint, which becomes the live drop status while dragging.
@@ -2695,7 +2723,14 @@ which checks every catchment tab).
   curtailment reporting window (also the assurance of supply's window), and
   the **annual assurance threshold** (%, `settings.assuranceAnnualThreshold`,
   default 90 %: a water year counts as met at that supply ratio; engine ≥
-  0.32.0).
+  0.32.0), and **Registered volumes** (engine ≥ 1.18.0, issue #72): the
+  **allocation mode** (`settings.allocationMode`: *Compare only*, the
+  default; *Cap use at the registered volume*; *Full allocation*, [model.md
+  §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72))
+  and the **comparison band** (± %, `settings.allocationTolerance`, default
+  10 %, the Allocations tab's "within band"), each with its help tip and
+  field history. Either is a model setting: saving it makes the latest run
+  out of date.
 - **Reserve rule tables** (`#set-reserve`, `settings/EwrRulesSection.svelte`,
   helpers in `settings/ewrRules.ts`; engine ≥ 0.21.0, [model.md §2.9c](./model.md#29c-ewr-compliance-by-the-reserves-assurance-rules-engine--0210-hydrologist-q6)).
   Optional; with none, runs report days below the pragmatic EWR only. **Add a
@@ -3375,7 +3410,9 @@ read it before.
   fall in the forecast period (`RunSummary.forecastRain`). On a forecast run
   *Last 7 / 14 / 30 days* end on the day before the forecast, and the note says
   so (issue #51): the latest days of the record, never forecast days read as
-  "this week"; *Whole record* and a custom range may still reach into it. A run saved before
+  "this week". *Whole record* and a custom range end there too, with a note
+  ("Cut to the record before the forecast: …"; a range wholly in the forecast
+  is refused): a historical figure never averages over forecast days. A run saved before
   engine 0.17.0 (no EWR charge series), or missing any series the recompute
   reads, disables the picker and asks for a new run. The engine's
   `views/curtailmentOverWindow.test.ts` checks the table, binding sites
@@ -4192,7 +4229,12 @@ to where it was opened from. A viewer opening a sheet link gets the page.
 **Under the header**, a sentence naming the run and saying modelled use is
 *modelled, not metered* and a difference is something to look into, not a
 finding; slim notes for volumes not matched to a unit (editors: "Change a
-volume to match it"), or matched to a unit the run doesn't have.
+volume to match it"), or matched to a unit the run doesn't have. A run made
+with an allocation mode (engine ≥ 1.18.0, Settings › Registered volumes)
+says what it did first (`MODE_NOTE`, `allocation-mode-note`): a cap ("This
+run capped each unit’s use at its registered volume per water year …") or a
+full allocation ("… what the river would look like if every registered user
+took their entitlement, not what they take").
 
 **Modelled use vs registered volume** is a list of each unit and water
 source with use or a volume, the ones to look into first (`unitRows`): above
@@ -4228,7 +4270,9 @@ fits at 1280 without sideways scroll: unit (or **Not matched**, highlighted)
 with the registration number under it, the registered user for editors only,
 authorisation with purpose, volume with source, storage, validity with where
 it came from (the file name and the first 12 hex digits of its SHA-256, or
-"Entered by hand"), and **Change** / **Delete** for editors (the form's unit
+"Entered by hand") and, when it states any, its licence conditions in one
+line ("Oct–Mar only · at most 0.05 m³/s · 2 conditions", `conditionsSummary`,
+the conditions themselves in its title), and **Change** / **Delete** for editors (the form's unit
 picker is how a row is matched by hand). Viewers see "Names of registered
 users are shown to editors only." Under it, **Imported files**: each with its
 full hash, reference, row count, who and when, and **Remove this import**.
@@ -4252,7 +4296,11 @@ closing the sheet drops a preview.
 **Add or change a volume** (`AllocationForm.svelte`, `volume=new` or
 `volume=<id>`): unit or water user (or "Not matched yet"), authorisation,
 source, purpose, volume, storage, valid from/to, registration number,
-property, the registered user (editors), reference; Save and Cancel pinned.
+property, the registered user (editors), reference, and **Licence
+conditions** (issue #72; "shown, not yet applied by the model"): the months
+water may be taken (twelve boxes in water-year order, none ticked = none
+stated, each a 24 px target), the maximum rate (m³/s) and the other
+conditions one a line; Save and Cancel pinned.
 
 **Phone and narrow windows**: one column (list, picked unit, volumes, every
 year); the list shows six rows until **Show all N hydrological units and sources** and the
@@ -4894,7 +4942,9 @@ published.
   sticky at every width, so while it's on the page it sets `--header-h` to
   its 56 px (the app shell's 0 from 900 px would leave in-page links, such
   as Why?'s "Read the notice" (`#notice`, landed once the farm has loaded)
-  and the words page's `#farm-…` entries, under it). The frame has no
+  and the words page's `#farm-…` entries, under it). It stays one 56 px row
+  down to 320 px in every language (the EN | AF pair doesn't wrap;
+  `lang-layout.spec.ts`). The frame has no
   minimum height, so a page that fits doesn't scroll (the confirm-your-email
   banner sits above it).
 - **Main page, top to bottom:** the name and the dates line ("Published by
@@ -5002,10 +5052,16 @@ published.
 - **Saved copy** (`savedCopy.ts`, design §9): the last good `FarmView` per
   user and farm in `localStorage`, shown at once with "Updating…". Without a
   signal it stays under a dark strip ("No signal. These are the figures
-  saved on this phone at …") over a reduced view. Cleared on sign-out, on a
+  saved on this phone at …") over a reduced view; its **Try again** button's
+  focus ring takes the strip's own text colour (16:1 in both themes; the
+  page's `--focus` was 1.67:1 on the swapped dark strip). Cleared on sign-out, on a
   403/404, when another user signs in, after 30 days unused, and by the
   Menu's opt-out. No service worker, no polling: the page refetches when it
-  becomes visible again.
+  becomes visible again. Ages on it (the dates line, the forecast's) count
+  to today where the catchment is (`farmToday`: the project's zone from the
+  response, on this device's clock), never the phone's own zone, so a saved
+  copy ages with the day and a phone set to another zone agrees with the
+  server (issue #51).
 - **Preview.** Viewer+ can open a farm's page ("Preview as farmer" in the
   Network tab's node detail); it shows under a "You're previewing … as its
   farmer sees it" banner and keeps no copy.
@@ -5033,7 +5089,11 @@ digest). The modeller workspace stays English.
 - **Switch.** `lib/i18n/LanguageSwitch.svelte`, drawn from the table. With
   two languages it is "English | Afrikaans" (each name in its own language,
   the button marked with that `lang`, `aria-pressed` on the current one;
-  "EN | AF" in the phone headers, the full name as the accessible name);
+  "EN | AF" in the phone headers, the full name as the accessible name, and
+  that compact pair never wraps, so a 320 px header stays one row; below
+  360 px the farm header shows its mark, or a back link's chevron, without
+  the words "My hydrological unit", which stay for screen readers, since
+  beside EN | AF and Menu they took three lines, `FarmShell.svelte`);
   from three it becomes a `<select>` named "Language", each `<option>` in
   its own language with its own `lang` (`LanguageSwitch.test.ts`,
   `testLanguage.test.ts`). It sits above the sign-in forms (`AuthCard`), in the farm
@@ -5122,9 +5182,15 @@ digest). The modeller workspace stays English.
   returns a `Rich` sentence where `**…**` and `{ b }` values are bold
   (`lib/i18n/Rich.svelte` renders it); `joinAnd(items)`; `setLocale(l)`;
   `i18n.locale` (the choice); `wordsLang()` (the language the words are in).
+  `t()` and `tRich()` drop a full stop that comes straight after a value
+  already ending in one, since af-ZA abbreviates months with a dot and a
+  sentence ending on "31 Des." must not read "31 Des.." (issue #51).
   They read runes, so a template that calls them re-renders on a switch.
   The backend's emails keep a keyed catalogue, `backend/src/mail/i18n/`
-  (`mailT(locale)` → `{ t, lang }`): the server ships no bundle, so its keys
+  (`mailT(locale)` → `{ t, tn, lang }`; `tn(base, n, vars)` picks a counted
+  message's form, keys `<base>.one` / `<base>.other` and whatever else the
+  language's `Intl.PluralRules` needs, so no mail says "1 days late", issue
+  #51): the server ships no bundle, so its keys
   cost nothing, and the sheet lists its rows by key beside the site's ids;
   the alert emails'
   words are there too (`mail.alert.*`, WP-2.13), and so are the dates in
@@ -5137,6 +5203,9 @@ digest). The modeller workspace stays English.
   `en` elsewhere: it stays `en` until the Afrikaans catalogue is complete, so
   a page of mostly English words never claims to be Afrikaans. An email is
   `lang="af"` only when every word in it came from the Afrikaans catalogue.
+  The prerendered `/welcome` ships `lang="en"` (`app.html`) because its
+  prerendered words are English; `lang` follows the words once the page
+  hydrates (a per-language prerender is in followups.md § Landing page).
   A glossary entry on `/farm/words` shown in the other language carries its
   own `lang`.
 - **Layouts, once per language** (issue #58). Afrikaans runs 20–30 % longer
@@ -5158,7 +5227,8 @@ digest). The modeller workspace stays English.
   locale (`en-ZA`, and `af-ZA` once the Afrikaans words are in), so an
   English sentence never carries Afrikaans month names. The emails date in
   the same locale (`mail/alerts.ts` `dateText`, the day without a leading
-  zero).
+  zero), and a timestamp in them (a notice's publication) by its day in the
+  project's time zone, never UTC's (issue #51).
 - **Translation.** Every farmer-facing string has Afrikaans (2026-09-26,
   issue #49): 505 site messages, 70 email strings and the 8 farmer glossary
   entries (the ones that name a farm node re-translated 2026-09-28 for
@@ -5285,7 +5355,10 @@ the catalogue, [§ Language](#language)); both unit-tested.
   is an estimate, not a measurement or a restriction; its body ends
   "Forecasts change." A restriction notice (`mail.alert.restriction.wua`)
   says it is the WUA's own, shown as published, and that questions go to the
-  WUA. The operational alerts (data feed behind, data feed failing,
+  WUA; its percentage reads as a cut, "a 20 % cut in registered water use",
+  written whole as the farm page writes it (`cutPctText`: never "12.5 %"),
+  and the WUA's own words are marked with their `lang` when they are in
+  another language than the mail (issue #51). The operational alerts (data feed behind, data feed failing,
   background jobs failed) are no model figure and carry no liability line.
 - **`/account/alerts`** (linked from the account page's **Alert emails**
   panel and from every alert email; translated): the section header
@@ -5304,7 +5377,11 @@ the catalogue, [§ Language](#language)); both unit-tested.
   move the choice; the picked one tinted, bold and ticked; 32 px with a
   mouse, 44 px on touch and phones; in a narrow card the switch goes under
   the name at full width). A farmer sees a *Dam running low: <farm>* row per
-  own farm and *Restriction notices from the WUA*, nothing else; a viewer
+  own farm and *Restriction notices from the WUA*, nothing else; a farm's
+  dam row the WUA has switched on says under the switch at what level it
+  warns, "Warns when the model puts your dam below 30 %. Your WUA sets this
+  level." (also the row's description; `thresholdLine` in
+  `alerts/words.ts`, issue #51); a viewer
   also the opt-in kinds (dam alerts for every farm, the EWR forecast);
   editors and owners the operational kinds. A choice saves when made
   ("Saved." in the card's head); the switch stays usable while it saves

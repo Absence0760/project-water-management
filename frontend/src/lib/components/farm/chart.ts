@@ -6,7 +6,7 @@
 // the content, and both come from here too, in the active language ($lib/i18n).
 import type { MonthTotals } from '@water-management/engine';
 import { plural, t, tn } from '$lib/i18n/locale.svelte';
-import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd } from './format';
+import { fmtMonthLong, fmtMonthLongYear, fmtMonthShort, fmtMonthYear, fmtNumber, fmtPct, fmtVolume, joinAnd, monthEnd, type VolumeUnit } from './format';
 
 import { CHART_BASE, CHART_FONT_PX, CHART_HEIGHT, CHART_TOP as TOP, niceMax } from './chartGeometry';
 
@@ -105,10 +105,10 @@ export function supplySummary(monthly: readonly MonthTotals[], dataUntil: string
 	return t('Water you needed and received each month, {from} to {to}. {short} The numbers are in the table below.', { from: fmtMonthLongYear(monthly[0]!.month), to: end, short: shortText });
 }
 
-/** The "Show the numbers" rows: every month with its year, in ML. */
-export function supplyRows(monthly: readonly MonthTotals[], dataUntil: string) {
+/** The "Show the numbers" rows: every month with its year, in the reader's unit (the chart's axis stays in ML). */
+export function supplyRows(monthly: readonly MonthTotals[], dataUntil: string, unit: VolumeUnit) {
 	const labels = monthLabels(monthly, dataUntil);
-	return monthly.map((m, i) => ({ label: labels[i]!.row, need: fmtVolume(m.demandM3, 'ML'), got: fmtVolume(m.suppliedM3, 'ML') }));
+	return monthly.map((m, i) => ({ label: labels[i]!.row, need: fmtVolume(m.demandM3, unit), got: fmtVolume(m.suppliedM3, unit) }));
 }
 
 // ---- The dam's month-end line ------------------------------------------------
@@ -158,7 +158,8 @@ export function damSummary(monthly: readonly MonthTotals[], dataUntil: string): 
 	const low = withDam.reduce((a, b) => (b.damPctEnd < a.damPctEnd ? b : a));
 	const high = withDam.reduce((a, b) => (b.damPctEnd > a.damPctEnd ? b : a));
 	const latest = withDam[withDam.length - 1]!;
-	return t('Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.', {
+	// A complete last month is a month, not a day: "at the end of December 2024", never "on December 2024" (issue #51).
+	return t(last.partial ? 'Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} on {to}. The numbers are in the table below.' : 'Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} at the end of {to}. The numbers are in the table below.', {
 		from: fmtMonthLongYear(monthly[0]!.month),
 		to: end,
 		low: fmtPct(low.damPctEnd),
