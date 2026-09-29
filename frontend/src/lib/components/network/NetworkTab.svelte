@@ -387,15 +387,14 @@
 
 	// The picked farm's dam at the end of the latest run (the "Dam at end of run" tile), as a % of the
 	// run's own capacity, as the map's colour by dam level reads it (damInRun, issue #173): from the run
-	// summary, or its dam_storage series through the Runs cache (overview/damLevels.ts). Whether the farm
-	// had a dam is the run's call too: one removed since still shows its %, one added since is "not in
-	// this run". pct null: loading, or the series had no value.
+	// summary, or its dam_storage series through the Runs cache (overview/damLevels.ts). As on the map, a
+	// farm with no dam now is "No dam" and one whose dam the run didn't model is "not in this run"
+	// (damEndTile). pct null: loading, or the series had no value.
 	let damEnd = $state<DamEnd | null>(null);
 	$effect(() => {
-		const id = view === 'map' && picked?.kind === 'farm' ? picked.id : null;
-		const hasDamNow = (picked?.damCapacityM3 ?? 0) >= 1;
+		const id = view === 'map' && picked?.kind === 'farm' && picked.damCapacityM3 >= 1 ? picked.id : null;
 		const run = latestRun?.id ?? null;
-		// The run's details arrive with its summary (loadSupply): read it here so the effect re-runs then.
+		// The run's details are cached before its summary lands (loadSupply): reading supplyRun re-runs this then.
 		const loaded = run !== null && supplyRun?.id === run;
 		const detail = run ? detailCache.get(run) : undefined;
 		if (!id || !run || !loaded || !detail) {
@@ -404,7 +403,7 @@
 		}
 		const dam = damInRun(detail.run.model?.nodes, nodes, detail.series ?? [], id);
 		if (!dam) {
-			damEnd = hasDamNow ? { nodeId: id, inRun: false, pct: null, capacityM3: 0 } : null;
+			damEnd = { nodeId: id, inRun: false, pct: null, capacityM3: 0 };
 			return;
 		}
 		// From the run summary when it has the figure (engine ≥ 1.2.0, issue #55), else the series.

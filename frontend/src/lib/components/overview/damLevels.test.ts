@@ -1,5 +1,6 @@
-import { damFigures, type FarmSummary } from '@water-management/engine';
+import { damFigures, type FarmSummary, type NetworkNode } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
+import { damColouring } from '$lib/components/network/farmColour';
 import { AGO_DAYS, damEndPctFromSummary, damEndTile, damInRun, damLevel, damLevelsFromSummary, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, sortDamLevels, YEAR_DAYS, type DamLevel } from './damLevels';
 
 const dam = { nodeId: 'f1', name: 'Upper farm', capacityM3: 1000, minPct: 10 };
@@ -203,12 +204,20 @@ describe('damEndTile: what the Network card writes (issue #173)', () => {
 		expect(damEndTile(end(), 75_000)).toEqual({ value: '36%', sub: 'of 150\u202f000 m³ in the run' });
 	});
 
-	it('keeps the run’s % for a dam removed since, as the map does, and says a dam added since is not in the run', () => {
-		expect(damEndTile(end(), 0)).toEqual({ value: '36%', sub: 'of 150\u202f000 m³ in the run' });
+	it('reads a farm as the map’s colour by dam level does: a dam removed since is "No dam", one added since is not in the run', () => {
+		const run = { name: 'Baseline', ago: 'today' };
+		const live = (damCapacityM3: number) => [{ id: 'a', name: 'A', kind: 'farm', damCapacityM3 } as NetworkNode];
+		const level = { nodeId: 'a', name: 'A', capacityM3: 150_000, minPct: 0, endPct: 36.4, endDate: '2025-01-01', lowPct: 30, lowDate: '2024-12-01', daysAtMin: 0, agoPct: null };
+		expect(damEndTile(end(), 0)).toEqual({ value: 'No dam', sub: null });
+		expect(damColouring(live(0), [level], run, false).byNode.get('a')!.text).toBe('no dam');
 		expect(damEndTile({ nodeId: 'a', inRun: false, pct: null, capacityM3: 0 }, 5_000)).toEqual({ value: '–', sub: 'not in this run' });
+		expect(damColouring(live(5_000), [], run, false).byNode.get('a')!.text).toBe('not in this run');
+		// Same % on both after a capacity edit.
+		expect(damColouring(live(75_000), [level], run, false).byNode.get('a')!.text).toBe('36% full');
+		expect(damEndTile(end(), 75_000).value).toBe('36%');
 	});
 
-	it('is a dash while loading, and "No dam" without a run and without a dam', () => {
+	it('is a dash while loading or before the run is read, and "No dam" without a dam', () => {
 		expect(damEndTile(end({ pct: null }), 150_000)).toEqual({ value: '–', sub: null });
 		expect(damEndTile(null, 5_000)).toEqual({ value: '–', sub: null });
 		expect(damEndTile(null, 0)).toEqual({ value: 'No dam', sub: null });

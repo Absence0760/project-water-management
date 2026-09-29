@@ -185,15 +185,18 @@ export interface DamEnd {
 }
 
 /**
- * The tile's value and its small line. The run decides whether there was a
- * dam, as the map's colour by dam level does: a dam removed since still shows
- * its %, one added since reads "not in this run" under a dash, as the Supplied tile writes it. When the capacity has been
- * edited since the run, the line says what the % is a share of.
- * `liveCapacityM3` is the model's capacity now.
+ * The tile's value and its small line, reading a farm as the map's colour by
+ * dam level does (network/farmColour.ts `damColouring`): a farm with no dam in
+ * the model now is "No dam" (even if the run had one), one whose dam the run
+ * didn't model (added since) reads "not in this run" under a dash, as the
+ * Supplied tile writes it, and otherwise the % of the run's capacity. When the
+ * capacity has been edited since the run, the line says what the % is a share
+ * of. `liveCapacityM3` is the model's capacity now.
  */
 export function damEndTile(end: DamEnd | null, liveCapacityM3: number): { value: string; sub: string | null } {
-	if (end && !end.inRun) return { value: '–', sub: 'not in this run' };
-	if (!end) return { value: liveCapacityM3 >= 1 ? '–' : 'No dam', sub: null };
+	if (!(liveCapacityM3 >= 1)) return { value: 'No dam', sub: null };
+	if (!end) return { value: '–', sub: null };
+	if (!end.inRun) return { value: '–', sub: 'not in this run' };
 	const edited = Math.abs(end.capacityM3 - liveCapacityM3) >= 1;
 	return {
 		value: end.pct === null ? '–' : `${fmtNum(end.pct, 0)}%`,
