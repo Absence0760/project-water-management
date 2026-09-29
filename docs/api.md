@@ -705,9 +705,10 @@ as before and stores no report:
 
 **`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
 the newest import's report: the fields above plus `importedAt` (ISO time) and
-`importedBy` (the importer's display name). `404 { error: "no import report" }`
-when the project wasn't imported through the dialog (made by hand, copied, or
-imported with no report); `404 not found` for a project you can't see.
+`importedBy` (the importer's display name). `200 { report: null }` when the
+project wasn't imported through the dialog (made by hand, copied, or imported
+with no report): the Project page asks on every visit, so "none" is an answer,
+not an error. `404 not found` for a project you can't see.
 
 **Not in `export.json`.** The export is the project's inputs, the document
 that imports back into a project. An import report describes one import of a
@@ -834,7 +835,9 @@ A team owns many projects (catchments) together. Team roles: `viewer` <
 team's projects admins are owners, members are editors and viewers are viewers
 (see Projects above). A team viewer can't add projects to the team (create,
 move or copy into it). `role` in the member and invite bodies is one of
-`viewer`, `member`, `admin`; anything else is a `400`.
+`viewer`, `member`, `admin`; anything else is a `400`. The UI and the invite
+email show them by the project role they give, viewer / editor / owner
+([ui.md § Teams](./ui.md#teams)); the values here don't change.
 
 | Method | Path | Body | Response | Min team role |
 | --- | --- | --- | --- | --- |
@@ -865,7 +868,7 @@ move or copy into it). `role` in the member and invite bodies is one of
   `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
   in the database). Every member reads them; only an admin changes them.
 - `TeamMember = { userId, email, displayName, role }`
-- `409 a team must keep at least one admin` when removing or demoting the last
+- `409 a team must keep at least one owner` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
 
 ### Portfolio

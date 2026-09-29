@@ -7,6 +7,11 @@ import { plainText } from '$lib/i18n/rich';
 const sp = (s: string | null | undefined) => s?.replace(/[\u00a0\u202f]/g, ' ');
 
 describe('the dam page', () => {
+	it('names the 30 days by their last day once the figures are stale (issue #162)', () => {
+		const d = damPage(vaalbankFixture().farm, 'ML', '2024-01-10')!;
+		expect(d.facts.find((f) => f.value.includes('32.4') && f.label !== 'You can still use')?.label).toBe('30 days to 10 Jan 2024');
+	});
+
 	it('matches board 3', () => {
 		const d = damPage(vaalbankFixture().farm, 'ML')!;
 		expect(sp(d.pct)).toBe('24 %');

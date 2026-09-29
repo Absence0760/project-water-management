@@ -23,17 +23,18 @@ test('four tiles, a card per hydrological unit worst supplied first in the Summa
 
 	await expect(strip(page).getByRole('link', { name: 'Hydrological units', exact: true })).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 hydrological units · \d short this week · run “Baseline”, ran today$/);
+	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 hydrological units · \d short in the week to 28 Jan 2022 · run “Baseline”, ran today$/);
 	await expect(page.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
 
 	// The tiles: the Summary's irrigation supplied with its change (the same inputs, so no change), units below 95 %,
-	// short this week (the run's last 7 days, linking to the curtailment over them) and the total shortfall.
+	// short in the run's last 7 days (named by their last day, long past: issue #162; linking to the curtailment over
+	// them) and the total shortfall.
 	await expect(supplyTiles(page)).toHaveCount(4);
 	await expect(supplyTile(page, 'supplied')).toContainText(/Irrigation supplied\s*[\d.]+%\s*of demand/);
 	await expect(supplyTile(page, 'supplied')).toContainText(/0 pp\s*no change vs previous run/);
 	await expect(supplyTile(page, 'below')).toContainText(/Hydrological units below 95%\s*\d\s*of 4/);
 	await expect(supplyTile(page, 'week')).toContainText('2022-01-22 to 2022-01-28');
-	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short this week' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
+	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short in the week to 28 Jan 2022' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
 	await expect(supplyTile(page, 'shortfall')).toContainText(/Total shortfall\s*[\d.]+\s*Mm³\/a/);
 
 	// Worst supplied first, each in its band (words as well as colour), with its facts and links.
@@ -59,8 +60,8 @@ test('four tiles, a card per hydrological unit worst supplied first in the Summa
 	await expect(first.getByRole('link', { name: `${firstName}: planted areas` })).toHaveAttribute('href', `?tab=supply&farm=${firstId}`);
 	// The tile counts the units with a short day in the week; each such card says so.
 	const week = parseInt((await supplyTile(page, 'week').locator('.value').textContent())!, 10);
-	await expect(unitCards(page).filter({ hasText: /Short on \d of the last 7 days/ })).toHaveCount(week);
-	await expect(page.getByTestId('supply-summary')).toContainText(`${week} short this week`);
+	await expect(unitCards(page).filter({ hasText: /Short on \d of the 7 days to 28 Jan 2022/ })).toHaveCount(week);
+	await expect(page.getByTestId('supply-summary')).toContainText(`${week} short in the week to 28 Jan 2022`);
 
 	// The same bands as the Summary's Supply by unit.
 	await page.goto(`/projects/${project.id}`);

@@ -1,16 +1,17 @@
 <script lang="ts">
 	// One group of projects as a compact table (issue #17, docs/ui.md § Project
 	// list): each row says how the catchment is doing, from the portfolio's
-	// figures (GET /projects/outcomes): the EWR status, units short this week,
+	// figures (GET /projects/outcomes): the EWR status, units short in the figures' last week,
 	// the lowest dam, data freshness and the last run. A click anywhere on a
 	// row opens the project (the name link stretches over the row, .name::after).
 	// Add data is the one row button; Copy and Delete sit in a ⋯ menu. The
 	// table answers to its own width: Lowest dam and Last run fold into the
 	// line under the name at 1100 px, every outcome column at 730 px.
 	import { base } from '$app/paths';
-	import { hasRole, type PortfolioProject, type ProjectSummary } from '$lib/api';
+	import { hasRole, roleLabel, type PortfolioProject, type ProjectSummary } from '$lib/api';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
-	import { curtailmentHref, damText, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+	import { ageText, curtailmentHref, damText, ewrWindowLabel, farmsShortText, feedsText } from '$lib/components/portfolio/portfolio';
+	import { agoText } from '$lib/format/age';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import { dataFreshness, daysSince } from './freshness';
 	import type { SortKey } from './grouping';
@@ -49,15 +50,8 @@
 	const addDataHref = (p: ProjectSummary) => `${base}/projects/${p.id}?add=data`;
 	const now = new Date();
 
-	/** "today", "yesterday", "3 days ago", "5 months ago". */
-	function ago(iso: string): string {
-		const d = daysSince(fmtDate(iso), now);
-		if (d <= 0) return 'today';
-		if (d === 1) return 'yesterday';
-		if (d < 60) return `${d} days ago`;
-		if (d < 730) return `${Math.floor(d / 30.44)} months ago`;
-		return `${Math.floor(d / 365.25)} years ago`;
-	}
+	/** "today", "yesterday", "3 days ago", "5 months ago": the one age wording ($lib/format/age). */
+	const ago = (iso: string) => agoText(Math.max(0, daysSince(fmtDate(iso), now)));
 
 	/** Why a row has no figures: still loading, the request failed, or none for this role. */
 	const noFigures = (p: ProjectSummary) =>
@@ -124,11 +118,13 @@
 		if (menuFor && !menuEl?.contains(to) && !trigger?.contains(to)) closeMenu();
 	}
 
-	const SORTABLE: { key: SortKey; label: string; cls: string; col: string }[] = [
-		{ key: 'status', label: 'EWR, last 30 days', cls: 'wide', col: 'c-ewr' },
+	// "EWR, last 30 days" only while the rows' figures are current: once stale, the date they end on.
+	const ewrLabel = $derived(ewrWindowLabel(projects.flatMap((p) => outcomes?.get(p.id) ?? [])));
+	const SORTABLE = $derived<{ key: SortKey; label: string; cls: string; col: string }[]>([
+		{ key: 'status', label: ewrLabel, cls: 'wide', col: 'c-ewr' },
 		{ key: 'farms', label: 'Hydrological units short', cls: 'wide', col: 'c-units' },
 		{ key: 'dam', label: 'Lowest dam', cls: 'wide xwide', col: 'c-dam' }
-	];
+	]);
 </script>
 
 {#snippet freshBadge(p: ProjectSummary)}
@@ -138,13 +134,13 @@
 
 {#snippet lastRun(p: ProjectSummary)}
 	{#if p.lastRunAt}
-		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">last run {fmtDate(p.lastRunAt)}</span>
+		<span class="run" title="Newest run: {fmtDate(p.lastRunAt, true)}">last run {fmtDay(fmtDate(p.lastRunAt))}</span>
 	{:else if hasRole(p.role, 'viewer')}
 		<!-- A farmer sees no runs (lastRunAt is null for them), so "not run yet" would be wrong. -->
 		<span class="run">not run yet</span>
 	{/if}
 	{#if p.publishedAt}
-		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {fmtDate(p.publishedAt)}</span>
+		<span class="run" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {fmtDay(fmtDate(p.publishedAt))}</span>
 	{/if}
 {/snippet}
 
@@ -193,9 +189,10 @@
 								{#if p.team?.name}<a class="lift team" href="{base}/teams/{p.team.id}">{p.team.name}</a>{:else}<span>{teamLabel(p)}</span>{/if}
 								<span aria-hidden="true">·</span>
 							{/if}
-							<span class="role" data-testid="project-role">{p.role}</span>
+							<span class="role" data-testid="project-role">{roleLabel(p.role)}</span>
 							<span aria-hidden="true">·</span>
-							<span title={fmtDate(p.updatedAt, true)}>updated {fmtDate(p.updatedAt)}</span>
+							<!-- When the project itself (model, settings, data) last changed: not how current its data is (the Data column). -->
+							<span title="Project last changed: {fmtDate(p.updatedAt, true)}">edited {fmtDay(fmtDate(p.updatedAt))}</span>
 						</span>
 						{#if p.description}<span class="desc">{p.description}</span>{/if}
 						<!-- Narrow tables: the columns that fold away, as lines under the name. -->
@@ -215,7 +212,7 @@
 					<td class="wide c-ewr">
 						{#if o}
 							<StatusPill p={o} />
-							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if o.figuresUntil}{' '}· to {fmtDay(o.figuresUntil)}{/if}</span>{/if}
+							{#if sourceShort(o)}<span class="sub">{sourceShort(o)}{#if ageText(o)}{' '}· {ageText(o)}{/if}</span>{/if}
 						{:else}<span class="muted">{noFigures(p)}</span>{/if}
 					</td>
 					<td class="wide c-units">{#if o}{@render units(o)}{:else}<span class="muted">–</span>{/if}</td>
@@ -230,7 +227,7 @@
 							<span class="lift" title="Newest run: {fmtDate(p.lastRunAt, true)}">{ago(p.lastRunAt)}</span>
 							{#if p.publishedAt}
 								<span class="sub lift" title="Current published baseline: {fmtDate(p.publishedAt, true)}">published {ago(p.publishedAt)}</span>
-							{:else}<span class="sub">{fmtDate(p.lastRunAt)}</span>{/if}
+							{:else}<span class="sub">{fmtDay(fmtDate(p.lastRunAt))}</span>{/if}
 						{:else if hasRole(p.role, 'viewer')}<span class="muted">Not run yet</span>{/if}
 					</td>
 					<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->

@@ -14,6 +14,7 @@ import { openCropGrid, openCropSheet } from '../support/crops.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { closeModal, saveModelChanges } from '../support/network.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 async function savedFactor(page: Page, projectId: string, crop: string, month: number): Promise<number> {
 	const res = await page.request.get(`${API_URL}/projects/${projectId}/model`);
@@ -129,8 +130,8 @@ test('Add crop opens the new crop’s sheet; Remove takes it and its areas away'
 
 	// Remove Vines (planted on a farm, so it asks first); the sheet closes with it.
 	const vines = await openCropSheet(page, 'Vines');
-	page.once('dialog', (d) => void d.accept());
 	await vines.getByRole('button', { name: 'Remove Vines' }).click();
+	await answerConfirm(page, true, 'Remove crop “Vines”?');
 	await expect(page.getByRole('dialog')).toHaveCount(0);
 	await expect(page).not.toHaveURL(/crop=/);
 	await expect(page.getByTestId('crop-row')).toHaveCount(2);

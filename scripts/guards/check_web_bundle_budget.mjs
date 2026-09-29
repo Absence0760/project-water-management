@@ -1249,6 +1249,22 @@
 //             api chunk and its puzzle section in the sign-in route chunk take
 //             ~2 KB of that headroom; AWS's script is loaded on demand, never
 //             bundled. Headroom ~1 KB.
+// 2026-09-29  total 1166 → 1170 KB (measured 1167 on main @ 58192db8 plus
+//             issue #162 items 11, 12, 13, 21). The app's own confirmation
+//             dialog replacing the browser's confirm() in 24 files (the
+//             ConfirmHost in the root layout, each call's title, detail and
+//             button words), the leave guard (lib/nav: the registry, the
+//             destination names, the one beforeNavigate) and the project
+//             details moved onto the page's save bar. No new dependency.
+//             Headroom ~3 KB.
+// 2026-09-29  total 1170 → 1176 KB (measured 1173 with all of issue #162
+//             merged: items 1–27 as one PR. The glossary as one page per
+//             topic with redirects for old term links, the Summary's
+//             days-below-the-reserve strip and the shared EWR-not-met
+//             wording, the one data-age formatter and stale-date wording,
+//             visible chip group names, one role-name map, and the
+//             register page's scrolling terms box, on main @ 12cde4ae, with
+//             #126's sign-in CAPTCHA). No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1259,7 +1275,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1166,
+	totalCodeKb: 1176,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

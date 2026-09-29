@@ -11,7 +11,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import FarmShell from '$lib/components/farm/FarmShell.svelte';
-	import { holdAnchor } from '$lib/help/anchor';
+	import { hashId, holdAnchor } from '$lib/help/anchor';
 	import { FARMER_HELP } from '$lib/help/farmer';
 	import { helpTranslations, type HelpTranslation } from '$lib/help/translations';
 	import { DEFAULT_LOCALE, i18n, t, wordsLang } from '$lib/i18n/locale.svelte';
@@ -51,7 +51,7 @@
 	// The SPA renders after navigation, so jump to #id once the list exists,
 	// and hold the entry there while the page settles (lib/help/anchor.ts).
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
+		const id = hashId(page.url.hash);
 		if (!id || !ready) return;
 		let live = true;
 		let release: (() => void) | undefined;

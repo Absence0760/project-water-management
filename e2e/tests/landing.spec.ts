@@ -118,7 +118,7 @@ test('the hero moves only when motion is allowed, and rests on its last frame ot
 	const scene = page.locator('.hero .scene');
 	await expect(scene).toHaveAttribute('data-motion', 'off');
 	// The still frame shows the gauge's tag.
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	await page.emulateMedia({ reducedMotion: 'no-preference' });
 	await page.reload();
@@ -143,7 +143,7 @@ test('the hero’s loop can be stopped on its still frame and started again, and
 	const tag = page.locator('.hero .tag');
 	expect(await tag.evaluate((el) => el.getAnimations().length)).toBe(0);
 	await expect(tag).toHaveCSS('opacity', '1');
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	const pause = page.getByRole('button', { name: 'Pause the animation' });
 	await expect(pause).toHaveAttribute('aria-pressed', 'false');
@@ -151,7 +151,7 @@ test('the hero’s loop can be stopped on its still frame and started again, and
 	await expect(pause).toHaveAttribute('aria-pressed', 'true');
 	await expect(scene).toHaveAttribute('data-motion', 'off');
 	expect(await running()).toBe(0);
-	await expect(page.getByText(/Reserve met on \d+ % of days/)).toBeVisible();
+	await expect(page.getByText(/Reserve not met on \d+ % of days/)).toBeVisible();
 
 	await pause.press('Enter');
 	await expect(pause).toHaveAttribute('aria-pressed', 'false');
@@ -322,13 +322,18 @@ test('the story’s heading is on the first screen at 1440 × 960, and the page 
 	expect((await signIn.boundingBox())!.height).toBeGreaterThanOrEqual(44);
 });
 
-test('the trust figures are the example catchment’s, the model’s fit to its weir among them', async ({ page }) => {
+// Named, and said to be invented, with the fit in plain words (issue #162),
+// in the prerendered HTML as well as on screen.
+test('the trust figures are the invented Kleinberg example’s, the model’s fit to its river flow among them', async ({ page, request }) => {
+	const html = await (await request.get('/welcome')).text();
+	expect(html).toContain('From Kleinberg, an invented example catchment:');
+	expect(html).toContain('fit to the measured river flow (1 is perfect)');
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await page.goto('/');
 	const trust = page.getByRole('region', { name: 'Why trust it' });
-	await expect(trust.getByText('In the example catchment')).toBeVisible();
+	await expect(trust.getByText('From Kleinberg, an invented example catchment:')).toBeVisible();
 	await expect(trust.locator('dd').nth(2).locator('.visually-hidden')).toHaveText(DATA.hero.calibrationNse.toFixed(2));
-	await expect(trust.getByText('fit to the weir’s measured flow (NSE, where 1 is perfect)')).toBeVisible();
+	await expect(trust.getByText('fit to the measured river flow (1 is perfect)')).toBeVisible();
 });
 
 test('the what-if names each bar, draws today in a muted grey and the plan’s supply in the supply bands', async ({ page }) => {

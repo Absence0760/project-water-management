@@ -51,7 +51,10 @@ test('three runs side by side: cards, outcomes with deltas, takeaways, the yearl
 	await expect(days.getByRole('cell')).toHaveCount(3);
 	// More orchard irrigates more, so the river is below its reserve on more days: a worse change, said in words.
 	await expect(days.getByRole('cell').nth(1)).toContainText(/up \d+, worse/);
-	await expect(table.getByRole('rowheader', { name: /^Reserve met/ })).toBeVisible();
+	// One framing across the app (issue #162): EWR not met, a rise said as worse, as the days row is.
+	const notMet = table.getByRole('row', { name: /^EWR not met/ });
+	await expect(notMet.getByRole('rowheader')).toHaveText('EWR not met, % of days');
+	await expect(notMet.getByRole('cell').nth(1)).toContainText(/up [\d.]+ pp, worse/);
 	await expect(table.getByRole('rowheader', { name: /^Irrigation supplied/ })).toBeVisible();
 	await expect(table.getByRole('rowheader', { name: /^Mean outflow/ })).toBeVisible();
 	// Dam storage at the end of each run (issue #55's run-summary figures), as a share of each run's own capacity.

@@ -17,7 +17,7 @@ export type HelpCategory =
 	| 'farmer';
 
 export interface HelpEntry {
-	/** Stable anchor on the glossary (`/help/glossary#<id>`). Lowercase, hyphenated. */
+	/** Stable anchor on its glossary topic's page (`/help/glossary/<topic>#<id>`, glossaryLinks.ts). Lowercase, hyphenated. */
 	id: string;
 	term: string;
 	/** One sentence, ≤ 140 characters: what the HelpTip shows first. */
@@ -32,7 +32,10 @@ export interface HelpEntry {
 	fields?: string[];
 	/** Ids of related entries. */
 	related?: string[];
-	/** Where the concept comes from: a workbook sheet or a doc. */
+	/**
+	 * Where the concept comes from: a workbook sheet or a doc. For maintainers:
+	 * the glossary doesn't show it (readers can't open the repo's docs).
+	 */
 	source: string;
 	/**
 	 * The countries (ISO 3166-1 alpha-2, e.g. 'ZA') an entry only applies in:

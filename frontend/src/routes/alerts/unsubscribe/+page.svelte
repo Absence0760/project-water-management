@@ -30,7 +30,7 @@
 		status = token ? 'ask' : 'incomplete';
 	});
 
-	async function confirm() {
+	async function unsubscribe() {
 		if (!token) return;
 		status = 'working';
 		failure = null;
@@ -62,7 +62,7 @@
 		{#if status === 'ask' || status === 'working'}
 			<p>{t('Stop getting these alert emails? You can turn them back on from your account at any time.')}</p>
 			{#if failure}<div class="alert alert-error" role="alert">{failure}</div>{/if}
-			<button type="button" class="btn btn-primary" onclick={confirm} disabled={status === 'working'}>
+			<button type="button" class="btn btn-primary" onclick={unsubscribe} disabled={status === 'working'}>
 				{status === 'working' ? t('One moment…') : t('Stop these emails')}
 			</button>
 		{:else if status === 'done' && done}

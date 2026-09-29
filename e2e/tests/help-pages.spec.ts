@@ -16,8 +16,19 @@ test('a guide heads its page with a breadcrumb back to help', async ({ page, own
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(['Add a transfer']);
 });
 
+test('a figure caption shows its bold and italic labels, never the markup', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/guides/the-whole-process');
+	const caption = page.locator('figure[data-diagram="workflow"] figcaption');
+	await expect(caption).toContainText('The setup order follows the workspace’s Build the model section');
+	await expect(caption.locator('strong')).toHaveText(['Build the model', 'Outcomes']);
+	await expect(caption).not.toContainText('*');
+});
+
 const SUBPAGES = [
 	{ path: '/help/glossary', title: 'Glossary', crumbs: ['Help', 'Reference', 'Glossary'] },
+	{ path: '/help/glossary/goodness-of-fit', title: 'Goodness of fit', crumbs: ['Help', 'Reference', 'Glossary', 'Goodness of fit'] },
+	{ path: '/help/glossary/no-such-topic', title: 'Topic not found', crumbs: ['Help'] },
 	{ path: '/help/search?q=dam', title: 'Search help', crumbs: ['Help', 'Search'] },
 	{
 		path: '/help/guides/how-calibration-works',
@@ -129,6 +140,29 @@ test('a link to one section of a guide lands on it', async ({ page, owner }) => 
 	await expect(page.getByRole('navigation', { name: 'On this page' }).locator('a[aria-current="location"]')).toHaveText([
 		'The search'
 	]);
+});
+
+test('a guide spans the help column: "On this page" at its right edge, figures wider than the text, no previous / next (issue #162)', async ({
+	page,
+	owner
+}) => {
+	void owner;
+	await page.setViewportSize({ width: 1440, height: 960 });
+	await page.goto('/help/guides/how-calibration-works');
+	await expect(page.getByRole('heading', { level: 1, name: 'How calibration works' })).toBeVisible();
+	const col = (await page.locator('.help-main').boundingBox())!;
+	const rail = (await page.getByRole('navigation', { name: 'On this page' }).boundingBox())!;
+	expect(Math.abs(rail.x + rail.width - (col.x + col.width))).toBeLessThanOrEqual(2);
+	// Body text keeps a readable measure; a diagram's frame takes the text column's whole width.
+	const para = (await page.getByRole('main').locator('section > p').first().boundingBox())!;
+	const figure = (await page.locator('figure.diagram').first().boundingBox())!;
+	expect(para.width).toBeLessThanOrEqual(44 * 16 + 1);
+	expect(figure.width).toBeGreaterThan(para.width + 100);
+	expect(figure.x + figure.width).toBeGreaterThan(rail.x - 3 * 16);
+	// Related guides stay; the previous / next pager is gone (the contents mark where you are).
+	await expect(page.getByRole('region', { name: 'Related guides' })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Previous and next guide' })).toHaveCount(0);
+	await expect(page.locator('a[rel="prev"], a[rel="next"]')).toHaveCount(0);
 });
 
 test('widened from a phone past 900 px, the text takes its column at once, beside the contents', async ({ page, owner }) => {

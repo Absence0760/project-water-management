@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { hashId } from '$lib/help/anchor';
 	// The help landing page: the illustrated catchment tour, the setup path
 	// through the workspace tabs, and the guides that explain the model. The
 	// sidebar (search, every guide, the glossary) is the help layout's.
@@ -7,6 +8,7 @@
 	import { page } from '$app/state';
 	import PictureTour from '$lib/components/help/PictureTour.svelte';
 	import { HELP, helpFor } from '$lib/help/content';
+	import { glossaryPath } from '$lib/help/glossaryLinks';
 	import { GUIDES, SETUP_STEPS, TAB_TITLES, guideFor } from '$lib/help/guides';
 	import { TOUR } from '$lib/help/tour';
 
@@ -14,10 +16,10 @@
 	const start = GUIDES.find((g) => g.kind === 'start')!;
 
 	// The glossary used to live here: /help#<term> links (old help tips,
-	// bookmarks) go on to /help/glossary#<term>.
+	// bookmarks) go on to the term's topic page.
 	$effect(() => {
-		const id = decodeURIComponent(page.url.hash.slice(1));
-		if (id && helpFor(id)) goto(`${base}/help/glossary#${id}`, { replaceState: true });
+		const e = helpFor(hashId(page.url.hash));
+		if (e) goto(`${base}${glossaryPath(e)}`, { replaceState: true });
 	});
 </script>
 

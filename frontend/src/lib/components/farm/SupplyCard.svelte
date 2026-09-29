@@ -13,8 +13,17 @@
 	import type { VolumeUnit } from './format';
 	import { writeUnit } from './savedCopy';
 
-	let { farm, unit = $bindable() }: { farm: FarmProjection; unit: VolumeUnit } = $props();
-	const vm = $derived(supplyCard(farm, unit));
+	let {
+		farm,
+		unit = $bindable(),
+		staleEnd = null
+	}: {
+		farm: FarmProjection;
+		unit: VolumeUnit;
+		/** The figures' last day once they are stale (cards.ts staleUntil): "30 days to …", not "Last 30 days". */
+		staleEnd?: string | null;
+	} = $props();
+	const vm = $derived(supplyCard(farm, unit, staleEnd));
 	let failed = $state(false);
 
 	async function choose(u: VolumeUnit) {

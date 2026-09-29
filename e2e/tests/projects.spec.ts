@@ -4,6 +4,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { openRowMenu, outcomesReady, row } from '../support/projects.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 /** A real mouse click at the middle of `target` (whatever element is on top there gets it). */
 async function clickAt(page: Page, target: ReturnType<Page['locator']>) {
@@ -62,9 +63,9 @@ test('several projects for one place: create, copy, delete', async ({ page, owne
 	await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Projects' }).click();
 
 	// Delete one (confirm dialog accepted).
-	page.once('dialog', (d) => void d.accept());
 	await openRowMenu(page, 'Example Valley — drought');
 	await row(page, 'Example Valley — drought').getByRole('button', { name: 'Delete Example Valley — drought' }).click();
+	await answerConfirm(page, true, 'Delete project “Example Valley — drought”?');
 	await expect(row(page, 'Example Valley — drought')).toHaveCount(0);
 	await expect(page.getByRole('row')).toHaveCount(4);
 
@@ -103,9 +104,9 @@ test('cancelling the delete confirmation keeps the project', async ({ page, owne
 	void owner;
 	await createProject(page.request, 'Keep me');
 	await page.goto('/');
-	page.once('dialog', (d) => void d.dismiss());
 	await openRowMenu(page, 'Keep me');
 	await row(page, 'Keep me').getByRole('button', { name: 'Delete Keep me' }).click();
+	await answerConfirm(page, false, 'Delete project “Keep me”?');
 	await page.reload();
 	await expect(row(page, 'Keep me')).toBeVisible();
 });
@@ -119,9 +120,9 @@ test('deleting a project with a nominated evidence run is refused, and the dialo
 	await nominateRun(page.request, project.id, runId, 'Calibrated against the logger record.');
 	await page.goto('/');
 
-	page.once('dialog', (d) => void d.accept());
 	await openRowMenu(page, 'Licence evidence');
 	await row(page, 'Licence evidence').getByRole('button', { name: 'Delete Licence evidence' }).click();
+	await answerConfirm(page, true);
 	const dialog = page.getByRole('dialog', { name: "This project can't be deleted" });
 	await expect(dialog).toBeVisible();
 	await expect(dialog.getByTestId('evidence-kept')).toHaveText(
@@ -188,11 +189,14 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 
 	await page.goto('/');
 	const emptyRow = row(page, 'Freshness — empty');
-	await expect(emptyRow).toContainText('no rain yet');
+	await expect(emptyRow).toContainText('No rain yet');
 	const staleRow = row(page, 'Freshness — stale');
-	await expect(staleRow.locator('td.c-data').getByTitle('Recorded rain runs to 2020-10-30')).toHaveText(/^rain \d+ years old$/);
+	// The rain's last day and its age, one way (issue #162).
+	await expect(staleRow.locator('td.c-data').getByTitle('Recorded rain (catchment or CHIRPS) runs to 30 Oct 2020')).toHaveText(/^Rain to 30 Oct 2020 \(\d+ years ago\)$/);
 	// The last run and its age, the date under it.
-	await expect(staleRow.locator('td.c-run')).toHaveText(/^\s*today\s+\d{4}-\d{2}-\d{2}\s*$/);
+	await expect(staleRow.locator('td.c-run')).toHaveText(/^\s*today\s+\d{1,2} \w{3} \d{4}\s*$/);
+	// "edited": when the project itself last changed, not how current its data is.
+	await expect(staleRow.getByTitle(/^Project last changed: /).first()).toHaveText(/^edited \d{1,2} \w{3} \d{4}$/);
 	await expect(emptyRow.locator('td.c-run')).toHaveText('Not run yet');
 
 	// "Add data" opens the workspace with the upload dialog requested.
@@ -204,7 +208,7 @@ test('the list shows data freshness and the last run, with an Add data shortcut 
 	await addMember(page.request, stale.id, viewer.user.email, 'viewer');
 	await viewer.page.goto('/');
 	const vRow = row(viewer.page, 'Freshness — stale');
-	await expect(vRow).toContainText(/rain \d+ years old/);
+	await expect(vRow).toContainText(/Rain to 30 Oct 2020 \(\d+ years ago\)/);
 	await expect(vRow.getByRole('link', { name: /^Add data/ })).toHaveCount(0);
 });
 
@@ -223,14 +227,12 @@ test.describe('data age under a skewed time zone', () => {
 
 		await page.goto('/');
 		// The row carries the badge twice (wide and narrow layouts); one is shown.
-		const badge = row(page, 'Skewed clock').getByTitle('Recorded rain runs to 2022-01-28').filter({ visible: true });
-		await expect(badge).toHaveText('rain 10 days old');
+		const badge = row(page, 'Skewed clock').getByTitle('Recorded rain (catchment or CHIRPS) runs to 28 Jan 2022').filter({ visible: true });
+		await expect(badge).toHaveText('Rain to 28 Jan 2022 (10 days ago)');
 
 		await page.goto(`/projects/${p.id}`);
-		// Stale (> 7 days), so a hidden "(older than 7 days)" follows.
-		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText(
-			'Rain up to 28 Jan 2022 · 10 days ago (older than 7 days)'
-		);
+		// Stale (> 7 days), so a hidden ", older than 7 days" follows.
+		await expect(page.locator('summary').filter({ hasText: 'Rain up to' })).toHaveText('Rain up to 28 Jan 2022 (10 days ago), older than 7 days');
 	});
 });
 
@@ -272,13 +274,15 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 
 	await page.goto('/');
 	await outcomesReady(page);
-	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · EWR, last 30 days: .+$/);
+	// The figures end on 28 Jan 2022, long past: dates, not "last 30 days" or "this week" (issue #162).
+	await expect(page.getByTestId('projects-context')).toHaveText(/^\s*3 catchments · EWR, 30 days to 28 Jan 2022: .+$/);
+	await expect(page.getByRole('columnheader', { name: /^EWR, 30 days to 28 Jan 2022/ }).first()).toBeVisible();
 
 	// Published: the status in words, where it comes from, units short and the lowest dam.
 	const pr = row(page, 'Outcome published');
 	await expect(pr.locator('td.c-ewr')).toContainText(pillText(pubFig)!);
-	await expect(pr.locator('td.c-ewr')).toContainText('Published · to 28 Jan 2022');
-	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short this week\s*$/);
+	await expect(pr.locator('td.c-ewr')).toContainText(/Published · to 28 Jan 2022 \(\d+ years ago\)/);
+	await expect(pr.locator('td.c-units')).toHaveText(/^\s*\d+ of \d+ hydrological units? short in the week to 28 Jan 2022\s*$/);
 	await expect(pr.locator('td.c-dam')).toHaveText(/ \d+ %\s*$/);
 	await expect(pr.locator('td.c-run')).toContainText('published today');
 
@@ -292,7 +296,7 @@ test('each row says how its catchment is doing, from the portfolio’s figures, 
 	// Both runs' figures end in 2022: stale, so both are flagged, with the reason in words.
 	const strip = page.getByRole('region', { name: 'Needs attention' });
 	await expect(strip.getByTestId('attention-count')).toHaveText('2 of 3');
-	await expect(strip.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Outcome draft' }) }).first()).toContainText(/Figures [\d\u202f]+ days old/);
+	await expect(strip.getByRole('listitem').filter({ has: page.getByRole('link', { name: 'Outcome draft' }) }).first()).toContainText(/Figures to 28 Jan 2022 \(\d+ years ago\)/);
 	await expect(strip.getByRole('link', { name: 'Outcome empty' })).toHaveCount(0);
 
 	// "Sort the list by it" puts them first, in the URL; Back undoes it.

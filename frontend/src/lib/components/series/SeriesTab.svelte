@@ -13,6 +13,7 @@
 	// (the Dams page's measure): the table scrolls inside its box and the
 	// chart fills the rest. The checks, the upload form and the reference
 	// follow below.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
@@ -53,7 +54,8 @@
 	import { CsvError, parseSeriesCsv, type ParsedSeries } from '$lib/series/csv';
 	import { defaultUnit, KIND_OPTIONS, kindLabel } from '$lib/series/kinds';
 	import { asksFreeProvenance, asksProvenance, CHIRPS_CHOICES, describeProvenance, provenanceFields, rebuildingNote, seriesProvenance } from '$lib/series/provenance';
-	import { coverageBins, coverageStats, daysBetween, describeAge, mergePreview, type Daily } from './coverage';
+	import { coverageBins, coverageStats, daysBetween, mergePreview, type Daily } from './coverage';
+	import { agoText, dateAge } from '$lib/format/age';
 	import AgreementTable from './AgreementTable.svelte';
 	import CoverageStrip from './CoverageStrip.svelte';
 	import DoubleMassPanel from './DoubleMassPanel.svelte';
@@ -321,7 +323,13 @@
 	};
 
 	async function remove(s: SeriesMeta) {
-		if (!confirm(`Delete the series "${s.name || kindLabel(s.kind)}"? Runs already stored are not affected.`)) return;
+		const ok = await confirmDialog({
+			title: `Delete the series “${s.name || kindLabel(s.kind)}”?`,
+			message: 'Runs already stored are not affected.',
+			confirmLabel: 'Delete series',
+			danger: true
+		});
+		if (!ok) return;
 		actionError = null;
 		try {
 			await api.series.remove(projectId, s.id);
@@ -483,7 +491,7 @@
 {/if}
 
 <!-- In-page menu: at the tab's top level, not in .data-page, so it sticks down the panels below the chart. -->
-{#if list.length}<SectionNav groups={navGroups} label="Data sections" />{/if}
+{#if list.length}<SectionNav groups={navGroups} label="Data sections" groupNames />{/if}
 
 <div class="data-page" bind:clientWidth={pageW}>
 <div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
@@ -492,7 +500,7 @@
 		<h2 id="ser-h">Input time series</h2>
 		{#if list.length}
 			<span class="muted small" data-testid="series-summary"
-				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${rainUpTo} (${describeAge(daysBetween(rainUpTo, today))})` : ''}</span
+				>Daily values · {list.length} series{#if behindText}{' · '}<span class="behind-text">{behindText}</span>{/if}{rainUpTo ? ` · recorded rain up to ${dateAge(rainUpTo, daysBetween(rainUpTo, today))}` : ''}</span
 			>
 		{/if}
 	</div>
@@ -605,7 +613,7 @@
 							</th>
 							<td role="cell" class="upto" data-label="Data up to">
 								<span class="num">{st?.lastValueDate ?? end}</span>
-								<span class="age">{describeAge(age)}</span>
+								<span class="age">{agoText(age)}</span>
 								{#if behind !== undefined}
 									<span class="behind" data-testid="series-behind" title="A run reads this series and it ends {behind} days ago, more than {STALE_DAYS}: the Data badge counts it"
 										>Behind</span

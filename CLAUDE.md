@@ -43,6 +43,7 @@ Rules only. The reasoning and the catalogues live in `docs/` (`data-model.md`, `
 Several Claude sessions may share this checkout, its working tree and its git index. `.claude/hooks/git-scope-guard.py` enforces these rules; if it denies a command, use the scoped alternative its message names. The full workflow and the reasons: `docs/contributing.md` § Git workflow.
 
 - **Every change reaches `main` through a PR; never push or commit on `main`.** One worktree per PR branch, off `origin/main` (`git worktree add ../wm-<slug> -b <type>/<slug> origin/main`). Don't merge your own PR unless the operator asks. No `Co-Authored-By`/generated-by trailer in commits or PR bodies.
+- **PR titles are conventional commits:** `<type>(<scope>): <subject>`, type one of feat, fix, chore, docs, refactor, test, perf, ci, build, revert; the subject starts lowercase and doesn't end with a period (`feat(ui): add the leave guard (#162)`). CI's `pr-title-lint` fails anything else, and the hook refuses such a `gh pr create/edit --title`.
 - **Commit path-scoped, always:** `git commit -m "…" -- <paths>`. Bare `git commit`, `git add -u/-A/.`, `git commit -a` and `--amend` with staged changes are blocked.
 - **Only touch what your task owns**, and **never whole-tree:** no `git add .`, `checkout/restore .`, `reset --hard`, `git rm .`, `git stash`, `git clean -f`.
 - **HEAD moves under you.** Commits you didn't make and files you didn't change are other sessions' work; leave them. Update a PR branch that falls behind by merging `origin/main`, not rebasing.

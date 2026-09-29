@@ -7,11 +7,14 @@ import {
 	damText,
 	DEFAULT_SORT,
 	ewrText,
+	ewrWindowLabel,
+	farmsShortLabel,
 	farmsShortText,
 	farmsShortTotalText,
 	farmsUnknownText,
 	portfolioTotals,
 	feedsText,
+	last30Text,
 	nextSort,
 	parseSort,
 	restrictionText,
@@ -75,10 +78,13 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(sourceText(row({ newerRun: true }))).toBe('Published run (a newer run is not published)');
 		expect(sourceText(row({ source: 'run' }))).toBe('Latest run, not published');
 		expect(sourceText(row({ source: null }))).toBe('Not run yet');
-		expect(ageText(row())).toBe('to 24 Sep 2026, 2 days ago');
-		expect(ageText(row({ figuresAgeDays: 1 }))).toBe('to 24 Sep 2026, yesterday');
-		expect(ageText(row({ figuresAgeDays: 0 }))).toBe('to 24 Sep 2026, today');
-		expect(ageText(row({ figuresAgeDays: 1002 }))).toBe('to 24 Sep 2026, 1\u202f002 days ago');
+		// The one age wording ($lib/format/age): the date, then how long ago.
+		expect(ageText(row())).toBe('to 24 Sep 2026 (2 days ago)');
+		expect(ageText(row({ figuresAgeDays: 1 }))).toBe('to 24 Sep 2026 (yesterday)');
+		expect(ageText(row({ figuresAgeDays: 0 }))).toBe('to 24 Sep 2026 (today)');
+		expect(ageText(row({ figuresAgeDays: 1002 }))).toBe('to 24 Sep 2026 (2 years ago)');
+		// A project zone ahead of the server's still reads today.
+		expect(ageText(row({ figuresAgeDays: -1 }))).toBe('to 24 Sep 2026 (today)');
 		expect(ageText(row({ figuresUntil: null, figuresAgeDays: null }))).toBeNull();
 	});
 	it('farms, dams, restriction, feeds', () => {
@@ -86,6 +92,11 @@ describe('wording: every status is words, every unknown says why', () => {
 		expect(farmsShortText(row({ farmCount: 1, farmsShort7: 0 }))).toBe('0 of 1 hydrological unit short this week');
 		expect(farmsShortText(row({ farmCount: 0, farmsShort7: 0 }))).toBe('No hydrological units');
 		expect(farmsShortText(row({ farmsShort7: null }))).toBeNull();
+		// Stale figures (over a week): the week is the figures' last one, by its date.
+		expect(farmsShortText(row({ figuresUntil: '2024-12-31', figuresAgeDays: 637 }))).toBe('2 of 14 hydrological units short in the week to 31 Dec 2024');
+		expect(farmsShortText(row({ figuresAgeDays: 7 }))).toBe('2 of 14 hydrological units short this week');
+		expect(last30Text(row())).toBe('in the last 30 days');
+		expect(last30Text(row({ figuresUntil: '2024-12-31', figuresAgeDays: 637 }))).toBe('in the 30 days to 31 Dec 2024');
 		expect(farmsUnknownText(row({ source: 'run' }))).toBe('Unknown until a run is published');
 		expect(farmsUnknownText(row())).toBe('Unknown: publish again to count them');
 		expect(damText(row())).toBe('Kareebos 18 %');
@@ -168,6 +179,23 @@ describe('the thresholds (D11)', () => {
 		expect(thresholdsError(5, 101)).toBe('Each cut-off is a percentage from 0 to 100.');
 		expect(thresholdsError(20, 20)).toBe('The green cut-off must be below the amber one.');
 		expect(thresholdsError(30, 20)).toBe('The green cut-off must be below the amber one.');
+	});
+});
+
+describe('the labels over several catchments (column headers, totals)', () => {
+	const stale = { figuresUntil: '2024-12-31', figuresAgeDays: 637 };
+	it('say "last 30 days" and "this week" only while every catchment’s figures are current', () => {
+		expect(ewrWindowLabel([row(), row({ figuresUntil: null, figuresAgeDays: null })])).toBe('EWR, last 30 days');
+		expect(farmsShortLabel([row()])).toBe('Hydrological units short this week');
+		expect(ewrWindowLabel([])).toBe('EWR, last 30 days');
+	});
+	it('name the day when every catchment’s figures end on the same stale one', () => {
+		expect(ewrWindowLabel([row(stale), row(stale)])).toBe('EWR, 30 days to 31 Dec 2024');
+		expect(farmsShortLabel([row(stale), row(stale)])).toBe('Hydrological units short in the week to 31 Dec 2024');
+	});
+	it('stay neutral when the catchments’ figures end on different days, one of them stale', () => {
+		expect(ewrWindowLabel([row(stale), row()])).toBe('EWR, last 30 days of figures');
+		expect(farmsShortLabel([row(stale), row()])).toBe('Hydrological units short, last week of figures');
 	});
 });
 

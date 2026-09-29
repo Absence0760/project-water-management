@@ -38,6 +38,7 @@
 	// scroll and resize.
 	import { tick } from 'svelte';
 	import { base } from '$app/paths';
+	import { glossaryPath } from '$lib/help/glossaryLinks';
 	import { SHOTS, TIP_PICTURES, pictureSrc } from '$lib/help/pictures';
 
 	let { key, label }: { key: string; label?: string } = $props();
@@ -159,7 +160,7 @@
 					<strong class="term">{entry.term}</strong>
 					<span class="short">{entry.short}</span>
 					{#if entry.units}<span class="units">Units: {entry.units}</span>{/if}
-					<a class="more" href="{base}/help/glossary#{entry.id}">More in the glossary</a>
+					<a class="more" href="{base}{glossaryPath(entry)}">More in the glossary</a>
 				</span>
 			{/if}
 		</span>

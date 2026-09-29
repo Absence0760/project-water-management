@@ -33,7 +33,11 @@ export function isolatedIndices(ys: readonly (number | null)[]): number[] {
 
 /**
  * Short axis labels: 30 000 000 → "30M", 250 000 → "250k", 1 500 → "1.5k",
- * 0.25 → "0.25". Keeps the y axis narrow for big m³/day figures.
+ * 0.25 → "0.25". Keeps the y axis narrow for big m³/day figures. Below 0.01
+ * (a log axis's lower decades) it writes the decimal, two significant
+ * figures at most: 0.001 → "0.001", 0.00025 → "0.00025" (issue #162: not
+ * "1e-3"). Only below 1e-6, float noise rather than a flow, is it an
+ * exponent, as fmtQty writes one.
  */
 export function fmtCompact(v: number): string {
 	const a = Math.abs(v);
@@ -44,7 +48,10 @@ export function fmtCompact(v: number): string {
 	if (a >= 1e3) return `${trim(v / 1e3, 1)}k`;
 	if (a >= 1 || a === 0) return trim(v, 1);
 	if (a >= 0.01) return trim(v, 3);
-	return v.toExponential(0);
+	if (a < 1e-6) return v.toExponential(0);
+	// toFixed never writes an exponent: two figures past the first non-zero digit, trailing zeros dropped.
+	const digits = Math.ceil(-Math.log10(a)) + 1;
+	return v.toFixed(digits).replace(/0+$/, '');
 }
 
 /**

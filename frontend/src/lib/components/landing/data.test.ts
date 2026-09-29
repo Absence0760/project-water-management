@@ -41,8 +41,8 @@ describe('landing data', () => {
 	});
 
 	it('the hero figure is the run’s own', () => {
-		expect(DATA.hero.reserveMetPct).toBeGreaterThan(0);
-		expect(DATA.hero.reserveMetPct).toBeLessThanOrEqual(100);
+		expect(DATA.hero.reserveNotMetPct).toBeGreaterThan(0);
+		expect(DATA.hero.reserveNotMetPct).toBeLessThanOrEqual(100);
 		expect(DATA.hero.days).toBeGreaterThanOrEqual(365 * DATA.hero.years - 5);
 	});
 

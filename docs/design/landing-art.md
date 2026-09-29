@@ -60,7 +60,7 @@ example catchment's (the gauge tag, the story's intro, the what-if); the page
 carries no separate "invented data" disclaimers (the operator's call,
 2026-09-27).
 
-**The figures are honest.** The hero's tag ("Reserve met on 42 % of days") and
+**The figures are honest.** The hero's tag ("Reserve not met on 59 % of days", framed as "not met" like every EWR figure in the app, issue #162) and
 the what-if are what the engine gives on the example, not chosen numbers. On
 Kleinberg most of the reserve's failures come from the farms' use, and one
 farm's orchard moves them by a few days a year while its own supply falls
@@ -117,10 +117,12 @@ that contradicts itself.
   water-blue accent.
 - **How it works**, **Why trust it** (`HowItWorks.svelte`, `Trust.svelte`):
   three steps; four plain statements (no borrowed logos: no CHIRPS or DWS
-  marks) and three figures under "In the example catchment" that count up
+  marks) and three figures under "From Kleinberg, an invented example
+  catchment:" that count up
   once in view (the real figure is what assistive tech reads): the years and
   days of the example's run, and how closely its fitted model follows its
-  weir's measured flow, the run's calibration NSE (0.87), taken from the
+  weir's measured flow, the run's calibration NSE (0.87, labelled in plain
+  words: "fit to the measured river flow (1 is perfect)"), taken from the
   engine by `landing-data.ts` (`hero.calibrationNse`), never typed in. It
   replaced "35 runs behind the what-if above", a count of work done rather
   than a reason to trust the result.
