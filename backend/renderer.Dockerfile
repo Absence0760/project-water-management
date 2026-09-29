@@ -58,6 +58,28 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b7
 #   - when .github/workflows/renderer-apt-snapshot.yml opens its issue (weekly
 #     check; the snapshot is over 90 days old);
 #   - for a security fix in one of them.
+# Where the packages come from. The snapshot decides every version; the live
+# archive is only a second place to download the same files from.
+#   - Ubuntu's `main` component only, and no third-party list: every package
+#     below and each of its dependencies is in main (checked with
+#     `apt-get install -s` against the snapshot). That is ~11 MB of indexes
+#     instead of ~64 MB.
+#   - snapshot.ubuntu.com is slow (~100-230 kB/s) and answers 500/503 now and
+#     then. The 2026-09-29 CI run failed on an index and a local build on a
+#     .deb, each after apt's retries. So archive.ubuntu.com is listed too,
+#     with `Snapshot: disable` and pinned to priority 100. Every candidate
+#     stays the snapshot's (500), but a pinned version the live archive still
+#     carries is the same file there, so apt fetches it from whichever source
+#     answers. Checked with snapshot.ubuntu.com blocked after `apt-get
+#     update`: all 63 packages came from the archive. Both indexes are signed
+#     by Ubuntu's archive key, and a version is one file wherever it's served.
+#     A version the live archive has dropped comes from the snapshot alone.
+# The final stage keeps the base image's sources (it copies only node_modules
+# from here).
+RUN sed -i 's/^Components: .*/Components: main/' /etc/apt/sources.list.d/ubuntu.sources \
+	&& rm -f /etc/apt/sources.list.d/nodesource.list \
+	&& printf '%s\n' 'Types: deb' 'URIs: http://archive.ubuntu.com/ubuntu/' 'Suites: noble noble-updates noble-security' 'Components: main' 'Snapshot: disable' 'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' > /etc/apt/sources.list.d/ubuntu-live.sources \
+	&& printf '%s\n' 'Package: *' 'Pin: origin "archive.ubuntu.com"' 'Pin-Priority: 100' > /etc/apt/preferences.d/80-live-archive-fallback
 ARG APT_SNAPSHOT=20260928T000000Z
 RUN apt-get update --snapshot "$APT_SNAPSHOT" \
 	&& apt-get install -y --no-install-recommends --snapshot "$APT_SNAPSHOT" \

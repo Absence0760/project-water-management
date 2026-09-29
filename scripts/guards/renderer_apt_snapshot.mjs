@@ -255,7 +255,7 @@ function bump(args) {
 	console.log(`Reading ${names.length} candidates from snapshot ${snapshot} in ${image.split('@')[0]}…`);
 	const output = execFileSync(
 		'docker',
-		['run', '--rm', '--platform', 'linux/amd64', '--user', 'root', image, 'bash', '-c', `apt-get update --snapshot "$0" -qq >/dev/null && apt-cache --snapshot "$0" policy ${names.join(' ')}`, snapshot],
+		['run', '--rm', '--platform', 'linux/amd64', '--user', 'root', image, 'bash', '-c', `sed -i 's/^Components: .*/Components: main/' /etc/apt/sources.list.d/ubuntu.sources && rm -f /etc/apt/sources.list.d/nodesource.list && apt-get update --snapshot "$0" -qq >/dev/null && apt-cache --snapshot "$0" policy ${names.join(' ')}`, snapshot],
 		{ encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }
 	);
 	const next = rewriteDockerfile(text, snapshot, parsePolicy(output));
