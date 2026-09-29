@@ -190,6 +190,8 @@ describe('what an item says', () => {
 
 	it('gives an event one line and a revision its changes', () => {
 		expect(itemLines(ev('invite.revoked', { email: 'j•••@example.com' }))).toEqual(['Revoked the invite for j•••@example.com']);
+		// Declined by its invitee (issue #136): no actor, so the line names no one.
+		expect(itemLines(ev('invite.declined', { email: 'j•••@example.com', role: 'viewer' }))).toEqual(['The invite for j•••@example.com was declined']);
 		expect(itemLines(rev())).toHaveLength(1);
 	});
 });

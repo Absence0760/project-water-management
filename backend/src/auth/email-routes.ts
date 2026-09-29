@@ -67,10 +67,16 @@ async function requestDevice(c: Context, db: Db, userId: string, email: string):
 	return trustedDevice(c, email, rows[0]?.sessions_revoked_at ?? null);
 }
 
-/** Mark the address verified and turn its pending invites into memberships. */
+/**
+ * Mark the address verified and, when this is what verifies it, turn its
+ * pending invites into memberships: the invites mailed to an address with no
+ * account, or an unconfirmed one, said that confirming it accepts them. An
+ * address verified already (a password reset on a confirmed account) accepts
+ * nothing: its invites wait for its holder on the invitations page (issue #136).
+ */
 export async function markVerified(db: Db, userId: string): Promise<void> {
-	await db.query('UPDATE app_user SET email_verified_at = coalesce(email_verified_at, now()) WHERE id = $1', [userId]);
-	await db.query('SELECT app_accept_invites($1)', [userId]);
+	const { rowCount } = await db.query('UPDATE app_user SET email_verified_at = now() WHERE id = $1 AND email_verified_at IS NULL', [userId]);
+	if (rowCount) await db.query('SELECT app_accept_invites($1)', [userId]);
 }
 
 /**

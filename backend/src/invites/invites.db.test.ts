@@ -1,4 +1,5 @@
-// Inviting people who don't have an account yet (004_email.sql, invites.ts).
+// Inviting people by email (004_email.sql, invites.ts), and an existing
+// account accepting or declining (109_invite_accept.sql, issue #136).
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { describe, expect, it } from 'vitest';
 import { anon, asOwner, lastMailTo, mailCount, node, signUp, tokenIn } from '../__tests__/helpers.js';
@@ -204,21 +205,18 @@ describe('project invites', () => {
 		expect((await invitee.call('GET', `/projects/${pid}`)).status).toBe(404);
 	});
 
-	it('adding someone who has since registered and verified makes them a member and clears the invite', async () => {
+	it('verifying the address accepts the invite and clears it; adding the member again is a 409', async () => {
 		const owner = await signUp('Direct');
 		const pid = await projectOf(owner);
 		const email = newEmail('direct');
 		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
-		await register(email);
+		const invitee = await register(email);
 		expect((await anon('POST', '/auth/verify-email', { token: tokenIn(lastMailTo(email)) })).status).toBe(200);
 		// Verifying already accepted the invite…
 		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
-		// …and a direct add of a verified account is a plain membership.
-		const other = await signUp('DirectOther');
-		const res = await owner.call('POST', `/projects/${pid}/members`, { email: other.email, role: 'viewer' });
-		expect(res.status).toBe(201);
-		expect(res.body.member).toMatchObject({ email: other.email, role: 'viewer' });
-		expect((await owner.call('POST', `/projects/${pid}/members`, { email: other.email, role: 'viewer' })).status).toBe(409);
+		expect((await invitee.call('GET', `/projects/${pid}`)).body.project.role).toBe('viewer');
+		// …and someone on the members list the owner reads is a 409, not another invite.
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' })).status).toBe(409);
 	});
 
 	it('an existing but unverified account is invited, not added, until it confirms the address', async () => {
@@ -369,6 +367,194 @@ describe('team invites', () => {
 // INVITE_CAP), counted before the address is looked up, so a capped owner
 // learns nothing more about which addresses have accounts, and can't keep
 // mailing strangers the project's name. Refused adds count nothing.
+describe('an existing account is invited and must accept (109_invite_accept, issue #136)', () => {
+	type Caller = Awaited<ReturnType<typeof signUp>>;
+	/** A verified account that doesn't accept on its own (helpers.ts signUp). */
+	const holder = (name: string) => signUp(name, { acceptInvites: false });
+	const events = (pid: string, kind: string) =>
+		asOwner('SELECT actor_user_id, actor_label, subject FROM audit_event WHERE project_id = $1 AND kind = $2 ORDER BY created_at', [pid, kind]) as Promise<
+			{ actor_user_id: string | null; actor_label: string; subject: Record<string, unknown> }[]
+		>;
+	const mine = async (u: Caller) => (await u.call('GET', '/me/invites')).body.invites as { id: string; kind: string; targetId: string; name: string; role: string; invitedBy: string; farms: string[] }[];
+
+	it('answers the same for a verified account as for an address with none, and shows the owner no name', async () => {
+		const owner = await signUp('SameOwner');
+		const known = await holder('Knownperson');
+		const pid = await projectOf(owner);
+		const unknown = newEmail('unknown');
+		const a = await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'editor' });
+		const b = await owner.call('POST', `/projects/${pid}/members`, { email: unknown, role: 'editor' });
+		expect(a.status).toBe(201);
+		expect(b.status).toBe(201);
+		const shape = (r: { body: { invite: Record<string, unknown> } & Record<string, unknown> }) => ({ keys: Object.keys(r.body).sort(), invite: Object.keys(r.body.invite).sort() });
+		expect(shape(a)).toEqual(shape(b));
+		expect(a.body).toMatchObject({ invited: true, invite: { email: known.email, role: 'editor', invitedBy: 'SameOwner', expired: false } });
+		expect(JSON.stringify(a.body)).not.toContain('Knownperson');
+		// Not a member yet: the members list is the owner alone, both addresses are pending invites.
+		expect((await owner.call('GET', `/projects/${pid}/members`)).body.members.map((m: { userId: string }) => m.userId)).toEqual([owner.id]);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites.map((i: { email: string }) => i.email).sort()).toEqual([known.email, unknown].sort());
+		expect((await known.call('GET', `/projects/${pid}`)).status).toBe(404);
+		// Their email points at the invitations page, with no token in it.
+		const mail = lastMailTo(known.email)!;
+		expect(mail.text).toContain('/invitations');
+		expect(mail.text).not.toMatch(/[?&](token|invite)=/);
+		expect(mail.text).toContain('accept or decline');
+		// The history says only that an invite went out, as for the unknown address.
+		expect((await events(pid, 'invite.sent')).map((e) => Object.keys(e.subject).sort())).toEqual([
+			['email', 'inviteId', 'role'],
+			['email', 'inviteId', 'role']
+		]);
+		expect(await events(pid, 'member.added')).toEqual([]);
+	});
+
+	it('lists the invite for its holder, who joins on accepting, recorded as joining by invite', async () => {
+		const owner = await signUp('AccOwner');
+		const known = await holder('Accepter');
+		const pid = await projectOf(owner, 'Kloof');
+		const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'editor' })).body.invite;
+		expect(await mine(known)).toEqual([
+			expect.objectContaining({ id: invite.id, kind: 'project', targetId: pid, name: 'Kloof', role: 'editor', invitedBy: 'AccOwner', farms: [] })
+		]);
+		const ok = await known.call('POST', `/me/invites/${invite.id}/accept`);
+		expect(ok.status).toBe(200);
+		expect(ok.body).toEqual({ joined: { kind: 'project', id: pid } });
+		expect((await known.call('GET', `/projects/${pid}`)).body.project.role).toBe('editor');
+		expect(await mine(known)).toEqual([]);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+		expect(await events(pid, 'member.added')).toEqual([
+			{ actor_user_id: known.id, actor_label: 'Accepter', subject: { userId: known.id, displayName: 'Accepter', role: 'editor', via: 'invite' } }
+		]);
+		// A second accept finds nothing.
+		expect((await known.call('POST', `/me/invites/${invite.id}/accept`)).status).toBe(404);
+	});
+
+	it('declining deletes the invite, records it without the holder’s name, and joins nothing', async () => {
+		const owner = await signUp('DecOwner');
+		const known = await holder('Decliner');
+		const pid = await projectOf(owner);
+		const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).body.invite;
+		expect((await known.call('DELETE', `/me/invites/${invite.id}`)).status).toBe(204);
+		expect(await mine(known)).toEqual([]);
+		expect((await owner.call('GET', `/projects/${pid}/invites`)).body.invites).toEqual([]);
+		expect((await known.call('GET', `/projects/${pid}`)).status).toBe(404);
+		const at = known.email.lastIndexOf('@');
+		expect(await events(pid, 'invite.declined')).toEqual([
+			{ actor_user_id: null, actor_label: '', subject: { inviteId: invite.id, email: `${known.email[0]}•••${known.email.slice(at)}`, role: 'viewer' } }
+		]);
+		expect((await known.call('DELETE', `/me/invites/${invite.id}`)).status).toBe(404);
+		// The owner may invite them again.
+		expect((await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).status).toBe(201);
+	});
+
+	it('only the invited address sees, accepts or declines an invite (positive control: its holder sees it)', async () => {
+		const owner = await signUp('OnlyOwner');
+		const known = await holder('Onlyknown');
+		const stranger = await holder('Onlystranger');
+		const pid = await projectOf(owner);
+		const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'owner' })).body.invite;
+		expect((await mine(known)).map((i) => i.id)).toEqual([invite.id]);
+		expect(await mine(stranger)).toEqual([]);
+		// The owner who sent it doesn't accept it either (they're not the address).
+		for (const u of [stranger, owner]) {
+			expect((await u.call('POST', `/me/invites/${invite.id}/accept`)).status).toBe(404);
+			expect((await u.call('DELETE', `/me/invites/${invite.id}`)).status).toBe(404);
+		}
+		expect((await stranger.call('GET', `/projects/${pid}`)).status).toBe(404);
+		expect((await stranger.call('POST', '/me/invites/not-a-uuid/accept')).status).toBe(404);
+		expect((await stranger.call('DELETE', '/me/invites/not-a-uuid')).status).toBe(404);
+		// Still there for its holder.
+		expect((await mine(known)).map((i) => i.id)).toEqual([invite.id]);
+		// RLS: as water_app, the invite table stays owner-only for the invitee too.
+		const seen = await withUser(known.id, async (db) => (await db.query('SELECT id FROM invite WHERE id = $1', [invite.id])).rows);
+		expect(seen).toEqual([]);
+	});
+
+	it('an expired invite is neither listed nor accepted', async () => {
+		const owner = await signUp('ExpOwner');
+		const known = await holder('Expired');
+		const pid = await projectOf(owner);
+		const invite = (await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' })).body.invite;
+		expect((await mine(known)).map((i) => i.id)).toEqual([invite.id]);
+		await asOwner(`UPDATE invite SET expires_at = now() - interval '1 minute' WHERE id = $1`, [invite.id]);
+		expect(await mine(known)).toEqual([]);
+		expect((await known.call('POST', `/me/invites/${invite.id}/accept`)).status).toBe(404);
+		expect((await known.call('DELETE', `/me/invites/${invite.id}`)).status).toBe(404);
+		expect((await known.call('GET', `/projects/${pid}`)).status).toBe(404);
+	});
+
+	it('a password reset on a verified account accepts nothing: its invites wait for the holder', async () => {
+		const owner = await signUp('ResetOwner');
+		const known = await holder('Resetter');
+		const pid = await projectOf(owner);
+		await owner.call('POST', `/projects/${pid}/members`, { email: known.email, role: 'viewer' });
+		await anon('POST', '/auth/forgot-password', { email: known.email });
+		expect((await anon('POST', '/auth/reset-password', { token: tokenIn(lastMailTo(known.email)), password: 'another password' })).status).toBe(204);
+		const login = await anon('POST', '/auth/login', { email: known.email, password: 'another password' });
+		const cookie = login.headers.get('set-cookie')!.split(';')[0]!;
+		expect((await anon('GET', `/projects/${pid}`, undefined, cookie)).status).toBe(404);
+		expect((await anon('GET', '/me/invites', undefined, cookie)).body.invites).toHaveLength(1);
+	});
+
+	it('an unconfirmed account sees no invitations to accept: confirming its address accepts them', async () => {
+		const owner = await signUp('UnconfOwner');
+		const pid = await projectOf(owner);
+		const email = newEmail('unconf');
+		const invitee = await register(email);
+		await owner.call('POST', `/projects/${pid}/members`, { email, role: 'viewer' });
+		const list = await invitee.call('GET', '/me/invites');
+		expect(list.status).toBe(200);
+		expect(list.body.invites).toEqual([]);
+	});
+
+	it('a team admin’s add is an invite too; accepting joins the team and its projects', async () => {
+		const admin = await signUp('TeamAccAdmin');
+		const known = await holder('Teamjoiner');
+		const teamId = (await admin.call('POST', '/teams', { name: 'Joiners' })).body.team.id as string;
+		const pid = (await admin.call('POST', '/projects', { name: 'Team catchment', teamId })).body.project.id as string;
+		const a = await admin.call('POST', `/teams/${teamId}/members`, { email: known.email, role: 'member' });
+		const b = await admin.call('POST', `/teams/${teamId}/members`, { email: newEmail('teamnobody'), role: 'member' });
+		expect(a.status).toBe(201);
+		expect(Object.keys(a.body).sort()).toEqual(Object.keys(b.body).sort());
+		expect(a.body.invited).toBe(true);
+		expect(JSON.stringify(a.body)).not.toContain('Teamjoiner');
+		expect((await admin.call('GET', `/teams/${teamId}`)).body.members).toHaveLength(1);
+		expect((await known.call('GET', `/projects/${pid}`)).status).toBe(404);
+		const [inv] = await mine(known);
+		expect(inv).toMatchObject({ kind: 'team', targetId: teamId, name: 'Joiners', role: 'member' });
+		expect((await known.call('POST', `/me/invites/${inv!.id}/accept`)).body).toEqual({ joined: { kind: 'team', id: teamId } });
+		expect((await known.call('GET', `/projects/${pid}`)).body.project.role).toBe('editor');
+		// Already on the list now: a 409.
+		expect((await admin.call('POST', `/teams/${teamId}/members`, { email: known.email, role: 'member' })).status).toBe(409);
+	});
+
+	it('a farmer with an account is invited with their farms, linked when they accept', async () => {
+		const owner = await signUp('FarmAccOwner');
+		const farmer = await holder('Farmholder');
+		const pid = await projectOf(owner);
+		const gauge = node('Gauge', null);
+		const farm = node('Rooikloof', gauge.id);
+		expect((await owner.call('PUT', `/projects/${pid}/model`, { nodes: [gauge, farm], crops: [], cropAreas: [], transfers: [] })).status).toBe(200);
+		const a = await owner.call('POST', `/projects/${pid}/farmers`, { email: farmer.email, nodeIds: [farm.id] });
+		const b = await owner.call('POST', `/projects/${pid}/farmers`, { email: newEmail('farmnobody'), nodeIds: [farm.id] });
+		expect(a.status).toBe(201);
+		expect(Object.keys(a.body).sort()).toEqual(Object.keys(b.body).sort());
+		expect(Object.keys(a.body.invite).sort()).toEqual(Object.keys(b.body.invite).sort());
+		expect(a.body.invite).toMatchObject({ status: 'invited', email: farmer.email, nodeIds: [farm.id] });
+		// The farmers list shows an invite, not a farmer with a name.
+		const listed = (await owner.call('GET', `/projects/${pid}/farmers`)).body.farmers as { status: string; email: string }[];
+		expect(listed.filter((f) => f.email === farmer.email).map((f) => f.status)).toEqual(['invited']);
+		expect(JSON.stringify(listed)).not.toContain('Farmholder');
+		// Bulk: a verified account is 'invited' like any other address.
+		const bulk = await owner.call('POST', `/projects/${pid}/farmers/bulk`, { rows: [{ email: farmer.email, farm: 'Rooikloof' }], dryRun: true });
+		expect(bulk.body.results.map((r: { status: string }) => r.status)).toEqual(['invited']);
+		const [inv] = await mine(farmer);
+		expect(inv).toMatchObject({ kind: 'project', role: 'farmer', farms: ['Rooikloof'] });
+		expect((await farmer.call('POST', `/me/invites/${inv!.id}/accept`)).status).toBe(200);
+		const now = (await owner.call('GET', `/projects/${pid}/farmers`)).body.farmers as { status: string; userId?: string; nodeIds: string[] }[];
+		expect(now.find((f) => f.userId === farmer.id)).toMatchObject({ status: 'active', nodeIds: [farm.id] });
+	});
+});
+
 describe('the daily cap on adding by email (101_invite_throttle)', () => {
 	const bucket = (b: string) => asOwner('SELECT attempts FROM invite_throttle WHERE bucket = $1', [b]).then((r) => (r[0]?.attempts as number | undefined) ?? 0);
 	const fill = (b: string, n: number) => asOwner('UPDATE invite_throttle SET attempts = $2 WHERE bucket = $1', [b, n]);

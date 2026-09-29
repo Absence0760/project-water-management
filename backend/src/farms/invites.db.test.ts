@@ -1,6 +1,6 @@
 // Farmer invites, single and bulk (roadmap WP-2.2, issue #27;
-// 034_farmer_invites.sql, farms/routes.ts). An address without a verified
-// account is invited with the farms the invite will link; accepting it
+// 034_farmer_invites.sql, farms/routes.ts). Every address, a verified
+// account's too (issue #136), is invited with the farms the invite will link; accepting it
 // (app_accept_invites) creates the membership and the links. Every "cannot
 // see" check has a positive control.
 import { LEGAL_VERSION } from '@water-management/engine/legal';
@@ -228,7 +228,7 @@ describe('POST /farmers/bulk', () => {
 		const fresh = newEmail('bulk-fresh');
 		const twice = newEmail('bulk-twice');
 		const rows = [
-			{ email: verified.email, farm: 'farm a' }, // 0 added, farm name case-insensitive
+			{ email: verified.email, farm: 'farm a' }, // 0 invited like any address (issue #136), farm name case-insensitive
 			{ email: fresh.toUpperCase(), farm: 'Rustenvrede', locale: 'Afrikaans' }, // 1 invited
 			{ email: twice, farm: 'Farm A', locale: 'en' }, // 2 invited
 			{ email: twice, farm: 'Hoek' }, // 3 invited, same email
@@ -243,7 +243,7 @@ describe('POST /farmers/bulk', () => {
 		expect(res.status).toBe(200);
 		expect(res.body.dryRun).toBe(false);
 		const status = res.body.results.map((r: { status: string }) => r.status);
-		expect(status).toEqual(['added', 'invited', 'invited', 'invited', 'invited', 'error', 'error', 'error', 'error', 'error']);
+		expect(status).toEqual(['invited', 'invited', 'invited', 'invited', 'invited', 'error', 'error', 'error', 'error', 'error']);
 		const errors = res.body.results.map((r: { error?: string }) => r.error ?? null);
 		expect(errors.slice(5)).toEqual([
 			'no farm named “Farm Z” in this catchment',
@@ -254,6 +254,7 @@ describe('POST /farmers/bulk', () => {
 		]);
 		expect(res.body.results[1]).toMatchObject({ row: 1, email: fresh, farm: 'Rustenvrede' });
 
+		// Linked once they accepted (helpers.ts signUp accepts at once).
 		expect(await farmNodesOf(verified.id)).toEqual([farmA.id]);
 		expect(mailCount(twice)).toBe(1);
 		expect(lastMailTo(twice)!.subject).toBe('Iowner has given you access to Farm A and Hoek in Invite <Kloof>');
@@ -275,7 +276,7 @@ describe('POST /farmers/bulk', () => {
 		const res = await bulk(owner, [{ email, farm: 'Hoek' }, { email: verified.email, farm: 'Hoek' }, { email, farm: 'Nope' }], true);
 		expect(res.status).toBe(200);
 		expect(res.body.dryRun).toBe(true);
-		expect(res.body.results.map((r: { status: string }) => r.status)).toEqual(['invited', 'added', 'error']);
+		expect(res.body.results.map((r: { status: string }) => r.status)).toEqual(['invited', 'invited', 'error']);
 		expect(mailCount(email)).toBe(0);
 		expect(await asOwner('SELECT 1 FROM invite WHERE email = $1', [email])).toEqual([]);
 		expect(await asOwner('SELECT 1 FROM project_member WHERE user_id = $1', [verified.id])).toEqual([]);
@@ -343,12 +344,14 @@ describe('inviting an applicant with farms', () => {
 		]);
 	});
 
-	it('adds a verified account as an applicant with its farms at once', async () => {
+	it('invites a verified account as an applicant with its farms, linked when it accepts', async () => {
 		const u = await signUp('Verifiedapplicant');
 		const res = await owner.call('POST', `/projects/${projectId}/farmers`, { email: u.email, nodeIds: [farmA.id, farmC.id], role: 'contributor' });
 		expect(res.status, JSON.stringify(res.body)).toBe(201);
-		expect(res.body.farmer).toEqual(expect.objectContaining({ userId: u.id, role: 'contributor', nodeIds: [farmA.id, farmC.id].sort() }));
+		expect(res.body.invite).toEqual(expect.objectContaining({ status: 'invited', email: u.email, role: 'contributor', nodeIds: [farmA.id, farmC.id].sort() }));
+		// Accepted at once by the helper (helpers.ts signUp), as its holder would.
 		expect(await farmNodesOf(u.id)).toEqual([farmA.id, farmC.id].sort());
+		expect(await asOwner('SELECT role::text AS role FROM project_member WHERE project_id = $1 AND user_id = $2', [projectId, u.id])).toEqual([{ role: 'contributor' }]);
 	});
 
 	it('a resend through /members keeps the farms; an applicant invite without farms stays off the farmer list', async () => {
