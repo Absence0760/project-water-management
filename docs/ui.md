@@ -116,6 +116,11 @@ draw the reader's own locale. A revision line saved before the change
 ("750,000 m³") still matches today's diff for the History attribution
 (`backend/src/history/attribute.ts`).
 
+A chart's value axis writes its ticks short (`charts/series.ts`
+`fmtCompact`): 30M, 250k, 1.5k, 0.25, and a log axis's lower decades as
+decimals, 0.001 and 0.0001, never `1e-3` (issue #162); only below 1e-6, float
+noise rather than a flow, does it fall back to an exponent.
+
 ## Landing page
 
 `/` for a signed-out visitor, and `/welcome` for anyone (issue #57;
@@ -659,18 +664,21 @@ put the results first; its first screen follows board A1 of the redesign
 
 1. **Before the first run**, the setup checklist (`overview/checklist.ts`)
    leads, then Needs attention: there is nothing to summarise yet, so there
-   is no KPI row, chart or supply list.
+   is no KPI row, reserve strip or supply list.
 2. **The first screen, once there is a run**: the **Latest run** KPI row
-   (four cards, the mean outflow in the line under them), then two columns:
-   the **Flow vs reserve** chart on the left, and on the right (a column
-   280–340 px wide) **Needs attention** above **Supply by farm**. From
-   1100 × 620 px (`FIT_QUERY` in `OverviewTab.svelte`) the block is exactly
-   the height left in the window below its own top edge (measured with a
-   `ResizeObserver` on `body`, as the Network's map, less the save bar
-   when it shows; at least 560 px): the chart fills what the KPIs leave, the
-   side column's cards scroll inside themselves, and the page doesn't need
-   scrolling to see any of it. Narrower, the columns stack and the chart is
-   240 px tall; on a phone the KPIs are 2 × 2.
+   (four cards, the mean outflow in the line under them), the **Days below
+   the reserve** strip across the page under it, then **Needs attention**
+   beside **Supply by farm** (two equal columns from 900 px, one alone
+   takes the width; stacked below 900 px). From 1100 × 620 px (`FIT_QUERY`
+   in `OverviewTab.svelte`) the block is exactly the height left in the
+   window below its own top edge (measured with a `ResizeObserver` on
+   `body`, as the Network's map, less the save bar when it shows; at least
+   560 px): the two cards fill what the KPIs and the strip leave and scroll
+   inside themselves. On a phone the KPIs are 2 × 2.
+   Until issue #162 the Summary drew the full **Flow vs reserve** chart here,
+   filling what the KPIs left; River & reserve draws the same chart, larger
+   and with more controls, so the Summary now shows the strip and links
+   there instead: the flow chart is drawn once, on River & reserve.
 3. **Below the first screen**, compact: the active alerts
    ([§ Alerts](#alerts)) beside the published baseline (two columns once the
    tab is 56rem wide, a container query; stacked below that), each panel
@@ -686,32 +694,23 @@ put the results first; its first screen follows board A1 of the redesign
    and `#model-h` for the facts; `project/links.ts` `PROJECT_ANCHORS`) is
    sent there, replacing the history entry so Back skips it.
 
-- **Flow vs reserve** (`overview/FlowVsReserve.svelte`), once the latest run's
-  record is in: the Runs tab's *EWR vs simulated outflow* chart
-  (`runs/flowSeries.ts` `ewrChartSeries`, log axis at first) with a
-  **30 days / 1 year / All** switch (LineChart's `windows`: each window ends
-  on the run's last day, it opens on a year, the pressed button is the window
-  shown and a drag-zoom releases it), shading a forecast run's forecast days.
-  The **days below the reserve are shaded** (LineChart's `shade`), from the
-  run's own `ewr_shortfall` series (`overview/summaryChart.ts`
-  `belowReserve`: negative on a day the engine counted as EWR not met), so
-  the caption's count ("Shaded: the 23 days the outflow was below the pragmatic
-  EWR line") is the EWR card's; a run that always met it says so. When the
-  outlet has a Reserve rule table the chart also draws its requirement
-  (the run's catchment-level `ewr_rule` series, `EWR_RULE_KEY`) as a second
-  step line, *Reserve rule requirement*, and the caption says it is each
-  month's requirement judged month by month, so the chart shows the line the
-  "Reserve rules met" headline is judged by, not only the pragmatic EWR
-  (issue #51; the printed report's EWR chart too). A rule table at another
-  site isn't drawn: this chart's flow is the outlet's. On the
-  first screen it fills its panel (`fill`: the plot gets the panel's height
-  less the chart's own head, legend and caption, measured from the drawn
-  chart). It is its own chunk, since it pulls in uPlot, so the page's first
-  paint doesn't wait for it. Its series come through the Runs tab's
-  `cachedSeries`, and it fetches only the series the run stored ("This run
-  stored no outflow or EWR series." otherwise). Beside its heading, **More on
-  River & reserve** opens [River & reserve](#river--reserve) for that run
-  (`riverHref`, `river/links.ts`), where the same chart is larger.
+- **Days below the reserve** (`overview/ReserveStrip.svelte`, rules in
+  `overview/reserveStrip.ts`), once the latest run's record is in: the days
+  below the pragmatic EWR at the outlet in each of the run's last twelve
+  months (`recentMonths`, from the run summary's monthly grid,
+  `RunSummary.ewrCompliance`, so it draws with the cards: no series to fetch,
+  no chart library), oldest first. Each month is a small bar (its height the
+  share of the month's days below, in the warning colour of the flow chart's
+  shading), the count above it and the month under it, the year under the
+  first month and each January; each is a list item whose words ("Jan 2024:
+  below the EWR on 12 of 31 days") are what a screen reader and the tooltip
+  get. A line under the heading says what it counts and the span ("… (EWR
+  not met), the run's last 12 months: Jan 2024 – Dec 2024"). On a forecast
+  run it stops before the month the forecast starts in, as the cards are the
+  history's. Six a row on a phone. A run made before the monthly grid says
+  so. Beside its heading, **More on River & reserve** opens [River &
+  reserve](#river--reserve) for that run (`riverHref`, `river/links.ts`),
+  where the **Flow vs reserve** chart is.
 - **Supply by farm** (`overview/SupplyByFarm.svelte`, rules in
   `overview/supplyBars.ts`): every farm in the latest run with a bar and the
   % of its demand supplied, fullest first and emptiest last, in the Network's
@@ -2075,7 +2074,9 @@ results**, **River & reserve**, **Hydrological units** and **Data**. Each page
 gives it its sections in groups (a `nav` labelled "Settings sections",
 "Result sections", "River sections", "Hydrological units sections", "Data
 sections"); each group is a list named for screen readers, set apart by a
-wider gap. The dashboards that fit the window (Summary, Network, Crops,
+wider gap. A page can show the names on the bar too (`groupNames`: a small
+muted label before each group's first link, in the same item, so the two
+wrap together and the fit counts both); River & reserve does (issue #162). The dashboards that fit the window (Summary, Network, Crops,
 Dams, Transfers, Scenarios) and the pages with at most two panels past their
 first screen at 1440×960 (Allocations, Project, Compare runs, Applications)
 have none (surveyed 2026-09-27 with the example catchments); History is left
@@ -3128,9 +3129,14 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   what the page is for.
 - **Tiles** (`riverKpis`), each with its change from the previous run where
   both runs have the figure (`Delta`, as on the Summary):
-  *Reserve met* (share of days the outflow met the pragmatic EWR at the
-  outflow gauge, "N of M days", and with a rule table "Reserve rules: x% of
-  months"; flagged above 5 % of days not met); *Days below the reserve* (the
+  *EWR not met* (share of days the outflow was below the pragmatic EWR at
+  the outflow gauge, "N of M days", and with a rule table "Reserve rules: x%
+  of months"; flagged above 5 % of days; a fall is the better change). It
+  is the Summary's *EWR not met* card word for word: both take their term,
+  value and count from `ewr/notMet.ts` `ewrNotMet`, since until issue #162
+  this tile framed the same figure the other way round ("Reserve met 21.2%"
+  against the Summary's "EWR not met 78.8%"). "Not met" is the framing the
+  flow chart's shading, the EWR by month grid and the projects list use; *Days below the reserve* (the
   count, and how many in an average year; the change compares the per-year
   figure, since runs can differ in length); *Mean simulated outflow* (m³/s and
   % of natural, moved here from the line under the Summary's cards, same
@@ -3138,11 +3144,17 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   year with the largest share of days below the EWR over the run, from the
   EWR grid's "All years" row, `ewr/heatmap.ts` `monthProfile`; "None" when the
   EWR was met every day; its change is that same month in the previous run).
-- **First screen.** The Summary's **Flow vs reserve** chart
+- **First screen.** The **Flow vs reserve** chart, the app's only copy of it
   (`overview/FlowVsReserve.svelte`, `#res-ewr`: EWR vs simulated outflow, log
   axis, the **30 days / 1 year / All** switch, the days below the reserve
-  shaded and counted in its caption, a forecast run's band). It keeps the two
-  controls the Runs tab's EWR chart had, which the Summary's copy leaves off
+  shaded and counted in its caption, a forecast run's band). The Summary
+  drew it too until issue #162 and now shows the days below by month and
+  links here. Its shading comes from the run's own `ewr_shortfall` series
+  (`overview/summaryChart.ts` `belowReserve`: negative on a day the engine
+  counted as EWR not met), so the caption's count is the *EWR not met*
+  tile's; with a Reserve rule table at the outlet it also draws the
+  requirement (`EWR_RULE_KEY`) as a second step line (issue #51). It keeps
+  the two controls the Runs tab's EWR chart had
   (`FlowVsReserve` `units` and `pannable`): the **m³/s ↔ m³/day** switch
   (the shading is days, so it is the same in both units) and **◀ Earlier /
   Later ▶**, which step by the window picked (a year, or 30 days) with that
@@ -3151,10 +3163,13 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   below the reserve, each water year** (`#res-reserve-years`, Compare runs'
   `ReserveYearsChart` with this one run: the engine's
   `reserveDaysByWaterYear` over the run's `ewr_shortfall`, part years faded,
-  a table behind *Show as a table*). From 1100 × 620 the tiles and this row
+  a table behind *Show as a table*; about six years labelled, always the
+  last, and a label near an edge moved in so it is never cut off,
+  `compare/yearAxis.ts`, issue #162: the narrow column clipped "2024/25" to
+  "2024/2…"). From 1100 × 620 the tiles and this row
   are exactly the height left below their top (measured with a
   ResizeObserver, less the save bar), the chart filling what the tiles
-  leave, as the Summary's first screen does; narrower, the two stack.
+  leave; narrower, the two stack.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
   **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
@@ -3170,13 +3185,16 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   panels: **Flow vs reserve**, **Days below, by year**, **Reserve
   compliance** (with a rule table), **EWR by month**, **Uncertainty**,
   **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
-  above (`river/river.ts`, `riverNavGroups`), in three groups named for
-  screen readers (The reserve; How sure, and what if; Water balance).
+  above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
+  How sure, and what if; Water balance. The group names show on the bar,
+  each just before its group's first link (`SectionNav` `groupNames`, issue
+  #162: named for screen readers only, the wider gaps between the groups
+  read as spacing bugs).
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on
   Runs & results (`?tab=runs&run=<id>#res-reserve` …, `RIVER_ANCHORS`) is
-  replaced by the same link here. The Summary's flow chart and outflow line
+  replaced by the same link here. The Summary's reserve strip and outflow line
   and the run headline's "by month of the year" link here too.
 - **No run yet:** the header, a "No run yet" panel saying what the page will
   show, and (editors) **Run the model** (`?tab=runs`); a viewer reads that an

@@ -104,22 +104,23 @@ describe('worstMonth', () => {
 
 describe('riverKpis', () => {
 	const days = 730;
-	it('gives the reserve met, days below (and per year), the mean outflow and the worst month', () => {
+	it('gives EWR not met, days below (and per year), the mean outflow and the worst month', () => {
 		const notMet = Array(12).fill(0);
 		notMet[10] = 12;
 		const ks = riverKpis(summary({}, { ewrCompliance: grid(notMet) }), days, null);
-		expect(ks.map((k) => k.id)).toEqual(['met', 'below', 'outflow', 'worst']);
-		expect(tile(ks, 'met')).toMatchObject({ value: '90.0%', unit: 'of days', flagged: true, delta: null });
-		expect(tile(ks, 'met').sub).toEqual(['657 of 730 days at the outflow gauge']);
+		expect(ks.map((k) => k.id)).toEqual(['ewr', 'below', 'outflow', 'worst']);
+		// Framed as the Summary's card is (issue #162): the share not met, and the days not met of the record.
+		expect(tile(ks, 'ewr')).toMatchObject({ term: 'EWR not met', value: '10.0%', unit: 'of days', flagged: true, delta: null });
+		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge']);
 		expect(tile(ks, 'below')).toMatchObject({ value: '73', unit: 'days', sub: ['37 in an average year'] });
 		expect(tile(ks, 'outflow')).toMatchObject({ value: '0.500', unit: 'm³/s', sub: ['50% of natural'] });
 		expect(tile(ks, 'worst')).toMatchObject({ value: 'August', sub: ['EWR not met on 40% of its days'], flagged: true, delta: null });
 	});
 	it('adds the rule-table months to the reserve tile when the project has one', () => {
 		const ks = riverKpis(summary({}, { ewrAssurance: [site(null, 'Outflow gauge', 33, 36)] }), days, null);
-		expect(tile(ks, 'met').sub).toEqual(['657 of 730 days at the outflow gauge', 'Reserve rules: 91.7% of months']);
+		expect(tile(ks, 'ewr').sub).toEqual(['73 of 730 days at the outflow gauge', 'Reserve rules: 91.7% of months']);
 	});
-	it('compares with the previous run: the share met, days below per year (runs differ in length), outflow, and the same month', () => {
+	it('compares with the previous run: the share not met, days below per year (runs differ in length), outflow, and the same month', () => {
 		const cur = Array(12).fill(0);
 		cur[10] = 12;
 		const prev = Array(12).fill(0);
@@ -130,7 +131,9 @@ describe('riverKpis', () => {
 			// A one-year run with 73 days below: 73 a year, against this run's 36.5 (73 in 730 days).
 			{ summary: summary({ ewrDaysNotMet: 73, ewrFractionDaysNotMet: 0.2, meanSimulatedOutflowM3Day: 86_400 }, { ewrCompliance: grid(prev) }), days: 365.25 }
 		);
-		expect(tile(ks, 'met').delta?.delta).toBeCloseTo(0.1);
+		// 20% not met before, 10% now: down 10 points, which is better.
+		expect(tile(ks, 'ewr').delta?.delta).toBeCloseTo(-0.1);
+		expect(tile(ks, 'ewr').spec.better).toBe('lower');
 		expect(tile(ks, 'below').delta?.delta).toBeCloseTo(73 * 365.25 / 730 - 73);
 		expect(tile(ks, 'outflow').delta?.delta).toBeCloseTo(-0.5);
 		expect(tile(ks, 'worst').delta?.delta).toBeCloseTo(0.2);

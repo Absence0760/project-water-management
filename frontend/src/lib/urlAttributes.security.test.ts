@@ -93,7 +93,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// Objects built in code from the builders above.
 	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)', in: ['lib/components/farm/FarmShell.svelte'] },
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
-	'more.href': { why: 'SupplyByFarm / FlowVsReserve prop: OverviewTab passes riverHref / supplyHref', in: ['lib/components/overview/FlowVsReserve.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
+	'more.href': { why: 'SupplyByFarm / ReserveStrip prop: OverviewTab passes supplyHref / riverHref', in: ['lib/components/overview/ReserveStrip.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },
 	'h.href': { why: 'LatestRun: latestRun.ts rows with DAMS_HREF and the builders', in: ['lib/components/overview/LatestRun.svelte'] },
 	'r.href': { why: 'CompareView: the `reports` list, reportHref() (`${base}/projects/<id>/report?` + URLSearchParams); projects/NeedsAttention: outcomes.ts attention() reasons, built by curtailmentHref (`${base}/projects/…`) or absent', in: ['lib/components/compare/CompareView.svelte', 'lib/components/projects/NeedsAttention.svelte'] },
 	allHref: { why: 'projects/NeedsAttention prop: the list page passes hrefWith(…)', in: ['lib/components/projects/NeedsAttention.svelte'] },

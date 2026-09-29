@@ -28,4 +28,4 @@ export async function openRiver(page: Page, projectId: string, runId?: string) {
 export const riverTiles = (page: Page) => page.locator('dl.kpis > [data-kpi]');
 
 /** One tile by its data-kpi id (met, below, outflow, worst). */
-export const riverTile = (page: Page, id: 'met' | 'below' | 'outflow' | 'worst') => page.locator(`[data-kpi="${id}"]`);
+export const riverTile = (page: Page, id: 'ewr' | 'below' | 'outflow' | 'worst') => page.locator(`[data-kpi="${id}"]`);

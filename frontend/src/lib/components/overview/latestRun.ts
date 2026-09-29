@@ -11,6 +11,7 @@ import { m3DayToM3s, SUPPLY_TARGET } from '$lib/components/runs/results';
 import { daysBetween, describeAge } from '$lib/components/series/coverage';
 import { fmtDay, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
 import { calibrationSample } from '$lib/components/calibration/sample';
+import { ewrNotMet } from '$lib/components/ewr/notMet';
 import { AGO_DAYS, LOW_PCT, type DamsToday } from './damLevels';
 
 export interface RunPick {
@@ -143,14 +144,15 @@ export function headlines(s: RunSummary, days: number, previous: RunSummary | nu
 			spec: { format: 'fraction', better: 'higher' }
 		});
 	} else {
+		const ewr = ewrNotMet(c, days);
 		out.push({
 			id: 'ewr',
-			term: 'EWR not met',
-			help: 'catchment.ewrFractionDaysNotMet',
-			value: fmtPct(c.ewrFractionDaysNotMet),
-			unit: 'of days',
-			sub: [`${fmtNum(c.ewrDaysNotMet)} of ${fmtNum(days)} days at the outflow gauge`],
-			flagged: c.ewrFractionDaysNotMet > 0.05,
+			term: ewr.term,
+			help: ewr.help,
+			value: ewr.value,
+			unit: ewr.unit,
+			sub: [ewr.count],
+			flagged: ewr.flagged,
 			// The pragmatic test runs on every run, so a previous run always has it
 			// (unless its headline was a rule table: then the two cards differ).
 			delta: previous && !headlineSite(previous) ? change(pc?.ewrFractionDaysNotMet, c.ewrFractionDaysNotMet) : null,
