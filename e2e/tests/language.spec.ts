@@ -10,6 +10,7 @@
 // The emails are covered by backend/src/auth/locale.db.test.ts and
 // farms/invites.db.test.ts (e2e mail goes to the server log), and the alert
 // email through Mailpit by alerts-mailpit.spec.ts.
+import { readFile } from 'node:fs/promises';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { acceptInvites, createRun, register, seedRunnableProject } from '../support/api.ts';
 import { words as siteWords } from '../support/lang.ts';
@@ -103,6 +104,14 @@ test('a farmer’s choice of language and unit is saved to the account; the farm
 	// No "written only in …" line: the notice is in the reader's language.
 	await expect(card).not.toContainText(words('The WUA wrote this notice in {language} only.').split('{language}')[0]!);
 	await expectNoViolations(page);
+
+	// The figures' CSV in Afrikaans (issue #124): the column names in the catalogue's words, and `;` between
+	// cells with a decimal comma, so Excel in af-ZA opens it in columns; whole m³, so no decimals at all.
+	const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: words('Download my figures (CSV)') }).click()]);
+	const lines = (await readFile((await csv.path())!, 'utf8')).replace(/^\uFEFF/, '').split('\r\n');
+	expect(lines[0]!.startsWith('# ')).toBe(true);
+	expect(lines[1]!.split(';').slice(0, 3)).toEqual([words('Date'), words('Water you needed (m³/day)'), words('Water you received (m³/day)')]);
+	expect(lines[2]).toMatch(/^\d{4}-\d{2}-\d{2}(;-?\d*)+$/);
 
 	// From the account now, not just this device: a fresh browser signed in as the farmer starts in Afrikaans and ML.
 	await page.context().clearCookies();

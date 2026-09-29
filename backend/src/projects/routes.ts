@@ -18,7 +18,7 @@ import { loadModel, saveModel } from '../model/store.js';
 import { hasTeamRole, requireTeamRole } from '../teams/access.js';
 import { requireRole, UUID, type Role } from './access.js';
 import { autoFitRecordError, dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, signOffChange } from './settings.js';
-import { TimeZone } from './timeZone.js';
+import { localDate, TimeZone } from './timeZone.js';
 import { resolveAutoRun } from '../runs/autoRun.js';
 import { checkOutcomeSite, resolveOutcomes } from './outcomeSettings.js';
 import { resolveOutlook } from './outlookSettings.js';
@@ -61,6 +61,8 @@ const summary = (r: ProjectRow) => ({
 	createdAt: r.created_at.toISOString(),
 	updatedAt: r.updated_at.toISOString(),
 	dataUntil: r.data_until,
+	// The project's calendar date (its time zone, 058): the list counts dataUntil's age to it, as the portfolio does.
+	today: localDate(new Date(), r.time_zone),
 	lastRunAt: r.last_run_at ? r.last_run_at.toISOString() : null,
 	publishedAt: r.published_at ? r.published_at.toISOString() : null
 });

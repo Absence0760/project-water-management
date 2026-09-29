@@ -27,7 +27,7 @@ test('a run shows the plausibility checks, with the other runoff model overlaid 
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${gr4j}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'GR4J run' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility checks' }).click();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility', exact: true }).click();
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByText(/^Five checks a reviewing hydrologist makes by hand\..*Dry season: .*, the six months with the lowest mean flow in the gauge record\.$/)).toBeVisible();
 	const results = panel.getByRole('list', { name: 'Check results' });

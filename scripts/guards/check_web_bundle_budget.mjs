@@ -1284,12 +1284,19 @@
 //             background job per fit, so the worker no longer carries
 //             autoCalibrate, the filters or the rule resolver; the panel
 //             follows the server's run instead. Headroom ~3 KB.
-// 2026-09-29  total 1186 → 1192 KB (issue #136: measured 1189 with main @
-//             3c68382c merged, against main's 1183). Every add by email is
-//             an invite that an existing account accepts: the invitations
-//             page (routes/account/invitations, its own chunk), the banner
-//             that counts waiting invitations (auth-extras/InvitesBanner,
-//             lazy, with its store) and their Afrikaans words in the af
+// 2026-09-29  total 1186 → 1190 KB (issue #137: measured 1187 with main @
+//             3c68382c merged, against main's 1183). The Water balance
+//             section in Model quality (runs/WaterBalanceTable.svelte, now
+//             drawn on the Runs page and not only inside Self-checks), the
+//             Other uses section on Units & supply with the Summary's link to
+//             it, and the project's-date helper the data-age badges count to.
+//             No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1190 → 1194 KB (issue #136: measured 1191 with main @
+//             0a9cc278 merged, #137 included). Every add by email is an
+//             invite that an existing account accepts: the invitations page
+//             (routes/account/invitations, its own chunk), the banner that
+//             counts waiting invitations (auth-extras/InvitesBanner, lazy,
+//             with its store) and their Afrikaans words in the af
 //             catalogue. The members, farmers and team panels lost their
 //             added-at-once branches. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
@@ -1302,7 +1309,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1192,
+	totalCodeKb: 1194,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

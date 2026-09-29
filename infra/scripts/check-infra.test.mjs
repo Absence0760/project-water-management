@@ -9,7 +9,7 @@
 // bash, git and node. No Terraform, no AWS.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -20,7 +20,9 @@ const BASH = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' }).
 const STALE_OVERRIDE = 'terraform {\n  backend "local" {}\n}\n';
 
 function setup() {
-	const dir = mkdtempSync(join(tmpdir(), 'check-infra-test-'));
+	// realpath: on macOS tmpdir() is under /var, a symlink to /private/var, and the
+	// fake terraform reports process.cwd(), which is always the resolved path.
+	const dir = realpathSync(mkdtempSync(join(tmpdir(), 'check-infra-test-')));
 	const repo = join(dir, 'repo');
 	mkdirSync(join(repo, 'bin'), { recursive: true });
 	mkdirSync(join(repo, 'infra', 'tests'), { recursive: true });

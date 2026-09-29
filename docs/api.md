@@ -263,7 +263,7 @@ alongside teams, e.g. to give an outside client `viewer` access.
 | POST | `/projects/import` | a project document (`ProjectFile`); query `teamId?`, `run=1?` | `201 { project, runId?, runError? }` (below) | – |
 | POST | `/projects/:id/copy` | `{ name }` | `201 { project }` (settings, model + series copied, the model with fresh ids in the same id order (so the copy runs exactly as the original) and each EWR rule table's `siteNodeId` moved to its node's new id; runs and notes not ([why](./data-model.md#notes-037_notessql)); stays in the team only if you're a member or admin of it, otherwise it's personal) | viewer |
 
-- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, lastRunAt, publishedAt }`
+- `ProjectSummary = { id, name, description, role, team, createdAt, updatedAt, dataUntil, today, lastRunAt, publishedAt }`
 - `GET /projects/outcomes` (issue #17) feeds the project list's outcome
   columns and its *Needs attention* strip: one `PortfolioProject` (the
   [portfolio](#portfolio)'s row, same fields and rules) per project you can
@@ -304,7 +304,10 @@ alongside teams, e.g. to give an outside client `viewer` access.
   ISO timestamp of the current publication ([§ Publication](#publication)), or
   `null` before any; every member sees it, farmers included. All three come
   from the same query as the list (no per-project calls), for the list's
-  freshness badge and its "published" hint.
+  freshness badge and its "published" hint. `today` — the project's
+  calendar date now (`YYYY-MM-DD`, in its `timeZone`, `projects/timeZone.ts`
+  `localDate`): the day the list counts `dataUntil`'s age to, the same day
+  the portfolio row's `today` is (issue #137).
 - `team = { id, name } | null` — `null` for a personal project. `name` is
   `null` when you reach a team's project through direct sharing but aren't in
   the team (team names are visible to members only).
@@ -2224,7 +2227,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
 | --- | --- | --- | --- |
 | GET | `/projects/:id/farm` | `FarmIndex = { project: { id, name, wuaName }, farms: { nodeId, name }[], publication: { publishedAt, restriction: { level } } \| null }`: a farmer's linked farms, every farm for viewer and above; `wuaName` is the project's (`null` = unnamed) | farmer |
 | GET | `/projects/:id/farm/:nodeId` | `FarmView = { project: { id, name, wuaName, timeZone }, today, farm: FarmProjection, context, publication, outlet30, stale, outlook }` (below) | farmer |
-| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)); the whole run by default, `from` / `to` narrow it (`400` outside the run, `413` past 5 MB) | farmer |
+| GET | `/projects/:id/farm/:nodeId/export.csv?from=&to=` | The farm's own daily CSV from the published run: `date` + the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`), the export CSV's rules ([Export](#export)), shaped for a farmer (issue #124): the header is those keys (the farm view's download words them in the reader's language and, for a decimal-comma language such as Afrikaans, writes `;` between cells, [ui.md § Farmer view](./ui.md#farmer-view-farm)), every figure is rounded to whole m³, and the window is the last 365 days to `dataUntil` by default; `from` reaches further back (to the run's first day) and `to` ends it earlier (`400` outside the run, `413` past 5 MB) | farmer |
 | GET | `/projects/:id/farm/:nodeId/series?key=&from=&to=` | `FarmSeries = { key, label, unit, startDate, values }`: one of the farm's own daily series from the published run, `key` one of the farm allowlist (`demand`, `supplied`, `deficit`, `dam_storage`, `spill`, `transfer`; any other `400`). The year to `dataUntil` by default (`from` = `to` − 364 days); `from` / `to` narrow it, clamped to the run's first day and to `dataUntil` (never into forecast days); `400` for a window outside the figures or over 3 653 days. `Cache-Control: no-store` | farmer |
 | GET | `/projects/:id/farm/:nodeId/history` | `{ publications: FarmHistoryEntry[] }`: the farm in the WUA's last 12 publications (the current one and the ones it superseded), newest first. `FarmHistoryEntry = { publishedAt, current, dataUntil, season: { from, to, demandM3, suppliedM3, fraction, shortDays }, damPct, model: { headline, band }, restriction: { level, pct } }`: the farm's own figures from each stored projection, never the even share (a catchment ratio) or the notice text | farmer |
 | GET | `/projects/:id/farm/:nodeId/access` | `{ people: { displayName, role, you }[] }`: "Who can see my hydrological unit", everyone who can read this farm's figures (its linked farmers, and every viewer-and-above member, direct or through the team, at their effective role), by name, **never an email** (`app_farm_access`, 022). `404` for anyone who can't open the farm | farmer |
@@ -2235,7 +2238,7 @@ infrastructure). The contract types are `FarmIndex` and `FarmView` in
   and `aboveBelowShareM3Day` are `null` when the viewer has fewer than
   `FARMER_K − 1` = 4 other holders (`app_other_farm_holders`, design §10.3
   D2; for a viewer previewing the farm, counted as that farm's own farmer
-  would count them, 096), and `cutBeyondShare` is `false` (it is measured against the even
+  would count them, 104), and `cutBeyondShare` is `false` (it is measured against the even
   share, so it would bound it); the stored projection keeps them.
   `farm.forecast = { from, to, days, madeOn, minDamPct, minDamDate,
   deficitDays, suppliedFraction }` only when the published run is a forecast

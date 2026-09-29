@@ -41,6 +41,28 @@ function firstDifference(a: readonly number[], b: readonly number[], n: number):
 }
 
 /**
+ * The first summary figure (by key) that differs between two runs, with both
+ * values cut to 300 characters, or null when every figure but `forecast`,
+ * `forecastRain` and `warnings` is the same. Names the key so a failure in CI,
+ * where only the message survives, says which figure moved.
+ */
+export function summaryDifference(a: ModelOutput, b: ModelOutput): string | null {
+	const skip = new Set(['forecast', 'forecastRain', 'warnings']);
+	const keys = new Set([...Object.keys(a.summary), ...Object.keys(b.summary)]);
+	for (const k of keys) {
+		if (skip.has(k)) continue;
+		const x = JSON.stringify((a.summary as unknown as Record<string, unknown>)[k]) ?? 'undefined';
+		const y = JSON.stringify((b.summary as unknown as Record<string, unknown>)[k]) ?? 'undefined';
+		if (x === y) continue;
+		let i = 0;
+		while (i < x.length && x[i] === y[i]) i++;
+		const cut = (v: string) => v.slice(Math.max(0, i - 100), i + 200).slice(0, 300);
+		return `summary.${k} differs from character ${i}: …${cut(x)} vs …${cut(y)}`;
+	}
+	return null;
+}
+
+/**
  * Forecast mode keeps history apart from the forecast:
  * - without a forecast tail, runForecastChecked is runModelChecked plus
  *   `forecastFrom: null` (a project without a forecast is unchanged);
@@ -96,8 +118,8 @@ export function checkForecastPrefix(input: ModelInput): string | null {
 		const t = firstDifference(s.values, f, cut);
 		if (t >= 0) return `prefix stability: ${s.nodeId}|${s.key} on ${fromEpochDay(toEpochDay(out.startDate) + t)}: ${s.values[t]} vs ${f[t]}`;
 	}
-	const strip = (o: ModelOutput) => JSON.stringify({ ...o.summary, forecast: undefined, forecastRain: undefined, warnings: undefined });
-	if (strip(out) !== strip(hist)) return 'prefix stability: the summaries differ';
+	const summaryDiff = summaryDifference(out, hist);
+	if (summaryDiff) return `prefix stability: the summaries differ: ${summaryDiff}`;
 	const extra = out.summary.warnings.filter((w) => !hist.summary.warnings.includes(w));
 	if (extra.some((w) => !w.startsWith('self-check failed on the run with the forecast tail'))) return `unexpected warnings: ${extra.join(' | ')}`;
 

@@ -467,6 +467,20 @@ export const af: Catalogue = {
 	'f8cd4d40': 'Damvlak aan die einde van elke maand, {from} tot {to}. Laagste {low} aan die einde van {lowMonth}, hoogste {high} aan die einde van {highMonth}, en {latest} op {to}. Die syfers is in die tabel hieronder.',
 	// Dam level at the end of each month, {from} to {to}. Lowest {low} at the end of {lowMonth}, highest {high} at the end of {highMonth}, and {latest} at the end of {to}. The numbers are in the table below.
 	'79af4301': 'Damvlak aan die einde van elke maand, {from} tot {to}. Laagste {low} aan die einde van {lowMonth}, hoogste {high} aan die einde van {highMonth}, en {latest} aan die einde van {to}. Die syfers is in die tabel hieronder.',
+	// Date
+	'3b527379': 'Datum',
+	// Water you needed (m³/day)
+	'921274b0': 'Water wat jy nodig gehad het (m³/dag)',
+	// Water you received (m³/day)
+	'58acb212': 'Water wat jy ontvang het (m³/dag)',
+	// Water you were short (m³/day)
+	'6c25f0ce': 'Water wat jy kortgekom het (m³/dag)',
+	// Water in your dam (m³)
+	'0ac8c1bf': 'Water in jou dam (m³)',
+	// Water that spilled from your dam (m³/day)
+	'e10b8ecd': 'Water wat uit jou dam oorgeloop het (m³/dag)',
+	// Water transferred in (+) or out (−) (m³/day)
+	'a3425379': 'Oorgedra water: in (+) of uit (−) (m³/dag)',
 	// no change
 	'547b9d7a': 'geen verandering',
 	// up {amount}

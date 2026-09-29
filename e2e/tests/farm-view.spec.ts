@@ -108,11 +108,18 @@ test('a farmer with one farm lands on it: the notice first, then their water and
 	await expect(monthsTable).not.toContainText('ML');
 	await expect.poll(async () => ((await (await page.request.get(`${API_URL}/auth/me`)).json()) as { user: { volumeUnit: string } }).user.volumeUnit).toBe('m3');
 
-	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table.
+	// The figures' CSV leads with the page's disclaimer line (docs/legal/disclaimer-review.md § 3), then the table:
+	// plain column names in the reader's language, whole m³, the last year (issue #124).
 	const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Download my figures (CSV)' }).click()]);
 	const lines = (await readFile((await csv.path())!, 'utf8')).replace(/^\uFEFF/, '').split('\r\n');
 	expect(lines[0]).toBe('# These figures are worked out by a computer model of the catchment. They are estimates, not measurements or instructions, and they can be wrong. Only a notice from your WUA or from the Department of Water and Sanitation (DWS) is a restriction.');
-	expect(lines[1]).toMatch(/^date,/);
+	expect(lines[1]).toBe(
+		'Date,Water you needed (m³/day),Water you received (m³/day),Water you were short (m³/day),Water in your dam (m³),Water that spilled from your dam (m³/day),Water transferred in (+) or out (−) (m³/day)'
+	);
+	const days = lines.slice(2).filter(Boolean);
+	expect(days.length).toBeGreaterThan(0);
+	expect(days.length).toBeLessThanOrEqual(365);
+	for (const d of days) expect(d).toMatch(/^\d{4}-\d{2}-\d{2}(,-?\d*)+$/);
 
 	// Why? and the dam page, and back.
 	await page.getByRole('link', { name: /^Why .*What can I do\?$/ }).click();
