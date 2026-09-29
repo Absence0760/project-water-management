@@ -51,12 +51,12 @@ const TABS: { id: string; ready: (page: Page) => Promise<void> }[] = [
 			await expect(p.locator('#res-curtailment').getByTestId('curtailment-period')).toBeVisible();
 		}
 	},
-	// The two farm dams' cards, the picked one's storage chart drawn, and the Dam levels table.
+	// The two farm dams' cards with their days at the minimum, and the picked one's storage chart drawn.
 	{
 		id: 'dams',
 		ready: async (p) => {
 			await expect(p.getByRole('region', { name: /^Storage: / }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
-			await expect(p.getByRole('region', { name: 'Dam levels' }).getByRole('rowheader')).toHaveCount(2);
+			await expect(p.getByRole('list', { name: 'Dams' }).getByTestId('dam-days-at-min')).toHaveCount(2);
 		}
 	},
 	// One seeded run, so the tab says there is nothing to compare yet.

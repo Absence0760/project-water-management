@@ -43,7 +43,7 @@ describe('outcomeRows', () => {
 		expect(notMet.base).toBeCloseTo(0.13);
 		expect(notMet.whatIfs.map((m) => m.b)).toEqual([expect.closeTo(0.166), expect.closeTo(0.139)]);
 		expect(notMet.whatIfs[0]!.delta).toBeCloseTo(0.036);
-		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'farmsBelow', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'deficit', 'farmsBelow', 'outflow', 'natural', 'runoffCoefficient']);
 	});
 
 	it('adds rows for the (at most two) farms most changed, matched on the baseline node, and never the calibration NSE', () => {
@@ -58,7 +58,7 @@ describe('outcomeRows', () => {
 		expect(farms[1]!.whatIfs[1]!.b).toBe(0.95);
 		// A what-if's fit to the real gauge is not an outcome of the what-if: Headline results → Calibration has it.
 		expect(rows.some((r) => r.id === 'nse')).toBe(false);
-		expect(rows.at(-1)!.id).toBe('outflow');
+		expect(rows.slice(-3).map((r) => r.id)).toEqual(['outflow', 'natural', 'runoffCoefficient']);
 	});
 });
 
@@ -125,7 +125,7 @@ describe('dam storage (issue #55 figures)', () => {
 			{ a: 0.6, b: 0.48, delta: -0.12 },
 			{ a: 0.6, b: 0.63, delta: 0.03 }
 		]);
-		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'farmsBelow', 'dams', 'outflow']);
+		expect(rows.map((r) => r.id)).toEqual(['ewrNotMet', 'supplied', 'deficit', 'farmsBelow', 'dams', 'outflow', 'natural', 'runoffCoefficient']);
 		const dams = rows.find((r) => r.id === 'dams')!;
 		expect(dams).toMatchObject({ label: 'Dam storage, end of run', unit: '% of capacity', base: 0.6, spec: { format: 'fraction', better: 'neutral' } });
 		expect(takeaways(rows, ['What-if 1', 'What-if 2'], ctx(2)).map((x) => x.text)).toEqual([

@@ -66,7 +66,7 @@
 	import SectionsMenu from '$lib/components/workspace/SectionsMenu.svelte';
 	import { headerSlot } from '$lib/components/workspace/headerSlot.svelte';
 	import { sectionContext } from '$lib/components/workspace/context';
-	import { GRID_TAB, isGridId, withParam, withoutParam } from '$lib/workspace/overlays';
+	import { GRID_TAB, isGridId, movedGridHref, withParam, withoutParam } from '$lib/workspace/overlays';
 	import {
 		ALL_TABS,
 		canOpenTab,
@@ -437,7 +437,12 @@
 		gridOpen = !!openGrid;
 	});
 	$effect(() => {
-		if (!gridOpen && untrack(() => gridParam)) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+		if (!gridOpen && untrack(() => gridParam) && !untrack(() => movedGridHref(page.url))) goto(withoutParam(page.url, 'grid'), { replaceState: true, noScroll: true, keepFocus: true });
+	});
+	// A grid that left the modal: its old link goes where the grid is now (grid=demand → Crops & demand's table, issue #174).
+	$effect(() => {
+		const moved = movedGridHref(page.url);
+		if (moved) void goto(moved, { replaceState: true, noScroll: true });
 	});
 
 	// Selecting a tab keeps focus/scroll and adds a history entry so Back works.
@@ -820,7 +825,6 @@
 								{runs}
 								{canEdit}
 								{isOwner}
-								{canSeeHistory}
 								currentUserId={session.user?.id ?? ''}
 								{onProjectChange}
 								{onLeftProject}

@@ -35,7 +35,6 @@
 
 	const crop = $derived(editor.model.crops.find((c) => c.id === cropId) ?? null);
 	const label = $derived(crop?.name || 'unnamed crop');
-	const mean = $derived(crop ? crop.cropFactor.reduce((s, f) => s + (f || 0), 0) / 12 : 0);
 	const high = $derived(crop ? WATER_YEAR_MONTHS.filter((_, i) => (crop.cropFactor[i] ?? 0) > 1) : []);
 	const plantedOn = $derived(
 		farms.flatMap((f) => {
@@ -80,7 +79,8 @@
 						</div>
 					{/each}
 				</div>
-				<p class="muted small">Mean {fmtNum(mean, 2)} · water year, October → September</p>
+				<!-- No mean factor: an unweighted 12-month average the b023 workbook doesn't have, which reads as more than it is (issue #174). -->
+				<p class="muted small">Water year, October → September</p>
 			</fieldset>
 			{#if high.length}
 				<p class="alert alert-warning small" role="status">

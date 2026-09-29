@@ -106,7 +106,7 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
-	// The Dam levels table lives on the Dams page; the Summary links there.
+	// Each dam's level lives on the Dams page's cards; the Summary links there.
 	const damsLink = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(damsLink).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);

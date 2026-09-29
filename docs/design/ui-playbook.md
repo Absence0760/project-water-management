@@ -99,6 +99,14 @@ section it belongs to, with the example that taught it.
   result. It was removed (2026-09-29). Before drawing a chart, name the user
   and the decision it serves, and check it shows something the inputs beside
   it don't.
+- **A page's first row is its own answer, not a digest of other tabs.**
+  The Project page opened with eight "The model" tiles, each repeating the
+  context line of the tab it links to, above the details and the team the
+  page is for. They moved to a panel at the foot of the left column
+  (2026-09-29, issue #176), still in the page's flow rather than behind a
+  disclosure: a fixed set of eight facts isn't a long list to fold, and the
+  Summary's old `#model-h` link still lands on them without opening
+  anything.
 - **Don't fit a first screen that has more below it.** The Summary was a
   fitted first screen (KPIs, reserve strip, Needs attention beside Supply by
   unit) with the alerts, published baseline, links and setup checklist
@@ -109,18 +117,18 @@ section it belongs to, with the example that taught it.
   the page, so a page whose main content continues below should not fit:
   let it flow with the window's one scroll, bound a long list by showing the worst few with a
   **Show all N** button (`aria-expanded`) that opens the rest in place (the
-  Summary's Supply by unit and the Dams page's Dam levels show eight), and
+  Summary's Supply by unit shows eight), and
   let the next card's top edge show inside the window
   (`overview.spec.ts` checks no Summary card scrolls and the alerts' heading is
   inside 1440×960 with thirty units). The Dams page had copied the same fit
   (cards scrolling in their column, Dam levels under the fold) and flows now
   too: three cards beside a fixed 420 px chart, **Show all N dams** under
-  them, the chart panel `position: sticky` so it stays beside an opened list
-  as the window scrolls, and the table's `.table-wrap` uncapped
-  (`max-height: none`) so it doesn't scroll in its box either. Two
-  disclosures on one page need different names: the table's became
-  **Show all N rows** (`dams-page.spec.ts` checks no element on the page
-  scrolls vertically inside itself, collapsed and opened, wide and phone).
+  them, and the chart panel `position: sticky` so it stays beside an opened
+  list as the window scrolls (`dams-page.spec.ts` checks no element on the
+  page scrolls vertically inside itself, collapsed and opened, wide and
+  phone). Two disclosures on one page need different names: while the Dams
+  page had a Dam levels table under its cards (until issue #175 merged it
+  into them), the table's button was **Show all N rows**.
 - **No reserved room below a page; no pointless scroll.** `.page` keeps a
   1rem gutter under its content, and the workspace adds the model save
   bar's height (`--dock-h`) only while the bar shows. Don't pad a page
@@ -475,8 +483,8 @@ section it belongs to, with the example that taught it.
     accessible name is the item, the caption and the numbers. A list of rows shows the caption once, as a
     column header over the sparklines (the Crops list), not in every row; a
     card shows its own (the Dams cards). The marked value is the same figure
-    the page gives elsewhere: the dam card's low is the Dam levels table's
-    *Lowest in its last year* to the day, so its line is each step's lowest
+    the page gives elsewhere: the dam card's low is the chart's facts line's
+    *lowest in its last year* to the day, so its line is each step's lowest
     real day, not a mean that smooths the low away. In a narrow card the
     mark takes its own line rather than being cut off.
   - **The guard** (`frontend/src/lib/chartLabels.test.ts`): every `<svg>` is

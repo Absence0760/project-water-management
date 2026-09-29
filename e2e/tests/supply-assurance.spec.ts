@@ -43,7 +43,14 @@ test('a run shows each farm’s reliability, the stress grid with class names, a
 	// The residual is float noise: printed to two significant figures, it is 0 or tiny.
 	const residual = table.getByRole('row').filter({ has: page.getByRole('rowheader', { name: 'Residual (in − out − change in storage)' }) });
 	for (const cell of await residual.getByRole('cell').all()) await expect(cell).toHaveText(/^(-?0(\.0)?|-?\d\.\de-\d+)$/);
-	// The outlet's EWR required vs met.
-	await expect(account.getByTestId('account-ewr').getByRole('rowheader')).toHaveText(['Outflow gauge (outlet)']);
 	await expect(account.getByTestId('account-bars')).toContainText('Natural flow');
+	// The outlet's EWR required vs met: under the EWR by month grid, with the compliance findings, not in the water
+	// account, whose balance it isn't part of (issue #175).
+	await expect(account.getByRole('heading', { name: /EWR required vs met/ })).toHaveCount(0);
+	const required = page.locator('#res-ewr-grid').getByRole('region', { name: 'EWR required vs met, each water year' });
+	const met = required.getByTestId('ewr-required-met');
+	await expect(met.getByRole('columnheader')).toHaveText(['Site', '2021/22', 'Whole run']);
+	await expect(met.getByRole('rowheader')).toHaveText(['Outflow gauge (outlet)']);
+	for (const cell of await met.getByRole('cell').all()) await expect(cell).toHaveText(/^\d+(\.\d)?% of [\d.\u202f]+ (m³|Mm³); [\d\u202f]+ days short$/);
+	await expect(required).toContainText('Met = the part of the requirement that passed the site');
 });

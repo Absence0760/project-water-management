@@ -223,10 +223,17 @@ test('on a wide screen "What the model uses" spans the page with the kinds in co
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const series = (await page.getByRole('region', { name: 'Input time series' }).boundingBox())!;
 	const usesRegion = page.getByRole('region', { name: 'What the model uses' });
+	// The kinds are behind a disclosure (issue #174); the closing note shows without it.
+	const terms = usesRegion.getByRole('term');
+	await expect(terms.first()).toBeHidden();
+	await expect(usesRegion.getByText(/^A run needs at least one rainfall series/)).toBeVisible();
+	const more = usesRegion.getByText('Show what each kind of series is for', { exact: true });
+	await more.click();
+	await expect(usesRegion.getByText('Hide what each kind of series is for', { exact: true })).toBeVisible();
+	await expect(terms.first()).toBeVisible();
 	const uses = (await usesRegion.boundingBox())!;
 	expect(Math.abs(uses.x - series.x)).toBeLessThan(2);
 	expect(Math.abs(uses.width - series.width)).toBeLessThan(2);
-	const terms = usesRegion.getByRole('term');
 	const first = (await terms.nth(0).boundingBox())!;
 	const second = (await terms.nth(1).boundingBox())!;
 	expect(Math.abs(first.y - second.y)).toBeLessThan(2);

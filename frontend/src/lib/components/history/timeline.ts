@@ -139,6 +139,8 @@ export function eventLine(e: Pick<HistoryEvent, 'kind' | 'subject'>): string {
 			return `Invited ${str(s.email)} as ${role(s.role)}`;
 		case 'invite.revoked':
 			return `Revoked the invite for ${str(s.email)}`;
+		case 'invite.declined':
+			return `The invite for ${str(s.email)} was declined`;
 		case 'publication.published': {
 			const r = (s.restriction ?? {}) as Record<string, unknown>;
 			const level = str(r.level);

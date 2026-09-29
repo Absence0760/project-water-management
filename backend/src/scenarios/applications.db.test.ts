@@ -400,7 +400,9 @@ describe('roles', () => {
 
 	it('lets an owner give and change the contributor role', async () => {
 		const u = await signUp('Latecomer');
-		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role: 'contributor' })).body.member.role).toBe('contributor');
+		expect((await owner.call('POST', `${P()}/members`, { email: u.email, role: 'contributor' })).body.invite.role).toBe('contributor');
+		// A member once they accepted (helpers.ts signUp accepts at once).
+		expect(await asOwner('SELECT role::text AS role FROM project_member WHERE project_id = $1 AND user_id = $2', [projectId, u.id])).toEqual([{ role: 'contributor' }]);
 		expect((await owner.call('PATCH', `${P()}/members/${u.id}`, { role: 'viewer' })).body.member.role).toBe('viewer');
 	});
 

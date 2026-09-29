@@ -31,7 +31,7 @@ describe('farmer emails in Afrikaans', () => {
 		expect(mail.html).toMatch(/<html lang="en">/);
 		expect(mail.text).toContain("You will see your own hydrological unit's water");
 		// The farms are joined with the catalogue's "and".
-		expect(mail.subject).toBe('[af] Ann has given you access to Hoek [af] and Rand in Kloof');
+		expect(mail.subject).toBe('[af] Ann invited you to see Hoek [af] and Rand in Kloof');
 	});
 
 	it('still escapes user-controlled names inside translated wording', () => {

@@ -188,8 +188,11 @@ test('a viewer reads the picked change and its differences, with no restore butt
 	await viewer.page.setViewportSize({ width: 1440, height: 960 });
 	// The inputs sections are behind "Show model inputs" for a viewer, but a History link still opens it.
 	await openHistory(viewer.page, p.id);
-	await expect(historyEntries(viewer.page).first()).toContainText('Added History page viewer as viewer');
-	await rowLink(viewer.page, 1).click();
+	// The newest event is their own: they joined by accepting the owner's invitation (issue #136).
+	await expect(historyEntries(viewer.page).first()).toContainText('History page viewer joined as viewer (accepted an invite)');
+	await expect(historyEntries(viewer.page).nth(1)).toContainText('Invited h•••@example.com as viewer');
+	// The newest model version, under the two membership events.
+	await rowLink(viewer.page, 2).click();
 	const diffs = historyDetail(viewer.page).getByTestId('history-differences');
 	await expect(diffs).toContainText('From the saved inputs now to this version.');
 	await expect(diffs).not.toContainText('restoring');

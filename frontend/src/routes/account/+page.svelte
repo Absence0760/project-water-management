@@ -328,6 +328,8 @@
 					<p class="status" role="status" aria-live="polite">{resumed ? t('Alert emails are back on.') : ''}</p>
 					<p class="muted intro">{t('Choose which alerts you get by email, and how often.')}</p>
 					<p class="link-row"><a class="btn" href="{base}/account/alerts">{t('Choose your alert emails')}</a></p>
+					<!-- Invitations to accept or decline (issue #136): an account joins nothing it hasn't accepted. -->
+					<p class="link-row"><a class="btn" href="{base}/account/invitations">{t('Your invitations')}</a></p>
 				</section>
 
 				<section class="panel" aria-labelledby="data-h">

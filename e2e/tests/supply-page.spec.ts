@@ -1,5 +1,5 @@
 // Units & supply (?tab=supply, issue #17 option A · Outcomes; docs/ui.md §
-// Units & supply): four tiles, a card per unit worst supplied first in the
+// Units & supply): three tiles, a card per unit worst supplied first in the
 // Summary's and the Network's supply bands, the picked unit's supply against
 // its demand (unit=<nodeId>), and the panels moved here from Runs & results
 // (the unit results table, curtailment, assurance of supply). Synthetic data
@@ -20,7 +20,7 @@ const innerScrollers = (page: Page) =>
 	);
 const pcts = (page: Page) => unitCards(page).evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.level .v')?.textContent ?? 'NaN')));
 
-test('four tiles, a card per hydrological unit worst supplied first in the Summary’s bands, and the tables that moved from Runs & results', async ({ page, owner }) => {
+test('three tiles, a card per hydrological unit worst supplied first in the Summary’s bands, and the tables that moved from Runs & results', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedSupplyProject(page.request, 'Supply cards');
@@ -33,13 +33,14 @@ test('four tiles, a card per hydrological unit worst supplied first in the Summa
 	await expect(page.getByTestId('supply-summary')).toHaveText(/^4 hydrological units · \d short in the week to 28 Jan 2022 · run “Baseline”, ran today$/);
 	await expect(page.getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
 
-	// The tiles: the Summary's irrigation supplied with its change (the same inputs, so no change), units below 95 %,
-	// short in the run's last 7 days (named by their last day, long past: issue #162; linking to the curtailment over
-	// them) and the total shortfall.
-	await expect(supplyTiles(page)).toHaveCount(4);
+	// The tiles: the Summary's irrigation supplied with the units below 95 % under it and its change (the same inputs,
+	// so no change; the units below were a tile of their own until issue #175), short in the run's last 7 days
+	// (named by their last day, long past: issue #162; linking to the curtailment over them) and the total shortfall.
+	await expect(supplyTiles(page)).toHaveCount(3);
+	await expect(page.locator('[data-kpi="below"]')).toHaveCount(0);
 	await expect(supplyTile(page, 'supplied')).toContainText(/Irrigation supplied\s*[\d.]+%\s*of demand/);
 	await expect(supplyTile(page, 'supplied')).toContainText(/0 pp\s*no change vs previous run/);
-	await expect(supplyTile(page, 'below')).toContainText(/Hydrological units below 95%\s*\d\s*of 4/);
+	await expect(supplyTile(page, 'supplied').getByTestId('supply-below')).toHaveText(/^(\d of 4 hydrological units below 95%|all hydrological units ≥ 95%)$/);
 	await expect(supplyTile(page, 'week')).toContainText('2022-01-22 to 2022-01-28');
 	await expect(supplyTile(page, 'week').getByRole('link', { name: 'Short in the week to 28 Jan 2022' })).toHaveAttribute('href', `?tab=supply&run=${run}&window=last7#res-curtailment`);
 	await expect(supplyTile(page, 'shortfall')).toContainText(/Total shortfall\s*[\d.]+\s*Mm³\/a/);
@@ -56,7 +57,7 @@ test('four tiles, a card per hydrological unit worst supplied first in the Summa
 	});
 	expect(bands[0]).not.toBe('met');
 	const below = shown.filter((p) => p < 95).length;
-	await expect(supplyTile(page, 'below').locator('.value')).toHaveText(new RegExp(`^${below}\\s*of 4$`));
+	await expect(supplyTile(page, 'supplied').getByTestId('supply-below')).toHaveText(below ? `${below} of 4 hydrological units below 95%` : 'all hydrological units ≥ 95%');
 	const first = unitCards(page).first();
 	await expect(first).toContainText(/below (95|70)%/);
 	await expect(first).toContainText(/Short [\d\u202f]+ m³\/day on average \([\d.]+ Mm³\/a\)/);
@@ -207,10 +208,9 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	await expect(windows.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
 	await expect(unitChart(page).getByRole('button', { name: 'm³/s' })).toHaveCount(0);
 
-	// Its dam: the storage chart, one click away.
-	await unitChart(page).getByRole('button', { name: 'Dam storage' }).click();
-	await expect(unitChart(page).getByRole('img', { name: /^Dam storage, % of capacity/ })).toBeVisible();
-	await expect(unitChart(page).getByRole('button', { name: 'Dam storage' })).toHaveAttribute('aria-pressed', 'true');
+	// Its dam: a link to its storage chart on the Dams page (issue #175 dropped this panel's weaker copy of it).
+	await expect(unitChart(page).getByRole('button', { name: 'Dam storage' })).toHaveCount(0);
+	await expect(unitChart(page).getByRole('link', { name: 'Dam storage on the Dams page' })).toHaveAttribute('href', `?tab=dams&dam=${upper.id as string}`);
 
 	// Back returns to the worst unit; a reload of a unit link opens it.
 	await page.goBack();
@@ -221,6 +221,12 @@ test('picking a hydrological unit charts its supply against demand, the link rou
 	// A unit the run doesn't have: the worst one instead.
 	await page.goto(`/projects/${project.id}?tab=supply&unit=nope`);
 	await expect(unitChart(page).getByRole('heading')).toHaveText(`Hydrological unit detail: ${firstName}`);
+
+	// The dam link opens that dam's storage chart on the Dams page.
+	await page.goto(`/projects/${project.id}?tab=supply&unit=${upper.id as string}`);
+	await unitChart(page).getByRole('link', { name: 'Dam storage on the Dams page' }).click();
+	await expect(page.getByRole('heading', { level: 1, name: 'Dams' })).toBeVisible();
+	await expect(page.getByRole('region', { name: /^Storage/ }).getByRole('heading')).toHaveText('Storage: Upper farm');
 });
 
 test('the run follows run= and the header picker; Runs & results links here for its run; old Runs anchors land here', async ({ page, owner }) => {

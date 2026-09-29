@@ -144,15 +144,30 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await allVols.click();
 	await expect(volRows).toHaveCount(41);
 	await expect(volumesCard(page).getByRole('button', { name: 'Show the first 8 registered volumes' })).toHaveAttribute('aria-expanded', 'true');
-	// Every unit's water years in the list's order (the first unit's first), twelve rows until "Show all".
+	// Every unit's water years in the list's order (the first unit's first), folded whole behind "Show all units'
+	// water years" (issue #175: the picked unit's table for every unit); the band note sits under the picked unit's.
 	const yearRows = page.getByTestId('allocation-compare-table').locator('tbody tr');
-	await expect(yearRows).toHaveCount(12);
-	await expect(yearRows.first().getByRole('rowheader')).toHaveText(firstName);
-	const allRows = page.getByRole('button', { name: 'Show all 108 rows' });
+	await expect(yearRows).toHaveCount(0);
+	await expect(detail(page).getByTestId('allocation-band-note')).toHaveText(/^“Within band” is within ±\d+ % of the registered volume\./);
+	const allRows = page.getByRole('button', { name: "Show all units' water years (108 rows)" });
 	await expect(allRows).toHaveAttribute('aria-controls', 'alloc-all-years');
+	await expect(allRows).toHaveAttribute('aria-expanded', 'false');
 	await allRows.click();
 	await expect(yearRows).toHaveCount(36 * 3);
-	await expect(page.getByRole('button', { name: 'Show the first 12 rows' })).toHaveAttribute('aria-expanded', 'true');
+	await expect(yearRows.first().getByRole('rowheader')).toHaveText(firstName);
+	// What the table carries, and which a fold must keep (issue #175): every unit's name, source and water year, the
+	// figures, and the band note.
+	await expect(page.getByTestId('allocation-compare-table').getByRole('columnheader')).toHaveText([
+		'Hydrological unit or user',
+		'Source',
+		'Water year',
+		'Registered (m³)',
+		/^Modelled use \(m³\)/,
+		'Modelled ÷ registered',
+		'Comparison'
+	]);
+	await expect(page.getByText(/^“Within band” is within ±\d+ % of the registered volume\./)).toHaveCount(1);
+	await expect(page.getByRole('button', { name: "Hide all units' water years" })).toHaveAttribute('aria-expanded', 'true');
 	// Every list open, still nothing scrolls inside itself, and no two buttons share a name.
 	expect(await innerScrollers(page)).toEqual([]);
 	const names = await page.locator('.allocations').getByRole('button').allInnerTexts();
@@ -181,6 +196,8 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expect(volumesCard(page).getByTestId('allocation-list').locator('tbody tr')).toHaveCount(8);
 	await volumesCard(page).getByRole('button', { name: 'Show all 41 registered volumes' }).click();
 	await expect(volumesCard(page).getByTestId('allocation-list').locator('tbody tr')).toHaveCount(41);
+	await page.getByRole('button', { name: "Show all units' water years (108 rows)" }).click();
+	await expect(page.getByTestId('allocation-compare-table').locator('tbody tr')).toHaveCount(108);
 	await expect(page.getByTestId('allocation-compare-table').locator('thead')).toBeHidden();
 	expect(await innerScrollers(page)).toEqual([]);
 	await expectNoSidewaysScroll(page);

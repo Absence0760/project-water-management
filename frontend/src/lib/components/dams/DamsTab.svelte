@@ -6,8 +6,10 @@
 	// links to its node on
 	// the Network and, for a farm's dam, the farm drawer) beside the picked
 	// dam's storage chart (`dam=<nodeId>`, 30 days / 1 year / All, % full or
-	// m³), then the Dam levels table, moved here from the Summary. The page
-	// flows in the window's one scroll: the emptiest few cards show, the rest
+	// m³). Each card also carries what the Dam levels table (moved here from
+	// the Summary, merged into the cards 2026-09-29, issue #175) listed: the
+	// lowest level in the run's last year (the sparkline's mark) and the days
+	// at the minimum operating level. The page flows in the window's one scroll: the emptiest few cards show, the rest
 	// behind "Show all N dams" (no card list scrolls inside itself), and on a
 	// wide page the chart sticks beside the cards as they are read down.
 	// Before a run the cards show each dam's capacity.
@@ -25,14 +27,13 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { forecastBand } from '$lib/components/forecast/forecast';
-	import { AGO_DAYS, capacityOver, damsInRun, damsToday, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
+	import { AGO_DAYS, capacityOver, damsInRun, levelBand, loadDamLevels, LOW_PCT, type DamLevel } from '$lib/components/overview/damLevels';
 	import { pickRuns, ranAgo } from '$lib/components/overview/latestRun';
 	import { FLOW_OPEN_DAYS, FLOW_WINDOWS } from '$lib/components/overview/summaryChart';
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import { fmtDay, fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import { withParam } from '$lib/workspace/overlays';
-	import DamLevels from './DamLevels.svelte';
 	import { foldList } from '$lib/components/common/fold';
 	import { changeWords, damCards, damsSummary, fmtVolume, pickDam, SPARK_CAPTION, storageChartSeries, storageSpark, type StorageUnit } from './dams';
 
@@ -153,7 +154,6 @@
 	const cards = $derived(damCards(editor.model.nodes, levels));
 	const damParam = $derived(page.url.searchParams.get('dam'));
 	const picked = $derived(pickDam(cards, damParam));
-	const total = $derived(damsToday(levels));
 	const runText = $derived(latest ? `latest run “${latest.label || 'Untitled run'}”, ran ${ranAgo(latest.createdAt)}` : null);
 	const summary = $derived(damsSummary(cards.length, cards.reduce((s, c) => s + c.capacityM3, 0), runText));
 	// The card's sparkline is its record's, as its figures are (issue #51): a forecast run's stops before the forecast.
@@ -164,6 +164,7 @@
 	/** Why a card has no level: before a run, while loading, or the run has no storage for it. */
 	function noLevel(): string {
 		if (!latest) return 'No run yet';
+		if (damsLoading && damsTotal) return `Loading dam levels (${damsDone} of ${damsTotal})…`;
 		if (runLoading || damsLoading) return 'Loading…';
 		if (runError || damsError) return 'Level couldn’t be loaded';
 		return 'Not in the latest run';
@@ -233,11 +234,6 @@
 		<div class="first" class:with-chart={!!latest}>
 			<section class="list" aria-labelledby="dam-cards-h">
 				<h3 id="dam-cards-h" class="visually-hidden">Each dam</h3>
-				{#if total}
-					<p class="all small" data-testid="dams-total">
-						All dams together: <strong>{pct(total.pct)} full</strong> on {fmtDay(total.endDate)}{#if total.change !== null}, {changeWords({ endPct: total.pct, agoPct: total.pct - total.change }, AGO_DAYS)!.text}{/if}
-					</p>
-				{/if}
 				<ul class="cards" id="dam-cards" aria-label="Dams">
 					{#each fold.shown as c (c.nodeId)}
 						{@const band = c.level ? levelBand(c.level) : null}
@@ -264,6 +260,11 @@
 								<p class="chg {chg?.dir ?? ''} small">
 									{#if chg}<span aria-hidden="true">{chg.dir === 'up' ? '▲' : chg.dir === 'down' ? '▼' : '■'}</span> {chg.text}{:else}under {AGO_DAYS} days in the run{/if}
 								</p>
+								{#if c.level.minPct > 0}
+									<p class="atmin small" data-testid="dam-days-at-min">
+										{fmtNum(c.level.daysAtMin)} day{c.level.daysAtMin === 1 ? '' : 's'} at its minimum ({pct(c.level.minPct)}) in its last year
+									</p>
+								{/if}
 								{#if spark}
 									<!-- Above the card's stretched link so pointing at the line reads it out; a click still picks the dam (the name is the keyboard's way). -->
 									<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -339,17 +340,6 @@
 			{/if}
 		</div>
 
-		{#if latest && run && damsTotal}
-			<DamLevels
-				runId={run.id}
-				{levels}
-				total={damsTotal}
-				done={damsDone}
-				loading={damsLoading}
-				error={damsError}
-				retry={() => damsAttempt++}
-			/>
-		{/if}
 	{/if}
 </div>
 
@@ -384,10 +374,6 @@
 		gap: 0.5rem;
 		min-width: 0;
 		min-height: 0;
-	}
-	.all {
-		margin: 0;
-		color: var(--text-2);
 	}
 	.cards {
 		list-style: none;
@@ -487,8 +473,12 @@
 		color: var(--success);
 	}
 	.chg,
+	.atmin,
 	.nolevel {
 		margin: 0;
+	}
+	.atmin {
+		color: var(--text-2);
 	}
 	.chg.flat {
 		color: var(--text-muted);

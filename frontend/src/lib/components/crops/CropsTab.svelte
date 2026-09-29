@@ -14,7 +14,7 @@
 	// grid modal (`grid=<id>`, lib/workspace/overlays.ts), which shows them
 	// through `sections` (CropGrids); scenario override mode shows all three
 	// inline the same way.
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import type { ProjectSettings } from '@water-management/engine';
@@ -24,7 +24,7 @@
 	import { fmtNum, fmtQty } from '$lib/format/number';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
+	import { DEMAND_TABLE_ID, withParam, withoutParam, type GridId } from '$lib/workspace/overlays';
 	import {
 		cropAreaTotals,
 		cropColouring,
@@ -141,7 +141,16 @@
 		ro.observe(document.body);
 		return () => ro.disconnect();
 	});
+	// A link to the table (`#crop-demand-table`: an old `grid=demand`, lib/workspace/overlays.ts) opens it and brings it into view.
 	let tableOpen = $state(false);
+	let tableEl: HTMLDetailsElement | undefined = $state();
+	$effect(() => {
+		if (!tableEl || untrack(() => page.url.hash) !== `#${DEMAND_TABLE_ID}`) return;
+		tableOpen = true;
+		// Once open (the layout grows to hold the table), bring it to the top of the window.
+		const el = tableEl;
+		void tick().then(() => el.scrollIntoView({ block: 'start' }));
+	});
 	// Narrower than 1100 px the list is capped (it scrolls in itself) until "Show all N crops".
 	const LIST_CAP = 6;
 	const listLen = $derived(rows.length + (otherRows.length ? 1 : 0));
@@ -167,8 +176,7 @@
 	// --- the Grids menu (as the Network's): each full grid in the grid modal ---
 	const GRID_LINKS: [GridId, string][] = [
 		['crop-factors', 'Crop factors'],
-		['planted-areas', 'Planted areas'],
-		['demand', 'Irrigation demand']
+		['planted-areas', 'Planted areas']
 	];
 	let gridsOpen = $state(false);
 	let gridsEl: HTMLDetailsElement | undefined = $state();
@@ -312,7 +320,7 @@
 						{:else if apanSet}
 							<p class="muted">No demand yet: add crops with their factors and each hydrological unit's planted area.</p>
 						{/if}
-						<details class="show-table" bind:open={tableOpen}>
+						<details class="show-table" id={DEMAND_TABLE_ID} bind:open={tableOpen} bind:this={tableEl}>
 							<summary class="btn btn-sm">{tableOpen ? 'Hide table' : 'Show table'}</summary>
 							<div class="table-body">
 								<DemandTable {farms} {demand} {settings} total={demandTotal} areaM2={totalM2} />

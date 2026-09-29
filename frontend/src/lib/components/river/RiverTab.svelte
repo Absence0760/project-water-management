@@ -1,14 +1,15 @@
 <script lang="ts">
 	// River & reserve (issue #17, option A · Outcomes): one run's river, for
 	// the run the URL names (`run=`) or else the newest (river.ts pickRiverRun).
-	// The page header and run picker, four KPI tiles (river.ts riverKpis), then
+	// The page header and run picker, three KPI tiles (river.ts riverKpis), then
 	// the flow against the EWR (the app's one flow vs reserve chart, with its
 	// 30 days / 1 year / All switch and the days below the reserve shaded; the
 	// Summary shows the days below by month and links here, issue #162) beside
 	// the days below the reserve per water year. The page flows in the window's
 	// one scroll (nothing is sized to the window, and no card or table scrolls
 	// inside itself); the chart has a fixed height. Below it, the panels that were Runs & results' River & Reserve group,
-	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month,
+	// moved unchanged with their `#res-…` ids: Reserve compliance, EWR by month
+	// (with the EWR required vs met per site and water year under its grid),
 	// the uncertainty bands (with the sensitivity runs under them), the outcome
 	// matrix, the seasonal outlook and the water account.
 	import { onDestroy, tick, untrack } from 'svelte';
@@ -21,6 +22,7 @@
 	import Delta from '$lib/components/compare/Delta.svelte';
 	import { runOptionLabel } from '$lib/components/compare/picker';
 	import EwrHeatmap from '$lib/components/ewr/EwrHeatmap.svelte';
+	import EwrRequiredMet from '$lib/components/ewr/EwrRequiredMet.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { runHref } from '$lib/components/overview/attention';
 	import { historyDays } from '$lib/components/overview/latestRun';
@@ -294,6 +296,8 @@
 					<h3>EWR compliance by month</h3>
 					<p class="muted">This run was made before the monthly EWR compliance grid existed. Run the model again to see it.</p>
 				{/if}
+				<!-- The volume side of compliance, per site and water year (the water account's tail until issue #175). -->
+				<EwrRequiredMet assurance={summary.supplyAssurance} />
 			</div>
 			<!-- The uncertainty bands (issue #4 phase 9) beside the EWR and Reserve findings they qualify, and under
 			     them the sensitivity runs (CR-21): the same question for the inputs the record can't settle. -->
@@ -348,15 +352,18 @@
 		gap: 1rem;
 		margin-bottom: 1rem;
 	}
-	/* Four tiles: one row, then 2 × 2 on narrow screens (the Summary's KPI row). */
+	/* Three tiles: one row, then two over one on narrow screens (the outflow across the row). */
 	.kpis {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		margin-bottom: 0.4rem;
 	}
 	@media (max-width: 760px) {
 		.kpis {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
+		}
+		.kpis > :last-child {
+			grid-column: 1 / -1;
 		}
 	}
 	.stat dt {

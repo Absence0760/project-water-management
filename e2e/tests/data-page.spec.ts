@@ -24,7 +24,7 @@ test('the series behind come first and are marked, the same count as the sidebar
 
 	// One title; the header counts the series and those behind, and carries Preview all data and the main action, Add data.
 	await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-	await expect(page.getByTestId('section-context')).toHaveText('5 input series · 2 behind');
+	await expect(page.getByTestId('section-context')).toHaveText('5 daily input series · 2 behind');
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(2 series behind)');
 	const header = page.getByTestId('section-header');
 	await expect(header.getByRole('button', { name: 'Preview all data' })).toBeVisible();
@@ -40,10 +40,14 @@ test('the series behind come first and are marked, the same count as the sidebar
 	await expect(seriesRow(page, 'Logger L1').getByTestId('series-behind')).toHaveCount(0);
 	await expect(seriesRow(page, 'Forecast F1').getByTestId('series-behind')).toHaveCount(0);
 	await expect(seriesRow(page, 'Logger L1')).toContainText('2 months ago');
-	await expect(page.getByTestId('series-summary')).toContainText('2 behind (more than 7 days old)');
+	// The list has no line of its own repeating the header's count and the rain pill (issue #174); its key says what behind means.
+	await expect(page.getByTestId('series-summary')).toHaveCount(0);
+	await expect(page.getByText('Behind a series a run reads, more than 7 days old.')).toBeVisible();
 
 	// Freshness first in the columns too: Data up to comes straight after the series.
-	await expect(seriesTable(page).getByRole('columnheader')).toHaveText(['Series', 'Data up to', 'Period', /^Missing/, /^Typical/, 'Coverage by year', 'Actions']);
+	await expect(seriesTable(page).getByRole('columnheader')).toHaveText(['Series', 'Data up to', 'From', /^Missing/, /^Typical/, 'Coverage by year', 'Actions']);
+	// From is the start date only: the end is Data up to's (issue #174).
+	await expect(seriesRows(page).nth(0).getByRole('cell').nth(1)).toHaveText(/^\d{4}-\d{2}-\d{2}$/);
 });
 
 test('picking a series charts it through the URL: Back returns to the one before, a shared link opens it, a stale one falls back', async ({ page, owner }) => {
@@ -103,7 +107,7 @@ test('with 30 series the table shows the first six, the rest under “Show all�
 	for (let i = 0; i < 5; i++) await expect(seriesRows(page).nth(i).getByTestId('series-behind')).toBeVisible();
 	await expect(seriesRows(page).nth(5)).toHaveClass(/selected/);
 	await expect(sections(page).getByRole('link', { name: /^Data/ })).toContainText('(5 series behind)');
-	await expect(page.getByTestId('series-summary')).toContainText('30 series');
+	await expect(page.getByTestId('section-context')).toHaveText('30 daily input series · 5 behind');
 	const more = page.getByRole('button', { name: 'Show all 30 series' });
 	await expect(more).toHaveAttribute('aria-expanded', 'false');
 	await expect(more).toHaveAttribute('aria-controls', 'series-rows');

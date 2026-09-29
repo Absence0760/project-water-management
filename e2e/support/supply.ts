@@ -39,15 +39,15 @@ export async function seedSupplyProject(request: APIRequestContext, name: string
 export async function openSupply(page: Page, projectId: string, query = '') {
 	await page.goto(`/projects/${projectId}?tab=supply${query}`);
 	await expect(page.getByRole('heading', { level: 1, name: 'Hydrological units' })).toBeVisible();
-	await expect(supplyTiles(page)).toHaveCount(4);
+	await expect(supplyTiles(page)).toHaveCount(3);
 	await expect(unitChart(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 }
 
-/** The page's four KPI tiles. */
+/** The page's three KPI tiles. */
 export const supplyTiles = (page: Page) => page.locator('dl.kpis > [data-kpi]');
 
 /** One tile by its data-kpi id. */
-export const supplyTile = (page: Page, id: 'supplied' | 'below' | 'week' | 'shortfall') => page.locator(`[data-kpi="${id}"]`);
+export const supplyTile = (page: Page, id: 'supplied' | 'week' | 'shortfall') => page.locator(`[data-kpi="${id}"]`);
 
 /** The unit cards, in page order. */
 export const unitCards = (page: Page) => page.getByRole('list', { name: 'Hydrological units' }).getByRole('listitem').filter({ has: page.locator('a.name') });

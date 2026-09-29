@@ -52,7 +52,7 @@ const SAFE_SCHEMES = new Set(['http', 'https', 'mailto', 'tel']);
 const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	// App URL builders: each returns "?tab=…", "#…" or "{base}/…" with its ids encoded (BUILDER).
 	withParam: { why: 'BUILDER: "?" + URLSearchParams of the current page', in: ['lib/components/allocations/AllocationsTab.svelte', 'lib/components/crops/CropsTab.svelte', 'lib/components/scenarios/ApplicantView.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/network/NetworkTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
-	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamLevels.svelte', 'lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
+	runHref: { why: 'BUILDER: "?tab=runs&run=" + encoded id', in: ['lib/components/dams/DamsTab.svelte', 'lib/components/overview/LatestRun.svelte', 'lib/components/overview/OverviewTab.svelte', 'lib/components/overview/PublishedBaseline.svelte', 'lib/components/river/RiverTab.svelte', 'lib/components/supply/SupplyTab.svelte', 'routes/projects/[id]/reports/[jobId]/+page.svelte'] },
 	riverHref: { why: 'BUILDER: "?tab=river…"', in: ['lib/components/runs/RunsTab.svelte'] },
 	supplyHref: { why: 'BUILDER: "?" + URLSearchParams', in: ['lib/components/runs/RunsTab.svelte', 'lib/components/supply/SupplyTab.svelte'] },
 	farmHref: { why: 'BUILDER: "{base}/farm/" + encoded project id; NodeCard: its `farmHref` prop, which NetworkTab builds with withParam', in: ['lib/components/network/NodeCard.svelte', 'routes/farm/+page.svelte', 'routes/farm/[projectId]/+page.svelte'] },
@@ -97,6 +97,7 @@ const REVIEWED: Record<string, { why: string; in: string[] }> = {
 	set: { why: 'landing Shot: `${base}/landing/screen-<name>-<light|dark>-<width>.<avif|webp>`, name a literal from Screens.svelte', in: ['lib/components/landing/Shot.svelte'] },
 	abs: { why: 'landing link-preview tags: new URL(`${base}` + a literal path, page.url).href, the page’s own origin', in: ['lib/components/landing/Landing.svelte'] },
 	// Objects built in code from the builders above.
+	'done.href': { why: 'the invitations page: `${base}/teams/`, `/farm/` or `/projects/` + the encoded id of what was joined', in: ['routes/account/invitations/+page.svelte'] },
 	'back.href': { why: 'FarmShell prop: callers pass `${base}/farm` or farmHref(…)', in: ['lib/components/farm/FarmShell.svelte'] },
 	'preview.href': { why: 'FarmShell prop: FarmPage builds `${base}/projects/<encoded id>?tab=network`', in: ['lib/components/farm/FarmShell.svelte'] },
 	'more.href': { why: 'SupplyByFarm / ReserveStrip prop: OverviewTab passes supplyHref / riverHref', in: ['lib/components/overview/ReserveStrip.svelte', 'lib/components/overview/SupplyByFarm.svelte'] },

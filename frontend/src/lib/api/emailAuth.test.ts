@@ -56,12 +56,12 @@ describe('emailAuthApi', () => {
 		expect(call(d)).toMatchObject({ url: '/projects/p1/invites/i1', method: 'DELETE' });
 	});
 
-	it('add returns either a member or an invite', async () => {
+	it('add returns the invite (always an invite, account or not: issue #136)', async () => {
 		const invite = { invited: true, invite: { id: 'i', email: 'new@b.c', role: 'viewer' } };
 		const r = await emailAuthApi(createApi('', mockFetch(201, invite))).projectInvites.add('p1', 'new@b.c', 'viewer');
-		expect(r.invited).toBe(true);
-		const m = await emailAuthApi(createApi('', mockFetch(201, { member: { userId: 'u' } }))).teamInvites.add('t', 'x@b.c', 'member');
-		expect(m.member).toEqual({ userId: 'u' });
+		expect(r).toEqual(invite);
+		const m = await emailAuthApi(createApi('', mockFetch(201, { ...invite, invite: { ...invite.invite, role: 'member' } }))).teamInvites.add('t', 'x@b.c', 'member');
+		expect(m.invite.role).toBe('member');
 	});
 });
 

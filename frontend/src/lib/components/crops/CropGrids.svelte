@@ -166,7 +166,6 @@
 					<tr>
 						<th scope="col" class="sticky">Crop</th>
 						{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}
-						<th scope="col" class="num">Mean</th>
 						{#if !readonly}<th scope="col"><span class="visually-hidden">Remove</span></th>{/if}
 					</tr>
 				</thead>
@@ -195,7 +194,6 @@
 									/>
 								</td>
 							{/each}
-							<td class="num muted mean"><span class="cell-label">Mean{' '}</span>{fmtNum(crop.cropFactor.reduce((s, f) => s + (f || 0), 0) / 12, 2)}</td>
 							{#if !readonly}
 								<td class="rm"><button type="button" class="btn btn-icon" aria-label="Remove {label}" title="Remove crop" onclick={() => remove(crop.id, label)}>✕</button></td>
 							{/if}
@@ -443,8 +441,7 @@
 		.factors tr {
 			grid-template-columns: repeat(4, minmax(0, 1fr));
 		}
-		.factors th[scope='row'],
-		.factors .mean {
+		.factors th[scope='row'] {
 			grid-column: 1 / -1;
 		}
 		.factors.editable th[scope='row'] {
@@ -471,7 +468,6 @@
 		.areas tfoot tr > * {
 			background: none;
 		}
-		.factors .mean .cell-label,
 		.areas .total .cell-label,
 		.areas tfoot .cell-label {
 			display: inline;

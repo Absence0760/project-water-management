@@ -1,6 +1,6 @@
 // The Dams page (issue #17, option A · Outcomes): a card per dam with how
 // full it was at the end of the latest run, its 30-day change and a storage
-// sparkline, one dam's storage chart, and the Dam levels table. The levels
+// sparkline, its days at the minimum level, and one dam's storage chart. The levels
 // themselves come from overview/damLevels.ts (shared with the Summary's Dams
 // today card and the Network's colour by dam level); this file turns them and
 // the model into the page's cards, header line, sparkline and chart series.
@@ -50,7 +50,7 @@ export function modelDams(nodes: readonly NodeLike[]): { nodeId: string; name: s
  * One card per dam in the model: those with levels first, in the levels'
  * order (emptiest first, `sortDamLevels`), then the rest in node order. A dam
  * the run has but the model no longer has (removed since) keeps its card, so
- * the cards always match the Dam levels table.
+ * the cards always match the run's levels.
  */
 export function damCards(nodes: readonly NodeLike[], levels: readonly DamLevel[]): DamCard[] {
 	const dams = modelDams(nodes);
@@ -99,7 +99,7 @@ export function changeWords(l: Pick<DamLevel, 'endPct' | 'agoPct'>, days: number
 export const SPARK_CAPTION = "% full over the run's last year";
 
 export interface StorageSpark {
-	/** % of capacity at each point (not clamped: the same figure as the Dam levels table). */
+	/** % of capacity at each point (not clamped: the same figure as the card's % full). */
 	values: number[];
 	/** Each point's place across the window, 0…1. */
 	x: number[];

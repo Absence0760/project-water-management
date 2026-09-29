@@ -155,6 +155,14 @@
 	$effect(() => {
 		const watched = ids;
 		let frame = 0;
+		// The URL's fragment, the section a followed link named (a malformed one names none).
+		const fragment = () => {
+			try {
+				return decodeURIComponent(location.hash.slice(1)) || null;
+			} catch {
+				return null;
+			}
+		};
 		const update = () => {
 			frame = 0;
 			const root = document.documentElement;
@@ -164,7 +172,7 @@
 				const el = document.getElementById(id);
 				return el ? [{ id, top: el.getBoundingClientRect().top }] : [];
 			});
-			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2);
+			activeSection = activeSectionId(tops, line, window.innerHeight + window.scrollY >= root.scrollHeight - 2, fragment(), window.innerHeight);
 		};
 		const schedule = () => {
 			if (!frame) frame = requestAnimationFrame(update);

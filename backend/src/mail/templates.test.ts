@@ -136,8 +136,8 @@ describe('farmer invite email (WP-2.2)', () => {
 
 	it('says who gave access to which farms in which catchment, with the sign-up link', () => {
 		const mail = farmerInviteMail('farmer@example.com', url, 'Wua Manager', { catchment: 'Sandspruit', farms: ['Vaalbank', 'Rustenvrede'] });
-		expect(mail.subject).toBe('Wua Manager has given you access to Vaalbank and Rustenvrede in Sandspruit');
-		expect(mail.text).toContain('Wua Manager has given you access to Vaalbank and Rustenvrede in Sandspruit.');
+		expect(mail.subject).toBe('Wua Manager invited you to see Vaalbank and Rustenvrede in Sandspruit');
+		expect(mail.text).toContain('Wua Manager invited you to see Vaalbank and Rustenvrede in Sandspruit.');
 		expect(mail.text).toContain(`Create account and accept: ${url}`);
 		expect(mail.text).toMatch(/7 days/);
 		expect(mail.html).toContain(`href="${url}"`);

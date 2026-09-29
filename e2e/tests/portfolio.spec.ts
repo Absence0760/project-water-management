@@ -4,7 +4,7 @@
 // in. axe in both themes, at desktop and phone width.
 import type { APIRequestContext, Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
-import { createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
+import { acceptInvites, createProject, createRun, putModel, seedRunnableProject } from '../support/api.ts';
 import { API_URL } from '../support/env.ts';
 import { DEMO, DROEVLEI, KLEINBERG, SANDSPRUIT, seedExamplesOnce } from '../support/examples.ts';
 import { expect, test } from '../support/fixtures.ts';
@@ -204,6 +204,7 @@ test('a farmer on a team catchment is sent to their farm, never the portfolio', 
 	const farmer = await signIn('Portfolio farmer');
 	const add = await page.request.post(`${API_URL}/projects/${a.published.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [a.farmId] } });
 	expect(add.status(), await add.text()).toBe(201);
+	await acceptInvites(farmer.user.email, a.published.id);
 	expect((await farmer.page.request.get(`${API_URL}/teams/${a.team.id}/portfolio`)).status()).toBe(404);
 	await farmer.page.goto(`/teams/${a.team.id}/portfolio`);
 	await expect(farmer.page).toHaveURL(new RegExp(`/farm/${a.published.id}`));
