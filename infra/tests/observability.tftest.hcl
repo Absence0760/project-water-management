@@ -721,7 +721,7 @@ run "renderer_throttles_alarm_once_it_exists" {
   command = plan
 
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {

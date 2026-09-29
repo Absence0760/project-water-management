@@ -611,7 +611,7 @@ run "lambda_json_logs" {
 
   # The renderer exists only once its image is tagged (reports.tf).
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {
@@ -688,6 +688,9 @@ run "metric_filters_read_json_logs" {
           aws_cloudwatch_log_metric_filter.unhandled_error.pattern,
           aws_cloudwatch_log_metric_filter.login_failed.pattern,
           aws_cloudwatch_log_metric_filter.job_dead.pattern,
+          aws_cloudwatch_log_metric_filter.feed_fetch_failed.pattern,
+          aws_cloudwatch_log_metric_filter.report_render_failed.pattern,
+          aws_cloudwatch_log_metric_filter.origin_secret_rejected.pattern,
         ],
         [for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern],
       ) : can(regex("^\\{ \\$\\.message\\.event = \"[a-z_]+\" \\}$", p))
@@ -702,6 +705,9 @@ run "metric_filters_read_json_logs" {
       aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.message.event = \"unhandled_error\" }" &&
       aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.message.event = \"login_failed\" }" &&
       aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.message.event = \"job_dead\" }" &&
+      aws_cloudwatch_log_metric_filter.feed_fetch_failed.pattern == "{ $.message.event = \"feed_fetch_failed\" }" &&
+      aws_cloudwatch_log_metric_filter.report_render_failed.pattern == "{ $.message.event = \"report_render_failed\" }" &&
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected.pattern == "{ $.message.event = \"origin_secret_rejected\" }" &&
       alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.message.event = \"mail_send_failed\" }"])
     )
     error_message = "Each filter matches the event name its backend line logs (logEvent callers in backend/src)."
@@ -714,7 +720,8 @@ run "metric_filters_read_json_logs" {
       aws_cloudwatch_log_metric_filter.self_check_failed_worker.log_group_name == aws_cloudwatch_log_group.worker.name &&
       aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
       aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name
+      aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name &&
+      aws_cloudwatch_log_metric_filter.origin_secret_rejected.log_group_name == aws_cloudwatch_log_group.lambda.name
     )
     error_message = "A metric filter reads the wrong log group."
   }
