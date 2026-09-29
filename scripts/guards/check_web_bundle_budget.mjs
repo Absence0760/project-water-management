@@ -1166,7 +1166,17 @@
 //             Settings tab's Registered volumes fields, the Allocations tab's
 //             licence conditions and mode note, and two help entries. No new
 //             dependency. Headroom ~3 KB.
-@@MINE@@
+// 2026-09-29  total 1101 → 1114 KB (measured 1110 with main merged in; the
+//             branch added 11 KB over main before the merge, 1090 → 1101).
+//             Issue #53's remaining planning outputs: the impact report's
+//             licence-impact board by year class (R7: the engine's
+//             licenceImpact view, the board and its view model, in the
+//             impact section's lazy chunk), the seasonal outlook's review
+//             trigger table and publish-to-farmers controls (R6, R5; the
+//             outlook panel's lazy chunk), the review-date setting, and the
+//             farm page's "This season" card with its Afrikaans (E3). Every
+//             piece already sits in a lazy chunk, so a further split would
+//             only move bytes. No new dependency. Headroom ~4 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1177,7 +1187,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1101,
+	totalCodeKb: 1114,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 32,
