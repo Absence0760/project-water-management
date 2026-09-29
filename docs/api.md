@@ -356,9 +356,22 @@ alongside teams, e.g. to give an outside client `viewer` access.
   `PATCH` validates the known fields: e.g. `simulationStart/End` and
   `calibrationStart/End` are `YYYY-MM-DD` or `null` (a `null` simulation end follows the rain record, [model.md § 2.1](./model.md#21-pipeline)), and
   `calibrationFlowKind` is `flow_observed_m3s | flow_logger_m3s | null`
-  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (gauge-vs-logger thresholds) takes
+  (`flow_pitman_m3s` was removed in engine 0.10.0). `dataQuality` (the data-check limits) takes
   `agreementMinRatio` (0 < r ≤ 1), `agreementMaxRatio` (1–100) and
-  `agreementMinDays` (whole days, 1–366); any subset may be sent.
+  `agreementMinDays` (whole days, 1–366), and (engine ≥ 1.20.0, issue #66)
+  `outlierFactorRain` / `outlierFactorFlow` (above 1, at most 1000),
+  `flatlineRainDays`, `flatlineEvapDays`, `flatlineFlowMinDays`,
+  `flatlineFlowMaxDays` (whole days 2–366), `zeroRunRule` (`wetDays` |
+  `usualRain`), `zeroRunMinWetDays` and `zeroRunMinDays` (whole days 1–366),
+  `zeroRunUsualShare` (0 < s ≤ 1), `zeroRunChirpsCheck` (boolean),
+  `lowVsChirpsRatio` (0 < r < 1), `lowVsChirpsBaseline` (`record` |
+  `moving`) and `lowVsChirpsMinimum` (`fixed` | `scaled`); any subset may be
+  sent. A patch that leaves `flatlineFlowMaxDays` below
+  `flatlineFlowMinDays` (after merging over the stored values) is a `400`.
+  `GET` fills a field the stored settings lack with its default
+  ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+  A fit record's `forcing.rainChecks` (optional) holds the zero-run and
+  low-vs-CHIRPS fields it ran under.
   `runoffModel` records the rain → natural-flow model: `gr4j` (model.md
   §2.4a) is the only value, since engine 1.0.0 removed the legacy b023
   recession model (issue #16). `legacy` is a `400`, "the legacy runoff model
@@ -1511,7 +1524,10 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   used), `seriesChecks` (`{ seriesKind, check: 'negative' | 'outlier' |
   'flatline' | 'zerorun' | 'lowvschirps' | 'doublemass', days, examples: [{ date, value,
   runDays?, endDate? }], text }[]`; `zerorun` and `lowvschirps`, engine ≥ 0.5.2, are the
-  catchment-rain checks of issue #2; `doublemass`, engine ≥ 0.18.0, lists
+  catchment-rain checks of issue #2, under the project's `settings.dataQuality`
+  limits (engine ≥ 1.20.0; with `zeroRunChirpsCheck` a `zerorun` check can
+  have `days: 0` and no examples when CHIRPS reads every long zero run as
+  dry, so it only lists them); `doublemass`, engine ≥ 0.18.0, lists
   double-mass breaks against CHIRPS, one example per break: the next
   segment's first and last day, its slope ÷ the one before, its shared days),
   `areaMismatches` (`{ nodeId, name, areaKm2, hiLoKm2, difference }[]`, farms

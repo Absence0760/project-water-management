@@ -266,14 +266,17 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	// periods whose catchment rain comes from another series × monthly
 	// factors. Their primary reading is left out of every fit and of the
 	// zero-run handling, and replaced after the accumulations are applied.
-	const doubleMass = doubleMassOf(series, settings.zeroRainRuns);
+	// settings.dataQuality (engine ≥ 1.20.0): its zero-run and low-vs-CHIRPS limits decide which rain is suspect, everywhere below.
+	const dq = settings.dataQuality;
+	const checks = { dq, chirps: series.rain_chirps_mm ?? null };
+	const doubleMass = doubleMassOf(series, settings.zeroRainRuns, dq);
 	const replaced = rainSourceSpans(settings.rainSource);
 	const isReplaced = (day: number) => replaced.some((w) => day >= w.from && day <= w.to);
-	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}) };
+	const fitOpts = { fitPeriod: settings.chirpsFitPeriod, ...(replaced.length ? { replaced } : {}), dq };
 	const acc = rainAccumulations(series, settings.zeroRainRuns, settings.chirpsBiasCorrection, fitOpts);
 	const claimed = new Set<number>();
 	for (const w of acc?.windows ?? []) if (claimsDays(w.status)) for (let d = w.from; d <= w.to; d++) claimed.add(d);
-	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced);
+	const zeroRain = zeroRainMask(series.rain_catchment_mm, settings.zeroRainRuns, start, days, (day) => claimed.has(day), isReplaced, checks);
 	const pinned = options.pinned;
 	// A pinned fit (a resumed run) stands in for the input's own; without a CHIRPS series there is nothing to correct.
 	const chirpsCorrection =
@@ -284,7 +287,7 @@ function alignToWindow(settings: ProjectSettings, series: ModelInput['series'], 
 	if (acc) spreadAccumulations(acc, series.rain_chirps_mm, chirpsCorrection);
 	const catchment = blankMasked(alignSeries(series.rain_catchment_mm, start, days), zeroRain);
 	const accumulation = acc ? applyAccumulations(acc, catchment, start) : null;
-	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc)) : [];
+	const rsFactors = settings.rainSource.length ? rainSourceFactors(series, settings.rainSource, settings.zeroRainRuns, fitExcludedWindows(acc), dq) : [];
 	const rsKeys = options.pinned || options.captureFits ? settings.rainSource.map((p) => stableStringify(p)) : [];
 	if (pinned) {
 		rsKeys.forEach((key, k) => {

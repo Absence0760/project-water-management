@@ -1,7 +1,7 @@
 // CHIRPS fallback bias correction (audit B1). All fixtures are synthetic.
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, type Monthly } from './calendar';
-import type { DailySeries, ModelInput, NetworkNode, SeriesKind, ZeroRainSettings } from './project';
+import { defaultDataQualitySettings, type DailySeries, type ModelInput, type NetworkNode, type SeriesKind, type ZeroRainSettings } from './project';
 import {
 	applyChirpsCorrection,
 	CHIRPS_FACTOR_MAX,
@@ -608,6 +608,52 @@ describe('zero-rain runs treated as missing (CR-20, B2)', () => {
 		expect(m.mask.reduce((a, b) => a + b, 0)).toBe(92);
 	});
 });
+
+describe('data-quality limits decide which zero runs a run fills (settings.dataQuality, engine 1.20.0, issue #66)', () => {
+	const dq = defaultDataQualitySettings();
+	const filledDays = (input: ModelInput) => runModel(input).summary.zeroRainInfill!.days;
+
+	it('a higher wet-season minimum leaves the run as recorded; the default fills it', () => {
+		const wet = zeroRainRuns(zeroRunInput().series.rain_catchment_mm!).runs[0]!.wetDays;
+		expect(filledDays(zeroRunInput())).toBe(RUN_N);
+		expect(filledDays(zeroRunInput({ dataQuality: { ...dq, zeroRunMinWetDays: wet } }))).toBe(RUN_N);
+		expect(filledDays(zeroRunInput({ dataQuality: { ...dq, zeroRunMinWetDays: wet + 1 } }))).toBe(0);
+	});
+
+	it('with the CHIRPS check on, fills a run CHIRPS saw rain over and keeps one CHIRPS reads as dry, saying why', () => {
+		const on = { dataQuality: { ...dq, zeroRunChirpsCheck: true } };
+		// The fixture's CHIRPS rains through the run: probably missing data, filled as before.
+		expect(filledDays(zeroRunInput(on))).toBe(RUN_N);
+		// CHIRPS dry over the run too: a dry spell that may be real, run as recorded.
+		const dry = zeroRunInput(on);
+		for (const i of runDays) dry.series.rain_chirps_mm!.values[i] = 0;
+		const out = runModel(dry);
+		expect(checkInvariants(dry, out)).toBeNull();
+		expect(out.summary.zeroRainInfill!.days).toBe(0);
+		expect(runDays.every((i) => get(out, null, 'rain_used')[i] === 0)).toBe(true);
+		const check = out.summary.dataQuality!.seriesChecks!.find((c) => c.check === 'zerorun')!;
+		expect(check.days).toBe(0);
+		expect(check.text).toMatch(/1 run CHIRPS also reads as dry .* is not flagged, a long dry spell that may be real/);
+		// Negative control: the same series with the check off fills the run, as today.
+		const off = zeroRunInput();
+		for (const i of runDays) off.series.rain_chirps_mm!.values[i] = 0;
+		expect(runModel(off).summary.zeroRainInfill!.periods.find((p) => p.source === 'flagged')?.start).toBe(RUN_FROM);
+	});
+
+	it('the CHIRPS fit leaves out what the limits flag: the low-vs-CHIRPS ratio decides the years, the zero-run rule the days', () => {
+		const fit = (over: ModelInput['settings']) => runModel(zeroRunInput(over)).summary.chirpsCorrection!;
+		// By default the run's water year reads far below CHIRPS and is left out whole.
+		const base = fit({});
+		expect(base.lowVsChirpsYears!.length).toBeGreaterThan(0);
+		// A stricter ratio keeps the year; the flagged run's days are then left out one by one.
+		const strict = fit({ dataQuality: { ...dq, lowVsChirpsRatio: 0.01 } });
+		expect(strict.lowVsChirpsYears).toEqual([]);
+		expect(strict.flaggedDaysLeftOut).toBe(RUN_N);
+		// … unless the zero-run rule no longer flags the run.
+		expect(fit({ dataQuality: { ...dq, lowVsChirpsRatio: 0.01, zeroRunMinWetDays: 366 } }).flaggedDaysLeftOut).toBe(0);
+	});
+});
+
 
 describe('resolveZeroRain', () => {
 	it('defaults to treating flagged runs as missing, and drops what it cannot use with a warning', () => {

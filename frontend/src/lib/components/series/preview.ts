@@ -18,6 +18,7 @@ import {
 	fromEpochDay,
 	prepareRun,
 	SERIES_KINDS,
+	resolveDataQuality,
 	seriesRowFlags,
 	toEpochDay,
 	type DailySeries,
@@ -213,10 +214,12 @@ export function buildPreviewRows(list: readonly SeriesMeta[], valuesById: Readon
 		maxDay = Math.max(maxDay, d0 + d.values.length - 1);
 	}
 
+	// The project's data-quality limits (engine ≥ 1.20.0), as a run applies them.
+	const dq = resolveDataQuality(settings.dataQuality);
 	const flagsById = new Map<string, ReturnType<typeof seriesRowFlags> | null>();
 	for (const s of withData) {
 		const d = valuesById[s.id]!;
-		flagsById.set(s.id, (SERIES_KINDS as readonly string[]).includes(s.kind) ? seriesRowFlags(s.kind as SeriesKind, d) : null);
+		flagsById.set(s.id, (SERIES_KINDS as readonly string[]).includes(s.kind) ? seriesRowFlags(s.kind as SeriesKind, d, dq) : null);
 	}
 
 	const derivedByDate = buildDerivedByDate(list, valuesById, settings);
