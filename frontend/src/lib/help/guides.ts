@@ -5,6 +5,7 @@
 //
 // Inline text markup, parsed by `inline()` (no HTML, so nothing is {@html}):
 //   **Save**                 a UI label, shown in bold
+//   *Outcomes*               a section or a word to stress, in italics
 //   [[ewr]]                  link to a glossary entry, labelled with its term
 //   [[ewr|the Reserve]]      the same, with its own label
 //   [[guide:add-data|label]] link to another guide
@@ -1185,13 +1186,14 @@ export function sectionId(heading: string): string {
 export type InlinePart =
 	| { kind: 'text'; text: string }
 	| { kind: 'strong'; text: string }
+	| { kind: 'em'; text: string }
 	/** A glossary entry (`id`) or a guide (`guide`), with its label. */
 	| { kind: 'term'; id: string; text: string }
 	| { kind: 'guide'; id: string; text: string }
 	/** A reference that doesn't resolve: shown as plain text (and failed by the tests). */
 	| { kind: 'broken'; ref: string; text: string };
 
-const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+const INLINE = /\*\*(.+?)\*\*|\[\[([^\]|]+)(?:\|([^\]]+))?\]\]|\*([^*\s](?:[^*]*[^*\s])?)\*/g;
 
 /**
  * A glossary term as it reads mid-sentence: an ordinary capitalised first
@@ -1203,7 +1205,7 @@ export function inSentence(term: string): string {
 	return /^[A-Z][a-z]+(?![-\w])/.test(term) ? term[0]!.toLowerCase() + term.slice(1) : term;
 }
 
-/** Splits guide text into plain text, bold UI labels and links. */
+/** Splits guide text into plain text, bold UI labels, italics and links. */
 export function inline(text: string): InlinePart[] {
 	const out: InlinePart[] = [];
 	let last = 0;
@@ -1212,6 +1214,10 @@ export function inline(text: string): InlinePart[] {
 		last = m.index + m[0].length;
 		if (m[1] !== undefined) {
 			out.push({ kind: 'strong', text: m[1] });
+			continue;
+		}
+		if (m[4] !== undefined) {
+			out.push({ kind: 'em', text: m[4] });
 			continue;
 		}
 		const ref = m[2]!.trim();

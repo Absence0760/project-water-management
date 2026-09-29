@@ -137,7 +137,7 @@
 						<Diagram id={b.id} caption={b.caption} />
 					{:else if b.type === 'picture'}
 						<figure class="picture">
-							<figcaption>{b.caption}</figcaption>
+							<figcaption><RichText text={b.caption} /></figcaption>
 							<PictureTour shot={b.shot} stops={b.stops} sizes="(min-width: 64rem) 46rem, 100vw" />
 						</figure>
 					{/if}

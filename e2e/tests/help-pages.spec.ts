@@ -16,6 +16,15 @@ test('a guide heads its page with a breadcrumb back to help', async ({ page, own
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText(['Add a transfer']);
 });
 
+test('a figure caption shows its bold and italic labels, never the markup', async ({ page, owner }) => {
+	void owner;
+	await page.goto('/help/guides/the-whole-process');
+	const caption = page.locator('figure[data-diagram="workflow"] figcaption');
+	await expect(caption).toContainText('The setup order follows the workspace’s Build the model section');
+	await expect(caption.locator('strong')).toHaveText(['Build the model', 'Outcomes']);
+	await expect(caption).not.toContainText('*');
+});
+
 const SUBPAGES = [
 	{ path: '/help/glossary', title: 'Glossary', crumbs: ['Help', 'Reference', 'Glossary'] },
 	{ path: '/help/search?q=dam', title: 'Search help', crumbs: ['Help', 'Search'] },
