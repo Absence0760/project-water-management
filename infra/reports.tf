@@ -226,24 +226,48 @@ resource "aws_ecr_repository" "renderer" {
 }
 
 # Keep the last 10 images (a rollback reaches back ten releases); an untagged
-# layer left by a failed push goes after a day.
+# layer left by a failed push goes after a day; and never expire the image
+# renderer_image_tag names. That tag is the one the function is created from,
+# and it stays in the tfvars after later releases move the function on, so
+# without rule 2 it would age out after ten more releases and any later
+# re-create of the function (a replacement, a restore into a new stack) would
+# fail on a missing image.
+#
+# How ECR applies these (docs.aws.amazon.com/AmazonECR/latest/userguide/
+# LifecyclePolicies.html, "Lifecycle policy evaluation rules"): a lower
+# rulePriority wins, an image is expired by at most one rule, and "an image
+# that matches the tagging requirements of a rule cannot be expired by a rule
+# with a lower priority". Rule 2 selects only the pinned tag (a
+# tagPatternList with no wildcard matches that tag exactly; a tag carries no
+# `*`, the variable's validation guarantees it) and expires only past one
+# such image, which can't happen with one immutable tag: so it keeps the
+# pinned image forever and rule 3 can never expire it. Rule 3 still counts it
+# among its 10 (lower rules "can still identify" a higher rule's images), so
+# at worst nine other releases are kept beside it. After changing
+# renderer_image_tag, apply: the protection moves with it.
 resource "aws_ecr_lifecycle_policy" "renderer" {
   repository = aws_ecr_repository.renderer.name
   policy = jsonencode({
-    rules = [
-      {
+    rules = concat(
+      [{
         rulePriority = 1
         description  = "Expire untagged images after a day"
         selection    = { tagStatus = "untagged", countType = "sinceImagePushed", countUnit = "days", countNumber = 1 }
         action       = { type = "expire" }
-      },
-      {
+      }],
+      local.renderer_enabled ? [{
         rulePriority = 2
+        description  = "Keep the image renderer_image_tag pins (the function is created from it)"
+        selection    = { tagStatus = "tagged", tagPatternList = [var.renderer_image_tag], countType = "imageCountMoreThan", countNumber = 1 }
+        action       = { type = "expire" }
+      }] : [],
+      [{
+        rulePriority = 3
         description  = "Keep the last 10 release images"
         selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 10 }
         action       = { type = "expire" }
-      },
-    ]
+      }],
+    )
   })
 }
 

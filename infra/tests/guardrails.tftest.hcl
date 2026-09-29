@@ -2605,13 +2605,13 @@ run "reports_renderer_created_from_its_image" {
   command = plan
 
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {
     condition = (
       aws_lambda_function.renderer[0].package_type == "Image" &&
-      aws_lambda_function.renderer[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer:0.4.0" &&
+      aws_lambda_function.renderer[0].image_uri == "000000000000.dkr.ecr.af-south-1.amazonaws.com/water-management-renderer:0.4.0-0123456789ab" &&
       aws_lambda_function.renderer[0].memory_size == 2048 &&
       aws_lambda_function.renderer[0].timeout == 120 &&
       aws_lambda_function.renderer[0].reserved_concurrent_executions == 2
@@ -2841,7 +2841,7 @@ run "worker_sqs_triggers" {
 
   # Enables the renderer too, so every SQS trigger in the stack is planned.
   variables {
-    renderer_image_tag = "0.4.0"
+    renderer_image_tag = "0.4.0-0123456789ab"
   }
 
   assert {

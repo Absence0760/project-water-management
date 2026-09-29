@@ -8,7 +8,8 @@ import {
 	jobsOf,
 	needsOf,
 	pushFullProblem,
-	topLevelPermissions
+	topLevelPermissions,
+	unshaPushSteps
 } from './check_workflows.mjs';
 
 const SHA = 'de0fac2e4500dabe0009e67214ff5f5447ce83dd';
@@ -143,6 +144,31 @@ test('a docker build must produce one linux/amd64 manifest without attestations'
 	assert.deepEqual(rules(good + '      - run: docker build -t x .\n'), ['image']);
 	assert.deepEqual(rules(good + ok.replace(' --sbom=false', '')), ['image']);
 	assert.deepEqual(rules(good + '      # docker build -t x .\n'), []);
+});
+
+test('an image push must name the commit it was built from', () => {
+	const push = (env) =>
+		'      - name: Push\n        env:\n          VERSION: ${{ needs.preflight.outputs.version }}\n' +
+		env +
+		'        run: |\n          docker tag a "b:$TAG"\n          docker push "b:$TAG"\n      - name: Next\n        run: echo "${{ github.sha }}"\n';
+	// Positive controls: the preflight's SHA, or github.sha, in the step.
+	assert.deepEqual(rules(good + push('          COMMIT_SHA: ${{ needs.preflight.outputs.sha }}\n')), []);
+	assert.deepEqual(rules(good + push('          COMMIT_SHA: ${{ github.sha }}\n')), []);
+	// The version alone: a recut release would keep the old image.
+	assert.deepEqual(rules(good + push('')), ['image-sha']);
+	// A SHA in the NEXT step doesn't count, nor does a commented-out one.
+	assert.deepEqual(unshaPushSteps((good + push('          # COMMIT_SHA: ${{ github.sha }}\n')).split('\n')).length, 1);
+	// A commented push is not a push.
+	assert.deepEqual(rules(good + '      # - run: docker push x\n'), []);
+});
+
+test('image-sha: the repo deploy workflows pass', () => {
+	for (const f of ['deploy-backend.yml', 'deploy-frontend.yml']) {
+		const file = new URL(`../../.github/workflows/${f}`, import.meta.url);
+		assert.deepEqual(unshaPushSteps(readFileSync(file, 'utf8').split('\n')), [], f);
+	}
+	// And the backend deploy really pushes (so the check above checked something).
+	assert.match(readFileSync(new URL('../../.github/workflows/deploy-backend.yml', import.meta.url), 'utf8'), /docker push "\$image"/);
 });
 
 const EXCLUDE_RENDERER_DEPS =

@@ -435,12 +435,12 @@ variable "fetcher_reserved_concurrency" {
 # --- Server-side reports (reports.tf) --------------------------------------------
 
 variable "renderer_image_tag" {
-  description = "Tag of the renderer image in its ECR repository (a release version, e.g. 0.4.0) that the renderer Lambda is created from. Empty (the default) creates the bucket, queues and repository but not the function, because Lambda can't be created before its image exists: push one with deploy-backend.yml first (docs/deployment.md § Reports). Later releases move the function's image themselves; this is only its first."
+  description = "Tag of the renderer image in its ECR repository that the renderer Lambda is created from: <release version>-<first 12 hex of its commit>, e.g. 0.4.0-0123456789ab, as deploy-backend.yml pushes it and prints it. Empty (the default) creates the bucket, queues and repository but not the function, because Lambda can't be created before its image exists: push one with deploy-backend.yml first (docs/deployment.md § Reports). Later releases move the function's image themselves; this is the image a (re-)created function starts from, and the ECR lifecycle policy never expires it (reports.tf)."
   type        = string
   default     = ""
   validation {
-    condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.renderer_image_tag))
-    error_message = "renderer_image_tag must be empty or a release version like 0.4.0."
+    condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+-[0-9a-f]{12}$", var.renderer_image_tag))
+    error_message = "renderer_image_tag must be empty or the tag deploy-backend.yml pushed, <version>-<12 hex of the commit>, like 0.4.0-0123456789ab."
   }
 }
 
