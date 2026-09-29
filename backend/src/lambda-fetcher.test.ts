@@ -32,7 +32,7 @@ const today = new Date().toISOString().slice(0, 10);
 describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 	it('fetches each request and sends the result, success or failure, to ingest-results', async () => {
 		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const ok = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
 		const sea = { ...ok, request: { ...ok.request, config: { cells: [{ lat: -20.27, lon: 25.37, weight: 1 }] } } };
 		const res = await handler({ Records: [record('m1', ok), record('m2', sea)] } as never);
@@ -65,7 +65,7 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 
 	it('answers a fetch that outruns the Lambda’s time with a failure, instead of timing out into retries and the DLQ', async () => {
 		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		let calls = 0;
 		// An upstream that never answers.
 		const hung: FeedHttp = { range: () => (calls++, new Promise(() => {})), text: () => (calls++, new Promise(() => {})) };
@@ -92,7 +92,7 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 
 	it('reports a failed send as a batch item failure, so SQS retries just that message', async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		sendToQueue.mockRejectedValueOnce(new Error('INGEST_RESULTS_QUEUE_URL is not set'));
 		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
 		const res = await handler({ Records: [record('m1', req), record('m2', req)] } as never);

@@ -28,6 +28,7 @@ import { assertLambdaEnv } from './config/production.js';
 import { type RenderResult, type RenderResultMessage, parseRenderRequest, sendToQueue } from './jobs/transport.js';
 import { renderOptionsFromEnv, RenderError, renderReportPdf } from './reports/render.js';
 import { putPdf, reportKey } from './reports/storage.js';
+import { logEvent } from './logging/logEvent.js';
 
 // Refuse to start with a local default (config/production.ts).
 assertLambdaEnv('renderer');
@@ -37,7 +38,7 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 	for (const record of event.Records) {
 		const req = parseRenderRequest(record.body);
 		if (!req) {
-			console.warn(JSON.stringify({ event: 'render_request_ignored', messageId: record.messageId }));
+			logEvent('warn', { event: 'render_request_ignored', messageId: record.messageId });
 			continue;
 		}
 		let result: RenderResult;
@@ -47,28 +48,26 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
 			result = { ok: true, pages: rendered.pages, bytes: rendered.pdf.length, ms: rendered.ms };
 		} catch (err) {
 			const e = err instanceof RenderError ? err : new RenderError('the PDF could not be stored');
-			if (!(err instanceof RenderError)) console.error(JSON.stringify({ event: 'report_store_failed', reportId: req.reportId, error: (err as Error).message }));
+			if (!(err instanceof RenderError)) logEvent('error', { event: 'report_store_failed', reportId: req.reportId, error: (err as Error).message });
 			result = { ok: false, error: e.message.slice(0, 300), retry: e.retry };
 		}
 		const message: RenderResultMessage = { v: 1, type: 'rendered', reportId: req.reportId, result };
 		try {
 			await sendToQueue(process.env.RENDER_RESULTS_QUEUE_URL, 'RENDER_RESULTS_QUEUE_URL', message);
 		} catch (err) {
-			console.error(JSON.stringify({ event: 'render_result_send_failed', messageId: record.messageId, error: (err as Error).message }));
+			logEvent('error', { event: 'render_result_send_failed', messageId: record.messageId, error: (err as Error).message });
 			failures.push({ itemIdentifier: record.messageId });
 			continue;
 		}
 		// Ids and the outcome only: never the token, a URL or page text.
-		console.log(
-			JSON.stringify({
-				event: 'report_rendered',
-				reportId: req.reportId,
-				projectId: req.projectId,
-				ok: result.ok,
-				pages: result.ok ? result.pages : 0,
-				ms: result.ok ? result.ms : null
-			})
-		);
+		logEvent('info', {
+			event: 'report_rendered',
+			reportId: req.reportId,
+			projectId: req.projectId,
+			ok: result.ok,
+			pages: result.ok ? result.pages : 0,
+			ms: result.ok ? result.ms : null
+		});
 	}
 	return { batchItemFailures: failures };
 };

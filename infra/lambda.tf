@@ -100,6 +100,28 @@ resource "aws_cloudwatch_log_group" "lambda" {
   retention_in_days = var.lambda_log_retention_days
 }
 
+# Every Lambda logs in Lambda's JSON format (issue #126). The platform's own
+# START / END / REPORT lines, three per invocation and so three per API
+# request, are system logs at INFO; WARN keeps only the platform's warnings
+# and errors (an init failure, a timeout, an out-of-memory). The code's own
+# lines are application logs, kept from INFO up: the alarm lines are WARN or
+# ERROR (logging/logEvent.ts callers), but the worker's embedded metrics
+# (jobs_backlog, alert-mail burst) are bare stdout lines Lambda records as
+# INFO, and a higher level would silently drop them.
+#
+# JSON changes the shape the metric filters read: each console call becomes
+# `{ timestamp, level, requestId, message }`, with a single-object argument
+# nested under `message`. The backend logs its events that way
+# (backend/src/logging/logEvent.ts), so every filter matches
+# `$.message.event` (alarms.tf, jobs.tf; pinned in tests/logging.tftest.hcl).
+locals {
+  lambda_logging = {
+    log_format            = "JSON"
+    system_log_level      = "WARN"
+    application_log_level = "INFO"
+  }
+}
+
 resource "aws_lambda_function" "backend" {
   function_name = "${local.project}-backend"
   role          = aws_iam_role.lambda.arn
@@ -114,6 +136,16 @@ resource "aws_lambda_function" "backend" {
   memory_size   = var.lambda_memory_mb
 
   reserved_concurrent_executions = var.lambda_reserved_concurrency
+
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.lambda.name
+  }
 
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
@@ -260,6 +292,16 @@ resource "aws_lambda_function" "migrate" {
   memory_size   = 512
 
   reserved_concurrent_executions = var.migrate_reserved_concurrency
+
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.migrate.name
+  }
 
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id

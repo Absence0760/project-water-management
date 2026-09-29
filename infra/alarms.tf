@@ -274,7 +274,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
   name           = "${local.project}-self-check-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"self_check_failed\" }"
+  pattern        = "{ $.message.event = \"self_check_failed\" }"
 
   metric_transformation {
     name          = "SelfCheckFailed"
@@ -337,7 +337,7 @@ resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
   }
   name           = "${local.project}-mail-send-failed-${each.key}"
   log_group_name = each.value
-  pattern        = "{ $.event = \"mail_send_failed\" }"
+  pattern        = "{ $.message.event = \"mail_send_failed\" }"
 
   metric_transformation {
     name          = "MailSendFailed"
@@ -378,7 +378,7 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
 resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
   name           = "${local.project}-unhandled-error"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"unhandled_error\" }"
+  pattern        = "{ $.message.event = \"unhandled_error\" }"
 
   metric_transformation {
     name          = "UnhandledError"
@@ -424,7 +424,7 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
 resource "aws_cloudwatch_log_metric_filter" "login_failed" {
   name           = "${local.project}-login-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"login_failed\" }"
+  pattern        = "{ $.message.event = \"login_failed\" }"
 
   metric_transformation {
     name          = "LoginFailed"
@@ -444,7 +444,7 @@ resource "aws_cloudwatch_metric_alarm" "login_failed" {
   period              = 900
   statistic           = "Sum"
   threshold           = var.login_failed_alarm_per_15min
-  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter event = \"login_failed\" | stats count() by reason, route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
+  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter message.event = \"login_failed\" | stats count() by message.reason, message.route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

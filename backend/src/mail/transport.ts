@@ -14,6 +14,7 @@
 // tests) never load nodemailer or the AWS SDK.
 
 import { safeError } from '../logging/safeError.js';
+import { logEvent } from '../logging/logEvent.js';
 
 /** Which email this is, for logs: a failed send is logged by kind, never by subject or recipient. */
 export type MailKind = 'verify' | 'account_exists' | 'reset' | 'invite' | 'farmer_invite' | 'report_ready' | 'alert' | 'alert_digest';
@@ -158,7 +159,7 @@ export async function trySendMail(mail: Mail): Promise<boolean> {
 		await sendMail(mail);
 		return true;
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'mail_send_failed', kind: mail.kind ?? 'unknown', ...safeError(err) }));
+		logEvent('error', { event: 'mail_send_failed', kind: mail.kind ?? 'unknown', ...safeError(err) });
 		return false;
 	}
 }

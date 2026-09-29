@@ -27,6 +27,7 @@ import { feedLabel } from './evaluate.js';
 import { queueAlertEval } from './queue.js';
 import { ALERT_KINDS, ALERT_MODES, DEFAULT_THRESHOLDS, defaultMode, THRESHOLD, type AlertKind, type AlertMode } from './rules.js';
 import { newNonce } from './tokens.js';
+import { logEvent } from '../logging/logEvent.js';
 
 // ---------------------------------------------------------------------------
 // Preferences (/me/alerts)
@@ -167,7 +168,7 @@ async function resumeMail(userId: string): Promise<void> {
 		await withUser(userId, (db) =>
 			db.query('UPDATE app_user SET mail_resumed_at = $1 WHERE id = app_current_user_id() AND mail_resumed_at = $2', [claim.previous, claim.claimed])
 		);
-		console.error(JSON.stringify({ event: 'mail_release_failed', userId, error: (err as { name?: string }).name ?? 'Error' }));
+		logEvent('error', { event: 'mail_release_failed', userId, error: (err as { name?: string }).name ?? 'Error' });
 		throw new Error('releasing the address from the SES suppression list failed');
 	}
 	await withUser(userId, (db) =>

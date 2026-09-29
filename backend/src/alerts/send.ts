@@ -31,6 +31,7 @@ import { DEFAULT_TIME_ZONE } from '../projects/timeZone.js';
 import { alertsEnabled } from './evaluate.js';
 import type { AlertKind, AlertMode } from './rules.js';
 import { alertsTokenSecret, newSubscriptionSecret, oneClickUrl, unsubscribePageUrl, unsubscribeToken } from './tokens.js';
+import { logEvent } from '../logging/logEvent.js';
 
 export interface Claimed {
 	event_id: string;
@@ -217,7 +218,7 @@ async function deliver(c: Claimed, secret: string, r: SendResult): Promise<void>
 	try {
 		p = await withUser(c.user_id, (db) => prepareOne(db, c, secret));
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_prepare_failed', eventId: c.event_id, ...safeError(err) }));
+		logEvent('error', { event: 'alert_prepare_failed', eventId: c.event_id, ...safeError(err) });
 		await finish(c, 'retry', failureReason(err));
 		r.failed++;
 		return;
@@ -230,7 +231,7 @@ async function deliver(c: Claimed, secret: string, r: SendResult): Promise<void>
 	try {
 		await sendMail(p.mail);
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_send_failed', eventId: c.event_id, ...safeError(err) }));
+		logEvent('error', { event: 'alert_send_failed', eventId: c.event_id, ...safeError(err) });
 		await finish(c, 'retry', failureReason(err));
 		r.failed++;
 		return;
@@ -283,7 +284,7 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 			return { mail, used, skipped };
 		});
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_digest_prepare_failed', userId: first.user_id, ...safeError(err) }));
+		logEvent('error', { event: 'alert_digest_prepare_failed', userId: first.user_id, ...safeError(err) });
 		for (const c of lines) await finish(c, 'retry', failureReason(err));
 		r.failed += lines.length;
 		return;
@@ -298,7 +299,7 @@ async function deliverDigest(lines: Claimed[], secret: string, r: SendResult): P
 	try {
 		await sendMail(ready.mail);
 	} catch (err) {
-		console.error(JSON.stringify({ event: 'alert_digest_send_failed', userId: first.user_id, ...safeError(err) }));
+		logEvent('error', { event: 'alert_digest_send_failed', userId: first.user_id, ...safeError(err) });
 		for (const c of ready.used) await finish(c, 'retry', failureReason(err));
 		r.failed += ready.used.length;
 		return;
@@ -340,7 +341,7 @@ export async function sendAlerts({ now = new Date(), limit = 100 }: { now?: Date
 	if (!alertsEnabled()) {
 		const { rows } = await withoutUser((db) => db.query<{ n: number }>("SELECT app_alert_skip_all('alerts switched off (ALERTS_ENABLED=false)') AS n"));
 		r.skipped = rows[0]?.n ?? 0;
-		if (r.skipped) console.warn(JSON.stringify({ event: 'alerts_disabled_skipped', deliveries: r.skipped }));
+		if (r.skipped) logEvent('warn', { event: 'alerts_disabled_skipped', deliveries: r.skipped });
 		return r;
 	}
 	let secret: string;
@@ -348,7 +349,7 @@ export async function sendAlerts({ now = new Date(), limit = 100 }: { now?: Date
 		secret = alertsTokenSecret();
 	} catch (err) {
 		// No way to sign unsubscribe links: send nothing (the deliveries wait), and say so loudly.
-		console.error(JSON.stringify({ event: 'alerts_not_sent', reason: (err as Error).message }));
+		logEvent('error', { event: 'alerts_not_sent', reason: (err as Error).message });
 		return r;
 	}
 	// The digest day (from 06:00 to 06:00) is each project's own: the claims work it out from `now` and project.time_zone.

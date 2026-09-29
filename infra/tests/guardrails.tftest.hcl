@@ -1529,7 +1529,7 @@ run "alarms" {
     error_message = "Self-check failures must be counted from both log groups: the API's (user runs) and the worker's (automatic re-runs, forecast runs)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.event = \"self_check_failed\" }"
+    condition     = aws_cloudwatch_log_metric_filter.self_check_failed.pattern == "{ $.message.event = \"self_check_failed\" }"
     error_message = "The filter must match executeRun's structured event name exactly."
   }
   assert {
@@ -1838,7 +1838,7 @@ run "background_jobs" {
     error_message = "EventBridge failing to deliver the worker tick must alarm (FailedInvocations > 0 on the worker-tick rule)."
   }
   assert {
-    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.event = \"job_dead\" }"
+    condition     = aws_cloudwatch_log_metric_filter.job_dead.log_group_name == aws_cloudwatch_log_group.worker.name && aws_cloudwatch_log_metric_filter.job_dead.pattern == "{ $.message.event = \"job_dead\" }"
     error_message = "The dead-job filter must match runner.ts's structured event in the worker's log group."
   }
 
@@ -2679,7 +2679,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       toset([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.log_group_name]) == toset([aws_cloudwatch_log_group.lambda.name, aws_cloudwatch_log_group.worker.name]) &&
-      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.event = \"mail_send_failed\" }"])
+      alltrue([for f in aws_cloudwatch_log_metric_filter.mail_send_failed : f.pattern == "{ $.message.event = \"mail_send_failed\" }"])
     )
     error_message = "mail_send_failed must be counted from both the API's and the worker's log group, by the exact event name trySendMail logs."
   }
@@ -2704,7 +2704,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.unhandled_error.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.event = \"unhandled_error\" }"
+      aws_cloudwatch_log_metric_filter.unhandled_error.pattern == "{ $.message.event = \"unhandled_error\" }"
     )
     error_message = "unhandled_error must be counted from the API's log group, by the exact event name handleError logs."
   }
@@ -2731,7 +2731,7 @@ run "mail_failures_and_log_privacy" {
   assert {
     condition = (
       aws_cloudwatch_log_metric_filter.login_failed.log_group_name == aws_cloudwatch_log_group.lambda.name &&
-      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.event = \"login_failed\" }"
+      aws_cloudwatch_log_metric_filter.login_failed.pattern == "{ $.message.event = \"login_failed\" }"
     )
     error_message = "login_failed must be counted from the API's log group, by the exact event name logLoginFailed logs (backend/src/auth/loginFailed.ts)."
   }

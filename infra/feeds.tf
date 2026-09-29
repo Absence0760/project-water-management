@@ -148,6 +148,16 @@ resource "aws_lambda_function" "fetcher" {
   # Bounds spend and how hard the public sources are hit at once.
   reserved_concurrent_executions = var.fetcher_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.fetcher.name
+  }
+
   # Deliberately no vpc_config: this is the one Lambda with internet access.
 
   environment {
