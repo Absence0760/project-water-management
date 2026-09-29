@@ -101,7 +101,11 @@ export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
 
 /**
  * The outcomes table: the headline outcomes, each for the baseline and every
- * what-if. `dams[i]` is the dam storage at the end of the run for
+ * what-if. It took in the Full comparison's Headline results water balance
+ * (issue #175): four of its nine rows were these rows, and of the rest only
+ * the irrigation deficit, the mean natural flow and the runoff coefficient
+ * said something new (its supplied m³/day is the share and the deficit
+ * again, its days EWR not met the share of days again). `dams[i]` is the dam storage at the end of the run for
  * comparison i (damStorageShare of each side); its row shows when either
  * side of any comparison has one.
  */
@@ -110,6 +114,8 @@ export function outcomeRows(comparisons: readonly RunComparison[], dams: readonl
 		// Framed as the Summary's card and River & reserve's tile (ewr/notMet.ts, issue #162): the share not met, lower is better.
 		row('ewrNotMet', EWR_NOT_MET, '% of days', { format: 'fraction', better: 'lower' }, (c) => c.catchment.ewrFractionDaysNotMet, comparisons),
 		row('supplied', 'Irrigation supplied', '% of demand', { format: 'fraction', better: 'higher' }, (c) => c.totals.fractionSupplied, comparisons),
+		// The volume behind that share (the Headline results water balance's row until issue #175 merged it in here).
+		row('deficit', 'Irrigation deficit', 'm³/day', { format: 'volume', better: 'lower' }, (c) => c.totals.deficitM3Day, comparisons),
 		row('farmsBelow', `Hydrological units below ${fmtPct(SUPPLY_TARGET, 0)} supplied`, 'hydrological units', { format: 'count', better: 'lower' }, (c) => c.totals.farmsBelowTarget, comparisons),
 		...farmRows(comparisons),
 		...(dams.some((m) => m.a !== null || m.b !== null)
@@ -125,7 +131,10 @@ export function outcomeRows(comparisons: readonly RunComparison[], dams: readonl
 					)
 				]
 			: []),
-		row('outflow', 'Mean outflow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanSimulatedOutflowM3Day, comparisons)
+		row('outflow', 'Mean outflow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanSimulatedOutflowM3Day, comparisons),
+		// What the catchment itself makes: a land-cover or runoff what-if moves these.
+		row('natural', 'Mean natural flow', 'm³/day', { format: 'volume', better: 'neutral' }, (c) => c.catchment.meanNaturalFlowM3Day, comparisons),
+		row('runoffCoefficient', 'Runoff coefficient (flow ÷ rain)', '', { format: 'ratio', better: 'neutral' }, (c) => c.catchment.runoffCoefficient, comparisons)
 	];
 }
 

@@ -83,7 +83,7 @@ Above the detail, for the baseline and every what-if at once
   changed*. A what-if with no input changes says so (or names its scenario).
 - **What changes** (`outcomeRows`): EWR not met (the share of days the
   EWR wasn't met, so runs of different lengths compare), irrigation supplied (share
-  of demand), farms below 95 % supplied, a row for each of the (at most two)
+  of demand), the irrigation deficit (m³/day), farms below 95 % supplied, a row for each of the (at most two)
   farms whose supply moves by at least 1 point in some what-if (matched on
   the baseline's node, so a farm missing from one what-if's comparison is
   "–" there, not 0), **dam storage at the end of the run** (when a run has
@@ -93,7 +93,12 @@ Above the detail, for the baseline and every what-if at once
   model's capacities, so a raised dam is a share of its new size; "–" for a
   run saved before those figures; no better/worse verdict and no takeaway,
   since a bigger dam can end emptier as a share yet hold more;
-  `damStorageShare`, `compareDamStorage`) and mean outflow. No days-a-year
+  `damStorageShare`, `compareDamStorage`), mean outflow, mean natural flow
+  and the runoff coefficient (flow ÷ rain). The last three rows and the
+  deficit came from the full comparison's Headline results *Water balance*
+  table, which issue #175 merged in here (2026-09-29): four of its nine rows
+  were this table's, its supplied m³/day restated the share and the deficit,
+  and its days EWR not met restated the share of days. No days-a-year
   row (it was the EWR share × 365.25, the same number again) and no
   calibration NSE (a what-if's fit to the real gauge is not an outcome;
   Headline results → Calibration has it for calibration comparisons). Each what-if cell has its value and its change from the baseline
@@ -226,12 +231,13 @@ bottom:
    × 1.85 (map: …)" when one side has none (a run saved before 1.13.0 had
    none), else the months whose factor changed ("factors Oct 1.85 → 1.9"),
    a changed method and a reworded source.
-3. **Headline results.** A **Water balance** table (total irrigation supplied
-   and deficit, share of demand supplied, farms below 95 % supplied, EWR days
-   not met and their share, mean outflow and natural flow, the runoff
-   coefficient (natural flow ÷ rain)) and a **Calibration against observed
+3. **Headline results.** A **Calibration against observed
    flow** table (KGE, NSE, percent bias, RMSE and the overlapping days) for A
-   and B side by side, with the change. The calibration table says whether
+   and B side by side, with the change. Its **Water balance** table
+   (`HeadlineDeltas`, supply, deficit, EWR days, outflow, natural flow,
+   runoff coefficient) is left out here (`water={false}`) since What changes
+   carries those rows (issue #175); the scenario comparison, which has no
+   What changes table, still shows it. The calibration table says whether
    the scores are in-sample (issue #45, `comparison.calibration.fitStatus`):
    **calibration period (in-sample)** when both runs' parameters were fitted
    on the days scored, the shared reason when neither was ("parameters not

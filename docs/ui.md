@@ -4535,8 +4535,11 @@ gives it an `h1` and **Back to runs**). The full reference is
   share of days, worded as the Summary's card and River & reserve's tile
   from `ewr/notMet.ts`, a rise worse; it read "Reserve met" until issue
   #162; irrigation supplied, farms below 95 %,
-  up to two most-changed farms, dam storage at the end of the run (when a
-  run has a dam), mean outflow), each what-if cell its value over its `Delta`, the unit on its own
+  the irrigation deficit, up to two most-changed farms, dam storage at the
+  end of the run (when a run has a dam), mean outflow, mean natural flow and
+  the runoff coefficient; the deficit and the last two came from the Full
+  comparison's Headline results water balance table, merged in here and
+  dropped there, issue #175), each what-if cell its value over its `Delta`, the unit on its own
   line under the outcome; then the takeaways box (the first worse, else
   better, takeaway in bold, the rest listed; red, green or grey by that
   lead's tone, whose words also say the direction).

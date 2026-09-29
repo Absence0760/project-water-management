@@ -1,12 +1,15 @@
 <script lang="ts">
-	// Headline numbers for both runs with the change B − A.
+	// Headline numbers for both runs with the change B − A. Compare runs passes
+	// `water={false}`: its What changes table carries the water balance rows
+	// (compare/summary.ts outcomeRows, issue #175), so only the calibration and
+	// WR2012 tables show here.
 	import { SUPPLY_TARGET, type MetricDelta, type RunComparison } from '@water-management/engine';
 	import { fmtPct } from '$lib/format/number';
 	import Delta from './Delta.svelte';
 	import { fmtMetric, type MetricSpec } from './delta';
 	import { calibrationSample } from '$lib/components/calibration/sample';
 
-	let { comparison }: { comparison: RunComparison } = $props();
+	let { comparison, water: showWater = true }: { comparison: RunComparison; water?: boolean } = $props();
 
 	interface Row {
 		label: string;
@@ -87,11 +90,13 @@
 	</div>
 {/snippet}
 
-<div class="cols">
-	<div>
-		<h3>Water balance</h3>
-		{@render table(water, 'Headline water balance for both runs')}
-	</div>
+<div class="cols" class:one={!showWater}>
+	{#if showWater}
+		<div>
+			<h3>Water balance</h3>
+			{@render table(water, 'Headline water balance for both runs')}
+		</div>
+	{/if}
 	<div>
 		<h3>Calibration against observed flow</h3>
 		{#if calibration.length}
@@ -117,6 +122,9 @@
 		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
 		gap: 1rem;
 		align-items: start;
+	}
+	.cols.one {
+		grid-template-columns: minmax(0, 1fr);
 	}
 	@media (max-width: 900px) {
 		.cols {
