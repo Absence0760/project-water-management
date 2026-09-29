@@ -2070,7 +2070,10 @@ readable by anyone. The rules:
   weekly over the whole history (`gitleaks-sweep.yml`, which opens a
   `secret-scan` issue when it fails). Reviewed false positives are pinned by
   exact fingerprint in `.gitleaksignore` (m³/day field names,
-  fake test tokens); add one only after checking the match isn't real. Before pushing a branch, check the diff
+  fake test tokens), or, for a placeholder repeated across files (the
+  mocked-provider Terraform tests' synthetic secrets), allowlisted by its
+  exact value in `.gitleaks.toml`, never by path; add one only after checking
+  the match isn't real. Before pushing a branch, check the diff
   for client names as well as for keys.
 - If something slips in: **don't push**. Rewrite the history locally, then tell
   the operator (see the incident playbook below).
