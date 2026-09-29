@@ -1,4 +1,4 @@
-import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow } from '@water-management/engine';
+import { assessSite, EQUITABLE_SHARE_FOOTNOTE, FARM_COLUMNS, plausibilityChecks, type RunSummary, type RunVerification, type WaterBalance, type WaterBalanceRow, wr2012FitStatsFromMonthly } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import {
 	chirpsFactorLines,
@@ -181,6 +181,32 @@ describe('summary sheet', () => {
 			'Water year,Days observed,Days in the window,Observed (Mm³),Simulated (Mm³),Simulated − observed (%)',
 			'1999/00,270,274,2.5,2.75,10'
 		]);
+	});
+
+	it('writes the WR2012 five-statistic table (CR-28), and says why when there is none; never under a raw key', () => {
+		const s = structuredClone(summary);
+		const stats = wr2012FitStatsFromMonthly([
+			{ waterYear: 2001, observed: Array(12).fill(1), simulated: Array(12).fill(1.1) },
+			{ waterYear: 2002, observed: Array(12).fill(2), simulated: Array(12).fill(2.2) }
+		]);
+		s.calibration!.wr2012Fit = stats;
+		const lines = [...summaryCsvLines(meta, s)];
+		const at = lines.findIndex((l) => l.startsWith('"WR2012 statistics on monthly flows'));
+		expect(at).toBeGreaterThan(lines.indexOf('Calibration (outflow gauge vs observed)'));
+		expect(lines[at + 1]).toBe('Water years,2001/02 2002/03,Years in the log statistics,2');
+		expect(lines[at + 2]).toMatch(/^Bands,"?indicative, to be confirmed/);
+		const mar = lines[at + 4]!.split(',');
+		expect(mar[0]).toBe('MAR (Mm³/a)');
+		expect(Number(mar[1])).toBeCloseTo(18, 9);
+		expect(Number(mar[2])).toBeCloseTo(19.8, 9);
+		expect(Number(mar[3])).toBeCloseTo(10, 9);
+		expect(mar.slice(4)).toEqual(['4', 'no']);
+		expect(lines.some((l) => l.startsWith('wr2012Fit,'))).toBe(false);
+		s.calibration!.wr2012Fit = null;
+		const none = [...summaryCsvLines(meta, s)];
+		const n = none.findIndex((l) => l.startsWith('"WR2012 statistics on monthly flows'));
+		expect(none[n + 1]).toMatch(/^"?Not computed: no water year has all 12 months observed/);
+		expect(none.some((l) => l.startsWith('wr2012Fit,'))).toBe(false);
 	});
 
 	it('writes the outlet EWR test, observed vs simulated, with the catchment (issue #4)', () => {
@@ -962,6 +988,34 @@ describe('Reserve compliance block (engine ≥ 0.21.0)', () => {
 		expect(lines.slice(-2)).toEqual(['2000/01,1,0,1,no', '2001/02,1,1,1,yes']);
 	});
 
+	it('adds daily compliance, the EWR as %nMAR and the duration curves for the FDC overlay (engine ≥ 1.19.0, CR-29)', () => {
+		const lines = [...ewrAssuranceLines([report])];
+		// Every day of the first October is short (0.6 of 0.75 Mm³ spread evenly): 31 of the 730 days of complete months.
+		const daily = lines.find((l) => l.startsWith("From daily data: days below the day's requirement"))!.split(',');
+		expect(daily.slice(1, 5)).toEqual(['31', 'of', '730', 'Time not met (%)']);
+		expect(Number(daily[5])).toBeCloseTo((100 * 31) / 730, 6);
+		expect(Number(daily[7])).toBeCloseTo((100 * 0.15e6) / report.daily!.requiredM3, 6);
+		const nmar = lines.find((l) => l.startsWith('EWR as % of natural MAR'))!.split(',');
+		expect(Number(nmar[1])).toBeCloseTo((100 * report.ewrPctNmar!.ewrMcm) / report.ewrPctNmar!.naturalMarMcm, 9);
+		const byDay = lines.indexOf('Month,Days assessed,Days not met,Time not met (%),Required (m³),Shortfall (m³),Volume not met (%)');
+		expect(lines[byDay + 1]!.split(',').slice(0, 4)).toEqual(['Oct', '62', '31', '50']);
+		const fdc = lines.indexOf('Month,% point,EWR (Mm³),Natural flow duration (Mm³),Simulated flow duration (Mm³),Met');
+		expect(lines.slice(fdc + 1, fdc + 37).map((l) => l.split(',')[0])).toEqual(['Oct', 'Oct', 'Oct', 'Nov', 'Nov', 'Nov', 'Dec', 'Dec', 'Dec', 'Jan', 'Jan', 'Jan', 'Feb', 'Feb', 'Feb', 'Mar', 'Mar', 'Mar', 'Apr', 'Apr', 'Apr', 'May', 'May', 'May', 'Jun', 'Jun', 'Jun', 'Jul', 'Jul', 'Jul', 'Aug', 'Aug', 'Aug', 'Sep', 'Sep', 'Sep']);
+		const oct10 = lines[fdc + 1]!.split(',');
+		expect(oct10.slice(0, 3)).toEqual(['Oct', '10', '1.5']);
+		expect(Number(oct10[3])).toBeCloseTo(1.5, 9);
+		// A run before engine 1.19.0 has none of them.
+		const old = structuredClone(report);
+		delete old.daily;
+		delete old.ewrPctNmar;
+		for (const m of old.byMonth) {
+			delete m.daily;
+			for (const f of m.fdc) delete f.natural;
+		}
+		const oldLines = [...ewrAssuranceLines([old])];
+		expect(oldLines.some((l) => /^(From daily data|EWR as %|Month,Days assessed|Month,% point)/.test(l))).toBe(false);
+	});
+
 	it("compares the run's natural MAR with the determination's only when the table records one (engine ≥ 1.11.0)", () => {
 		expect([...ewrAssuranceLines([report])].some((l) => l.startsWith('Natural MAR'))).toBe(false);
 		const r = assessSite(start, days, { table: { ...table, naturalMarMcm: 10 }, nodeId: null, name: 'Outlet gauge', isOutlet: true, natural, impacted }).report;
@@ -1032,7 +1086,37 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(lines).toContain('Runoff model,gr4j');
 		expect(lines.some((l) => l.startsWith("Q90 on the calibration record's dry-season days,observed gauge,days,"))).toBe(true);
 		expect(lines).toContain('Curve,On the days of,Days,Q1,Q2,Q5,Q10,Q20,Q30,Q40,Q50,Q60,Q70,Q75,Q80,Q85,Q90,Q95,Q98,Q99');
-		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(2);
+		expect(lines.filter((l) => l.startsWith('simulated outflow,'))).toHaveLength(3);
+		// A constant record has no recession: the block says so.
+		expect(lines).toContain('Recession diagnostics (−dQ/dt = a·Q^b on rain-free recession segments)');
+		expect(lines).toContain('Record,observed gauge,segments,0,min. length (days),5,days dropped after the peak,1,allowed rise (m³/s),0,rain threshold (mm/day),1,−dQ/dt method,ETS');
+		expect(lines).toContain('observed gauge,too few points to fit');
+		expect(lines).toContain('simulated outflow,too few points to fit');
+		expect(lines).toContain('Simulated recession agrees (indicative),"not judged (fewer than 8 segments, or no observed fit)"');
+	});
+
+	it('writes both recession fits and the comparison (engine ≥ 1.19.0)', () => {
+		const lines = [
+			...plausibilityLines({
+				...checks,
+				recession: {
+					...checks.recession!,
+					segments: [[3, 12]],
+					observed: { a: 0.05, b: 1, points: 40, segments: 9, minQM3s: 0.1, maxQM3s: 9 },
+					simulated: { a: 0.1, b: 1.2, points: 38, segments: 9, minQM3s: 0.1, maxQM3s: 8 },
+					referenceFlowM3s: 1,
+					observedRate: 0.05,
+					simulatedRate: 0.1,
+					rateRatio: 2,
+					bDiff: 0.2,
+					agrees: true
+				}
+			})
+		];
+		expect(lines).toContain('observed gauge,0.05,1,0.05,40,9');
+		expect(lines).toContain('simulated outflow,0.1,1.2,0.1,38,9');
+		expect(lines).toContain('Reference flow (m³/s),1,rate ratio (simulated ÷ observed),2,b difference (simulated − observed),0.2');
+		expect(lines).toContain('Simulated recession agrees (indicative),yes');
 	});
 
 	it('adds checks 1 and 4 for each gauge with a record of its own (engine ≥ 1.4.0), and nothing without one', () => {
@@ -1056,6 +1140,10 @@ describe('plausibility checks block (engine ≥ 0.25.0)', () => {
 		expect(none).toContain('Not checked: the run has no observed flow record');
 		expect(none).toContain('Not checked: the run has no rainfall series');
 		expect(none).toContain('Not computed: no dry season');
+		expect(none).toContain('Run made before engine 1.19.0: no recession diagnostics');
+		expect([...plausibilityLines({ drySeason: null, naturalised: null, rainSource: null, flowDoubleMass: null, lowFlow: null, recession: null })]).toContain(
+			'Not checked: needs an observed flow record and catchment rain'
+		);
 		const lines = [...summaryCsvLines(meta, { ...summary, plausibility: checks })];
 		expect(lines).toContain('Plausibility checks');
 		expect(lines).toContain('Water years judged,2,failed,2');

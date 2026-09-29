@@ -1,5 +1,5 @@
 // A seasonal outlook published to farmers (issue #53 R5, farmer-view ask E3;
-// 104_outlook_triggers_publication.sql, docs/api.md § Seasonal outlooks).
+// 106_outlook_triggers_publication.sql, docs/api.md § Seasonal outlooks).
 // The WUA chooses one level of a complete outlook and publishes it; every
 // farm of the project gets its own figures at that level (the engine's
 // farmOutlookProjection), stored with the publication, which the farm page

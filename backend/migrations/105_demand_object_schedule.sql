@@ -1,4 +1,4 @@
--- 100_demand_object_schedule — a demand object's daily schedule (engine
+-- 105_demand_object_schedule — a demand object's daily schedule (engine
 -- 1.17.0, issue #90 Q4 and Q12, docs/model.md §2.7f).
 --
 -- The client's answer: a demand's daily on/off pattern depends on its type

@@ -1166,8 +1166,24 @@
 //             Settings tab's Registered volumes fields, the Allocations tab's
 //             licence conditions and mode note, and two help entries. No new
 //             dependency. Headroom ~3 KB.
-// 2026-09-29  total 1101 → 1114 KB (measured 1110 with main merged in; the
-//             branch added 11 KB over main before the merge, 1090 → 1101).
+// 2026-09-28  total 1101 → 1127 KB (measured 1124 with main merged), largestWorkerKb 32 → 34
+//             (calibration worker measured 33). Issue #65, the calibration
+//             workflow batch (engine 1.19.0), one change: CR-21 sensitivity
+//             runs (River & reserve's Sensitivity panel and tornado, ~4 KB;
+//             the verdict module kept apart from the run by engineSplit.test.ts;
+//             sensitivityRuns in the calibration worker), CR-28 WR2012
+//             five-statistic table (Wr2012FitTable), CR-29 daily compliance,
+//             %nMAR and the monthly FDC overlay (EwrDailyCompliance,
+//             EwrFdcOverlay, reused on the compare page), CR-3/CR-5 score
+//             intervals and benchmarks, CR-34 record representativeness, the
+//             hydrograph's exclusion shading and CR-13 recession diagnostics
+//             (RecessionDiagnostics in the plausibility panel). The worker
+//             grows by the bootstrap, WR2012 statistics, representativeness
+//             and sensitivity code it runs; all of it is scoring or run code
+//             the worker needs, so none can move to the page. No new
+//             dependency. Headroom ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1127 → 1137 KB (measured 1134 with #65's calibration
+//             batch merged in; the branch added 11 KB over main before it).
 //             Issue #53's remaining planning outputs: the impact report's
 //             licence-impact board by year class (R7: the engine's
 //             licenceImpact view, the board and its view model, in the
@@ -1176,7 +1192,7 @@
 //             outlook panel's lazy chunk), the review-date setting, and the
 //             farm page's "This season" card with its Afrikaans (E3). Every
 //             piece already sits in a lazy chunk, so a further split would
-//             only move bytes. No new dependency. Headroom ~4 KB.
+//             only move bytes. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1187,10 +1203,10 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1114,
+	totalCodeKb: 1137,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 32,
+	largestWorkerKb: 34,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

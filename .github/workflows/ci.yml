@@ -450,6 +450,27 @@ jobs:
       - name: Build and smoke-test the renderer image
         run: bin/check-renderer-image.sh
 
+  # The Claude agents and commands cite only paths that exist and carry no
+  # template placeholders (scripts/guards/check_claude_tooling.mjs). No
+  # `changes` gate: a PR that only touches .claude/ or docs is exactly the
+  # one that can break it.
+  claude-tooling:
+    name: Claude tooling (agents and commands)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Agents and commands match the repo
+        run: node scripts/guards/check_claude_tooling.mjs
+
   # Committed env files stay local-only; values are never printed
   # (estate standard: feohledger env-isolation.yml, threkir env-isolation).
   env-isolation:
@@ -530,7 +551,7 @@ jobs:
     name: CI gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, wbt-import, terraform, gitleaks]
+    needs: [changes, workflow-lint, test, db-test, e2e-build, e2e, e2e-report, renderer-image, env-isolation, claude-tooling, wbt-import, terraform, gitleaks]
     steps:
       - name: Require every upstream job to have passed
         env:

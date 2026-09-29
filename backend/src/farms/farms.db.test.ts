@@ -150,7 +150,7 @@ describe('anonymised farm context and the holder count', () => {
 		expect(await holders(stranger)).toEqual([{ n: null }]);
 	});
 
-	// "Preview as farmer" (096, issue #51): a viewer gets the count the farm's own farmer gets.
+	// "Preview as farmer" (104, issue #51): a viewer gets the count the farm's own farmer gets.
 	it('counts for a previewed farm as its farmer would, and a farmer only ever from their own point of view', async () => {
 		const forNode = (u: User, nodeId: string) => rowsAs<{ n: number | null }>(u, 'SELECT app_other_farm_holders($1, $2) AS n', [projectId, nodeId]);
 		expect(await forNode(viewer, farmA.id)).toEqual([{ n: 1 }]); // farmer's view: farmer2 holds B and C

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calibrationStats } from './stats';
 import { toEpochDay, waterYearOf } from '../calendar';
+import { wr2012FitStats } from '../reference/wr2012Fit';
 
 const D = 86_400;
 const m3day = (m3s: number[]) => m3s.map((v) => v * D);
@@ -183,5 +184,38 @@ describe('calibrationStats — exclusions', () => {
 		const c = calibrationStats(sim, obs, { startDate: '2020-09-29', exclusions: [{ start: '2020-01-01', end: '2021-01-01', reason: 'x' }] });
 		expect(c.days).toBe(0);
 		expect(c.excludedDays).toBe(4);
+	});
+});
+
+describe('calibrationStats — WR2012 five-statistic table (CR-28)', () => {
+	// Two water years, 2002/03 and 2003/04, observed 1 m³/s Oct–Mar and 0.5 Apr–Sep; simulated 10 % wetter.
+	const start = '2002-10-01';
+	const d0 = toEpochDay(start);
+	const n = toEpochDay('2004-10-01') - d0;
+	const obs = Array.from({ length: n }, (_, t) => {
+		const m = new Date((d0 + t) * D * 1000).getUTCMonth() + 1;
+		return m >= 10 || m <= 3 ? 1 : 0.5;
+	}) as (number | null)[];
+	const sim = obs.map((v) => v! * 1.1 * D);
+
+	it('scores the same days as the other statistics, converted to m³/day', () => {
+		const c = calibrationStats(sim, obs, { startDate: start });
+		const direct = wr2012FitStats(d0, Float64Array.from(obs, (v) => v! * D), sim, Int32Array.from({ length: n }, (_, t) => t));
+		expect(c.wr2012Fit).toEqual(direct);
+		expect(c.wr2012Fit!.waterYears).toEqual([2002, 2003]);
+		expect(c.wr2012Fit!.stats.find((s) => s.key === 'mar')!.diffPct).toBeCloseTo(10, 9);
+	});
+
+	it('leaves out days outside the window, excluded days and missing observations', () => {
+		expect(calibrationStats(sim, obs, { startDate: start, windowStart: '2003-10-01' }).wr2012Fit!.waterYears).toEqual([2003]);
+		expect(calibrationStats(sim, obs, { startDate: start, exclusions: [{ start: '2003-10-01', end: '2004-09-30', reason: 'x' }] }).wr2012Fit!.waterYears).toEqual([2002]);
+		const gappy = obs.slice();
+		for (let t = 0; t < 4; t++) gappy[t] = null; // 27 of October 2002's 31 days: below 90 %
+		expect(calibrationStats(sim, gappy, { startDate: start }).wr2012Fit!.waterYears).toEqual([2003]);
+	});
+
+	it('is null without a start date, or with no complete water year', () => {
+		expect(calibrationStats(sim, obs).wr2012Fit).toBeNull();
+		expect(calibrationStats(sim.slice(0, 200), obs.slice(0, 200), { startDate: start }).wr2012Fit).toBeNull();
 	});
 });

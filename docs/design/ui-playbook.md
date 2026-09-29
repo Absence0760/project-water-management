@@ -4,7 +4,7 @@ How screens are designed and built in this app: the process, the layout
 rules, the pieces to reuse, and the testing traps. It collects what the
 option A redesign (issue #17) learned the hard way. Each rule here cost at
 least one round of "that doesn't look right". Read it before building or
-reviewing any screen; the `ui-designer` agent (`.claude/agents/ui-designer.md`,
+reviewing any screen; the `ui-designer` agent (`.claude/agents/design/ui-designer.md`,
 `/polish-ui`) works from it.
 
 [ui.md](../ui.md) describes what each screen *is*; this file is about *how*

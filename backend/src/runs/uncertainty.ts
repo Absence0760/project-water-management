@@ -15,6 +15,7 @@ import { randomInt } from 'node:crypto';
 import {
 	ENGINE_VERSION,
 	ENSEMBLE_MEMBERS_MAX,
+	OBJECTIVES,
 	pairedMembers,
 	pairedRefusal,
 	resolveEnsembleOptions,
@@ -100,7 +101,7 @@ const StartBody = z.union([
 					records: z.array(RECORD).max(2).optional(),
 					thresholds: z
 						.object({
-							objective: z.enum(['kgePrime', 'kgeYearly', 'kgeNp', 'nseSqrt', 'nseLog']).optional(),
+							objective: z.enum(OBJECTIVES).optional(),
 							minSkill: z.number().optional(),
 							wr2012MaxLevel: LEVEL.optional(),
 							maxLowFlowBiasPct: z.number().nullable().optional()

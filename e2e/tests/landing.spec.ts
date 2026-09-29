@@ -256,6 +256,35 @@ test('the prerendered page loads every asset it asks for, the contour texture am
 		expect(new URL(res.url()).pathname).toBe('/landing/contours.svg');
 		expect(res.status()).toBe(200);
 		expect(failed).toEqual([]);
+		// And it draws: the file's line group, through <use>, spans the texture's box.
+		const drawn = await p.locator('main .contours use').evaluate((u) => (u as SVGUseElement).getBBox().width);
+		expect(drawn).toBeGreaterThan(1000);
+	}
+});
+
+test('the largest contentful paint is the hero render, never the background texture', async ({ page }) => {
+	// As a CSS mask the page-sized contour texture was an image to the browser,
+	// so it was the page's LCP, fetched only once the styles had resolved
+	// (docs/design/landing-art.md § Quality bar). Drawn as vector through <use>,
+	// it isn't a candidate. Checked on a phone, where the hero sits below the copy.
+	for (const size of [PHONE, DESKTOP]) {
+		await page.setViewportSize(size);
+		await page.goto('/welcome');
+		await expect(page.locator('.hero .scene')).toHaveClass(/\bloaded\b/);
+		// Every candidate has loaded by the page's load event (the texture too,
+		// when it was a mask); each is reported on the paint after its load, so
+		// wait two frames past it, then the last entry is the page's LCP.
+		const lcp = await page.evaluate(async () => {
+			if (document.readyState !== 'complete') await new Promise((r) => addEventListener('load', r, { once: true }));
+			for (let i = 0; i < 2; i++) await new Promise(requestAnimationFrame);
+			return new Promise<string>((resolve) => {
+				new PerformanceObserver((list) => {
+					const last = list.getEntries().at(-1) as PerformanceEntry & { element?: Element | null; url?: string };
+					resolve(`${last.element?.tagName ?? '?'} ${new URL(last.url || location.href).pathname}`);
+				}).observe({ type: 'largest-contentful-paint', buffered: true });
+			});
+		});
+		expect(lcp, `${size.width} px`).toMatch(/^IMG \/landing\/hero-(day|dusk)-\d+\.(avif|webp)$/);
 	}
 });
 

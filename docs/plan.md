@@ -462,7 +462,7 @@ rehearsed once.
 - 🚧 **Data protection (POPIA):** a privacy notice, data export (done:
   `GET /auth/me/export`, the Account page's "Download my data") and account
   deletion, a retention policy for runs, and a sub-processor list (AWS). Run
-  `/audit/gdpr`, `/audit/account-deletion-completeness` and
+  `/audit/popia`, `/audit/account-deletion-completeness` and
   `/audit/data-export-completeness`.
 - 🚧 **Run storage:** trim output keys, cap the number of runs kept
   (done: `RUNS_KEPT_PER_PROJECT`, default 20), and consider float4 ([data-model.md](./data-model.md#time-series-storage)).

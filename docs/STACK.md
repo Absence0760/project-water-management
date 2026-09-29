@@ -126,11 +126,15 @@ pnpm import:project <project.json> --email you@example.com [--name …] [--passw
                              # patch the settings and transfer rules (by end-node names), fit GR4J before importing (model.md §2.10b)
 pnpm pan-sensitivity <project.json> [--out <file.md>] [--seed <n>] [--starts <n>] [--budget <n>]
                              # GR4J at a few pan-coefficient choices, fixed vs refitted (no DB; refuses a monthly PE, settings.pe; model.md §2.4a)
+pnpm fit-sweep <project.json> --grid <grid.json> [--out <file.md>] [--json <file.json>] [--seed <n>] [--starts <n>] [--budget <n>] [--max-cells <n>]
+                             # one GR4J fit per cell of a grid (pan preset × bounds × objective × exclusion set × WR2012 band), with
+                             # validation, MAR and EWR days, in one Markdown table; ranks nothing (no DB; ≤ 24 cells unless raised; model.md §2.10b)
 pnpm test:scripts           # guard: root scripts point at real targets
 pnpm check:infra            # Terraform fmt + validate + plan-only tests (mocked providers, no AWS creds)
 
 pnpm check:workflows        # workflow guard (SHA pins, OIDC-only, production gating, CI-gate fan-in) + actionlint if installed
 pnpm check:env              # committed env files point only at the local stack
+pnpm check:claude           # the Claude agents, commands and skills cite only real paths and no template placeholders
 pnpm check:bundle           # frontend gzip budget (after build:frontend); ceilings + change log in scripts/guards/check_web_bundle_budget.mjs
 pnpm check:compliance       # advisory: privacy-doc drift vs origin/main
 pnpm check:terms            # no client-identifying term in any tracked file (needs the terms list in ../infra-secrets; else a no-op)
@@ -228,6 +232,7 @@ Deploying (only when the client is ready for it) is covered in
 - `docs/allocations.md`: registered water-use volumes (WARMS, licences) vs modelled use: import, matching, the comparison, who sees names
 - `docs/scenarios.md`: scenarios, overrides on a base run (the engine's op catalogue, classification, problems; the backend, data model and API)
 - `docs/testing.md`: which test command when, and how long each takes
+- `docs/contributing.md`: the git workflow for sessions sharing a checkout, code organization, the root scripts format, and which files the templates repo owns; `.claude/README.md`: the Claude agents and commands
 - `docs/plan.md`: roadmap, acceptance criteria, questions for the client, risks
 - `docs/planned-work.md`: feature backlog beyond V1; `docs/followups.md`: known open work
 - `docs/design/ui-playbook.md`: how screens are designed, built and tested (process, layout rules, reusable pieces, testing traps; the `ui-designer` agent works from it)

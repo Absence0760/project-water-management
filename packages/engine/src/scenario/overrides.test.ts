@@ -11,7 +11,7 @@ import { runModel } from '../run';
 import type { ModelInput, NetworkNode, RunSeries } from '../project';
 import { scrambleOrder } from '../testing/fuzz';
 import { checkAll } from '../testing/invariants';
-import { MASKED_RULE, applyScenario, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
+import { MASKED_RULE, applyScenario, cloneData, classifyOp, classifyScenario, scenarioSteps, type ScenarioMask } from './overrides';
 import { structureIssues } from './structure';
 import { validateScenarioOps, type ScenarioOp } from './ops';
 
@@ -1275,5 +1275,20 @@ describe('mask: ids, counts and value rules (docs/followups.md "Hidden ids and c
 		expect(classifyScenario(baseM(), ops, ['A', 'C'], { mask })).toEqual(['proposal', 'proposal']);
 		// Unmasked the add collides, so the set meets the C → B transfer: not wholly theirs.
 		expect(classifyScenario(baseM(), ops, ['A', 'C'])).toEqual(['proposal', 'baseline']);
+	});
+});
+
+describe('cloneData', () => {
+	it('copies plain data deeply and drops keys that would reach a prototype (JSON.parse keeps __proto__ as an own key)', () => {
+		const src = JSON.parse('{"a":{"b":[1,{"c":2}]},"__proto__":{"polluted":true},"x":{"constructor":{"prototype":{"bad":1}},"prototype":3,"ok":4}}');
+		const out = cloneData(src) as Record<string, unknown>;
+		expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
+		expect((out as { polluted?: unknown }).polluted).toBeUndefined();
+		expect(Object.keys(out)).toEqual(['a', 'x']);
+		expect(out.x).toEqual({ ok: 4 });
+		expect(Object.hasOwn(out.x as object, 'constructor')).toBe(false);
+		expect(out.a).toEqual({ b: [1, { c: 2 }] });
+		expect(out.a).not.toBe(src.a);
+		expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
 	});
 });

@@ -2,7 +2,8 @@
 // Don't edit by hand: change the sources in scripts/landing-art/ and rerun it.
 // The hero render's size and blurred placeholders, where the scene's rivers,
 // dams, clouds and gauge fall in it (% of the picture), each framed app
-// screen's size, and the icons' and river divider's path data.
+// screen's size, the icons' and river divider's path data, and the contour
+// texture's size.
 /* eslint-disable */
 export const ART = {
 	"hero": {
@@ -911,5 +912,9 @@ export const ART = {
 			}
 		]
 	},
-	"river": "M0 14 C60 14 80 5 140 6 S230 22 300 21 S390 4 470 6 S560 23 640 22 S740 5 820 7 S920 21 1000 20 S1110 9 1200 12"
+	"river": "M0 14 C60 14 80 5 140 6 S230 22 300 21 S390 4 470 6 S560 23 640 22 S740 5 820 7 S920 21 1000 20 S1110 9 1200 12",
+	"contours": {
+		"width": 1500,
+		"height": 997
+	}
 };

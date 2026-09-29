@@ -99,6 +99,7 @@ const CHARTS: Record<string, { prop: string } | { heading: true } | { svgName: R
 	'farm/MonthlyChart.svelte': { heading: true },
 	'share/FlowChart.svelte': { heading: true },
 	'uncertainty/BandFdcChart.svelte': { svgName: /<title id="\{uid\}-t">/ },
+	'uncertainty/TornadoChart.svelte': { prop: 'title' },
 	'compare/ReserveYearsChart.svelte': { svgName: /aria-label="Days below the reserve per water year\./ },
 	'runs/RunChart.svelte': { delegates: true },
 	'runs/RunCharts.svelte': { delegates: true }
@@ -114,6 +115,7 @@ const CHARTS: Record<string, { prop: string } | { heading: true } | { svgName: R
  */
 const INLINE: Record<string, string> = {
 	'network/DamStorageFields.svelte': 'the survey curve: axis titles "Volume (m³)" and "Area (m²)", end ticks, "dashed = capacity"; the table beside it',
+	'runs/EwrFdcOverlay.svelte': 'a month\'s flow-duration curves against the EWR: axis titles "% of <month>s the flow is at least this" and "Flow (<unit>, log scale)", ticks on both axes, a key of the lines, the SVG title; the values table under it',
 	'runs/EwrAssurancePanel.svelte': 'months met by month of the year: "% of months met", a month under each bar and its % on it; the table under it'
 };
 /** Help's explanatory diagrams: pictures of an idea, each named with a full text description (help/Diagram.svelte), not charts of data. */

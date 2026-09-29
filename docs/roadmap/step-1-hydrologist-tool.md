@@ -801,7 +801,7 @@ operator/hydrologist waits (SES review, the region opt-in, answers), plan on
       `information_schema` FKs);
   - **e2e:** export, then delete, then sign-in fails;
   - **axe:** `/privacy` and the dialogs;
-  - run `/audit/gdpr`, `/audit/account-deletion-completeness`,
+  - run `/audit/popia`, `/audit/account-deletion-completeness`,
     `/audit/data-export-completeness` and `/audit/third-party-data-flows`,
     and fix every finding.
 - **Docs to update:** security.md (POPIA section; remove the known gap),
@@ -1955,7 +1955,7 @@ each "Need verdict" here before building the work packages it covers.
 | Before WP-1.17–1.31 | `/persona hydrologist` | Which gaps block moving off the spreadsheet; ranks preview, auto-cal, `.xlsx`, import, templates, units. **Need verdict:** _pending; run against `main` and record here._ |
 | After WP-1.25 | `/persona hydrologist` | "Is the hydrology right?" is yes for the signed-off version; no unphysical results on the examples. |
 | WP-1.9, 1.31 | `/persona new-user` | A new modeller can import a workbook and run it without help. |
-| WP-1.13 | `/persona data-subject`, `/audit/gdpr`, `/audit/account-deletion-completeness`, `/audit/data-export-completeness`, `/audit/third-party-data-flows` | Export is complete; deletion is complete; the notice matches reality. |
+| WP-1.13 | `/persona data-subject`, `/audit/popia`, `/audit/account-deletion-completeness`, `/audit/data-export-completeness`, `/audit/third-party-data-flows` | Export is complete; deletion is complete; the notice matches reality. |
 | Before WP-1.15 | `/persona adversary`, `/audit/auth`, `/audit/xss`, `/audit/infra`, `/audit/cost-controls`, `/audit/secrets` | No open high or medium finding. |
 | WP-1.10, 1.26 | `/persona international-user`, `/persona accessibility-user` | The number and unit styles read correctly, including with screen readers. |
 

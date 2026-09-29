@@ -125,9 +125,10 @@ while level < hi:
 
 with open(args.out, "w") as f:
     f.write(
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" fill="none" stroke="currentColor" '
-        f'stroke-linecap="round" stroke-linejoin="round">\n'
+        # One group with its own paint: the page draws it through <use href="…#contours">.
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}">\n'
+        f'<g id="contours" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">\n'
         + "\n".join(paths)
-        + "\n</svg>\n"
+        + "\n</g>\n</svg>\n"
     )
 print(f"contours: {len(paths)} levels, {W} × {H}")

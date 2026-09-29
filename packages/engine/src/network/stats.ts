@@ -2,6 +2,7 @@
 import { fromEpochDay, toEpochDay, waterYearOf } from '../calendar';
 import { excludedDayMask, type ExclusionRange } from '../calibrate/provenance';
 import type { AnnualVolume, CalibrationStats } from '../project';
+import { wr2012FitStats } from '../reference/wr2012Fit';
 
 const SEC_PER_DAY = 86_400;
 
@@ -28,6 +29,7 @@ export interface CalibrationWindow {
  * - logNSE = NSE of ln(Q + ε), ε = ō / 100               (weights low flows; Pushpalatha et al. 2012)
  * - volume error = 100 × (Σs − Σo) / Σo                  (%; positive = model too wet; = −PBIAS)
  * - annual volumes per water year (Oct–Sep), paired days only, in Mm³
+ * - the WR2012 five-statistic table on the same days (reference/wr2012Fit.ts; needs startDate)
  *
  * @param simulatedM3Day simulated outflow, m³/day, aligned with `observedM3s`
  * @param observedM3s    observed flow, m³/s; null = missing
@@ -96,7 +98,8 @@ export function calibrationStats(
 			logNse: null,
 			logEpsilonM3s: null,
 			volumeErrorPct: null,
-			annualVolumes: []
+			annualVolumes: [],
+			wr2012Fit: null
 		};
 	}
 
@@ -186,6 +189,21 @@ export function calibrationStats(
 		logNse: eps !== null && logSst > 0 ? 1 - logSse / logSst : null,
 		logEpsilonM3s: eps,
 		volumeErrorPct: sumObs !== 0 ? (100 * (sumSim - sumObs)) / sumObs : null,
-		annualVolumes
+		annualVolumes,
+		wr2012Fit: d0 !== null ? wr2012OnScoredDays(d0, from, to, obsAt, simulatedM3Day) : null
 	};
+}
+
+/** The WR2012 five-statistic table on the scored days, in m³/day. */
+function wr2012OnScoredDays(d0: number, from: number, to: number, obsAt: (t: number) => number | null, simulatedM3Day: ArrayLike<number>) {
+	const len = to + 1;
+	const obs = new Float64Array(len).fill(NaN);
+	const idx: number[] = [];
+	for (let t = from; t <= to; t++) {
+		const o = obsAt(t);
+		if (o === null) continue;
+		obs[t] = o * SEC_PER_DAY;
+		idx.push(t);
+	}
+	return wr2012FitStats(d0, obs, simulatedM3Day, idx);
 }

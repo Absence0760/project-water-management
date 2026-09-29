@@ -2643,7 +2643,47 @@ which checks every catchment tab).
     one was chosen; the validation columns are shaded. Each column header
     gives its period: a date range, except for the dry → wet test, whose
     years interleave and are listed (for example "WY 2001/02, 2003/04"). Its rows are KGE′, year-balanced KGE′, non-parametric KGE, the NSE
-    variants, volume error and the FDC signatures.
+    variants, the low/high-flow KGE′ on Q and 1/Q (engine ≥ 1.19.0; "–" on a report made
+    before it), volume error and the FDC signatures. From engine 1.19.0
+    (CR-5, model.md §2.10b) KGE′, NSE and the low/high-flow KGE′ show their
+    90 % bootstrap interval in brackets ("0.62 (0.48–0.71)", "to" when a
+    bound is negative), with a line saying what it is; a period of fewer than
+    3 water years shows the bare score. Below it, a **benchmarks** table
+    (`data-testid="fit-benchmarks"`) scores the model, the mean flow every
+    day and the day-of-year climatology (±7 days) on the fit's objective,
+    over the same columns, and a warning sentence
+    (`data-testid="fit-climatology-warning"`) names the fitted or validation
+    periods where the model scores no better than the climatology. A report
+    made before 1.19.0 has neither. The formatting lives in
+    `lib/calibration/fit.ts` (`scoreCellText`, `benchmarkRows`,
+    `climatologyWarning`).
+    With a dry → wet test, a line under the table says what ranked its
+    years: the reference gauge (other catchment), "a regional wet/dry index
+    that is never scored", or the fitted record's own mean flow (engine ≥
+    1.19.0, `rankedByText` in `lib/calibration/fit.ts`; model.md §2.10b); the
+    fit record's dry → wet line says the same.
+    Under it, **How representative is the record** (engine ≥ 1.19.0, CR-34;
+    `calibration/representativeness.ts`): the record's length and its mean
+    rain as a share of the long-term mean in the heading, the engine's
+    one-sentence summary, a table of each scored water year (scored days,
+    rain, its percentile in the run's long-term water-year rain and Dry /
+    Near normal / Wet), and a key naming the reference and the 33rd / 67th
+    percentile thresholds (model.md §2.10b). Any limit it implies ("all dry:
+    it can't show how the model behaves in wet years") is among the notes
+    at the top of the result.
+  - Under it, **WR2012 statistics** (`calibration/Wr2012FitTable.svelte`,
+    helpers in `lib/calibration/wr2012Fit.ts`; engine ≥ 1.19.0, CR-28,
+    model.md §2.10): MAR, mean of log annual flows, SD, log SD and seasonal
+    index on complete water years of monthly flows, each observed, simulated,
+    the signed difference, the band ("< 4 %") and a **Within** / **Outside**
+    badge in words (Outside amber), or "Not computed" (the SDs with one
+    year). A **Period** select switches between the fit, the current
+    parameters and each test part that has a complete year. Below: how many
+    are within, over which water years, and while the bands are unconfirmed
+    (`WR2012_GOOD_FIT_BANDS.confirmed`) the column is headed **Indicative
+    band** with a note that they come from a consultant report citing WR2012,
+    not yet checked against WRC TT 689/16 and TT 690/16. A report from before
+    engine 1.19.0 shows no table.
   - **Apply to form** (editors only) writes the fitted parameters into the
     form, with a **fit record** (`settings.fitRecord`, model.md §2.10b), and
     the form then shows "Unsaved settings". Nothing is stored until Save.
@@ -3033,7 +3073,8 @@ viewers); an applicant and a farmer get their own views, as for every tab.
 - **Below it**, full width, the moved panels, with their ids:
   **Reserve compliance by month** (`#res-reserve`, with a rule table),
   **EWR compliance by month** (`#res-ewr-grid`, `EwrHeatmap`), the
-  **Uncertainty bands** (`#res-uncertainty`), the **Outcome matrix**
+  **Uncertainty bands** (`#res-uncertainty`, with the **Sensitivity runs**
+  under them in the same panel, [§ Sensitivity runs](#sensitivity-runs)), the **Outcome matrix**
   (`#res-outcomes`, [§ Outcome matrix](#outcome-matrix)), the **Seasonal
   outlook** (`#res-outlook`, [§ Seasonal outlook](#seasonal-outlook)) and the
   **Water account** (`#res-water-account`). Each is described under
@@ -3573,7 +3614,18 @@ read it before.
   hidden and its legend entry shows it, and a legend toggle survives the log
   scale and unit switches; a switched-off entry is struck through in the
   muted text colour, not faded, so it keeps AA contrast; m³/s or m³/day, log
-  scale, last 3 years or the full period). A plain drag draws a box to zoom
+  scale, last 3 years or the full period). **Periods excluded from
+  calibration** (settings.calibrationExclusions, model.md §2.10) are tinted
+  behind the lines (`--warning` at 16 %, `LineChart`'s `shade`, light and
+  dark), and a key under the chart (`shadeKey`) names them in words, one line
+  each with its reason ("WY 2015/16: suspect rain"), so the tint never rests
+  on colour alone. They are the run's own exclusions, from its settings
+  snapshot (else, for a detail cached before runs carried settings, the ones
+  its calibration statistics applied), never the project's current ones, so
+  an old run shows what it was fitted and scored with. Each is clipped to the
+  hydrograph's days; one that runs past them says "(partly outside the run)",
+  and one wholly outside isn't listed (`runs/exclusionShading.ts`). A plain
+  drag draws a box to zoom
   into, as on every chart; **Shift+drag** moves the view back and forth
   through the record at the same width, and **◀ Earlier / Later ▶** move it
   by half a window (the non-drag route, and the only one on touch). Neither
@@ -3590,7 +3642,9 @@ read it before.
   calibration-period note, in-sample or why not, and adds the gauge vs logger table when years disagree;
   the volume bias is one tile, *Volume bias (PBIAS)*, in words, "57.6% too dry" or "12.3% too wet",
   and the annual water balance's *Simulated vs observed* column says the same, never a signed PBIAS beside
-  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled),
+  a signed volume error of the opposite sign, issue #51; the CSV keeps both signed, each labelled;
+  from engine 1.19.0 the same **WR2012 statistics** table as the fit results, for the run's scored
+  days, above the annual water balance, CR-28),
   then **Where the parameters came from**: the fit record the
   run was made with, from the run's own settings snapshot (same layout as in
   Settings, with the in-sample score beside its validation scores, the
@@ -3653,7 +3707,8 @@ read it before.
   draw the seed, runs every member in the calibration worker with a live
   count ("Running: 120 of 301 members, 41 kept so far", Cancel), then the
   server checks and stores it. A cancelled one stays in the list as never
-  stored. **Run notes** on every run (`runs/RunNotes.svelte`,
+  stored. Under the bands, in the same panel, the **Sensitivity runs**
+  ([§ Sensitivity runs](#sensitivity-runs)). **Run notes** on every run (`runs/RunNotes.svelte`,
   `#res-notes`, helpers in `runs/notes.ts`): the modeller's written
   explanation of the run, the one thing about a run that can change after it
   is made. Editors get a textarea with a character count (4 000 at most) and
@@ -3730,7 +3785,21 @@ read it before.
   the share of months met per month of the year on a fixed 0–100 % axis with
   each bar's value written above it, the same by month of the year as a table
   (years, met, %, mean required and simulated flow in the table's unit, deficit,
-  FDC points met), and, collapsed, **Month by month**: every complete month's
+  FDC points met), and, from engine 1.19.0 (calibration research CR-29,
+  helpers in `runs/ewrReporting.ts`): a fifth figure, **EWR as % of natural
+  MAR** ("50.0 %nMAR", with the mean annual EWR and the site's natural MAR in
+  Mm³/a, and the low flows' % with a low-flow grid); **from daily data**
+  (`runs/EwrDailyCompliance.svelte`) a sentence for the whole run ("Below the
+  day's requirement on 10 of 365 days (2.7% of the time); 2.7% of the
+  required volume was not delivered") and a table by month of the year with
+  the monthly verdict beside the days not met, % of time and % of volume not
+  met, a month of the year whose every month was met but had short days
+  marked **short days** in words; and the **flow-duration curves on the EWR**
+  (`runs/EwrFdcOverlay.svelte`): a month select (opening on the first month
+  whose simulated curve falls below the EWR at a point), a key naming each
+  line, the run's natural flow (dashed), present-day flow (solid) and the EWR
+  curve (dash-dot, the text colour) at the table's % points on a log scale,
+  and, collapsed, **Values for** the month as a table. Then, collapsed, **Month by month**: every complete month's
   natural flow, its condition (% exceedance, or wetter / drier than the table),
   the requirement, the simulated flow, the share of the requirement and met or
   not met (rows not met shaded). From engine 0.33.0 ([model.md §2.9d](./model.md)),
@@ -3780,8 +3849,22 @@ read it before.
   record (engine ≥ 1.4.0), **At gauges in the network**: a row per gauge with
   its record, the share of the catchment's natural flow above it, check 1's
   failing water years and check 4's Q90 ratio with *within* / *outside the
-  factor of 2* (a failing gauge's row shaded), and a fifth line in the check
-  list. The Compare page sets these checks side by side
+  factor of 2* (a failing gauge's row shaded), and a line in the check
+  list. From engine 1.19.0, after the low-flow curves, **Recession
+  diagnostics** (`runs/RecessionDiagnostics.svelte`, helpers in
+  `runs/recession.ts`; [model.md §2.10d](./model.md), *Recession
+  diagnostics*, CR-13): the segment rules in one sentence, a verdict (the
+  simulated recession rate at the observed points' median flow as *n× faster
+  / slower*, the difference in b, and whether that is within the indicative
+  limits; *Not judged* with fewer than 8 segments), a scatter of −dQ/dt
+  against Q on log–log axes for the record and for the simulated outflow on
+  the same days with each fitted line (`LineChart` in `xy` mode: x is
+  log₁₀ Q labelled as flows, y its log scale; the points are rebuilt in the
+  browser from the run's stored `observed_flow` and `simulated_outflow`
+  series with the engine's `recessionPoints`, so the summary holds only the
+  segments and fits), and a table of a, b, −dQ/dt ÷ Q at the reference flow,
+  points and segments per fit. The check list gains a *Recessions* line on
+  those runs; an older run shows neither. The Compare page sets these checks side by side
   ([run-comparison.md](./run-comparison.md#plausibility-checks)). Hydrological unit detail (on Hydrological units since issue #17; dam
   storage as % of the capacity the run had, from its model snapshot, not
   today's model, `runDamCapacity`; supply against demand), and an explorer for any
@@ -3842,6 +3925,47 @@ read it before.
   Large arrays live in `$state.raw` and are replaced, never mutated.
 - **Report**, beside the Download menu in the run header, opens the shown
   run's printable report (§ Report below).
+
+### Sensitivity runs
+
+Calibration research CR-21 ([model.md §2.10g](./model.md#210g-sensitivity-runs-ewr-compliance-as-a-range-engine--1180-calibration-research-cr-21)):
+how far EWR compliance moves when one input the record can't settle is
+changed at a time. On [River & reserve](#river--reserve), under the
+uncertainty bands in the same panel (`#res-uncertainty`; the **Uncertainty**
+link of the page's menu reaches both), `uncertainty/SensitivityPanel.svelte`
+with its chart `uncertainty/TornadoChart.svelte` and helpers
+`uncertainty/sensitivity.ts`.
+
+- **Anyone who can see the run** can press **Run sensitivity**: the page
+  fetches the run's own inputs (`…/model-input`) and the calibration worker
+  runs the central case and each factor's low and high (at most 11 model
+  runs, under a second on the examples), with a count ("5 of 11 runs") and
+  Cancel. **Nothing is stored**: it is a live diagnostic, like
+  `pnpm pan-sensitivity`, and **Run again** repeats it (the same inputs give
+  the same numbers).
+- A line names each factor's settings (Rain × 0.9 / × 1.1 · Pan coefficient
+  × 0.85 / × 1.15 · Dam evaporation factor × 0.85 / × 1.15 · Abstraction
+  (demand) × 0.7 / × 1.3 · Initial dam storage empty / full), the reporting
+  window and the engine version. Factors that don't apply (no dam, no
+  demand, a monthly PE row) are listed under **Not run** with the reason.
+- **Thresholds**: the share of days the EWR must be met, and with a rule
+  table the share of months meeting it, both 80 % by default (a note says
+  they are defaults pending the hydrologist). Changing one re-judges at once,
+  without a re-run.
+- **The verdict**, one line per EWR site, with a coloured edge and its name
+  in words: *Meets the threshold*, *Below the threshold*, *Not determinable
+  with current data* (the range over every run crosses the threshold) or
+  *Nothing to judge*, then the engine's sentence with the range, the central
+  value and the threshold.
+- **The tornado** for one site (a select when there are several) and one
+  result: EWR days not met, the shortfall (Mm³), and with a rule table the
+  months meeting it (shown first then). One row per factor, largest swing
+  first: a blue bar from the central run to the low setting and an orange one
+  to the high, each setting named beside its bar; the central run is the
+  solid line, the threshold the dashed one (on days not met, the days the
+  threshold allows; none on the shortfall). The chart's accessible name
+  carries every number, and the table under it gives the same rows (low,
+  its result, high, its result, swing).
 
 ### Outcome matrix
 

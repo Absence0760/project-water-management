@@ -109,6 +109,17 @@ export function planMigrations(files: readonly MigrationFile[], applied: readonl
 			problems.push(`${row.name} was applied but its contents have changed since (recorded sha256 ${row.checksum.slice(0, 12)}…, file ${file.checksum.slice(0, 12)}…)`);
 		}
 	}
+	// One file per number: two branches that each take the next free number
+	// both pass their own CI, and once both land one of them sorts before a
+	// file a database has already applied (the out-of-order check below).
+	const byNumber = new Map<string, string[]>();
+	for (const f of files) {
+		const n = f.name.slice(0, f.name.indexOf('_'));
+		byNumber.set(n, [...(byNumber.get(n) ?? []), f.name]);
+	}
+	for (const [n, names] of byNumber) {
+		if (names.length > 1) problems.push(`${names.join(' and ')} share the number ${n} (renumber the later one after the highest)`);
+	}
 	const pending = files.filter((f) => !done.has(f.name));
 	const latest = [...done.keys()].sort(cmp).at(-1);
 	for (const f of pending) {

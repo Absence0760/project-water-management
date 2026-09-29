@@ -1,8 +1,9 @@
 // The migration runner's forward-only rules and per-file directives, without a
 // database. Against Postgres (bootstrap, backfill, timeouts):
 // src/db/migrate.db.test.ts.
+import { readdirSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { checksumOf, parseDirectives, planMigrations, type AppliedRow, type MigrationFile } from './migrate.js';
+import { checksumOf, MIGRATIONS_DIR, parseDirectives, planMigrations, type AppliedRow, type MigrationFile } from './migrate.js';
 
 const file = (name: string, sql = `-- ${name}`): MigrationFile => ({ name, checksum: checksumOf(sql) });
 const row = (f: MigrationFile, checksum: string | null = f.checksum): AppliedRow => ({ name: f.name, checksum });
@@ -41,6 +42,19 @@ describe('planMigrations', () => {
 		const { problems, pending } = planMigrations([a, b, late, c], [row(a), row(b), row(c)]);
 		expect(pending).toEqual([late]);
 		expect(problems).toEqual([expect.stringMatching(/^002a_merged_late\.sql is pending but sorts before 003_last\.sql/)]);
+	});
+
+	it('refuses two files with the same number, naming both (positive control: distinct numbers pass)', () => {
+		const twin = file('002_other.sql');
+		const { problems } = planMigrations([a, b, twin, c], []);
+		expect(problems).toEqual(['002_more.sql and 002_other.sql share the number 002 (renumber the later one after the highest)']);
+		expect(planMigrations([a, b, c], []).problems).toEqual([]);
+	});
+
+	it('the checked-in migrations have one file per number', () => {
+		const names = readdirSync(MIGRATIONS_DIR).filter((f) => /^\d+_.+\.sql$/.test(f));
+		expect(names.length).toBeGreaterThan(100);
+		expect(planMigrations(names.map((n) => file(n)), []).problems).toEqual([]);
 	});
 
 	it('backfills rows recorded before checksums instead of refusing them', () => {

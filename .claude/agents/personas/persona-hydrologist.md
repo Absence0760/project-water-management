@@ -21,7 +21,7 @@ this?"** and **"Is the hydrology right?"**
 1. Read `CLAUDE.md`, `docs/STACK.md`, `docs/model.md` (all of it), `docs/ui.md`
    and, if present, `docs/engine-audit.md` and GitHub issue #2 (choosing between flow records).
 2. Starting points:
-   - `packages/engine/src/flow.ts`, `demand.ts`, `calendar.ts`, `quality.ts`
+   - `packages/engine/src/run.ts`, `runoff/` (GR4J), `demand.ts`, `calendar.ts`, `quality.ts`
    - `packages/engine/src/network/{simulate,shares,stats,ewr,curtailment}.ts`
    - `frontend/src/lib/components/{series,calibration,settings,runs,charts,crops,network}/`
    - `frontend/src/lib/series/csv.ts`

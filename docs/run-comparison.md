@@ -267,7 +267,16 @@ bottom:
    met, the months not met, the deficit (m³), the longest run of months not
    met and the FDC check for A and B (`RunComparison.ewrAssurance`), and,
    under it, the share of months met per month of the year. More months met
-   is better. A site with a table in one run only says so, and when the two
+   is better. From engine 1.19.0 (CR-29, model.md §2.9c), when either run has
+   them, *Days not met (daily)* and *Volume not met (daily)* (lower is
+   better) and *EWR as % of natural MAR* (neutral: it moves only with the
+   natural flow or the table) join the table, and under it **Flow-duration
+   curves on the EWR** (`compare/EwrFdcCompare.svelte`, reusing the Reserve
+   panel's `runs/EwrFdcOverlay.svelte`): per site of run A matched in run B,
+   a month select with run A's natural and present-day curves, run B's
+   curve (named "Run B: scenario “…”" when B is a scenario run) and the EWR
+   curve. Run B's curve is left out, with a note, when its table has other %
+   points. A site with a table in one run only says so, and when the two
    runs' tables differ (values, points, unit, scale or natural source) a note
    says the rates measure against different rules. *What changed* lists each
    table added or removed (*"EWR rule table at the outlet added ("Reserve

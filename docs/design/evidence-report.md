@@ -25,9 +25,9 @@ decision; §12 lists every change it asks of the roadmap.
   [`figures.ts`](./evidence-report-prototype/figures.ts) prints them,
   including a 300-member ensemble and the paired band. No client data: the
   repo is public.
-- **Personas:** [`persona-licensing-authority`](../../.claude/agents/persona-licensing-authority.md),
-  [`persona-licence-applicant`](../../.claude/agents/persona-licence-applicant.md),
-  [`persona-environmentalist`](../../.claude/agents/persona-environmentalist.md).
+- **Personas:** [`persona-licensing-authority`](../../.claude/agents/personas/persona-licensing-authority.md),
+  [`persona-licence-applicant`](../../.claude/agents/personas/persona-licence-applicant.md),
+  [`persona-environmentalist`](../../.claude/agents/personas/persona-environmentalist.md).
   Their questions shape §1 and §3; running them against the build is part of
   the build's acceptance (§11).
 - **Evidence and judgement.** As in

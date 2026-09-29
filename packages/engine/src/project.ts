@@ -11,6 +11,7 @@ import type { ChirpsCorrection, ZeroRainInfill } from './rain';
 import type { RainSourceInfo } from './rainSourcePeriods';
 import type { ApanDailyInfo } from './evaporation/apanDaily';
 import type { RainAccumulationInfo } from './accumulation';
+import type { Wr2012FitStats } from './reference/wr2012Fit';
 import type { Gr4jParams } from './runoff/params';
 import type { RunoffModelId } from './runoff/types';
 import type { SeriesProvenance } from './seriesProvenance';
@@ -775,10 +776,13 @@ export type UserPriority = (typeof USER_PRIORITIES)[number];
  * Time-series kinds a project can hold. Values are daily, starting at `startDate`.
  *
  * `flow_reference_m3s` is a gauge on a *different* river (a neighbouring
- * sub-catchment), kept as a regional wet/dry index only. The engine never
- * reads it: it is not a driver, not a calibration or validation record, not
- * in the gauge-vs-logger agreement check and not in the EWR comparison, and
- * it is deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10).
+ * sub-catchment), kept as a regional wet/dry index only. A run never reads
+ * it: it is not a driver, not a calibration or validation record, not in the
+ * gauge-vs-logger agreement check and not in the EWR comparison, and it is
+ * deliberately not in CALIBRATION_FLOW_KINDS (docs/model.md §2.10). The one
+ * thing that reads it is automatic calibration's dry → wet test, which ranks
+ * water years by it (engine ≥ 1.19.0, CalibrateOptions.rankYearsBy); it is
+ * never scored there either.
  *
  * `rain_catchment_alt_mm` (engine ≥ 0.30.0, issue #40 (b)) is a second
  * catchment-rain record, e.g. an in-catchment automatic station. The engine
@@ -1866,6 +1870,12 @@ export interface CalibrationStats {
 	 * ./calibrate/provenance.ts). Absent on older runs.
 	 */
 	fitStatus?: CalibrationFitStatus;
+	/**
+	 * The WR2012 five-statistic table on the scored days (CR-28, engine ≥
+	 * 1.19.0; reference/wr2012Fit.ts): null when no water year has all 12
+	 * months scored or the run has no start date; absent on older runs.
+	 */
+	wr2012Fit?: Wr2012FitStats | null;
 }
 
 /**

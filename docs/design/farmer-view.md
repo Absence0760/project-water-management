@@ -19,7 +19,7 @@ the roadmap.
   10 Jan 2024. [`figures.ts`](./farmer-view-prototype/figures.ts) prints
   them. Forecast values stay `[placeholders]` until forecast mode exists.
   No client data: the repo is public.
-- **Persona:** [`persona-farmer`](../../.claude/agents/persona-farmer.md).
+- **Persona:** [`persona-farmer`](../../.claude/agents/personas/persona-farmer.md).
   §11 has the test results and what changed because of them.
 
 ## 1. The job
