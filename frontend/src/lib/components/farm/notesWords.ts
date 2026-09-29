@@ -22,6 +22,7 @@ export function farmNotesWords(): NotesWords {
 		edit: t('Edit'),
 		delete: t('Delete'),
 		noteFrom: (date) => ` ${t('note from {date}', { date })}`,
+		deleteTitle: t('Delete this note?'),
 		confirmDelete: (n) => (n.mine ? t('Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.') : t('Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.', { author: n.author ?? t('A former member') })),
 		add: t('Add a note'),
 		plainText: t('Plain text.'),

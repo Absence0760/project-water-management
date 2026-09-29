@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Which team (if any) owns the project, and — for owners — moving it into
 	// one of your teams or back to personal.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { api, hasTeamRole, type Member, type Project, type Team } from '$lib/api';
@@ -47,7 +48,7 @@
 		const leaving = project.team
 			? ` Members of ${project.team.name ?? 'the current team'} who aren't shared on it directly lose access.`
 			: '';
-		if (!confirm(`Move "${project.name}" to ${targetName}?${leaving}`)) return;
+		if (!(await confirmDialog({ title: `Move “${project.name}” to ${targetName}?`, message: leaving.trim() || undefined, confirmLabel: 'Move project' }))) return;
 		moving = true;
 		error = null;
 		try {
@@ -70,7 +71,7 @@
 				Belongs to a team you're not in. You have access because it was shared with you directly.
 			{/if}
 		</p>
-		<p class="muted small">Team admins are owners of this project, team members are editors and team viewers can only read it, as well as anyone listed under Members.</p>
+		<p class="muted small">Everyone in the team has the role they hold in the team on this project too, as does anyone listed under Members.</p>
 	{:else}
 		<p class="owner-line"><strong>Personal project.</strong> Only the people listed under Members can open it.</p>
 	{/if}

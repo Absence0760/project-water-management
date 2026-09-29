@@ -32,7 +32,7 @@
 
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import { beforeNavigate, goto } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import type { SeriesMeta } from '@water-management/engine';
@@ -43,10 +43,12 @@
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { prefetch } from '$lib/components/common/lazy';
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
+	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { ProjectDetailsDraft } from '$lib/components/project/detailsDraft.svelte';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import SaveBar from '$lib/components/model/SaveBar.svelte';
 	import OverviewTab from '$lib/components/overview/OverviewTab.svelte';
-	import { describeAge } from '$lib/components/series/coverage';
+	import { agoText } from '$lib/format/age';
 	import { freshness, newDataSinceRun, STALE_DAYS } from '$lib/components/series/freshness';
 	import type { UploadResult } from '$lib/components/series/upload';
 	import { rerunQueuedText, resolveAutoRun } from '$lib/components/autorun/autoRun';
@@ -134,10 +136,17 @@
 	let error = $state<string | null>(null);
 	let notFound = $state(false);
 	const editor = new ModelEditor();
+	// The project details being edited on the Project page (issue #162 item 12):
+	// held here, so they survive a tab change and share the model's save bar.
+	const details = new ProjectDetailsDraft();
 	// A tab or dialog whose chunk fails to download offers a reload; with
-	// unsaved model edits it warns first (the reload still meets the
-	// beforeunload guard below).
-	provideUnsaved(() => editor.dirty);
+	// unsaved edits it warns first (the reload still meets the browser's
+	// own prompt, lib/nav/leaveGuard.ts).
+	provideUnsaved(() => editor.dirty || details.dirty);
+	// Leaving the project (not just changing tab) with either unsaved asks first, in
+	// the app's dialog (lib/nav/leaveGuard.ts); a tab change keeps both.
+	guardUnsaved({ dirty: () => editor.dirty, what: 'model edits' });
+	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
 	let runs = $state<RunMeta[] | null>(null);
@@ -280,6 +289,7 @@
 			const [p, m, sl, rl] = await (takeProjectPage(projectId) ?? fetchProjectPage(projectId));
 			project = p;
 			editor.load(m);
+			details.load(p);
 			series = sl;
 			setRuns(rl);
 		} catch (e) {
@@ -364,15 +374,29 @@
 		}
 	}
 
-	const UNSAVED = 'You have unsaved model changes. Leave without saving?';
-	beforeNavigate((nav) => {
-		if (!editor.dirty || nav.to?.url.pathname === page.url.pathname) return;
-		if (nav.type === 'leave') {
-			nav.cancel(); // browser shows its own "leave site?" prompt
-			return;
+	/** The project details (the Project page's form), through the same bar as the model; true once saved. */
+	async function saveDetails(): Promise<boolean> {
+		if (details.problems.length || details.saving) return false;
+		details.saving = true;
+		details.saveError = null;
+		try {
+			const p = await api.projects.update(projectId, details.patch());
+			project = p;
+			details.load(p);
+			fieldHistory?.refresh();
+			return true;
+		} catch (e) {
+			details.saveError = e instanceof Error ? e.message : String(e);
+			return false;
+		} finally {
+			details.saving = false;
 		}
-		if (!confirm(UNSAVED)) nav.cancel();
-	});
+	}
+	/** The save bar's Save changes: the project details, then the model, whichever are unsaved. */
+	async function saveAll() {
+		if (details.dirty && !(await saveDetails())) return;
+		if (editor.dirty) await saveModel();
+	}
 
 	// --- the farm drawer: open while the URL names a farm ---------------------
 	// Closing it (Done, Esc, the ✕) drops `farm` from the URL in place, so Back
@@ -409,6 +433,7 @@
 
 	function onProjectChange(p: Project) {
 		project = p;
+		details.rebase(p);
 		fieldHistory?.refresh();
 	}
 
@@ -416,6 +441,7 @@
 	async function reloadInputs() {
 		const [p, m] = await Promise.all([api.projects.get(projectId), api.model.get(projectId)]);
 		project = p;
+		details.rebase(p);
 		editor.load(m);
 		fieldHistory?.refresh();
 	}
@@ -521,7 +547,7 @@
 
 <!-- The section header's parts (SectionHeader): the page's own around the tab's (headerSlot). -->
 {#snippet unsavedBadge()}
-	{#if editor.dirty && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
+	{#if (editor.dirty || details.dirty) && canEdit}<span class="badge badge-warn">Unsaved changes</span>{/if}
 {/snippet}
 {#snippet pageContext()}{contextText}{/snippet}
 {#snippet headerStatus()}
@@ -532,7 +558,7 @@
 			<summary>
 				<span class="dot" aria-hidden="true"></span>
 				{#if fresh.latest !== null && fresh.age !== null}
-					Rain up to <strong>{fmtDay(fresh.latest)}</strong> · {describeAge(fresh.age)}{#if fresh.stale}<span class="visually-hidden">{` (older than ${STALE_DAYS} days)`}</span>{/if}
+					Rain up to <strong>{fmtDay(fresh.latest)}</strong> ({agoText(fresh.age)}){#if fresh.stale}<span class="visually-hidden">{`, older than ${STALE_DAYS} days`}</span>{/if}
 				{:else}
 					No recorded rain yet
 				{/if}
@@ -542,7 +568,7 @@
 					<thead><tr><th scope="col">Series</th><th scope="col" class="num">Up to</th><th scope="col" class="num">Age</th></tr></thead>
 					<tbody>
 						{#each fresh.perSeries as p (p.id)}
-							<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{p.end}</td><td class="num">{describeAge(p.age)}</td></tr>
+							<tr><th scope="row">{kindLabel(p.kind)}{p.name ? ` · ${p.name}` : ''}</th><td class="num">{fmtDay(p.end)}</td><td class="num">{agoText(p.age)}</td></tr>
 						{/each}
 					</tbody>
 				</table>
@@ -773,6 +799,7 @@
 							<ProjectTab
 								project={project!}
 								{editor}
+								{details}
 								{series}
 								{runs}
 								{canEdit}
@@ -829,7 +856,7 @@
 					{/snippet}
 				</Lazy>
 			{/if}
-			<SaveBar {editor} onsave={saveModel} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
+			<SaveBar {editor} {details} onsave={saveAll} readonly={!canEdit} bind:height={saveBarHeight} bind:reason={saveReason} />
 			{#if canEdit}
 				{#if addMounted}
 					<Lazy load={loadAddData}>
@@ -846,12 +873,6 @@
 		{/if}
 	</LoadState>
 </main>
-
-<svelte:window
-	onbeforeunload={(e) => {
-		if (editor.dirty) e.preventDefault();
-	}}
-/>
 
 <style>
 	/* The page's 1rem gutter, plus room for the fixed model save bar only while

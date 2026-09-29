@@ -52,11 +52,13 @@ test('the latest run: its headline figures, the change from the run before, and 
 	const card = (term: string) => latest.locator('dl.stats > div').filter({ has: page.getByRole('term').filter({ hasText: term }) });
 	await expect(card('EWR not met')).toContainText('of days');
 	await expect(card('Irrigation supplied')).toContainText('of demand');
-	await expect(card('Dams today')).toContainText(/\d+%full/);
+	// The seeded run ends on 28 Jan 2022, long past: the card names that day, not "today" (issue #162).
+	await expect(card('Dams on 28 Jan 2022')).toContainText(/\d+%full/);
+	await expect(card('Dams today')).toHaveCount(0);
 	await expect(latest.locator('dl.stats > div')).toHaveCount(4);
-	// Reserve · Irrigation supplied · Dams today · NSE, in that order; the mean outflow is a short line under them,
+	// Reserve · Irrigation supplied · Dams (on the run's last day) · NSE, in that order; the mean outflow is a short line under them,
 	// its change and the rest on River & reserve (river-page.spec.ts).
-	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams today', 'Calibration NSE']);
+	await expect(latest.locator('dl.stats > div > dt')).toContainText(['EWR not met', 'Irrigation supplied', 'Dams on 28 Jan 2022', 'Calibration NSE']);
 	await expect(latest.locator('[data-headline="outflow"]')).toContainText(/^Mean simulated outflow [\d.]+ m³\/s \(\d+% of natural\): its change and the reserve in detail are on River & reserve\.$/);
 	await expect(latest.locator('[data-headline="outflow"]').getByRole('link', { name: 'River & reserve' })).toHaveAttribute('href', `?tab=river&run=${second}`);
 	// Same inputs, so every change is zero, and it says which run it is against.
@@ -91,18 +93,18 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	const project = await seedRunnableProject(page.request, 'Summary order');
 	await page.goto(`/projects/${project.id}`);
 	await expect(page.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Summary' })).toHaveAttribute('aria-current', 'page');
-	// No run yet: the checklist is the first thing on the tab, and there is no KPI row or flow chart.
+	// No run yet: the checklist is the first thing on the tab, and there is no KPI row or reserve strip.
 	await expect(setup(page)).toBeVisible();
 	const box = async (name: string | RegExp) => (await page.getByRole('region', { name, exact: typeof name === 'string' }).boundingBox())!;
 	expect((await box(/^Set(up| up this catchment)/)).y).toBeLessThan((await box('Needs attention')).y);
-	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
+	await expect(page.getByRole('region', { name: 'Days below the reserve' })).toHaveCount(0);
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toHaveCount(0);
 
 	await createRun(page.request, project.id, 'Baseline');
 	await page.reload();
-	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
-	await expect(flow.getByRole('img', { name: /^EWR vs simulated outflow: line chart of Simulated outflow/ })).toBeVisible();
-	await expect(flow.locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+	// The reserve by month, not the flow chart: that is River & reserve's alone (issue #162).
+	await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
+	await expect(page.getByRole('region', { name: 'Flow vs reserve' })).toHaveCount(0);
 	await expect(setup(page).getByRole('heading', { name: 'Setup complete' })).toBeVisible();
 	// The Dam levels table lives on the Dams page; the Summary links there.
 	const damsLink = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
@@ -112,28 +114,28 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	// The bars' % says what it measures.
 	await expect(page.getByTestId('supply-bars-what')).toHaveText("Share of each hydrological unit's irrigation demand supplied, latest run");
 
-	// First screen (board A1): the KPI row, then the chart on the left, Needs attention above Supply by unit on the right.
+	// First screen (issue #17 A1, #162): the KPI row, the reserve strip across the page under it, then Needs
+	// attention beside Supply by unit (the flow chart that was here is River & reserve's alone).
 	const kpis = await box('Latest run');
-	const chart = await box('Flow vs reserve');
+	const strip = await box('Days below the reserve');
 	const attention = await box('Needs attention');
 	const supply = await box('Supply by hydrological unit');
-	expect(chart.y).toBeGreaterThan(kpis.y + kpis.height - 1);
-	expect(attention.x).toBeGreaterThan(chart.x + chart.width);
-	expect(Math.abs(attention.y - chart.y)).toBeLessThan(2);
-	expect(supply.y).toBeGreaterThan(attention.y + attention.height - 1);
-	expect(Math.round(supply.x)).toBe(Math.round(attention.x));
-	// It fits the window: the chart and the side column end inside it, on one bottom edge, and fill it.
+	expect(strip.y).toBeGreaterThan(kpis.y + kpis.height - 1);
+	expect(Math.abs(strip.width - kpis.width)).toBeLessThan(2);
+	expect(attention.y).toBeGreaterThan(strip.y + strip.height - 1);
+	expect(Math.round(supply.y)).toBe(Math.round(attention.y));
+	expect(supply.x).toBeGreaterThan(attention.x + attention.width);
+	// It fits the window: the two cards end inside it, on one bottom edge, and fill it.
 	const vh = page.viewportSize()!.height;
-	expect(chart.y + chart.height).toBeLessThanOrEqual(vh);
-	expect(Math.abs(chart.y + chart.height - (supply.y + supply.height))).toBeLessThan(2);
-	expect(chart.y + chart.height).toBeGreaterThan(vh - 40);
-	expect(chart.height).toBeGreaterThan(450);
+	expect(supply.y + supply.height).toBeLessThanOrEqual(vh);
+	expect(Math.abs(attention.y + attention.height - (supply.y + supply.height))).toBeLessThan(2);
+	expect(supply.y + supply.height).toBeGreaterThan(vh - 40);
 
 	// Below it, compact (issue #17): the alerts beside the published baseline, then one line of links (the Dams
 	// page, the Project page), then the one-line setup. Nothing else: the rest is on the Project page.
 	const alerts = await box('Active alerts');
 	const baseline = await box('Published baseline');
-	expect(alerts.y).toBeGreaterThan(chart.y + chart.height);
+	expect(alerts.y).toBeGreaterThan(Math.max(attention.y + attention.height, supply.y + supply.height));
 	expect(Math.round(baseline.y)).toBe(Math.round(alerts.y));
 	expect(baseline.x).toBeGreaterThan(alerts.x + alerts.width);
 	const projectLink = page.getByRole('link', { name: /^Model facts, details, team and sharing\s+Project$/ });
@@ -151,33 +153,30 @@ test('the Summary leads with the results once there is a run, the setup checklis
 	await expect(page.getByRole('region', { name: 'Latest run', exact: true })).toBeVisible();
 });
 
-test('the flow chart: 30 days / 1 year / All, and the days below the reserve shaded', async ({ page, owner }) => {
+test('the reserve strip: the days below the EWR in each month of the run, adding up to the KPI card, and a link to River & reserve', async ({ page, owner }) => {
 	void owner;
-	const project = await seedRunnableProject(page.request, 'Summary flow chart');
-	await createRun(page.request, project.id, 'Baseline');
+	const project = await seedRunnableProject(page.request, 'Summary reserve strip');
+	const run = await createRun(page.request, project.id, 'Baseline');
 	await page.goto(`/projects/${project.id}`);
-	const flow = page.getByRole('region', { name: 'Flow vs reserve' });
-	const fig = flow.locator('figure.chart');
-	await expect(fig).toHaveAttribute('data-ready', 'true');
-	const windows = flow.getByRole('group', { name: 'Time window' });
-	// The run is 120 days (1 Oct 2021 – 28 Jan 2022): a year shows all of it, and the chart opens on it.
-	await expect(windows.getByRole('button', { name: '1 year' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(fig).toHaveAttribute('data-view-start', '2021-10-01');
-	await expect(fig).toHaveAttribute('data-view-end', '2022-01-28');
-	await windows.getByRole('button', { name: '30 days' }).click();
-	await expect(fig).toHaveAttribute('data-view-start', '2021-12-29');
-	await expect(fig).toHaveAttribute('data-view-end', '2022-01-28');
-	await expect(windows.getByRole('button', { name: '30 days' })).toHaveAttribute('aria-pressed', 'true');
-	await expect(windows.getByRole('button', { name: '1 year' })).toHaveAttribute('aria-pressed', 'false');
-	await windows.getByRole('button', { name: 'All' }).click();
-	await expect(fig).toHaveAttribute('data-view-start', '2021-10-01');
-	await expect(windows.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'true');
-
-	// The shaded days are the run's own EWR-not-met days: the caption's count is the KPI card's.
-	await expect(fig).toHaveAttribute('data-shaded', /^\d+$/);
+	const strip = page.getByRole('region', { name: 'Days below the reserve' });
+	// The run is 120 days (1 Oct 2021 – 28 Jan 2022): its four months, each in words for a screen reader.
+	await expect(strip.getByTestId('reserve-strip-what')).toHaveText(
+		'Days each month the outflow was below the pragmatic EWR (EWR not met), the run’s last 4 months: Oct 2021 – Jan 2022'
+	);
+	const months = strip.getByRole('listitem');
+	await expect(months).toHaveCount(4);
+	await expect(months.nth(3)).toHaveAttribute('data-month', '2022-01');
+	await expect(months.nth(3)).toContainText(/^Jan 2022: (EWR met every day \(28 days\)|below the EWR on \d+ of 28 days)/);
+	// The months add up to the KPI card's count: the same test, one framing ("EWR not met", issue #162).
+	const counts = await months.evaluateAll((lis) => lis.map((li) => Number(li.getAttribute('data-not-met'))));
 	const card = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="ewr"]');
-	const notMet = /(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1];
-	await expect(fig).toContainText(`Shaded: the ${notMet} days the outflow was below the pragmatic EWR line (EWR not met).`);
+	await expect(card.locator('dt')).toContainText('EWR not met');
+	const notMet = Number(/(\d+) of 120 days/.exec((await card.textContent()) ?? '')![1]);
+	expect(counts.reduce((a, b) => a + b, 0)).toBe(notMet);
+
+	await strip.getByRole('link', { name: 'More on River & reserve' }).click();
+	await expect(page).toHaveURL(new RegExp(`[?&]tab=river&run=${run}$`));
+	await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 });
 
 test('needs attention cards and supply by hydrological unit: coloured by how much it matters, each hydrological unit opens its drawer, and both lead to Hydrological units', async ({ page, owner }) => {
@@ -234,7 +233,7 @@ test.describe('the first screen has no accessibility violations', () => {
 			await createRun(page.request, project.id, 'Baseline');
 			await createRun(page.request, project.id, 'Second');
 			await page.goto(`/projects/${project.id}`);
-			await expect(page.getByRole('region', { name: 'Flow vs reserve' }).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
+			await expect(page.getByRole('region', { name: 'Days below the reserve' }).getByRole('listitem').first()).toBeVisible();
 			await expect(page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]')).toContainText('full');
 			await expect(page.getByRole('region', { name: 'Supply by hydrological unit' })).toBeVisible();
 			if (label === 'phone') expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport.width);
@@ -256,6 +255,7 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 
 	const today = page.getByRole('region', { name: 'Latest run', exact: true }).locator('[data-headline="dams"]');
 	await expect(today).toContainText('2 dams on 28 Jan 2022');
+	await expect(today.getByRole('term')).toHaveText('Dams on 28 Jan 2022');
 	await expect(today).toContainText(/in 30 days/);
 	// Before the Dams page, whose sparklines and chart do read the series.
 	expect(damSeries).toEqual([]);
@@ -263,9 +263,9 @@ test('Dams today is every dam together, and it and the one-line link open the Da
 	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
 	const link = page.getByRole('link', { name: /^Dam levels for each dam\s+Dams$/ });
 	await expect(link).toHaveAttribute('href', '?tab=dams');
-	// Below the flow chart, above the setup checklist.
-	const flow = (await page.getByRole('region', { name: 'Flow vs reserve' }).boundingBox())!;
-	expect((await link.boundingBox())!.y).toBeGreaterThan(flow.y);
+	// Below the reserve strip, above the setup checklist.
+	const strip = (await page.getByRole('region', { name: 'Days below the reserve' }).boundingBox())!;
+	expect((await link.boundingBox())!.y).toBeGreaterThan(strip.y);
 	expect((await link.boundingBox())!.y).toBeLessThan((await setup(page).boundingBox())!.y);
 	await link.click();
 	await expect(page).toHaveURL(/\?tab=dams$/);

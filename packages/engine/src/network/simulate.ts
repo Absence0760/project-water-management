@@ -908,8 +908,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			else if (room > 0) [Gs, Gr] = surfaceSplit(sup!.rule, Math.min(Dl, sLeft), Math.max(avail0 - node.deadStorageM3, 0), room);
 			else Gs = Math.min(Math.max(avail0 - node.deadStorageM3, 0), Dl, sLeft);
 			const avail = Gd > 0 ? avail0 + Gd : avail0;
-			// Gs + (D − Gs) can round one ulp above D.
-			const G = Xused > 0 ? Xused + Math.min(Gs + Ggw + Gr, Dl) : Math.min(Gs + Ggw + Gr, D);
+			// Gs + (D − Gs) can round one ulp above D, and so can Xused + (D − Xused) (fuzz seed 15467).
+			const G = Xused > 0 ? Math.min(Xused + Math.min(Gs + Ggw + Gr, Dl), D) : Math.min(Gs + Ggw + Gr, D);
 			const au = allocUsed[i];
 			if (au) {
 				au[0]! += G - Ggw;

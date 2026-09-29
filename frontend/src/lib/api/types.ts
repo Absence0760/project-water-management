@@ -52,8 +52,7 @@ import type { ImportNote, UnmappedItem } from '$lib/spreadsheet/import/report';
 export type Role = 'farmer' | 'contributor' | 'viewer' | 'editor' | 'owner';
 /** The roles a member can be given in the Members panel; farmers are managed apart (FarmersPanel). */
 export const ROLES: readonly Role[] = ['contributor', 'viewer', 'editor', 'owner'];
-/** A role as people read it: a `contributor` is an applicant. */
-export const ROLE_LABEL: Record<Role, string> = { farmer: 'farmer', contributor: 'applicant', viewer: 'viewer', editor: 'editor', owner: 'owner' };
+/** How a role reads (a `contributor` is an applicant, a team `admin` an owner): ./roleLabels.ts. */
 
 export interface User {
 	id: string;
@@ -322,7 +321,8 @@ export interface BulkFarmerResult {
 
 /**
  * Team roles, lowest first: on every team project a viewer is a viewer, a
- * member an editor and an admin an owner (docs/data-model.md § Teams).
+ * member an editor and an admin an owner (docs/data-model.md § Teams). The UI
+ * shows them by those project names (roleLabel, ./roleLabels.ts).
  */
 export type TeamRole = 'viewer' | 'member' | 'admin';
 export const TEAM_ROLES: readonly TeamRole[] = ['viewer', 'member', 'admin'];

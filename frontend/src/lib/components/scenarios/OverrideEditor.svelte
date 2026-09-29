@@ -19,16 +19,17 @@
 	// one PATCH, as the form does. Edits no op can express are listed and
 	// block recording; nothing is dropped silently.
 	import { untrack } from 'svelte';
-	import { beforeNavigate } from '$app/navigation';
-	import { page } from '$app/state';
 	import type { ModelInput, ProjectSettings, ScenarioOp } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
 	import { provideUnsaved } from '$lib/components/common/chunkFailed';
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
+	import { guardUnsaved } from '$lib/nav/unsaved';
 	import IssueList from '$lib/components/model/IssueList.svelte';
 	import { ModelEditor } from '$lib/model/editor.svelte';
 	import OpList from './OpList.svelte';
 	import { namesOf, opItems } from './ops';
 	import { diffModel } from './overrideDiff';
+	import { leavesScenario } from './leaves';
 
 	let {
 		scenarioName,
@@ -93,21 +94,24 @@
 		const n = diff.ops.length;
 		if (await onrecord(diff.ops)) note = `${n === 1 ? '1 change' : `${n} changes`} recorded in “${scenarioName}”.`;
 	}
-	const LEAVE = "Your edits to the scenario haven't been recorded. Leave override mode and lose them?";
-	function close() {
-		if (editor.dirty && !confirm(LEAVE)) return;
+	async function close() {
+		if (
+			editor.dirty &&
+			!(await confirmDialog({
+				title: 'Close override mode?',
+				message: `Your edits to the scenario “${scenarioName}” haven't been recorded. Closing override mode loses them.`,
+				confirmLabel: 'Close and lose edits',
+				cancelLabel: 'Keep editing',
+				danger: true
+			}))
+		)
+			return;
 		onclose();
 	}
 	// A navigation that stays on this scenario (only other URL parameters
 	// change) keeps override mode and its edits: only leaving the scenario
-	// (another tab, scenario or page, or the browser) asks.
-	const leaves = (to: URL | undefined) =>
-		!to ||
-		to.pathname !== page.url.pathname ||
-		['tab', 'scenario'].some((k) => to.searchParams.get(k) !== page.url.searchParams.get(k));
-	beforeNavigate((nav) => {
-		if (editor.dirty && leaves(nav.to?.url) && !confirm(LEAVE)) nav.cancel();
-	});
+	// (another tab, scenario or page, or the browser) asks (lib/nav/leaveGuard.ts).
+	guardUnsaved({ dirty: () => editor.dirty, what: () => `override edits not yet recorded in “${scenarioName}”`, leaves: leavesScenario });
 
 	// Opened below the fold on a long scenario, the sticky "Edits to record" bar would cover this banner and its
 	// Close button (issue #17): bring the banner to the top once, when override mode opens.
@@ -117,12 +121,6 @@
 		untrack(() => modeEl?.scrollIntoView({ block: 'start' }));
 	});
 </script>
-
-<svelte:window
-	onbeforeunload={(e) => {
-		if (editor.dirty) e.preventDefault();
-	}}
-/>
 
 <section class="panel override" bind:this={modeEl} aria-labelledby="override-h" data-testid="override-mode">
 	<div class="banner" role="note">

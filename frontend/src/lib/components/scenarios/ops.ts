@@ -413,6 +413,15 @@ export function emptyDraft(kind: ScenarioOpName = 'node.set'): OpDraft {
 }
 
 /**
+ * Whether a draft holds anything beyond its kind: a target, a field or a
+ * value typed in. Picking a kind alone isn't work to lose (the leave guard,
+ * lib/nav/unsaved.ts).
+ */
+export function draftStarted(d: OpDraft): boolean {
+	return JSON.stringify(d) !== JSON.stringify(emptyDraft(d.kind));
+}
+
+/**
  * The table ewrRule.set starts from at a site: a copy of the one the input
  * has there (so a small change is a small edit), or a blank one at the
  * Settings form's default points.

@@ -4,6 +4,7 @@
 // vs what-if i + 1); this module turns those into the outcomes table's rows,
 // the plain-language takeaways under it, and the one-line "what changed" of
 // each run card. Pure: no I/O, no Svelte.
+import { EWR_NOT_MET } from '$lib/components/ewr/notMet';
 import { SUPPLY_TARGET, type FarmSummary, type InputChange, type InputChangeArea, type MetricDelta, type RunComparison } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
 import type { MetricSpec } from './delta';
@@ -28,11 +29,6 @@ const scale = (m: MetricDelta, k: number): MetricDelta => ({
 	a: m.a === null ? null : m.a * k,
 	b: m.b === null ? null : m.b * k,
 	delta: m.delta === null ? null : m.delta * k
-});
-const complement = (m: MetricDelta): MetricDelta => ({
-	a: m.a === null ? null : 1 - m.a,
-	b: m.b === null ? null : 1 - m.b,
-	delta: m.delta === null ? null : -m.delta
 });
 
 /** Farms whose supply moves at least this much in some what-if get a row of their own (fraction points). */
@@ -117,7 +113,8 @@ export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
  */
 export function outcomeRows(comparisons: readonly RunComparison[], dams: readonly MetricDelta[] = []): OutcomeRow[] {
 	const rows: OutcomeRow[] = [
-		row('reserveMet', 'Reserve met', '% of days', { format: 'fraction', better: 'higher' }, (c) => complement(c.catchment.ewrFractionDaysNotMet), comparisons),
+		// Framed as the Summary's card and River & reserve's tile (ewr/notMet.ts, issue #162): the share not met, lower is better.
+		row('ewrNotMet', EWR_NOT_MET, '% of days', { format: 'fraction', better: 'lower' }, (c) => c.catchment.ewrFractionDaysNotMet, comparisons),
 		row(
 			'reserveDays',
 			'Days below the reserve, average year',

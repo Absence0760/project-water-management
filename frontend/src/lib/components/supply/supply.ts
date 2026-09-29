@@ -11,6 +11,7 @@ import type { NavGroup } from '$lib/components/common/sectionNav';
 import { farmSupply, LOW_SUPPLY, type SupplyBand } from '$lib/components/network/supplyColour';
 import { m3DayToMm3a, SUPPLY_TARGET } from '$lib/components/runs/results';
 import { resolveWindow, type WindowRun } from '$lib/components/runs/reportWindow';
+import { windowText, type DataEnd } from '$lib/format/age';
 import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 
 /** The run before `id` by createdAt (the one its changes are against); null for the oldest or an unknown id. */
@@ -140,12 +141,23 @@ export function supplyTotals(summary: CardInput, cards: readonly UnitCard[], wee
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** The section header's line: "14 units · 3 short this week · run “Baseline”, ran today". */
-export function supplySummary(t: Pick<SupplyTotals, 'units' | 'weekShort'> | null, modelUnits: number, runText: string | null): string {
+/**
+ * "This week" while the week's last day (the run's last day of recorded rain)
+ * is current, "in the week to 31 Dec 2024" once it is stale ($lib/format/age).
+ */
+export const weekText = (weekEnd: DataEnd | null): string => windowText(weekEnd, 'this week', 'in the week to {date}');
+
+/** The section header's line: "14 units · 3 short this week · run “Baseline”, ran today" (weekText for "this week"). */
+export function supplySummary(
+	t: Pick<SupplyTotals, 'units' | 'weekShort'> | null,
+	modelUnits: number,
+	runText: string | null,
+	weekEnd: DataEnd | null = null
+): string {
 	const parts: string[] = [];
 	if (t) {
 		parts.push(plural(t.units, 'hydrological unit'));
-		if (t.weekShort !== null && t.units) parts.push(`${t.weekShort} short this week`);
+		if (t.weekShort !== null && t.units) parts.push(`${t.weekShort} short ${weekText(weekEnd)}`);
 	} else parts.push(plural(modelUnits, 'hydrological unit'));
 	if (runText) parts.push(runText);
 	return parts.join(' · ');
@@ -186,13 +198,13 @@ export const BAND_WORDS: Record<SupplyBand, string> = {
  * days short in the reporting window, the days short in the run's last 7 days and the cut the
  * curtailment table asks for. Lines a run can't give are left out.
  */
-export function cardFacts(c: UnitCard, weekDays: number): string[] {
+export function cardFacts(c: UnitCard, weekDays: number, weekEnd: DataEnd | null = null): string[] {
 	const out: string[] = [];
 	if (c.fraction === null) return out;
 	out.push(c.deficitM3Day > 0.5 ? `Short ${fmtNum(c.deficitM3Day)} m³/day on average (${fmtQty(m3DayToMm3a(c.deficitM3Day), 3)} Mm³/a)` : 'No shortfall on average');
 	if (c.daysShort !== null && c.demandDays) out.push(`${fmtNum(c.daysShort)} of ${fmtNum(c.demandDays)} demand days short in the reporting window`);
 	// Only when it was: the Short this week tile already says how many weren't.
-	if (c.weekShort) out.push(`Short on ${c.weekShort} of the last ${weekDays} days`);
+	if (c.weekShort) out.push(`Short on ${c.weekShort} of the ${windowText(weekEnd, `last ${weekDays} days`, `${weekDays} days to {date}`)}`);
 	if (c.cutM3Day) out.push(`Curtailment: cut ${fmtNum(c.cutM3Day)} m³/day`);
 	return out;
 }

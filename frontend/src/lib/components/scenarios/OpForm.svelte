@@ -7,11 +7,13 @@
 	// the base run is the server's check, shown in the list after saving.
 	import { BOREHOLE_MODES, LAND_COVER_CLASSES, PE_SOURCE_MAX, SCALABLE_SERIES_KINDS, SCENARIO_OP_NAMES, type ModelInput, type PeKind, type ScenarioOp, type ScenarioOpName } from '@water-management/engine';
 	import Lazy from '$lib/components/common/Lazy.svelte';
+	import { guardUnsaved } from '$lib/nav/unsaved';
+	import { leavesScenario } from './leaves';
 	import { siteOptions } from '$lib/components/settings/ewrRules';
 	import { PE_KIND_OPTIONS } from '$lib/components/settings/peInput';
 	import { kindLabel } from '$lib/series/kinds';
 	import { MONTH_NAMES, NODE_FIELD_SPECS, SETTINGS_FIELDS, TRANSFER_FIELDS, formatValue, nodeFields, peDraftOf, settingsValue, valueText, type ValueSpec } from './fields';
-	import { OP_LABEL, OUTLET_SITE, buildOp, draftSpec, emptyDraft, siteTable, startTable, tableText, type OpDraft } from './ops';
+	import { OP_LABEL, OUTLET_SITE, buildOp, draftSpec, draftStarted, emptyDraft, siteTable, startTable, tableText, type OpDraft } from './ops';
 
 	let {
 		input,
@@ -27,6 +29,8 @@
 	let d = $state<OpDraft>(emptyDraft());
 	let error = $state<string | null>(null);
 	let busy = $state(false);
+	// A change half filled in (anything beyond picking its kind): leaving the scenario asks first (lib/nav/leaveGuard.ts).
+	guardUnsaved({ dirty: () => draftStarted(d), what: 'a change not yet added to the scenario', leaves: leavesScenario });
 
 	const nodes = $derived(input.model.nodes);
 	const farms = $derived(nodes.filter((n) => n.kind === 'farm'));

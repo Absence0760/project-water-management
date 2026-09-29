@@ -6,6 +6,7 @@ import { expect, test } from '../support/fixtures.ts';
 import { openCropSheet } from '../support/crops.ts';
 import { closeModal, openNodeTable } from '../support/network.ts';
 import { agreeToTerms, fillNewPassword } from '../support/signup.ts';
+import { answerConfirm } from '../support/confirm.ts';
 
 test('an owner shares a project read-only with a viewer', async ({ page, owner, signIn }) => {
 	void owner;
@@ -36,7 +37,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 	await expect(v.getByTestId('project-name').filter({ hasText: 'Shared catchment' })).toBeVisible();
 	await v.getByRole('navigation', { name: 'Project sections' }).getByRole('link', { name: 'Project', exact: true }).click();
 	await expect(v.getByLabel('Name', { exact: true })).not.toBeEditable();
-	await expect(v.getByRole('button', { name: 'Save details' })).toHaveCount(0);
+	await expect(v.getByTestId('details-save-hint')).toHaveCount(0);
 	await expect(v.getByLabel('Add member by email')).toHaveCount(0);
 
 	// The model inputs sit behind a toggle for a viewer (tabs-by-role.spec.ts).
@@ -136,8 +137,8 @@ test('an owner invites an address with no account, sees it pending, and revokes 
 	await pending.getByRole('button', { name: `Resend invitation to ${email}` }).click();
 	await expect(page.getByText(`An invitation went to ${email} less than a minute ago`)).toBeVisible();
 
-	page.once('dialog', (d) => void d.accept());
 	await pending.getByRole('button', { name: `Revoke invitation to ${email}` }).click();
+	await answerConfirm(page, true, 'Revoke this invitation?');
 	await expect(page.getByText(`Invitation to ${email} revoked.`)).toBeVisible();
 	await expect(pending).toHaveCount(0);
 	await page.reload();

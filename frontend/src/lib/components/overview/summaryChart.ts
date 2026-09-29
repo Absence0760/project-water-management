@@ -1,4 +1,4 @@
-// Summary → the flow vs reserve chart: the days the outflow was below the
+// River & reserve → the flow vs reserve chart (FlowVsReserve.svelte): the days the outflow was below the
 // reserve, as date ranges to shade, and the chart's time windows.
 import { fromEpochDay, toEpochDay } from '@water-management/engine';
 

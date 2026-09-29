@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
@@ -13,7 +14,7 @@
 	import NeedsAttention from '$lib/components/projects/NeedsAttention.svelte';
 	import ProjectTable from '$lib/components/projects/ProjectTable.svelte';
 	import { needsAttention } from '$lib/components/projects/outcomes';
-	import { statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
+	import { ewrWindowLabel, statusCounts, statusSummary } from '$lib/components/portfolio/portfolio';
 	import { evidenceRefusal, type EvidenceRefusal } from '$lib/components/projects/deleteRefusal';
 	import {
 		filterProjects,
@@ -252,7 +253,13 @@
 	}
 
 	async function remove(p: ProjectSummary) {
-		if (!confirm(`Delete project "${p.name}"? Its model, time series and runs are removed permanently.`)) return;
+		const ok = await confirmDialog({
+			title: `Delete project “${p.name}”?`,
+			message: 'Its model, time series and runs are removed permanently.',
+			confirmLabel: 'Delete project',
+			danger: true
+		});
+		if (!ok) return;
 		actionError = null;
 		try {
 			await api.projects.remove(p.id);
@@ -280,7 +287,7 @@
 			<h1>Projects</h1>
 			<p class="muted sub" data-testid="projects-context">
 				{#if !loading && projects.length}
-					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· EWR, last 30 days: {summaryLine}{/if}
+					{filtered.length} catchment{filtered.length === 1 ? '' : 's'}{#if summaryLine}{' '}· {ewrWindowLabel(inView)}: {summaryLine}{/if}
 				{:else}
 					Each project models one catchment: its river network, hydrological units, dams and data.
 				{/if}
@@ -384,8 +391,8 @@
 								<p><strong>{selectedTeam.name}</strong> has no projects yet.</p>
 								{#if canAddTo(selectedTeam.id)}
 									<p class="muted">
-										Projects you create in a team can be edited by every member; team viewers can only read them, and team
-										admins are owners.
+										Projects you create in a team can be edited by its editors and owners; its viewers can only read
+										them.
 									</p>
 									<button type="button" class="btn btn-primary" onclick={openCreate}>New project in {selectedTeam.name}</button>
 								{:else}
@@ -449,8 +456,8 @@
 			</select>
 			<span class="hint" id="np-team-hint">
 				{#if addableTeams.length}
-					Personal: only you and people you share it with. In a team, members can edit, viewers can only read and team
-					admins are owners.
+					Personal: only you and people you share it with. In a team, its editors and owners can edit it and its
+					viewers can only read it.
 				{:else}
 					Only you and people you share it with. <a href="{base}/teams">Create a team</a> to work on catchments together.
 				{/if}

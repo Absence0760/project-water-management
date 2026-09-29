@@ -4,6 +4,7 @@
 	// with the form's buttons in the dialog's action row. While a file is read
 	// but not uploaded yet (or uploading), Escape, the close button and Cancel
 	// ask before discarding it.
+	import { confirmDialog } from '$lib/components/common/confirm.svelte';
 	import type { SeriesMeta } from '@water-management/engine';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import UploadForm from './UploadForm.svelte';
@@ -27,8 +28,15 @@
 	let submit = $state<UploadSubmit | null>(null);
 	let form: { back: () => void } | undefined = $state();
 
-	const DISCARD = 'Discard the file you haven\'t uploaded yet?';
-	const mayClose = () => !pending || confirm(DISCARD);
+	const mayClose = async () =>
+		!pending ||
+		(await confirmDialog({
+			title: 'Discard the file?',
+			message: "You haven't uploaded it yet.",
+			confirmLabel: 'Discard file',
+			cancelLabel: 'Keep it',
+			danger: true
+		}));
 </script>
 
 <Dialog bind:open title="Add data" wide beforeclose={mayClose}>
@@ -58,7 +66,7 @@
 			type="button"
 			class="btn"
 			disabled={submit?.confirming && submit.disabled}
-			onclick={() => (submit?.confirming ? form?.back() : mayClose() && (open = false))}>{submit?.confirming ? 'Back' : 'Cancel'}</button
+			onclick={async () => (submit?.confirming ? form?.back() : (await mayClose()) && (open = false))}>{submit?.confirming ? 'Back' : 'Cancel'}</button
 		>
 		<button type="submit" form="dlg-form" class="btn btn-primary" disabled={!submit || submit.disabled}>{submit?.label ?? 'Upload'}</button>
 	{/snippet}

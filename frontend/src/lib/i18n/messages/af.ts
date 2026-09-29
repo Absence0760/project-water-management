@@ -213,8 +213,8 @@ export const af: Catalogue = {
 	'e557592b': 'Wys in',
 	// Couldn’t save your choice to your account. It applies on this phone.
 	'0515b26b': 'Kon nie jou keuse in jou rekening stoor nie. Dit geld op hierdie foon.',
-	// Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.
-	'351d363e': 'Deur die WGV gepubliseer op {published}. Data tot {until}, {age} gelede. Vra jou WGV of nuwer syfers op pad is.',
+	// Published by the WUA on {published}. Data up to {until} ({age}). Ask your WUA if newer figures are coming.
+	'25e88ab0': 'Deur die WGV gepubliseer op {published}. Data tot {until} ({age}). Vra jou WGV of nuwer syfers op pad is.',
 	// Published by the WUA on {published}. Data up to {until}.
 	'f51b7fed': 'Deur die WGV gepubliseer op {published}. Data tot {until}.',
 	// Next update expected around {date}.
@@ -263,12 +263,16 @@ export const af: Catalogue = {
 	'6c3f611f': '{head}.',
 	// {got} of {need} since {from}
 	'2937054a': '{got} van {need} sedert {from}',
-	// Last 30 days: very little water needed
-	'a91b9d31': 'Afgelope 30 dae: baie min water nodig',
-	// Last 30 days: **{pct}** · {got} of {need}
-	'4e9af1ae': 'Afgelope 30 dae: **{pct}** · {got} van {need}',
 	// Worked out by the model, not read from your meter. It assumes {pct} of the water you pump reaches the crop ({system}). Wrong? Tell your WUA.
 	'48170aeb': 'Deur die model bereken, nie van jou meter afgelees nie. Die model neem aan dat {pct} van die water wat jy pomp by die gewas uitkom ({system}). Verkeerd? Sê vir jou WGV.',
+	// 30 days to {date}: very little water needed
+	'48cd31f8': '30 dae tot {date}: baie min water nodig',
+	// Last 30 days: very little water needed
+	'a91b9d31': 'Afgelope 30 dae: baie min water nodig',
+	// 30 days to {date}: **{pct}** · {got} of {need}
+	'a4efbdd5': '30 dae tot {date}: **{pct}** · {got} van {need}',
+	// Last 30 days: **{pct}** · {got} of {need}
+	'4e9af1ae': 'Afgelope 30 dae: **{pct}** · {got} van {need}',
 	// less than a day
 	'e9f24832': 'minder as ’n dag',
 	// about {span}
@@ -343,6 +347,12 @@ export const af: Catalogue = {
 	'c7fda361': '{n} hidrologiese eenhede',
 	// {up} upstream of you and {down} downstream, of {count} in the catchment. The same rules apply to every hydrological unit.
 	'10e2d49e': 'Stroomop van jou: {up}. Stroomaf: {down}. Altesaam {count} in die opvanggebied. Dieselfde reëls geld vir elke hidrologiese eenheid.',
+	// River at {name}: kept its reserve on every one of the {days} to {date}.
+	'1cdbc4c7': 'Rivier by {name}: het op elkeen van die {days} tot {date} sy reserwe behou.',
+	// River at {name}: below its reserve on **all of the {days} to {date}**.
+	'bded7e0c': 'Rivier by {name}: onder sy reserwe op **al die {days} tot {date}**.',
+	// River at {name}: below its reserve on **{n} of the {days} to {date}**.
+	'921f114d': 'Rivier by {name}: onder sy reserwe op **{n} van die {days} tot {date}**.',
 	// River at {name}: kept its reserve on every one of the last {days}.
 	'e3636500': 'Rivier by {name}: het op elkeen van die afgelope {days} sy reserwe behou.',
 	// River at {name}: below its reserve on **all of the last {days}**.
@@ -463,6 +473,8 @@ export const af: Catalogue = {
 	'7fa5ff5c': 'Vol',
 	// You can still use
 	'f9fb4eaf': 'Jy kan nog gebruik',
+	// 30 days to {date}
+	'44829316': '30 dae tot {date}',
 	// Last 30 days
 	'd0778b33': 'Afgelope 30 dae',
 	// Same day last season
@@ -523,10 +535,20 @@ export const af: Catalogue = {
 	'fd1a1a20': { one: 'dag', other: 'dae' },
 	// week / weeks
 	'c2d97242': { one: 'week', other: 'weke' },
+	// month / months
+	'9d716b54': { one: 'maand', other: 'maande' },
+	// year / years
+	'b9681100': { one: 'jaar', other: 'jaar' },
 	// point / points
 	'a3e2d360': { one: 'punt', other: 'punte' },
 	// hydrological unit / hydrological units
 	'38fa9118': { one: 'hidrologiese eenheid', other: 'hidrologiese eenhede' },
+	// today
+	'420372be': 'vandag',
+	// yesterday
+	'63fe3327': 'gister',
+	// {span} ago
+	'f8c6ea48': '{span} gelede',
 	// {time} on {date}
 	'060fa091': '{time} op {date}',
 	// Couldn’t load the notes. {reason}
@@ -551,6 +573,8 @@ export const af: Catalogue = {
 	'5797ea6a': 'Vee uit',
 	// note from {date}
 	'd1097925': 'nota van {date}',
+	// Delete this note?
+	'9d3e3253': 'Vee hierdie nota uit?',
 	// Delete your note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.
 	'1882f376': 'Vee jou nota uit? Dit word vir almal versteek; die WGV se redigeerders hou dit in die rekord van veranderinge.',
 	// Delete {author}’s note? It is hidden from everyone; the WUA’s editors keep it in the record of changes.
@@ -719,8 +743,8 @@ export const af: Catalogue = {
 	'744be623': 'Teken in',
 	// Create an account
 	'd7f6c093': 'Skep ’n rekening',
-	// Reserve met on {pct} % of days
-	'bc8fde2e': 'Reserwe behou op {pct} % van die dae',
+	// Reserve not met on {pct} % of days
+	'2e8484f9': 'Reserwe op {pct} % van die dae nie behou nie',
 	// Example catchment, {years} years
 	'828ebfcc': 'Voorbeeld-opvanggebied, {years} jaar',
 	// Pause the animation
@@ -831,8 +855,8 @@ export const af: Catalogue = {
 	'f8c0f358': 'jaar se daaglikse waterbalans',
 	// days in one run
 	'e4291d84': 'dae in een lopie',
-	// fit to the weir’s measured flow (NSE, where 1 is perfect)
-	'32f438d7': 'ooreenstemming met die meetstuwal se gemete vloei (NSE, waar 1 perfek is)',
+	// fit to the measured river flow (1 is perfect)
+	'237c2d7f': 'ooreenstemming met die gemete riviervloei (1 is perfek)',
 	// Why trust it
 	'458b8568': 'Hoekom jy dit kan vertrou',
 	// The engine is judged against documented hydrology, not against a spreadsheet, and every place it departs from the workbook is written down.
@@ -843,8 +867,8 @@ export const af: Catalogue = {
 	'49027b5c': 'Elke projek is privaat vir sy lede, afgedwing deur die databasis self (row-level security).',
 	// Daily data from CHIRPS rainfall and the DWS gauges.
 	'746a0c9c': 'Daaglikse data van CHIRPS-reënval en die DWS-meetstasies.',
-	// In the example catchment
-	'fb86138c': 'In die voorbeeld-opvanggebied',
+	// From {name}, an invented example catchment:
+	'e0fcc06b': 'Uit {name}, ’n fiktiewe voorbeeld-opvanggebied:',
 	// This is the hydrological unit as it is today. Move a slider to change it.
 	'be75f214': 'Dit is die hidrologiese eenheid soos dit vandag is. Beweeg ’n skuifbalk om dit te verander.',
 	// It costs the river {days} more days a year below the reserve
@@ -901,6 +925,8 @@ export const af: Catalogue = {
 	'd0e44714': 'Bereken dekades se daaglikse vloei in sekondes.',
 	// Check the environmental flow requirement (EWR) against every hydrological unit’s use.
 	'3c10ddb2': 'Vergelyk die omgewingsvloeivereiste (EWR) met elke hidrologiese eenheid se gebruik.',
+	// Read the full terms
+	'b6cba77c': 'Lees die volledige voorwaardes',
 	// The main things you agree to
 	'0a1c21b6': 'Die belangrikste dinge waartoe jy instem',
 	// Results are model estimates and can be wrong. Check them before you rely on them.
@@ -941,6 +967,12 @@ export const af: Catalogue = {
 	'82aa7d85': 'By die opvanggebied se uitloop',
 	// At {place}
 	'60d1632f': 'By {place}',
+	// Kept its reserve on every one of the {days} to {date}.
+	'7479d547': 'Het sy reserwe op elkeen van die {days} tot {date} behou.',
+	// Below its reserve on all of the {days} to {date}.
+	'249b65c8': 'Onder sy reserwe op al die {days} tot {date}.',
+	// Below its reserve on {n} of the {days} to {date}.
+	'0ba980dd': 'Onder sy reserwe op {n} van die {days} tot {date}.',
 	// Kept its reserve on every one of the last {days}.
 	'03ac8a80': 'Het sy reserwe op elkeen van die afgelope {days} behou.',
 	// Below its reserve on all of the last {days}.

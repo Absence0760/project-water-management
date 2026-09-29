@@ -11,8 +11,8 @@
 // both have it); the order here is the glossary's order within a topic.
 //
 // Written for hydrologists, in our own words, following docs/model.md.
-// `source` (articles.ts) names where each idea comes from so a reader can
-// check it.
+// `source` (articles.ts) names where each idea comes from so a maintainer can
+// check it (the glossary doesn't show it).
 //
 // `fields` are the keys a form uses to place a HelpTip next to a field:
 //   node.<NetworkNode field>        settings.<ProjectSettings field>

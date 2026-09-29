@@ -7,6 +7,7 @@
 	import { page } from '$app/state';
 	import HelpCrumbs from '$lib/components/help/HelpCrumbs.svelte';
 	import { searchHelp } from '$lib/help/content';
+	import { glossaryPath } from '$lib/help/glossaryLinks';
 	import { searchGuides } from '$lib/help/guides';
 
 	const q = $derived(page.url.searchParams.get('q')?.trim() ?? '');
@@ -54,7 +55,7 @@
 			<ul class="results">
 				{#each terms as e (e.id)}
 					<li>
-						<a href="{base}/help/glossary#{e.id}">{e.term}</a>
+						<a href="{base}{glossaryPath(e)}">{e.term}</a>
 						<p>{e.short}</p>
 					</li>
 				{/each}

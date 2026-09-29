@@ -9,12 +9,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { base } from '$app/paths';
-	import { api, type Portfolio, type Team } from '$lib/api';
+	import { api, roleLabel, roleTitle, type Portfolio, type Team } from '$lib/api';
 	import Dialog from '$lib/components/common/Dialog.svelte';
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
-	import { DEFAULT_SORT, farmsShortTotalText, portfolioTotals, sortPortfolio } from '$lib/components/portfolio/portfolio';
+	import { DEFAULT_SORT, ewrWindowLabel, farmsShortLabel, farmsShortTotalText, portfolioTotals, sortPortfolio } from '$lib/components/portfolio/portfolio';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	let teams = $state<Team[]>([]);
@@ -89,7 +89,7 @@
 	<li class="card" aria-labelledby="team-{t.id}">
 		<div class="card-head">
 			<h2 id="team-{t.id}"><a href="{base}/teams/{t.id}">{t.name}</a></h2>
-			<span class="badge" class:badge-owner={t.role === 'admin'}>{t.role}</span>
+			<span class="badge" class:badge-owner={t.role === 'admin'}>{roleLabel(t.role)}</span>
 		</div>
 		<div class="card-body">
 			<div class="summary">
@@ -97,7 +97,7 @@
 					<div><dt>Projects</dt><dd>{t.projectCount}</dd></div>
 					<div><dt>Members</dt><dd>{t.memberCount}</dd></div>
 					<div>
-						<dt>Hydrological units short this week</dt>
+						<dt>{farmsShortLabel(pf?.projects ?? [])}</dt>
 						<dd>
 							{#if totals}{farmsShortTotalText(totals) ?? '–'}{:else if pf === null}–{:else}<span class="muted">…</span>{/if}
 						</dd>
@@ -111,7 +111,7 @@
 				</dl>
 				{#if totals}
 					<div class="ewr">
-						<span class="ewr-h">EWR, last 30 days</span>
+						<span class="ewr-h">{ewrWindowLabel(pf?.projects ?? [])}</span>
 						<StatusBar counts={totals.counts} empty="No projects yet" />
 					</div>
 				{:else if pf === null}
@@ -171,9 +171,9 @@
 				<h2 id="about-h">How teams work</h2>
 				<p class="small">A team owns catchments together: everyone in it gets the team's projects, as the role they hold.</p>
 				<dl class="roles">
-					<div><dt>Viewer</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
-					<div><dt>Member</dt><dd>Edits every team project: model, data and runs.</dd></div>
-					<div><dt>Admin</dt><dd>Owner of every team project (delete, share, move) and manages the team.</dd></div>
+					<div><dt>{roleTitle('viewer')}</dt><dd>Reads every team project and its runs, but can't change or run anything.</dd></div>
+					<div><dt>{roleTitle('member')}</dt><dd>Edits every team project: model, data and runs.</dd></div>
+					<div><dt>{roleTitle('admin')}</dt><dd>Owns every team project (delete, share, move) and manages the team.</dd></div>
 				</dl>
 				<p class="small muted">
 					Add colleagues on the team's page by the email they registered with; anyone without an account gets an invitation.
@@ -190,7 +190,7 @@
 		<div class="field">
 			<label for="team-name">Team name</label>
 			<input id="team-name" required maxlength="200" placeholder="e.g. Breede Hydrology Consultants" bind:value={name} />
-			<span class="hint">You'll be its admin. Add members on the next page.</span>
+			<span class="hint">You'll be its owner. Add people on the next page.</span>
 		</div>
 	</form>
 	{#snippet actions()}

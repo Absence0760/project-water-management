@@ -214,6 +214,29 @@ describe('help content', () => {
 	});
 });
 
+// The glossary is read by hydrologists using the app, who can't open the
+// repo: where an idea comes from (`source`: docs/model.md §…, an audit
+// finding, an issue) is for maintainers, kept in the data and not shown
+// (issue #162). The text a reader sees mustn't point there either.
+describe('the glossary’s reader-facing text', () => {
+	it('names no developer document, audit finding or issue', () => {
+		for (const e of HELP) {
+			for (const [part, text] of [
+				['term', e.term],
+				['short', e.short],
+				['long', e.long],
+				['units', e.units ?? '']
+			] as const) {
+				expect(text, `${e.id} ${part}`).not.toMatch(/docs\/|\.md\b|\bissues? #\d|§\s?\d/);
+			}
+		}
+	});
+
+	it('still records a source for every entry, for maintainers', () => {
+		for (const e of HELP) expect(e.source.trim(), e.id).not.toBe('');
+	});
+});
+
 // A HelpTip loads tips.ts alone; the glossary's long text (articles.ts) and
 // the farm words (farmer.ts) load only where they're read (tips.ts header).
 describe('the help text split', () => {
