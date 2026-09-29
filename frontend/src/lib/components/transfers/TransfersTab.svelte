@@ -1,18 +1,14 @@
 <script lang="ts">
-	// Transfers (issue #17, option A): the rules table, and under it "When
-	// water moves", each month's enabled rules and the most they can move in a
-	// day together (capacity.ts). On the page (`page`) the section header
-	// carries the title, the count (workspace/context.ts), Show on the map and
-	// + Add transfer; from 1100 × 620 the two cards fill the window, the rules
-	// scrolling inside theirs. The grid modal (`grid=transfers`) and scenario
-	// override mode show the table alone, with Add transfer under it.
+	// Transfers (issue #17, option A): the rules table, one card on a page that
+	// scrolls as a whole. On the page (`page`) the section header carries the
+	// title, the count (workspace/context.ts), Show on the map and + Add
+	// transfer. The grid modal (`grid=transfers`) and scenario override mode show
+	// the same table, with Add transfer under it.
 	import { tick } from 'svelte';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
-	import { fmtNum } from '$lib/format/number';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
-	import { monthCapacity } from './capacity';
 	import MonthRates from './MonthRates.svelte';
 	import type { TransferSizing, TransferSource } from '@water-management/engine';
 
@@ -31,39 +27,15 @@
 		root?.querySelector<HTMLSelectElement>(`tr[data-id="${t.id}"] select`)?.focus();
 	}
 
-	// --- When water moves: the enabled rules by month, the tallest month the full bar ---
-	const months = $derived(monthCapacity(transfers));
-	const peak = $derived(Math.max(0, ...months.map((m) => m.maxM3Day)));
-	const rulesWord = (n: number) => `${n} rule${n === 1 ? '' : 's'}`;
-	const monthSentence = (m: (typeof months)[number]) =>
-		m.rules ? `${m.month}: ${rulesWord(m.rules)}, up to ${fmtNum(m.maxM3Day)} m³ a day` : `${m.month}: no rule runs`;
-
-	// --- fitting the window (the playbook's dashboards): from 1100 × 620, measured, not assumed ---
-	let innerW = $state(0);
-	let innerH = $state(0);
-	let top = $state(0);
-	const fit = $derived(page && transfers.length > 0 && nodes.length >= 2 && innerW >= 1100 && innerH >= 620);
-	$effect(() => {
-		if (!page || !root) return;
-		const el = root;
-		const measure = () => (top = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-
 	$effect(() => fillHeader({ actions: headerActions }, page));
 </script>
-
-<svelte:window bind:innerWidth={innerW} bind:innerHeight={innerH} />
 
 {#snippet headerActions()}
 	{#if transfers.length && nodes.length >= 2}<a class="btn" href="?tab=network">Show on the map</a>{/if}
 	{#if canAdd}<button type="button" class="btn" onclick={add}>+ Add transfer</button>{/if}
 {/snippet}
 
-<div class="transfers" class:fit bind:this={root} style:--tr-top="{top}px" data-testid="transfers">
+<div class="transfers" bind:this={root} data-testid="transfers">
 	{#if nodes.length < 2}
 		<section class="panel" aria-label="Transfer rules">
 			<p class="muted">
@@ -189,27 +161,6 @@
 			{#if !page && !readonly}<div class="toolbar after"><button type="button" class="btn" onclick={add}>+ Add transfer</button></div>{/if}
 		</section>
 
-		{#if page}
-			<section class="panel months-card" aria-labelledby="tr-months-h">
-				<div class="panel-head">
-					<h2 id="tr-months-h">When water moves</h2>
-					<span class="muted small">The most the enabled rules can move in a day, m³, before each dam’s own limits</span>
-				</div>
-				<ol class="mbars" aria-labelledby="tr-months-h" data-testid="transfer-months">
-					{#each months as m (m.month)}
-						<li class:none={!m.rules}>
-							<span class="track" aria-hidden="true" style:--h="{peak > 0 ? (100 * m.maxM3Day) / peak : 0}%">
-								<span class="bar"></span>
-								<span class="v">{m.rules ? fmtNum(m.maxM3Day) : '–'}</span>
-							</span>
-							<span class="m" aria-hidden="true">{m.month}</span>
-							<span class="n" aria-hidden="true">{m.rules ? rulesWord(m.rules) : 'none'}</span>
-							<span class="visually-hidden">{monthSentence(m)}</span>
-						</li>
-					{/each}
-				</ol>
-			</section>
-		{/if}
 	{/if}
 </div>
 
@@ -223,29 +174,10 @@
 	.transfers > .panel {
 		margin: 0;
 	}
-	/* Wide and tall enough: the two cards are the height left in the window (less the save bar); the rules
-	   scroll inside theirs and When water moves takes what they leave. */
-	.transfers.fit {
-		height: max(460px, calc(100vh - var(--tr-top, 0px) - var(--dock-h, 0px) - 1rem));
-	}
-	.fit .rules-card {
-		flex: 0 1 auto;
-		min-height: 12rem;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .rules-card .table-wrap {
-		flex: 1 1 auto;
-		min-height: 0;
+	/* The page scrolls, once: the rules card grows with its rules rather than scrolling inside itself
+	   (app.css caps .table-wrap at 70vh). It still scrolls sideways if a column ever can't fit. */
+	.rules-card .table-wrap {
 		max-height: none;
-	}
-	.fit .months-card {
-		flex: 1 0 9.5rem;
-		display: flex;
-		flex-direction: column;
-	}
-	.fit .mbars {
-		flex: 1 1 auto;
 	}
 	.panel-head .small {
 		overflow-wrap: anywhere;
@@ -334,64 +266,6 @@
 		margin: 0 auto 1rem;
 	}
 
-	/* When water moves: a bar per month with its figure above and the month and rule count below. */
-	.months-card .panel-head {
-		margin-bottom: 0.5rem;
-	}
-	.mbars {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(12, minmax(0, 1fr));
-		gap: 0.4rem;
-		min-height: 7.5rem;
-	}
-	.mbars li {
-		display: grid;
-		grid-template-rows: minmax(3.5rem, 1fr) auto auto;
-		justify-items: center;
-		gap: 0.15rem;
-		min-width: 0;
-		font-size: 0.8rem;
-		font-variant-numeric: tabular-nums;
-	}
-	/* The figure sits on its bar; the track keeps a line clear above the tallest one for it. */
-	.mbars .track {
-		position: relative;
-		width: 100%;
-		border-bottom: 1px solid var(--border-strong);
-		margin-top: 1.3rem;
-	}
-	.mbars .bar {
-		position: absolute;
-		bottom: 0;
-		left: 50%;
-		translate: -50% 0;
-		width: min(100%, 3.5rem);
-		height: var(--h);
-		background: var(--accent);
-		border-radius: 3px 3px 0 0;
-	}
-	.mbars .v {
-		position: absolute;
-		bottom: calc(var(--h) + 0.15rem);
-		left: 50%;
-		translate: -50% 0;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.mbars .m {
-		font-weight: 600;
-		color: var(--text-2);
-	}
-	.mbars .n,
-	.mbars .none .v {
-		color: var(--text-muted);
-		font-size: 0.72rem;
-		white-space: nowrap;
-	}
-
 	.cell-label {
 		display: none;
 	}
@@ -413,7 +287,6 @@
 	   past everything but From and To; two cards to a row where there is room. The page scrolls, not a box. */
 	@container transfers (max-width: 64rem) {
 		.rules-card .table-wrap {
-			max-height: none;
 			border: 0;
 			background: none;
 		}
@@ -554,15 +427,6 @@
 			min-height: 44px;
 			border: 1px solid var(--border);
 			justify-content: center;
-		}
-		/* The months six to a row as well. */
-		.mbars {
-			grid-template-columns: repeat(6, minmax(0, 1fr));
-			row-gap: 0.75rem;
-			min-height: 0;
-		}
-		.mbars li {
-			grid-template-rows: 3rem auto auto;
 		}
 	}
 </style>
