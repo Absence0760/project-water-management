@@ -82,7 +82,8 @@ models what the farm *could take* each day given rain, flows and its dam, and
 a 14-day forecast once WP-2.12 lands. So the view answers Q1 in honest parts:
 what the WUA says (the notice), what the farm received so far, how long its
 usable dam water lasts at today's use, and the next 14 days. A seasonal
-outlook is ask **E3**.
+outlook is ask **E3**, built (issues #53 R5 and #122): while the WUA has one
+level of an outlook published, the page shows *This season* (§12, "E3: the season outlook on the farm page").
 
 | Line on screen | Source | Unit, rounding |
 | --- | --- | --- |
@@ -156,7 +157,7 @@ Nothing here changes `runModel` except E2, which is WP-2.12's.
 | --- | --- | --- | --- |
 | E1 | `farmProjection` and `windowSummary` (pure helpers, `packages/engine/src/views.ts`) | Every card | WP-2.3, as planned |
 | E2 | Forecast mode with per-day forecast flags; the projection adds `forecast: { from, to, damPctMin, damPctMinDate, deficitDays }` | "Next 14 days" | WP-2.12 (adds `damPctMinDate`) |
-| E3 | **Seasonal outlook**: the rest of the season from today's dam level, run with each historical year's rain and flows (an analogue ensemble), giving the likely range of "% of what you need" and the dam at season end | The real answer to "how much will I get *this season*" | [planned-work.md § Data](../planned-work.md#data). Trigger: before farmers' second season on the view |
+| E3 | **Seasonal outlook**: the rest of the season from today's dam level, run with each historical year's rain and flows (an analogue ensemble), giving the likely range of "% of what you need" and the dam at season end | The real answer to "how much will I get *this season*" | ✅ Built (issue #53 R5, issue #122): the WUA publishes one level of an outlook; the farm page's *This season* card gives that farm's own share of demand met and its own dam at season end across the analogue years, in English and Afrikaans, with a `/farm/words` entry. Engine 1.19.0 (`FarmOutlookProjection`), migration 106. See [planning-outputs.md §3.5](./planning-outputs.md) |
 | E4 | `lastSeason` in the projection: the season and dam figures for the same dates a year earlier, from the same run | "Compared with last season", like for like. Comparing publications instead would mix model changes with weather | WP-2.3 |
 | E5 | The projection's curtailment over the **season** (`computeCurtailment` with the season as its window), the days charged, and the sites' days not met with their charged/natural split, all over the season | Q2's lines; §2 "The season" | WP-2.3 |
 | E6 | Farms upstream and downstream of a node, and the catchment's farm count, as a `SECURITY DEFINER` count function (no ids) | "1 farm upstream, 2 downstream" (D1 b) | WP-2.1 |
@@ -507,7 +508,7 @@ tracked with a trigger (⏭).
 | F9 | The pump cut averaged over 102 days applies on 56; tiny l/s | medium, defect | ✅ Per-charged-day figure first; l/s only from 1 l/s (§5.2, §8) |
 | F10 | Days charged and days the outlet was short were one number | medium, defect | ✅ Two lines, and "only low rain" split out (§3 Q2) |
 | F11 | "Let water pass your dam" assumes an outlet; "doesn't come off irrigation" hides the later cost | medium, defect | ✅ Information wording and the later-cost line. ⏭ E9 release-works flag |
-| F12 | No forward answer at launch | medium, gap | ✅ Days-left line. ⏭ E3, with a trigger |
+| F12 | No forward answer at launch | medium, gap | ✅ Days-left line. ✅ E3, *This season* (issue #122) |
 | F13 | The stop level is 0 for every imported dam | medium, gap | ✅ Zero-stop wording and the publish warning (§3 Q3) |
 | F14 | "Email me before a restriction" promises foresight; email-only | medium, gap | ✅ Renamed "when the WUA posts a notice or my dam gets low". ⏭ WhatsApp stays the roadmap's post-Step 2 option; trigger: under half of farmers open the notice email in the first season |
 | F15 | Afrikaans untested | medium, gap | ✅ Draft glossary column (§5.1). ⏭ Afrikaans boards once the translator is named, before the WP-2.6 build |
@@ -586,7 +587,35 @@ settled something this spec left open:*
 **WP-2.12:** `damPctMinDate` in the forecast block.
 
 **New:** E3, the seasonal outlook, in
-[planned-work.md § Data](../planned-work.md#data).
+[planned-work.md § Data](../planned-work.md#data). Built (issues #53 R5 and
+#122).
+
+### E3: the season outlook on the farm page (issue #122)
+
+The client confirmed (issue #90, O5) that farmers see the seasonal outlook,
+on their phones and in Afrikaans. What a farmer may see was settled in
+issue #122's privacy review ([security.md § Seasonal outlooks to
+farmers](../security.md)):
+
+- **Their own hydrological unit only.** The *This season* card holds the
+  engine's `FarmOutlookProjection` for that farm: its share of its own
+  demand met (median and 10th–90th percentile across the analogue years)
+  and its own dam's fill at season end. No other farm's id, name or figure,
+  and no catchment total.
+- **No catchment figures**, so the `k ≥ 5` rule (FV-D2, §10.3) is not
+  engaged. Showing a catchment-wide outlook figure to farmers later would
+  need it, as the even share does.
+- **The level is the WUA's decision** (planning-outputs.md §3.6): the app
+  shows the trade-off to the WUA, the WUA publishes one level, and the card
+  says "Your WUA set irrigation at …". The level label is the WUA's own
+  text, so it is the WUA's to keep free of figures.
+- Worded as what the level gave in past years' weather, never as a forecast
+  or a promise, with the same "only a notice is a restriction" line.
+
+The card loads as its own chunk only when an outlook is published (the
+farm page is near its bundle budget), links to the `farm-season-outlook`
+entry on `/farm/words`, and is checked at 360 px in Afrikaans, light and
+dark (`e2e/tests/seasonal-outlook.spec.ts`).
 
 ## 13. Open decisions
 
@@ -595,6 +624,6 @@ settled something this spec left open:*
 | FV-D1 | Model band thresholds (§6.2) | OK ≥ 90 %, Watch 70 to 90 % or a storage part, Short < 70 % | WUA + hydrologist |
 | FV-D2 | `k` by holders, covering the even share (§10.3) | Yes, `k = 5` | Client (Q15) + operator |
 | FV-D3 | Default volume unit for farmers | m³ (the roadmap's default), with the switch on the supply card | Client (ask farmers) |
-| FV-D4 | Seasonal outlook (E3) before or after first release | After: ship without it, before the second season | Client + hydrologist |
+| FV-D4 | Seasonal outlook (E3) before or after first release | ✅ Decided: farmers see it (client, issue #90 O5), built in issues #53 R5 and #122 | Client + hydrologist |
 | FV-D5 | Who may hold viewer on a project with farmers (§10.2) | WUA staff and the modeller only; board members who farm are farmers | Client (Q15) + CISO / Security Analyst |
 | D10 | The disclaimer and "not an official restriction" wording, both languages | Draft text on boards 1 and 4, marked `[D10]` | Client (legal) |
