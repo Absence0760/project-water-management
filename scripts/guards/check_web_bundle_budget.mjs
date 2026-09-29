@@ -1204,6 +1204,11 @@
 //             (shared engine chunk 40.5 → 41.1 KB, import worker +0.5 KB),
 //             their run-comparison labels, the fit provenance line and one
 //             help entry. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1143 → 1149 KB (measured 1146 with #157 merged in).
+//             Issue #66, rain-source periods' daily intensity: the heavy-day
+//             check and the opt-in quantile-map fields in Settings → Rain
+//             source periods and their run-comparison and fit-provenance
+//             lines. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1214,7 +1219,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1143,
+	totalCodeKb: 1149,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,

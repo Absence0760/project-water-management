@@ -1340,6 +1340,7 @@ series lacks (or a month without a factor) falls through to the period's
 | `fitReference` | `{ series, fromWaterYear, toWaterYear }` | `'fit'` only: the reference series (`rain_reanalysis_mm` or `rain_chirps_mm`) and the **reference era** |
 | `fallback` | absent, or `{ series: 'rain_reanalysis_mm', fromWaterYear, toWaterYear }` | Where the series' gaps go. Absent: CHIRPS × the §2.4b factors (the fit period's), as for any blank day. Named: reanalysis × catchment ÷ reanalysis factors fitted over that era |
 | `gaugeInChirps` | boolean | The period's gauge reports to CHIRPS: CHIRPS may be neither the fit reference nor the fallback, so a fallback must be named |
+| `quantileMap` | absent, or `{ fromWaterYear, toWaterYear, wetDayMm }` | Engine ≥ 1.21.0, opt-in: quantile-map the scaled series' wet days (≥ `wetDayMm`, 0.1–10 mm) onto the primary record's over those water years, keeping every month's total (*Daily intensity* below). Absent: the factor alone |
 | `reason` | 1–500 characters | Why, shown in the warning, the summary CSV and run comparison |
 
 **`'fit'`.** The alternative gauge is scaled to the primary series' level in
@@ -1417,11 +1418,64 @@ timestamp is taken to close its interval, so a reading stamped exactly
 merge of days added up in the other window is refused. The engine itself
 reads only daily values.
 
-**Not done here.** Quantile mapping of a single automatic gauge's heavier
-daily intensities (calibration-research.md §4) is not applied: a factor
-keeps the gauge's own wet-day distribution. A replacement from a gridded
-product alone (no gauge) is still a `missing` period (§2.4c) filled from
-CHIRPS.
+**Daily intensity (engine ≥ 1.21.0, issue #66).** A factor fixes the
+monthly volume, not how the rain falls: a single automatic gauge has more
+intense days than a mean of several gauges, the factor keeps its own
+wet-day distribution, and GR4J turns heavier days into more flow
+(calibration-research.md §4, *Check daily intensity*).
+
+- **The check, on every period.** `summary.rainSource.periods[].intensity`
+  gives the share of the rain on **heavy days (≥ 20 mm,
+  `HEAVY_DAY_MM`)** for the series × factor over the whole period (every
+  day it has a reading and its month a factor, not only the run's days),
+  after the quantile map when there is one, and for the primary catchment
+  series over a **reference era**: the quantile map's era, else a `'fit'`
+  period's reference era, else the whole trusted primary record (outside
+  every period, off the suspect days, as the fits read it). It also counts
+  the wet days (≥ the map's threshold, else 1 mm) on each side. When the
+  series × factor and the reference differ by more than **5 share points**
+  (`HEAVY_SHARE_BAND`) and the period has no map, the run adds a warning
+  that suggests one (or carrying the runoff effect in the calibration
+  band); with a map, a warning says what it did. The daily output of a
+  period without a map is unchanged: the series × factor, exactly as
+  before 1.21.0.
+- **The map, opt-in per period** (`quantileMap`,
+  `packages/engine/src/quantileMap.ts`, a pure mapper written to serve
+  CHIRPS later, CR-23). Per calendar month, the scaled series' wet days
+  over the period and the primary record's trusted wet days over the era
+  are each summarised as a 101-point quantile table (every percentile, by
+  linear interpolation between order statistics). A wet day (scaled value
+  ≥ `wetDayMm`) takes the primary record's value at its own
+  non-exceedance probability in the series (a tie takes the middle of its
+  flat run; beyond the table, the table's end). A day below the threshold
+  keeps its scaled value. Then **each year-month's wet days are rescaled
+  to that year-month's scaled wet total**, so every month of the period
+  holds exactly the rain the factor gives it: the map moves rain between a
+  month's days, never in or out of the month. A month with fewer than
+  **30 wet days** (`QM_MIN_WET_DAYS`) on either side is mapped with its
+  **3-month season's** tables (DJF, MAM, JJA, SON, pooled); a season that
+  thin too is **not mapped** (the factor alone), and the warning names it.
+  The tables are part of the period's fit, so a warm-start snapshot pins
+  them like the factors; the values are computed over the whole period, so
+  a shorter run window gives a day the same rain.
+- **What it can't do.** With the totals and the wet days fixed, the map
+  corrects the *spread* of the falls (the tail), not how often it rains. A
+  gauge that is wet on fewer days than the primary series for the same
+  volume keeps a higher mean fall, and so part of its heavy-day excess;
+  the check reports both sides' wet-day counts so the hydrologist can see
+  which it is. Making dry days wet would invent rain the gauge didn't see.
+
+Run comparison's settings diff names the map, and the periods it sets side
+by side add the map as applied; a fit record's `forcing.rainSource` holds
+it, so turning it on or changing it flags "Forcing changed since fit"; the
+summary CSV adds a *Daily intensity* row per period. Every default here
+(the 20 mm heavy day, the 5-point band, the 1 mm wet day, month-then-season
+at 30 wet days) is a documented starting point awaiting the hydrologist's
+confirmation (docs/followups.md).
+
+**Not done here.** A replacement from a gridded product alone (no gauge)
+is still a `missing` period (§2.4c) filled from CHIRPS. CHIRPS itself is
+still scaled by month only (§2.4b; its quantile map is CR-23).
 
 ### 2.4f Forecast mode (engine ≥ 0.37.0, roadmap WP-2.12)
 

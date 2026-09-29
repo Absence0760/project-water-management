@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lastWaterYear, newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback } from './rainSource';
+import { lastWaterYear, newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback, withQuantileMap } from './rainSource';
 
 const AT = new Date(Date.UTC(2026, 8, 26)); // 26 September 2026: water year 2025/26 still running
 
@@ -44,5 +44,19 @@ describe('rain-source periods in the Settings form', () => {
 		expect(withFallback(named, 'chirps')).not.toHaveProperty('fallback');
 		// A fixed-factor period takes the ten years before it.
 		expect(withFallback(withFactorMode(fit, 'fixed'), 'rain_reanalysis_mm').fallback).toEqual({ series: 'rain_reanalysis_mm', fromWaterYear: 2010, toWaterYear: 2019 });
+	});
+});
+
+describe('the quantile map of a rain-source period (engine ≥ 1.21.0)', () => {
+	it('turns on over the fit’s reference era at the 1 mm default, off again, and blocks Save on a bad threshold', () => {
+		const fit = { ...newRainSourcePeriod(AT), reason: 'automatic station' };
+		const on = withQuantileMap(fit, true);
+		expect(on.quantileMap).toEqual({ fromWaterYear: 2010, toWaterYear: 2019, wetDayMm: 1 });
+		expect(rainSourceFormError([on])).toBeNull();
+		expect(withQuantileMap(on, true)).toBe(on);
+		expect(withQuantileMap(on, false)).not.toHaveProperty('quantileMap');
+		expect(rainSourceFormError([{ ...on, quantileMap: { ...on.quantileMap!, wetDayMm: 0 } }])).toMatch(/wet-day threshold must be 0\.1–10 mm/);
+		// A fixed-factor period takes the ten water years before it.
+		expect(withQuantileMap(withFactorMode(fit, 'fixed'), true).quantileMap).toEqual({ fromWaterYear: 2010, toWaterYear: 2019, wetDayMm: 1 });
 	});
 });

@@ -3,15 +3,16 @@
 	periods whose catchment rain comes from the alternative catchment gauge ×
 	monthly factors. Each period has its dates and a reason; fixed factors with
 	their provenance, or a fit against a reference series over a reference era;
-	and where its gaps fall through to. `error` is set while the list is
+	and where its gaps fall through to; optionally a quantile map of its wet
+	days (engine ≥ 1.21.0). `error` is set while the list is
 	invalid (the engine's own check, which the API uses), so the parent form
 	can block saving.
 -->
 <script lang="ts">
-	import { waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
+	import { HEAVY_DAY_MM, QM_MIN_WET_DAYS, QM_WET_DAY_MM_MAX, QM_WET_DAY_MM_MIN, waterYearLabel, type RainSourcePeriod } from '@water-management/engine';
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback } from './rainSource';
+	import { newRainSourcePeriod, rainSourceFormError, withFactorMode, withFallback, withQuantileMap } from './rainSource';
 
 	let {
 		value = $bindable(),
@@ -179,6 +180,34 @@
 							<input type="checkbox" disabled={readonly} checked={p.gaugeInChirps === true} onchange={(e) => patch(i, { gaugeInChirps: e.currentTarget.checked })} />
 							CHIRPS ingests this gauge in this period (so CHIRPS can be neither the fit reference nor the fallback)
 						</label>
+						<label class="check">
+							<input type="checkbox" disabled={readonly} checked={!!p.quantileMap} onchange={(e) => set(i, withQuantileMap(p, e.currentTarget.checked))} />
+							Quantile-map its wet days onto the catchment series (each month’s total kept)
+						</label>
+						{#if p.quantileMap}
+							{@const q = p.quantileMap}
+							<div class="row">
+								<div class="field year">
+									<label for="{uid}-qf{i}">Mapped onto water years from</label>
+									<NumberInput id="{uid}-qf{i}" min={1800} max={2200} step={1} disabled={readonly} value={q.fromWaterYear} onchange={(v) => v !== null && patch(i, { quantileMap: { ...q, fromWaterYear: v } })} aria-describedby="{uid}-qf{i}-h" />
+									<span class="hint" id="{uid}-qf{i}-h">WY {waterYearLabel(q.fromWaterYear)}</span>
+								</div>
+								<div class="field year">
+									<label for="{uid}-qt{i}">to</label>
+									<NumberInput id="{uid}-qt{i}" min={1800} max={2200} step={1} disabled={readonly} value={q.toWaterYear} onchange={(v) => v !== null && patch(i, { quantileMap: { ...q, toWaterYear: v } })} aria-describedby="{uid}-qt{i}-h" />
+									<span class="hint" id="{uid}-qt{i}-h">WY {waterYearLabel(q.toWaterYear)}</span>
+								</div>
+								<div class="field year">
+									<label for="{uid}-qw{i}">Wet day from <span class="u">(mm)</span></label>
+									<NumberInput id="{uid}-qw{i}" min={QM_WET_DAY_MM_MIN} max={QM_WET_DAY_MM_MAX} step={0.1} disabled={readonly} value={q.wetDayMm} onchange={(v) => v !== null && patch(i, { quantileMap: { ...q, wetDayMm: v } })} />
+								</div>
+							</div>
+							<span class="hint">
+								The gauge’s wet days are mapped, month by month, onto the catchment series’ wet days in those years (a month with fewer than {QM_MIN_WET_DAYS} wet days
+								uses its three-month season, else keeps the factor alone), then scaled back to the month’s total: the spread of the falls changes, the volume
+								doesn’t. Each run reports the share of rain on heavy days (≥ {HEAVY_DAY_MM} mm) either way.
+							</span>
+						{/if}
 					</fieldset>
 				</li>
 			{/each}
