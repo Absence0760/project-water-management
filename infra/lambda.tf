@@ -84,20 +84,38 @@ resource "aws_iam_role" "lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-# Logs + the EC2 ENI permissions a VPC Lambda needs. The API reads its config
-# from environment variables and its secrets from its own runtime secret
-# (GetSecretValue on that one ARN, secrets.tf, through the endpoint in
-# network.tf); its other AWS calls are SES SendEmail, granted separately and
-# scoped to one identity + From address (ses.tf), and SQS SendMessage to the
-# jobs queue (jobs.tf).
-resource "aws_iam_role_policy_attachment" "lambda_vpc" {
-  role       = aws_iam_role.lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs (its own log group) + the EC2 ENI permissions a VPC Lambda needs are
+# in iam.tf. The API reads its config from environment variables and its
+# secrets from its own runtime secret (GetSecretValue on that one ARN,
+# secrets.tf, through the endpoint in network.tf); its other AWS calls are SES
+# SendEmail, granted separately and scoped to one identity + From address
+# (ses.tf), and SQS SendMessage to the jobs queue (jobs.tf).
 
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.project}-backend"
   retention_in_days = var.lambda_log_retention_days
+}
+
+# Every Lambda logs in Lambda's JSON format (issue #126). The platform's own
+# START / END / REPORT lines, three per invocation and so three per API
+# request, are system logs at INFO; WARN keeps only the platform's warnings
+# and errors (an init failure, a timeout, an out-of-memory). The code's own
+# lines are application logs, kept from INFO up: the alarm lines are WARN or
+# ERROR (logging/logEvent.ts callers), but the worker's embedded metrics
+# (jobs_backlog, alert-mail burst) are bare stdout lines Lambda records as
+# INFO, and a higher level would silently drop them.
+#
+# JSON changes the shape the metric filters read: each console call becomes
+# `{ timestamp, level, requestId, message }`, with a single-object argument
+# nested under `message`. The backend logs its events that way
+# (backend/src/logging/logEvent.ts), so every filter matches
+# `$.message.event` (alarms.tf, jobs.tf; pinned in tests/logging.tftest.hcl).
+locals {
+  lambda_logging = {
+    log_format            = "JSON"
+    system_log_level      = "WARN"
+    application_log_level = "INFO"
+  }
 }
 
 resource "aws_lambda_function" "backend" {
@@ -114,6 +132,16 @@ resource "aws_lambda_function" "backend" {
   memory_size   = var.lambda_memory_mb
 
   reserved_concurrent_executions = var.lambda_reserved_concurrency
+
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.lambda.name
+  }
 
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
@@ -158,7 +186,8 @@ resource "aws_lambda_function" "backend" {
 
   depends_on = [
     aws_cloudwatch_log_group.lambda,
-    aws_iam_role_policy_attachment.lambda_vpc,
+    aws_iam_role_policy.lambda_logs["api"],
+    aws_iam_role_policy.lambda_vpc_eni["api"],
     aws_iam_role_policy.lambda_ses,
     aws_iam_role_policy.lambda_jobs_send,
     aws_iam_role_policy.runtime_secret,
@@ -216,10 +245,7 @@ resource "aws_iam_role" "migrate_lambda" {
   assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
 }
 
-resource "aws_iam_role_policy_attachment" "migrate_lambda_vpc" {
-  role       = aws_iam_role.migrate_lambda.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
+# Logs and VPC ENIs: iam.tf.
 
 # Read the RDS-managed master secret. The secret is encrypted with the
 # AWS-managed aws/secretsmanager key, which needs no explicit kms:Decrypt
@@ -261,6 +287,16 @@ resource "aws_lambda_function" "migrate" {
 
   reserved_concurrent_executions = var.migrate_reserved_concurrency
 
+  # JSON logs, with the per-invocation platform lines dropped (lambda.tf,
+  # local.lambda_logging).
+  logging_config {
+    log_format            = local.lambda_logging.log_format
+    system_log_level      = local.lambda_logging.system_log_level
+    application_log_level = local.lambda_logging.application_log_level
+    # The group this file creates, with its retention (and filters).
+    log_group = aws_cloudwatch_log_group.migrate.name
+  }
+
   vpc_config {
     subnet_ids         = aws_subnet.private[*].id
     security_group_ids = [aws_security_group.migrate_lambda.id]
@@ -281,7 +317,8 @@ resource "aws_lambda_function" "migrate" {
 
   depends_on = [
     aws_cloudwatch_log_group.migrate,
-    aws_iam_role_policy_attachment.migrate_lambda_vpc,
+    aws_iam_role_policy.lambda_logs["migrate"],
+    aws_iam_role_policy.lambda_vpc_eni["migrate"],
     aws_iam_role_policy.runtime_secret,
     aws_vpc_endpoint.secretsmanager,
   ]

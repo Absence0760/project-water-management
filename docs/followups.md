@@ -46,11 +46,20 @@ The checklist for these is issue #62; the history scrub is #63.
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
       appear under the repo's Settings → Variables.
+- [ ] **`production` environment branch/tag policy and the release-tag
+      ruleset (#126, 2026-09-29).** The release preflight now refuses every
+      release until the `production` environment deploys only from `main`
+      and the `backend@*`/`web@*` tags, and an active tag ruleset stops those
+      tags being created (except by an admin), moved or deleted. Run the
+      one-line `gh api` commands in deployment.md § The production
+      environment's branch and tag policy (steps 1–3), then its step 4 check.
+      Also propose the same steps for the templates repo's
+      `backfill-prod-environment.sh`, which sets only the reviewer today.
 - [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
-      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to that
-      version and apply again. The image has never been built or run on
+      `backend/renderer.Dockerfile`), then set `renderer_image_tag` to the
+      tag it printed (`<version>-<sha12>`) and apply again. The image has never been built or run on
       Lambda; smoke-test one render in production and check its alarms
       (details under § Server-side reports).
 - [ ] **Raise the Lambda concurrent-executions quota before the first apply
@@ -3381,6 +3390,33 @@ assume, the questions for counsel); these are the actions, with triggers.
 - [ ] **Self-service account deletion** and what happens to evidence an
       account made: #90; the privacy notice discloses the current exception.
 
+## Infrastructure edge
+
+- [ ] **Move the API origin to CloudFront OAC for Lambda if direct traffic
+      shows up (issue #126).** Today a direct call to the public Function
+      URL is refused by the app's shared-secret check (403), but it has
+      already passed the WAF by going around it and holds API concurrency
+      while refused. Decision: keep the shared secret. **Trigger:** the
+      `origin-secret-rejected` alarm (`infra/alarms.tf`, more than 20
+      refusals in an hour, from the `origin_secret_rejected` log line in
+      `backend/src/app.ts`) firing outside a secret rotation, or throttles the
+      WAF's request metrics don't explain. **Durable fix:** Function URL auth
+      type `AWS_IAM` behind an OAC of type `lambda`; the SPA then sends
+      `x-amz-content-sha256` on every PUT/POST/PATCH, and the one-click
+      unsubscribe POST (RFC 8058, sent by mail clients that can't add that
+      header) moves to a signed GET. Reasoning in docs/security.md
+      § Infrastructure.
+- [ ] **Check the 404s on the live site after the first apply (issue #126).**
+      `curl -sI https://<domain>/missing.pdf` should answer `404` with
+      `content-type: text/html` (spa_rewrite's page, not S3 XML), and
+      `curl -sI https://<domain>/_app/missing.js` `404` (S3 NoSuchKey via the
+      frontend bucket's ListBucket grant, not `403` AccessDenied);
+      `curl -s 'https://<domain>/?list-type=2'` must return the app's
+      `index.html`, never a bucket listing. Plan-only tests
+      (`infra/tests/edge.tftest.hcl`,
+      `infra/scripts/cloudfront-functions.test.mjs`) can't see CloudFront's
+      real behaviour.
+
 ## Housekeeping
 
 - [ ] **Run the full suites once GitHub Actions is back** (it has been off
@@ -3390,6 +3426,17 @@ assume, the questions for counsel); these are the actions, with triggers.
       `signUp`, `e2e/support/api.ts` `register`). Trigger: Actions
       re-enabled, or before the first release: run `test:backend:db` and
       the 14 e2e shards (or both suites locally, not beside each other).
+
+- [ ] **Make the deploy role's sops-key grant opt-in upstream** (issue #126
+      § IAM). The templates `project-baseline` module's key policy lets the
+      GitHub deploy role `kms:Decrypt` the project's sops key, which no
+      workflow here uses, and which would let an approved deploy run decrypt
+      every production secret. The proposal (a `deploy_role_sops_access`
+      variable, off here, default flipped once consumers opt in) is in
+      [upstream/templates-baseline-sops-deploy-grant.md](./upstream/templates-baseline-sops-deploy-grant.md).
+      The change belongs in the `templates` repo, not here. Trigger: before
+      the first `terraform apply`, or the next baseline change, whichever
+      comes first; then re-run the baseline stage and check the key policy.
 
 - `SECURITY DEFINER` grants (issue #37, 028_definer_grants): the catalogue
   guard now fails any `SECURITY DEFINER` function executable by a role other

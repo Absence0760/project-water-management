@@ -57,6 +57,32 @@ data "aws_iam_policy_document" "frontend_bucket_policy" {
     }
   }
 
+  # ListBucket makes S3 answer a missing key with 404 (NoSuchKey) instead of
+  # 403 (AccessDenied): without it S3 won't say whether a key exists. It
+  # can't expose a listing through CloudFront: a listing is a GET on the
+  # bucket root, and spa_rewrite sends every path ending in "/" (the root
+  # included) to /index.html and refuses dot segments, and the default
+  # behaviour forwards no query string (CachingOptimized, no origin request
+  # policy), so no list-type/prefix parameter reaches S3. The reports bucket
+  # keeps GetObject only (reports.tf): its misses stay 403, which leaks
+  # nothing about which reports exist.
+  statement {
+    sid       = "AllowCloudFrontServicePrincipalList"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.frontend.arn]
+
+    principals {
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "AWS:SourceArn"
+      values   = [aws_cloudfront_distribution.frontend.arn]
+    }
+  }
+
   statement {
     sid     = "DenyInsecureTransport"
     effect  = "Deny"
@@ -137,6 +163,15 @@ resource "aws_acm_certificate_validation" "frontend" {
 #   methods page, are served from their own HTML: /welcome, /privacy, /terms,
 #   /methods → <path>.html
 #   (static HTML for crawlers and link previews).
+#   A path WITH an extension goes to S3 only where the build keeps files:
+#   under STATIC_DIRS (/_app/… and frontend/static's directories) or one of
+#   STATIC_FILES at the root (frontend/static's files and the HTML the build
+#   writes). Anything else (/report.pdf, /wp-login.php, /.env) gets a small
+#   404 page from the function itself, never reaching S3, whose miss would be
+#   an XML error. A missing file inside those locations reaches S3 and gets
+#   its 404 (ListBucket, above). infra/scripts/cloudfront-functions.test.mjs
+#   runs this code and checks both lists against frontend/static and the
+#   prerendered routes, so a new static file can't silently 404.
 #
 # api_strip_prefix — /api/* behaviour. The browser calls same-origin
 #   /api/auth/login; the Hono app routes /auth/login (dev hits it directly on
@@ -152,19 +187,54 @@ resource "aws_acm_certificate_validation" "frontend" {
 resource "aws_cloudfront_function" "spa_rewrite" {
   name    = "${local.project}-spa-rewrite"
   runtime = "cloudfront-js-2.0"
-  comment = "Serve /index.html for extension-less SPA routes"
+  comment = "Serve /index.html for extension-less SPA routes, 404 for files the build doesn't have"
   publish = true
   code    = <<-EOT
+    var STATIC_DIRS = ['_app', 'fonts', 'help', 'landing'];
+    var STATIC_FILES = [
+      'index.html', 'welcome.html', 'privacy.html', 'terms.html', 'methods.html',
+      'favicon.ico', 'favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png',
+      'icon-maskable-512.png', 'robots.txt', 'site.webmanifest'
+    ];
+    var NOT_FOUND = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<meta name="robots" content="noindex"><title>Page not found</title></head>' +
+      '<body><h1>Page not found</h1><p>There is nothing at this address.</p>' +
+      '<p><a href="/">Go to the home page</a></p></body></html>';
+
+    function notFound() {
+      return {
+        statusCode: 404,
+        statusDescription: 'Not Found',
+        headers: {
+          'content-type': { value: 'text/html; charset=utf-8' },
+          'cache-control': { value: 'no-store' },
+          'x-content-type-options': { value: 'nosniff' }
+        },
+        body: { encoding: 'text', data: NOT_FOUND }
+      };
+    }
+
     function handler(event) {
       var request = event.request;
       var uri = request.uri;
-      var last = uri.substring(uri.lastIndexOf('/') + 1);
       if (uri === '/welcome' || uri === '/privacy' || uri === '/terms' || uri === '/methods') {
         request.uri = uri + '.html';
-      } else if (last.indexOf('.') === -1) {
-        request.uri = '/index.html';
+        return request;
       }
-      return request;
+      var segments = uri.split('/');
+      for (var i = 0; i < segments.length; i++) {
+        if (segments[i] === '.' || segments[i] === '..') return notFound();
+      }
+      var last = segments[segments.length - 1];
+      if (last.indexOf('.') === -1) {
+        request.uri = '/index.html';
+        return request;
+      }
+      var known = segments.length === 2
+        ? STATIC_FILES.indexOf(last) !== -1
+        : STATIC_DIRS.indexOf(segments[1]) !== -1;
+      return known ? request : notFound();
     }
   EOT
 }

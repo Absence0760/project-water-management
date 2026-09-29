@@ -3,7 +3,10 @@
 #
 # The bucket was created by the estate account bootstrap
 # (~/github/templates/scripts/new-project-account.sh water-management) as
-# `water-management-tfstate-<account-id>`. Only the bucket lives here — key,
+# `water-management-tfstate-<account-id>`, in **us-east-1**: the bootstrap
+# puts the bucket in its own `region`, which must be us-east-1 (not the
+# workload region, af-south-1), because main.tf reads state from us-east-1
+# only (infra/README.md § Operator steps, step 1). Only the bucket lives here — key,
 # region, locking and encryption are committed in main.tf — so the AWS
 # account ID stays out of this public repo. Generate the file rather than
 # typing the ID:

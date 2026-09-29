@@ -60,6 +60,31 @@ data "aws_iam_policy_document" "alerts_publish" {
       values   = ["arn:aws:cloudwatch:${var.aws_region}:${data.aws_caller_identity.current.account_id}:alarm:*"]
     }
   }
+
+  # RDS event notifications (rds.tf aws_db_event_subscription.main). A custom
+  # topic policy replaces SNS's default, which let any RDS resource in the
+  # account publish, so RDS needs its own statement: this account's database
+  # only (AWS's own example shape:
+  # https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_Events.GrantingPermissions.html).
+  statement {
+    sid       = "AllowRdsEvents"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.alerts.arn]
+    principals {
+      type        = "Service"
+      identifiers = ["events.rds.amazonaws.com"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:db:${local.project}"]
+    }
+  }
 }
 
 resource "aws_sns_topic_policy" "alerts" {
@@ -274,7 +299,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_duration" {
 resource "aws_cloudwatch_log_metric_filter" "self_check_failed" {
   name           = "${local.project}-self-check-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"self_check_failed\" }"
+  pattern        = "{ $.message.event = \"self_check_failed\" }"
 
   metric_transformation {
     name          = "SelfCheckFailed"
@@ -337,7 +362,7 @@ resource "aws_cloudwatch_log_metric_filter" "mail_send_failed" {
   }
   name           = "${local.project}-mail-send-failed-${each.key}"
   log_group_name = each.value
-  pattern        = "{ $.event = \"mail_send_failed\" }"
+  pattern        = "{ $.message.event = \"mail_send_failed\" }"
 
   metric_transformation {
     name          = "MailSendFailed"
@@ -378,7 +403,7 @@ resource "aws_cloudwatch_metric_alarm" "mail_send_failed" {
 resource "aws_cloudwatch_log_metric_filter" "unhandled_error" {
   name           = "${local.project}-unhandled-error"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"unhandled_error\" }"
+  pattern        = "{ $.message.event = \"unhandled_error\" }"
 
   metric_transformation {
     name          = "UnhandledError"
@@ -424,7 +449,7 @@ resource "aws_cloudwatch_metric_alarm" "unhandled_error" {
 resource "aws_cloudwatch_log_metric_filter" "login_failed" {
   name           = "${local.project}-login-failed"
   log_group_name = aws_cloudwatch_log_group.lambda.name
-  pattern        = "{ $.event = \"login_failed\" }"
+  pattern        = "{ $.message.event = \"login_failed\" }"
 
   metric_transformation {
     name          = "LoginFailed"
@@ -444,7 +469,81 @@ resource "aws_cloudwatch_metric_alarm" "login_failed" {
   period              = 900
   statistic           = "Sum"
   threshold           = var.login_failed_alarm_per_15min
-  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter event = \"login_failed\" | stats count() by reason, route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
+  alarm_description   = "More than ${var.login_failed_alarm_per_15min} failed sign-ins (or bad reset/verification links) in 15 minutes across all accounts: possible password spraying or credential stuffing. Logs Insights on the API log group: filter message.event = \"login_failed\" | stats count() by message.reason, message.route, bin(5m). Runbook: docs/deployment.md § Runbooks, Credential stuffing / password spraying."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
+# --- Dead-letter queues: alarm on each new arrival --------------------------
+# Every SQS DLQ (jobs, fetch-requests, ingest-results, render-requests,
+# render-results, mail-events) alarms through this expression rather than on
+# its depth. A depth > 0 alarm stays in ALARM for as long as the message sits
+# in the DLQ (up to its 14-day retention), and SNS only notifies on a state
+# change, so a second, unrelated failure in that time is silent.
+#
+# The metric: SQS's NumberOfMessagesSent does NOT count a message the redrive
+# policy moves into a DLQ (only a SendMessage to it; SQS developer guide,
+# "Available CloudWatch metrics for Amazon SQS"), so it can't see a
+# dead-lettering. ApproximateNumberOfMessagesVisible does, and an increase in
+# it between two 5-minute periods is a new arrival:
+#
+#   DIFF(FILL(visible, 0)) > 0
+#
+# FILL(…, 0): SQS stops publishing a queue's metrics after ~6 hours with no
+# activity and no messages, which is an idle DLQ's normal state. Without the
+# fill the first arrival after a quiet spell has no preceding datapoint and
+# DIFF drops it, missing exactly the failure this is for. A DLQ holding
+# messages counts as active, so a real backlog is never zero-filled.
+# 1 of 3 datapoints (15 minutes): FILL also fills a latest period whose
+# datapoint hasn't been published yet (CloudWatch metric math docs, FILL), which
+# reads as a drop, never a rise, so the increase is caught one evaluation later
+# once the datapoint lands, and the alarm returns to OK 15 minutes after it.
+# A purge or redrive reads as a drop (no alarm). The one blind spot: a message
+# arriving in the same 5 minutes as one is removed; the redrive/purge runbook
+# (docs/deployment.md § Runbooks) says to check depth after clearing.
+locals {
+  dlq_arrivals_expression         = "DIFF(FILL(visible, 0))"
+  dlq_arrivals_evaluation_periods = 3
+  dlq_arrivals_note               = "(This alarm fires once per new arrival and clears after 15 minutes; the DLQ may still hold earlier messages: check its ApproximateNumberOfMessagesVisible.)"
+}
+
+# --- Direct Function URL traffic ---------------------------------------------
+# The Function URL is public by AWS design (auth type NONE); only the shared
+# secret CloudFront stamps (s3_cloudfront.tf) keeps a direct caller out, and
+# the app refuses one with 403 before any route runs. Those requests never
+# passed the WAF, and each still occupies API concurrency for a moment. The
+# decision (issue #126) is to keep the shared secret and revisit CloudFront
+# OAC for Lambda only if this alarm shows direct traffic; the trigger and
+# what OAC would need are in docs/security.md § Infrastructure. Each refusal
+# logs one line (backend/src/app.ts):
+#   {"event":"origin_secret_rejected","reason":"missing"}   (or "mismatch")
+# no path, address or header value. A secret rotation causes a few seconds
+# of "mismatch" while CloudFront and Lambda converge, hence the threshold.
+
+resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
+  name           = "${local.project}-origin-secret-rejected"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.message.event = \"origin_secret_rejected\" }"
+
+  metric_transformation {
+    name          = "OriginSecretRejected"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "origin_secret_rejected" {
+  alarm_name          = "${local.project}-origin-secret-rejected"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 20
+  alarm_description   = "More than 20 API requests in an hour arrived without CloudFront's shared secret: someone is calling the Lambda Function URL directly, past the WAF (or a secret rotation didn't converge). Logs Insights on the API log group: filter message.event = \"origin_secret_rejected\" | stats count() by message.reason, bin(5m). Sustained direct traffic is the trigger to move to CloudFront OAC for Lambda: docs/security.md § Infrastructure, docs/followups.md."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }
@@ -491,8 +590,12 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
   }
 }
 
-# t4g is burstable: once CPU credits run out the instance is throttled to its
-# baseline (~10% of 2 vCPUs on micro). Warn well before that.
+# t4g is burstable, and RDS runs every T4g instance in Unlimited mode: when
+# its CPU credits run out it is NOT throttled to baseline, it keeps bursting on
+# surplus credits, and those are billed if it doesn't earn them back. So an
+# empty balance means a sustained load above the micro's baseline (~10% of 2
+# vCPUs) and an extra charge from here on. This alarm is the early warning;
+# rds_cpu_surplus_charged below is the one that says money is being spent.
 resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
   alarm_name          = "${local.project}-rds-cpu-credits"
   comparison_operator = "LessThanThreshold"
@@ -502,7 +605,29 @@ resource "aws_cloudwatch_metric_alarm" "rds_cpu_credits" {
   period              = 300
   statistic           = "Minimum"
   threshold           = 20
-  alarm_description   = "RDS CPU credit balance below 20 — the burstable instance is about to be throttled. Consider db.t4g.small."
+  alarm_description   = "RDS CPU credit balance below 20. T4g runs Unlimited: past zero the instance keeps bursting on surplus credits, which are billed, not throttled. Find the load, or consider db.t4g.small."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.identifier
+  }
+}
+
+# Surplus credits actually charged (Unlimited mode, above): the instance
+# spent more CPU than it earned over 24 hours, or the balance could not pay
+# its surplus back. Any charge in an hour pages; one is a few cents, but it
+# means the instance class is too small for the load or something is spinning.
+resource "aws_cloudwatch_metric_alarm" "rds_cpu_surplus_charged" {
+  alarm_name          = "${local.project}-rds-cpu-surplus-charged"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "CPUSurplusCreditsCharged"
+  namespace           = "AWS/RDS"
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "RDS is being charged for surplus CPU credits (T4g Unlimited): sustained CPU above the burstable baseline. Find the load, or consider db.t4g.small."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 

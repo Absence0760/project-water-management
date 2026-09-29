@@ -74,13 +74,13 @@ Cost, us-east-1:
 | RDS gp3 storage, 20 GiB | 2.30 |
 | 3 interface endpoints × 1 AZ | 21.90 |
 | WAF (ACL + 4 rules) | 9.00 |
-| CloudWatch alarms, logs, RDS log export | ~2.80 |
+| CloudWatch alarms, logs, RDS log export | ~3.40 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~1.50 |
-| **Total** | **≈ $52** |
+| **Total** | **≈ $53** |
 
 af-south-1 costs roughly 25–35% more for RDS, endpoints and storage:
-**≈ $58–63**.
+**≈ $59–64**.
 
 What you accept:
 
@@ -122,10 +122,10 @@ Cost, us-east-1:
 | Backups beyond the free allowance (14 days) | ~1.00 |
 | 3 interface endpoints × 2 AZs | 43.80 |
 | WAF (ACL + 4 rules + requests) | ~9.60 |
-| CloudWatch alarms, logs, RDS log export | ~3.00 |
+| CloudWatch alarms, logs, RDS log export | ~3.60 |
 | KMS key, Route 53 zone, 4 Secrets Manager secrets (the RDS master + 3 runtime secrets) | 3.10 |
 | SQS polling, ECR image, S3, SES, Lambda, CloudFront | ~2.50 |
-| **Total** | **≈ $112–117** |
+| **Total** | **≈ $113–118** |
 
 af-south-1: **≈ $135–150**.
 

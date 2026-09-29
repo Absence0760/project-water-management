@@ -11,6 +11,8 @@
 // address from a wrong password for the operator; the client never sees the
 // difference (both answer the same 401, after the same bcrypt work).
 
+import { logEvent } from '../logging/logEvent.js';
+
 /**
  * Why a credential check failed.
  * - `unknown_account`: sign-in with an address that has no account.
@@ -27,5 +29,5 @@ export type LoginFailureRoute = '/auth/login' | '/auth/change-password' | '/auth
 
 /** Log `{"event":"login_failed","route","reason"}`: nothing that names a person. */
 export function logLoginFailed(route: LoginFailureRoute, reason: LoginFailureReason): void {
-	console.warn(JSON.stringify({ event: 'login_failed', route, reason }));
+	logEvent('warn', { event: 'login_failed', route, reason });
 }

@@ -15,7 +15,7 @@ vi.mock('./feeds/http.js', async (orig) => {
 	return { ...real, feedHttp: async () => httpOverride.next ?? real.feedHttp() };
 });
 
-const { FETCH_SEND_MARGIN_MS, handler, withDeadline } = await import('./lambda-fetcher.js');
+const { FETCH_SEND_MARGIN_MS, fetchFailureReason, handler, withDeadline } = await import('./lambda-fetcher.js');
 
 afterEach(() => {
 	sent.length = 0;
@@ -32,7 +32,7 @@ const today = new Date().toISOString().slice(0, 10);
 describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 	it('fetches each request and sends the result, success or failure, to ingest-results', async () => {
 		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		const ok = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
 		const sea = { ...ok, request: { ...ok.request, config: { cells: [{ lat: -20.27, lon: 25.37, weight: 1 }] } } };
 		const res = await handler({ Records: [record('m1', ok), record('m2', sea)] } as never);
@@ -65,7 +65,7 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 
 	it('answers a fetch that outruns the Lambda’s time with a failure, instead of timing out into retries and the DLQ', async () => {
 		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		let calls = 0;
 		// An upstream that never answers.
 		const hung: FeedHttp = { range: () => (calls++, new Promise(() => {})), text: () => (calls++, new Promise(() => {})) };
@@ -90,9 +90,53 @@ describe('fetcher Lambda (FEED_SOURCE=fixtures here: no network)', () => {
 		expect(await live.text('https://x')).toBe('page');
 	});
 
+	it('logs one feed_fetch_failed line per failed answer, with a reason code and never the stored message (infra/feeds.tf alarms on it)', async () => {
+		vi.stubEnv('INGEST_RESULTS_QUEUE_URL', 'https://sqs.example/ingest-results');
+		vi.spyOn(console, 'log').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const ok = { v: 1, type: 'fetch', ...ids, request: { source: 'chirps_gefs', config: { cells: [{ lat: -20.12, lon: 25.17, weight: 1 }] }, start: today, end: today, today } };
+		const sea = { ...ok, request: { ...ok.request, config: { cells: [{ lat: -20.27, lon: 25.37, weight: 1 }] } } };
+		const invalid = { v: 1, type: 'fetch', ...ids, request: { source: 'x' } };
+		await handler({ Records: [record('m1', ok), record('m2', sea), record('m3', invalid)] } as never);
+		const failed = warn.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((l) => l.event === 'feed_fetch_failed');
+		// The successful fetch logs none; the answered failures one each.
+		expect(failed).toEqual([
+			{ event: 'feed_fetch_failed', feedId: ids.feedId, source: 'chirps_gefs', reason: fetchFailureReason((sent[1]!.message as { result: { error: string } }).result.error) },
+			{ event: 'feed_fetch_failed', feedId: ids.feedId, source: null, reason: 'invalid_request' }
+		]);
+		expect(failed[0]!.reason).not.toBe('other');
+		// The stored message names the grid cell; the log never does.
+		expect(JSON.stringify(warn.mock.calls)).not.toContain('-20.27');
+	});
+
+	it('logs no feed_fetch_failed line for a send that failed (it is retried, and logs once it goes through)', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		sendToQueue.mockRejectedValueOnce(new Error('INGEST_RESULTS_QUEUE_URL is not set'));
+		await handler({ Records: [record('m1', { v: 1, type: 'fetch', ...ids, request: { source: 'x' } })] } as never);
+		expect(warn.mock.calls.filter((c) => String(c[0]).includes('feed_fetch_failed'))).toEqual([]);
+	});
+
+	it('maps each failure message to a fixed reason code', () => {
+		expect(fetchFailureReason('the source is unreachable: it did not answer in time')).toBe('timeout');
+		expect(fetchFailureReason('the fetch request was not valid, so nothing was fetched')).toBe('invalid_request');
+		expect(fetchFailureReason('the source is unreachable: HTTP 503')).toBe('unavailable');
+		expect(fetchFailureReason('the source’s data could not be read: no station X0H000')).toBe('format');
+		expect(fetchFailureReason('the fetch failed with an internal error')).toBe('internal');
+		expect(fetchFailureReason('something new')).toBe('other');
+	});
+
+	it('logs a failed send by its error name only, never its message', async () => {
+		const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		sendToQueue.mockRejectedValueOnce(Object.assign(new Error('arn:aws:sqs:af-south-1:123456789012:secret-queue'), { name: 'AccessDenied' }));
+		await handler({ Records: [record('m1', { v: 1, type: 'fetch', ...ids, request: { source: 'x' } })] } as never);
+		expect(err).toHaveBeenCalledWith(JSON.stringify({ event: 'fetch_result_send_failed', messageId: 'm1', error: 'AccessDenied' }));
+	});
+
 	it('reports a failed send as a batch item failure, so SQS retries just that message', async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => {});
-		vi.spyOn(console, 'log').mockImplementation(() => {});
+		vi.spyOn(console, 'info').mockImplementation(() => {});
 		sendToQueue.mockRejectedValueOnce(new Error('INGEST_RESULTS_QUEUE_URL is not set'));
 		const req = { v: 1, type: 'fetch', ...ids, request: { source: 'dws', config: { station: 'X0H000' }, start: '2020-01-01', end: '2020-01-10', today } };
 		const res = await handler({ Records: [record('m1', req), record('m2', req)] } as never);
