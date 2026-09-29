@@ -10,7 +10,7 @@
 // Needs Mailpit (`pnpm dev:mail:up`; CI starts it). Locally, without it the
 // spec is skipped and says why; in CI it never skips (server-report.spec.ts's
 // rule).
-import { putSeries, seedRunnableProject } from '../support/api.ts';
+import { putModel, putSeries, seedRunnableProject } from '../support/api.ts';
 import { mail as mailFn, words as siteWords } from '../support/lang.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
@@ -101,6 +101,11 @@ for (const L of LANGUAGES) {
 	}) => {
 		const projectName = `Mailpit alerts ${L.lang}`;
 		const project = await seedRunnableProject(page.request, projectName);
+		// No transfer rule: the sample network's Upper → Lower rule (Nov–Feb, while Upper's dam is above 20 %)
+		// keeps Lower's dam full through a dry fortnight, so nothing would cross an alert level. The forecast
+		// only drew it down before engine 1.27.0 because the tail started from a history the forecast had
+		// already drained (engine-audit.md K1).
+		await putModel(page.request, project.id, { ...project.model, transfers: [] });
 		const lower = project.model.nodes.find((n) => n.name === 'Lower farm')!.id as string;
 		const farmer = await signIn('Mailpit farmer');
 		expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [lower] } })).status()).toBe(201);
