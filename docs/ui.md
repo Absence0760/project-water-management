@@ -3052,7 +3052,10 @@ which checks every catchment tab).
   the quaternary, monthly means more than 5 % off the MAR, a one-sided or
   inverted band) show next to the field and block Save; the save bar links
   to the WR2012 group.
-- **Flow share between hydrological units**.
+- **Flow share between hydrological units**: the method, and the **High/low
+  MAP split** (High, Low, their Sum, amber unless 100 %) only while the method
+  is *High/low MAP split*, the one method that reads it (issue #174); under
+  *by area* or *manual* it is hidden and its saved value kept.
 - **EWR**: m³/day per month, with l/s, then (under the row, so the twelve
   months get the full width) the annual volume and mean flow (no chart: a bar
   chart of the same twelve values was removed as a restatement of the row,

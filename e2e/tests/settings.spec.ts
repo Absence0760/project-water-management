@@ -36,6 +36,30 @@ test('monthly A-pan and EWR values are saved and survive a reload', async ({ pag
 	await expect(page.getByText('Unsaved settings')).toBeHidden();
 });
 
+test('the high/low MAP split shows only while that flow-share method is chosen', async ({ page, owner }) => {
+	void owner;
+	const project = await createProject(page.request, 'Settings hi/lo');
+	await page.goto(`/projects/${project.id}?tab=settings`);
+	const method = page.getByLabel('Method', { exact: true });
+	const split = page.getByRole('group', { name: /^High\/low MAP split/ });
+
+	// By area (the default) and manual shares don't read the split: no dead control, no amber Sum.
+	await expect(method.locator('option:checked')).toHaveText('By catchment area');
+	await expect(split).toHaveCount(0);
+	await method.selectOption('hiLo');
+	await expect(split.getByLabel('High (%)')).toHaveValue('50');
+	await expect(split.getByLabel('Low (%)')).toHaveValue('50');
+	await expect(split).toContainText('Should add up to 100 %. Default 50 / 50');
+	await split.getByLabel('High (%)').fill('81');
+	await split.getByLabel('High (%)').press('Tab');
+	await expect(split.locator('.sum')).toHaveClass(/warn/);
+	await method.selectOption('manual');
+	await expect(split).toHaveCount(0);
+	// Back on high/low, the typed value is still there.
+	await method.selectOption('hiLo');
+	await expect(split.getByLabel('High (%)')).toHaveValue('81');
+});
+
 test('discarding settings restores the saved values', async ({ page, owner }) => {
 	void owner;
 	const project = await createProject(page.request, 'Settings discard');

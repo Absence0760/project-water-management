@@ -914,26 +914,27 @@
 				<span class="hint" id="st-method-h">{method?.help} The resulting share per hydrological unit is shown on the Network tab.</span>
 				<FieldHistoryLine field="settings:flowShareMethod" />
 			</div>
-			<fieldset class="plain hilo">
-				<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
-				<div class="form-row">
-					<div class="field">
-						<label for="st-hi">High <span class="u">(%)</span></label>
-						<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
+			<!-- Only the high/low MAP method reads the split, so it shows only then (issue #174); the saved value is kept. -->
+			{#if s.flowShareMethod === 'hiLo'}
+				<fieldset class="plain hilo" data-testid="hilo-split">
+					<legend>High/low MAP split <HelpTip key="settings.hiLoSplit" /></legend>
+					<div class="form-row">
+						<div class="field">
+							<label for="st-hi">High <span class="u">(%)</span></label>
+							<NumberInput id="st-hi" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.hi} />
+						</div>
+						<div class="field">
+							<label for="st-lo">Low <span class="u">(%)</span></label>
+							<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
+						</div>
+						<div class="field">
+							<span class="label">Sum</span>
+							<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
+						</div>
 					</div>
-					<div class="field">
-						<label for="st-lo">Low <span class="u">(%)</span></label>
-						<NumberInput id="st-lo" min={0} max={100} scale={100} disabled={readonly} bind:value={s.hiLoSplit.lo} />
-					</div>
-					<div class="field">
-						<span class="label">Sum</span>
-						<span class="sum" class:warn={Math.abs(hiLoSum - 1) > 1e-6}>{fmtPct(hiLoSum, 1)}</span>
-					</div>
-				</div>
-				<span class="hint">
-					{s.flowShareMethod === 'hiLo' ? 'Should add up to 100 %. Default 81 / 19.' : 'Only used by the high/low MAP method.'}
-				</span>
-			</fieldset>
+					<span class="hint">Should add up to 100 %. Default 50 / 50; an imported workbook brings its own.</span>
+				</fieldset>
+			{/if}
 		</div>
 	</section>
 
