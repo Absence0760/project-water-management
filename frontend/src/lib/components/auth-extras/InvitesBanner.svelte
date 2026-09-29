@@ -11,7 +11,7 @@
 	import { session } from '$lib/auth/session.svelte';
 	import { t, tn } from '$lib/i18n/locale.svelte';
 	import { plural } from '$lib/i18n/msg';
-	import { invitesChanged, loadPendingInvites, pendingInvites } from './pendingInvites.svelte';
+	import { invitesChanged, loadPendingInvites, pendingInvites } from './inviteCount.svelte';
 
 	const INVITATIONS = plural({ one: '{n} invitation', other: '{n} invitations' });
 

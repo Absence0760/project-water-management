@@ -11,7 +11,7 @@
 	import { base } from '$app/paths';
 	import { api, type MyInvite } from '$lib/api';
 	import SectionHeader from '$lib/components/workspace/SectionHeader.svelte';
-	import { invitesChanged } from '$lib/components/auth-extras/pendingInvites.svelte';
+	import { invitesChanged } from '$lib/components/auth-extras/inviteCount.svelte';
 	import { fmtDay } from '$lib/format/number';
 	import { msg, type Msg } from '$lib/i18n/msg';
 	import { t } from '$lib/i18n/locale.svelte';

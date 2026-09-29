@@ -5851,7 +5851,7 @@ then.
   confirmed address only): "You have N invitations waiting." with **See
   invitations**, on every signed-in page but the invitations page, while any
   wait. The count is read once per account, again after an accept or
-  decline, and when the tab comes back into view (`auth-extras/pendingInvites.svelte.ts`).
+  decline, and when the tab comes back into view (`auth-extras/inviteCount.svelte.ts`).
 - The register page, opened from an invite link by an account that is
   signed in and confirmed, points to the invitations page instead of saying
   it should have access already.

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mine = vi.fn<() => Promise<unknown[]>>();
 vi.mock('$lib/api', () => ({ api: { invites: { mine: () => mine() } } }));
 
-const { invitesChanged, loadPendingInvites, pendingInvites } = await import('./pendingInvites.svelte');
+const { invitesChanged, loadPendingInvites, pendingInvites } = await import('./inviteCount.svelte');
 
 describe('the pending-invitations count (InvitesBanner, issue #136)', () => {
 	beforeEach(() => {
