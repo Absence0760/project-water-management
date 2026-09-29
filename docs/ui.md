@@ -1559,9 +1559,17 @@ note's link on the Summary, `notes.ts` `noteHref`).
       *Supplied* in the latest run (the newest run's summary, fetched through
       the Runs tab's `detailCache` whenever this layout shows; the tile
       tints for the short and low bands, and "no demand" / "not in this run"
-      are written) and **Dam now**, its storage at the end of that run as a %
-      of capacity (its `dam_storage` series, through `cachedSeries`, reduced
-      by `overview/damLevels.ts`; "No dam" without one). Then drains into,
+      are written) and **Dam at end of run** (it was "Dam now", but it is the
+      latest run's last day, the record's last day on a forecast run, not
+      today), its storage then as a % of the capacity the run modelled (from
+      the run's own model, `damInRun`, as the map's colour by dam level reads
+      it, so a capacity edited since doesn't make the two disagree, issue
+      #173; from the run summary, or its `dam_storage` series through
+      `cachedSeries`, reduced by `overview/damLevels.ts`). It reads a farm as
+      the map does (`damEndTile`): "No dam" without a dam in the model now, a
+      dash and "not in this run" for a dam the run didn't model, and after a
+      capacity edit a line under the % naming the run's capacity ("of 150 000
+      m³ in the run"). Then drains into,
       catchment area (a user: what it takes, `describeUser`), and for a farm
       its flow share in use, dam capacity and irrigated area, a link ("20.00
       ha, 1 crop") to the farm drawer. With nothing picked: "Select a node on
@@ -1943,7 +1951,18 @@ and units, and 30 crops on 20 units, without pushing the results off the screen:
   under it. **Show table** opens the demand table (`crops/DemandTable.svelte`:
   the formula, m³/day per month, the mean and Mm³/a per unit and for the
   catchment) in place. An alert says when A-pan isn't set (demand is then
-  zero).
+  zero). The preview multiplies the monthly A-pan means; when the project
+  has a daily A-pan series, which runs use instead on the days it has a
+  value ([model.md §2.3a](./model.md#23a-daily-a-pan-evaporation-engine--0380-issue-45)),
+  a line under the heading (and the chart's accessible name) says the chart
+  shows the monthly means and a run's demand differs, and with no monthly
+  means set the alert says runs still take the daily series
+  (`demand.ts` `demandApanNote`, issue #173; the page passes `apanDaily`,
+  as does the grid modal to the preview there). The preview doesn't average
+  the daily series itself: which days a run covers depends on its rain
+  window and zero-rain handling (`prepareRun`, model.md §2.3a), which this
+  page doesn't load, so any average here would still differ from a run's;
+  a run's own demand is on its results.
 - **Planted area by hydrological unit:** one stacked bar per unit with something planted,
   largest total first, split by crop in the list's colours and order, scaled
   to the largest unit, with its total ha (`farmBars`). Each bar is an image
@@ -2575,9 +2594,9 @@ section header, which it fills (`fillHeader`) like the other sections.
   listed by `settings/sections.ts`, `settingsNavGroups`), in three groups
   named for screen readers only, its links evenly spaced (the names on the
   bar would push links into More at 1280 px, issue #162): **Model inputs**
-  (Demand … Simulation period), **How results are read** (Data quality,
-  Outcome matrix, Seasonal outlook: they change no result) and **Runs, feeds
-  and reports**. It is the shared in-page menu
+  (Demand … Data quality: its zero-rain and low-vs-CHIRPS limits change
+  results, issue #173), **How results are read** (Outcome matrix, Seasonal
+  outlook: they change no result) and **Runs, feeds and reports**. It is the shared in-page menu
   (`common/SectionNav.svelte`, [§ On this page menu](#on-this-page-menu)),
   above the form rather than in it, so it stays stuck down the panels after
   the form too (inside it, it scrolled away at Data feeds): a bar of pill links
