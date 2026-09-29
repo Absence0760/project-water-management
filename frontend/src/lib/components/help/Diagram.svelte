@@ -43,6 +43,13 @@
 	const MIN_TEXT_PX = 9.5;
 	let box: HTMLDivElement | undefined = $state();
 	let minWidth = $state<number | null>(null);
+	/**
+	 * The widest a diagram is drawn (px): a guide's figures span the Help
+	 * column (issue #162), ~900 px at 1440, which would draw a 560-unit
+	 * drawing's text at 1.6 times its size. Past this it stays centred.
+	 */
+	const MAX_SCALE = 1.3;
+	let maxWidth = $state<number | null>(null);
 	$effect(() => {
 		void Body;
 		const svg = box?.querySelector('svg');
@@ -51,11 +58,14 @@
 		let smallest = Infinity;
 		for (const t of svg.querySelectorAll('text')) smallest = Math.min(smallest, parseFloat(getComputedStyle(t).fontSize) || Infinity);
 		minWidth = w > 0 && Number.isFinite(smallest) ? Math.ceil((w * MIN_TEXT_PX) / smallest) : null;
+		maxWidth = w > 0 ? Math.round(w * MAX_SCALE) : null;
 	});
 </script>
 
 <figure class="diagram" data-diagram={id}>
-	<div class="scroll" data-scroll-region data-scroll-label="Diagram" bind:this={box} style:--diagram-min-w={minWidth ? `${minWidth}px` : null}>
+	<div class="scroll" data-scroll-region data-scroll-label="Diagram" bind:this={box} style:--diagram-min-w={minWidth ? `${minWidth}px` : null}
+		style:--diagram-max-w={maxWidth ? `${maxWidth}px` : null}
+	>
 		<Body />
 	</div>
 	{#if caption}<figcaption>{caption}</figcaption>{/if}
@@ -82,6 +92,8 @@
 		display: block;
 		width: 100%;
 		min-width: var(--diagram-min-w, 600px);
+		max-width: max(var(--diagram-max-w, 100%), var(--diagram-min-w, 600px));
+		margin-inline: auto;
 		height: auto;
 		font-family: var(--font-sans);
 	}

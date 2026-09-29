@@ -5038,11 +5038,14 @@ exists, says so with a link to Runs & results.
 
 Every help page shares one shell (`routes/help/+layout.svelte`): the search
 box heads the page, above the text, and a contents list
-(`help/HelpNav.svelte`: the overview, every guide by group, *Start here*,
-*How it works*, *How to*, and the glossary) marks the page you're on
-(`aria-current`). From 900 px the contents are a 13rem column in the page,
+(`help/HelpNav.svelte`: the overview, then four static groups, *Start here*,
+*How it works*, *How to* and *Reference*, the last the glossary's index and
+one link per topic) marks the page you're on (`aria-current`). Each group's
+name is a heading (`h2`, not a link) and names its list; its links are
+indented under a thin rule, so a group reads as a block (issue #162). The
+contents never change as you scroll. From 900 px the contents are a 13rem column in the page,
 against the app sidebar, beside the text, sticky while you read, scrolling on their own only when
-taller than the window (a short window, or the glossary's term list). The column fits the window exactly
+taller than the window (a short window). The column fits the window exactly
 (the page's top gutter above it and below it), and the reading space at the end of a long page belongs
 to the text column, so a page that fits the window (search with nothing typed, no matches, an unknown
 guide) doesn't scroll. They
@@ -5087,12 +5090,16 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   header and each page's actions in it, the notice line, the Grids menu's grid
   modal and the node and crop sheets, and every way into the farm drawer),
   and *Compare runs and try what-ifs* points at the Compare runs tab.
-  An old `/help#<term>` link goes on to `/help/glossary#<term>`.
+  An old `/help#<term>` link goes on to the term's glossary topic page.
 - **Guides** (`/help/guides/<id>`, content in `lib/help/guides.ts`): one task
   or one idea each, with an "On this page" list (a box under the intro; when
   the Help text column is at least 56rem wide, a container query on
-  `help-main`, a sticky rail right of the 42rem article instead, so the
-  article keeps its reading width and the right-hand space is used). The list
+  `help-main`, a sticky rail pinned to the column's right edge instead). A
+  guide spans the Help column like the overview (issue #162): body text,
+  notes and lists keep a 44rem reading measure, while diagrams, picture
+  tours, formulas and the terms table take the column's whole width (a
+  diagram is drawn at most 1.3 times its viewBox width, centred, so a small
+  one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
   heading past a line near the top, `lib/help/spy.ts`, or the last section at
   the end of the page; nothing while the intro shows), and a link to one
@@ -5100,7 +5107,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
   stores under the ground, the outlet gauge, the transfer, the EWR reach), the
-  glossary terms it uses, related guides and previous / next. Guide text is
+  glossary terms it uses and related guides. There is no previous / next
+  pager (the contents already mark where you are). Guide text is
   plain strings with a small markup (`**UI label**`, `[[glossary-id]]`,
   `[[guide:id|label]]`) rendered by `help/RichText.svelte` via `inline()`, so
   nothing is rendered as HTML; a term link reads in lower case mid-sentence
@@ -5113,8 +5121,11 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   drawing is never drawn so small that its smallest text is under 9.5 px
   (`Diagram` sizes its `min-width` from the SVG's viewBox and smallest font
   once it is on the page); narrower than that it scrolls sideways (a
-  `data-scroll-region`): on a phone, and at 1440 for the five diagrams wider
-  than 660 units (the model pipeline shrank its notes to 7 px there). A label
+  `data-scroll-region`): on a phone, or in a column too narrow for the
+  widest drawings (the model pipeline, 920 units wide, shrank its notes to
+  7 px in the old 42rem guide column). It is also never drawn wider than 1.3
+  times its viewBox, centred in its frame, now that a guide's figures span
+  the Help column. A label
   on the figure's ground beside a wire (not in a box) is `.lbl`: a halo in
   `--surface`. A diagram carries no colours or `<style>` of its own,
   and marker ids are unique across diagrams (both guarded by
@@ -5128,11 +5139,25 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   (`alt=""`), since the bubble is a live region and its text says what the
   picture shows, and it has a fixed size so the bubble is placed correctly
   before it loads.
-- **Glossary** (`/help/glossary`): every entry (`lib/help/content.ts` joins
-  `tips.ts`, `articles.ts` and `farmer.ts`), grouped by topic, with a stable anchor per term (`/help/glossary#<id>`) that
-  the ⓘ help tips link to. Its scroll spy (`lib/help/nav.svelte.ts`) tells the
-  contents which topic and term are on screen; the contents list the current
-  topic's terms and keep the current one in view inside their column. The
+- **Glossary**: every entry (`lib/help/content.ts` joins `tips.ts`,
+  `articles.ts` and `farmer.ts`), one page per topic (issue #162; it was one
+  54,000 px page). `/help/glossary` is the index: each topic with its count
+  and its terms, linked. A topic is `/help/glossary/<topic>`, the slugs in
+  `lib/help/glossaryLinks.ts` (`TOPIC_SLUGS`; they are URLs, so a renamed one
+  needs a redirect), with a stable anchor per term
+  (`/help/glossary/<topic>#<id>`, `glossaryPath`) that the ⓘ help tips,
+  guides, search and "See also" link to. Its "On this page" rail lists the
+  topic's terms and marks the one being read (`lib/help/spy.ts`), pinned to
+  the column's right edge as on a guide; it scrolls on its own when the topic
+  has more terms than the window holds. Search is the way to find one term.
+  An old link to the one-page glossary (`/help/glossary#<id>`), or a term
+  linked under the wrong topic, goes on to its topic page
+  (`glossaryLinks.test.ts` fails on any app link still written the old way).
+  An entry shows its short and full text, units, where it applies, other
+  names and related terms, but not its `source` (a workbook sheet,
+  `docs/model.md §…`, an audit finding, an issue): that is for maintainers,
+  kept in the data, and `content.test.ts` fails if the reader-facing text
+  names a developer document or issue. The
   legacy runoff model's six terms (peak coefficient, season factors, summer
   months, winter thresholds, recession curve, pulse index) became one
   **Legacy runoff model** entry (`legacy-runoff-model`) when engine 1.0.0
