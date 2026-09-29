@@ -59,7 +59,7 @@ test('a flow record attached to a gauge is checked there, and the comparison sho
 
 	await page.goto(`/projects/${project.id}?tab=runs&run=${runA}`);
 	await expect(page.getByRole('heading', { level: 2, name: 'Weir record too big' })).toBeVisible();
-	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility checks' }).click();
+	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Plausibility', exact: true }).click();
 	const panel = page.getByRole('region', { name: /^Plausibility checks/ });
 	await expect(panel.getByRole('list', { name: 'Check results' }).getByRole('listitem').filter({ hasText: 'At gauges in the network' })).toHaveText(
 		'At gauges in the network: see below'

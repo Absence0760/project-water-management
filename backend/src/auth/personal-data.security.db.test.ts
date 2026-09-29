@@ -57,7 +57,14 @@ const RETAINED_AFTER_DELETION: Record<'id' | 'email' | 'name' | 'typedName', Rec
 	name: {},
 	typedName: {
 		'signoff.full_name': 'the signature on a run: the typed name stays, the account is cleared',
-		'audit_event.subject': 'signoff.created records the signature as typed, like the sign-off itself'
+		'audit_event.subject': 'signoff.created and calibration_rules.signed_off record the signature as typed, like the sign-off itself',
+		// Issue #153: the calibration rules' sign-off is a typed signature too, kept with the rules it signed (their account is only the audit event's actor).
+		'project.settings': 'calibrationRules.signedOff: the signature on the calibration rules, as typed; the account is cleared from its audit event',
+		'model_revision.changes': 'the settings history of that sign-off: the signature as typed',
+		'model_revision.snapshot': 'the settings as they stood after it, sign-off included: the signature as typed',
+		'model_run.inputs': 'a run’s settings snapshot, with the rules it ran under: the signature as typed',
+		'auto_calibration.rules': 'the rules a run of them ran under, sign-off included: the signature as typed',
+		'auto_calibration.plan': 'the same rules, inside the run’s plan: the signature as typed'
 	}
 };
 
@@ -219,6 +226,22 @@ beforeAll(async () => {
 			[projectId, runId, farm.id]
 		)
 	);
+	// The calibration rules signed off by them, as a typed signature (issue #153), and a run of the rules they asked for
+	// and whose fit they applied (108): created_by and applied_by. Planted as they make it, without its jobs.
+	const rules = (await call(subject, 'GET', `/projects/${projectId}`)).project.settings.calibrationRules;
+	await call(subject, 'PATCH', `/projects/${projectId}`, { settings: { calibrationRules: { ...rules, signedOff: { by: TYPED_NAME, on: '2026-09-29' } } } });
+	await withUser(subject.id, async (tx) => {
+		const plan = { rules, engineVersion: 'x', flowKind: 'flow_observed_m3s', validationRecord: null, years: [], ruleExclusions: [], cases: [], notes: [], caseEvaluations: 0 };
+		const [a] = (
+			await tx.query(
+				`INSERT INTO auto_calibration (project_id, "trigger", rules, rules_revision, input_sha256, plan, engine_version)
+				 VALUES ($1, 'manual', $2, 1, $3, $4, 'x') RETURNING id`,
+				[projectId, JSON.stringify(rules), '0'.repeat(64), JSON.stringify(plan)]
+			)
+		).rows;
+		await tx.query(`UPDATE auto_calibration SET status = 'complete', report = '{"chosen": 0, "notes": [], "eligible": [], "reasons": []}', chosen = 0 WHERE id = $1`, [a.id]);
+		await tx.query('UPDATE auto_calibration SET applied_at = now() WHERE id = $1', [a.id]);
+	});
 	// Their own display preferences (083): the sections they hid.
 	await call(subject, 'PATCH', '/auth/me', { preferences: { hiddenTabs: ['crops'] } });
 	await asOwner(`UPDATE app_user SET mail_suppressed_at = now(), mail_suppressed_reason = 'bounce', mail_resumed_at = now(), locale = 'af' WHERE id = $1`, [subject.id]);

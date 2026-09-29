@@ -695,6 +695,12 @@ same way on every screen:
   reserve count (`farm/cards.ts` `staleUntil`, stale as the dates line is).
   The reporting-window picker's "Last 7 days" keeps its name: its dates
   follow it.
+- **Whose "today".** A project's data ages count to **the project's
+  calendar date** (its time zone, 058; `projects/freshness.ts`
+  `projectToday` in the workspace, the API's `today` on the project list),
+  the day the portfolio, the outcome columns and the farm pages count to,
+  so a row never shows two ages a day apart for a viewer outside the
+  project's zone (issue #137). A run's "ran … ago" is the viewer's.
 - **"edited <date>"** on a project row is when the project itself last
   changed (`updated_at`: the model, its settings, allocations), not how
   current its data is; the **Data** column says that.
@@ -708,9 +714,11 @@ same way on every screen:
   rain lags. With no recorded rain it reads "No recorded rain yet". Click it
   for every series' end date. It turns amber when the recorded rain is more
   than 7 days old (`STALE_DAYS`, [Data age and stale wording](#data-age-and-stale-wording)). Ages count
-  calendar days up to the viewer's **local** date (`localIsoDate`); the
-  project list's badge (`projects/freshness.ts`) counts the same way from its
-  own `daysSince`, so the two never differ by a day around midnight. Series
+  calendar days up to **the project's** date (its time zone,
+  `projects/freshness.ts` `projectToday`; the viewer's own date until the
+  project has loaded); the project list's badge counts to the same day (the
+  API's `today`), as do the Data tab and the Overview, so none of them differ
+  by a day around midnight, whatever the viewer's zone (issue #137). Series
   dates are calendar days, so the UTC date would be wrong for anyone east or
   west of UTC.
 - **Add data** (editors) opens the upload form in a dialog on any tab
@@ -2300,7 +2308,7 @@ with the table the data needs).
   within each group (`series/freshness.ts` `freshnessOrder`). *Behind* is
   exactly the sidebar badge's rule (`freshness().behind`): a series a run is
   driven by (recorded rain, daily A-pan) ending more than 7 days
-  (`STALE_DAYS`) before the viewer's date; a forecast runs ahead and observed
+  (`STALE_DAYS`) before the project's date; a forecast runs ahead and observed
   flow only scores a run, so neither is. Each such row carries a **Behind**
   pill beside its age and an amber edge, the key line says what it means,
   and the panel head repeats "2 behind (more than 7 days old)", so the
@@ -3002,30 +3010,36 @@ which checks every catchment tab).
     coefficients to fit under** (the project's own, the presets), **Bounds**,
     **Objectives**, the two **filters** a kept fit must pass, the search
     (**Model runs per fit**, **Starts per fit**, **Seed**: part of the rules,
-    so another seed is a rule change), and "*n* fits,
-    each with the split-sample and dry → wet tests (at most 8)". An empty
-    list or more than 8 fits shows an alert and blocks Save (the save bar
-    links to *Fit automatically*). **Signed off by** and **On** with **Record
-    the sign-off**, or **Withdraw the sign-off**, record the hydrologist's
-    agreement; saving a rule change raises the revision and withdraws it
-    (the server's rule). Viewers see the rules, disabled, with no sign-off
-    controls.
-    The run (`calibration/AutoFitPanel.svelte`, helpers in
+    so another seed is a rule change), **When new observed or rain data
+    arrives** (nothing, run the rules and keep the report, or also apply the
+    kept fit while signed off), **After a kept fit is applied, run the model
+    and the uncertainty ensemble around it**, and "*n* fits, each with the
+    split-sample and dry → wet tests (at most 8)". An empty list or more than
+    8 fits shows an alert and blocks Save (the save bar links to *Fit
+    automatically*). **Your name, as a signature** with **Sign off these
+    rules**, or **Withdraw the sign-off**, records the hydrologist's
+    agreement: saving dates it and records their account in the History tab
+    ("Signed off the calibration rules (revision *n*) as …"), and saving a rule
+    change raises the revision and withdraws it (the server's rules). Viewers
+    see the rules, disabled, with no sign-off controls.
+    The panel (`calibration/AutoFitPanel.svelte`, helpers in
     `lib/calibration/autoFit.ts`) lists the **saved** rules, warns while they
-    are drafts, and says how many model runs the rules' search makes; it
-    offers no seed or budget of its own. While the form's rules differ from
-    the saved ones it says to save them first, and **Run the calibration
-    rules** and **Apply the kept fit to form** are disabled. The run shows
-    "Fit *i* of *n* (…)" progress, then the notes (drafts, a filter that
-    couldn't apply, why nothing was kept), the water years left out by rule,
-    a **Fits the rules tried** table (fit, *Kept* / *Passed* / *Not kept*, the
-    held-out score, natural MAR, the filters, why not kept) and the kept
-    fit's parameters. **Apply the kept fit to form** fills them in (and the
-    pan coefficient it was fitted under, for a preset) with a fit record
-    carrying the rules; it never saves. The fit record then shows an
-    **Automated** badge, **Picked by** (the rules' revision and sign-off, the
-    kept fit of *n*) and **Left out by rule**, a caveat while the rules were
-    drafts, and **Rules changed since fit** once they change.
+    are drafts and says how many model runs their search makes. **Run the
+    calibration rules** asks the server (disabled while the rules have unsaved
+    edits, and for viewers); the latest run, whoever or whatever started it
+    ("Started by …" / "Queued by new data"), shows "Fitting *i* of *n* on the
+    server…" while its jobs run (followed every 1.5 s), then the notes, the
+    water years left out by rule, a **Fits the rules tried** table (fit,
+    *Kept* / *Passed* / *Not kept*, the held-out score, natural MAR, the
+    filters, why not kept) and the kept fit's parameters. A run whose job
+    stopped, or that failed, says why. **Apply and save the kept fit** asks
+    the server to save it (disabled, with the reason, while the rules or any
+    other setting have unsaved edits); the form then reloads the settings and
+    the panel says who applied it and whether a run and an ensemble followed.
+    The fit record then shows an **Automated** badge, **Picked by** (the
+    rules' revision and sign-off, the kept fit of *n*) and **Left out by
+    rule**, a caveat while the rules were drafts, and **Rules changed since
+    fit** once they change.
 - **WR2012 check** (`settings/Wr2012Section.svelte`, helpers in
   `settings/wr2012.ts`; model.md §2.10c). Off until "Compare runs with WR2012
   naturalised flow" is ticked. Then: quaternary code, area (km²), MAP (mm,
@@ -3518,21 +3532,26 @@ read it before.
   ids: **Hydrological unit results** (`#res-farms`, `supply/UnitResultsTable.svelte`, the
   table that was in the run summary; the printable report still shows it
   there), **Curtailment** (`#res-curtailment`, with the
-  [reporting window](#report-window), `window=`) and **Assurance of supply**
-  (`#res-assurance`). Each is described under [§ Runs & results](#runs--results).
+  [reporting window](#report-window), `window=`), **Assurance of supply**
+  (`#res-assurance`) and, for a run that has any, **Other uses**
+  (`#res-other-uses`, issue #137): the land-cover, groundwater,
+  demand-object and other-user tables, once under the run summary with no
+  menu entry, other users left out when the curtailment table lists them.
+  Each is described under [§ Runs & results](#runs--results).
 - **On this page.** A **Hydrological units sections** menu ([§ On this page
   menu](#on-this-page-menu)) sits under the header, above the tiles (one
-  row), and sticks down the page: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**, **Curtailment**
-  and **Assurance of supply** (`supply/supply.ts`, `SUPPLY_NAV`). Until it,
+  row), and sticks down the page: **Hydrological unit detail** (`#res-farm`), **Hydrological unit results**, **Curtailment**,
+  **Assurance of supply** and **Other uses** when there are any (`supply/supply.ts`, `supplyNav`). Until it,
   the three tables ran four screens under the cards with no way to them but
   scrolling. Not shown with no run or no units.
-- **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment` or
-  `#res-assurance` fragment scrolls to its panel once the run is in and holds
+- **Links in.** A `#res-farm`, `#res-farms`, `#res-curtailment`,
+  `#res-assurance` or `#res-other-uses` fragment scrolls to its panel once the run is in and holds
   it there (`holdAnchor`), focus on its heading. An old link to one of them on
   Runs & results (`SUPPLY_ANCHORS`) is replaced by the same link here, with
   its `run=` and `window=`. The portfolio's and team page's "units short this
   week", the Summary's *Supply by hydrological unit* and its short-units card, and the
-  run header's *Hydrological units* link on Runs & results lead here.
+  run header's *Hydrological units* link on Runs & results lead here, and
+  the Summary's line about the run's other uses.
 - **Empty states:** no run yet (editors get **Run the model (Runs &
   results)**; a viewer reads that an editor can run it); no units in the model
   (a link to the Network); a run with no units (added since: run again).
@@ -3606,7 +3625,10 @@ read it before.
   rows on a laptop (three at 1280 px until its groups could break across rows; [§ On this page
   menu](#on-this-page-menu)), and on phones is one sideways strip.
   Runoff model only for a GR4J run, WR2012 check only with a reference, and
-  Plausibility checks only on a run made by engine 0.25.0 or later. The
+  Plausibility only on a run made by engine 0.25.0 or later. Plausibility
+  and Outputs are one word in the menu (the panels' headings say
+  *Plausibility checks* and *Explore outputs*) so it still fits two rows at
+  1280 px beside the runs rail with the Water balance entry (issue #137). The
   page's `scroll-padding-top` includes the menu's height, so a jumped-to
   section, or a focused control, clears both the phone bar and the menu.
 - **Page order.** The results are grouped by the question they answer
@@ -3627,8 +3649,11 @@ read it before.
      it has no verdict and the NSE card below says it, issue #177).
   2. **Model quality**: the hydrograph with the flow-duration curve under it
      (compared together on every calibration iteration), calibration (with
-     where the parameters came from), runoff model, WR2012 check, EWR vs
-     observed, plausibility checks.
+     where the parameters came from), the **water balance** by water year
+     (`#res-water-balance`, `runs/WaterBalanceTable.svelte`: the table a
+     hydrologist hands a client first, its own section since issue #137;
+     described under [Self-checks](#self-checks)), runoff model, WR2012
+     check, EWR vs observed, plausibility checks.
   3. **Record**: notes & evidence (with the run's inputs), the validation
      statement, publication: sign-off, after the results. The **validation
      statement** (`#res-validation`, menu entry **Validation**;
@@ -3638,7 +3663,16 @@ read it before.
      statement loads as its own chunk, its headings (Calibration, Data
      quality, Known limitations) one level under the panel's. Nothing is
      computed twice: both call the engine's `validationStatement`.
-  4. **Dig deeper**: self-checks (with Trace a day), Explore outputs.
+  4. **Dig deeper**: self-checks (with Trace a day, and a line linking to
+     the water balance), Explore outputs.
+
+  The run summary no longer draws the land-cover, groundwater,
+  demand-object and other-user tables, which had no menu entry: they are
+  **Other uses** on Units & supply (issue #137), and a line at the foot of
+  the Summary names what the run has and links there (`other-uses-link`,
+  `runs/humanImpacts.ts` `otherUsesLink`; to the curtailment targets when
+  the run's only ones are other users, listed there). The printable report
+  keeps them in the summary.
 
   Everything after the flow-duration curve (the rest of Model quality,
   Record, Dig deeper) renders once the hydrograph has drawn and been painted,
@@ -3824,7 +3858,10 @@ read it before.
   in the workspace's words (the engine's "farm" reads "hydrological unit", `checkLabel`),
   the first problem (the node's name and date) under a failed one, which engine
   made the run and ran its checks, and the largest daily balance error of any
-  unit (column V). Second, the **water balance by water year**: rain,
+  unit (column V). Second, the **water balance by water year**
+  (`runs/WaterBalanceTable.svelte`): on Runs & results its own Model quality
+  section (`#res-water-balance`, issue #137), which the self-checks link to;
+  in the printable report here, under the checks. Rain,
   runoff coefficient, start storage, unit runoff, transfers, rain on dams,
   consumptive use, dam evaporation (both engine ≥ 0.16.0, blank before),
   outflow and end storage in Mm³, and the residual in m³. A network's
@@ -3857,13 +3894,16 @@ read it before.
   it has no checks, balance or working columns, and to run it again.
   Not yet: an Excel audit workbook, and
   model columns in the Data tab downloads ([followups.md § Verification](./followups.md#verification)).
+- **Other uses** (`runs/HumanImpactTables.svelte`, its own chunk): the
+  tables below are on Units & supply (`#res-other-uses`, issue #137), in the
+  printable report under the summary.
 - **Land cover** (engine ≥ 0.24.0, only with land cover): the mean natural
   flow invasive plants and forestry took, its share of natural flow, the
   low-flow threshold, and per class the condensed area, reduction and mm/yr
-  over that area (`RunSummaryView.svelte`).
+  over that area.
 - **Groundwater** (engine ≥ 0.23.0, only when a farm or user has boreholes):
   a table of each one's mean pumping, its share of what was supplied, and the
-  stream depletion it causes (`RunSummaryView.svelte`). From engine 0.36.0
+  stream depletion it causes. From engine 0.36.0
   (WP-3.9, `HumanImpactTables.svelte`, `runs/groundwater.ts`), **Groundwater
   by water year**: the GN 538 context note (area × Table 2 rate, at most
   40 000 m³/a, in any 12 months; the ceiling only where a property's area or
@@ -3878,9 +3918,11 @@ read it before.
   most in the 12 months to then, and each borehole's volume (of its cap,
   marked when reached).
 - **Other water users** (engine ≥ 0.22.0, only when the run has any): a table
-  under the farms with each user's priority, demand, taken, deficit, % of
-  demand supplied (flagged below 95 %), returned and EWR charge, whole-run
-  means (`RunSummaryView.svelte`).
+  with each user's priority, demand, taken, deficit, % of demand supplied
+  (flagged below 95 %), returned and EWR charge, whole-run means. Units &
+  supply draws it only for a run whose curtailment table doesn't list the
+  users (`usersTableOnSupply`), so the page has one copy; the printable
+  report keeps it.
 - **Farm table columns.** *Demand* is the farm's **abstraction demand**: its
   crop water requirement after effective rainfall ÷ irrigation efficiency (D =
   F / e, [model.md §2.3, §2.7](./model.md)), what it has to take to meet the
@@ -3948,7 +3990,8 @@ read it before.
   is a whole % in 0–100: "no demand", "—" with a tooltip below 1 m³/day of
   demand, "<1%" / ">99%" at the ends. When the run has other water users, an
   **Other water users** table follows (engine ≥ 0.22.0, §2.7c): demand, taken,
-  returned, EWR charge, the supply cut, and the charge left standing, with
+  the % of demand supplied (flagged below 95 %, as the units are; issue
+  #137), returned, EWR charge, the supply cut, and the charge left standing, with
   "junior (curtailed)" or "senior (not curtailed)"; they are not in the
   equitable share or its totals. Below it, the **EWR sites** table (outlet first, then
   gauges): farms upstream, days not met, and the mean shortfall, the part
@@ -4569,7 +4612,9 @@ them scenarios).
   the page. Narrower, the list stacks above the scenario, capped at a few
   rows that scroll inside it. With none picked, the first (newest) opens in
   place (`replaceState`, so Back leaves the section rather than stopping on
-  the bare list).
+  the bare list), but only once no navigation is in flight and the URL
+  doesn't ask for the create dialog, so it can't cancel a `+ New scenario`
+  click made while the list was loading.
 - **The list**, newest first: each scenario's name (two lines at most),
   status as a pill in words, number of changes, base run and last run.
   Empty: "No scenarios yet. A scenario changes the published baseline
@@ -5385,7 +5430,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   one's text doesn't balloon). The list
   marks the section being read (`aria-current="location"`, in bold; the last
   heading past a line near the top, `lib/help/spy.ts`, or the last section at
-  the end of the page; nothing while the intro shows), and a link to one
+  the end of the page, unless a link jumped to a section still in the window,
+  which stays marked; nothing while the intro shows), and a link to one
   section (`/help/guides/<id>#<section>`) lands on it and focuses its heading
   (`holdAnchor`). Numbered steps, tip and
   caution notes, formulas, diagrams, picture tours (a farm's day, GR4J's
@@ -5430,7 +5476,8 @@ overview's size, at the same height on every page (`e2e/tests/help-pages.spec.ts
   needs a redirect), with a stable anchor per term
   (`/help/glossary/<topic>#<id>`, `glossaryPath`) that the ⓘ help tips,
   guides, search and "See also" link to. Its "On this page" rail lists the
-  topic's terms and marks the one being read (`lib/help/spy.ts`), pinned to
+  topic's terms and marks the one being read (`lib/help/spy.ts`; a term a
+  link jumped to stays marked when that scrolls the page to its end), pinned to
   the column's right edge as on a guide; it scrolls on its own when the topic
   has more terms than the window holds. Search is the way to find one term.
   An old link to the one-page glossary (`/help/glossary#<id>`), or a term
@@ -5527,9 +5574,15 @@ published.
   privacy sentence and "Who can see my hydrological unit", which loads the people by name
   and role when first opened, `GET …/access`, and falls back to the roles
   alone if that fails); "Notes about your hydrological unit" ([§ Notes](#notes)); the
-  CSV download. The CSV download fetches the file and puts the estimate
-  line (`cards.ts` `disclaimer()`), in the page's language, as a leading
-  `# ` line (`farm/csvNote.ts`); a failed download says why under the
+  CSV download. The CSV download fetches the file (the farm's last 365
+  days to `dataUntil`, in whole m³, headed by the series keys; api.md
+  § Farm) and puts the estimate line (`cards.ts` `disclaimer()`), in the
+  page's language, as a leading `# ` line, names the columns in plain words
+  with their unit in the page's language ("Water you received (m³/day)",
+  `FARM_CSV_COLUMNS`, sheet section `farm.csv`), and, for a language whose
+  decimal mark is a comma (Afrikaans), writes `;` between cells and a
+  decimal comma, so Excel in af-ZA opens it in columns (`farm/csvNote.ts`
+  `farmCsvForReader`, issue #124); a failed download says why under the
   links. **Next 14 days** (WP-2.12, `farm/ForecastCard.svelte`,
   wording in `farm/forecastCard.ts`) comes after "Looking back" only when
   the WUA published a forecast run: a "Forecast" kicker and a dashed edge

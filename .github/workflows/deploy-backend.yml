@@ -13,8 +13,10 @@ name: Deploy backend
 #   preflight  no environment, no AWS. scripts/release/preflight.mjs refuses
 #              the release unless the tag is backend@semver and newer than the
 #              last backend release, the commit is on main with a green
-#              `CI gate`, the `production` environment exists WITH a required
-#              reviewer, and every AWS variable/secret is set. Until the AWS
+#              `CI gate` (from ci.yml, under GitHub Actions), the `production`
+#              environment exists WITH a required reviewer and deploys only
+#              from main and the release tags, a tag ruleset protects
+#              backend@*/web@*, and every AWS variable/secret is set. Until the AWS
 #              account is bootstrapped, this is where a release stops, with a
 #              pointer to infra/README.md § Operator steps.
 #   build      no environment, no AWS. Installs deps and packages the four
@@ -28,7 +30,8 @@ name: Deploy backend
 #              Migrations run BEFORE the API code is updated (expand/contract,
 #              CLAUDE.md rule 2); the worker's code follows the API's, and
 #              the fetcher's the worker's; then the renderer's image is
-#              pushed to ECR and the renderer moved to it (skipped, with a
+#              pushed to ECR as <version>-<sha12> and the renderer moved to
+#              it (skipped, with a
 #              notice, until the operator has created the function:
 #              infra/reports.tf renderer_image_tag);
 #              then a /api/health smoke check.
@@ -248,6 +251,12 @@ jobs:
           MIGRATE_FUNCTION_NAME: ${{ vars.MIGRATE_FUNCTION_NAME }}
         run: |
           set -euo pipefail
+          # The point-in-time restore target if a migration damages data
+          # (docs/deployment.md § Restoring the database: restore-db.sh
+          # --restore-time). No manual snapshot: PITR already reaches any
+          # second in the retention window, and a manual snapshot would
+          # outlive it (the privacy notice's backup period).
+          echo "Restore point before these migrations (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           # Synchronous invoke; the function's own timeout is 300 s. No
           # --log-type Tail: this log is public (the repo is), and the
           # function's log and error text can quote SQL or data. Only names
@@ -320,10 +329,15 @@ jobs:
           aws lambda wait function-updated --function-name "$FETCHER_FUNCTION_NAME"
 
       # The report renderer (infra/reports.tf): push this release's image,
-      # tagged with its version (the repository's tags are immutable), then
-      # move the function to it. The function exists only once the operator
-      # has set renderer_image_tag and applied (Lambda can't be created before
-      # its image exists), so until then this pushes and says what to do.
+      # tagged <version>-<first 12 hex of the released commit> (the
+      # repository's tags are immutable), then move the function to it. The
+      # SHA ties the image to the code: a release deleted and recut at the
+      # same version on a new commit gets a new tag, so it pushes and deploys
+      # its own image instead of finding the old one and skipping the push;
+      # a redeploy of the same commit finds its image and reuses it. The
+      # function exists only once the operator has set renderer_image_tag and
+      # applied (Lambda can't be created before its image exists), so until
+      # then this pushes and says what to do.
       - name: Download the renderer image
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -335,15 +349,21 @@ jobs:
           RENDERER_FUNCTION_NAME: ${{ vars.RENDERER_FUNCTION_NAME }}
           RENDERER_ECR_REPOSITORY: ${{ vars.RENDERER_ECR_REPOSITORY }}
           VERSION: ${{ needs.preflight.outputs.version }}
+          COMMIT_SHA: ${{ needs.preflight.outputs.sha }}
         run: |
           set -euo pipefail
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The preflight gave no version or commit SHA to tag the renderer image with."
+            exit 1
+          fi
+          tag="${VERSION}-${COMMIT_SHA:0:12}"
           repo_uri=$(aws ecr describe-repositories --repository-names "$RENDERER_ECR_REPOSITORY" --query 'repositories[0].repositoryUri' --output text)
           registry="${repo_uri%%/*}"
           aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
           docker load < dist/renderer-image.tar.gz
-          image="${repo_uri}:${VERSION}"
-          if aws ecr describe-images --repository-name "$RENDERER_ECR_REPOSITORY" --image-ids imageTag="$VERSION" > /dev/null 2>&1; then
-            echo "Image ${VERSION} is already in ECR (a redeploy): not pushing it again."
+          image="${repo_uri}:${tag}"
+          if aws ecr describe-images --repository-name "$RENDERER_ECR_REPOSITORY" --image-ids imageTag="$tag" > /dev/null 2>&1; then
+            echo "Image ${tag} is already in ECR (a redeploy of the same commit): not pushing it again."
           else
             docker tag "renderer:${VERSION}" "$image"
             docker push "$image"
@@ -359,7 +379,7 @@ jobs:
               --query 'CodeSha256' --output text
             aws lambda wait function-updated --function-name "$RENDERER_FUNCTION_NAME"
           elif grep -q 'ResourceNotFoundException' <<<"$get_err"; then
-            echo "::notice::The renderer Lambda doesn't exist yet. Its image ${VERSION} is in ECR: set renderer_image_tag = \"${VERSION}\" in terraform.tfvars and apply (docs/deployment.md § Reports)."
+            echo "::notice::The renderer Lambda doesn't exist yet. Its image ${tag} is in ECR: set renderer_image_tag = \"${tag}\" in prod.tfvars and apply (docs/deployment.md § Reports)."
           else
             # Its error code only: the text names the deploy role and account.
             code=$(grep -oE 'An error occurred \([A-Za-z]+\)' <<<"$get_err" | head -n 1 || true)

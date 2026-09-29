@@ -222,7 +222,12 @@ personal information under POPIA (see [plan.md questions](./plan.md#questions-fo
   also names the route's pattern, never the concrete path, since a path can
   carry a token). A failed sign-in or bad account link logs `login_failed`
   with the route's pattern and a reason code only, never the address tried
-  (§ Throttles that don't depend on the WAF). Never an error's message or a pg `detail`, which
+  (§ Throttles that don't depend on the WAF). The fetcher and renderer
+  Lambdas log a failed answer as `feed_fetch_failed` (the feed's id, its
+  source and a reason code: never the stored message, which can name a grid
+  cell or a station) and `report_render_failed` (the report and project ids,
+  `render`/`store` and `retry`: never the error text or the render token), and
+  a failed queue send or PDF store by `safeError` too. Never an error's message or a pg `detail`, which
   can carry an address or row values. Postgres logs no bind values either
   (`log_parameter_max_length = 0`, and `_on_error`, in `infra/rds.tf`), so a
   slow statement is logged without its parameters.
@@ -1829,20 +1834,32 @@ the whole report is **untrusted text stored server-side**:
 ### Calibration rules sign-off
 
 Automated calibration's rules (`settings.calibrationRules`, issue #153,
-[model.md §2.10j](./model.md)) are an evidence-integrity control: a fit can
-only be stored under the rules saved before it ran, with the parameters of
-the case they kept (`autoFitRecordError`, a `409`; `importedAutoFitError` on
-import). What the server can't check:
+[model.md §2.10j](./model.md)) are an evidence-integrity control:
 
-- **The scores.** The fit runs in the browser, so a hostile editor could
-  report invented scores. The record keeps the rules, seed, engine version
-  and every fit tried, so anyone can re-run it and compare.
-- **The sign-off.** `signedOff` is a name and a date that any editor may
-  enter. It isn't tied to the hydrologist's account or to a role, so it is
-  self-attested. Changing a rule clears it (server-side), and run comparison
-  lists every sign-off change. A sign-off bound to a named account with its
-  own role is the durable fix, and waits on the client's answer to who signs
-  off (#90, "Automated calibration rules").
+- **The server computes and writes every automated fit.** It fits the saved
+  rules in its own jobs (`backend/src/calibration/`), stores every score, and
+  builds the fit record itself when a fit is applied. A settings save can only
+  carry a stored automated record back unchanged (`autoFitRecordError`, a
+  `409`), so a client can't claim a fit, a score or a set of rules it didn't
+  run. Applying refuses a run whose rules or inputs have changed since
+  (a `409`). The seed and search are rules too, so re-running with other
+  seeds is a rule change with its own revision, never a way to shop for a
+  score. A project file import checks a file's automated record against the
+  file's own rules (`importedAutoFitError`); the file itself is the importer's.
+- **The sign-off is bound to the account that gave it.** The hydrologist
+  types their name as a signature (as on a run's sign-off); the server dates
+  it and records the signed-in account as the actor of a
+  `calibration_rules.signed_off` audit event (a withdrawal:
+  `calibration_rules.sign_off_withdrawn`). No account id is copied into the
+  settings. Changing a rule clears the sign-off server-side, and run
+  comparison lists every sign-off change.
+- **Still open:** any editor may sign off; whether only a named role (the
+  hydrologist's) should is the client's call (#90, "Automated calibration
+  rules").
+- **Account deletion.** The typed signature stays with the rules it signed
+  (the settings, their history, run snapshots and the calibration rows), as a
+  run's typed signature does; the account is cleared from the audit event
+  (`auth/personal-data.security.db.test.ts` RETAINED_AFTER_DELETION).
 
 ### Allocations: POPIA minimisation (038_allocations.sql)
 
@@ -1972,6 +1989,7 @@ PDF someone else asked for kept the person as a recipient
 | Evidence that names its maker: a project or team created, a run, a nomination, an ensemble, a scenario, an import | `project`, `team`, `model_run`, `run_nomination`, `run_uncertainty`, `scenario`, `project_import` | Kept | **Blocks the deletion** (restrict): the operator decides first *(confirm)* | Deleted, unless nominated (`project_evidence_guard`) |
 | Logs: request logs, database logs | CloudWatch | 30 days (`lambda_log_retention_days`, `db_log_retention_days`) | Not searchable by person | – |
 | Backups | RDS automated backups | 7–35 days (`db_backup_retention_days`) | A deleted account stays in backups until they age out *(confirm)* | Same |
+| Teardown snapshot | The final RDS snapshot `terraform destroy` takes (`water-management-final-<suffix>`, infra/README.md § Tearing down) | Only when the whole service is shut down; a manual snapshot, kept until the operator deletes it (the privacy notice says so and promises the period with the shutdown notice) | Stays in it | Stays in it |
 
 **Data-subject requests.**
 - **Access / export: self-service.** Account → Your data → **Download my
@@ -2052,7 +2070,10 @@ readable by anyone. The rules:
   weekly over the whole history (`gitleaks-sweep.yml`, which opens a
   `secret-scan` issue when it fails). Reviewed false positives are pinned by
   exact fingerprint in `.gitleaksignore` (m³/day field names,
-  fake test tokens); add one only after checking the match isn't real. Before pushing a branch, check the diff
+  fake test tokens), or, for a placeholder repeated across files (the
+  mocked-provider Terraform tests' synthetic secrets), allowlisted by its
+  exact value in `.gitleaks.toml`, never by path; add one only after checking
+  the match isn't real. Before pushing a branch, check the diff
   for client names as well as for keys.
 - If something slips in: **don't push**. Rewrite the history locally, then tell
   the operator (see the incident playbook below).
@@ -2153,8 +2174,70 @@ key there would let any read-only principal forge any user's session.
 - **CI/CD uses GitHub OIDC.** There are no long-lived AWS keys. The deploy
   role's trust policy is pinned to `repo:<owner>/<repo>:environment:production`,
   and that environment has a required reviewer. A workflow can only assume the
-  role after a human approves the run.
-- **S3** blocks all public access. Only CloudFront (OAC) reads it.
+  role after a human approves the run. The environment deploys only from
+  `main` and the `backend@*`/`web@*` tags, and a tag ruleset stops those tags
+  being created, moved or deleted by anyone but an admin, so an approved run
+  can only ship a commit the preflight checked (the release preflight refuses
+  to deploy until both are set; [deployment.md § The production environment's
+  branch and tag policy](./deployment.md#the-production-environments-branch-and-tag-policy)).
+  The workflow guard refuses any job that grants `id-token: write` outside
+  `environment: production` (one allowlisted exception, Scorecard's signing
+  job) and any `pull_request_target` workflow that checks out the PR's head.
+- **CI's dependency cache is not trusted by release builds.** Every job in
+  `ci.yml` (and `dependabot-lockfile.yml`'s credential-free job) restores
+  pnpm's store through `actions/setup-node`'s `cache: pnpm`; both deploy
+  workflows restore no cache at all (`check_workflows.mjs` rule
+  `no-cache`, [deployment.md § What each deploy does](./deployment.md#what-each-deploy-does)).
+  That split is the control, because **pnpm's store-integrity check would
+  not reject a doctored store** (checked 2026-09-29 against pnpm 10.33.2,
+  issue #126):
+  - `verify-store-integrity` (default `true`) checks a stored file "before
+    linking it … if a file in the store has been modified"
+    ([pnpm.io/settings/store](https://pnpm.io/settings/store#verifystoreintegrity)).
+    "Modified" means an mtime more than 100 ms after the `checkedAt` the
+    package's index file records; only then is the file re-hashed, and only
+    against the hash that same index file holds (`verifyFile` /
+    `checkFile` in `@pnpm/store.cafs`'s `checkPkgFilesIntegrity`, in
+    pnpm's bundled `dist/pnpm.cjs`). The lockfile's tarball `integrity`
+    only locates the index file; a package already in the store is not
+    re-downloaded or re-derived from its tarball.
+  - A cache is a tar archive its writer controls end to end: the content
+    files (named by their own hash, so a doctored file simply gets a new
+    name), the index files that map a package to them, and every mtime.
+    A poisoned entry can therefore point an index at doctored files with
+    a `checkedAt` that says "unmodified", and pnpm links them without
+    re-hashing; even a re-hash would pass, against the forged index.
+    pnpm's own docs say the store "is intended to be shared only between
+    mutually trusted users, jobs, and processes".
+  - So the check guards against a corrupted store, not a hostile one, and
+    no pnpm setting fixes that. **Release builds are sufficient as they
+    are**: they install cold from the registry against the lockfile's
+    tarball hashes, and they are the only builds that ship or hold deploy
+    credentials. A poisoned cache could still change what a CI job on
+    `main` or a PR runs (a false green or red, or code run with that job's
+    read-only token), which is why no CI job that restores the cache holds
+    a secret, and why the release preflight's trust in `CI gate` is a gate
+    on the commit, not on the bytes CI built. Nothing to set in non-release
+    CI: setting `verify-store-integrity` explicitly would change nothing
+    (it is already the default and the forged index satisfies it). If a
+    cache-restoring job ever needs a secret, drop the cache from it
+    instead.
+- **Each Lambda role writes to its own log group only** (`infra/iam.tf`,
+  issue #126): `logs:CreateLogStream` and `logs:PutLogEvents` on
+  `/aws/lambda/<its function>`, no `logs:CreateLogGroup` (Terraform makes
+  every group), and no AWS-managed policy, whose logs grants are on `*`. So
+  a compromised fetcher or renderer (the two with internet access) can't
+  forge the lines the API's and worker's log alarms count. The VPC Lambdas'
+  EC2 ENI actions are denied to their own code (`lambda:SourceFunctionArn`),
+  leaving them to the Lambda service. The SQS endpoint admits `SendMessage`
+  only; the deploy role reads nothing from the frontend bucket and can't
+  change the renderer's repository policy (`tests/iam.tftest.hcl`).
+- **S3** blocks all public access. Only CloudFront (OAC) reads it. The
+  frontend bucket also lets that distribution `s3:ListBucket`, so a missing
+  key is `404` rather than `403`; no listing can be requested through
+  CloudFront (every path ending in `/` becomes `/index.html`, dot segments
+  get a 404, no query string reaches S3; infra/README.md, "Missing files are 404").
+  The reports bucket keeps `GetObject` only.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,
   [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
@@ -2171,6 +2254,22 @@ key there would let any read-only principal forge any user's session.
   dev), so the Lambda entry point (`lambda.ts`, `assertEdgeSecret`) refuses to
   start without a secret of at least 32 characters: a deploy missing it fails
   loudly instead of opening the Function URL (`app.security.test.ts`).
+  A refused request still reached the Lambda past the WAF and held API
+  concurrency for a moment, so each refusal logs
+  `{"event":"origin_secret_rejected","reason":"missing"|"mismatch"}` (no path,
+  address or header value) and the `origin-secret-rejected` alarm fires above
+  20 in an hour (`infra/alarms.tf`). **Decision (issue #126): keep the shared
+  secret.** CloudFront OAC for Lambda would make the Function URL refuse
+  unsigned callers at AWS's edge instead, but it needs `AWS_IAM` auth on the
+  URL, the viewer to send a SHA-256 of every PUT/POST body
+  (`x-amz-content-sha256`), and the one-click unsubscribe (a mail client's
+  POST without that header) moved to a GET. **Revisit trigger:** the alarm
+  firing outside a secret rotation, or API throttles/concurrency the WAF's
+  metrics don't account for; then move to OAC (tracked in
+  [followups.md](./followups.md), § Infrastructure edge). The
+  CloudFront→Function URL hop is `https-only` (TLSv1.2), and the header's
+  value is the one the API's runtime secret carries
+  (`infra/tests/edge.tftest.hcl`).
 - **Production configuration fails closed** (`backend/src/config/production.ts`).
   Every setting falls back to the local stack when unset (`STORAGE=local`,
   `REPORT_DOWNLOADS=presigned`, `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
@@ -2239,8 +2338,15 @@ key there would let any read-only principal forge any user's session.
   is not pinned to this repo's `environment:production` subject
   (`infra/oidc.tf` postcondition, tested).
 - **Database** (`infra/rds.tf`, not yet applied): RDS in private subnets, no
-  public endpoint, encryption at rest, TLS enforced (`rds.force_ssl`),
-  automated backups + PITR (7–35 days), deletion protection. Only the API and
+  public endpoint, encryption at rest (a customer-managed KMS key by default,
+  `rds_customer_managed_key`, usable only through RDS; deployment.md § Decide
+  before the first apply; disabling it, scheduling its deletion, changing
+  its policy or revoking a grant pages the alerts topic through CloudTrail
+  and EventBridge, `kms.tf`), TLS enforced (`rds.force_ssl`),
+  automated backups + PITR (7–35 days; single-AZ recovery point about
+  5 minutes), deletion protection and `prevent_destroy`, a final snapshot on
+  teardown (kept until deleted), and an RDS event subscription to the alerts
+  topic. Only the API and
   migrate Lambdas' security groups can reach it (and the job worker's).
 - **The fetcher Lambda** (data feeds, `infra/feeds.tf`) is the only Lambda
   with internet access and the only one outside the VPC. It has no database
@@ -2347,8 +2453,8 @@ Roadmap WP-3.13. How far a report can be trusted, and who stands behind it.
 - Registration is open to anyone who can reach the site. Registering grants no
   access to existing projects, but decide with the client whether sign-up
   should be invite-only (plan question 11).
-- The calibration rules' sign-off is self-attested, and automated fits'
-  scores are client-reported ([§ Calibration rules sign-off](#calibration-rules-sign-off)).
+- Any editor may sign off the calibration rules; restricting it to a role
+  waits on the client (#90; [§ Calibration rules sign-off](#calibration-rules-sign-off)).
 - POPIA: no privacy notice and no self-service account deletion yet
   (Phase 7); what exists today and the open items are in
   [§ Personal information](#personal-information-popia).

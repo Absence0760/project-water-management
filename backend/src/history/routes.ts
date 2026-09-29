@@ -17,7 +17,8 @@ import { ModelBody, modelProblems } from '../model/validate.js';
 import { requireRole, UUID } from '../projects/access.js';
 import { loadModelInput, seriesHash } from '../runs/execute.js';
 import { rowOrigin, rowProvenance } from '../series/merge.js';
-import { replaceSeries, setDayBoundary } from '../series/routes.js';
+import { replaceSeries } from '../series/replace.js';
+import { setDayBoundary } from '../series/routes.js';
 import { fieldHistory } from './fields.js';
 import {
 	beginModelChange,

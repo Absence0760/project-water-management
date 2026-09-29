@@ -80,6 +80,14 @@
 		if (e.target === el && !e.defaultPrevented) open = false;
 	}
 
+	// The browser fires `close` from a queued task. If the dialog was closed and shown again before
+	// that task ran (a question answered, the next one asked at once: the leave guard's Stay, then
+	// Back again), the stale event would set `open = false` and shut the new one. Only a dialog
+	// that really is closed follows it.
+	function onclose() {
+		if (!el?.open) open = false;
+	}
+
 	/** Close unless `beforeclose` says no. */
 	let asking = false;
 	async function requestClose() {
@@ -119,7 +127,7 @@
 	aria-describedby={alert ? bodyId : undefined}
 	{oncancel}
 	{onkeydown}
-	onclose={() => (open = false)}
+	{onclose}
 >
 	<h2 id={titleId}>{title}</h2>
 	{#if subhead}<div class="subhead">{@render subhead()}</div>{/if}

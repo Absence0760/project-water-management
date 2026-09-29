@@ -69,12 +69,13 @@ locals {
 # ----------------------------------------------------------------------------
 
 data "aws_iam_policy_document" "github_deploy" {
+  # `aws s3 sync` from local files to the bucket (deploy-frontend.yml) lists
+  # the bucket, puts and, with --delete, deletes; it never reads an object.
   statement {
     sid = "FrontendBucketWrite"
     actions = [
       "s3:PutObject",
       "s3:DeleteObject",
-      "s3:GetObject",
     ]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
   }
@@ -130,6 +131,20 @@ data "aws_iam_policy_document" "github_deploy" {
       "ecr:DescribeRepositories",
       "ecr:DescribeImages",
     ]
+    resources = [aws_ecr_repository.renderer.arn]
+  }
+
+  # Read-only: when UpdateFunctionCode moves the renderer to a new image,
+  # Lambda checks the repository policy for its pull statement (reports.tf
+  # renderer_ecr) and, finding none, tries to add one. AWS lists
+  # GetRepositoryPolicy (with SetRepositoryPolicy, deliberately NOT granted)
+  # for the principal that creates or updates an image function:
+  # https://docs.aws.amazon.com/lambda/latest/dg/images-create.html#gettingstarted-images-permissions
+  # Reading lets Lambda see the statement is already there; without write,
+  # a missing statement fails the deploy loudly instead of being added.
+  statement {
+    sid       = "RendererImageLambdaCheck"
+    actions   = ["ecr:GetRepositoryPolicy"]
     resources = [aws_ecr_repository.renderer.arn]
   }
 

@@ -2,6 +2,7 @@ import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { ZodError } from 'zod';
 import { safeError, stackFrames } from '../logging/safeError.js';
+import { logEvent } from '../logging/logEvent.js';
 
 /**
  * Throw from a handler to return `{ error }` with a status. `error` is
@@ -135,14 +136,12 @@ export function handleError(err: unknown, c: Context) {
 	// route's pattern go in (safeError): never its message, which for a pg
 	// error can carry row values and for anything else user input, and never
 	// the concrete path, which can hold a token.
-	console.error(
-		JSON.stringify({
-			event: 'unhandled_error',
-			method: c.req.method,
-			route: c.req.routePath,
-			...safeError(err),
-			at: stackFrames(err)
-		})
-	);
+	logEvent('error', {
+		event: 'unhandled_error',
+		method: c.req.method,
+		route: c.req.routePath,
+		...safeError(err),
+		at: stackFrames(err)
+	});
 	return c.json({ error: 'Internal server error' }, 500);
 }

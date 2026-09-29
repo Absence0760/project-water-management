@@ -558,6 +558,11 @@ settled something this spec left open:*
 - *The binding site (`river.bindingSite`) is recomputed from the run's
   stored flows with the engine's attribution, since a run doesn't store it
   (exact unless the transfer rules form a loop; followups.md).*
+- *The CSV (item 11; issue #124) is the last 365 days to `dataUntil` by
+  default, in whole m³, its columns named in the reader's language with
+  their unit, and `;` with a decimal comma in Afrikaans so Excel in af-ZA
+  opens it in columns (`farm/csvNote.ts`); the disclaimer stays its first
+  `# ` line.*
 - *`FarmView.publication.restriction` carried both notices (`noticeEn`,
   `noticeAf`), and the page picks the reader's language, showing "not
   translated" when it falls back to the other (§7). (First built as one

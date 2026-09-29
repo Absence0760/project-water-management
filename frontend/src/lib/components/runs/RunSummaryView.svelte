@@ -1,10 +1,11 @@
 <script lang="ts">
 	// Headline numbers and calibration fit of one run. The per-unit table moved to
-	// Units & supply (supply/UnitResultsTable.svelte, issue #17); the printable
-	// report passes it back in through `units`, in its old place.
+	// Units & supply (supply/UnitResultsTable.svelte, issue #17), and so did the
+	// land-cover, groundwater, demand-object and other-user tables (issue #137,
+	// its Other uses section); the printable report passes them back in through
+	// `units`, in their old place.
 	import type { Snippet } from 'svelte';
 	import type { RunSummary } from '@water-management/engine';
-	import Lazy from '$lib/components/common/Lazy.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum, fmtPct, fmtQty } from '$lib/format/number';
 	import { describePbias, NSE_HELP, PBIAS_HELP } from './rating';
@@ -12,14 +13,15 @@
 	import { runSentence } from './runSentence';
 	import { headlineSite } from './ewrAssurance';
 	import { credibility, warningGroups } from './credibility';
-	import { loadHumanImpacts } from './humanImpacts';
+	import { otherUsesLink } from './humanImpacts';
 	import { calibrationSample } from '$lib/components/calibration/sample';
 
 	let {
 		summary,
 		days,
 		units,
-		reserveHref = '#res-reserve'
+		reserveHref = '#res-reserve',
+		otherUsesHref
 	}: {
 		summary: RunSummary;
 		/** Days in the run (for "% of days"). */
@@ -28,11 +30,11 @@
 		units?: Snippet;
 		/** Where "by month of the year" goes: the Reserve compliance panel, on River & reserve in the workspace (issue #17). */
 		reserveHref?: string;
+		/** A link to a panel of Units & supply by its anchor: where the land-cover, groundwater, demand-object and other-user tables are in the workspace (issue #137). */
+		otherUsesHref?: (hash: string) => string;
 	} = $props();
 
 	const farms = $derived(summary.farms ?? []);
-	// Farms and other users with boreholes (engine ≥ 0.23.0, WP-1.34).
-	const pumping = $derived([...farms, ...(summary.users ?? [])].filter((f) => f.avgGroundwaterM3Day !== undefined));
 	const shortCount = $derived(farms.filter((f) => f.fractionSupplied < SUPPLY_TARGET).length);
 	const totals = $derived({
 		demand: farms.reduce((s, f) => s + f.avgDemandM3Day, 0),
@@ -48,6 +50,7 @@
 	const lede = $derived(runSentence(summary));
 	const groups = $derived(warningGroups(summary.warnings));
 	const checkItems = $derived(credibility(summary));
+	const otherUses = $derived(otherUsesHref ? otherUsesLink(summary) : null);
 </script>
 
 <!-- What to check before relying on the run, then how its data were handled (runs/credibility.ts). -->
@@ -134,15 +137,16 @@
 
 {#if units}{@render units()}{/if}
 
-{#if summary.landCover || summary.users?.length || pumping.length || farms.some((f) => f.demandObjects?.length)}
-	<Lazy load={loadHumanImpacts}>
-		{#snippet children(HumanImpactTables)}
-			<HumanImpactTables {summary} />
-		{/snippet}
-	</Lazy>
+{#if otherUses && otherUsesHref}
+	<p class="muted small other-uses" data-testid="other-uses-link">
+		{otherUses.what}: <a href={otherUsesHref(otherUses.hash)}>{otherUses.where}</a>.
+	</p>
 {/if}
 
 <style>
+	.other-uses {
+		margin: 1rem 0 0;
+	}
 	.data-notes {
 		margin: 0 0 0.75rem;
 		font-size: 0.85rem;

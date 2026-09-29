@@ -1,117 +1,118 @@
 <!--
-	Automated calibration (issue #153): runs the project's saved calibration
-	rules end to end in the calibration worker. The rules leave years out,
-	fit every case with validation and keep one by its held-out score among
-	the fits that pass the filters, or none, saying why. It only runs on the
-	saved rules (a fit must run under rules fixed before its result is seen),
-	and, like Fit automatically, never saves: Apply writes the kept fit and
-	its record into the form.
+	Automated calibration (issue #153): the server runs the project's saved
+	calibration rules, one background job per fit, and keeps a fit by its
+	held-out score among the fits that pass the filters, or none, saying why.
+	New data can queue a run too (the rules' "after" group). Applying the kept
+	fit is the server's: it saves the parameters with a fit record it builds,
+	makes a run and, when the rules say so, queues the uncertainty ensemble
+	around it. The page only asks, shows and follows.
 -->
 <script lang="ts">
-	import {
-		rulesLines,
-		waterYearLabel,
-		type AutoCalibrationProgress,
-		type AutoCalibrationReport,
-		type CalibrationFlowKind,
-		type CalibrationReport,
-		type CalibrationRules,
-		type FitRecord,
-		type ProjectModel,
-		type ProjectSettings,
-		type SeriesOrigin,
-		type SeriesProvenance,
-		type ApanDailyFingerprint
-	} from '@water-management/engine';
+	import { rulesLines, waterYearLabel, type CalibrationRules } from '@water-management/engine';
 	import { api } from '$lib/api';
-	import { apanDailyOfValues, chirpsSourceOfInput } from '$lib/series/provenance';
-	import { fitInput, marPenaltyOn } from '$lib/calibration/fit';
-	import { autoCaseRows, autoFitRecordFor, autoProgressFraction, autoRunsTotal, autoStageText, keptPan, rulesUnsaved, selectionText } from '$lib/calibration/autoFit';
-	import { FitCancelled, startAutoFit } from '$lib/calibration/runner';
+	import type { AutoCalibration } from '$lib/api/types';
+	import { applyBlocker, autoCaseRows, autoRunsTotal, autoState, rulesUnsaved, selectionText, triggerText } from '$lib/calibration/autoFit';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
 	import { fmtNum } from '$lib/format/number';
 
 	let {
 		projectId,
-		settings,
 		savedRules,
 		formRules,
-		model,
+		formDirty,
+		penalty,
 		hasObserved,
 		readonly,
-		onApply
+		onApplied
 	}: {
 		projectId: string;
-		/** The Settings form as it stands (unsaved edits included). */
-		settings: () => ProjectSettings;
-		/** settings.calibrationRules as saved: the only rules the run uses. */
+		/** settings.calibrationRules as saved: the only rules the server runs. */
 		savedRules: CalibrationRules;
 		/** The form's rules as they stand: the run and Apply wait while they differ from the saved ones. */
 		formRules: CalibrationRules;
-		model?: () => ProjectModel | undefined;
+		/** The settings form has unsaved edits: applying saves at once, so it waits for them to be saved or discarded. */
+		formDirty: boolean;
+		/** The WR2012 MAR penalty is on: each fit runs once more without it. */
+		penalty: boolean;
 		hasObserved: boolean;
 		readonly: boolean;
-		/** Writes the kept fit, its record and the pan coefficient it was fitted under (when not the project's) into the form. */
-		onApply: (report: CalibrationReport, record: FitRecord, pan: { values: number[]; source: string } | null) => void;
+		/** The server saved an applied fit: reload the project's settings. */
+		onApplied: () => Promise<void>;
 	} = $props();
 
 	const uid = $props.id();
-	let status = $state<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
-	let progress = $state<AutoCalibrationProgress | null>(null);
-	let report = $state.raw<AutoCalibrationReport | null>(null);
+	let latest = $state.raw<AutoCalibration | null>(null);
 	let error = $state<string | null>(null);
-	let handle: { cancel(): void } | null = null;
-	let ran: { settings: ProjectSettings; chirpsSource?: SeriesProvenance | null; apanDaily?: ApanDailyFingerprint | null; observedOrigin?: SeriesOrigin | null } | null = null;
-	// Whether the WR2012 penalty adds a fit, as the last run saw it (for its progress bar).
-	let runPenalty = false;
+	let busy = $state(false);
+	let runError = $state<string | null>(null);
+	let timer: ReturnType<typeof setTimeout> | undefined;
 
 	const unsaved = $derived(rulesUnsaved(savedRules, formRules));
-	const busy = $derived(status === 'running' || status === 'loading');
-	const canStart = $derived(hasObserved && !unsaved && !busy);
-	const pct = $derived(progress ? Math.round(100 * autoProgressFraction(progress, runPenalty, savedRules.run.starts)) : 0);
-	const rows = $derived(report ? autoCaseRows(report) : []);
-	const kept = $derived(report && report.chosen !== null ? report.cases[report.chosen]! : null);
+	const runState = $derived(latest ? autoState(latest) : null);
+	const running = $derived(runState?.kind === 'running');
+	const canStart = $derived(hasObserved && !readonly && !unsaved && !busy && !running);
+	const rows = $derived(latest ? autoCaseRows(latest) : []);
+	const kept = $derived(latest && latest.chosen !== null ? latest.cases[latest.chosen]! : null);
+	const blocker = $derived(latest ? applyBlocker(latest, { rulesUnsaved: unsaved, formDirty, readonly }) : null);
 
-	async function start() {
-		if (!canStart) return;
-		status = 'loading';
-		error = null;
-		report = null;
-		progress = null;
+	/** Follow a running calibration until it completes, fails or its job stops. */
+	async function follow(id: string) {
+		clearTimeout(timer);
 		try {
-			const server = await api.runs.modelInput(projectId);
-			// The form as it stands, but always under the saved rules.
-			const form = { ...settings(), calibrationRules: savedRules };
-			const input = fitInput(server, form, model?.());
-			const context = { settings: form, chirpsSource: chirpsSourceOfInput(server.series), apanDaily: await apanDailyOfValues(server.series.evap_apan_mm) };
-			status = 'running';
-			runPenalty = marPenaltyOn(form);
-			const h = startAutoFit({ kind: 'auto', input }, (p) => (progress = p));
-			handle = h;
-			report = await h.result;
-			const fitted = server.series[report.flowKind as CalibrationFlowKind];
-			ran = { ...context, ...(fitted?.origin !== undefined ? { observedOrigin: fitted.origin } : {}) };
-			status = 'done';
+			latest = await api.autoCalibrations.get(projectId, id);
+			if (autoState(latest).kind === 'running') timer = setTimeout(() => follow(id), 1500);
 		} catch (e) {
-			if (e instanceof FitCancelled) {
-				status = 'idle';
-				return;
-			}
 			error = e instanceof Error ? e.message : String(e);
-			status = 'error';
-		} finally {
-			handle = null;
 		}
 	}
 
-	function apply() {
-		if (!report || !ran || !kept?.report || unsaved) return;
-		const record = autoFitRecordFor(report, ran.settings, ran);
-		if (record) onApply(kept.report, record, keptPan(report));
+	async function load() {
+		try {
+			const [first] = await api.autoCalibrations.list(projectId);
+			latest = first ?? null;
+			if (first && autoState(first).kind === 'running') timer = setTimeout(() => follow(first.id), 1500);
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		}
 	}
 
-	const fmtParam = (v: number | undefined) => (v === undefined ? '–' : fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3));
-	$effect(() => () => handle?.cancel());
+	async function start() {
+		if (!canStart) return;
+		busy = true;
+		error = null;
+		runError = null;
+		try {
+			const res = await api.autoCalibrations.start(projectId);
+			latest = res.calibration;
+			await follow(res.calibration.id);
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function apply() {
+		if (!latest || blocker) return;
+		busy = true;
+		error = null;
+		try {
+			const res = await api.autoCalibrations.apply(projectId, latest.id);
+			latest = res.calibration;
+			runError = res.runError;
+			await onApplied();
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	$effect(() => {
+		void projectId;
+		load();
+		return () => clearTimeout(timer);
+	});
 </script>
 
 <section class="auto" aria-labelledby="{uid}-h">
@@ -120,8 +121,8 @@
 		<p class="muted small">Upload an observed or logger flow record (Data) to calibrate against it.</p>
 	{:else}
 		<p class="muted small">
-			Runs the saved calibration rules below from start to finish: no one chooses after the scores are seen. It fits in your browser and never saves:
-			apply the kept fit to the form, then save.
+			The server runs the saved calibration rules below from start to finish, one background job per fit: no one chooses after the scores are seen.
+			Applying the kept fit saves it at once, with a record of how the rules chose it.
 		</p>
 		<dl class="rules small" data-testid="auto-rules">
 			<dt>Rules</dt>
@@ -134,100 +135,94 @@
 		{#if !savedRules.signedOff}
 			<p class="alert alert-warning small">These rules are drafts until the hydrologist signs them off: a fit they keep is not evidence yet.</p>
 		{/if}
-		<p class="muted small" data-testid="auto-runs">{fmtNum(autoRunsTotal(savedRules, marPenaltyOn(settings())))} model runs in all, by the rules’ search.</p>
+		<p class="muted small" data-testid="auto-runs">{fmtNum(autoRunsTotal(savedRules, penalty))} model runs in all, by the rules’ search.</p>
 		{#if unsaved}
-			<p class="alert alert-info small" data-testid="auto-rules-unsaved">The calibration rules have unsaved changes. Save them first: automated calibration only runs, and its fit only applies, under saved rules.</p>
+			<p class="alert alert-info small" data-testid="auto-rules-unsaved">The calibration rules have unsaved changes. Save them first: the server only runs, and applies fits under, saved rules.</p>
 		{/if}
-		<div class="row">
-			{#if busy}
-				<button type="button" class="btn" onclick={() => handle?.cancel()} disabled={status === 'loading'}>Cancel</button>
-			{:else}
+		{#if !readonly}
+			<div class="row">
 				<button type="button" class="btn btn-primary" onclick={start} disabled={!canStart}>Run the calibration rules</button>
-			{/if}
-		</div>
-
-		{#if status === 'loading'}
-			<p class="muted small" role="status">Loading the project’s data…</p>
-		{:else if status === 'running'}
-			<div class="progress">
-				<div
-					class="bar"
-					role="progressbar"
-					aria-label="Automated calibration progress"
-					aria-valuemin={0}
-					aria-valuemax={100}
-					aria-valuenow={pct}
-					aria-valuetext="{pct}%{progress ? `, ${autoStageText(progress)}` : ''}"
-				>
-					<span style:width="{pct}%"></span>
-				</div>
-				<p class="muted small" aria-live="polite">{progress ? autoStageText(progress) : 'Starting…'}</p>
 			</div>
-		{:else if status === 'error'}
-			<div class="alert alert-error" role="alert">{error}</div>
 		{/if}
+		{#if error}<div class="alert alert-error" role="alert">{error}</div>{/if}
 
-		{#if report}
-			<div class="result" aria-live="polite">
-				<h4>Result</h4>
+		{#if latest && runState}
+			<div class="result" data-testid="auto-result">
+				<h4>Latest run</h4>
 				<p class="small muted">
-					Kept by {selectionText(report.rules)} · rules revision {report.rules.revision} · seed {report.seed} · {report.starts} start{report.starts === 1 ? '' : 's'} and {fmtNum(report.budget)} model runs per fit
+					{triggerText(latest)} · rules revision {latest.rulesRevision} · kept by {selectionText(latest.rules)} · {latest.createdAt.slice(0, 16).replace('T', ' ')}
 				</p>
-				{#each report.notes as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
-				{#if report.ruleExclusions.length}
+				{#if runState.kind === 'running'}
+					<div class="progress">
+						<div class="bar" role="progressbar" aria-label="Automated calibration progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={runState.progress ?? 0} aria-valuetext={runState.text}>
+							<span style:width="{runState.progress ?? 0}%"></span>
+						</div>
+						<p class="muted small" role="status">{runState.text}</p>
+					</div>
+				{:else if runState.kind === 'failed' || runState.kind === 'stopped'}
+					<p class="alert alert-error small" role="alert">{runState.text}</p>
+				{/if}
+				{#each latest.report?.notes ?? [] as n (n)}<p class="alert alert-warning small">{n}</p>{/each}
+				{#if latest.plan.ruleExclusions.length}
 					<p class="small" data-testid="auto-rule-exclusions">
-						Left out by rule: {report.years
+						Left out by rule: {latest.plan.years
 							.filter((y) => y.excluded)
 							.map((y) => `WY ${waterYearLabel(y.waterYear)} (${y.flaggedDays} of ${y.observedDays} days flagged)`)
 							.join(', ')}.
 					</p>
 				{/if}
-				<div class="table-wrap">
-					<table class="data compact">
-						<caption>Fits the rules tried</caption>
-						<thead>
-							<tr>
-								<th scope="col">Fit</th>
-								<th scope="col">Result</th>
-								<th scope="col" class="num">Held-out score</th>
-								<th scope="col" class="num">Natural MAR (Mm³/a)</th>
-								<th scope="col">Filters</th>
-								<th scope="col">Why not kept</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each rows as r, i (i)}
-								<tr class:kept={r.verdict === 'Kept'}>
-									<th scope="row">{r.label}</th>
-									<td>{r.verdict}</td>
-									<td class="num">{r.score}</td>
-									<td class="num">{r.mar}</td>
-									<td>{r.filters}</td>
-									<td>{r.reasons.join('; ') || '–'}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-				{#if kept?.report}
+				{#if rows.length}
 					<div class="table-wrap">
 						<table class="data compact">
-							<caption>Kept fit: parameters</caption>
-							<thead><tr><th scope="col">Parameter</th><th scope="col" class="num">Current</th><th scope="col" class="num">Fitted</th></tr></thead>
+							<caption>Fits the rules tried</caption>
+							<thead>
+								<tr>
+									<th scope="col">Fit</th>
+									<th scope="col">Result</th>
+									<th scope="col" class="num">Held-out score</th>
+									<th scope="col" class="num">Natural MAR (Mm³/a)</th>
+									<th scope="col">Filters</th>
+									<th scope="col">Why not kept</th>
+								</tr>
+							</thead>
 							<tbody>
-								{#each kept.report.free as k (k)}
-									<tr><th scope="row">{k.toUpperCase()}</th><td class="num">{fmtParam(kept.report.startParams[k])}</td><td class="num">{fmtParam(kept.report.params[k])}</td></tr>
+								{#each rows as r, i (i)}
+									<tr class:kept={r.verdict === 'Kept'}>
+										<th scope="row">{r.label}</th>
+										<td>{r.verdict}</td>
+										<td class="num">{r.score}</td>
+										<td class="num">{r.mar}</td>
+										<td>{r.filters}</td>
+										<td>{r.reasons.join('; ') || '–'}</td>
+									</tr>
 								{/each}
 							</tbody>
 						</table>
 					</div>
-					{#if !readonly}
+				{/if}
+				{#if kept?.params}
+					<div class="table-wrap">
+						<table class="data compact">
+							<caption>Kept fit: parameters</caption>
+							<thead><tr><th scope="col">Parameter</th><th scope="col" class="num">Fitted</th></tr></thead>
+							<tbody>
+								{#each Object.entries(kept.params) as [k, v] (k)}
+									<tr><th scope="row">{k.toUpperCase()}</th><td class="num">{fmtNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 3)}</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					{#if latest.appliedAt}
+						<p class="small" data-testid="auto-applied">
+							Applied by {latest.appliedBy ?? 'a former member'} on {latest.appliedAt.slice(0, 16).replace('T', ' ')}{latest.appliedRunId ? ', with a run' : ''}{latest.uncertaintyId
+								? ' and its uncertainty ensemble (Runs tab)'
+								: ''}.
+						</p>
+						{#if runError}<p class="alert alert-warning small">The fit is saved, but no run followed: {runError}</p>{/if}
+					{:else if !readonly}
 						<div class="row">
-							<button type="button" class="btn btn-primary" onclick={apply} disabled={unsaved}>Apply the kept fit to form</button>
-							<span class="muted small">
-								Fills in its parameters{kept.pan.values ? ' and the pan coefficient it was fitted under' : ''}, and records how the rules chose it; nothing is saved until you
-								press Save settings.
-							</span>
+							<button type="button" class="btn btn-primary" onclick={apply} disabled={!!blocker || busy}>Apply and save the kept fit</button>
+							<span class="muted small" data-testid="auto-apply-hint">{blocker ?? `Saves its parameters with a record of how the rules chose it${kept.pan.values ? ', and the pan coefficient it was fitted under' : ''}, then runs the model.`}</span>
 						</div>
 					{/if}
 				{/if}

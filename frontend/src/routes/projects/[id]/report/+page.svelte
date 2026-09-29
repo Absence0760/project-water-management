@@ -47,7 +47,7 @@
 	import { toDisplayUnit } from '$lib/components/runs/results';
 	import RunSummaryView from '$lib/components/runs/RunSummaryView.svelte';
 	import UnitResultsTable from '$lib/components/supply/UnitResultsTable.svelte';
-	import { loadHumanImpacts } from '$lib/components/runs/humanImpacts';
+	import { hasHumanImpacts, loadHumanImpacts } from '$lib/components/runs/humanImpacts';
 	import { runSentence } from '$lib/components/runs/runSentence';
 	import SelfChecksPanel from '$lib/components/runs/SelfChecksPanel.svelte';
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
@@ -140,7 +140,7 @@
 			signoffs = so;
 			impact = cmp;
 			impactSeries = boardSeries;
-			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
+			// The land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			// If it fails to download, only a reload can fetch it (lazy.ts), so it gets its own message, not "Try again".
 			try {
 				await Promise.all([loadOnce(loadHumanImpacts), against ? loadOnce(loadImpact) : null]);
@@ -408,7 +408,15 @@
 						{/if}
 					{:else if s.id === 'farms'}
 						<RunSummaryView {summary} {days}>
-							{#snippet units()}<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />{/snippet}
+							{#snippet units()}
+								<UnitResultsTable farms={summary.farms ?? []} {days} {nodeOrder} />
+								<!-- The land-cover, groundwater, demand-object and other-user tables: on Units & supply in the workspace (issue #137), here in their old place. -->
+								{#if hasHumanImpacts(summary)}
+									<Lazy load={loadHumanImpacts}>
+										{#snippet children(HumanImpactTables)}<HumanImpactTables {summary} />{/snippet}
+									</Lazy>
+								{/if}
+							{/snippet}
 						</RunSummaryView>
 						<div class="sub">
 							<SelfChecksPanel {summary} {projectId} runId={run.id} startDate={run.startDate} endDate={run.endDate} engineVersion={run.engineVersion} nodes={[]} trace={false} />
