@@ -837,6 +837,12 @@ against its owner, and a farmer's mail naming a neighbour's farm.
     otherwise; checked and stamped in one conditional `UPDATE`, so two calls
     at once can't both pass), so an address that keeps bouncing costs the account one
     bounce a day, not a loop.
+  - *The SES endpoint.* The SES API endpoint's policy repeats the IAM
+    split (`ses_endpoint`, `ses.tf`): the API and worker roles may send, as
+    no-reply@ only, and only the API role may release an address; no other
+    principal can use the endpoint. That the endpoint carries
+    `DeleteSuppressedDestination` at all is to be confirmed on the first
+    deploy (infra/README.md step 10b, #126).
 
 ## Authorization: per-project roles enforced by Postgres RLS
 

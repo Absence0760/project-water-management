@@ -57,7 +57,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   doesn't go through the function's ENI. The VPC reaches exactly three AWS
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert
-  emails; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
+  emails, and `DeleteSuppressedDestination` from the API only; its endpoint
+  policy names only those two roles, those actions and a send as
+  no-reply@; `ses.tf`, the worker's rules in `reports.tf`), **Secrets Manager**
   (the migrate Lambda's RDS master secret, and the API, worker and migrate
   Lambdas' runtime secrets; its endpoint policy lets each role read only its
   own secrets; `network.tf`, `secrets.tf`) and **SQS** (from the API and the worker; its
@@ -160,7 +162,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: two roles, six queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
 | `feeds.tf` | Data feeds: SQS `fetch-requests` / `ingest-results` + DLQs, the fetcher Lambda outside the VPC (role: those two queues only), its event source, the worker's feed-queue policy and `ingest-results` event source, and the two DLQ-depth and fetcher-errors alarms |
 | `reports.tf` | Server-side reports: the private reports bucket (SSE, TLS only, 7-day lifecycle), the renderer's ECR repository (immutable, scanned) and Lambda (container image, outside the VPC, created once `renderer_image_tag` is set), SQS `render-requests` / `render-results` + DLQs, the worker's render-queue and SES policies, the API's read-only PDF policy (for pre-signed downloads), and the DLQ / renderer-errors / renderer-duration alarms |
-| `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
+| `ses.tf` | SES configuration set, domain identity + DKIM/MAIL FROM/DMARC records, the API role's `ses:SendEmail` policy, SES API VPC endpoint and its endpoint policy; the bounce/complaint chain to the app (event destination → SNS `ses-events` → SQS `mail-events` + DLQ + alarm → the worker; the API role's `ses:DeleteSuppressedDestination` for turning mail back on) |
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
@@ -520,6 +522,25 @@ Claude does not run any of these, and none of them print a secret. Replace
     its own image; the tag in `prod.tfvars` only ever creates it. Until then
     report requests wait in `render-requests` (4 days) and show as
     "rendering".
+10b. **SES suppression through the endpoint** (after the first backend
+    deploy; issue #126). Step 4a only proves the SES API endpoint service
+    exists; it doesn't prove the endpoint carries the SESv2
+    `DeleteSuppressedDestination` call the API makes when someone turns
+    alert emails back on (`POST /me/alerts/resume`,
+    `backend/src/mail/suppression.ts`), or that it honours the endpoint
+    policy's `ApiReleasesSuppressedAddress` statement (`ses.tf`). Put a test
+    address you own on the suppression list
+    (`aws sesv2 put-suppressed-destination --email-address <you> --reason BOUNCE --region <region> --profile water-management`),
+    sign in as that account, turn alert emails back on, then check it's gone:
+    `aws sesv2 get-suppressed-destination --email-address <you> --region <region> --profile water-management`
+    should answer `NotFoundException`. If the resume request fails instead
+    (a 500, and an `AccessDenied` or timeout for `DeleteSuppressedDestination`
+    in the API's log), the endpoint doesn't carry the call: until that's
+    fixed, take an address off the list by hand after someone turns mail
+    back on (`aws sesv2 delete-suppressed-destination --email-address <address> --region <region> --profile water-management`),
+    and record the finding in #126. The same applies if the first apply
+    rejects the endpoint policy itself (the endpoint service not supporting
+    custom policies): note it on #126 before removing the `policy` argument.
 
 ### Rotating secrets
 

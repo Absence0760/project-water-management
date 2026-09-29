@@ -1003,6 +1003,35 @@ run "email_ses" {
     condition     = aws_vpc_security_group_ingress_rule.vpce_ses_from_api.from_port == 443 && aws_vpc_security_group_ingress_rule.vpce_ses_from_api.to_port == 443
     error_message = "The SES endpoint accepts HTTPS only."
   }
+
+  # The SES endpoint policy: the API and worker send as no-reply@, only the
+  # API releases a suppressed address, and nobody else uses the endpoint.
+  assert {
+    condition     = aws_vpc_endpoint.ses.service_name != "" && can(regex("policy\\s*=\\s*data\\.aws_iam_policy_document\\.ses_endpoint\\.json", regex("(?s)resource \"aws_vpc_endpoint\" \"ses\" \\{.*?\\n\\}", file("ses.tf"))))
+    error_message = "The SES endpoint must carry an endpoint policy (ses_endpoint)."
+  }
+  assert {
+    condition = toset([for s in data.aws_iam_policy_document.ses_endpoint.statement :
+      "${s.sid} ${join(",", sort(tolist(s.actions)))} ${join(",", sort(flatten([for p in s.principals : p.identifiers])))}"
+      ]) == toset([
+      "ApiSendsAsNoReply ses:SendEmail ${aws_iam_role.lambda.arn}",
+      "WorkerSendsAsNoReply ses:SendEmail ${aws_iam_role.worker_lambda.arn}",
+      "ApiReleasesSuppressedAddress ses:DeleteSuppressedDestination ${aws_iam_role.lambda.arn}",
+    ])
+    error_message = "The SES endpoint policy must be exactly: the API and worker roles may SendEmail, and only the API role may DeleteSuppressedDestination."
+  }
+  assert {
+    condition = alltrue([for s in data.aws_iam_policy_document.ses_endpoint.statement :
+      toset(s.resources) == toset(["arn:aws:ses:af-south-1:000000000000:identity/*", aws_sesv2_configuration_set.main.arn]) &&
+      length(s.condition) == 1 && one(s.condition).variable == "ses:FromAddress" && one(s.condition).values == tolist(["no-reply@water-management.jaredhoward.com"])
+      if contains(s.actions, "ses:SendEmail")
+    ])
+    error_message = "A send through the SES endpoint must be pinned like the IAM policy: this account's identities and configuration set, From = no-reply@<domain>."
+  }
+  assert {
+    condition     = alltrue([for s in data.aws_iam_policy_document.ses_endpoint.statement : length(s.principals) == 1 && one(s.principals).type == "AWS" && alltrue([for a in s.actions : !strcontains(a, "*")])])
+    error_message = "Every SES endpoint statement names one AWS principal and no wildcard action."
+  }
   assert {
     condition = (
       aws_lambda_function.backend.environment[0].variables["MAIL_TRANSPORT"] == "ses" &&

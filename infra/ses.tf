@@ -401,11 +401,17 @@ resource "aws_iam_role_policy" "lambda_ses" {
 # (`com.amazonaws.<region>.email`) launched Dec 2025 in every SES region; the
 # older `email-smtp` endpoint is SMTP-only and is not what the app uses.
 #
-# No custom endpoint policy: IAM above already pins the action, identity and
-# From address for both roles (the worker's policy, reports.tf, is the same
-# document), and the API and worker Lambdas are the only ENIs in the VPC that
-# can reach the endpoint (security group below; the worker's rules are in
-# reports.tf).
+# The endpoint policy repeats IAM as a second, network-side fence, the way
+# the SQS (jobs.tf) and Secrets Manager (network.tf) endpoints do: only the
+# API and worker roles, only the SESv2 actions each one makes, and a send only
+# as no-reply@. Both send (backend/src/mail/transport.ts, SendEmail); only the
+# API releases a suppressed address (mail/suppression.ts,
+# DeleteSuppressedDestination). SESv2's IAM action names are the ses: ones,
+# so the policy reads like the IAM policies above. The security group below
+# (and the worker's rules in reports.tf) keeps every other ENI off the
+# endpoint. Unconfirmed until the first deploy: that the `email` endpoint
+# service carries DeleteSuppressedDestination at all (issue #126; the
+# check is infra/README.md step 10b).
 
 resource "aws_security_group" "vpce_ses" {
   name        = "${local.project}-vpce-ses"
@@ -440,5 +446,49 @@ resource "aws_vpc_endpoint" "ses" {
   security_group_ids  = [aws_security_group.vpce_ses.id]
   private_dns_enabled = true
 
+  # Only these roles, only the actions they make (above).
+  policy = data.aws_iam_policy_document.ses_endpoint.json
+
   tags = { Name = "${local.project}-ses" }
+}
+
+data "aws_iam_policy_document" "ses_endpoint" {
+  # Both Lambdas send as no-reply@: the same resources and condition as their
+  # IAM policy (lambda_ses above; the worker's copy is in reports.tf).
+  dynamic "statement" {
+    for_each = {
+      ApiSendsAsNoReply    = aws_iam_role.lambda.arn
+      WorkerSendsAsNoReply = aws_iam_role.worker_lambda.arn
+    }
+    content {
+      sid     = statement.key
+      actions = ["ses:SendEmail"]
+      resources = [
+        "arn:aws:ses:${var.aws_region}:${data.aws_caller_identity.current.account_id}:identity/*",
+        aws_sesv2_configuration_set.main.arn,
+      ]
+      principals {
+        type        = "AWS"
+        identifiers = [statement.value]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "ses:FromAddress"
+        values   = [local.mail_from_address]
+      }
+    }
+  }
+
+  # Turning mail back on (POST /me/alerts/resume) takes the address off the
+  # account-level suppression list: the API role only. The action takes no
+  # resource ARN (lambda_ses_release above).
+  statement {
+    sid       = "ApiReleasesSuppressedAddress"
+    actions   = ["ses:DeleteSuppressedDestination"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.lambda.arn]
+    }
+  }
 }

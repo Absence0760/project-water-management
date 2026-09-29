@@ -824,6 +824,13 @@ and configuration set as every other email ([§ Email](#email-amazon-ses)).
   (`POST /me/alerts/resume`) takes the address off the suppression list
   (`ses:DeleteSuppressedDestination`, the API role only; once a day per
   person). A transient bounce (a full mailbox) changes nothing.
+  - *Through the SES endpoint.* The call leaves the VPC through the SES API
+    interface endpoint, whose policy (`ses_endpoint`, `ses.tf`) admits
+    `SendEmail` from the API and worker roles (as no-reply@ only) and
+    `DeleteSuppressedDestination` from the API role only. **Still to be
+    confirmed on the first deploy** (#126): that the endpoint carries
+    `DeleteSuppressedDestination` at all. infra/README.md step 10b is the
+    check and the by-hand fallback.
   - *Trust.* The topic's policy admits only SES, for this configuration set
     in this account; the queue's admits only the topic; and the worker reads
     a record as an SES event only when its event source is `mail-events`
