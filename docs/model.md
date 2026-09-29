@@ -7080,6 +7080,18 @@ text:
 | `checkWaterAccount` | Engine ≥ 0.32.0 (§2.11b): the account closes to 10⁻¹⁰ of Σ\|terms\| in every water year and over the run, the years add up to the run, each year opens with the last year's closing storage, and 0 ≤ EWR met ≤ required. |
 | `checkAll` | `runModel`, all of the above, and determinism (a second run is identical). |
 
+**Recomputed outside the engine (issue #68).** The checks show the model
+agrees with itself; the **Excel audit workbook** shows it agrees with its
+formulas in someone else's tool. For one farm of a run it writes the chain F
+… AA as live spreadsheet formulas over the farm's inputs, its dam storage
+carried from row to row, beside the model's numbers and a daily largest
+difference (`verify/audit.ts`, api.md § Export). The formulas come from one
+expression tree that renders to Excel text and evaluates in the engine;
+`verify/audit.test.ts` holds them to `runModel` on every supported farm of
+random networks, and the parameters are resolved by the same helpers as
+`checkWorkings` (`verify/workings.ts`). A farm with a feature the formulas
+don't carry yet is refused by name (docs/followups.md § Verification).
+
 **The ordering rule (engine ≥ 0.26.1).** Floating-point addition is not
 associative, so a sum over a list in display order can change in its last bit
 when the user reorders the list. On its own that is noise, but the balance has

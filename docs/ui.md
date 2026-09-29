@@ -2545,6 +2545,18 @@ included) in the menu's status line. The phone layout keeps the same menu and
 progress, wrapped under the button. Leaving the tab stops an export still
 running. The workbook code loads only then, in a worker, never with the page.
 
+**Audit workbook — *unit* (.xlsx)** follows each farm's daily CSV in the menu
+(issue #68). It is the independent check: the farm's daily water balance,
+F through AA, as live Excel formulas over its inputs, so Excel, LibreOffice or
+Google Sheets recomputes the model itself, beside the model's own numbers and
+a column with each day's largest difference ([api.md § Export](./api.md#export)).
+It runs in the same worker, with the same progress line and Cancel. A unit
+whose rules the formulas don't carry yet (boreholes, a release rule, a river
+pump, off-takes, demand objects, senior users below, an allocation cap, a
+storage reset, a survey curve, a daily A-pan series on a dam) gets "Workbook
+failed: The audit workbook can't recompute *unit* yet: …" naming each, never a
+file whose numbers disagree.
+
 ## Settings & calibration
 
 A reading page (issue #17, option A): the long form scrolls under the

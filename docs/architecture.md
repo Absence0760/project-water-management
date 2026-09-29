@@ -305,7 +305,7 @@ import worker kept scenario-op and fit-provenance code it never calls without
 it); the same test checks both.
 
 The `.xlsx` run export has a worker of its own
-(`lib/spreadsheet/export/export.worker.ts`, 10.5 KB gzip), so the workbook
+(`lib/spreadsheet/export/export.worker.ts`, 19 KB gzip), so the workbook
 code never lands in a page chunk. Nothing on a page imports it. The Download
 menu's "Workbook (.xlsx)" item dynamically imports a 0.5 KB runner
 (`lib/spreadsheet/export/runner.ts`), which starts the worker with
@@ -317,11 +317,18 @@ series](./api.md#bulk-run-series)) and the building, posts progress per node,
 and transfers the finished file back; Cancel terminates it. The parts are
 written by `writer.ts`, the OOXML SheetJS CE 0.20.3 wrote for this workbook,
 byte for byte, without SheetJS (issue #9: the worker was 88 KB gzip with its
-mini build, 10.5 KB now). The export only ever wrote text cells, numeric
+mini build, 10.5 KB then). The run export only ever wrote text cells, numeric
 cells with a number format, and column widths, so the parts are few and
 fixed; `workbook.test.ts` builds each test workbook both ways (the SheetJS
 path, kept as test-only `sheetjsReference.ts`) and compares the zips byte for
-byte, and `writer.test.ts` fails if app code imports `xlsx` again. The zip
+byte, and `writer.test.ts` fails if app code imports `xlsx` again. The same
+worker builds a farm's audit workbook (issue #68) when the menu's request
+carries `auditNodeId`: the engine's plan (`verify/audit.ts`) laid out by
+`lib/spreadsheet/audit/`, the one workbook with formula cells, which SheetJS
+never wrote, so the writer's formula cells and its `fullCalcOnLoad` flag are
+pinned by `audit/auditWorkbook.test.ts` and `writer.formula.test.ts` rather
+than by the byte comparison (a workbook without formulas is unchanged); the
+engine's plan put the worker at 19 KB. The zip
 itself is written by `zip.ts` with the browser's
 `CompressionStream('deflate-raw')`, since SheetJS's own browser deflate made
 files ~2.5 times larger. The bundle guard gives spreadsheet workers

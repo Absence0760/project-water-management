@@ -17,8 +17,14 @@
 // imports it (the export worker was 88 KB gzip with it, ~7 KB without).
 import { zip, type ZipEntry } from './zip';
 
-/** A cell: text, or a finite number with an optional Excel number format code. */
-export type XlsxCell = { t: 's'; v: string } | { t: 'n'; v: number; z?: string };
+/**
+ * A cell: text, a finite number with an optional Excel number format code,
+ * or a formula (text without the leading `=`) with its value as last
+ * computed. SheetJS's export never wrote formulas; the audit workbook
+ * ($lib/spreadsheet/audit) does, and a workbook with any makes Excel
+ * recompute every formula on open (`fullCalcOnLoad`).
+ */
+export type XlsxCell = { t: 's'; v: string } | { t: 'n'; v: number; z?: string } | { t: 'f'; f: string; v: number; z?: string };
 
 const XML_HEADER = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n';
 const NS_MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
@@ -159,7 +165,12 @@ function sheetShell(ref: string, widths: readonly number[]): [head: string, tail
 export interface XlsxDailyColumn {
 	format: string | undefined;
 	values: ArrayLike<number | null>;
+	/** A formula column: the formula (without `=`) on sheet row `row` (1-based); `values` are its results as last computed. */
+	formula?: (row: number) => string;
 }
+
+/** A formula cell's content: the formula, and its last value when it has a finite one. */
+const formulaXml = (f: string, v: number | null | undefined) => `<f>${escapeXml(f)}</f>${typeof v === 'number' && Number.isFinite(v) ? `<v>${v}</v>` : ''}`;
 
 /**
  * The workbook, built sheet by sheet. Sheets are written as they are added
@@ -171,6 +182,8 @@ export class XlsxWorkbook {
 	private readonly styles = new Styles();
 	private readonly names: string[] = [];
 	private readonly sheets: Uint8Array<ArrayBuffer>[] = [];
+	/** Any formula written: the workbook then asks Excel to recompute on open. */
+	private formulas = false;
 
 	private addName(name: string): void {
 		if (!name || name.length > 31 || /[\\/?*[\]:]/.test(name) || this.names.includes(name)) throw new Error(`xlsx: bad or repeated sheet name ${JSON.stringify(name)}`);
@@ -180,8 +193,12 @@ export class XlsxWorkbook {
 	private cell(c: XlsxCell, ref: string): string {
 		let attrs = ` r="${ref}"`;
 		let v: string;
-		if (c.t === 'n') {
+		if (c.t === 'n' || c.t === 'f') {
 			v = tag('v', String(c.v));
+			if (c.t === 'f') {
+				v = formulaXml(c.f, c.v);
+				this.formulas = true;
+			}
 			const s = this.styles.of(c.z);
 			if (s) attrs += ` s="${s}"`;
 		} else {
@@ -216,6 +233,7 @@ export class XlsxWorkbook {
 	addDaily(name: string, header: readonly string[], dateFormat: string, day0: number, columns: readonly XlsxDailyColumn[], widths: readonly number[]): void {
 		this.addName(name);
 		const days = Math.max(0, ...columns.map((c) => c.values.length));
+		if (days && columns.some((c) => c.formula)) this.formulas = true;
 		const headerRow = this.row(header.map((v): XlsxCell => ({ t: 's', v })), 1);
 		// Style ids in column order, as SheetJS met the formats: it was given the
 		// header and, when there were days, one probe row of every column's format.
@@ -231,8 +249,10 @@ export class XlsxWorkbook {
 			const R = d + 2;
 			buf += `<row r="${R}"><c r="A${R}"${style[0]}><v>${day0 + d}</v></c>`;
 			for (let i = 0; i < columns.length; i++) {
-				const v = columns[i]!.values[d];
-				if (typeof v === 'number' && Number.isFinite(v)) buf += `<c r="${letters[i]}${R}"${style[i + 1]}><v>${v}</v></c>`;
+				const col = columns[i]!;
+				const v = col.values[d];
+				if (col.formula) buf += `<c r="${letters[i]}${R}"${style[i + 1]}>${formulaXml(col.formula(R), v)}</c>`;
+				else if (typeof v === 'number' && Number.isFinite(v)) buf += `<c r="${letters[i]}${R}"${style[i + 1]}><v>${v}</v></c>`;
 			}
 			buf += '</row>';
 			if (buf.length > 1 << 20) {
@@ -269,7 +289,9 @@ export class XlsxWorkbook {
 					XML_HEADER +
 						`<workbook xmlns="${NS_MAIN}" xmlns:r="${NS_REL}"><workbookPr codeName="ThisWorkbook"/><sheets>` +
 						this.names.map((s, i) => `<sheet name="${escapeXml(s)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') +
-						'</sheets></workbook>'
+						'</sheets>' +
+						(this.formulas ? '<calcPr fullCalcOnLoad="1"/>' : '') +
+						'</workbook>'
 				)
 			},
 			{ name: 'xl/theme/theme1.xml', data: text(XML_HEADER + THEME_XML) },

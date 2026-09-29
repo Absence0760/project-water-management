@@ -1291,6 +1291,18 @@
 //             Other uses section on Units & supply with the Summary's link to
 //             it, and the project's-date helper the data-age badges count to.
 //             No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1190 → 1198 KB (issue #68: measured 1195 on main @
+//             0a9cc278 plus the change). A farm's Excel audit workbook, built
+//             in the existing export worker (10.5 → 19 KB, inside the 32 KB
+//             spreadsheet-worker budget): the engine's audit plan and
+//             formula tree (verify/audit.ts), the dam and evaporation
+//             helpers it shares with the self-checks (verify/workings.ts)
+//             and what it reads a run's model through (upgradeLegacyModel,
+//             the demand factor, the survey-curve and demand-object readers),
+//             plus the sheet layout. Trimmed first: the FarmTemplate letters
+//             are inlined rather than loading FARM_COLUMNS' formula texts,
+//             and the evaporation defaults are two constants rather than
+//             defaultProjectSettings. No new dependency. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1301,7 +1313,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1190,
+	totalCodeKb: 1198,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 36,

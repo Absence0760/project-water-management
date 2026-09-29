@@ -1,10 +1,14 @@
-// Web Worker: fetches a run and builds its .xlsx workbook off the main
+// Web Worker: fetches a run and builds its .xlsx workbook (or one farm's
+// audit workbook, ../audit) off the main
 // thread (WP-1.28), with ./writer.ts (no spreadsheet library: issue #9), so
 // none of it is in a page chunk. Loaded
 // as a module worker from 'self' (new Worker(new URL(…), { type: 'module' })),
 // which the CSP's `worker-src 'self'` allows; no blob: workers. Cancel = the
 // page terminates the worker, in-flight fetches included.
+import { buildAuditWorkbook } from '../audit/auditWorkbook';
+import { collectAudit } from '../audit/collect';
 import { collectWorkbookInput } from './collect';
+import type { ExportProgress } from './collect';
 import type { FromWorker, ToWorker } from './messages';
 import { buildWorkbook } from './workbook';
 
@@ -13,7 +17,16 @@ const post = (m: FromWorker, transfer: Transferable[] = []) => (self as unknown 
 self.onmessage = async (e: MessageEvent<ToWorker>) => {
 	if (e.data.type !== 'start') return;
 	try {
-		const { input, filename } = await collectWorkbookInput(e.data.request, (...a) => fetch(...a), (progress) => post({ type: 'progress', progress }));
+		const request = e.data.request;
+		const onProgress = (progress: ExportProgress) => post({ type: 'progress', progress });
+		// One farm's audit workbook (issue #68), or the whole run's.
+		if (request.auditNodeId) {
+			const { plan, run, filename } = await collectAudit({ ...request, auditNodeId: request.auditNodeId }, (...a) => fetch(...a), onProgress);
+			const bytes = await buildAuditWorkbook({ plan, run, site: globalThis.location?.origin ?? '' });
+			post({ type: 'done', bytes, filename }, [bytes.buffer]);
+			return;
+		}
+		const { input, filename } = await collectWorkbookInput(request, (...a) => fetch(...a), onProgress);
 		const bytes = await buildWorkbook(input);
 		post({ type: 'done', bytes, filename }, [bytes.buffer]);
 	} catch (err) {

@@ -1635,17 +1635,41 @@ the suggested order (the IDs carry the detail):
       users may enter, so it is the real hydrologist's call. Trigger: the
       hydrologist review of N2 (engine-audit.md), or the first real dam
       entered with b > 1.
-- [ ] **Excel audit workbook export** (the strongest independent check). The
-      farm daily CSV has every column but the hydrologist still types the
-      formulas. An `.xlsx` for one farm: inputs as values, each working column
-      (F … AB) as a live Excel formula taken from `verify/columns.ts`, and a
-      column comparing Excel's value with the model's. Excel then recomputes
-      the model independently, which a hydrologist or licensing authority will
-      trust. SheetJS from its CDN tarball only (STACK.md: not the npm `xlsx`
-      package); mind the 5 MB export limit (one farm, or a date window).
-      About a day. Also settles the `verify/` Python cross-check question
-      above: this would replace it. Trigger: after the client catchment run
-      (first item) and the hydrologist persona review (below) confirm it's wanted.
+- [x] **Excel audit workbook export** (issue #68, 2026-09-29; the operator
+      asked for it ahead of the trigger below). The Runs tab's Download menu
+      offers **Audit workbook — *unit* (.xlsx)** after each farm's daily CSV:
+      the chain F … AA as live Excel formulas over the farm's inputs (the
+      catchment's rain, the evaporation depth, gross demand, effective rain
+      used, the demand factor, H, I, J, Z as values), the dam storage carried
+      from row to row, a Model sheet with the run's numbers and a daily
+      largest-difference column (`verify/audit.ts`, `lib/spreadsheet/audit/`,
+      api.md § Export). Written by the app's own OOXML writer (formula cells
+      added; no SheetJS in the app); the bulk route pages the fetch, so the
+      5 MB limit doesn't bind. The formulas are one expression tree that the
+      engine evaluates, held to `runModel` on random networks. AB (a
+      diagnostic that needs every upstream AA) is left out. Whether this
+      replaces the `verify/` Python cross-check is the operator's call in #90.
+      Original entry: an `.xlsx` for one farm, inputs as values, each working
+      column as a live formula and a column comparing Excel's value with the
+      model's, so Excel recomputes the model independently. Trigger was: after
+      the client catchment run and the hydrologist persona review confirm it's
+      wanted.
+- [ ] **Audit workbook: the farms it refuses today** (from issue #68). The
+      workbook names and refuses a farm with boreholes, a release rule, a
+      river pump, river off-takes, demand objects, senior users downstream,
+      an allocation cap, a storage reset, a survey curve, or a daily A-pan
+      series on a dam, since its formulas carry the b023 core only. It also
+      takes gross demand, the effective rain used and the open-water
+      evaporation depth as values (headed "From the run"). Durable fix:
+      grow `farmAuditPlan` feature by feature (the checkWorkings replay is the
+      reference for each: release, then the river pump and boreholes, then
+      off-takes and demand objects), recompute gross demand from the crops
+      sheet and the soil-water store from `rain_final` as `checkSoilWater`
+      does, put the lake factor and the monthly A-pan on the Parameters sheet
+      so the evaporation depth is a formula, and store the day's evaporation
+      depth on the run so a daily A-pan series needs no refusal. Each step keeps the random-network
+      test green. Trigger: the first licence-evidence run on a farm the
+      workbook refuses, or a hydrologist asking for the demand side in it.
 - [x] **Trace the runoff side** (2026-09-24): `/day` without `nodeId`
       traces the catchment (GR4J stores before/after, exchange, UH, natural
       flow, and the store balance with its residual; legacy runs list the

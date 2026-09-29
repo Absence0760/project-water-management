@@ -396,7 +396,7 @@
 					downloads,
 					projectId,
 					detail.run.id,
-					editor.model.nodes.map((n) => ({ id: n.id, name: n.name })),
+					editor.model.nodes.map((n) => ({ id: n.id, name: n.name, kind: n.kind })),
 					detail.run.summary.farms.length > 0 ? { onPreview: previewFarmTable } : null
 				)
 			: []

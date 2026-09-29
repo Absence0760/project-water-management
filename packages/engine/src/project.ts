@@ -649,14 +649,18 @@ export const OBSERVED_SERIES_LABEL: Record<CalibrationFlowKind, string> = {
 
 const zeros: Monthly = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 
+/** The defaults of settings.februaryDays and settings.lakeEvapFactor, on their own so a reader of those two needn't load every default. */
+export const DEFAULT_FEBRUARY_DAYS = 28.25;
+export const DEFAULT_LAKE_EVAP_FACTOR = 0.75;
+
 /** Neutral starting values for a new project; each is set per project. */
 export function defaultProjectSettings(): ProjectSettings {
 	return {
-		februaryDays: 28.25,
+		februaryDays: DEFAULT_FEBRUARY_DAYS,
 		effectiveRainFraction: 0.65,
 		effectiveRainFractionMonthly: null,
 		effectiveRainStoreMm: 25,
-		lakeEvapFactor: 0.75,
+		lakeEvapFactor: DEFAULT_LAKE_EVAP_FACTOR,
 		assuranceAnnualThreshold: 0.9,
 		allocationMode: 'none',
 		allocationTolerance: 0.1,

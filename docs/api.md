@@ -2946,6 +2946,29 @@ the CSV. Sheet names are made Excel-safe (at most 31 characters, none of
 `[ ] : * ? / \`, unique ignoring case: a farm called "Summary" becomes
 "Summary (2)").
 
+**Audit workbook (`.xlsx`, issue #68).** Also built in the browser, in the
+same worker, for one farm of a run: `GET …/runs/:runId`, then the catchment's
+and the farm's [bulk series](#bulk-run-series). The engine lays out the
+columns and their formulas (`packages/engine/src/verify/audit.ts`
+`farmAuditPlan`); `frontend/src/lib/spreadsheet/audit/` writes them. Sheets:
+
+| Sheet | Content |
+| --- | --- |
+| Read this first | The disclaimer, as in the run workbook |
+| About | The unit, run, engine and period; the largest difference over the run as a formula (`=MAX(Audit!…)`); how to read the file |
+| Parameters | The farm's fixed inputs, one cell each: dam capacity, starting storage, dead storage, A_full, b, seepage (and the share returning, when not all), the two % to the dam, the diversion capacity, e, β |
+| Audit | `date`; the inputs taken from the run as given, not recomputed (`From the run: …` headers): the catchment's rain (`rain_final`, blank on a gap), the open-water evaporation depth, gross demand, effective rain used, the demand factor, H, I, J and Z; then the formula columns F, D, K … O, the dam's area, rain on it, evaporation, seepage (and seepage lost), G, P, Q, R, S, T, U, V, W, AA, each on day one reading the storage parameter and after that the row above; last, each day's largest \|Audit − Model\| over the formula columns |
+| Model | The same columns with the run's stored numbers |
+
+Each formula keeps the engine's order of operations (it is parenthesised
+from the same expression tree the engine evaluates), so a spreadsheet's result
+equals the model's to float noise; the unit tests evaluate the formulas on
+random networks against `runModel`. The file asks Excel to recompute on
+open (`fullCalcOnLoad`); its cells also carry the values as computed when it
+was written. The demand side (gross demand, the soil-water store's effective
+rain) and what arrives from the rest of the network are inputs, not formulas.
+A farm with a feature the formulas don't carry is refused, naming it (docs/ui.md).
+
 **Number formats (decision D11).** Each numeric cell carries a display format
 chosen from its column's unit (`lib/spreadsheet/export/formats.ts`): volumes
 and flows in m³ or m³/day `#,##0.00`, Mm³ and m³/s `#,##0.000`, mm `#,##0.0`,
