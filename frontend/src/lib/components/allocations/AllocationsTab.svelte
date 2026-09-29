@@ -7,9 +7,11 @@
 	// each a side sheet. Under it a list of each unit and water source, the
 	// ones to look into first (above registered, then use with nothing
 	// registered), beside the picked unit's water years and its registered
-	// volumes (`unit=`); from 1100 × 620 that block is the height left in the
-	// window, the list scrolling in its card. Below: every registered volume
-	// with its source file, the imported files, and every unit's water years.
+	// volumes (`unit=`). The page flows in the window's one scroll: each long
+	// list shows its first few (the ones that matter most) with a "Show all"
+	// that opens the rest in place, and nothing scrolls inside a card. Below:
+	// every registered volume with its source file, the imported files, and
+	// every unit's water years.
 	// Viewers see volumes but no holder names (decision D3; the API leaves them
 	// out, RLS enforces it). Farmers never reach the workspace.
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
@@ -19,6 +21,7 @@
 	import type { AllocationComparison, AllocationMode } from '@water-management/engine';
 	import { api, type Allocation, type AllocationList, type RunMeta } from '$lib/api';
 	import LoadState from '$lib/components/common/LoadState.svelte';
+	import { foldList } from '$lib/components/common/fold';
 	import { fillHeader } from '$lib/components/workspace/headerSlot.svelte';
 	import { fmtDate, fmtNum } from '$lib/format/number';
 	import { withoutParam, withParam } from '$lib/workspace/overlays';
@@ -30,9 +33,11 @@
 		AUTHORISATION_LABEL,
 		comparisonRows,
 		conditionsSummary,
+		foldYears,
 		MODE_NOTE,
 		pickUnit,
 		PURPOSE_LABEL,
+		rowsInListOrder,
 		shortHash,
 		SOURCE_LABEL,
 		unitRows,
@@ -140,58 +145,42 @@
 			.join(' · ');
 	});
 
-	// --- fitting the window (the playbook's dashboards): from 1100 × 620, measured, not assumed ---
+	// --- the page flows in the window's one scroll; each long list shows its first few until "Show all" (ui-playbook § 2) ---
 	let pageW = $state(0);
-	let innerW = $state(0);
-	let innerH = $state(0);
 	// The same width as the container query that sets the two columns (56rem at 14 px).
 	const side = $derived(pageW >= 784);
-	const fit = $derived(side && innerW >= 1100 && innerH >= 620 && units.length > 0);
-	let firstEl: HTMLDivElement | undefined = $state();
-	let firstTop = $state(0);
-	$effect(() => {
-		if (!firstEl) return;
-		const el = firstEl;
-		const measure = () => (firstTop = el.getBoundingClientRect().top + window.scrollY);
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(document.body);
-		return () => ro.disconnect();
-	});
-	// Stacked (a phone, a narrow window) the lists show the first few until "Show all", so the picked unit and the
-	// volumes aren't a screenful of scrolling away; the page scrolls, not a box.
-	const UNIT_CAP = 6;
+	// Beside the picked unit, five rows sit about level with it and leave the Registered volumes card's top edge
+	// inside a 1440 × 960 window; stacked, six keep the unit near the first screen.
+	const UNIT_CAP = $derived(side ? 5 : 6);
 	const VOL_CAP = 8;
+	const YEAR_CAP = 6;
+	const ROW_CAP = 12;
 	let unitsAll = $state(false);
 	let volsAll = $state(false);
-	const narrow = $derived(pageW > 0 && pageW < 560);
-	const shownUnits = $derived(side || unitsAll ? units : units.slice(0, UNIT_CAP));
-	const shownVols = $derived(!data ? [] : narrow && !volsAll ? data.allocations.slice(0, VOL_CAP) : data.allocations);
-	/** The picked unit's bars: modelled use against the registered volume, on one scale. */
-	const barScale = $derived(Math.max(1, ...pickedYears.map((r) => Math.max(r.year.modelledM3, r.year.registeredM3))));
-	const bothSources = $derived(new Set(pickedYears.map((r) => r.source)).size > 1);
-
-	// A link that names a unit further down the list: bring its row into view once, inside the list's own scroller
-	// (once the block fits the window at its measured height; stacked, the page isn't scrolled away from the header).
-	let listEl: HTMLUListElement | undefined = $state();
-	let revealed = false;
-	$effect(() => {
-		if (revealed || !listEl || !pickedId || !fit || !firstTop) return;
-		revealed = true;
-		const row = untrack(() => url.searchParams.get('unit')) ? listEl.querySelector('.unit.picked') : null;
-		if (!row) return;
-		// The list's own scroll only (scrollIntoView would move the page too).
-		const r = row.getBoundingClientRect();
-		const l = listEl.getBoundingClientRect();
-		listEl.scrollTop += r.top - l.top - (l.height - r.height) / 2;
+	let yearsAll = $state(false);
+	let rowsAll = $state(false);
+	// A shared `unit=` link keeps its row shown under the fold (both its sources).
+	const unitFold = $derived(foldList(units, (u) => u.nodeId, pickedId, unitsAll, UNIT_CAP));
+	// The volumes in the API's order (unmatched first); folding one away isn't worth a button, as foldList.
+	const volFold = $derived.by(() => {
+		const all = data?.allocations ?? [];
+		const shown = volsAll || all.length <= VOL_CAP + 1 ? all : all.slice(0, VOL_CAP);
+		return { shown, hidden: all.length - shown.length };
 	});
+	const yearFold = $derived(foldYears(pickedYears, yearsAll, YEAR_CAP));
+	const listRows = $derived(rowsInListOrder(rows, units));
+	const rowFold = $derived(foldList(listRows, (r) => r.nodeId, null, rowsAll, ROW_CAP));
+	/** The picked unit's bars: modelled use against the registered volume, on one scale. */
+	const barScale = $derived(Math.max(1, ...yearFold.shown.map((r) => Math.max(r.year.modelledM3, r.year.registeredM3))));
+	const bothSources = $derived(new Set(pickedYears.map((r) => r.source)).size > 1);
 
 	let detailEl: HTMLElement | undefined = $state();
 	function choose(e: MouseEvent, id: string) {
 		if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 		e.preventDefault();
 		void goto(withParam(url, 'unit', id), { noScroll: true, keepFocus: true }).then(() => {
-			if (!side) detailEl?.scrollIntoView({ block: 'start' });
+			// Stacked, the detail is under the list; beside an opened list read far down, it has scrolled away above.
+			if (detailEl && (!side || detailEl.getBoundingClientRect().top < 0)) detailEl.scrollIntoView({ block: 'start' });
 		});
 	}
 
@@ -254,8 +243,6 @@
 	$effect(() => fillHeader({ context: headerContext, actions: headerActions }));
 </script>
 
-<svelte:window bind:innerWidth={innerW} bind:innerHeight={innerH} />
-
 {#snippet headerContext()}
 	<span data-testid="allocations-summary">{data ? allocationsContext(data.allocations.length, unmatchedCount, comparison ? units : null) : ''}</span>
 {/snippet}
@@ -307,14 +294,14 @@
 						</p>
 					{/if}
 					{#if units.length}
-						<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
+						<div class="first">
 							<section class="panel list-card" aria-labelledby="alloc-compare-h">
 								<div class="panel-head">
 									<h2 id="alloc-compare-h">Modelled use vs registered volume</h2>
 									<span class="muted small">Each hydrological unit and source, mean water year{tally ? ` · ${tally}` : ''}</span>
 								</div>
-								<ul class="units" bind:this={listEl} aria-label="Hydrological units, the ones to look into first">
-									{#each shownUnits as u (u.key)}
+								<ul class="units" id="alloc-units" aria-label="Hydrological units, the ones to look into first">
+									{#each unitFold.shown as u (u.key)}
 										<li class="unit st-{u.status}" class:picked={u.nodeId === pickedId} data-unit={u.nodeId} data-status={u.status}>
 											<p class="unit-head">
 												<a class="name" href={withParam(url, 'unit', u.nodeId)} aria-current={u.nodeId === pickedId ? 'true' : undefined} onclick={(e) => choose(e, u.nodeId)}>{u.name}</a>
@@ -330,8 +317,10 @@
 										</li>
 									{/each}
 								</ul>
-								{#if shownUnits.length < units.length}
-									<button type="button" class="btn btn-sm more" onclick={() => (unitsAll = true)}>Show all {fmtNum(units.length)} hydrological units and sources</button>
+								{#if unitsAll || unitFold.hidden}
+									<button type="button" class="btn btn-sm more" aria-expanded={unitsAll} aria-controls="alloc-units" onclick={() => (unitsAll = !unitsAll)}>
+										{unitsAll ? `Show the ${UNIT_CAP} to look into first` : `Show all ${fmtNum(units.length)} hydrological units and sources`}
+									</button>
 								{/if}
 							</section>
 
@@ -348,7 +337,7 @@
 								<div class="detail-body">
 									<p class="small muted ycap" aria-hidden="true" data-testid="allocation-unit-bars-caption">Modelled use per water year (October–September), m³</p>
 									<ul class="ybars" aria-hidden="true" data-testid="allocation-unit-bars">
-										{#each pickedYears as r (r.key)}
+										{#each yearFold.shown as r (r.key)}
 											<li class="st-{r.year.status}">
 												<span class="yl">{waterYearLabel(r.year.waterYear)}{bothSources ? ` · ${r.source === 'surface' ? 'surface' : 'ground'}` : ''}{r.year.partial ? ' (part)' : ''}</span>
 												<span class="track">
@@ -360,7 +349,12 @@
 										{/each}
 									</ul>
 									<p class="small muted key" aria-hidden="true"><span class="kbar"></span>modelled use (modelled, not metered) <span class="ktick"></span>registered volume</p>
-									<YearTable rows={pickedYears} tolerance={comparison.tolerance} showName={false} caption="{pickedName}: modelled use against the registered volume per water source and water year" testid="allocation-unit-years" />
+									<YearTable id="alloc-unit-years" rows={yearFold.shown} tolerance={comparison.tolerance} showName={false} caption="{pickedName}: modelled use against the registered volume per water source and water year" testid="allocation-unit-years" />
+									{#if yearsAll || yearFold.folded}
+										<button type="button" class="btn btn-sm more" aria-expanded={yearsAll} aria-controls="alloc-unit-years" onclick={() => (yearsAll = !yearsAll)}>
+											{yearsAll ? `Show the latest ${YEAR_CAP} water years` : `Show all ${fmtNum(yearFold.years)} water years`}
+										</button>
+									{/if}
 									{#if pickedStorage && (pickedStorage.registeredM3 !== null || pickedStorage.modelledCapacityM3)}
 										<p class="small storage">
 											Registered storage {pickedStorage.registeredM3 === null ? 'not stated' : `${fmtNum(pickedStorage.registeredM3)} m³`} · dam capacity in the run
@@ -411,7 +405,7 @@
 			{#if data}
 				{#if data.allocations.length}
 					<div class="table-wrap vol-wrap">
-						<table class="data vol-table" data-testid="allocation-list">
+						<table class="data vol-table" id="alloc-vol-table" data-testid="allocation-list">
 							<caption class="visually-hidden">Registered and licensed volumes</caption>
 							<thead>
 								<tr>
@@ -425,7 +419,7 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each shownVols as a (a.id)}
+								{#each volFold.shown as a (a.id)}
 									{@const src = a.sourceId ? sourceById.get(a.sourceId) : undefined}
 									<tr class:flag={a.nodeId === null}>
 										<th scope="row">{a.nodeName ?? 'Not matched'}<span class="sub">{a.registrationNo || '–'}</span></th>
@@ -449,8 +443,10 @@
 							</tbody>
 						</table>
 					</div>
-					{#if shownVols.length < data.allocations.length}
-						<button type="button" class="btn btn-sm more" onclick={() => (volsAll = true)}>Show all {fmtNum(data.allocations.length)} registered volumes</button>
+					{#if volsAll || volFold.hidden}
+						<button type="button" class="btn btn-sm more" aria-expanded={volsAll} aria-controls="alloc-vol-table" onclick={() => (volsAll = !volsAll)}>
+							{volsAll ? `Show the first ${VOL_CAP} registered volumes` : `Show all ${fmtNum(data.allocations.length)} registered volumes`}
+						</button>
 					{/if}
 				{:else}
 					<p class="muted" data-testid="allocations-empty">
@@ -480,7 +476,18 @@
 			<div class="panel-head">
 				<h2 id="alloc-years-h">Every hydrological unit and water year</h2>
 			</div>
-			<YearTable {rows} tolerance={comparison.tolerance} caption="Modelled use against the registered volume per hydrological unit, water source and water year" testid="allocation-compare-table" />
+			<YearTable
+				id="alloc-all-years"
+				rows={rowFold.shown}
+				tolerance={comparison.tolerance}
+				caption="Modelled use against the registered volume per hydrological unit, water source and water year"
+				testid="allocation-compare-table"
+			/>
+			{#if rowsAll || rowFold.hidden}
+				<button type="button" class="btn btn-sm more" aria-expanded={rowsAll} aria-controls="alloc-all-years" onclick={() => (rowsAll = !rowsAll)}>
+					{rowsAll ? `Show the first ${ROW_CAP} rows` : `Show all ${fmtNum(listRows.length)} rows`}
+				</button>
+			{/if}
 			<p class="hint muted">
 				“Within band” is within ±{fmtNum(comparison.tolerance * 100, 0)} % of the registered volume. A part year compares the days the run covers with the registered
 				volume prorated to them, and isn’t counted in the whole water years above.
@@ -818,27 +825,15 @@
 			align-items: start;
 		}
 	}
-	/* Wide and tall enough: the block is the height left in the window; the list and the unit scroll inside their cards. */
-	.first.fit {
-		height: max(420px, calc(100vh - var(--first-top, 0px) - var(--dock-h, 0px) - 1rem));
-		align-items: stretch;
-	}
-	.fit .units,
-	.fit .detail-body {
-		flex: 1 1 auto;
-		overflow: auto;
-		/* Room for the picked row's outline and the focus ring inside the scroller. */
-		padding: 3px;
-		margin: -3px;
-	}
-	.fit .detail-body :global(.table-wrap) {
+	/* The page is the one scroll: the volumes table grows with its rows (eight until "Show all") instead of
+	   scrolling inside the global 70vh cap; it still scrolls sideways if it must. */
+	.vol-wrap {
 		max-height: none;
 	}
 
 	/* Narrow (a phone): each registered volume is a card of label–value lines, the page scrolls rather than a box. */
 	@container alloc-page (max-width: 40rem) {
 		.vol-wrap {
-			max-height: none;
 			border: 0;
 			background: none;
 		}

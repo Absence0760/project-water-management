@@ -1,18 +1,17 @@
 // The Transfers page (?tab=transfers, issue #17 option A): the section header carries the count, Show on the map
-// and + Add transfer; the rules table, then "When water moves" (each month's enabled rules and the most they can
-// move in a day). From 1100 × 620 the two cards fill the window and the rules scroll inside theirs; on a phone
-// each rule is a card and the page scrolls. Synthetic data only.
+// and + Add transfer; under it the rules table, one card that grows with its rules while the page scrolls (never a
+// scroll box inside the card); on a phone each rule is a card. Synthetic data only.
 import { expectNoViolations } from '../support/a11y.ts';
 import { addMember, createProject, putModel, sampleModel } from '../support/api.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { saveModelChanges } from '../support/network.ts';
 import { expectNoSidewaysScroll } from '../support/reflow.ts';
-import { monthsCard, monthSentences, openTransfers, rulesCard, seedManyTransfers } from '../support/transfers.ts';
+import { openTransfers, rulesCard, rulesWrapBox, seedManyTransfers } from '../support/transfers.ts';
 
 const header = (page: import('@playwright/test').Page) => page.getByTestId('section-header');
 const saveBar = (page: import('@playwright/test').Page) => page.getByRole('region', { name: 'Unsaved model changes' });
 
-test('the header carries the count and the actions; When water moves adds up the enabled rules by month', async ({ page, owner }) => {
+test('the header carries the count and the actions; + Add transfer adds a rule and focuses it', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Transfers page');
@@ -27,18 +26,11 @@ test('the header carries the count and the actions; When water moves adds up the
 	// The add button lives in the header only on the page.
 	await expect(rulesCard(page).getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 
-	// The sample rule runs Nov–Feb at 0.01 m³/s: 864 m³ a day in each of those months, nothing in the others.
-	const sentences = await monthSentences(page);
-	expect(sentences).toHaveLength(12);
-	expect(sentences[0]).toBe('Oct: no rule runs');
-	expect(sentences.slice(1, 5)).toEqual(['Nov', 'Dec', 'Jan', 'Feb'].map((m) => `${m}: 1 rule, up to 864 m³ a day`));
-
-	// The two cards reach the window's bottom and the page doesn't scroll; the rules come first.
+	// No month chart: the rules table is the page (the "When water moves" card only restated the month rates).
+	await expect(page.getByRole('region', { name: 'When water moves' })).toHaveCount(0);
+	// One rule: the card is as tall as its rule, not stretched to the window, and the page doesn't scroll.
 	const rules = (await rulesCard(page).boundingBox())!;
-	const months = (await monthsCard(page).boundingBox())!;
-	expect(months.y).toBeGreaterThan(rules.y + rules.height - 1);
-	expect(months.y + months.height).toBeLessThanOrEqual(960);
-	expect(months.y + months.height).toBeGreaterThan(960 - 40);
+	expect(rules.y + rules.height).toBeLessThan(960 - 200);
 	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(960);
 	await expectNoSidewaysScroll(page);
 
@@ -51,12 +43,11 @@ test('the header carries the count and the actions; When water moves adds up the
 	await page.getByLabel('Max rate of transfer 2 in Oct, m³/s', { exact: true }).press('Tab');
 	// Tab moves on to the next month's field.
 	await expect(page.getByLabel('Max rate of transfer 2 in Nov, m³/s', { exact: true })).toBeFocused();
-	await expect.poll(async () => (await monthSentences(page))[0]).toBe('Oct: 1 rule, up to 1\u202f728 m³ a day');
 	await expect(page.getByRole('group', { name: /^Max rate of transfer 2 by month/ })).toContainText('Oct, up to 0.02 m³/s');
-	// Switching the first rule off takes it out of the months.
+	// Switching the first rule off says so by its number and in the header's count.
 	await page.getByLabel('transfer 1 enabled', { exact: true }).uncheck();
 	await expect(header(page).getByTestId('section-context')).toHaveText('2 transfer rules · 1 active');
-	await expect.poll(async () => (await monthSentences(page))[1]).toBe('Nov: no rule runs');
+	await expect(page.getByRole('rowheader', { name: '1 off', exact: true })).toBeVisible();
 
 	await saveModelChanges(page);
 	await expect(saveBar(page)).toBeHidden();
@@ -80,12 +71,13 @@ test('each month has its own rate: a workbook rule shows its rate in its months,
 	await rate('Feb').fill('0.005');
 	await rate('Mar').fill('0.005');
 	await rate('Mar').press('Tab');
-	const sentences = await monthSentences(page);
-	expect(sentences.slice(1, 7)).toEqual(['Nov: 1 rule, up to 864 m³ a day', 'Dec: 1 rule, up to 864 m³ a day', 'Jan: 1 rule, up to 864 m³ a day', 'Feb: 1 rule, up to 432 m³ a day', 'Mar: 1 rule, up to 432 m³ a day', 'Apr: no rule runs']);
+	for (const m of ['Nov', 'Dec', 'Jan']) await expect(rate(m)).toHaveValue('0.01');
+	for (const m of ['Feb', 'Mar']) await expect(rate(m)).toHaveValue('0.005');
+	await expect(rate('Apr')).toHaveValue('');
 	// Clearing a month turns it off.
 	await rate('Nov').fill('');
 	await rate('Nov').press('Tab');
-	await expect.poll(async () => (await monthSentences(page))[1]).toBe('Nov: no rule runs');
+	await expect(rate('Nov')).toHaveValue('');
 	// The button puts the largest rate in every month.
 	await page.getByRole('button', { name: '0.01 in every month', exact: true }).click();
 	for (const m of ['Oct', 'Nov', 'Apr', 'Sep']) await expect(rate(m)).toHaveValue('0.01');
@@ -95,7 +87,6 @@ test('each month has its own rate: a workbook rule shows its rate in its months,
 	await expect(saveBar(page)).toBeHidden();
 	await page.reload();
 	await expect(rate('Sep')).toHaveValue('0.01');
-	await expect.poll(async () => (await monthSentences(page))[11]).toBe('Sep: 1 rule, up to 864 m³ a day');
 });
 
 test('a rule can be a river off-take: its fields show in place of the minimum storage and survive a save', async ({ page, owner }) => {
@@ -136,46 +127,46 @@ for (const [width, height] of [
 	[1440, 960],
 	[1280, 800]
 ] as const) {
-	test(`thirty rules scroll inside their card at ${width} × ${height}; the page does not scroll`, async ({ page, owner }) => {
+	test(`thirty rules at ${width} × ${height}: the page scrolls, not the rules card, and every column fits`, async ({ page, owner }) => {
 		void owner;
 		const project = await seedManyTransfers(page.request, 'Transfers big');
 		await page.setViewportSize({ width, height });
 		await openTransfers(page, project.id);
 		await expect(page.getByLabel('Source of transfer 30', { exact: true })).toBeAttached();
 		await expect(header(page).getByTestId('section-context')).toHaveText('30 transfer rules · 25 active');
-		const wrap = rulesCard(page).locator('.table-wrap');
-		const box = await wrap.evaluate((el) => ({ sh: el.scrollHeight, ch: el.clientHeight, sw: el.scrollWidth, cw: el.clientWidth }));
-		expect(box.sh).toBeGreaterThan(box.ch);
+		// One scroll: the card holds all thirty rows (nothing scrolls inside it) and the page is what scrolls.
+		const box = await rulesWrapBox(page);
+		expect(box.sh).toBeLessThanOrEqual(box.ch);
+		expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(height);
 		// Every column fits: no scrolling the table sideways to reach Priority, On or Remove.
 		expect(box.sw).toBeLessThanOrEqual(box.cw);
 		await expect(page.getByRole('button', { name: /^Remove transfer 1 / })).toBeInViewport();
 		// Five rules are off, each saying so by its number.
 		await expect(page.getByRole('rowheader', { name: /^\d+ off$/ })).toHaveCount(5);
-		// When water moves stays on the first screen.
-		const months = (await monthsCard(page).boundingBox())!;
-		expect(months.y + months.height).toBeLessThanOrEqual(height);
-		expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(height);
+		// The last rule is reached by scrolling the page.
+		const last = page.getByRole('button', { name: /^Remove transfer 30 / });
+		await last.scrollIntoViewIfNeeded();
+		await expect(last).toBeInViewport();
 		await expectNoSidewaysScroll(page);
 	});
 }
 
-// The scan needs the rules scrolling inside their card, not thirty of them: twelve scroll at 1280 × 800 and hold
-// every kind of row the thirty do (each month pattern, a daily cap or none, two rules off) in 2,000 elements, and
-// scan in about half the time (0.98 s idle). Each row's own markup, a river off-take's fields and the phone's cards
+// The scan needs every kind of row, not thirty of them: twelve hold every kind the thirty do (each month pattern, a
+// daily cap or none, two rules off) in 2,000 elements, and scan in about half the time (0.98 s idle). Each row's own markup, a river off-take's fields and the phone's cards
 // are scanned in "no accessibility violations" below.
-test('a dozen rules, scrolling inside their card at 1280 × 800: no accessibility violations', async ({ page, owner }) => {
+test('a dozen rules at 1280 × 800, the page scrolling: no accessibility violations', async ({ page, owner }) => {
 	void owner;
 	const project = await seedManyTransfers(page.request, 'Transfers a11y many', 14, 12);
 	await page.setViewportSize({ width: 1280, height: 800 });
 	await openTransfers(page, project.id);
 	await expect(header(page).getByTestId('section-context')).toHaveText('12 transfer rules · 10 active');
 	await expect(page.getByRole('rowheader', { name: /^\d+ off$/ })).toHaveCount(2);
-	// The state the scan is for: the rules scroll inside their card (scrollable-region-focusable, target-size).
-	expect(await rulesCard(page).locator('.table-wrap').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+	// The state the scan is for: longer than the window, the page scrolling rather than the card.
+	expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeGreaterThan(800);
 	await expectNoViolations(page);
 });
 
-test('a viewer sees every rule and the months, with nothing to change', async ({ page, owner, signIn }) => {
+test('a viewer sees every rule, with nothing to change', async ({ page, owner, signIn }) => {
 	void owner;
 	const project = await createProject(page.request, 'Transfers viewer');
 	await putModel(page.request, project.id, sampleModel());
@@ -191,7 +182,9 @@ test('a viewer sees every rule and the months, with nothing to change', async ({
 	await expect(v.getByRole('button', { name: /^Remove transfer/ })).toHaveCount(0);
 	await expect(v.getByRole('button', { name: 'All', exact: true })).toHaveCount(0);
 	await expect(header(v).getByRole('link', { name: 'Show on the map', exact: true })).toBeVisible();
-	await expect(monthsCard(v).getByRole('listitem')).toHaveCount(12);
+	await expect(v.getByLabel('Max rate of transfer 1 in Nov, m³/s', { exact: true })).toHaveValue('0.01');
+	// Read-only rather than disabled, as MonthRates draws them for a viewer: still readable and focusable.
+	await expect(v.getByLabel('Max rate of transfer 1 in Nov, m³/s', { exact: true })).toHaveAttribute('readonly', '');
 });
 
 test('empty states: no rules yet offers Add transfer; fewer than two hydrological units points to the Network', async ({ page, owner }) => {
@@ -204,12 +197,10 @@ test('empty states: no rules yet offers Add transfer; fewer than two hydrologica
 	await openTransfers(page, project.id);
 	await expect(header(page).getByTestId('section-context')).toHaveText('No transfer rules yet');
 	await expect(page.getByText('No transfer rules.', { exact: true })).toBeVisible();
-	await expect(monthsCard(page)).toHaveCount(0);
 	await expect(header(page).getByRole('link', { name: 'Show on the map' })).toHaveCount(0);
 	// The empty card's button adds the first rule, as the header's does.
 	await rulesCard(page).getByRole('button', { name: 'Add transfer', exact: true }).click();
 	await expect(page.getByLabel('Source of transfer 1', { exact: true })).toBeFocused();
-	await expect(monthsCard(page)).toBeVisible();
 
 	const lone = await createProject(page.request, 'Transfers one unit');
 	await putModel(page.request, lone.id, { ...sampleModel(), nodes: sampleModel().nodes.slice(0, 1), cropAreas: [], transfers: [] });
@@ -218,7 +209,7 @@ test('empty states: no rules yet offers Add transfer; fewer than two hydrologica
 	await expect(page.getByRole('button', { name: /Add transfer/ })).toHaveCount(0);
 });
 
-test('the Transfers grid on the Network keeps its own Add transfer and no months card', async ({ page, owner }) => {
+test('the Transfers grid on the Network keeps its own Add transfer', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await createProject(page.request, 'Transfers grid');
@@ -227,7 +218,6 @@ test('the Transfers grid on the Network keeps its own Add transfer and no months
 	const grid = page.getByRole('dialog', { name: 'Transfers' });
 	await expect(grid.getByLabel('transfer 1 enabled', { exact: true })).toBeChecked();
 	await expect(grid.getByRole('button', { name: '+ Add transfer', exact: true })).toBeVisible();
-	await expect(grid.getByRole('region', { name: 'When water moves' })).toHaveCount(0);
 	await grid.getByRole('button', { name: '+ Add transfer', exact: true }).click();
 	await expect(grid.getByLabel('Source of transfer 2', { exact: true })).toBeFocused();
 });
@@ -252,9 +242,8 @@ test.describe('no accessibility violations', () => {
 				// Each rule a card; the page scrolls, not a box inside it, and nothing is wider than the screen.
 				await expect(page.getByRole('rowheader', { name: 'Transfer 1', exact: true })).toBeVisible();
 				await expect(page.getByRole('rowheader', { name: 'Transfer 2 off', exact: true })).toBeVisible();
-				const wrap = await rulesCard(page).locator('.table-wrap').evaluate((el) => el.scrollHeight - el.clientHeight);
-				expect(wrap).toBeLessThanOrEqual(1);
-				expect((await monthsCard(page).boundingBox())!.y).toBeGreaterThan((await rulesCard(page).boundingBox())!.y);
+				const wrap = await rulesWrapBox(page);
+				expect(wrap.sh).toBeLessThanOrEqual(wrap.ch);
 				await expectNoSidewaysScroll(page);
 			}
 			await expectNoViolations(page);

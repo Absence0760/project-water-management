@@ -1,7 +1,7 @@
 import { compareAllocations } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import type { AllocationPreviewRow } from '$lib/api/types';
-import { allocationsContext, comparisonRows, conditionsFromText, conditionsSummary, MODE_NOTE, monthsText, pickUnit, previewOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
+import { allocationsContext, comparisonRows, conditionsFromText, conditionsSummary, foldYears, MODE_NOTE, monthsText, pickUnit, previewOrder, rowsInListOrder, STATUS_LABEL, statusSentence, TEMPLATE_CSV, unitRows, unitStatusText, waterYearLabel } from './allocations';
 
 const comparison = () =>
 	compareAllocations({
@@ -110,6 +110,53 @@ describe('unitRows', () => {
 		expect(allocationsContext(1, 1, [])).toBe('1 registered volume · 1 not matched');
 		expect(allocationsContext(0, 0, null)).toBe('No registered volumes yet');
 		expect(allocationsContext(0, 0, unitRows(comparison()).filter((r) => r.status !== 'over'))).toBe('No registered volumes yet · no hydrological unit above registered');
+	});
+});
+
+describe('the long tables, folded', () => {
+	it('orders every unit\'s water years as the list does, each unit\'s years together and in order', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [
+				{ nodeId: 'W', name: 'Within', kind: 'farm', supplied: new Array(730).fill(100) },
+				{ nodeId: 'O', name: 'Over', kind: 'farm', supplied: new Array(730).fill(300), groundwater: new Array(730).fill(10) }
+			],
+			allocations: [
+				{ id: 'w', nodeId: 'W', waterSource: 'surface', volumeM3PerYear: 36_500 },
+				{ id: 'o', nodeId: 'O', waterSource: 'surface', volumeM3PerYear: 36_500 }
+			]
+		});
+		const rows = rowsInListOrder(comparisonRows(c), unitRows(c));
+		expect(rows.map((r) => `${r.nodeId}:${r.source}:${r.year.waterYear}`)).toEqual([
+			'O:surface:2001',
+			'O:surface:2002',
+			'O:groundwater:2001',
+			'O:groundwater:2002',
+			'W:surface:2001',
+			'W:surface:2002'
+		]);
+		// A row whose unit isn't on the list keeps its place after it.
+		expect(rowsInListOrder(comparisonRows(c), []).map((r) => r.nodeId)).toEqual(['W', 'W', 'O', 'O', 'O', 'O']);
+	});
+
+	it('shows the picked unit\'s latest water years, both sources of each, until opened', () => {
+		const c = compareAllocations({
+			startDate: '2001-10-01',
+			nodes: [{ nodeId: 'A', name: 'Farm A', kind: 'farm', supplied: new Array(365 * 10).fill(100), groundwater: new Array(365 * 10).fill(10) }],
+			allocations: [{ id: 'a', nodeId: 'A', waterSource: 'surface', volumeM3PerYear: 36_500 }]
+		});
+		const rows = comparisonRows(c);
+		const years = new Set(rows.map((r) => r.year.waterYear)).size;
+		const f = foldYears(rows, false, 6);
+		expect(f.folded).toBe(true);
+		expect(f.years).toBe(years);
+		expect(new Set(f.shown.map((r) => r.year.waterYear)).size).toBe(6);
+		expect(Math.min(...f.shown.map((r) => r.year.waterYear))).toBe(Math.max(...rows.map((r) => r.year.waterYear)) - 5);
+		expect(f.shown.filter((r) => r.source === 'groundwater')).toHaveLength(6);
+		expect(foldYears(rows, true, 6)).toMatchObject({ shown: rows, folded: false });
+		// One year more than the cap isn't worth a button.
+		expect(foldYears(rows, false, years - 1).folded).toBe(false);
+		expect(foldYears([], false, 6)).toEqual({ shown: [], years: 0, folded: false });
 	});
 });
 

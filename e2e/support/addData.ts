@@ -23,3 +23,15 @@ export async function dropCsv(page: Page, name: string, text: string) {
 		{ name, text }
 	);
 }
+
+/** Opens the header's Add data dialog (the one upload form on every page) and returns it. */
+export async function openAddData(page: Page) {
+	await page.getByRole('button', { name: 'Add data', exact: true }).click();
+	const dialog = addDataDialog(page);
+	await dialog.getByLabel('CSV file').waitFor();
+	return dialog;
+}
+
+/** The page's slim line after an upload through the dialog: the upload's own message, then Re-run model and Dismiss. */
+export const uploadedNote = (page: Page) =>
+	page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Dismiss' }) }).locator('.note-text');

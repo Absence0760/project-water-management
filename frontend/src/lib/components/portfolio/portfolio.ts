@@ -93,15 +93,6 @@ type Ends = readonly Pick<PortfolioProject, 'figuresUntil' | 'figuresAgeDays'>[]
 export const ewrWindowLabel = (rows: Ends): string =>
 	sharedWindowText(rows.map(figuresEnd), 'EWR, last 30 days', 'EWR, 30 days to {date}', 'EWR, last 30 days of figures');
 
-/** The units-short total's label: "Hydrological units short this week", "… in the week to 31 Dec 2024". */
-export const farmsShortLabel = (rows: Ends): string =>
-	sharedWindowText(
-		rows.map(figuresEnd),
-		'Hydrological units short this week',
-		'Hydrological units short in the week to {date}',
-		'Hydrological units short, last week of figures'
-	);
-
 /** Why the farm counts are unknown. */
 export function farmsUnknownText(p: Pick<PortfolioProject, 'source'>): string {
 	return p.source === 'published' ? 'Unknown: publish again to count them' : 'Unknown until a run is published';
@@ -250,38 +241,17 @@ export function statusSummary(counts: Record<PortfolioEwrStatus, number>): strin
 export interface PortfolioTotals {
 	catchments: number;
 	counts: Record<PortfolioEwrStatus, number>;
-	/** Farms short in their figures' last week, over the catchments whose count is known; null when no count is known. */
-	farmsShort7: number | null;
-	/** The farms those counts are out of. */
-	farmsCounted: number;
 	alertsFiring: number;
 	/** Catchments whose figures are over 7 days old. */
 	stale: number;
-	/** The newest run of any catchment (ISO timestamp), or null when none has run. */
-	lastRunAt: string | null;
 }
 
 export function portfolioTotals(rows: readonly PortfolioProject[]): PortfolioTotals {
-	let farmsShort7: number | null = null;
-	let farmsCounted = 0;
 	let alertsFiring = 0;
 	let stale = 0;
-	let lastRunAt: string | null = null;
 	for (const r of rows) {
-		if (r.farmsShort7 != null) {
-			farmsShort7 = (farmsShort7 ?? 0) + r.farmsShort7;
-			farmsCounted += r.farmCount;
-		}
 		alertsFiring += r.alertsFiring;
 		if (r.stale) stale++;
-		if (r.lastRunAt && (!lastRunAt || Date.parse(r.lastRunAt) > Date.parse(lastRunAt))) lastRunAt = r.lastRunAt;
 	}
-	return { catchments: rows.length, counts: statusCounts(rows), farmsShort7, farmsCounted, alertsFiring, stale, lastRunAt };
-}
-
-/** "2 of 14 farms", "No farms", or null when no catchment's count is known (the caller says why). */
-export function farmsShortTotalText(t: Pick<PortfolioTotals, 'farmsShort7' | 'farmsCounted'>): string | null {
-	if (t.farmsShort7 == null) return null;
-	if (!t.farmsCounted) return 'No hydrological units';
-	return `${fmtNum(t.farmsShort7)} of ${plural(t.farmsCounted, 'hydrological unit')}`;
+	return { catchments: rows.length, counts: statusCounts(rows), alertsFiring, stale };
 }

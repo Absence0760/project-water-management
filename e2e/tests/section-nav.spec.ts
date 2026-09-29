@@ -195,7 +195,7 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	// Its group names would take it to a second row at 1440, so it has none and spaces its links evenly (issue #162).
 	await expectEvenGaps(menu);
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
-	// One row at 1440, so the first screen, which fits the window below it, loses little.
+	// One row at 1440, so the first screen loses little.
 	expect(await barRows(menu)).toBe(1);
 
 	await menu.getByRole('link', { name: 'Water account' }).click();
@@ -245,7 +245,7 @@ test('Data has the menu: only the panels drawn, a jump that lands below it, and 
 	await page.goto(`/projects/${project.id}?tab=series`);
 	const menu = page.getByRole('navigation', { name: 'Data sections' });
 	// Rain and observed flow, no logger or CHIRPS: no agreement table and no double mass.
-	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data checks', 'Upload CSV', 'What the model uses']);
+	await expect(menu.getByRole('link')).toHaveText(['Series', 'Chart', 'Data checks', 'What the model uses']);
 	await expectNamedGroups(menu, ['Series', 'Checks', 'Adding data']);
 
 	await menu.getByRole('link', { name: 'What the model uses' }).click();

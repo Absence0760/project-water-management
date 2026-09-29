@@ -72,7 +72,7 @@ test('an owner shares a project read-only with a viewer', async ({ page, owner, 
 
 	await v.getByRole('link', { name: 'Data', exact: true }).click();
 	await expect(v.getByRole('heading', { name: 'Input time series' })).toBeVisible();
-	await expect(v.getByRole('heading', { name: 'Upload CSV' })).toHaveCount(0);
+	await expect(v.getByRole('button', { name: 'Add data' })).toHaveCount(0);
 
 	await v.getByRole('link', { name: 'Runs & results' }).click();
 	await expect(v.getByRole('heading', { name: 'Runs', exact: true })).toBeVisible();
