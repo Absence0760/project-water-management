@@ -1,6 +1,6 @@
 # Key list for infra-secrets/water-management/prod.sops.yaml (PRIVATE estate
 # repo — never create the real file in this public repo). Flat keys, every
-# value a quoted string. infra/scripts/tf.sh hands each one to Terraform as
+# value a quoted string (the PEM key below: a block scalar). infra/scripts/tf.sh hands each one to Terraform as
 # the ephemeral variable of the same name (TF_VAR_<key>, via sops exec-env);
 # Terraform keeps them out of state (infra/secrets.tf).
 #
@@ -32,3 +32,16 @@ db_app_password: "REPLACE_ME"
 # Rotating breaks the unsubscribe link in every alert already sent ("Manage
 # your alerts" still works), so rotate only if it leaked.
 alerts_token_secret: "REPLACE_ME"
+
+# Signs report download links (CloudFront signed URLs, infra/reports.tf; the
+# API only): an RSA 2048 private key, PEM, as a block scalar. Generate it
+# outside any repo, put it here, put its PUBLIC half in prod.tfvars
+# (report_download_public_keys + report_download_signing_key), then delete
+# the file:
+#   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out report-downloads.key
+#   openssl pkey -in report-downloads.key -pubout
+# The API refuses to start if this key and the signing public key aren't a
+# pair. Rotating (two keys overlap, no failed downloads): docs/deployment.md
+# § Rotating a secret.
+cloudfront_private_key: |
+  REPLACE_ME

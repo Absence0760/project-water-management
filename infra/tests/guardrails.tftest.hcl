@@ -55,8 +55,6 @@ mock_provider "aws" {
 
 mock_provider "archive" {}
 mock_provider "random" {}
-# The report-download key pair (reports.tf): mocked, so no key is generated.
-mock_provider "tls" {}
 
 # Mocked RDS has no provider logic, so the computed master secret and
 # endpoint would stay unknown/empty. Supply what RDS really returns.
@@ -385,20 +383,21 @@ override_resource {
 # Report downloads through CloudFront (reports.tf): known values so the key
 # pair, key group, OAC and origin request policy can be matched by equality.
 # Placeholder text, not a key: nothing is generated in a test.
+# One id per trusted public key (the overlap run uses both), so a key-id
+# check can tell them apart.
 override_resource {
-  target          = tls_private_key.report_downloads
+  target          = aws_cloudfront_public_key.report_downloads["2026-09"]
   override_during = plan
   values = {
-    private_key_pem = "test-only-private-key-pem"
-    public_key_pem  = "test-only-public-key-pem"
+    id = "K2026090000000A"
   }
 }
 
 override_resource {
-  target          = aws_cloudfront_public_key.report_downloads
+  target          = aws_cloudfront_public_key.report_downloads["2027-03"]
   override_during = plan
   values = {
-    id = "K2JCJMDEHXQW5F"
+    id = "K2027030000000B"
   }
 }
 
@@ -584,6 +583,24 @@ variables {
   auth_jwt_secret     = "0123456789abcdef0123456789abcdef0123456789abcdef"
   db_app_password     = "abcdef0123456789abcdef0123456789abcdef01234567"
   alerts_token_secret = "fedcba9876543210fedcba9876543210fedcba9876543210"
+  # PEM armour around a placeholder: the shape the variable checks, not a key.
+  cloudfront_private_key = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
+  # Report downloads (reports.tf): a public key generated for these tests (its
+  # private half was never kept). Public keys aren't secret.
+  report_download_public_keys = {
+    "2026-09" = <<-EOT
+      -----BEGIN PUBLIC KEY-----
+      MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+      BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+      hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+      EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+      t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+      qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+      nQIDAQAB
+      -----END PUBLIC KEY-----
+    EOT
+  }
+  report_download_signing_key = "2026-09"
   # Required and validated. Not an example.* (or other RFC 2606) address,
   # which the variable refuses: the site's own domain, and a plan-only test
   # never subscribes it.
@@ -783,6 +800,8 @@ run "runtime_secrets" {
       ephemeralasnull(var.auth_jwt_secret) == null,
       ephemeralasnull(var.db_app_password) == null,
       ephemeralasnull(var.alerts_token_secret) == null,
+      ephemeralasnull(var.cloudfront_private_key) == null,
+      ephemeralasnull(local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY) == null,
       ephemeralasnull(local.runtime_secrets.api.DATABASE_URL) == null,
       ephemeralasnull(local.runtime_secrets.worker.DATABASE_URL) == null,
       ephemeralasnull(local.runtime_secrets.migrate.WATER_APP_PASSWORD) == null,
@@ -794,8 +813,8 @@ run "runtime_secrets" {
     error_message = "Positive control: ephemeralasnull keeps a non-ephemeral value (the CloudFront header, the one runtime value left in state)."
   }
   assert {
-    condition     = local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY == tls_private_key.report_downloads.private_key_pem
-    error_message = "The API's runtime secret carries the report-download signing key Terraform generates (reports.tf)."
+    condition     = local.runtime_secrets.api.CLOUDFRONT_PRIVATE_KEY == var.cloudfront_private_key
+    error_message = "The API's runtime secret carries the report-download signing key from its sops-fed variable, the same path as the session key."
   }
 
   # Each Lambda names its own secret and the version Terraform wrote (a new
@@ -2358,22 +2377,134 @@ run "report_downloads" {
     error_message = "The CloudFront read grant must be present (positive control for the check above)."
   }
 
-  # --- The key pair: generated, public half trusted, private half in the API's secret ---------
+  # --- The keys: operator-generated; public halves trusted, private half from sops -----------
   assert {
-    condition     = tls_private_key.report_downloads.algorithm == "RSA" && tls_private_key.report_downloads.rsa_bits == 2048
-    error_message = "The download signing key is RSA 2048 (a CloudFront-supported key type)."
+    condition = (
+      keys(aws_cloudfront_public_key.report_downloads) == ["2026-09"] &&
+      aws_cloudfront_public_key.report_downloads["2026-09"].encoded_key == var.report_download_public_keys["2026-09"] &&
+      aws_cloudfront_public_key.report_downloads["2026-09"].name == "water-management-report-downloads-2026-09"
+    )
+    error_message = "One CloudFront public key per report_download_public_keys entry, from its PEM."
+  }
+  assert {
+    condition     = aws_cloudfront_key_group.report_downloads.items == toset(["K2026090000000A"])
+    error_message = "The key group trusts exactly the configured public keys."
   }
   assert {
     condition = (
-      aws_cloudfront_public_key.report_downloads.encoded_key == tls_private_key.report_downloads.public_key_pem &&
-      aws_cloudfront_key_group.report_downloads.items == toset([aws_cloudfront_public_key.report_downloads.id])
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads["2026-09"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_PUBLIC_KEY"] == var.report_download_public_keys["2026-09"]
     )
-    error_message = "The key group trusts exactly the generated key's public half."
+    error_message = "The API names the signing key's id (Key-Pair-Id) and gets its public PEM, which it matches its private key against at cold start."
+  }
+}
+
+# A rotation's overlap: two trusted keys, the API signing with the new one.
+run "report_download_key_rotation_overlap" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {
+      "2026-09" = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+        BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+        hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+        EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+        t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+        qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+        nQIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+      "2027-03" = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvJouwFdIK8ScEDRGmkzG
+        gTg3bwqCaj7lyU0ws6m8vQH2NazCuQYeiuEbG4Hrq19iNaAD0UwVmf4CCWR9X7Wt
+        AXJQGo9bAGhIHhQiaTo/uAarQ8usWnuXCbUdzOMfg9/SEmc2PoCz3Y40rsPysWdC
+        T+zv8UJjVUog6OixnQYQYxvlWjlEP/wgyEnTTw+JkTpItcECYwj0r3k1HirCdpZs
+        Zp6JCjwnHK6OVtMIhsdN+ITAHicOECRXxIjQOoCfJVd1TK/g3Y14tMx1qm2HG6g0
+        wwRSyAYT7tioKZnqvzkCxh/ayuW/Ak6vVCBREqSijnM2d8gpxppx8OCPbsyBxynC
+        UwIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+    }
+    report_download_signing_key = "2027-03"
+  }
+
+  assert {
+    condition     = aws_cloudfront_key_group.report_downloads.items == toset(["K2026090000000A", "K2027030000000B"])
+    error_message = "During a rotation the key group trusts both keys, so links signed with either verify."
   }
   assert {
-    condition     = aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads.id
-    error_message = "The API names the trusted public key (Key-Pair-Id) it signs for."
+    condition = (
+      aws_cloudfront_public_key.report_downloads["2026-09"].id != aws_cloudfront_public_key.report_downloads["2027-03"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_KEY_PAIR_ID"] == aws_cloudfront_public_key.report_downloads["2027-03"].id &&
+      aws_lambda_function.backend.environment[0].variables["CLOUDFRONT_PUBLIC_KEY"] == var.report_download_public_keys["2027-03"]
+    )
+    error_message = "The API signs with report_download_signing_key's key (the new one), not the other."
   }
+}
+
+run "rejects_signing_key_outside_the_trusted_keys" {
+  command = plan
+
+  variables {
+    report_download_signing_key = "2027-03"
+  }
+
+  expect_failures = [var.report_download_signing_key]
+}
+
+run "rejects_a_private_key_as_a_public_key" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {
+      "2026-09" = "-----BEGIN PRIVATE KEY-----\ntestonlynotakey\n-----END PRIVATE KEY-----"
+    }
+  }
+
+  expect_failures = [var.report_download_public_keys]
+}
+
+run "rejects_no_trusted_key" {
+  command = plan
+
+  variables {
+    report_download_public_keys = {}
+  }
+
+  expect_failures = [var.report_download_public_keys]
+}
+
+run "rejects_a_malformed_private_key" {
+  command = plan
+
+  variables {
+    cloudfront_private_key = "REPLACE_ME"
+  }
+
+  expect_failures = [var.cloudfront_private_key]
+}
+
+run "rejects_a_public_key_as_the_private_key" {
+  command = plan
+
+  variables {
+    cloudfront_private_key = <<-EOT
+        -----BEGIN PUBLIC KEY-----
+        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsaz6UBDgol3d4/RdJsAq
+        BpgFgFKJjgs+6dXsDOL946Mw+N2ulW4LT/k6DEkGZuCJkef1Lqi0JtuVyjhcEwq8
+        hfWgorTT3zNc9JMudwCkUwaqLoPBwYKFai8AhIICqxjlnUm1dmVZTcENYDLF4/aS
+        EYLj2o4Wap+A8s+FVItY8Q8Vs4LpqiGI/ue0crfDTSERns+h08kIlp2Q6FKwXy/6
+        t/h8nqn67PlOHRqo9I6WmH1yCNuyTwjbVKQLQGA91hLbCaKAw1zbKpPS1kgq+eWr
+        qajzJK9XcdRlxS3aSSBU66/3tYik4WNlmrzIopEDCJDkgdwFkNBdFkPesowLlwt9
+        nQIDAQAB
+        -----END PUBLIC KEY-----
+      EOT
+  }
+
+  expect_failures = [var.cloudfront_private_key]
 }
 
 run "reports_renderer_created_from_its_image" {

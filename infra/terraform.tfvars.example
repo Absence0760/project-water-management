@@ -86,3 +86,17 @@ waf_rate_limit_per_ip = 1000
 # busy 5 minutes for a handful of users. 1000-20000; raise it only for real
 # growth (infra/README.md § Cost).
 # cloudfront_requests_alarm_per_5min = 5000
+
+# Report downloads (reports.tf): the CloudFront public keys trusted to sign
+# them, name -> PEM, and the one whose private half is cloudfront_private_key
+# in prod.sops.yaml. Public keys, not secrets: `openssl pkey -in <key> -pubout`
+# (infra/prod.sops.yaml.example). Two entries only while a rotation overlaps
+# (docs/deployment.md § Rotating a secret).
+report_download_public_keys = {
+  "2026-09" = <<-EOT
+    -----BEGIN PUBLIC KEY-----
+    REPLACE_ME
+    -----END PUBLIC KEY-----
+  EOT
+}
+report_download_signing_key = "2026-09"

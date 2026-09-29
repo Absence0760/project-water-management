@@ -105,6 +105,19 @@ variable "alerts_token_secret" {
   }
 }
 
+variable "cloudfront_private_key" {
+  description = "Signs report download links (CloudFront signed URLs, reports.tf): an RSA 2048 private key, PEM. sops key cloudfront_private_key; generate with openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 (infra/prod.sops.yaml.example). Its public half is report_download_public_keys[report_download_signing_key]; the API refuses to start if they aren't a pair."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  validation {
+    # The shape only: whether it pairs with the signing public key is checked
+    # by the API at cold start (reports.tf).
+    condition     = can(regex("^-----BEGIN (RSA )?PRIVATE KEY-----\\n[A-Za-z0-9+/=\\n]+\\n-----END (RSA )?PRIVATE KEY-----$", trimspace(var.cloudfront_private_key)))
+    error_message = "cloudfront_private_key in prod.sops.yaml must be a PEM private key. Generate with: openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048"
+  }
+}
+
 variable "runtime_secret_version" {
   description = "Version of the runtime secrets' write-only values (secrets.tf). Terraform never reads a write-only value back, so it cannot see that a sops value changed: raise this after editing prod.sops.yaml. Every runtime secret is then written again, and the API, worker and migrate Lambdas cold-start onto it (docs/deployment.md § Rotating a secret)."
   type        = number
@@ -368,6 +381,32 @@ variable "renderer_image_tag" {
   validation {
     condition     = var.renderer_image_tag == "" || can(regex("^[0-9]+\\.[0-9]+\\.[0-9]+$", var.renderer_image_tag))
     error_message = "renderer_image_tag must be empty or a release version like 0.4.0."
+  }
+}
+
+variable "report_download_public_keys" {
+  description = "The CloudFront public keys trusted to sign report downloads, name -> PEM (openssl pkey -in <key> -pubout). Not secret. Usually one; two while a rotation overlaps (docs/deployment.md § Rotating a secret)."
+  type        = map(string)
+  validation {
+    condition     = length(var.report_download_public_keys) >= 1 && length(var.report_download_public_keys) <= 5
+    error_message = "report_download_public_keys needs 1 to 5 keys (a CloudFront key group holds at most 5)."
+  }
+  validation {
+    condition     = alltrue([for k in keys(var.report_download_public_keys) : can(regex("^[a-z0-9][a-z0-9-]{0,40}$", k))])
+    error_message = "report_download_public_keys names must be lowercase letters, digits and dashes (e.g. 2026-09)."
+  }
+  validation {
+    condition     = alltrue([for v in values(var.report_download_public_keys) : can(regex("^-----BEGIN PUBLIC KEY-----\\n[A-Za-z0-9+/=\\n]+\\n-----END PUBLIC KEY-----$", trimspace(v)))])
+    error_message = "Each report_download_public_keys value must be a PEM public key (-----BEGIN PUBLIC KEY-----), never a private key."
+  }
+}
+
+variable "report_download_signing_key" {
+  description = "Which report_download_public_keys entry the API signs with: the public half of cloudfront_private_key in prod.sops.yaml."
+  type        = string
+  validation {
+    condition     = contains(keys(var.report_download_public_keys), var.report_download_signing_key)
+    error_message = "report_download_signing_key must name an entry of report_download_public_keys."
   }
 }
 

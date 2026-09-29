@@ -26,7 +26,7 @@ here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 secrets="${WM_SECRETS_FILE:-$here/../../../infra-secrets/water-management/prod.sops.yaml}"
 # The sops keys that become TF_VAR_<key> (variables.tf § Runtime secrets;
 # infra/prod.sops.yaml.example).
-keys=(auth_jwt_secret db_app_password alerts_token_secret)
+keys=(auth_jwt_secret db_app_password alerts_token_secret cloudfront_private_key)
 
 die() {
 	echo "tf.sh: $*" >&2

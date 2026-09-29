@@ -445,34 +445,34 @@ resource "aws_lambda_event_source_mapping" "worker_render_results" {
 # (secrets.tf); CLOUDFRONT_KEY_PAIR_ID in its environment names the public
 # key (lambda.tf).
 #
-# The key pair is generated here, like random_password.cloudfront_shared_secret:
-# the private key sits in state (SSE-encrypted, private to this account) and in
-# the API's runtime secret, never in git. Rotate with
-#   terraform apply -replace=tls_private_key.report_downloads
-# which creates the new public key first (create_before_destroy), moves the
-# key group and the API onto it, then deletes the old one. A download link
-# signed in the seconds between the key group moving and the API's cold start
-# fails; asking again works (docs/deployment.md § Rotating a secret).
-
-resource "tls_private_key" "report_downloads" {
-  algorithm = "RSA"
-  rsa_bits  = 2048
-}
+# The operator generates the key pair (infra/prod.sops.yaml.example), so
+# Terraform never creates or holds the private key:
+#   - the PRIVATE key is the sops key cloudfront_private_key, an ephemeral
+#     variable like auth_jwt_secret (variables.tf, scripts/tf.sh) that reaches
+#     only the API's write-only runtime secret (secrets.tf): never state;
+#   - the PUBLIC keys are plain inputs, var.report_download_public_keys in
+#     prod.tfvars (name -> PEM). Not secret; encoded_key is in state by
+#     necessity. Every entry is trusted, so a rotation can overlap two keys;
+#     var.report_download_signing_key names the one whose private half is in
+#     sops, and the API gets its id and its PEM (lambda.tf).
+# Terraform can't check at plan time that the two halves are a pair (that
+# needs the private key, and an ephemeral value can't be compared with a
+# public key without a provider holding it), so the API checks at cold start
+# and refuses to start on a mismatch (reports/cloudfrontSign.ts
+# assertKeyPair). Rotation: docs/deployment.md § Rotating a secret.
 
 resource "aws_cloudfront_public_key" "report_downloads" {
-  name_prefix = "${local.project}-report-downloads-"
-  comment     = "Verifies report download links the API signs (backend/src/reports/cloudfrontSign.ts)"
-  encoded_key = tls_private_key.report_downloads.public_key_pem
+  for_each = var.report_download_public_keys
 
-  lifecycle {
-    create_before_destroy = true
-  }
+  name        = "${local.project}-report-downloads-${each.key}"
+  comment     = "Verifies report download links the API signs (backend/src/reports/cloudfrontSign.ts)"
+  encoded_key = each.value
 }
 
 resource "aws_cloudfront_key_group" "report_downloads" {
   name    = "${local.project}-report-downloads"
   comment = "Trusted signers for /reports/* (report PDF downloads)"
-  items   = [aws_cloudfront_public_key.report_downloads.id]
+  items   = [for k in sort(keys(aws_cloudfront_public_key.report_downloads)) : aws_cloudfront_public_key.report_downloads[k].id]
 }
 
 resource "aws_cloudfront_origin_access_control" "reports" {

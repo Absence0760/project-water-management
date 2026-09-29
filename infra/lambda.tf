@@ -144,12 +144,15 @@ resource "aws_lambda_function" "backend" {
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
 
       # Server-side reports (reports.tf): the API signs PDF downloads as
-      # CloudFront signed URLs on the site's /reports/* path; the private key
-      # is in the runtime secret, this names its public half.
+      # CloudFront signed URLs on the site's /reports/* path. The private key
+      # is in the runtime secret; these name its public half: the key id
+      # CloudFront checks, and the PEM the API matches its private key against
+      # at cold start (a mismatch refuses to start).
       STORAGE                = "s3"
       REPORTS_BUCKET         = aws_s3_bucket.reports.bucket
       REPORT_DOWNLOADS       = "cloudfront"
-      CLOUDFRONT_KEY_PAIR_ID = aws_cloudfront_public_key.report_downloads.id
+      CLOUDFRONT_KEY_PAIR_ID = aws_cloudfront_public_key.report_downloads[var.report_download_signing_key].id
+      CLOUDFRONT_PUBLIC_KEY  = var.report_download_public_keys[var.report_download_signing_key]
     }
   }
 
@@ -162,6 +165,8 @@ resource "aws_lambda_function" "backend" {
     aws_vpc_endpoint.ses,
     aws_vpc_endpoint.sqs,
     aws_vpc_endpoint.secretsmanager,
+    # A rotation switches the API only once the key group trusts the new key.
+    aws_cloudfront_key_group.report_downloads,
   ]
 
   lifecycle {

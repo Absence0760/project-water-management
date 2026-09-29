@@ -31,9 +31,10 @@
 # ----------------------------------------------------------------------------
 
 locals {
-  auth_jwt_secret     = var.auth_jwt_secret
-  db_app_password     = var.db_app_password
-  alerts_token_secret = var.alerts_token_secret
+  auth_jwt_secret        = var.auth_jwt_secret
+  db_app_password        = var.db_app_password
+  alerts_token_secret    = var.alerts_token_secret
+  cloudfront_private_key = var.cloudfront_private_key
 }
 
 # Shape checks live as validations on the variables (variables.tf), so a
@@ -89,8 +90,8 @@ locals {
       AUTH_JWT_SECRET          = local.auth_jwt_secret
       DATABASE_URL             = local.database_url
       CLOUDFRONT_SHARED_SECRET = random_password.cloudfront_shared_secret.result
-      # Signs report download links (reports.tf); generated, like the above.
-      CLOUDFRONT_PRIVATE_KEY = tls_private_key.report_downloads.private_key_pem
+      # Signs report download links (reports.tf); from sops, like the session key.
+      CLOUDFRONT_PRIVATE_KEY = local.cloudfront_private_key
     }
     worker = {
       # A re-run job stores a run, stamped under a key derived from the

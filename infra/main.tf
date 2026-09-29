@@ -37,11 +37,6 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
-    # The key pair that signs report downloads (reports.tf).
-    tls = {
-      source  = "hashicorp/tls"
-      version = "~> 4.0"
-    }
   }
 }
 

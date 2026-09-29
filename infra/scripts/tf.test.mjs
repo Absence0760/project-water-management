@@ -14,11 +14,13 @@ const here = new URL('.', import.meta.url).pathname;
 const script = join(here, 'tf.sh');
 const which = (tool) => spawnSync('bash', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).stdout.trim();
 const BASH = which('bash');
-const KEYS = ['auth_jwt_secret', 'db_app_password', 'alerts_token_secret'];
+const KEYS = ['auth_jwt_secret', 'db_app_password', 'alerts_token_secret', 'cloudfront_private_key'];
 const VALUES = {
 	auth_jwt_secret: 'synthetic-jwt-0123456789abcdef0123456789abcdef',
 	db_app_password: 'synthetic0db0password0123456789',
 	alerts_token_secret: "synthetic 'quoted' $HOME value",
+	// A PEM is several lines: they must arrive intact.
+	cloudfront_private_key: 'synthetic line one\nline two',
 };
 
 function setup({ withSops = true } = {}) {
