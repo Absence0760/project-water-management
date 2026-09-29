@@ -5516,6 +5516,9 @@ default (it isn't).
 
 ### 2.10j Automated calibration with pre-declared rules (engine ≥ 1.25.0, issue #153)
 
+Engine 1.25.0 brought the rules and a fit run in the browser; engine 1.26.0
+moved the run to the server and added the search (`run`) and `after` rules.
+
 Not in the workbook. Fit automatically (§2.10b) needs a person at every pass
 of calibrate → review → refit: which periods to leave out, which forcing,
 which fit to keep are chosen after the scores are seen, and choosing by the
@@ -5554,12 +5557,12 @@ The rule set:
    score on that **held-out** test, the first on a tie. It is never the
    in-sample score: a fit whose record doesn't allow the test isn't kept, and
    the report says so, rather than falling back to the fit on the fitted days.
-5. **Search** (`run`, default seed 1, 5 starts per fit, 1 500 model runs per
+5. **Search** (`run`, engine ≥ 1.26.0; default seed 1, 5 starts per fit, 1 500 model runs per
    optimisation). The seed, starts and budget are rules too, not chosen when
    the rules run: otherwise the same rules could be re-run with seed after
    seed until one scored well. Another seed is a rule change, with its own
    revision.
-6. **After** (`after`). `onNewData` (default `off`): when new observed or
+6. **After** (`after`, engine ≥ 1.26.0). `onNewData` (default `off`): when new observed or
    rain data arrives, run the rules and keep the report (`report`), or also
    apply the kept fit (`apply`), which the server does only while the rules
    are signed off (otherwise it reports). `ensemble` (default on): applying a
