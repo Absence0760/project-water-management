@@ -7,7 +7,7 @@ import { recordAudit, recordSeriesRevision, seriesSubject } from '../history/rec
 import { MAX_SERIES_ABS_VALUE, MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate } from './limits.js';
 import type { QueuedRerun } from '../runs/autoRun.js';
 import { acceptedInput, anomalousPushedDays, type HeldDays, heldFor, othersSuffice } from './hold.js';
-import { queueRerunFor, type SeriesDaysChanged } from './newData.js';
+import { queueAutoCalibrationFor, queueRerunFor, type SeriesDaysChanged } from './newData.js';
 import { lastValueDaySql } from './lastDay.js';
 
 export { MAX_SERIES_VALUES, SERIES_PER_PROJECT_MAX, SeriesStartDate };
@@ -673,6 +673,9 @@ export async function mergeInto(db: Db, projectId: string, body: SeriesBody, opt
 			: null;
 	if (flagged) await recordAudit(db, projectId, 'series.held', { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, ...flagged, ...opts.audit });
 	// The new-data hook (series/newData.ts; queueRerunFor is onSeriesDaysChanged with the job id kept for the wake-up).
-	const rerun = flagged ? null : await queueRerunFor(db, projectId, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via });
+	const change: SeriesDaysChanged = { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged, via: opts.via };
+	const rerun = flagged ? null : await queueRerunFor(db, projectId, change);
+	// And a run of the calibration rules, when they ask for one (issue #153); held data queues neither.
+	if (!flagged) await queueAutoCalibrationFor(db, projectId, change);
 	return { meta: r.meta, daysChanged, rerunQueuedFor: rerun?.runAfter ?? null, rerun, held: flagged };
 }

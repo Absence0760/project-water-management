@@ -22,7 +22,7 @@ import { FARMER_NOTICE_VERSION, LEGAL_VERSION } from '@water-management/engine/l
 import { runEnsemble, type ModelInput, type ResolvedEnsembleOptions } from '@water-management/engine';
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { app, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
+import { app, asOwner, lastMailTo, signUp, tokenIn } from '../__tests__/helpers.js';
 import { buildLadder, SAMPLE, type LadderCtx, type User } from '../__tests__/routeSamples.js';
 import { newSubscriptionSecret, unsubscribeToken } from '../alerts/tokens.js';
 import { withUser } from '../db/tx.js';
@@ -168,6 +168,11 @@ const RECIPE: Record<string, () => Promise<Req> | Req> = {
 	'POST /teams/:id/members': async () => ({ params: { id: ctx.teamId }, body: { email: (await freshUser('Mteam')).email, role: 'viewer' } }),
 	'PATCH /teams/:id/members/:userId': () => ({ params: { id: ctx.teamId, userId: ctx.viewer.id }, body: { role: 'member' } }),
 	// A run with the observed record in its inputs (the SAMPLE of PUT …/series replaces it with two days).
+	// One queued run of the rules per user (calibration/schema.ts AUTO_CALIBRATION_JOBS_PER_USER): clear the last one's job first.
+	'POST /projects/:id/auto-calibrations': async () => {
+		await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
+		return {};
+	},
 	'POST /projects/:id/runs/:runId/uncertainty': async () => {
 		await ok(ctx.owner.call('PUT', `${at()}/series`, observed()));
 		const run = await ok(ctx.owner.call('POST', `${at()}/runs`, { label: 'Mass ensemble' }));
@@ -248,7 +253,11 @@ const NO_WRITE = new Map<string, string>([
 
 /** Routes the owner's sample can't reach past a business rule, and why (their body never gets that far). */
 const NOT_REACHED = new Map<string, { why: string; legit: number }>([
-	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }]
+	['POST /share/series', { why: 'a read (app_share_series); the ladder catchment has 2 farms, under the 5 holders a link needs to show a series', legit: 404 }],
+	[
+		'POST /projects/:id/auto-calibrations/:cid/apply',
+		{ why: 'takes an empty body only; the ladder’s run of the rules is still running (it has no fitted cases to apply), so a legit call is 409', legit: 409 }
+	]
 ]);
 
 const routes = [...new Set(app.routes.filter((r) => ['POST', 'PUT', 'PATCH'].includes(r.method)).map((r) => `${r.method} ${r.path}`))];
@@ -378,6 +387,8 @@ beforeAll(async () => {
 }, 300_000);
 
 afterAll(async () => {
+	// The run of the rules the last POST …/auto-calibrations queued: no other file's tick should pick it up.
+	if (ctx.projectId) await asOwner(`DELETE FROM job WHERE kind = 'auto_calibration' AND project_id = $1`, [ctx.projectId]);
 	await db?.end();
 });
 
