@@ -15,16 +15,20 @@
 	import LoadState from '$lib/components/common/LoadState.svelte';
 	import StatusBar from '$lib/components/portfolio/StatusBar.svelte';
 	import StatusPill from '$lib/components/portfolio/StatusPill.svelte';
+	import { dateAge, daysBetween, STALE_DAYS } from '$lib/format/age';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 	import {
 		ageText,
 		curtailmentHref as curtailmentLink,
 		damText,
+		ewrWindowLabel,
+		farmsShortLabel,
 		farmsShortText,
 		farmsShortTotalText,
 		farmsUnknownText,
 		feedsText,
 		alertsText,
+		last30Text,
 		nextSort,
 		parseSort,
 		portfolioTotals,
@@ -129,7 +133,7 @@
 	{@const a = ageText(p)}
 	{#if a}
 		<span class="sub">Figures {a}</span>
-		{#if p.stale}<span class="badge badge-warn flag">Stale: over 7 days old</span>{/if}
+		{#if p.stale}<span class="badge badge-warn flag">Stale: over {STALE_DAYS} days old</span>{/if}
 	{/if}
 {/snippet}
 
@@ -141,14 +145,14 @@
 		{:else}
 			{t}
 		{/if}
-		{#if p.farmsShort30 != null && p.farmCount}<span class="sub">{p.farmsShort30} in the last 30 days</span>{/if}
+		{#if p.farmsShort30 != null && p.farmCount}<span class="sub">{p.farmsShort30} {last30Text(p)}</span>{/if}
 	{:else}
 		<span class="muted">{farmsUnknownText(p)}</span>
 	{/if}
 {/snippet}
 
 {#snippet dataCell(p: PortfolioProject)}
-	{#if p.dataUntil}Rain to {fmtDay(p.dataUntil)}{:else}<span class="muted">No rain yet</span>{/if}
+	{#if p.dataUntil}Rain to {dateAge(p.dataUntil, Math.max(0, daysBetween(p.dataUntil, p.today)))}{:else}<span class="muted">No rain yet</span>{/if}
 	{#if p.behindData}<span class="badge badge-warn flag">Newer data not in the figures</span>{/if}
 	<span class="sub">{feedsText(p)}</span>
 {/snippet}
@@ -198,7 +202,7 @@
 			{:else}
 				<dl class="kpis">
 					<div class="kpi kpi-ewr">
-						<dt>EWR, last 30 days</dt>
+						<dt>{ewrWindowLabel(rows)}</dt>
 						<dd>
 							<p class="summary" role="status">
 								{rows.length} catchment{rows.length === 1 ? '' : 's'}: {statusSummary(totals.counts)}
@@ -207,7 +211,7 @@
 						</dd>
 					</div>
 					<div class="kpi">
-						<dt>Hydrological units short this week</dt>
+						<dt>{farmsShortLabel(rows)}</dt>
 						<dd class="num-big">{farmsShortTotalText(totals) ?? 'Unknown'}</dd>
 					</div>
 					<div class="kpi">
@@ -246,7 +250,7 @@
 										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'name'))}>Catchment <span aria-hidden="true">{indicator('name')}</span></button>
 									</th>
 									<th scope="col" aria-sort={ariaSort('status')}>
-										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'status'))}>EWR, last 30 days <span aria-hidden="true">{indicator('status')}</span></button>
+										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'status'))}>{ewrWindowLabel(rows)} <span aria-hidden="true">{indicator('status')}</span></button>
 									</th>
 									<th scope="col" aria-sort={ariaSort('farms')}>
 										<button type="button" class="sort" onclick={() => setSort(nextSort(sort, 'farms'))}>Hydrological units short <span aria-hidden="true">{indicator('farms')}</span></button>
@@ -288,7 +292,7 @@
 							<h2 class="card-h"><a href={projectHref(p)}>{p.name}</a></h2>
 							{@render source(p)}
 							<dl>
-								<div><dt>EWR, last 30 days</dt><dd>{@render status(p)}{@render age(p)}</dd></div>
+								<div><dt>{ewrWindowLabel(rows)}</dt><dd>{@render status(p)}{@render age(p)}</dd></div>
 								<div><dt>Hydrological units short</dt><dd>{@render farms(p)}</dd></div>
 								<div><dt>Lowest dam</dt><dd>{damText(p)}</dd></div>
 								<div><dt>Restriction</dt><dd>{restrictionText(p)}</dd></div>

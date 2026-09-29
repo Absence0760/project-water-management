@@ -39,7 +39,7 @@ export function lastSpillText(farm: FarmProjection): string {
 }
 
 /** null for a farm with no dam (no dam page: the page says so and links back). */
-export function damPage(farm: FarmProjection, unit: VolumeUnit): DamPageVm | null {
+export function damPage(farm: FarmProjection, unit: VolumeUnit, staleEnd: string | null = null): DamPageVm | null {
 	const card = damCard(farm, unit);
 	const d = farm.dam;
 	if (!card || !d) return null;
@@ -48,7 +48,8 @@ export function damPage(farm: FarmProjection, unit: VolumeUnit): DamPageVm | nul
 		{ label: t('Full'), value: fmtVolume(farm.damCapacityM3, unit) }
 	];
 	if (d.usableM3 != null && farm.damMinPct > 0) facts.push({ label: t('You can still use'), value: fmtVolume(d.usableM3, unit) });
-	facts.push({ label: t('Last 30 days'), value: storageChange(farm, unit) });
+	// The 30 days to the figures' last day: "Last 30 days" only while they are current (cards.ts staleUntil).
+	facts.push({ label: staleEnd ? t('30 days to {date}', { date: fmtDay(staleEnd) }) : t('Last 30 days'), value: storageChange(farm, unit) });
 	facts.push({
 		label: t('Same day last season'),
 		value: farm.lastSeason?.damPct != null ? fmtPct(farm.lastSeason.damPct) : t('not available')

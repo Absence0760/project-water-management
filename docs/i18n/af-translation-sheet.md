@@ -18,4 +18,65 @@ How to write the Afrikaans:
 - The farm pages use plain words, not a modeller’s; `docs/design/farmer-view.md` §5.1 lists the words to use and the ones to avoid.
 - Numbers, dates and units are formatted by the app; don’t translate them.
 
-0 strings: 0 on the site, 0 in emails, 0 in the glossary.
+17 strings: 17 on the site, 0 in emails, 0 in the glossary.
+
+## The site (farm pages, sign-in pages, account)
+
+### farm.n
+
+Farm view: a counted noun after a number (“3 days”). .one is the singular, .other the plural.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `9d716b54.one` | month |  |  |
+| `9d716b54.other` | months |  |  |
+| `b9681100.one` | year |  |  |
+| `b9681100.other` | years |  |  |
+| `420372be` | today |  |  |
+| `63fe3327` | yesterday |  |  |
+| `f8c6ea48` | {span} ago | {span} is a count of days, months or years: “12 days”, “20 months”. Keep: {span} |  |
+
+### farm.dates
+
+Farm view: the dates line under the farm name on every page.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `25e88ab0` | Published by the WUA on {published}. Data up to {until} ({age}). Ask your WUA if newer figures are coming. | {age} is how long ago that was: “yesterday”, “12 days ago”, “20 months ago” (the “{span} ago” message). Keep: {age}, {published}, {until} |  |
+
+### farm.supply
+
+Farm view: the “Water you received this season” card.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `48cd31f8` | 30 days to {date}: very little water needed | Keep: {date} |  |
+| `a4efbdd5` | 30 days to {date}: **{pct}** · {got} of {need} | Keep: {date}, {got}, {need}, {pct} |  |
+
+### farm.river
+
+Farm view: the “Your hydrological unit on the river” card. Counts only, never a neighbour’s name.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `1cdbc4c7` | River at {name}: kept its reserve on every one of the {days} to {date}. | Keep: {date}, {days}, {name} |  |
+| `bded7e0c` | River at {name}: below its reserve on **all of the {days} to {date}**. | Keep: {date}, {days}, {name} |  |
+| `921f114d` | River at {name}: below its reserve on **{n} of the {days} to {date}**. | Keep: {date}, {days}, {n}, {name} |  |
+
+### farm.damPage
+
+Farm view: the dam details page.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `44829316` | 30 days to {date} | A dam fact’s label: the 30 days that end on {date}, the figures’ last day (a date: “10 Jan 2024”), once they are more than a week old. Keep: {date} |  |
+
+### share.last30
+
+Shared view: each river site over the last 30 days. {days} is “30 days”.
+
+| Id | English | Context | Afrikaans |
+| --- | --- | --- | --- |
+| `7479d547` | Kept its reserve on every one of the {days} to {date}. | Keep: {date}, {days} |  |
+| `249b65c8` | Below its reserve on all of the {days} to {date}. | Keep: {date}, {days} |  |
+| `0ba980dd` | Below its reserve on {n} of the {days} to {date}. | Keep: {date}, {days}, {n} |  |

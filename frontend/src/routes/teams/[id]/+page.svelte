@@ -37,6 +37,8 @@
 		curtailmentHref,
 		damText,
 		DEFAULT_SORT,
+		ewrWindowLabel,
+		farmsShortLabel,
 		farmsShortText,
 		farmsShortTotalText,
 		farmsUnknownText,
@@ -48,6 +50,7 @@
 	} from '$lib/components/portfolio/portfolio';
 	import TeamSettings from '$lib/components/teams/TeamSettings.svelte';
 	import { withParam, withoutParam } from '$lib/workspace/overlays';
+	import { STALE_DAYS } from '$lib/format/age';
 	import { fmtDate, fmtDay } from '$lib/format/number';
 
 	const teamId = $derived(page.params.id ?? '');
@@ -249,7 +252,7 @@
 		<div class="p-ewr">
 			<StatusPill {p} />
 			{#if age}<span class="sub">Figures {age}</span>{/if}
-			{#if p.stale}<span class="badge badge-warn flag">Stale: over 7 days old</span>{/if}
+			{#if p.stale}<span class="badge badge-warn flag">Stale: over {STALE_DAYS} days old</span>{/if}
 		</div>
 		<dl class="p-facts">
 			<div>
@@ -316,11 +319,11 @@
 						{:else if totals && rows.length}
 							<dl class="kpis">
 								<div class="kpi">
-									<dt>EWR, last 30 days</dt>
+									<dt>{ewrWindowLabel(rows)}</dt>
 									<dd><StatusBar counts={totals.counts} /></dd>
 								</div>
 								<div class="kpi">
-									<dt>Hydrological units short this week</dt>
+									<dt>{farmsShortLabel(rows)}</dt>
 									<dd>{farmsShortTotalText(totals) ?? 'Unknown until a run is published'}</dd>
 								</div>
 								<div class="kpi">

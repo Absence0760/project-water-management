@@ -9,7 +9,8 @@
 	import type { FarmView } from '@water-management/engine';
 	import { api, type FarmAccessPerson } from '$lib/api';
 	import { t } from '$lib/i18n/locale.svelte';
-	import { accessLine, outletLine, positionLine, privacy, whoCanSee } from './cards';
+	import { accessLine, outletLine, positionLine, privacy, staleUntil, whoCanSee } from './cards';
+	import { farmToday } from './numbers';
 	import Rich from '$lib/i18n/Rich.svelte';
 
 	let { view }: { view: FarmView } = $props();
@@ -33,7 +34,7 @@
 <section class="card" aria-labelledby="fair-h">
 	<h2 id="fair-h">{t('Your hydrological unit on the river')}</h2>
 	<p>{positionLine(view)}</p>
-	<p><Rich text={outletLine(view)} /></p>
+	<p><Rich text={outletLine(view, staleUntil(view, farmToday(view)))} /></p>
 	<p class="privacy">
 		<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11 V8 a4 4 0 0 1 8 0 V11" /></svg>
 		<span>{privacy()}</span>

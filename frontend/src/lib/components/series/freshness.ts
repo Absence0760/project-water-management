@@ -3,8 +3,9 @@
 import { fromEpochDay, toEpochDay, type SeriesMeta } from '@water-management/engine';
 import type { RunMeta } from '$lib/api/types';
 
-/** Days after which data counts as stale. Could become a project setting. */
-export const STALE_DAYS = 7;
+/** Days after which data counts as stale: the one threshold ($lib/format/age). */
+export { STALE_DAYS } from '$lib/format/age';
+import { STALE_DAYS } from '$lib/format/age';
 
 type Meta = SeriesMeta & { updatedAt?: string };
 

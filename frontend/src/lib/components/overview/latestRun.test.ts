@@ -233,6 +233,13 @@ describe('damsHeadline', () => {
 		expect(h.spec).toMatchObject({ format: 'fraction', better: 'higher' });
 	});
 
+	it('is "Dams today" only while the run’s end is current, then names its day (issue #162)', () => {
+		expect(damsHeadline(today(64, -11), { end: '2022-01-28', age: 7 }).term).toBe('Dams today');
+		expect(damsHeadline(today(64, -11), { end: '2022-01-28', age: 8 }).term).toBe('Dams on 28 Jan 2022');
+		// Known before the levels load, so the card's name doesn't change under the reader.
+		expect(damsHeadline({ state: 'loading' }, { end: '2022-01-28', age: 1700 }).term).toBe('Dams on 28 Jan 2022');
+	});
+
 	it('flags dams below the low line, and has no change when the run is too short', () => {
 		const h = damsHeadline(today(LOW_PCT - 5, null, 1));
 		expect(h).toMatchObject({ flagged: true, sub: [`1 dam on 28 Jan 2022, below ${LOW_PCT}%`], delta: null });

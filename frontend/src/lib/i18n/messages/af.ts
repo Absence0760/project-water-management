@@ -207,8 +207,6 @@ export const af: Catalogue = {
 	'e557592b': 'Wys in',
 	// Couldn’t save your choice to your account. It applies on this phone.
 	'0515b26b': 'Kon nie jou keuse in jou rekening stoor nie. Dit geld op hierdie foon.',
-	// Published by the WUA on {published}. Data up to {until}, {age} ago. Ask your WUA if newer figures are coming.
-	'351d363e': 'Deur die WGV gepubliseer op {published}. Data tot {until}, {age} gelede. Vra jou WGV of nuwer syfers op pad is.',
 	// Published by the WUA on {published}. Data up to {until}.
 	'f51b7fed': 'Deur die WGV gepubliseer op {published}. Data tot {until}.',
 	// Next update expected around {date}.

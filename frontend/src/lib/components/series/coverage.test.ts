@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coverageBins, coverageStats, daysBetween, describeAge, holeBefore, mergePreview } from './coverage';
+import { coverageBins, coverageStats, daysBetween, holeBefore, mergePreview } from './coverage';
 
 describe('coverageStats', () => {
 	it('reports period, gaps and the mean of the days present', () => {
@@ -59,19 +59,8 @@ describe('coverageBins', () => {
 	it('is empty for an empty series', () => expect(coverageBins({ startDate: '2021-01-01', values: [] })).toEqual([]));
 });
 
-describe('describeAge', () => {
-	it.each([
-		[0, 'today'],
-		[1, 'yesterday'],
-		[12, '12 days ago'],
-		[59, '59 days ago'],
-		[60, '2 months ago'],
-		[75, '2 months ago'],
-		[729, '23 months ago'],
-		[730, '2 years ago'],
-		[800, '2 years ago']
-	])('%s days → %s', (d, want) => expect(describeAge(d)).toBe(want));
-
+// The age words (agoText, once describeAge here) are $lib/format/age's: age.test.ts.
+describe('daysBetween', () => {
 	it('counts whole days between ISO dates', () => {
 		expect(daysBetween('2025-03-31', '2025-04-12')).toBe(12);
 	});

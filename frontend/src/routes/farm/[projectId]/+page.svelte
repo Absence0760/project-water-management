@@ -26,7 +26,7 @@
 	import NoticeCard from '$lib/components/farm/NoticeCard.svelte';
 	import RiverCard from '$lib/components/farm/RiverCard.svelte';
 	import SupplyCard from '$lib/components/farm/SupplyCard.svelte';
-	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, supplyCard } from '$lib/components/farm/cards';
+	import { damCard, datesLine, disclaimer, levelWord, noRestriction, noticeCard, stateText, staleUntil, supplyCard } from '$lib/components/farm/cards';
 	import { FarmState } from '$lib/components/farm/farmState.svelte';
 	import { count, FARMS } from '$lib/components/farm/format';
 	import { withNoteLine } from '$lib/components/farm/csvNote';
@@ -139,7 +139,7 @@
 			<EstimateNote />
 			<!-- The farm's own dam alert, while it is firing (WP-2.13). -->
 			<FarmAlerts {projectId} nodeId={view.farm.nodeId} />
-			<SupplyCard farm={view.farm} bind:unit />
+			<SupplyCard farm={view.farm} bind:unit staleEnd={staleUntil(view, farmToday(view))} />
 			{#if dam}<DamCard vm={dam} href={href('dam')} />{/if}
 			<LookingBack farm={view.farm} href={href('why')} collapsed={view.publication.restriction.level === 'restricted'} />
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
