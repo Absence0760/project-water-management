@@ -185,7 +185,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `secrets.tf` | The API, worker and migrate Lambdas' runtime secrets in Secrets Manager, written write-only from the sops-fed ephemeral variables (`variables.tf`), each role's read of its own |
 | `scripts/tf.sh` | Runs Terraform under `sops exec-env` with `../../infra-secrets/water-management/prod.sops.yaml` (override with `WM_SECRETS_FILE`), each key as `TF_VAR_<key>`; every plan, apply and import goes through it. Tested against a fake `sops` + `terraform` (`tf.test.mjs`, `tf-stubs/`; `pnpm test:guards`) |
 | `network.tf` | VPC, 2 private subnets, the API, migrate and RDS security groups, the Secrets Manager endpoint and its security group (migrate's RDS master secret, and each Lambda's runtime secret) |
-| `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds` |
+| `kms.tf` | The database's customer-managed KMS key (`rds_customer_managed_key`, on by default): yearly rotation, 30-day deletion window, `prevent_destroy`, an RDS-only key policy, `alias/water-management-rds`, and its alarm: an EventBridge rule on CloudTrail's `DisableKey` / `ScheduleKeyDeletion` / `PutKeyPolicy` / `RevokeGrant` for the key (by key ID or ARN) to the regional alerts topic (free; needs a CloudTrail trail, step 7a) |
 | `rds.tf` | Subnet group, parameter group (`name_prefix` + `create_before_destroy`, so a major upgrade can replace it; the steps are in the file), log group, the DB instance (`prevent_destroy`, a random final-snapshot suffix), the RDS event subscription to the alerts topic |
 | `lambda.tf` | IAM roles, log groups, API Lambda + Function URL + permissions, migrate Lambda |
 | `jobs.tf` | Background jobs: SQS `jobs` queue + DLQ, worker Lambda + role + security group, its SQS event source and 5-minute EventBridge tick, the SQS interface endpoint and its security group (policy: `SendMessage` only, two roles, three queues), the API's send-only policy, and the DLQ / worker-errors / worker-throttles / worker-heartbeat / tick-failed / backlog / dead-job alarms |
@@ -202,7 +202,7 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `scripts/restore-db.sh` | Point-in-time or snapshot restore into this stack's network and parameter group, identifier swap and Terraform state move; dry run by default ([deployment.md § Restoring the database](../docs/deployment.md#restoring-the-database)). Tested against a fake `aws` + `terraform` + `sops` (`restore-db.test.mjs`, `restore-db-stubs/`; `pnpm test:guards`) |
-| `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist. PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
+| `scripts/preapply-check.sh` | Read-only checks before the first apply (Operator steps 7a): the Lambda concurrency quota covers every `*_reserved_concurrency` (defaults, overridden by `--var-file`) + 10, the state bucket and sops key are in us-east-1, the SES endpoint service and the RDS instance class for the pinned PostgreSQL major exist, and a logging CloudTrail trail (this account's or the Organization's) records KMS write management events in the region (the database key alarm's source). PASS/FAIL per check, exit 1 on any FAIL. Tested against a fake `aws` (`preapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
 | `scripts/postapply-check.sh` | Read-only checks after an apply (Operator steps 8, 10a, 10c): both alert topics' email subscriptions confirmed, the RDS event subscription active (`--rds-event-test`: its events reached the topic), SES production access (WARN), the ECR policy's single statement, the site's 404s and no bucket listing, the Function URL's 403 without the shared secret. Tested against a fake `aws` + `curl` (`postapply-check.test.mjs`, `check-stubs/`; `pnpm test:guards`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
@@ -290,6 +290,16 @@ new key → restore to a new instance.
 - **Guards:** `prevent_destroy`, the 30-day maximum deletion window, yearly
   automatic rotation. Deleting the key loses the database and every backup;
   disabling it stops the instance within hours.
+- **Alarm:** an EventBridge rule (`rds_kms_key_change`) pages the regional
+  alerts topic on CloudTrail's `DisableKey`, `ScheduleKeyDeletion`,
+  `PutKeyPolicy` and `RevokeGrant` for this key, matched by key ID or ARN
+  (the only forms those APIs accept, so an alias can't dodge it), failed
+  attempts included. The topic admits only that rule
+  (`AllowEventBridgeKmsKeyAlarm`: `events.amazonaws.com`, `aws:SourceAccount`,
+  `aws:SourceArn` = the rule). It needs a CloudTrail trail covering the
+  region (step 7a checks). An apply that changes the key policy fires it
+  too, as expected. What to do when it fires:
+  [docs/deployment.md § Runbooks](../docs/deployment.md#runbooks).
 - **Not shared** with the secrets (they stay on `aws/secretsmanager`, so no
   Lambda role needs `kms:Decrypt`) or the buckets (SSE-S3).
 - **Performance Insights**, if it is turned on (`local.db_performance_insights`
@@ -607,7 +617,23 @@ Claude does not run any of these, and none of them print a secret. Replace
    to give the sum yourself), the state bucket from `backend.config` and the
    `alias/water-management-sops` key existing in **us-east-1**, the SES
    endpoint service (step 4a) and the RDS instance class offering the
-   PostgreSQL major `rds.tf` pins. The region comes from the tfvars'
+   PostgreSQL major `rds.tf` pins, and `cloudtrail`: some trail covering
+   the region (multi-region, or homed there) is logging and records write
+   management events without excluding `kms.amazonaws.com` (classic or
+   advanced event selectors). The database KMS key alarm (`kms.tf`) is an
+   EventBridge rule on "AWS API Call via CloudTrail" events, which reach
+   EventBridge only through such a trail
+   ([EventBridge: events from CloudTrail](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-service-event-cloudtrail.html));
+   without one the alarm is silently dead. The stack doesn't create a trail,
+   on purpose: an **Organization trail** from the management account
+   (`personal-mgmt`) covers every member account at once, and a second trail
+   here would be a billed second copy of the management events. If the check
+   FAILs, create (or fix) the Organization trail in the management account:
+   multi-region, logging, management events Read/Write = All (or Write), KMS
+   events not excluded; its first copy of management events is free, the S3
+   storage cents a month. Only if the Organization can't have one, create a
+   multi-region trail in this account the same way. Skipped when
+   `rds_customer_managed_key = false`. The region comes from the tfvars'
    `aws_region` (or `--region`). Plan only once it passes.
 8. **Plan, review, apply:**
    - `cd ~/github/project-water-management/infra && AWS_PROFILE=water-management terraform init -backend-config=backend.config`

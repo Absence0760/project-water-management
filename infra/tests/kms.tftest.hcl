@@ -3,8 +3,10 @@
 # with yearly rotation, the 30-day deletion window and a key policy that lets
 # only RDS in this region and account use it, its alias, and the DB instance
 # encrypted with it; with it off, no key, no alias, no policy document and
-# storage still encrypted (AWS-managed aws/rds). prevent_destroy on the key
-# can't be observed by a plan-only test; it is read from kms.tf by review.
+# storage still encrypted (AWS-managed aws/rds). The key alarm (EventBridge
+# rule, SNS target, topic policy statement) follows the same switch.
+# prevent_destroy on the key can't be observed by a plan-only test; it is read
+# from kms.tf by review.
 #
 # A mocked aws_iam_policy_document renders a fixed JSON, so the key policy is
 # checked through the data source's `statement` inputs, reached by index
@@ -619,6 +621,14 @@ override_resource {
   }
 }
 
+override_resource {
+  target          = aws_cloudwatch_event_rule.rds_kms_key_change
+  override_during = plan
+  values = {
+    arn = "arn:aws:events:af-south-1:000000000000:rule/water-management-rds-kms-key-change"
+  }
+}
+
 run "kms_customer_managed_default" {
   command = plan
 
@@ -710,6 +720,49 @@ run "kms_customer_managed_default" {
     )
     error_message = "GrantsForRds must allow only kms:CreateGrant, via RDS in this region and account, for an AWS resource."
   }
+
+  # The key alarm (kms.tf): CloudTrail's DisableKey / ScheduleKeyDeletion /
+  # PutKeyPolicy / RevokeGrant on this key, by key ID or ARN, to the regional
+  # alerts topic.
+  assert {
+    condition = (
+      length(aws_cloudwatch_event_rule.rds_kms_key_change) == 1
+      && jsondecode(aws_cloudwatch_event_rule.rds_kms_key_change[0].event_pattern).source == ["aws.kms"]
+      && jsondecode(aws_cloudwatch_event_rule.rds_kms_key_change[0].event_pattern)["detail-type"] == ["AWS API Call via CloudTrail"]
+      && jsondecode(aws_cloudwatch_event_rule.rds_kms_key_change[0].event_pattern).detail.eventSource == ["kms.amazonaws.com"]
+      && toset(jsondecode(aws_cloudwatch_event_rule.rds_kms_key_change[0].event_pattern).detail.eventName) == toset(["DisableKey", "ScheduleKeyDeletion", "PutKeyPolicy", "RevokeGrant"])
+    )
+    error_message = "The key alarm rule must match CloudTrail's kms.amazonaws.com DisableKey, ScheduleKeyDeletion, PutKeyPolicy and RevokeGrant."
+  }
+  assert {
+    condition = toset([for m in jsondecode(aws_cloudwatch_event_rule.rds_kms_key_change[0].event_pattern).detail.requestParameters.keyId : m["equals-ignore-case"]]) == toset([
+      "11111111-2222-3333-4444-555555555555",
+      "arn:aws:kms:af-south-1:000000000000:key/11111111-2222-3333-4444-555555555555",
+    ])
+    error_message = "The key alarm must match requestParameters.keyId as this key's ID or its ARN (the only forms these APIs accept), case-insensitively."
+  }
+  assert {
+    condition = (
+      length(aws_cloudwatch_event_target.rds_kms_key_change) == 1
+      && aws_cloudwatch_event_target.rds_kms_key_change[0].arn == aws_sns_topic.alerts.arn
+      && aws_cloudwatch_event_target.rds_kms_key_change[0].rule == aws_cloudwatch_event_rule.rds_kms_key_change[0].name
+      && strcontains(one(aws_cloudwatch_event_target.rds_kms_key_change[0].input_transformer).input_template, "<event> on the database's KMS key <key>")
+      && one(aws_cloudwatch_event_target.rds_kms_key_change[0].input_transformer).input_paths["event"] == "$.detail.eventName"
+    )
+    error_message = "The key alarm must publish a readable message to the regional alerts topic."
+  }
+  # The topic admits that rule only: events.amazonaws.com, this account, this rule's ARN.
+  assert {
+    condition = (
+      data.aws_iam_policy_document.alerts_publish.statement[2].sid == "AllowEventBridgeKmsKeyAlarm"
+      && one(data.aws_iam_policy_document.alerts_publish.statement[2].principals).identifiers == toset(["events.amazonaws.com"])
+      && toset([for c in data.aws_iam_policy_document.alerts_publish.statement[2].condition : "${c.test} ${c.variable} ${join(",", c.values)}"]) == toset([
+        "StringEquals aws:SourceAccount 000000000000",
+        "ArnEquals aws:SourceArn arn:aws:events:af-south-1:000000000000:rule/water-management-rds-kms-key-change",
+      ])
+    )
+    error_message = "The alerts topic must let only this account's KMS key alarm rule (by ARN) publish through events.amazonaws.com."
+  }
 }
 
 run "kms_aws_managed" {
@@ -732,5 +785,15 @@ run "kms_aws_managed" {
   assert {
     condition     = aws_db_instance.main.storage_encrypted == true
     error_message = "With the AWS-managed key the DB instance must still be encrypted at rest."
+  }
+
+  assert {
+    condition = (
+      length(aws_cloudwatch_event_rule.rds_kms_key_change) == 0
+      && length(aws_cloudwatch_event_target.rds_kms_key_change) == 0
+      && length(data.aws_iam_policy_document.alerts_publish.statement) == 2
+      && !contains([for s in data.aws_iam_policy_document.alerts_publish.statement : s.sid], "AllowEventBridgeKmsKeyAlarm")
+    )
+    error_message = "With rds_customer_managed_key = false there must be no key alarm rule, target or topic policy statement for it."
   }
 }

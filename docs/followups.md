@@ -70,7 +70,8 @@ The checklist for these is issue #62; the history scrub is #63.
       + 10 (33 at the defaults; ask for 1000) and wait for the grant:
       infra/README.md § Operator steps, step 3. Then run
       `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
-      state bucket and sops key, the SES endpoint service, the RDS class) and
+      state bucket and sops key, the SES endpoint service, the RDS class,
+      the CloudTrail trail the KMS key alarm needs) and
       plan only once it passes.
 - [ ] **After the first apply and first release, run
       `infra/scripts/postapply-check.sh` (#126, 2026-09-29)** and clear
@@ -87,7 +88,12 @@ The checklist for these is issue #62; the history scrub is #63.
       Keep it, or set `false` for the AWS-managed `aws/rds` key, in
       `terraform.tfvars`. It can't be changed once the instance exists
       (deployment.md § Decide before the first apply). Disabling the key,
-      scheduling its deletion or changing its policy alarms (`kms.tf`).
+      scheduling its deletion, changing its policy or revoking a grant
+      alarms (`kms.tf`), but only through CloudTrail: **make sure a trail
+      logging write management events (KMS not excluded) covers the region
+      before the first apply**, preferably the Organization trail from the
+      management account; `preapply-check.sh`'s `cloudtrail` check FAILs
+      until one does (infra/README.md § Operator steps, step 7a).
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses

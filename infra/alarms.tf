@@ -85,6 +85,32 @@ data "aws_iam_policy_document" "alerts_publish" {
       values   = ["arn:aws:rds:${var.aws_region}:${data.aws_caller_identity.current.account_id}:db:${local.project}"]
     }
   }
+
+  # The database KMS key alarm (kms.tf aws_cloudwatch_event_rule.rds_kms_key_change,
+  # only with rds_customer_managed_key): that one EventBridge rule, in this
+  # account (AWS's shape: https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-use-resource-based.html#eb-sns-permissions).
+  dynamic "statement" {
+    for_each = var.rds_customer_managed_key ? [1] : []
+    content {
+      sid       = "AllowEventBridgeKmsKeyAlarm"
+      actions   = ["sns:Publish"]
+      resources = [aws_sns_topic.alerts.arn]
+      principals {
+        type        = "Service"
+        identifiers = ["events.amazonaws.com"]
+      }
+      condition {
+        test     = "StringEquals"
+        variable = "aws:SourceAccount"
+        values   = [data.aws_caller_identity.current.account_id]
+      }
+      condition {
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [aws_cloudwatch_event_rule.rds_kms_key_change[0].arn]
+      }
+    }
+  }
 }
 
 resource "aws_sns_topic_policy" "alerts" {

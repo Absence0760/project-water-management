@@ -146,3 +146,82 @@ data "aws_iam_policy_document" "rds_kms" {
     }
   }
 }
+
+# --- Alarm: the key disabled, scheduled for deletion or re-policied ----------
+# Disabling the key stops the database about two hours later; deleting it
+# (after the 30-day window) loses the database and every backup. The window
+# only helps if someone hears about it, so these calls page the regional
+# alerts topic the moment CloudTrail sees them:
+#
+# - DisableKey           the instance stops within hours (EnableKey undoes it)
+# - ScheduleKeyDeletion  the database and its backups go when the window ends
+#                        (CancelKeyDeletion, then EnableKey, undoes it)
+# - PutKeyPolicy         a new policy can cut RDS off, or let someone else in
+# - RevokeGrant          revoking RDS's grant cuts the instance off like a
+#                        disable does (RetireGrant is left out: RDS retires its
+#                        own grant when an instance is deleted, and that is
+#                        already alarmed through the RDS event subscription)
+#
+# Not matched: DeleteAlias / UpdateAlias (RDS holds the key's ARN, not the
+# alias, so an alias change can't reach the database), CancelKeyDeletion and
+# EnableKey (the fixes). KMS's native "KMS CMK Deletion" event arrives only
+# once the key is gone, too late to act on, so it isn't used.
+#
+# Matching the key: these four APIs accept only a key ID or key ARN, never an
+# alias, and CloudTrail records requestParameters.keyId exactly as the caller
+# passed it, so the pattern lists both, case-insensitively. EventBridge's
+# top-level `resources` is empty for "AWS API Call via CloudTrail" events, so
+# it can't be used. Failed calls (AccessDenied) match too, and the message
+# carries their errorCode: an attempt is worth knowing about.
+#
+# "AWS API Call via CloudTrail" events reach EventBridge only while a
+# CloudTrail trail logging write management events covers this region
+# (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-service-event-cloudtrail.html).
+# The stack deliberately doesn't create one: an Organization trail from the
+# management account covers every account at once, and a second trail here
+# would duplicate it (and a second copy of management events is billed).
+# preapply-check.sh's `cloudtrail` check FAILs until some trail covers the
+# region (infra/README.md § Operator steps, step 7a). A rule on the default
+# bus matching AWS events is free.
+resource "aws_cloudwatch_event_rule" "rds_kms_key_change" {
+  count = var.rds_customer_managed_key ? 1 : 0
+
+  name        = "${local.project}-rds-kms-key-change"
+  description = "The database's KMS key disabled, scheduled for deletion, re-policied or a grant revoked"
+
+  event_pattern = jsonencode({
+    source        = ["aws.kms"]
+    "detail-type" = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["kms.amazonaws.com"]
+      eventName   = ["DisableKey", "ScheduleKeyDeletion", "PutKeyPolicy", "RevokeGrant"]
+      requestParameters = {
+        keyId = [
+          { "equals-ignore-case" = aws_kms_key.rds[0].key_id },
+          { "equals-ignore-case" = aws_kms_key.rds[0].arn },
+        ]
+      }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "rds_kms_key_change" {
+  count = var.rds_customer_managed_key ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.rds_kms_key_change[0].name
+  target_id = "alerts"
+  arn       = aws_sns_topic.alerts.arn
+
+  # A readable email instead of the raw CloudTrail JSON. The topic policy
+  # admits this rule by ARN (alarms.tf AllowEventBridgeKmsKeyAlarm).
+  input_transformer {
+    input_paths = {
+      event = "$.detail.eventName"
+      key   = "$.detail.requestParameters.keyId"
+      who   = "$.detail.userIdentity.arn"
+      when  = "$.detail.eventTime"
+      error = "$.detail.errorCode"
+    }
+    input_template = "\"${local.project}: <event> on the database's KMS key <key> (alias/${local.project}-rds) by <who> at <when> (error code, if the call failed: <error>). DisableKey or RevokeGrant stops the database within hours; ScheduleKeyDeletion loses the database and every backup when the window ends. Runbook: docs/deployment.md § Runbooks, The database's KMS key.\""
+  }
+}

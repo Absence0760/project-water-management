@@ -418,8 +418,10 @@ keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
 Before the first plan, run the read-only pre-apply check (the Lambda
 concurrency quota against the reservations, the state bucket and sops key in
-us-east-1, the SES endpoint service, the RDS instance class; PASS/FAIL per
-check, exit 1 on any FAIL; infra/README.md § Operator steps, step 7a):
+us-east-1, the SES endpoint service, the RDS instance class, and a logging
+CloudTrail trail recording KMS write management events in the region, which
+the database KMS key alarm needs; PASS/FAIL per check, exit 1 on any FAIL;
+infra/README.md § Operator steps, step 7a):
 
 ```bash
 cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
@@ -474,10 +476,14 @@ snapshot are unrecoverable
 ([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)).
 Guards in `kms.tf`: `prevent_destroy` on the key, the maximum 30-day
 deletion window (`aws kms cancel-key-deletion` undoes a scheduled deletion
-in that window), and no principal but RDS can use the key. Nothing alarms on
-a key being disabled or scheduled for deletion yet. That needs CloudTrail
-events routed to the alerts topic (an EventBridge rule on
-`DisableKey`/`ScheduleKeyDeletion`), which the stack doesn't have yet.
+in that window), and no principal but RDS can use the key. `DisableKey`,
+`ScheduleKeyDeletion`, `PutKeyPolicy` and `RevokeGrant` on the key page the
+alerts topic (an EventBridge rule on CloudTrail events, `kms.tf`; § Runbooks
+says what to do). That rule hears nothing unless a CloudTrail trail logging
+write management events covers the region: the stack relies on the
+Organization's trail rather than creating a duplicate, and
+`preapply-check.sh` FAILs until one exists (infra/README.md § Operator
+steps, step 7a).
 
 What the key covers and what it doesn't: only the RDS instance and what RDS
 derives from it (storage, logs on the instance, backups, snapshots). The RDS
@@ -583,7 +589,10 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   low storage, availability, failover, recovery, restoration, deletion,
   maintenance and patching, RDS notices; not the routine daily-backup events,
   and RDS publishes no "backup failed" event, so the restore rehearsal in
-  § Restoring the database is what proves the backups), SES
+  § Restoring the database is what proves the backups), the database KMS
+  key being disabled, scheduled for deletion, re-policied or its grant
+  revoked (an EventBridge rule on CloudTrail events, `kms.tf`, free; needs a
+  CloudTrail trail, § Runbooks 13), SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line in both the API's
   and the worker's log group (a saved run failing one of the engine's own
@@ -1546,6 +1555,42 @@ Every step is an ordinary app action by an owner unless it says "operator".
        `WAF_CAPTCHA_API_KEY`), and deploy the web again: the script URL and
        key are baked into the build.
     5. Switch back to `CAPTCHA` once fixed, and record it in the operator log.
+13. **The database's KMS key** (an email "`<event>` on the database's KMS
+    key", operator; `kms.tf`, only with `rds_customer_managed_key`). Act the
+    same hour: a disabled key stops the instance about 2 hours later.
+    1. **Read the email:** the call (`DisableKey`, `ScheduleKeyDeletion`,
+       `PutKeyPolicy`, `RevokeGrant`), who made it and whether it failed
+       (an error code such as `AccessDenied` means an attempt, not a change:
+       treat it as a possible compromise:
+       [security.md § Incident playbook](./security.md#incident-playbook)).
+       If it was your own reviewed apply that changed the key policy, record it and stop.
+    2. **Check the key** (its state, deletion date and ARN; the commands
+       below take the ARN, since `EnableKey`, `CancelKeyDeletion`,
+       `GetKeyPolicy` and `ListGrants` don't accept an alias):
+       `aws kms describe-key --key-id alias/water-management-rds --region <region> --profile water-management --query 'KeyMetadata.[KeyState,DeletionDate,Arn]'`.
+    3. **`PendingDeletion`:** cancel it, then enable the key (cancelling
+       leaves it `Disabled`):
+       `aws kms cancel-key-deletion --key-id <key-arn> --region <region> --profile water-management && aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       Possible any time within the 30-day window; after it, the database
+       and every backup are gone.
+    4. **`Disabled`:** `aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       If RDS already stopped the instance (status
+       `inaccessible-encryption-credentials-recoverable`), start it within 7
+       days: `aws rds start-db-instance --db-instance-identifier water-management --region <region> --profile water-management`.
+    5. **`PutKeyPolicy`:** compare the live policy
+       (`aws kms get-key-policy --key-id <key-arn> --policy-name default --region <region> --profile water-management`)
+       with `data.aws_iam_policy_document.rds_kms`; a plan shows the drift,
+       and an apply of the reviewed code puts it back.
+    6. **`RevokeGrant`:** if it revoked RDS's grant, the instance loses the
+       key as if it were disabled, and only RDS can create its grant again
+       (the key policy's `kms:GrantIsForAWSResource`). List the grants
+       (`aws kms list-grants --key-id <key-arn> --region <region> --profile water-management`)
+       and watch the instance status; if it goes
+       `inaccessible-encryption-credentials-recoverable`, start it as in 4
+       (not yet rehearsed: if it doesn't come back, restore to a new
+       instance, § Restoring the database, and open an AWS Support case).
+    7. Find out who and why in CloudTrail (the email names the caller), and
+       record it in the operator log.
 
 ## Rollback
 

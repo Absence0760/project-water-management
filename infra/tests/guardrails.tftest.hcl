@@ -1482,9 +1482,11 @@ run "alarms" {
   }
   assert {
     condition = (
-      # Two statements: CloudWatch alarms (here) and RDS events (AllowRdsEvents,
-      # pinned in data.tftest.hcl's db_events run).
-      length(data.aws_iam_policy_document.alerts_publish.statement) == 2 &&
+      # Three statements: CloudWatch alarms (here), RDS events (AllowRdsEvents,
+      # pinned in data.tftest.hcl's db_events run) and the database KMS key
+      # alarm's EventBridge rule (AllowEventBridgeKmsKeyAlarm, pinned in
+      # kms.tftest.hcl; only with rds_customer_managed_key, the default).
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 3 &&
       data.aws_iam_policy_document.alerts_publish.statement[1].sid == "AllowRdsEvents" &&
       one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
       toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
@@ -1492,7 +1494,7 @@ run "alarms" {
         "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
       ])
     )
-    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn) and this instance's RDS events; Budgets no longer publish there."
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn), this instance's RDS events and the KMS key alarm's rule; Budgets no longer publish there."
   }
   assert {
     condition = {
