@@ -1,8 +1,9 @@
 # Copy to terraform.tfvars (gitignored) — or, per the estate pattern, keep the
 # canonical copy in the private repo as infra-secrets/water-management/prod.tfvars
 # and pass it with -var-file (infra/README.md § First apply). Nothing here is
-# secret; secrets come from infra-secrets/water-management/prod.sops.yaml via
-# the sops provider (secrets.tf), never from tfvars.
+# secret; secrets come from infra-secrets/water-management/prod.sops.yaml
+# through infra/scripts/tf.sh (ephemeral variables, secrets.tf), never from
+# tfvars.
 
 # Primary region for VPC/RDS/Lambda/S3. af-south-1 (Cape Town) for POPIA +
 # latency — enable it on the account first (Account → AWS Regions) — or
@@ -21,8 +22,11 @@ github_repo = "Absence0760/project-water-management"
 # MUST match the slug new-project-account.sh was run with (role <slug>-deploy).
 bootstrap_slug = "water-management"
 
-# Default: ../../infra-secrets/water-management/prod.sops.yaml (sibling clone).
-# secrets_file = ""
+# No runtime_secret_version here: scripts/tf.sh derives it from
+# prod.sops.yaml's sops.lastmodified, so every sops edit rotates the runtime
+# secrets, and it refuses a var file that sets it (docs/deployment.md §
+# Rotating a secret). The sops file's own path is tf.sh's WM_SECRETS_FILE
+# (default: the infra-secrets sibling clone).
 
 # Budget + alarm notifications. Budgets need IAM billing access enabled on the
 # member account (one-time root toggle) — set budget_monthly_usd to 0 until
@@ -87,3 +91,17 @@ waf_rate_limit_per_ip = 1000
 # busy 5 minutes for a handful of users. 1000-20000; raise it only for real
 # growth (infra/README.md § Cost).
 # cloudfront_requests_alarm_per_5min = 5000
+
+# Report downloads (reports.tf): the CloudFront public keys trusted to sign
+# them, name -> PEM, and the one whose private half is cloudfront_private_key
+# in prod.sops.yaml. Public keys, not secrets: `openssl pkey -in <key> -pubout`
+# (infra/prod.sops.yaml.example). Two entries only while a rotation overlaps
+# (docs/deployment.md § Rotating a secret).
+report_download_public_keys = {
+  "2026-09" = <<-EOT
+    -----BEGIN PUBLIC KEY-----
+    REPLACE_ME
+    -----END PUBLIC KEY-----
+  EOT
+}
+report_download_signing_key = "2026-09"

@@ -45,7 +45,8 @@ flowchart LR
   W -- "render request (token)" --> RQ --> RL
   RL -- "opens the report route<br/>(render session)" --> CF
   RL -- "PDF" --> RB
-  L -- "pre-signed GET" --> RB
+  L -- "302: CloudFront signed URL" --> UI
+  CF -- "/reports/* (signed URLs, OAC)" --> RB
 ```
 
 Locally the same pieces run as `vite dev` on `:7777`, a Node server
@@ -1086,8 +1087,8 @@ sequenceDiagram
   U->>API: GET /projects/:id/reports/:jobId
   API-->>U: { status }
   U->>API: GET /projects/:id/reports/:jobId/pdf (viewer)
-  API-->>U: 302 pre-signed GET, 60 s
-  U->>S: GET the PDF (direct, within the minute)
+  API-->>U: 302 CloudFront signed URL, 60 s
+  U->>S: GET /reports/… through CloudFront + WAF (signature checked, OAC to the bucket)
 ```
 
 - **The render token** (`render_token`, the `email_token` pattern with
@@ -1121,9 +1122,15 @@ sequenceDiagram
   lifecycle). The key is **derived from the ids**, never stored or taken from
   a message, so no row or message can point a download at another project's
   PDF. Downloads go through `GET /projects/:id/reports/:jobId/pdf`, which
-  checks the viewer's membership on every click and redirects to a
-  pre-signed GET that expires after 60 s (issue #126; the trade-off against
-  streaming the PDF through the API is in security.md § Reports).
+  checks the viewer's membership on every click and redirects to a signed
+  GET that expires after 60 s (issue #126; the trade-off against streaming
+  the PDF through the API is in security.md § Reports). `REPORT_DOWNLOADS`
+  picks the signer: `presigned` (the default) is a pre-signed MinIO/S3 GET;
+  production's `cloudfront` is a CloudFront signed URL on the site's own
+  `/reports/<project>/<report>.pdf` (`reports/cloudfrontSign.ts`, a canned
+  policy signed with RSA-SHA256), which the distribution serves from the
+  bucket through its origin access control, behind the WAF. The API never
+  reads the bucket.
 - **Email** (`reports/store.ts finishReport`): after a good render, in the
   job's transaction, to the requester if they asked and to members named at
   request time **who are still viewers or above**, through the existing mail

@@ -24,7 +24,9 @@
 locals {
   rds_ca_path = "/var/task/rds-global-bundle.pem"
 
-  # water_app password is alphanumeric (enforced below) but urlencode anyway.
+  # water_app password is alphanumeric (var.db_app_password's validation) but
+  # urlencode anyway. Ephemeral, like the password: it only reaches the runtime
+  # secrets' write-only values (secrets.tf).
   database_url = format(
     "postgresql://water_app:%s@%s:%d/%s?sslmode=verify-full",
     urlencode(local.db_app_password),
@@ -141,9 +143,16 @@ resource "aws_lambda_function" "backend" {
       JOB_TRANSPORT  = "sqs"
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
 
-      # Server-side reports (reports.tf): the API pre-signs PDF downloads.
-      STORAGE        = "s3"
-      REPORTS_BUCKET = aws_s3_bucket.reports.bucket
+      # Server-side reports (reports.tf): the API signs PDF downloads as
+      # CloudFront signed URLs on the site's /reports/* path. The private key
+      # is in the runtime secret; these name its public half: the key id
+      # CloudFront checks, and the PEM the API matches its private key against
+      # at cold start (a mismatch refuses to start).
+      STORAGE                = "s3"
+      REPORTS_BUCKET         = aws_s3_bucket.reports.bucket
+      REPORT_DOWNLOADS       = "cloudfront"
+      CLOUDFRONT_KEY_PAIR_ID = aws_cloudfront_public_key.report_downloads[var.report_download_signing_key].id
+      CLOUDFRONT_PUBLIC_KEY  = var.report_download_public_keys[var.report_download_signing_key]
     }
   }
 
@@ -156,6 +165,8 @@ resource "aws_lambda_function" "backend" {
     aws_vpc_endpoint.ses,
     aws_vpc_endpoint.sqs,
     aws_vpc_endpoint.secretsmanager,
+    # A rotation switches the API only once the key group trusts the new key.
+    aws_cloudfront_key_group.report_downloads,
   ]
 
   lifecycle {
@@ -163,21 +174,7 @@ resource "aws_lambda_function" "backend" {
       filename,
       source_code_hash,
     ]
-
-    precondition {
-      condition     = length(local.auth_jwt_secret) >= 32
-      error_message = "auth_jwt_secret in prod.sops.yaml must be at least 32 characters (the backend refuses shorter). Generate with: openssl rand -hex 32"
-    }
-    precondition {
-      # The committed dev/test values (backend/.env.development, src/__tests__/setup.ts)
-      # are public; the API Lambda refuses them at init too (config/production.ts).
-      condition     = !can(regex("^(dev|test)-only-", local.auth_jwt_secret))
-      error_message = "auth_jwt_secret in prod.sops.yaml is a committed dev/test placeholder. Generate a real one with: openssl rand -hex 32"
-    }
-    precondition {
-      condition     = can(regex("^[A-Za-z0-9]{24,}$", local.db_app_password))
-      error_message = "db_app_password in prod.sops.yaml must be 24+ alphanumeric characters (it is embedded in DATABASE_URL and role DDL). Generate with: openssl rand -hex 24"
-    }
+    # The secrets' shape checks are validations on their variables (variables.tf).
   }
 }
 

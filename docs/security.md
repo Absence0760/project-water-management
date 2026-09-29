@@ -422,13 +422,31 @@ buys a **render session** that can read one report and nothing else.
   not taken ([infra/README.md](../infra/README.md), the renderer).
 - **The PDFs** are in a private bucket (public access blocked, TLS only,
   SSE-S3), under keys derived from the project and report ids (never stored
-  or taken from a message), deleted after 7 days. A download is a pre-signed
-  GET that lasts **60 seconds**, minted per request by
+  or taken from a message), deleted after 7 days. A download is a
+  **CloudFront signed URL** that lasts **60 seconds**, minted per request by
   `GET /projects/:id/reports/:jobId/pdf` for a viewer of the project and
   handed over as a `302` (`no-store`, `no-referrer`); the status route
-  carries no link (issue #126). So the only lasting handle on a PDF is that
-  API route, behind the session, CloudFront, the WAF's rate rule and the
-  project's membership, and every download re-checks membership. The
+  carries no link (issue #126). The URL is on the site's own origin,
+  `/reports/<project>/<report>.pdf`: a CloudFront behaviour that serves the
+  bucket through its own origin access control and **only** to a request
+  signed by a key in the distribution's trusted key group (a canned policy,
+  RSA-SHA256, covering the exact URL, the download file name included, and
+  the expiry; `reports/cloudfrontSign.ts`). The bucket policy lets that one
+  distribution (`AWS:SourceArn`) `GetObject` under `reports/`, and nothing
+  else reads it: the API holds no S3 grant at all, only the private key
+  (from its runtime secret, § Runtime secrets), and the renderer may only
+  put. So the transfer itself, not just the redirect, passes CloudFront and
+  the WAF's per-IP rate rule, and the only lasting handle on a PDF is the
+  API route, behind the session, the WAF and the project's membership;
+  every download re-checks membership. The behaviour caches nothing and
+  forwards only `response-content-disposition` to S3. It takes precedence
+  over the SPA, so the frontend must never serve anything under `/reports`:
+  `scripts/guards/check_reports_path.mjs` (run by `pnpm test:guards` and
+  CI's guard step) fails on a top-level `reports` route, a top-level dynamic
+  route, or a static file there. Locally
+  (`REPORT_DOWNLOADS=presigned`, the default) the link is a pre-signed MinIO
+  GET instead, so no cloud account is needed; production's config check
+  refuses anything but `cloudfront` (§ Production configuration). The
   alternative, streaming the PDF through the API, was not taken: the API's
   Function URL is in buffered mode (a 6 MB response cap, less after base64,
   that a long report could pass), and streaming would hold a VPC Lambda open
@@ -442,14 +460,23 @@ buys a **render session** that can read one report and nothing else.
   schedules. The hourly and schedule caps are counted under an advisory lock
   (per user and project, per project), so a burst of concurrent requests
   can't pass them together (`jobs/costCaps.security.db.test.ts`).
-- **Accepted residual risks.** A pre-signed link works for its minute for
-  whoever holds it, from any address, and the S3 GET itself is outside
-  CloudFront and the WAF: a member who scripts the route can still pull a
-  PDF as often as the WAF's rate rule lets the redirects through, and each
-  URL may be replayed within its 60 s. Egress per minted URL is therefore
-  bounded by the PDF's size times what can be fetched in a minute, and the
-  minting is rate-limited and needs a live membership; don't log the
-  `Location` header. A render request dead-lettered in production still holds its token
+- **Accepted residual risks.** A signed link works for its minute for
+  whoever holds it, from any address (a canned policy binds no IP), and may
+  be fetched more than once in that minute. But every fetch, like every
+  redirect, now counts against the WAF's per-IP rate rule and shows in the
+  distribution's request and blocked-request alarms, so a member scripting
+  downloads is throttled on the transfer itself, not only on minting. Don't
+  log the `Location` header. The signing key is operator-generated and
+  kept like the session key: in sops (`cloudfront_private_key`), handed to
+  Terraform as an ephemeral variable and written only into the API's
+  write-only runtime secret, so it is **never in Terraform state** (§ Runtime
+  secrets). Only the public keys are, which is harmless. Terraform can't
+  check at plan time that the sops key and the configured public key are a
+  pair, so the API checks at cold start (`reports/cloudfrontSign.ts`
+  `assertKeyPair`: the same public key, and a probe it signs verifies) and
+  refuses to start on a mismatch, rather than signing every link with a key
+  CloudFront rejects. Rotation overlaps two trusted keys, so no valid link
+  fails (docs/deployment.md § The report-download signing key). A render request dead-lettered in production still holds its token
   until it expires (5 minutes): the DLQ is encrypted and readable only by the
   account. The worker's inline render (local and CI only) holds the job's
   database transaction open for the few seconds it takes.
@@ -1855,8 +1882,8 @@ readable by anyone. The rules:
   `Absence0760/infra-secrets` repo under `water-management/`, SOPS-encrypted
   under `alias/water-management-sops`. Bootstrap:
   `infra-secrets/bin/sops-init.sh --project water-management --region <region>`.
-  Terraform consumes them with the `carlpett/sops` provider or a
-  decrypt-to-tfvars step into a gitignored `terraform.tfvars`.
+  Terraform gets them as ephemeral variables through `infra/scripts/tf.sh`
+  (`sops exec-env`), never from a tfvars file.
 - **No client data.** Workbooks (kept outside the repo in `../project-water-management-source/`; `*.xlsm`, `*.xlsx` are gitignored) and
   everything extracted from them (`data/`) are gitignored. Committed test
   fixtures are **synthetic**: made-up farm names, made-up numbers. Never paste
@@ -1904,14 +1931,17 @@ readable by anyone. The rules:
 - **Production secrets live outside this repo**, in
   `infra-secrets/water-management/prod.sops.yaml`, SOPS-encrypted under
   `alias/water-management-sops`. Decryption is gated by IAM (`kms:Decrypt`) and
-  logged in CloudTrail. The key rotates yearly. Terraform's `carlpett/sops`
-  provider decrypts in memory, so nothing is written to disk.
-  See `../infra-secrets/README.md`.
-- This app's production secrets: `AUTH_JWT_SECRET` and the `water_app` DB
-  password. The owner (`water`) password is managed and rotated by RDS in
-  Secrets Manager (`manage_master_user_password`), read only by the migrate
-  Lambda at run time. The CloudFront shared secret and the alert
-  unsubscribe-token secret are generated by Terraform (`random_password`).
+  logged in CloudTrail. The key rotates yearly. `infra/scripts/tf.sh` runs
+  Terraform under `sops exec-env`, which decrypts in memory, so nothing is
+  written to disk, and hands the values over as ephemeral variables, so
+  nothing is written to Terraform state either ([§ Runtime
+  secrets](#runtime-secrets)). See `../infra-secrets/README.md`.
+- This app's production secrets: `AUTH_JWT_SECRET`, the `water_app` DB
+  password and the alert unsubscribe-token secret, all in sops. The owner
+  (`water`) password is managed and rotated by RDS in Secrets Manager
+  (`manage_master_user_password`), read only by the migrate Lambda at run
+  time. The CloudFront shared secret is generated by Terraform
+  (`random_password`).
 
 ### Runtime secrets
 
@@ -1926,7 +1956,7 @@ key there would let any read-only principal forge any user's session.
 
   | Lambda | Keys |
   | --- | --- |
-  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET` |
+  | API | `AUTH_JWT_SECRET`, `DATABASE_URL` (the `water_app` password), `CLOUDFRONT_SHARED_SECRET`, `CLOUDFRONT_PRIVATE_KEY` (signs report downloads, § Reports) |
   | worker | `AUTH_JWT_SECRET` (run stamps), `DATABASE_URL`, `ALERTS_TOKEN_SECRET` |
   | migrate | `WATER_APP_PASSWORD` |
   | fetcher, renderer | none: no database, no session |
@@ -1959,13 +1989,28 @@ key there would let any read-only principal forge any user's session.
   secret, a denylist keeps secret names out of every environment block, and
   each entry point loads its secret before its checks); the `runtime_secrets`
   tftest (the keys, each role's grant scoped to its ARN, the endpoint policy
-  and security groups, no Secrets Manager access for the deploy role).
-- **What remains.** The values are still in Terraform state (as before; the
-  state bucket is private and encrypted). The CloudFront secret is also in the
-  distribution's origin header, which `cloudfront:GetDistributionConfig`
-  returns; it lets a caller past the WAF to the Function URL, where the app's
-  own authentication still applies. Rotation: [deployment.md § Rotating a
-  secret](./deployment.md#rotating-a-secret).
+  and security groups, no Secrets Manager access for the deploy role, every
+  version write-only, the values ephemeral).
+- **Out of Terraform state.** The sops values reach Terraform only as
+  ephemeral variables (`infra/scripts/tf.sh`, `sops exec-env` → `TF_VAR_*`),
+  and flow only into `secret_string_wo`, the write-only argument of each
+  secret's version. Terraform stores neither an ephemeral value nor a
+  write-only one, in state or in a saved plan, so reading the state bucket no
+  longer yields the session key, the `water_app` password or the unsubscribe
+  key. The `runtime_secrets` tftest checks that no version uses
+  `secret_string` and that the values are ephemeral (`ephemeralasnull`, with
+  the CloudFront secret as the positive control). The price: Terraform can't
+  see a changed sops value by itself; `infra/scripts/tf.sh` sets
+  `runtime_secret_version` from the sops file's plaintext `sops.lastmodified`,
+  so every sops edit rewrites the secrets
+  ([deployment.md § Rotating a secret](./deployment.md#rotating-a-secret)).
+- **What remains.** The CloudFront shared secret is still in Terraform state
+  (the `random_password` and the distribution), because CloudFront's origin
+  `custom_header` isn't a write-only argument, and in the distribution's
+  configuration, which `cloudfront:GetDistributionConfig` returns. Either
+  lets a caller past the WAF to the Function URL, where the app's own
+  authentication still applies; neither lets anyone forge a session. The state
+  bucket is private, SSE-encrypted and versioned.
 - **Committed local defaults are non-sensitive by design.**
   `backend/.env.development` holds the docker-compose throwaway passwords
   (`water`/`water`, `water_app`/`water_app`) and a dev-only JWT secret. They
@@ -1997,7 +2042,7 @@ key there would let any read-only principal forge any user's session.
   loudly instead of opening the Function URL (`app.security.test.ts`).
 - **Production configuration fails closed** (`backend/src/config/production.ts`).
   Every setting falls back to the local stack when unset (`STORAGE=local`,
-  `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
+  `REPORT_DOWNLOADS=presigned`, `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,
   localhost links), so a Lambda missing one would quietly serve synthetic data
   or email localhost links rather than fail. All five entry points (`lambda.ts`,
   `lambda-worker.ts`, `lambda-fetcher.ts`, `lambda-renderer.ts`,
@@ -2098,7 +2143,7 @@ beside the resource; a new ignore needs a line here too.
 | Finding | Resources | Why it stays |
 | --- | --- | --- |
 | AWS-0095 SNS topic not encrypted with a customer-managed key | `aws_sns_topic.alerts`, `.alerts_us_east_1` (alarms.tf), `.ses_events` (ses.tf) | Budgets, Cost Anomaly Detection, CloudWatch alarms and SES publish to an encrypted topic only through a CMK whose key policy grants each service (the AWS-managed `alias/aws/sns` refuses them). The messages are threshold notices and bounce events, with no client data. |
-| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, read only by the API and renderer roles and short presigned URLs): a CMK would add a key and kms grants to both roles without changing who can read a PDF. |
+| AWS-0132 S3 bucket not encrypted with a customer-managed key | `aws_s3_bucket_server_side_encryption_configuration.reports` (reports.tf), `.frontend` (s3_cloudfront.tf) | Both are SSE-S3 encrypted. `frontend` is the public static site. `reports` is private (public access blocked, written only by the renderer role, read only by CloudFront's origin access control for short signed URLs): a CMK would need a key policy for CloudFront and a grant for the renderer without changing who can read a PDF. |
 
 Revisit AWS-0132 for `reports` if a client contract asks for customer-held
 keys or key-level audit of report reads.
@@ -2184,8 +2229,10 @@ notice to data subjects).
 1. **Suspected secret leak:** rotate the secret at its source.
    `AUTH_JWT_SECRET` rotation logs every user out and leaves every stored
    run unverified until re-run ([§ Run stamps](#run-stamps)). DB passwords: `ALTER ROLE`
-   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml` and
-   `terraform apply`. The operator runs these steps by hand.
+   and update the secret. Then update `infra-secrets/water-management/prod.sops.yaml`
+   and apply through `infra/scripts/tf.sh` (the edit moves
+   `sops.lastmodified`, which rotates the runtime secrets). The operator runs
+   these steps by hand.
 2. **Suspected cross-project data exposure:** check the RLS policies and the
    `water_app` role flags (`\du`, `pg_policies`). Add a failing DB test that
    reproduces it before fixing.
