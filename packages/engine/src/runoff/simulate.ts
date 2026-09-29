@@ -22,6 +22,8 @@ export interface RunoffTrace {
 	exchangeMm: Float64Array;
 	stores: Float64Array[];
 	storageStartMm: number;
+	/** Each store at the start of the first output day (after the warm-up), in the model's `stores` order; they sum to storageStartMm. */
+	storesStartMm: number[];
 	storageEndMm: number;
 	/** saveState's numbers at the start of day `captureAt`, when asked. */
 	captured?: number[];
@@ -113,6 +115,8 @@ export function simulateRunoff<P, S>(
 	const stores = model.stores.map(() => new Float64Array(trace ? n : 0));
 	const now = new Float64Array(model.stores.length);
 	const storageStartMm = model.storage(st);
+	model.readStores(st, now);
+	const storesStartMm = Array.from(now);
 	for (let t = 0; t < n; t++) {
 		if (t === opts.captureAt) captured = model.saveState!(st);
 		model.step(p, st, forcing.rainMm[t]!, forcing.petMm[t]!, day);
@@ -124,7 +128,7 @@ export function simulateRunoff<P, S>(
 		for (let j = 0; j < now.length; j++) stores[j]![t] = now[j]!;
 	}
 	if (opts.captureAt === n) captured = model.saveState!(st);
-	return { qMm, aetMm, exchangeMm, stores, storageStartMm, storageEndMm: model.storage(st), ...(captured ? { captured } : {}) };
+	return { qMm, aetMm, exchangeMm, stores, storageStartMm, storesStartMm, storageEndMm: model.storage(st), ...(captured ? { captured } : {}) };
 }
 
 /**
@@ -199,6 +203,7 @@ export const gr4jNaturalFlow: NaturalFlowGenerator = (input, ctx) => {
 			flowMm: total(tr.qMm),
 			exchangeMm: total(tr.exchangeMm),
 			storageStartMm: tr.storageStartMm,
+			storesStartMm: Object.fromEntries(gr4j.stores.map((s, j) => [s.key, tr.storesStartMm[j]!])),
 			storageEndMm: tr.storageEndMm
 		},
 		...(tr.captured ? { state: tr.captured } : {})

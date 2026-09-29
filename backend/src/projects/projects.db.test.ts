@@ -1,3 +1,4 @@
+import { defaultDataQualitySettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -159,11 +160,11 @@ describe('projects', () => {
 		const u = await signUp('Q');
 		const { projectId } = await projectWithModel(u);
 		const first = await u.call('GET', `/projects/${projectId}`);
-		expect(first.body.project.settings.dataQuality).toEqual({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
+		expect(first.body.project.settings.dataQuality).toEqual(defaultDataQualitySettings());
 		const ok = await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality: { agreementMinRatio: 0.9, agreementMinDays: 30 } } });
 		expect(ok.status).toBe(200);
 		// A partial patch keeps the other threshold at its default.
-		expect(ok.body.project.settings.dataQuality).toEqual({ agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
+		expect(ok.body.project.settings.dataQuality).toEqual({ ...defaultDataQualitySettings(), agreementMinRatio: 0.9, agreementMaxRatio: 1.5, agreementMinDays: 30 });
 		for (const dataQuality of [{ agreementMinRatio: 0 }, { agreementMinRatio: 1.2 }, { agreementMaxRatio: 0.5 }, { agreementMinDays: 12.5 }, { agreementMinDays: 400 }, { other: 1 }]) {
 			expect((await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality } })).status, JSON.stringify(dataQuality)).toBe(400);
 		}
@@ -175,6 +176,21 @@ describe('projects', () => {
 		const run = await u.call('POST', `/projects/${projectId}/runs`, { label: 'thresholds' });
 		expect(run.status).toBe(201);
 		expect(run.body.run.summary.dataQuality.observedAgreement).toMatchObject({ minRatio: 0.9, minDays: 30, flaggedYears: [2020] });
+		// The flow flat-line limits (engine ≥ 1.20.0): 60 days of one gauge value is a flat stretch by default …
+		const flat = (r: typeof run) => r.body.run.summary.dataQuality.seriesChecks.filter((c: { check: string; seriesKind: string }) => c.check === 'flatline' && c.seriesKind === 'flow_observed_m3s');
+		expect(flat(run)).toHaveLength(1);
+		// … a cap below its floor is refused on the merged settings, and nothing is stored …
+		const bad = await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality: { flatlineFlowMinDays: 100 } } });
+		expect(bad.status).toBe(400);
+		expect(bad.body.error).toMatch(/flow flat-line cap \(90 days\) can't be below its floor \(100 days\)/);
+		expect((await u.call('GET', `/projects/${projectId}`)).body.project.settings.dataQuality.flatlineFlowMinDays).toBe(14);
+		// … and a floor above the stretch, with its cap, clears it.
+		const longer = await u.call('PATCH', `/projects/${projectId}`, { settings: { dataQuality: { flatlineFlowMinDays: 61, flatlineFlowMaxDays: 120 } } });
+		expect(longer.status).toBe(200);
+		expect(longer.body.project.settings.dataQuality).toMatchObject({ agreementMinRatio: 0.9, flatlineFlowMinDays: 61, flatlineFlowMaxDays: 120 });
+		const rerun = await u.call('POST', `/projects/${projectId}/runs`, { label: 'flat-line limits' });
+		expect(rerun.status).toBe(201);
+		expect(flat(rerun)).toHaveLength(0);
 	});
 
 	it('scores a run over the calibration window and stores the EWR compliance grid', async () => {

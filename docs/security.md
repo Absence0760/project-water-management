@@ -1154,7 +1154,7 @@ In short:
   a neighbour's use (design [farmer-view.md §10](./design/farmer-view.md)).
   Open with the client and the security lead: who may hold viewer on a
   project with farmers (FV-D5), since viewers see every farm.
-- **Seasonal outlooks to farmers (issue #53 R5, 104).** A farmer never
+- **Seasonal outlooks to farmers (issue #53 R5, 106).** A farmer never
   reads a seasonal outlook (`seasonal_outlook` stays viewer-only): an
   editor publishes one level, and the farmer reads that publication's row
   for their own linked farms only (`outlook_publication_farm_select`:
@@ -1162,9 +1162,17 @@ In short:
   `FarmOutlookProjection`, that farm's own share of demand met and its own
   dam's end-of-season fill, no other farm's id, name or figure
   (`views/farmOutlook.test.ts`, `outlooks/publication.db.test.ts` with a
-  positive control). The publication row itself (level, season, who
-  published) is every member's. What was published is append-only; a
-  publication is ended, never edited or deleted by `water_app`.
+  positive control, beside an unlinked contributor and a user with no role
+  here, who read no farm's row). The publication row itself (level, season,
+  who published) is every member's; no route gives a farmer more than their
+  farm's projection, the season and the level (`GET /outlook-publication`
+  is viewer+). What was published is append-only; a publication is ended,
+  never edited or deleted by `water_app`. Issue #122's privacy review found
+  no catchment-wide outlook figure reaching farmers, so the `k ≥ 5` rule
+  isn't engaged; one reaching them later must apply it. The level label is
+  the WUA's own free text (up to 100 characters) and reaches every farmer
+  as typed, so it is the WUA's to keep free of figures
+  ([farmer-view.md §12](./design/farmer-view.md)).
 - **Publications and the farm view (WP-2.3, WP-2.6 API, 022).** A farmer reads
   run results only through the project's current publication: its counts-only
   `catchment_view`, their own farms' stored projections (`publication_farm`)

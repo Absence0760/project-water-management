@@ -437,7 +437,13 @@ export interface ProjectSettings {
 	 * set by hand or imported. Never changes model results.
 	 */
 	fitRecord: FitRecord | null;
-	/** Thresholds of the input data-quality checks (./quality.ts). They never change model results. */
+	/**
+	 * Limits of the input data-quality checks (./quality.ts). The gauge-vs-logger,
+	 * outlier and flat-line limits only change what is flagged; the zero-run and
+	 * low-vs-CHIRPS limits (engine ≥ 1.20.0) change results too, because a run
+	 * treats flagged zero runs as missing (§2.4c) and leaves flagged years out
+	 * of the CHIRPS fit (§2.4b).
+	 */
 	dataQuality: DataQualitySettings;
 	/**
 	 * Optional WR2012 check (./reference/wr2012.ts): the quaternary's
@@ -447,10 +453,34 @@ export interface ProjectSettings {
 	wr2012: Wr2012Settings;
 }
 
+/** How a zero-rain run is judged long enough to flag (engine ≥ 1.20.0, docs/model.md §2.10a). */
+export const ZERO_RUN_RULES = ['wetDays', 'usualRain'] as const;
 /**
- * Gauge-vs-logger agreement thresholds (observedAgreement): a water year is
+ * 'wetDays' (the default): zeroRunMinWetDays of the run in the series' six
+ * wettest calendar months. 'usualRain': the rain the series' monthly means
+ * would put on the run's days is at least zeroRunUsualShare of its usual
+ * annual rain, and the run lasts zeroRunMinDays or more.
+ */
+export type ZeroRunRule = (typeof ZERO_RUN_RULES)[number];
+/** What each water year's catchment / CHIRPS ratio is compared with (engine ≥ 1.20.0). */
+export const LOW_VS_CHIRPS_BASELINES = ['record', 'moving'] as const;
+/** 'record' (the default): the median over the whole record. 'moving': the median of the judged years within ±5 water years. */
+export type LowVsChirpsBaseline = (typeof LOW_VS_CHIRPS_BASELINES)[number];
+/** The CHIRPS rain a water year needs before it is judged (engine ≥ 1.20.0). */
+export const LOW_VS_CHIRPS_MINIMUMS = ['fixed', 'scaled'] as const;
+/** 'fixed' (the default): 50 mm. 'scaled': the larger of 50 mm and 25 % of the median annual CHIRPS. */
+export type LowVsChirpsMinimum = (typeof LOW_VS_CHIRPS_MINIMUMS)[number];
+
+/**
+ * Limits of the input data-quality checks (./quality.ts, docs/model.md
+ * §2.10a). Gauge-vs-logger agreement (observedAgreement): a water year is
  * flagged when gauge / logger volume on shared days falls outside
- * agreementMinRatio … agreementMaxRatio, on at least agreementMinDays shared days.
+ * agreementMinRatio … agreementMaxRatio, on at least agreementMinDays shared
+ * days. The rest (engine ≥ 1.20.0, issue #66) were engine constants before;
+ * their defaults are those constants, so a project that never sets them runs
+ * as before. Sample-size floors (100 positive values for the outlier rule, 56
+ * days a month for a climatology, 180 shared days for a low-vs-CHIRPS year)
+ * stay constants.
  */
 export interface DataQualitySettings {
 	/** 0 < min ≤ 1. Default 2/3. */
@@ -459,6 +489,84 @@ export interface DataQualitySettings {
 	agreementMaxRatio: number;
 	/** Whole days, 1–366. Default 90. */
 	agreementMinDays: number;
+	/** Outliers: rain and daily A-pan values above this × the 99th percentile of the positive values. Above 1, at most 1000. Default 5. */
+	outlierFactorRain: number;
+	/** The same for flow. Above 1, at most 1000. Default 10. */
+	outlierFactorFlow: number;
+	/** Flat-lines: days of one non-zero rain value. Whole days, 2–366. Default 5. */
+	flatlineRainDays: number;
+	/** Days of one non-zero daily A-pan value. Whole days, 2–366. Default 7. */
+	flatlineEvapDays: number;
+	/** Flow flat-lines: the floor of the resolution-aware limit. Whole days, 2–366. Default 14. */
+	flatlineFlowMinDays: number;
+	/** … and its cap (the limit for zero flow). Whole days, flatlineFlowMinDays–366. Default 90. */
+	flatlineFlowMaxDays: number;
+	/** How a zero-rain run is judged. Default 'wetDays'. */
+	zeroRunRule: ZeroRunRule;
+	/** 'wetDays': days of the run in the wet half of the year. Whole days, 1–366. Default 60. */
+	zeroRunMinWetDays: number;
+	/** 'usualRain': the share of the usual annual rain the run's days would bring. 0 < share ≤ 1. Default 0.25. */
+	zeroRunUsualShare: number;
+	/** 'usualRain': the run's shortest length. Whole days, 1–366. Default 60. */
+	zeroRunMinDays: number;
+	/**
+	 * Check each zero run against CHIRPS: a run over which CHIRPS read under
+	 * half its usual rain may be a real dry spell and is not flagged. Default
+	 * false (every run the rule picks is flagged).
+	 */
+	zeroRunChirpsCheck: boolean;
+	/** Low vs CHIRPS: a year below this × the usual catchment / CHIRPS ratio is flagged. 0 < ratio < 1. Default 0.5. */
+	lowVsChirpsRatio: number;
+	/** What the usual ratio is. Default 'record'. */
+	lowVsChirpsBaseline: LowVsChirpsBaseline;
+	/** The CHIRPS rain a year needs to be judged. Default 'fixed' (50 mm). */
+	lowVsChirpsMinimum: LowVsChirpsMinimum;
+}
+
+/**
+ * The data-quality limits that change which catchment-rain days a run
+ * treats as suspect, and so change results: the zero-run and low-vs-CHIRPS
+ * limits. A fit records them (FitRecord.forcing.rainChecks) because they
+ * change the rain it ran on.
+ */
+export const RAIN_CHECK_KEYS = [
+	'zeroRunRule',
+	'zeroRunMinWetDays',
+	'zeroRunUsualShare',
+	'zeroRunMinDays',
+	'zeroRunChirpsCheck',
+	'lowVsChirpsRatio',
+	'lowVsChirpsBaseline',
+	'lowVsChirpsMinimum'
+] as const satisfies readonly (keyof DataQualitySettings)[];
+export type RainCheckLimits = Pick<DataQualitySettings, (typeof RAIN_CHECK_KEYS)[number]>;
+
+/** The rain-check limits of a data-quality setting, in RAIN_CHECK_KEYS order. */
+export function rainCheckLimits(dq: DataQualitySettings): RainCheckLimits {
+	return Object.fromEntries(RAIN_CHECK_KEYS.map((k) => [k, dq[k]])) as unknown as RainCheckLimits;
+}
+
+/** The data-quality defaults (the engine constants they replaced). */
+export function defaultDataQualitySettings(): DataQualitySettings {
+	return {
+		agreementMinRatio: 2 / 3,
+		agreementMaxRatio: 1.5,
+		agreementMinDays: 90,
+		outlierFactorRain: 5,
+		outlierFactorFlow: 10,
+		flatlineRainDays: 5,
+		flatlineEvapDays: 7,
+		flatlineFlowMinDays: 14,
+		flatlineFlowMaxDays: 90,
+		zeroRunRule: 'wetDays',
+		zeroRunMinWetDays: 60,
+		zeroRunUsualShare: 0.25,
+		zeroRunMinDays: 60,
+		zeroRunChirpsCheck: false,
+		lowVsChirpsRatio: 0.5,
+		lowVsChirpsBaseline: 'record',
+		lowVsChirpsMinimum: 'fixed'
+	};
 }
 
 /** Series that calibration statistics can compare simulated outflow with. */
@@ -536,7 +644,7 @@ export function defaultProjectSettings(): ProjectSettings {
 		calibrationFlowKind: null,
 		calibrationExclusions: [],
 		fitRecord: null,
-		dataQuality: { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 },
+		dataQuality: defaultDataQualitySettings(),
 		wr2012: defaultWr2012Settings()
 	};
 }
@@ -2126,6 +2234,13 @@ export interface RunoffBalance {
 	/** Net groundwater exchange (+ = gained); 0 when X2 = 0. */
 	exchangeMm: number;
 	storageStartMm: number;
+	/**
+	 * Each store at the start of the run's first day, after the warm-up (or
+	 * the saved state a warm start resumes from), by its series key
+	 * (production_store, routing_store, uh_store); they sum to storageStartMm.
+	 * Engine ≥ 1.20.0; absent before, when only the total was kept.
+	 */
+	storesStartMm?: Record<string, number>;
 	storageEndMm: number;
 }
 

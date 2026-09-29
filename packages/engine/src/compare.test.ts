@@ -1024,6 +1024,18 @@ describe('diffInputs', () => {
 		const old = structuredClone(a);
 		delete (old.settings as Record<string, unknown>).dataQuality;
 		expect(texts(old, a)).toEqual([]);
+		// One stored before the other limits were settings (engine < 1.20.0) ran their defaults.
+		const pre120 = structuredClone(a);
+		(pre120.settings as Record<string, unknown>).dataQuality = { agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 };
+		expect(texts(pre120, a)).toEqual([]);
+		const c = structuredClone(a);
+		Object.assign(c.settings, { dataQuality: { zeroRunRule: 'usualRain', zeroRunChirpsCheck: true, lowVsChirpsBaseline: 'moving', outlierFactorFlow: 20 } });
+		expect(texts(a, c)).toEqual([
+			'Data quality flow outlier factor: 10× the 99th percentile → 20× the 99th percentile',
+			'Data quality zero-rain run rule: days in the wet season → share of the usual annual rain',
+			'Data quality zero-rain run CHIRPS check: off → on',
+			'Data quality low vs CHIRPS usual ratio: whole-record median → moving median (±5 years)'
+		]);
 	});
 
 	it('treats month lists as sets: order and repeats are not a change', () => {

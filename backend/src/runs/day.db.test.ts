@@ -1,7 +1,7 @@
 // GET /projects/:id/runs/:runId/day: one node's columns on one day, for the
 // day trace in the results (docs/ui.md § Self-checks).
 import { beforeAll, describe, expect, it } from 'vitest';
-import { makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
+import { asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 
@@ -222,12 +222,39 @@ describe('GET /projects/:id/runs/:runId/day without a nodeId (catchment)', () =>
 		expect(v('rain_used')).toBe(30); // 30 mm on the 8th
 	});
 
-	it("starts the run's first day from the storage after the warm-up (each store unknown, only the total)", async () => {
+	it("starts the run's first day from each store after the warm-up, and the day balances on them", async () => {
 		const res = await catchmentDay(owner, gr4jRun, '2020-01-01');
 		expect(res.status).toBe(200);
 		const run = await owner.call('GET', `/projects/${catchmentProject}/runs/${gr4jRun}`);
+		const start = run.body.run.summary.runoff;
+		expect(res.body.previousStorageMm).toBe(start.storageStartMm);
+		for (const k of STORES) {
+			expect(typeof start.storesStartMm[k], k).toBe('number');
+			expect(res.body.previousStores[k], k).toBe(start.storesStartMm[k]);
+		}
+		expect(STORES.reduce((s, k) => s + res.body.previousStores[k], 0)).toBeCloseTo(res.body.previousStorageMm, 9);
+		// Each store's own step from its start: the production store holds X1 at most, and the day closes.
+		expect(res.body.previousStores.production_store).toBeLessThanOrEqual(200);
+		const v = (k: string) => col(res.body, k)!;
+		const after = STORES.reduce((s, k) => s + v(k), 0);
+		const q = v('natural_flow') / (res.body.areaKm2 * 1000);
+		expect(Math.abs(res.body.previousStorageMm + v('rain_used') + v('exchange') - v('aet') - q - after)).toBeLessThan(1e-9);
+	});
+
+	it('a run from before engine 1.20.0 kept only the total at the start: each store is null on its first day', async () => {
+		const made = await owner.call('POST', `/projects/${catchmentProject}/runs`, { label: 'Before 1.20.0' });
+		expect(made.status).toBe(201);
+		const old = made.body.run.id as string;
+		await asOwner(`UPDATE model_run SET engine_version = '1.19.0', summary = summary #- '{runoff,storesStartMm}' WHERE id = $1`, [old]);
+		const res = await catchmentDay(owner, old, '2020-01-01');
+		expect(res.status).toBe(200);
+		const run = await owner.call('GET', `/projects/${catchmentProject}/runs/${old}`);
+		expect(run.body.run.summary.runoff.storesStartMm).toBeUndefined();
 		expect(res.body.previousStorageMm).toBe(run.body.run.summary.runoff.storageStartMm);
 		expect(res.body.previousStores).toEqual({ production_store: null, routing_store: null, uh_store: null });
+		// Only the first day: the second reads the stored series.
+		const next = await catchmentDay(owner, old, '2020-01-02');
+		for (const k of STORES) expect(typeof next.body.previousStores[k], k).toBe('number');
 	});
 
 	it('traces a legacy run without stores: the [Flow data] columns only', async () => {

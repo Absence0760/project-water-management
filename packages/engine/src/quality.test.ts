@@ -9,24 +9,28 @@ import {
 	FLATLINE_FLOW_RECESSION_PER_DAY,
 	FLATLINE_FLOW_RESOLUTION_STEPS,
 	FLATLINE_MIN_DAYS,
+	flatlineDaysOf,
 	flowFlatlineMinDays,
 	seriesResolution,
 	LOW_VS_CHIRPS_MIN_DAYS,
 	LOW_VS_CHIRPS_RATIO,
 	MAX_LISTED,
 	observedAgreement,
+	OUTLIER_FACTOR,
+	outlierFactorOf,
 	rainVsChirps,
 	rainVsChirpsCheck,
 	resolveDataQuality,
 	seriesChecks,
 	seriesRowFlags,
+	usualAnnualRainMm,
 	ZERO_RUN_MIN_WET_DAYS,
 	ZERO_RUN_PLAIN_DAYS,
 	zeroRainCheck,
 	zeroRainRuns
 } from './quality';
 import { fromEpochDay, monthOfEpochDay, toEpochDay, waterYearLabel } from './calendar';
-import { defaultProjectSettings, type NetworkNode } from './project';
+import { defaultDataQualitySettings, defaultProjectSettings, SERIES_KINDS, type NetworkNode } from './project';
 
 // 1 m³/s for one day = 0.0864 Mm³.
 const constant = (startDate: string, days: number, v: number | null) => ({ startDate, values: new Array(days).fill(v) });
@@ -129,12 +133,13 @@ describe('observedAgreement', () => {
 
 describe('resolveDataQuality', () => {
 	it('defaults to 2/3 … 3/2 on 90 shared days', () => {
-		expect(resolveDataQuality(undefined)).toEqual({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
+		expect(resolveDataQuality(undefined)).toMatchObject({ agreementMinRatio: 2 / 3, agreementMaxRatio: 1.5, agreementMinDays: 90 });
 		expect(resolveDataQuality(undefined)).toEqual(defaultProjectSettings().dataQuality);
 	});
 
 	it('keeps valid values and replaces each invalid one with its default, with a warning', () => {
 		expect(resolveDataQuality({ agreementMinRatio: 0.5, agreementMaxRatio: 2, agreementMinDays: 30 })).toEqual({
+			...defaultProjectSettings().dataQuality,
 			agreementMinRatio: 0.5,
 			agreementMaxRatio: 2,
 			agreementMinDays: 30
@@ -383,13 +388,13 @@ describe('zeroRainRuns (issue #2)', () => {
 
 	it(`without about two years of data, falls back to a plain ${ZERO_RUN_PLAIN_DAYS}-day rule in any season`, () => {
 		const short = (zeros: number) => [3, ...new Array(zeros).fill(0), 3, ...new Array(200).fill(3)];
-		expect(zeroRainRuns({ startDate: S, values: short(ZERO_RUN_PLAIN_DAYS - 1) })).toEqual({ wetMonths: null, runs: [] });
+		expect(zeroRainRuns({ startDate: S, values: short(ZERO_RUN_PLAIN_DAYS - 1) })).toMatchObject({ wetMonths: null, runs: [] });
 		const z = zeroRainRuns({ startDate: S, values: short(ZERO_RUN_PLAIN_DAYS) });
 		expect(z.runs).toEqual([{ startDate: '2010-01-02', endDate: '2010-06-30', days: 180, wetDays: 180, usualMm: null }]);
 		expect(zeroRainCheck(z)!.text).toMatch(/180\+ days \(too little data to tell the wet season\)/);
 		// A long series that never rains has no climatology either: the plain rule applies.
 		expect(zeroRainRuns({ startDate: S, values: new Array(DAYS).fill(0) }).runs).toMatchObject([{ days: DAYS }]);
-		expect(zeroRainRuns({ startDate: S, values: [] })).toEqual({ wetMonths: null, runs: [] });
+		expect(zeroRainRuns({ startDate: S, values: [] })).toMatchObject({ wetMonths: null, runs: [] });
 	});
 
 	it('warns only on the catchment rain, naming the dates and the blocked CHIRPS fallback', () => {
@@ -527,6 +532,217 @@ describe('rainVsChirps (issue #2)', () => {
 			['rain_catchment_mm', 'lowvschirps'],
 			['rain_chirps_mm', 'negative']
 		]);
+	});
+});
+
+describe('data-quality limits as settings (engine 1.20.0, issue #66)', () => {
+	const dq = defaultDataQualitySettings();
+
+	it('defaults to the constants they replaced, so a project that never sets them runs as before', () => {
+		expect(dq).toMatchObject({
+			outlierFactorRain: OUTLIER_FACTOR.rain,
+			outlierFactorFlow: OUTLIER_FACTOR.flow,
+			flatlineRainDays: FLATLINE_MIN_DAYS.rain_catchment_mm,
+			flatlineEvapDays: FLATLINE_MIN_DAYS.evap_apan_mm,
+			flatlineFlowMinDays: FLATLINE_MIN_DAYS.flow_observed_m3s,
+			flatlineFlowMaxDays: FLATLINE_FLOW_MAX_DAYS,
+			zeroRunRule: 'wetDays',
+			zeroRunMinWetDays: ZERO_RUN_MIN_WET_DAYS,
+			zeroRunChirpsCheck: false,
+			lowVsChirpsRatio: LOW_VS_CHIRPS_RATIO,
+			lowVsChirpsBaseline: 'record',
+			lowVsChirpsMinimum: 'fixed'
+		});
+		for (const k of SERIES_KINDS) expect(flatlineDaysOf(k, dq), k).toBe(FLATLINE_MIN_DAYS[k]);
+		expect(defaultProjectSettings().dataQuality).toEqual(dq);
+	});
+
+	it('resolves each new field, replacing an invalid one with its default and a warning', () => {
+		const w: string[] = [];
+		const r = resolveDataQuality(
+			{ outlierFactorRain: 1, flatlineRainDays: 1.5, zeroRunRule: 'weekly', zeroRunChirpsCheck: 'yes', lowVsChirpsRatio: 1, lowVsChirpsBaseline: 'moving', zeroRunUsualShare: 0.3 },
+			w
+		);
+		expect(r).toEqual({ ...dq, lowVsChirpsBaseline: 'moving', zeroRunUsualShare: 0.3 });
+		expect(w).toHaveLength(5);
+		expect(w.join('\n')).toMatch(/zeroRunRule = "weekly" is invalid \(needs one of wetDays, usualRain\)/);
+		expect(w.join('\n')).toMatch(/zeroRunChirpsCheck = "yes" is invalid \(needs true or false\)/);
+		// A flow flat-line cap below its floor is raised to the floor.
+		const w2: string[] = [];
+		expect(resolveDataQuality({ flatlineFlowMinDays: 30, flatlineFlowMaxDays: 20 }, w2)).toMatchObject({ flatlineFlowMinDays: 30, flatlineFlowMaxDays: 30 });
+		expect(w2).toEqual(['data-quality setting flatlineFlowMaxDays = 20 is below flatlineFlowMinDays = 30; using 30 for both']);
+	});
+
+	it('outlier factors: a wider factor clears a value the default flags, per-day flags included', () => {
+		const v = Array.from({ length: 200 }, (_, i) => 1 + (i % 10) / 10);
+		v[50] = 20; // 20 / p99 ≈ 10.5×
+		const rain = { startDate: '2020-01-01', values: v };
+		expect(checkSeries('rain_catchment_mm', rain).map((c) => c.check)).toEqual(['outlier']);
+		expect(checkSeries('rain_catchment_mm', rain, { ...dq, outlierFactorRain: 12 })).toEqual([]);
+		expect(checkSeries('rain_catchment_mm', rain, { ...dq, outlierFactorRain: 8 })[0]!.text).toMatch(/above 8× the 99th percentile/);
+		expect(seriesRowFlags('rain_catchment_mm', rain, { ...dq, outlierFactorRain: 12 }).outlier[50]).toBe(false);
+		// Flow reads its own factor (10 by default, so 10.5× is flagged, 12 isn't).
+		expect(checkSeries('flow_observed_m3s', rain).map((c) => c.check)).toEqual(['outlier']);
+		expect(checkSeries('flow_observed_m3s', rain, { ...dq, outlierFactorFlow: 12 })).toEqual([]);
+		expect(outlierFactorOf('flow_logger_m3s', { ...dq, outlierFactorFlow: 3 })).toBe(3);
+		expect(outlierFactorOf('evap_apan_mm', { ...dq, outlierFactorRain: 7 })).toBe(7);
+	});
+
+	it('flat-line limits: rain, A-pan and the flow floor and cap', () => {
+		const flat = (n: number, v: number) => ({ startDate: '2020-01-01', values: [1, ...new Array(n).fill(v), 2] });
+		expect(checkSeries('rain_catchment_mm', flat(5, 3)).map((c) => c.check)).toEqual(['flatline']);
+		expect(checkSeries('rain_catchment_mm', flat(5, 3), { ...dq, flatlineRainDays: 6 })).toEqual([]);
+		expect(checkSeries('evap_apan_mm', flat(6, 3), { ...dq, flatlineEvapDays: 6 }).map((c) => c.check)).toEqual(['flatline']);
+		expect(checkSeries('evap_apan_mm', flat(6, 3))).toEqual([]);
+		// Flow: the floor for an unknown resolution, the cap for zero flow.
+		expect(flowFlatlineMinDays(1, null, { flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 })).toBe(10);
+		expect(flowFlatlineMinDays(0, 0.001, { flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 })).toBe(40);
+		expect(flowFlatlineMinDays(0.004, 0.001, { flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 })).toBe(40); // 75 capped
+		expect(flowFlatlineMinDays(0.004, 0.001)).toBe(75);
+		const zeroFlow = { startDate: '2020-01-01', values: [0.5, 0.25, ...new Array(40).fill(0), 1] };
+		expect(checkSeries('flow_observed_m3s', zeroFlow)).toEqual([]);
+		const c = checkSeries('flow_observed_m3s', zeroFlow, { ...dq, flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 });
+		expect(c.map((x) => x.check)).toEqual(['flatline']);
+		expect(c[0]!.text).toMatch(/\(10 to 40 days by flow\)/);
+		expect(seriesRowFlags('flow_observed_m3s', zeroFlow, { ...dq, flatlineFlowMinDays: 10, flatlineFlowMaxDays: 40 }).flatline.filter(Boolean)).toHaveLength(40);
+	});
+
+	describe('zero-rain runs', () => {
+		const S = '2010-01-01';
+		const DAYS = 6 * 365;
+		const winterGap = (from: string, to: string) => {
+			const v = seasonal(S, DAYS, WINTER);
+			gap(v, S, from, to);
+			return { startDate: S, values: v };
+		};
+
+		it('the wet-season minimum is a setting, and the warning names it', () => {
+			const s = winterGap('2012-06-01', '2012-08-15'); // 76 winter days
+			expect(zeroRainRuns(s, { dq: { ...dq, zeroRunMinWetDays: 76 } }).runs).toHaveLength(1);
+			expect(zeroRainRuns(s, { dq: { ...dq, zeroRunMinWetDays: 77 } }).runs).toEqual([]);
+			expect(zeroRainCheck(zeroRainRuns(s, { dq: { ...dq, zeroRunMinWetDays: 70 } }))!.text).toMatch(/covering 70\+ days of the wet season/);
+		});
+
+		it("'usualRain' judges a run by the rain its days usually bring, with a minimum length", () => {
+			const usual = { ...dq, zeroRunRule: 'usualRain' as const, zeroRunUsualShare: 0.2, zeroRunMinDays: 45 };
+			const s = winterGap('2012-06-01', '2012-07-20'); // 50 winter days: under the 60 wet days the default needs
+			const annual = usualAnnualRainMm(s)!;
+			expect(zeroRainRuns(s).runs).toEqual([]);
+			const z = zeroRainRuns(s, { dq: usual });
+			expect(z.runs).toHaveLength(1);
+			expect(z.runs[0]!.usualMm!).toBeGreaterThanOrEqual(0.2 * annual);
+			expect(zeroRainCheck(z)!.text).toMatch(new RegExp(`covering 45\\+ days that the series' monthly means would give 20 % or more of its usual ${Math.round(annual)} mm a year: 2012-06-01 to 2012-07-20 \\(50 days, which usually bring about \\d+ mm\\)`));
+			// The length floor.
+			expect(zeroRainRuns(s, { dq: { ...usual, zeroRunMinDays: 51 } }).runs).toEqual([]);
+			// A share the run's usual rain doesn't reach.
+			expect(zeroRainRuns(s, { dq: { ...usual, zeroRunUsualShare: (z.runs[0]!.usualMm! + 1) / annual } }).runs).toEqual([]);
+			// A long dry-season spell brings little rain: never flagged, however long (the default rule agrees).
+			const dry = winterGap('2013-10-01', '2014-03-15');
+			expect(zeroRainRuns(dry, { dq: usual }).runs).toEqual([]);
+			// Without a climatology the plain rule still applies.
+			const short = { startDate: S, values: [3, ...new Array(ZERO_RUN_PLAIN_DAYS).fill(0), 3, ...new Array(200).fill(3)] };
+			expect(zeroRainRuns(short, { dq: usual }).runs).toHaveLength(1);
+		});
+
+		it('the CHIRPS check splits runs into probably missing (flagged) and dry spells that may be real (not flagged)', () => {
+			const s = winterGap('2012-06-01', '2012-08-15');
+			const on = { ...dq, zeroRunChirpsCheck: true };
+			// CHIRPS rained through the run as usual: probably missing data.
+			const wet = { startDate: S, values: seasonal(S, DAYS, WINTER) };
+			const zw = zeroRainRuns(s, { dq: on, chirps: wet });
+			expect(zw.runs).toMatchObject([{ startDate: '2012-06-01', verdict: 'probablyMissing' }]);
+			expect(zw.runs[0]!.chirpsShare).toBeGreaterThan(0.9);
+			expect(zw.dryRuns).toEqual([]);
+			expect(zeroRainCheck(zw)!.text).toMatch(/CHIRPS read \d+ % of its usual rain over it/);
+			expect(zeroRainCheck(zw)!.text).toMatch(/Checked against CHIRPS: a run is flagged when CHIRPS read 50 % or more/);
+			// CHIRPS dry over the run too: a dry spell that may be real.
+			const dryChirps = { startDate: S, values: [...wet.values] };
+			gap(dryChirps.values, S, '2012-06-01', '2012-08-15');
+			const zd = zeroRainRuns(s, { dq: on, chirps: dryChirps });
+			expect(zd.runs).toEqual([]);
+			expect(zd.dryRuns).toMatchObject([{ startDate: '2012-06-01', verdict: 'maybeDry', chirpsShare: 0 }]);
+			const cd = zeroRainCheck(zd)!;
+			expect(cd).toMatchObject({ check: 'zerorun', days: 0, examples: [] });
+			expect(cd.text).toMatch(/^Rainfall \(catchment\): no zero-rain run is flagged\. 1 run CHIRPS also reads as dry \(under 50 % of its usual rain\) is not flagged/);
+			// CHIRPS blank over most of the run can't judge it: flagged as before.
+			const blank = { startDate: S, values: [...wet.values] as (number | null)[] };
+			for (let i = toEpochDay('2012-06-01') - toEpochDay(S); i <= toEpochDay('2012-08-01') - toEpochDay(S); i++) blank.values[i] = null;
+			const zb = zeroRainRuns(s, { dq: on, chirps: blank });
+			expect(zb.runs).toMatchObject([{ verdict: null, chirpsShare: null }]);
+			expect(zeroRainCheck(zb)!.text).toMatch(/too little CHIRPS to judge it/);
+			// Off (the default): CHIRPS is not read, and the result has no verdicts.
+			const off = zeroRainRuns(s, { dq, chirps: dryChirps });
+			expect(off.runs).toHaveLength(1);
+			expect(off.runs[0]).not.toHaveProperty('verdict');
+			expect(off.dryRuns).toBeUndefined();
+			// seriesChecks hands the CHIRPS series to the catchment rain's check.
+			const checks = seriesChecks({ rain_catchment_mm: s, rain_chirps_mm: dryChirps }, on);
+			expect(checks.find((c) => c.check === 'zerorun')!.days).toBe(0);
+			expect(seriesChecks({ rain_catchment_mm: s, rain_chirps_mm: dryChirps }).find((c) => c.check === 'zerorun')!.days).toBe(76);
+		});
+	});
+
+	describe('low vs CHIRPS', () => {
+		/** Water years from 2000/01: CHIRPS is the seasonal rain, the catchment reads it × ratio(water year). */
+		const record = (years: number, ratio: (wy: number) => number) => {
+			const S = '2000-10-01';
+			const n = toEpochDay(`${2000 + years}-10-01`) - toEpochDay(S);
+			const chirps = seasonal(S, n, WINTER);
+			const d0 = toEpochDay(S);
+			const catchment = chirps.map((v, i): number | null => {
+				const wy = Number(fromEpochDay(d0 + i).slice(0, 4)) - (monthOfEpochDay(d0 + i) >= 10 ? 0 : 1);
+				return v! * ratio(wy);
+			});
+			return { rain_catchment_mm: { startDate: S, values: catchment }, rain_chirps_mm: { startDate: S, values: chirps } };
+		};
+
+		it('the ratio cutoff is a setting', () => {
+			const s = record(8, (wy) => (wy === 2003 ? 0.8 : 2)); // 2003/04 at 40 % of the usual 2
+			expect(rainVsChirps(s)!.flaggedYears).toEqual([2003]);
+			expect(rainVsChirps(s, { ...dq, lowVsChirpsRatio: 0.39 })!.flaggedYears).toEqual([]);
+			expect(rainVsChirps(s, { ...dq, lowVsChirpsRatio: 0.41 })!.flaggedYears).toEqual([2003]);
+			expect(rainVsChirpsCheck(rainVsChirps(s, { ...dq, lowVsChirpsRatio: 0.45 }))!.text).toMatch(/below 45 % of the usual catchment \/ CHIRPS rain ratio \(200 %\)/);
+		});
+
+		it("a moving median follows a record whose ratio drifts, where the record-wide median flags a whole era", () => {
+			// A new catchment average from 2008/09: the ratio drops from 4 to 1; 2012/13 is zero-filled at 0.4.
+			const s = record(16, (wy) => (wy < 2008 ? 4 : wy === 2012 ? 0.4 : 1));
+			const whole = rainVsChirps(s)!;
+			expect(whole.usualRatio).toBeCloseTo(2.5, 12);
+			expect(whole.flaggedYears).toEqual([2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015]); // every year of the new era
+			const moving = rainVsChirps(s, { ...dq, lowVsChirpsBaseline: 'moving' })!;
+			expect(moving.flaggedYears).toEqual([2012]);
+			const y = (wy: number) => moving.years.find((x) => x.waterYear === wy)!;
+			expect(y(2012).usualRatio).toBe(1);
+			expect(y(2003).usualRatio).toBe(4);
+			const c = rainVsChirpsCheck(moving)!;
+			expect(c.text).toMatch(/below 50 % of the usual catchment \/ CHIRPS rain ratio of the water years around each \(a moving median over ±5 years; 250 % over the record\)/);
+			expect(c.text).toMatch(/2012\/13: \d+ mm vs \d+ mm, 40 %, usual 100 % \(365 days\)/);
+			// With too few judged years nearby, a year falls back to the record's usual ratio.
+			const short = rainVsChirps(record(6, () => 2), { ...dq, lowVsChirpsBaseline: 'moving' })!;
+			expect(short.years.every((x) => x.usualRatio === short.usualRatio)).toBe(true);
+		});
+
+		it('a scaled CHIRPS minimum stops judging a year with too little CHIRPS rain for the catchment', () => {
+			const s = record(8, (wy) => (wy === 2003 ? 0 : 2));
+			// 2003/04: catchment blank from April to August leaves 212 shared days and about 120 mm of CHIRPS on them.
+			const d0 = toEpochDay('2000-10-01');
+			for (let i = toEpochDay('2004-04-01') - d0; i <= toEpochDay('2004-08-31') - d0; i++) s.rain_catchment_mm.values[i] = null;
+			const fixed = rainVsChirps(s)!;
+			const y = fixed.years.find((x) => x.waterYear === 2003)!;
+			expect(y.days).toBeGreaterThanOrEqual(LOW_VS_CHIRPS_MIN_DAYS);
+			expect(y.chirpsMm).toBeGreaterThan(50);
+			expect(fixed.minMm).toBe(50);
+			expect(fixed.flaggedYears).toEqual([2003]);
+			const scaled = rainVsChirps(s, { ...dq, lowVsChirpsMinimum: 'scaled' })!;
+			expect(scaled.minMm).toBeGreaterThan(y.chirpsMm);
+			expect(scaled.minMm).toBeCloseTo(0.25 * usualAnnualRainMm(s.rain_chirps_mm)!, -1);
+			expect(scaled.flaggedYears).toEqual([]);
+			// In a dry catchment the 50 mm floor holds.
+			const arid = record(8, () => 1);
+			arid.rain_chirps_mm.values = arid.rain_chirps_mm.values.map((v) => v! / 10);
+			expect(rainVsChirps(arid, { ...dq, lowVsChirpsMinimum: 'scaled' })!.minMm).toBe(50);
+		});
 	});
 });
 

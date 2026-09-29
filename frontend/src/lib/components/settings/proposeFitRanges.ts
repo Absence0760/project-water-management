@@ -16,8 +16,8 @@ async function valuesOf(projectId: string, s: SeriesMeta | null): Promise<DailyS
 }
 
 /** Load the project's catchment rain and CHIRPS and propose ranges from their double-mass breaks. */
-export async function proposeFitRanges(projectId: string, zeroRainRuns: unknown): Promise<FitRangeProposal> {
+export async function proposeFitRanges(projectId: string, zeroRainRuns: unknown, dataQuality?: unknown): Promise<FitRangeProposal> {
 	const list = await api.series.list(projectId);
 	const [c, h] = await Promise.all([valuesOf(projectId, firstOf(list, 'rain_catchment_mm')), valuesOf(projectId, firstOf(list, 'rain_chirps_mm'))]);
-	return proposalFrom(c, h, zeroRainRuns);
+	return proposalFrom(c, h, zeroRainRuns, dataQuality);
 }

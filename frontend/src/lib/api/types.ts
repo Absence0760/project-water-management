@@ -774,7 +774,7 @@ export interface RunCatchmentDay {
 	params: Record<string, number> | null;
 	/** Σ stores at the end of the day before (the storage after the warm-up on the run's first day), mm. */
 	previousStorageMm: number | null;
-	/** Each store at the end of the day before, mm; each null on the run's first day. Null for a legacy run. */
+	/** Each store at the end of the day before, mm (after the warm-up on the run's first day; each null there on a run from before engine 1.20.0). Null for a legacy run. */
 	previousStores: Record<string, number | null> | null;
 	columns: { key: string; label: string; unit: string | null; value: number | null }[];
 }

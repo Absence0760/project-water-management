@@ -2849,11 +2849,29 @@ which checks every catchment tab).
   filter, so a flood month can't pass its low flows). Each has a help tip;
   scenarios can change both with `settings.set`.
 - **Simulation period**: start and end, blank by default, which runs from the first to the last day with rain (engine ≥ 0.45.0; a run that leaves flow out warns, [model.md § 2.1](./model.md#21-pipeline)).
-- **Data quality**: the gauge-vs-logger thresholds (lowest and highest ratio
-  in %, shown to one decimal; minimum shared days; defaults 66.7 % (two
-  thirds), 150 %, 90 days). Out-of-range
-  values block Save with a message. They only change which water years are
-  flagged, never the results.
+- **Data quality** (`DataQualitySection.svelte`): three groups.
+  *Gauge vs logger*: the lowest and highest ratio in %, shown to one
+  decimal, and the minimum shared days (defaults 66.7 % (two thirds),
+  150 %, 90 days). *Outliers and flat stretches* (engine ≥ 1.20.0): the rain
+  and flow outlier factors (× the 99th percentile, defaults 5 and 10), the
+  rain and A-pan flat stretches (5 and 7 days) and the shortest and longest
+  flow flat stretch (14 and 90 days). These only change what is flagged,
+  never the results. *Catchment rain recorded as zero* (engine ≥ 1.20.0,
+  issue #66): **Judge a zero-rain run by** *Days in the wet season* (the
+  default, with its days, 60) or *Share of the usual annual rain* (its share,
+  25 %, and shortest run, 60 days, replace the days field); **Check each
+  zero-rain run against CHIRPS** (off); and low vs CHIRPS: **flag below** a
+  share of the usual ratio (50 %), the **Usual ratio** (whole-record median
+  or a moving median over ±5 years) and the **CHIRPS rain a year needs**
+  (50 mm, or scaled to the catchment). The group's note says these change
+  results and that the alternatives are still to be tested on a semi-arid
+  record. Every field has its field-history line. Out-of-range values, or a
+  longest flow flat stretch shorter than the shortest, block Save with a
+  message. The Data tab's checks, zero-rain shading and daily preview flags
+  follow the saved limits, as runs do
+  ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+  A fit's provenance lists the rain limits it ran under (*Rain data-quality
+  limits*).
 - **Automatic runs** (WP-2.11, `settings.autoRun`): **Re-run the model after
   new data** (off by default); **Wait after the latest new data** (minutes,
   0–120, default 15; more data within the wait pushes the run back, never
@@ -3514,9 +3532,9 @@ read it before.
   (shown as 0 when X2 = 0 stored none), natural flow Q in m³/day and as mm
   over the catchment, each with its formula from `GR4J_COLUMNS`; then the
   store balance, stores before + P + F − AET − Q − stores after, with its
-  residual in mm. On a run's first day each store's starting value is shown
-  as – (only their total after the warm-up is recorded) and the balance uses
-  the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
+  residual in mm. On a run's first day each store starts from its value after
+  the warm-up (engine ≥ 1.20.0); a run from before kept only their total there,
+  so each store shows – and the balance uses the total. A legacy run lists its [Flow data] columns (`LEGACY_RUNOFF_COLUMNS`)
   and says it keeps no stores, so there is no store balance to close.
   A run saved before 0.12.0 says
   it has no checks, balance or working columns, and to run it again.
@@ -4271,7 +4289,15 @@ them scenarios).
   control, the source (pan coefficient × A-pan, or a monthly row in mm with
   a required source note), checked with the Settings tab's own rules
   (`settings/peInput.ts`), and a new monthly row starts from the PE GR4J
-  runs on now. Targets come from the model as
+  runs on now. A farm's dam survey curve (`damCurve`, engine ≥ 1.20.0) is
+  a paste box that reads rows as the Network tab's survey box does (level,
+  area, volume, one per line; `network/damCurve.ts` `parseDamCurve`) and
+  refuses a curve the engine couldn't use; empty is none (the power law),
+  and the change reads "none (power law) → 3 survey rows, 180 000 m³ at the
+  top". Its hint says to add it after a capacity change, so a raised dam
+  uses its own survey ([scenarios.md § Dam capacity](./scenarios.md)); in
+  override mode a curve pasted in the table is recorded that way too.
+  Targets come from the model as
   the listed ops leave it, so a node the scenario adds can be changed next.
   A field starts at its current value with "Now: …" under it; percentages
   are typed as %, areas in ha. The op is built and checked with the engine's
@@ -5145,8 +5171,12 @@ published.
   way (no dam, no line); "Your WUA reviews the level on 1 Jan."; and
   "Worked out by the model from past years’ weather: not a forecast, and
   not a promise. Only a notice from your WUA or from DWS is a
-  restriction." Only this farm's own figures ever reach the page
-  (`FarmView.outlook`, api.md § Farm). That chart
+  restriction."; then "What is the season outlook?", a link to the
+  `farm-season-outlook` entry on `/farm/words` (issue #122). Only this
+  farm's own figures ever reach the page (`FarmView.outlook`, api.md §
+  Farm). The farm page imports the card only when `outlookCard()` returns
+  one, so it is a chunk of its own (under 1 KB gzipped) that a farm with no
+  outlook published never downloads. That chart
   (`farm/DamChart.svelte`, "Last 12 months") says what its line is under its
   heading ("Dam level at the end of each month", the numbers table's caption
   reused, so it needed no new translation), with % ticks, a month under each

@@ -1,4 +1,4 @@
-import { defaultZeroRainSettings, type ZeroRainSettings } from '@water-management/engine';
+import { defaultDataQualitySettings, defaultZeroRainSettings, type ZeroRainSettings } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
 import { zeroRainShading } from './zeroRain';
 
@@ -32,6 +32,20 @@ describe('zeroRainShading', () => {
 		expect(zeroRainShading(s, zr({ mode: 'asRecorded', keepDry: [], missing: [] }))).toEqual({ ranges: [], days: 0, spreadDays: 0, caption: null });
 		expect(zeroRainShading(s, zr({ mode: 'missing', keepDry: [{ waterYear: 2002, reason: 'real' }], missing: [] })).days).toBe(0);
 		expect(zeroRainShading(series(), zr({ mode: 'missing', keepDry: [], missing: [] })).caption).toBeNull();
+	});
+
+	it('follows the data-quality limits a run uses (engine 1.20.0): a higher wet-season minimum, or CHIRPS reading the run as dry', () => {
+		const s = series();
+		for (let i = idx('2003-05-01'); i <= idx('2003-07-31'); i++) s.values[i] = 0;
+		const on = zr({ mode: 'missing', keepDry: [], missing: [] });
+		const dq = defaultDataQualitySettings();
+		expect(zeroRainShading(s, on, null, 'monthly', { dq }).days).toBeGreaterThanOrEqual(92);
+		expect(zeroRainShading(s, on, null, 'monthly', { dq: { ...dq, zeroRunMinWetDays: 200 } }).days).toBe(0);
+		// CHIRPS dry over the run too, with the CHIRPS check on: a dry spell that may be real, not shaded.
+		const chirps = { startDate: s.startDate, values: s.values.slice() };
+		expect(zeroRainShading(s, on, chirps, 'monthly', { dq: { ...dq, zeroRunChirpsCheck: true } }).days).toBe(0);
+		// Positive control: CHIRPS as usual over the run keeps it flagged.
+		expect(zeroRainShading(s, on, series(), 'monthly', { dq: { ...dq, zeroRunChirpsCheck: true } }).days).toBeGreaterThanOrEqual(92);
 	});
 
 	it('shades a listed missing period, clipped to the series', () => {
