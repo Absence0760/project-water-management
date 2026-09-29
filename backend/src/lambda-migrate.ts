@@ -6,7 +6,8 @@
 //      from Secrets Manager — RDS rotates them, so they are fetched per run;
 //   2. ensures the RLS-bound runtime role `water_app` exists with LOGIN and
 //      the password from WATER_APP_PASSWORD (sops `db_app_password`, via
-//      Terraform), and verifies it is NOSUPERUSER NOBYPASSRLS. The password
+//      Terraform into this Lambda's runtime secret, loaded at cold start by
+//      config/runtimeSecrets.ts), and verifies it is NOSUPERUSER NOBYPASSRLS. The password
 //      is sent as a SCRAM-SHA-256 verifier computed here, so plaintext never
 //      reaches the server or its logs;
 //   3. applies backend/migrations/*.sql through scripts/migrate.ts as the owner.
@@ -25,9 +26,15 @@ import type { Context } from 'aws-lambda';
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from 'node:crypto';
 import pg from 'pg';
 import { assertLambdaEnv } from './config/production.js';
+import { loadRuntimeSecrets } from './config/runtimeSecrets.js';
+import { getSecretString } from './config/secretsManager.js';
 import { migrate, MigrateError, type MigrateErrorCode } from '../scripts/migrate.js';
 
-// Refuse to start without its settings (config/production.ts).
+// Its runtime secret (the water_app password) once per cold start
+// (config/runtimeSecrets.ts), then refuse to start without its settings
+// (config/production.ts). A rotation writes a new secret version, which changes
+// RUNTIME_SECRET_VERSION and so cold-starts this Lambda onto it.
+await loadRuntimeSecrets('migrate');
 assertLambdaEnv('migrate');
 
 interface MasterSecret {
@@ -78,14 +85,15 @@ function requireEnv(name: string): string {
 }
 
 async function readMasterSecret(secretArn: string): Promise<MasterSecret> {
-	// The AWS SDK v3 ships inside the nodejs24.x runtime; importing it through a
-	// variable keeps esbuild from bundling it and tsc from needing its types
-	// (no new dependency in backend/package.json).
-	const sdk = '@aws-sdk/client-secrets-manager';
-	const { SecretsManagerClient, GetSecretValueCommand } = await import(sdk);
-	const client = new SecretsManagerClient({});
-	const out = await client.send(new GetSecretValueCommand({ SecretId: secretArn }));
-	const parsed = JSON.parse(String(out.SecretString ?? '')) as Partial<MasterSecret>;
+	// The runtime's SDK (config/secretsManager.ts). Not JSON.parse's message on
+	// a malformed secret: it quotes the text.
+	let parsed: Partial<MasterSecret>;
+	try {
+		parsed = JSON.parse(await getSecretString(secretArn)) as Partial<MasterSecret>;
+	} catch (err) {
+		if (err instanceof SyntaxError) throw new Error('master secret is not JSON');
+		throw err;
+	}
 	if (!parsed.username || !parsed.password) throw new Error('master secret is missing username/password');
 	return { username: parsed.username, password: parsed.password };
 }

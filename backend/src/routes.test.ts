@@ -132,7 +132,15 @@ describe('route auth inventory', () => {
 
 	// Seasonal outlooks (issue #53 R5, 063_seasonal_outlook): auth-gated like every project route.
 	it('inventories the outlook routes as auth-gated', () => {
-		for (const r of ['POST /projects/:id/outlooks', 'GET /projects/:id/outlooks', 'GET /projects/:id/outlooks/:outlookId']) {
+		for (const r of [
+			'POST /projects/:id/outlooks',
+			'GET /projects/:id/outlooks',
+			'GET /projects/:id/outlooks/:outlookId',
+			// Publishing one level to farmers (106, issue #53 R5).
+			'POST /projects/:id/outlooks/:outlookId/publish',
+			'GET /projects/:id/outlook-publication',
+			'DELETE /projects/:id/outlook-publication'
+		]) {
 			expect(routes).toContain(r);
 			expect(PUBLIC.has(r)).toBe(false);
 		}
@@ -162,6 +170,7 @@ describe('route auth inventory', () => {
 		const reports = [
 			'POST /projects/:id/reports',
 			'GET /projects/:id/reports/:jobId',
+			'GET /projects/:id/reports/:jobId/pdf',
 			'GET /projects/:id/report-schedules',
 			'POST /projects/:id/report-schedules',
 			'PATCH /projects/:id/report-schedules/:scheduleId',

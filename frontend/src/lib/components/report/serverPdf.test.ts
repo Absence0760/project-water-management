@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createApi } from '$lib/api/client';
 import { describeReport, describeSchedule, emptyScheduleDraft, isPending, type ReportView, reportsApi, scheduleDraftToBody, scheduleStatus } from './serverPdf';
 
 const tz = process.env.TZ;
@@ -20,10 +21,13 @@ const view = (over: Partial<ReportView> = {}): ReportView => ({
 	...over
 });
 
+/** The two parts of the app's API client reportsApi uses. */
+const fakeApi = (request: unknown) => ({ request, reports: createApi('http://api.test').reports }) as never;
+
 describe('reportsApi', () => {
 	it('calls the report routes, with ids encoded', async () => {
-		const request = vi.fn(async (..._a: unknown[]) => ({ jobId: 'j1', schedules: [], schedule: { id: 's' } }) as never);
-		const r = reportsApi({ request } as never, 'p/1');
+		const request = vi.fn(async (..._a: unknown[]) => ({ jobId: 'j1', report: view(), schedules: [], schedule: { id: 's' } }) as never);
+		const r = reportsApi(fakeApi(request), 'p/1');
 		expect(await r.create({ runId: 'r', email: true })).toBe('j1');
 		await r.get('j 1');
 		await r.schedules();
@@ -43,21 +47,22 @@ describe('reportsApi', () => {
 
 	it('sends an impact report’s baseline as the report route’s `against`', async () => {
 		const request = vi.fn(async (..._a: unknown[]) => ({ jobId: 'j2' }) as never);
-		expect(await reportsApi({ request } as never, 'p').create({ runId: 'r', against: 'p0:r0' })).toBe('j2');
+		expect(await reportsApi(fakeApi(request), 'p').create({ runId: 'r', against: 'p0:r0' })).toBe('j2');
 		expect(request.mock.calls[0]![2]).toEqual({ runId: 'r', against: 'p0:r0' });
 	});
 
-	it('keeps the download link only when it is an http(s) URL: the page renders it as an href', async () => {
-		const got = async (url: string | undefined) => {
-			const request = vi.fn(async () => ({ report: view({ status: 'done' }), ...(url === undefined ? {} : { url }) }) as never);
-			return (await reportsApi({ request } as never, 'p').get('j')).url;
+	it('links a done PDF to the API download route, built from the ids, never from the response', async () => {
+		const got = async (status: ReportView['status'], url?: string) => {
+			const request = vi.fn(async () => ({ report: view({ status }), ...(url === undefined ? {} : { url }) }) as never);
+			return (await reportsApi(fakeApi(request), 'p/1').get('j 1')).url;
 		};
-		// Positive control: the pre-signed S3 link (and MinIO's plain http one locally) comes through.
-		expect(await got('https://reports.s3.af-south-1.amazonaws.com/p/j.pdf?X-Amz-Signature=abc')).toBe('https://reports.s3.af-south-1.amazonaws.com/p/j.pdf?X-Amz-Signature=abc');
-		expect(await got('http://localhost:9002/reports/j.pdf')).toBe('http://localhost:9002/reports/j.pdf');
-		expect(await got(undefined)).toBeUndefined();
-		for (const hostile of ['javascript:alert(1)', 'JavaScript:alert(1)', ' javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'vbscript:msgbox(1)', '//evil.example/x.pdf']) {
-			expect(await got(hostile), hostile).toBeUndefined();
+		expect(await got('done')).toBe('http://api.test/projects/p%2F1/reports/j%201/pdf');
+		// Not ready yet: no link.
+		for (const s of ['queued', 'rendering', 'retrying', 'failed'] as const) expect(await got(s), s).toBeUndefined();
+		// Whatever the response says is ignored: a hostile or stale link never reaches the href.
+		for (const hostile of ['javascript:alert(1)', 'data:text/html,<script>alert(1)</script>', 'https://evil.example/x.pdf']) {
+			expect(await got('done', hostile), hostile).toBe('http://api.test/projects/p%2F1/reports/j%201/pdf');
+			expect(await got('queued', hostile), hostile).toBeUndefined();
 		}
 	});
 });

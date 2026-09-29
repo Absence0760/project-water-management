@@ -40,6 +40,7 @@ export const SECTIONS: Record<string, string> = {
 	'farm.band': 'Farm view: the model’s own rating chip on the look-back card (not a restriction).',
 	'farm.back': 'Farm view: the “Looking back” card (the model’s estimate, not a restriction).',
 	'farm.forecast': 'Farm view: “Next 14 days”, shown only when the WUA published a forecast run. What the model expects on forecast rain, never a promise.',
+	'farm.outlook': 'Farm view: “This season”, shown only when the WUA published a seasonal outlook. The level is the WUA’s decision; the figures are what that level gave this farm in past years’ weather, never a forecast or a promise.',
 	'farm.compare': 'Farm view: the “Compared with last season” card.',
 	'farm.river': 'Farm view: the “Your hydrological unit on the river” card. Counts only, never a neighbour’s name.',
 	'farm.who': 'Farm view: “Who can see my hydrological unit” on the river card.',

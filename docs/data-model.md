@@ -63,7 +63,7 @@ erDiagram
 | `language` | The languages a person or an invite can have (`code`), synced from the engine's language table; see [Languages](#languages-080_languagesql) | none |
 | `team` | A group of users (name, creator) whose projects its members share; `settings` (jsonb, 055: the portfolio's traffic-light thresholds); see [Teams](#teams-002_teamssql-008_team_viewersql-055_team_settingssql) | none |
 | `team_member` | (team, user, team role) | none |
-| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Three keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null }`, null = the engine's defaults, 1 October – 30 April and 0.8, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
+| `project` | One catchment/place: name, description, optional `team_id`, `wua_name` (095_wua_name, issue #74: the WUA the farm pages' contact lines name, "Questions? Contact Vaalbank WUA."; NULL = "your WUA", 1–200 characters by a CHECK; not the team's name, which may be a consultancy's; every member reads it, farmers included, and an editor changes it), `time_zone` (an IANA name, `Africa/Johannesburg` by default, 058_project_time_zone: the calendar day its downloads are dated by, issue #45, and every other day the server counts or writes for a person: the alerts' today and 06:00 digest (059_local_day), feed health, the portfolio's ages, the farm view's freshness and forecast `madeOn`; the API accepts only a zone the runtime knows, a CHECK bounds it to 1–64 characters, and SQL reads it through `app_time_zone(zone)` (059), which falls back to the default for a name Postgres's tz database lacks rather than raising). `settings jsonb` holds model-wide parameters (`ProjectSettings`) | One workbook. `settings` ← `[Crop demand]` A-pan and effective rain (plus `effectiveRainStoreMm`, the soil-water store, which the workbook doesn't have: default 25 mm, engine ≥ 0.14.0; and `lakeEvapFactor`, dam evaporation ÷ A-pan, default 0.75, engine ≥ 0.16.0), `[Farm demand]` Feb days, `[Farm spec]` method and Hi/Lo split, `[Flow Calibration Cfg]` (only the rain threshold and catchment area since engine 1.0.0, [064](#legacy-runoff-settings-removed-064_remove_legacy_runoffsql)), `[EWR Cfg]` pragmatic EWR, `[Home]` date window, `[Flow Calibration Cfg]` calibration window (`calibrationStart/End`) and `[Flow data]` rUseFlow (`calibrationFlowKind`). App-only keys (e.g. `runoffModel`, always `'gr4j'` since engine 1.0.0: the run's record of its model, not a choice, `panCoefficient`, `chirpsBiasCorrection`, `chirpsFitPeriod` (engine 0.29.0), `rainSource` (engine 0.30.0: periods whose catchment rain comes from `rain_catchment_alt_mm` × monthly factors, [model.md §2.4e](./model.md#24e-rain-source-periods-engine--0300-issue-40-b)), `pe` (engine 0.31.0: GR4J's potential-evaporation input, `{ kind: 'pan' }` or `{ kind: 'monthly', mm, source }`, [model.md §2.4a](./model.md#24a-rain-to-flow-gr4j-engine--050-issue-4); no SQL migration, since a project saved without it takes `{ kind: 'pan' }` from `mergeSettings`, what it always ran), `panCoefficientSource` (engine 0.31.1: free-text provenance of the pan-coefficient row, never read by the model), `arealRain` (engine 1.13.0: the areal rainfall correction on GR4J's rain, `{ factors, method, source }` or null, [model.md §2.4g](./model.md#24g-areal-rainfall-correction-engine--1130); no SQL migration, null from `mergeSettings`), `effectiveRainFractionMonthly` (engine 0.43.0, issue #54: 12 effective-rain fractions 0–1 by water-year month, or null = `effectiveRainFraction` every month, [model.md §2.3](./model.md#23-irrigation-demand) step 7; no SQL migration, null from `mergeSettings`), `assuranceAnnualThreshold` (engine 0.32.0: the supply ratio at which a water year counts as met for the annual assurance of supply, default 0.9, [model.md §2.11a](./model.md#211a-assurance-of-supply-and-stress-classes-engine--0320-roadmap-wp-34)), `allocationMode` and `allocationTolerance` (engine 1.18.0, issue #72: what the registered volumes do to a run, `'none'` by default, `'cap'` or `'fullAllocation'`, and the comparison's band, a fraction in [0, 1), default 0.1, [model.md §2.12a](./model.md#212a-allocations-and-full-allocation-runs-engine--1180-issue-72); no SQL migration, `mergeSettings` gives a project without them the defaults), `ewrChargeSource` and `lowFlowMeasure` (engine 1.3.0, issue #64: what the EWR charge follows, `'pragmatic'` by default or `'ruleTable'`, and what low flows are judged on, `'total'` by default or `'baseflow'`, [model.md §2.9c–§2.9d](./model.md); pending the hydrologist; no SQL migration, `mergeSettings` gives a project without them the defaults), `zeroRainRuns` with its multi-day accumulation fields from engine 0.20.0, `dataQuality`, `reportStart/End`) have no workbook cell; missing keys take `defaultProjectSettings()`. Three keys are **not model inputs**, so runs don't record them and saving only them leaves `updated_at` alone: `autoRun` (WP-2.11, `runs/autoRun.ts`), `outlook` (issue #53 R5, R6, `projects/outlookSettings.ts`: `{ season: { startMonth, startDay, endMonth, endDay } \| null, planningShare: number \| null, review: { month, day } \| null }`, null = the engine's defaults, 1 October – 30 April, 0.8 and the review on 1 January, confirmed by the client (O3, O6, issue #90); how a seasonal outlook is set up; no SQL migration) and `outcomes` (issue #53 R4, `projects/outcomeSettings.ts`: `{ yearClassMethod: 'auto' \| 'terciles' \| 'quintiles', riskCutoffs: { reserveMonthsMet, daysBelowEwr }, siteNodeId }`, each metric `{ lower, increasing }` shares or null = the engine's defaults, pending the hydrologist, and `siteNodeId` the Reserve site, null = the outlet or a gauge with a rule table (checked when it changes; a copy remaps it with the rule tables' sites); how the Runs tab's outcome matrix reads a demand sweep; no SQL migration, the API resolves an absent key to the defaults). Access is the row's: every member reads it, an editor changes it |
 | `project_member` | (project, user, role) | none |
 | `node` | A network element: `farm`, `gauge` or (engine ≥ 0.22.0, migration 011) `user`, an other water user, `downstream_node_id` (tree to one outflow gauge), areas, flow-share override, dam and diversion parameters, irrigation efficiency and loss return | `[Network]` (name, type, upstream links reversed into one downstream link) + `[Farm spec]` (every numeric column) |
 | `crop` | A crop with 12 monthly crop factors (water-year order, Oct … Sep), a display `sort_order` (003) and an optional `irrigation_efficiency` (061, engine ≥ 0.43.0, issue #54: 0 < e ≤ 1 by CHECK, NULL = the farm's `node.irrigation_efficiency`; a farm runs on its crops' efficiencies weighted by annual requirement, [model.md §2.3](./model.md#23-irrigation-demand) step 6) | `[Crop demand]` crop table (b023 has no per-crop efficiency) |
@@ -565,7 +565,9 @@ the result change?", and put back any earlier version.
   in `app_accept_invites`), `invite.sent/revoked` (email masked
   `j•••@domain`; a farmer invite adds its number of `farms`; no "was mailed"
   flag, which would say whether the address has an account),
-  `publication.published/notice_changed`, `share_link.created/revoked`,
+  `publication.published/notice_changed`, `outlook.published/unpublished`
+  (106, issue #53 R5: the publication and outlook ids, the level, the
+  season and the number of farms), `share_link.created/revoked`,
   `series.created/replaced/merged/deleted` (day range, `valuesSha256`, days
   changed; a replace that changed the series' product or version adds
   `provenance: { from, to }`), `series.labelled` (032: a label changed by
@@ -1995,6 +1997,8 @@ series, and there are years × levels of them (up to 240), not 12.
 | `analogue_years` | The water years asked for, or NULL = every one the record holds |
 | `status` | `pending` or `complete` |
 | `result`, `engine_version`, `completed_at` | Set on completion (CHECK: all three exactly when `complete`). `result` is the engine's `SeasonalOutlook` with the backend's `excluded` (plus `overLimit`, `memberFailed`) and `failures`, ≤ 8 MB |
+| `review_date` | The season's review date for the review triggers (migration 106, issue #53 R6): after `decision_date`, on or before `season_end` (CHECK), or NULL = no trigger table. Fixed at insert |
+| `triggers` | Set on completion when there is a review date (CHECK: then never NULL on a complete outlook; NULL without a review date): the backend's `StoredTriggers` (the engine's `ReviewTriggers` table without each band's whole outlook, or why it couldn't be drawn), ≤ 8 MB |
 | `created_by`, `created_at` | Stamped by the insert trigger; `created_by` `ON DELETE SET NULL` (derived, like a sweep) |
 
 `seasonal_outlook_member`:
@@ -2008,15 +2012,16 @@ series, and there are years × levels of them (up to 240), not 12.
 | `created_at` | Stamped by the trigger |
 
 - **RLS**: SELECT for viewers on both (farmers and contributors read
-  nothing: the farmer view E3 waits on the client's O5), INSERT and DELETE
+  nothing: what farmers see is the publication below), INSERT and DELETE
   for editors, UPDATE of the outlook for editors on `pending` rows only.
   `water_app` may UPDATE only the outlook's outcome columns (`status`,
-  `result`, `engine_version`, `completed_at`) and **never** a member: a
+  `result`, `triggers`, `engine_version`, `completed_at`) and **never** a member: a
   member is inserted once, complete (the catalogue guard's
   `COLUMN_ONLY_UPDATE` and `NO_UPDATE`).
-- **`seasonal_outlook_guard`** (INSERT, `SECURITY DEFINER`): the base run
-  is the row's project's and an ordinary run, the job an `outlook` job of
-  the project; stamps the author and time, forces `pending` with no result.
+- **`seasonal_outlook_guard`** (INSERT, `SECURITY DEFINER`, latest
+  definition 106): the base run is the row's project's and an ordinary
+  run, the job an `outlook` job of the project; stamps the author and time,
+  forces `pending` with no result and no triggers.
 - **`seasonal_outlook_complete`** (UPDATE): only a `pending` outlook, only
   to `complete`, only by its author; stamps `completed_at`.
 - **`seasonal_outlook_member_guard`** (INSERT, `SECURITY DEFINER`): its
@@ -2025,6 +2030,55 @@ series, and there are years × levels of them (up to 240), not 12.
 - **Indexes**: `(project_id, created_at DESC)`, `base_run_id`, `job_id`,
   `created_by`; on members the unique `(outlook_id, level_position,
   water_year)` and `project_id`.
+
+### Outlook publications (106_outlook_triggers_publication.sql)
+
+One level of a complete seasonal outlook, published to the project's
+farmers (issue #53 R5, the farmer view E3; the client confirmed farmers see
+the outlook, O5, issue #90; [api.md § Seasonal outlooks](./api.md#seasonal-outlooks)).
+The run publication's pattern (022): a publication row and one row of
+each farm's own figures, what the farm's farmers were shown.
+
+`outlook_publication`:
+
+| Column | Holds |
+| --- | --- |
+| `project_id` | The project |
+| `outlook_id` | The outlook it came from, `ON DELETE SET NULL` (the API keeps 20 outlooks; the farms' rows keep what was shown) |
+| `level_id`, `level_label` | The level the WUA chose; the label copied from the outlook by the guard |
+| `decision_date`, `season_end`, `review_date`, `engine_version` | Copied from the outlook by the guard |
+| `published_by`, `published_at` | Stamped by the guard; `published_by` `ON DELETE SET NULL` |
+| `ended_at`, `ended_by` | Ended by a newer publication or withdrawn; NULL = current. `ended_by` `ON DELETE SET NULL` |
+
+`outlook_publication_farm`: `publication_id` (`ON DELETE CASCADE`),
+`project_id`, `node_id` (a farm, `ON DELETE CASCADE`), `view` (the engine's
+`FarmOutlookProjection`, that farm's own figures only, ≤ 16 KB);
+`PRIMARY KEY (publication_id, node_id)`.
+
+- **One current per project**: a unique index on `project_id` where
+  `ended_at IS NULL`. The API ends the current one before inserting the
+  next. `outlook_publication_cap` (AFTER INSERT, `SECURITY DEFINER`) keeps
+  the newest 12, never the current one.
+- **RLS**: the publication is readable by every member, farmers included
+  (`app_has_role(project_id, 'farmer')`); a farm's row by viewers or a
+  farmer linked to that farm (`node_id IN app_farm_nodes(project_id)`);
+  INSERT and the ending UPDATE for editors. `water_app` may UPDATE only
+  `ended_at` and `ended_by`, never DELETE a publication, and never UPDATE
+  or DELETE a farm's row (catalogue guard: `COLUMN_ONLY_UPDATE`,
+  `NO_DELETE`, `APPEND_ONLY`).
+- **`outlook_publication_guard`** (INSERT, `SECURITY DEFINER`): the outlook
+  is the row's project's and complete, and the level one of its levels;
+  copies the label, season, review date and engine; stamps who and when
+  (an insert already ended is ended by its writer).
+- **`outlook_publication_end`** (UPDATE): a current publication is ended
+  once, stamped with who and when; after that it is fixed. An update that
+  only clears `published_by`, `ended_by` or `outlook_id` (a foreign key's
+  SET NULL) passes.
+- **`outlook_publication_farm_guard`** (INSERT, `SECURITY DEFINER`): the
+  publication is the row's project's and current, the node a farm of it.
+- **Indexes**: the current one's unique index, `(project_id, published_at
+  DESC)`, `outlook_id`, `published_by`, `ended_by`; on farms `node_id`,
+  `project_id`.
 
 ### Legacy runoff settings removed (064_remove_legacy_runoff.sql)
 

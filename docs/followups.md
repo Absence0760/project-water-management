@@ -64,10 +64,12 @@ The checklist for these is issue #62; the history scrub is #63.
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $60** (`infra/variables.tf`
-      `budget_monthly_usd`; was $50). The job queue's SQS interface endpoint
-      adds ~$7.30/month per AZ; feeds and the renderer add ~$2/month idle.
-      Keep it, or set your own in tfvars (about 80 for af-south-1, below).
+- [ ] **AWS budget default is now $80** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, #126), sized for af-south-1's ~$58–63
+      idle, plus a derived $6/day budget and Cost Anomaly Detection
+      (deployment.md § Budget alerts). Set ~60 in tfvars for us-east-1.
+      Before the first apply, check for an existing anomaly monitor
+      (infra/README.md § Operator steps, step 4).
 - [ ] **Data-feed terms** (operator, roadmap D7): DWS's terms for automated
       fetching and whether the fetcher's region can reach the site (it
       answered our network with HTTP 403, so the DWS parser is untested
@@ -309,7 +311,7 @@ collected as a checklist in issue #46; tick it there as they answer.
       Runs page and run comparison show the validation scores beside the
       in-sample ones (model.md §2.10b). Calibration exclusions are stored too,
       and `runModel` passes them to the EWR agreement (model.md §2.9b).
-- [ ] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
+- [x] **Data-quality limits:** outliers are 5× the 99th percentile for rain and
       10× for flow; flat-lines are 5 days for rain and, for flow, 14 to 90 days
       by the record's resolution and the flow (engine 1.12.0, a draft pending
       the hydrologist; model.md §2.10a). The
@@ -343,6 +345,30 @@ collected as a checklist in issue #46; tick it there as they answer.
       fallback bias correction lands, because it uses these flags. Once
       CR-20 lands (below) a flagged zero run changes results, not just
       warnings, so a false alarm is no longer free: item 2 matters more.
+
+      **Done (engine 1.20.0, issue #66):** the limits are
+      `settings.dataQuality` (Settings → Data quality): the outlier factors,
+      the flat-line lengths (rain, A-pan, the flow floor and cap), the
+      minimum wet-season zero-rain days (1) and the low-vs-CHIRPS ratio
+      cutoff (1), defaults unchanged; the sample-size floors stay constants.
+      Recommendations 2–5 are built as settings, **off by default**:
+      `zeroRunChirpsCheck` (2), `zeroRunRule: 'usualRain'` with
+      `zeroRunUsualShare` 25 % and `zeroRunMinDays` 60 (3),
+      `lowVsChirpsBaseline: 'moving'` (±5 years) (4) and
+      `lowVsChirpsMinimum: 'scaled'` (5). Every rain consumer (zero-run mask,
+      CHIRPS and rain-source factor fits, double mass, the Data tab) reads
+      them, and a fit records them (`forcing.rainChecks`)
+      ([model.md §2.10a](./model.md#210a-data-quality-do-the-observed-flow-records-agree)).
+- [ ] **Data-quality alternatives as defaults.** The four alternatives above
+      stay off until they are run on a semi-arid gauge record with a known
+      drought (e.g. 2015–19; none is in the repo) and the hydrologist agrees.
+      Trigger: such a record, or the hydrologist's answer. Then decide per
+      alternative whether it becomes the default; a default change bumps
+      ENGINE_VERSION with an engine-audit.md entry and the regression
+      deviation list. Also for the hydrologist: the CHIRPS share that clears
+      a zero run (50 %, `ZERO_RUN_CHIRPS_SHARE`) and the coverage it needs
+      (50 % of the run's days) are constants; the ±5-year window and the 25 %
+      scaled-minimum share are too.
 - [ ] **CHIRPS bias correction (engine 0.7.0, audit B1).** CHIRPS that fills
       in for blank catchment rain is now scaled per calendar month by
       Σ catchment / Σ CHIRPS, fitted without the suspect catchment rain the
@@ -1495,11 +1521,11 @@ the suggested order (the IDs carry the detail):
       flow, and the store balance with its residual; legacy runs list the
       [Flow data] columns). Column catalogues `GR4J_COLUMNS` /
       `LEGACY_RUNOFF_COLUMNS` in `verify/columns.ts` (ui.md, api.md).
-- [ ] **Per-store starting values on a run's first day.** Only the total
-      storage after the warm-up is saved, so day one's catchment trace
-      shows each store's "before" as "–" and balances on the total. Saving
-      each store at the end of the warm-up is an engine change (bump
-      `ENGINE_VERSION`). Trigger: the hydrologist asks for day-one detail.
+- [x] **Per-store starting values on a run's first day** (engine 1.20.0,
+      issue #67): the run's summary records each store after the warm-up
+      (`summary.runoff.storesStartMm`, summing to `storageStartMm`, checked
+      by the runoff self-check), and day one's catchment trace starts from
+      them store by store. A run from before keeps the "–" and the total.
 - [x] **Alert on a failed self-check in production** (2026-09-24):
       `executeRun` logs `{ event: "self_check_failed", projectId, runId,
       checks }` (check ids only), and `infra/alarms.tf` has a metric filter
@@ -2000,12 +2026,12 @@ role and not before it.
         rate × years since a survey date. Needs a survey year per dam, so a
         field and a migration. Trigger: a licence run over more than ~20
         years, or the hydrologist asks.
-      - *The survey curve as a scenario op*: a scenario can add a dam with a
-        curve (`node.add`) but has no `node.set` for `damCurve` (the
-        override form has no table value spec). Durable fix: a `table`
-        ValueSpec in `scenarios/fields.ts` reusing `parseDamCurve`, and
-        `damCurve` in `NODE_SET_FIELDS.farm`. Trigger: an applicant's
-        scenario that raises a dam (WP-3.6 storage–yield will want it).
+      - ~~*The survey curve as a scenario op*~~: done (engine 1.20.0, issue
+        #67): `damCurve` is in `NODE_SET_FIELDS.farm`, the "Add a change"
+        form takes pasted rows (`curve` ValueSpec reusing `parseDamCurve`),
+        and override mode records a table edit of the curve, after the
+        capacity op when the dam is raised with it (scenarios.md § Dam
+        capacity).
       - *Transfer room ignores today's release*: a transfer into a dam with
         a release rule is sized as if the dam kept what it releases, so it
         can move less than it could (never more). Same conservative choice
@@ -2723,6 +2749,13 @@ from the WP:
       comparison's band as a project setting (Settings › Registered volumes,
       default 0.1, pending the hydrologist); `?tolerance=` still overrides it
       for one request.
+- [x] **Licence impact board on a full-allocation background** (2026-09-29,
+      issue #53 R7, [model.md §2.14a](./model.md#214a-licence-impact-by-year-class-issue-53-r7-engine-and-report)).
+      With #116's allocation mode merged, a baseline that is a
+      full-allocation run makes the board's step *existing authorised use*,
+      and a pair with only one run at full allocation is said so
+      (`report/licenceImpact.ts`). Making the pair for an assessor in one
+      step is WP-3.11's cumulative assessment (roadmap step 3).
 - [ ] **A real WARMS extract** to check `HEADER_ALIASES` against, then XLSX
       import and a column-mapping step for unknown headings. Until then an
       unknown heading is listed as "not read". Trigger: the client sends an
@@ -3062,9 +3095,10 @@ from the WP:
       model.md §2.13, scenarios.md § Dam capacity) instead of scaling the
       area with capacity. Drafted from the hydrologist persona's review of
       issue #46 (item 11), not the real hydrologist. Initial and minimum
-      levels still keep their fractions. Left: a `node.set` for a survey
-      curve, so a scenario can carry the enlarged dam's own surveyed curve
-      (today only a `node.add` can), the durable answer for the larger side.
+      levels still keep their fractions. The `node.set` for a survey curve,
+      so a scenario can carry the enlarged dam's own surveyed curve (the
+      durable answer for the larger side), is built (engine 1.20.0, issue
+      #67). Left: the hydrologist's confirmation of the resize (#90).
       Trigger: the hydrologist's review, or a licence application for a dam
       raise.
 

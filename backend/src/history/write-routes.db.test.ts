@@ -15,7 +15,7 @@
 //      history covers, `exempt: '<why>'`.
 import { LEGAL_VERSION } from '@water-management/engine/legal';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { anon, app, asOwner, lastMailTo, monthly, node, signUp, tokenIn } from '../__tests__/helpers.js';
+import { anon, app, asOwner, lastMailTo, monthly, node, plantCompleteOutlook, signUp, tokenIn } from '../__tests__/helpers.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
 type Res = { status: number; body: any }; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -192,6 +192,20 @@ const WRITE_ROUTES: Entry[] = [
 			c.pubId = r.body.publication?.id;
 			return r;
 		}
+	},
+	{
+		route: `POST ${P}/outlooks/:outlookId/publish`,
+		records: ['outlook.published'],
+		call: async (c) => {
+			// A complete outlook planted as its owner (the job isn't under test).
+			c.outlookId = await plantCompleteOutlook(c.owner.id, c.projectId, c.runId as string, [{ nodeId: c.farmId }]);
+			return c.owner.call('POST', `${at(c)}/outlooks/${c.outlookId}/publish`, { levelId: '0' });
+		}
+	},
+	{
+		route: `DELETE ${P}/outlook-publication`,
+		records: ['outlook.unpublished'],
+		call: (c) => c.owner.call('DELETE', `${at(c)}/outlook-publication`)
 	},
 	{
 		route: `PATCH ${P}/publication/:pubId`,

@@ -13,12 +13,14 @@
 // years of made-up rain, each year scaled differently so the years differ,
 // and a flat 400 m³/day pragmatic EWR, so some seasons meet it and some don't.
 import type { APIRequestContext } from '@playwright/test';
-import { addMember, createProject, createRun, putModel, putSeries, sampleModel, syntheticRain, updateSettings } from '../support/api.ts';
+import { acknowledgeFarmNotice, addMember, createProject, createRun, putModel, putSeries, sampleModel, syntheticRain, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { API_URL } from '../support/env.ts';
 import { expect, test } from '../support/fixtures.ts';
 import { grouped } from '../support/format.ts';
 import { runJobsTick } from '../support/jobs.ts';
+import { words as siteWords } from '../support/lang.ts';
+import { clippedText, expectNoSidewaysScroll } from '../support/reflow.ts';
 
 const START = '2006-10-01';
 /** Rain multiplier per water year, 2006/07 … 2017/18 (invented). */
@@ -86,6 +88,8 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await page.goto(`/projects/${project.id}?tab=settings`);
 	const section = page.getByTestId('outlook-settings');
 	await expect(section.getByRole('checkbox', { name: 'Use the default season (1 Oct – 30 Apr)' })).toBeChecked();
+	// The review date's default, the engine's for that season (1 January, O3, issue #53 R6).
+	await expect(section.getByRole('checkbox', { name: 'Use the default review date (1 Jan)' })).toBeChecked();
 	await expect(section.getByTestId('season-pending')).toHaveCount(0);
 	await expect(section.getByTestId('share-pending')).toHaveCount(0);
 	await section.getByRole('checkbox', { name: 'Use the default planning share (80 %)' }).uncheck();
@@ -93,7 +97,7 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByText('Settings saved.')).toBeVisible();
 	const saved = await getJson<{ project: { settings: { outlook: unknown } } }>(page.request, `/projects/${project.id}`);
-	expect(saved.project.settings.outlook).toEqual({ season: null, planningShare: 0.55 });
+	expect(saved.project.settings.outlook).toEqual({ season: null, planningShare: 0.55, review: null });
 
 	// River & reserve: no outlook yet, then one with a monthly plan (Oct–Dec at 100 %, Jan–Apr at 80 %), queued until the worker runs it.
 	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
@@ -191,3 +195,128 @@ test('an editor sets the planning share, runs an outlook with a monthly plan, an
 	await expect(theirs.getByTestId('outlook-table').locator('tbody tr')).toHaveCount(4);
 	await expect(theirs.getByRole('button', { name: /outlook/ })).toHaveCount(0);
 });
+
+/**
+ * The review triggers (R6) and publishing to farmers (R5, E3). Publishing
+ * refuses a season that has ended, so this catchment's record runs up to the
+ * current season's decision date: twelve water years to 30 September of the
+ * year whose 1 October – 30 April season hasn't ended yet (from the clock of
+ * the machine running the spec).
+ */
+test('the review triggers show for the review date, and a level published to farmers reaches a linked farmer’s page until it is withdrawn', async ({ page, owner, signIn }) => {
+	void owner;
+	const now = new Date();
+	const Y = now.getUTCMonth() >= 4 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+	const start = `${Y - 12}-10-01`;
+	const days = (Date.parse(`${Y}-10-01T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / DAY;
+	const project = await createProject(page.request, 'Outlook to farmers');
+	const model = sampleModel();
+	await putModel(page.request, project.id, model);
+	await updateSettings(page.request, project.id, {
+		apanMm: [150, 180, 220, 230, 190, 160, 110, 80, 60, 60, 80, 110],
+		ewrPragmaticM3PerDay: [400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400, 400]
+	});
+	const rain = syntheticRain(days).map((v, t) => Math.round(v * YEAR_SCALE[Math.floor(t / 365.25) % YEAR_SCALE.length]! * 10) / 10);
+	await putSeries(page.request, project.id, { kind: 'rain_catchment_mm', unit: 'mm', startDate: start, values: rain });
+	const runId = await createRun(page.request, project.id, 'Base');
+	const made = await page.request.post(`${API_URL}/projects/${project.id}/outlooks`, {
+		data: { name: 'This season', baseRunId: runId, levels: [100, 85, 70].map((p) => ({ label: `${p} %`, ops: [{ op: 'demand.scale', factor: p / 100 }] })) }
+	});
+	expect(made.status()).toBe(202);
+	await runJobsTick({ schedule: false });
+
+	type Stat = { p10: number; p50: number; p90: number };
+	type Full = {
+		outlook: {
+			id: string;
+			decisionDate: string;
+			reviewDate: string;
+			result: { nYears: number; levels: { id: string; demandMetByFarm: { nodeId: string; stat: Stat | null }[]; storageByDam: { nodeId: string; capacityM3: number; stat: Stat | null }[] }[] };
+			triggers: { reviewDate: string; table: { reviewDate: string; rows: { level: { label: string } | null; metYears: number | null; nYears: number }[] } };
+		};
+	};
+	const { outlooks } = await getJson<{ outlooks: { id: string }[] }>(page.request, `/projects/${project.id}/outlooks`);
+	const { outlook } = await getJson<Full>(page.request, `/projects/${project.id}/outlooks/${outlooks[0]!.id}`);
+	// The season from the run's newest state, its review date the default (1 January, O3), and the table drawn on the record's latest 1 January.
+	expect(outlook).toMatchObject({ decisionDate: `${Y}-10-01`, reviewDate: `${Y + 1}-01-01` });
+	expect(outlook.triggers.table.reviewDate).toBe(`${Y}-01-01`);
+
+	await page.goto(`/projects/${project.id}?tab=river&run=${runId}`);
+	const panel = page.getByTestId('seasonal-outlook');
+	await expect(panel).toHaveAttribute('data-state', 'complete');
+	const triggers = panel.getByTestId('outlook-triggers');
+	await expect(triggers.getByTestId('triggers-review-date')).toHaveText(`1 Jan ${Y + 1}`);
+	await expect(triggers.getByTestId('triggers-ran-on')).toHaveText(`1 Jan ${Y}`);
+	const rows = outlook.triggers.table.rows;
+	await expect(triggers.getByTestId('triggers-table').locator('tbody tr')).toHaveCount(rows.length);
+	for (const [i, r] of rows.entries()) {
+		const cells = triggers.getByTestId('triggers-table').locator('tbody tr').nth(i).locator('td');
+		await expect(cells.nth(0)).toHaveText(r.level?.label ?? 'No level');
+		await expect(cells.nth(1)).toHaveText(r.metYears === null ? '–' : `${r.metYears} of ${r.nYears} years`);
+	}
+	await expect(triggers.getByTestId('triggers-words').locator('li')).toHaveCount(rows.length);
+	await expect(triggers.getByText(/recommend|likely|should|best|optimal/i)).toHaveCount(0);
+
+	// Nothing published yet; the editor publishes 85 %.
+	const publish = panel.getByTestId('outlook-publish');
+	await expect(publish.getByTestId('outlook-not-published')).toHaveText('No outlook is published to farmers.');
+	await publish.getByLabel('Level the WUA has set').selectOption({ label: '85 %' });
+	await publish.getByRole('button', { name: 'Publish to farmers' }).click();
+	await expect(publish.getByTestId('outlook-published')).toContainText('Published to farmers: 85 %');
+	await expect(publish.getByTestId('outlook-published')).toHaveAttribute('data-here', 'true');
+	await expectNoViolations(page, { include: '[data-testid="seasonal-outlook"]' });
+
+	// A farmer linked to the upper farm, with the run published: the card, in their farm's own figures.
+	const upper = model.nodes.find((n) => n.name === 'Upper farm')!;
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/publication`, { data: { runId } })).status()).toBe(201);
+	const farmer = await signIn('Outlook farmer');
+	expect((await page.request.post(`${API_URL}/projects/${project.id}/farmers`, { data: { email: farmer.user.email, nodeIds: [upper.id] } })).status()).toBe(201);
+	await acknowledgeFarmNotice(farmer.page.request);
+	await farmer.page.goto(`/farm/${project.id}`);
+	const card = farmer.page.getByTestId('farm-outlook');
+	await expect(card.getByRole('heading', { name: 'This season' })).toBeVisible();
+	const level = outlook.result.levels[1]!;
+	const own = level.demandMetByFarm.find((f) => f.nodeId === upper.id)!.stat!;
+	const dam = level.storageByDam.find((d) => d.nodeId === upper.id)!;
+	const fp = (v: number) => {
+		const p = Math.round(v * 100);
+		return v <= 0 ? '0 %' : v >= 1 ? '100 %' : p < 1 ? '<1 %' : p > 99 ? '>99 %' : `${p} %`;
+	};
+	const flat = async (i: number) => (await card.locator('p').nth(i).innerText()).replace(/[\u00a0\u202f]/g, ' ');
+	expect(await flat(1)).toBe('Your WUA set irrigation at 85 % for 1 Oct to 30 Apr.');
+	expect(await flat(2)).toBe(`In ${outlook.result.nYears} past years’ weather, at this level you got about ${fp(own.p50)} of the water you needed, and between ${fp(own.p10)} and ${fp(own.p90)} in most of them.`);
+	const share = (v: number) => fp(v / dam.capacityM3);
+	expect(await flat(3)).toBe(`Your dam ended the season about ${share(dam.stat!.p50)} full, and between ${share(dam.stat!.p10)} and ${share(dam.stat!.p90)} in most of those years.`);
+	expect(await flat(4)).toBe('Your WUA reviews the level on 1 Jan.');
+	await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
+
+	// On a phone in Afrikaans (issue #122): the card in the farmer's language, nothing cut off or scrolling
+	// sideways, clean in light and dark, and its help link lands on the words page's entry.
+	const af = await siteWords('af');
+	await farmer.page.setViewportSize({ width: 360, height: 740 });
+	await farmer.page.getByRole('group', { name: 'Language' }).first().getByRole('button', { name: 'Afrikaans' }).click();
+	await expect(farmer.page.locator('html')).toHaveAttribute('lang', 'af');
+	await expect(card.getByRole('heading', { name: af('This season') })).toBeVisible();
+	await expect(card.getByText(af('Season outlook'), { exact: true })).toBeVisible();
+	expect(await flat(1)).toContain('85 %');
+	expect(await flat(5)).toBe(af('Worked out by the model from past years’ weather: not a forecast, and not a promise. Only a notice from your WUA or from DWS is a restriction.'));
+	for (const scheme of ['light', 'dark'] as const) {
+		await farmer.page.emulateMedia({ colorScheme: scheme });
+		await expectNoSidewaysScroll(farmer.page);
+		expect(await clippedText(farmer.page), 'text cut off in its box').toEqual([]);
+		await expectNoViolations(farmer.page, { include: '[data-testid="farm-outlook"]' });
+	}
+	await farmer.page.emulateMedia({ colorScheme: 'light' });
+	await card.getByRole('link', { name: af('What is the season outlook?') }).click();
+	await expect(farmer.page).toHaveURL(/\/farm\/words#farm-season-outlook$/);
+	await expect(farmer.page.locator('#farm-season-outlook')).toBeVisible();
+	await farmer.page.goBack();
+
+	// Withdrawn: the farm page drops the card.
+	await publish.getByRole('button', { name: 'Withdraw' }).click();
+	await expect(publish.getByTestId('outlook-not-published')).toBeVisible();
+	await farmer.page.reload();
+	await expect(farmer.page.locator('h1')).toHaveText('Upper farm');
+	await expect(farmer.page.getByTestId('farm-outlook')).toHaveCount(0);
+});
+

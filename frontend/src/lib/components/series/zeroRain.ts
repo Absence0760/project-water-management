@@ -32,7 +32,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * `chirps` is the CHIRPS series a run reads (null without one: no
  * accumulation can be detected then), `chirpsMode` the CHIRPS bias setting,
  * `fit` the CHIRPS fit period
- * (engine ≥ 0.29.0), as a run judges accumulations with it.
+ * (engine ≥ 0.29.0), as a run judges accumulations with it, and the
+ * data-quality limits (`fit.dq`, engine ≥ 1.20.0).
  */
 export function zeroRainShading(
 	series: DailySeries,
@@ -52,7 +53,8 @@ export function zeroRainShading(
 	const claimed = new Set<number>();
 	for (const w of windows) for (let d = w.from; d <= w.to; d++) if (d >= d0 && d < d0 + n) claimed.add(d);
 
-	const m = zeroRainMask(series, settings, d0, n, (day) => claimed.has(day));
+	// settings.dataQuality (fit.dq, engine ≥ 1.20.0) decides which zero runs are flagged, as in a run.
+	const m = zeroRainMask(series, settings, d0, n, (day) => claimed.has(day), undefined, { dq: fit.dq, chirps });
 	const periods = m?.infill.periods ?? [];
 	const days = m?.infill.days ?? 0;
 	if (periods.length === 0 && windows.length === 0) return { ranges: [], days: 0, spreadDays: 0, caption: null };

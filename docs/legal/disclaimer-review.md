@@ -199,6 +199,15 @@ view's *why* page and the farmer glossary say the same about restrictions:
 
 > Voorspellings verander, en dit is deur die model bereken, nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.
 
+**Farm view "This season" card** (`outlookCard.ts`, `outlookFine()`, issue
+#53 R5): shown only while the WUA has published a seasonal outlook. The
+card names the level as the WUA's decision ("Your WUA set irrigation at 85 %
+…") and gives what that level gave the farm in past years' weather, then:
+
+> Worked out by the model from past years’ weather: not a forecast, and not a promise. Only a notice from your WUA or from DWS is a restriction.
+
+> Deur die model bereken uit vorige jare se weer: nie ’n voorspelling nie, en nie ’n belofte nie. Net ’n kennisgewing van jou WGV of van die DWS is ’n beperking.
+
 **Alert emails about a dam, to the farmer** (`backend/src/mail/i18n/en.ts`, `mail.alert.model`):
 
 > This is the catchment model’s estimate, worked out from the figures your WUA published. It is not a measurement of your dam and not an instruction. Check your dam yourself, and ask your WUA if you are unsure. Only a notice from your WUA or from DWS is a restriction.

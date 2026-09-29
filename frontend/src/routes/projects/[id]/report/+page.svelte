@@ -12,12 +12,16 @@
 	// section after the cover (report/ImpactSection.svelte, its own chunk),
 	// from GET /compare/runs. The server-side PDF prints it too: the report
 	// request carries the baseline (082), and the renderer opens this route
-	// with the same `against`.
+	// with the same `against`. The section opens with the licence-impact board
+	// by year class (issue #53 R7): its three daily series (report/impactSeries.ts)
+	// load here, before "ready"; the board itself is in the section's chunk.
 	import { untrack } from 'svelte';
 	import { base } from '$app/paths';
 	import { page } from '$app/state';
 	import { fdcPercentileTable, REPORT_FOOTER, toEpochDay, type NetworkNode, type ProjectModel, type SeriesMeta } from '@water-management/engine';
 	import { fdcReportDays, fdcReportRows } from '$lib/components/report/fdc';
+	import { loadImpactSeries, type ImpactSeries } from '$lib/components/report/impactSeries';
+	import { parseRef } from '$lib/components/compare/picker';
 	import { apanDailyOfInput, chirpsSourceOfInput, runChirpsFactors } from '$lib/series/provenance';
 	import { api, ApiError, type Project, type Run, type RunCompareResponse, type SignoffList } from '$lib/api';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
@@ -60,6 +64,7 @@
 	// The impact section: its own chunk, loaded (before "ready") only for an impact report.
 	const loadImpact = () => import('$lib/components/report/ImpactSection.svelte');
 	let impact = $state.raw<RunCompareResponse | null>(null);
+	let impactSeries = $state.raw<ImpactSeries | null>(null);
 	let impactError = $state<string | null>(null);
 
 	let project = $state.raw<Project | null>(null);
@@ -79,6 +84,7 @@
 	async function load(id: string, want: string | null, against: string | null) {
 		status = 'loading';
 		impact = null;
+		impactSeries = null;
 		impactError = null;
 		// A new run's charts start undrawn: a remounted chart takes its ready flag from these bindings.
 		hydroDrawn = false;
@@ -108,7 +114,8 @@
 				throw e;
 			}
 			const have = (k: string) => detail.series.some((r) => r.key === k && r.nodeId === null);
-			const [pairs, so, cmp] = await Promise.all([
+			const againstRef = parseRef(against);
+			const [pairs, so, cmp, boardSeries] = await Promise.all([
 				Promise.all(
 					[...CATCHMENT_FLOW_KEYS, EWR_RULE_KEY].filter(([, k]) => have(k)).map(
 						async ([slot, k]) => [slot, await cachedSeries(runId, k, null, () => api.runs.series(id, runId, k, null))] as const
@@ -126,10 +133,13 @@
 										: String(e);
 							return null;
 						})
-					: null
+					: null,
+				// The licence-impact board's series; one that can't be read is null, and the board says so.
+				againstRef ? loadImpactSeries((p, r, k) => api.runs.series(p, r, k, null), againstRef, { projectId: id, runId }) : null
 			]);
 			signoffs = so;
 			impact = cmp;
+			impactSeries = boardSeries;
 			// The summary's land cover, groundwater and other users' tables are a chunk of their own: in before "ready".
 			// If it fails to download, only a reload can fetch it (lazy.ts), so it gets its own message, not "Try again".
 			try {
@@ -311,7 +321,13 @@
 					{#if s.id === 'impact'}
 						{#if impact}
 							<Lazy load={loadImpact}>
-								{#snippet children(ImpactSection)}<ImpactSection data={impact!} />{/snippet}
+								{#snippet children(ImpactSection)}<ImpactSection
+										data={impact!}
+										series={impactSeries ?? { background: { natural: null, ewrShortfall: null }, application: { ewrShortfall: null } }}
+										outcomes={project!.settings.outcomes}
+										{nodes}
+										ewrRules={settings.ewrRules}
+									/>{/snippet}
 							</Lazy>
 						{:else}
 							<p class="alert alert-warning" role="status">This run couldn't be compared with the baseline: {impactError}</p>

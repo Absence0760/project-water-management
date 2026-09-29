@@ -9,10 +9,12 @@
 	import { page } from '$app/state';
 	import { api } from '$lib/api';
 	import { session } from '$lib/auth/session.svelte';
+	import ChunkFailed from '$lib/components/common/ChunkFailed.svelte';
 	import CompareCard from '$lib/components/farm/CompareCard.svelte';
 	import DamCard from '$lib/components/farm/DamCard.svelte';
 	import ForecastCard from '$lib/components/farm/ForecastCard.svelte';
 	import { forecastCard } from '$lib/components/farm/forecastCard';
+	import { outlookCard } from '$lib/components/farm/outlookCard';
 	import DatesLine from '$lib/components/farm/DatesLine.svelte';
 	import { farmToday } from '$lib/components/farm/numbers';
 	import EstimateNote from '$lib/components/farm/EstimateNote.svelte';
@@ -143,6 +145,16 @@
 			<!-- "Next 14 days" (WP-2.12): only when the WUA published a forecast run. -->
 			{@const forecast = forecastCard(view.farm, farmToday(view))}
 			{#if forecast}<ForecastCard vm={forecast} />{/if}
+			<!-- "This season" (issue #53 R5, E3): only while the WUA has a seasonal outlook published; its card loads only then (issue #122). -->
+			{@const seasonOutlook = outlookCard(view, farmToday(view))}
+			{#if seasonOutlook}
+				{#await import('$lib/components/farm/OutlookCard.svelte') then { default: OutlookCard }}
+					<OutlookCard vm={seasonOutlook} />
+				{:catch}
+					<!-- Without it a farmer would read a missing card as "no outlook published". -->
+					<ChunkFailed text={t('The season outlook could not be loaded. Check your connection, then reload the page.')} reload={t('Reload page')} />
+				{/await}
+			{/if}
 			<MonthlyChart farm={view.farm} {unit} />
 			<CompareCard farm={view.farm} />
 			<RiverCard {view} />
