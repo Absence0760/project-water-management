@@ -1139,11 +1139,10 @@ describe('diffInputs', () => {
 	it('notes a change of the flow gap filling, and nothing between a run from before it and one with it off (issue #66)', () => {
 		const spec = { interpolateMaxDays: 5, donor: 'flow_logger_m3s', donorMaxDays: 60, donorMinOverlapDays: 365 };
 		const fill = (f: unknown) => snapshot({ settings: { ...snapshot().settings, flowGapFill: f } as never });
-		const off = { flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false };
+		const off = { flow_observed_m3s: null, flow_logger_m3s: null };
 		expect(texts(snapshot(), fill(off))).toEqual([]);
-		expect(texts(fill(off), fill({ ...off, flow_observed_m3s: spec, useFilledDays: true }))).toEqual([
-			'Gap filling of the observed gauge flow: not filled → interpolate gaps up to 5 days, fill gaps up to 60 days from the logger flow (365 shared days at least)',
-			'Filled flow days: shown only → read by the statistics'
+		expect(texts(fill(off), fill({ ...off, flow_observed_m3s: spec }))).toEqual([
+			'Gap filling of the observed gauge flow: not filled → interpolate gaps up to 5 days, fill gaps up to 60 days from the logger flow (365 shared days at least)'
 		]);
 	});
 

@@ -5,8 +5,8 @@
 // Flow: each day of a calibration record gets one class, the strongest that
 // applies, in FLOW_DAY_FLAGS order from the end (missing wins):
 // - missing: no reading (blank, NaN or negative, as alignFlow reads it);
-// - infilled: a gap-filled value, not a reading (observedInfillMask: the hook
-//   for gap filling of observed flow, issue #66; nothing fills flow yet);
+// - infilled: a gap-filled value, not a reading (observedInfillMask, from
+//   settings.flowGapFill's fill, engine ≥ 1.23.0, docs/model.md §2.10i);
 // - suspect: an outlier or a flat stretch by the Data checks (quality.ts
 //   seriesRowFlags, under the project's settings.dataQuality limits, the
 //   same the run warnings use);
@@ -56,13 +56,18 @@ export type RainDayFlag = (typeof RAIN_DAY_FLAGS)[number];
 
 /**
  * The per-day fill mask of a gap-filled observed flow record, aligned to the
- * run (1 = infilled), or null when nothing was filled. The hook for gap
- * filling of observed flow (issue #66): nothing fills a flow record yet, so
- * this is null; once a filled record carries its mask, return it here and
- * every fit, report and panel picks the `infilled` class up.
+ * run (1 = infilled), or null when nothing was filled: from the run's own
+ * fill (PreparedRun.flowFill[kind], settings.flowGapFill, ../flowGapFill.ts,
+ * engine ≥ 1.23.0), whose per-day code is 1 (interpolated) or 2 (from a donor
+ * record) on a filled day. Every fit, report and panel picks the `infilled`
+ * class up from here.
  */
-export function observedInfillMask(_series: DailySeries | undefined, _start: number, _days: number): Uint8Array | null {
-	return null;
+export function observedInfillMask(fill: { code: ArrayLike<number> } | null | undefined): Uint8Array | null {
+	if (!fill) return null;
+	const out = new Uint8Array(fill.code.length);
+	let any = false;
+	for (let t = 0; t < out.length; t++) if (fill.code[t]) out[t] = 1, (any = true);
+	return any ? out : null;
 }
 
 export interface FlowFlagInput {
@@ -104,6 +109,9 @@ export function flowDayFlags(x: FlowFlagInput): Uint8Array {
 						? FLOW_FLAG_CODE.belowRating
 						: FLOW_FLAG_CODE.inRange;
 	}
+	// A gap-filled day has no stored reading (the fill never touches the stored record), so it is
+	// marked from the mask whatever the loop above left it as.
+	if (x.infilled) for (let t = 0; t < x.days; t++) if (x.infilled[t]) out[t] = FLOW_FLAG_CODE.infilled;
 	return out;
 }
 

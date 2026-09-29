@@ -112,14 +112,16 @@ describe('series source and unit', () => {
 });
 
 describe('settings.flowGapFill', () => {
-	it('takes a spec per record and the switch, and refuses a record filling itself or out-of-bound days', async () => {
+	it('takes a spec per record, and refuses a record filling itself or out-of-bound days', async () => {
 		const u = await signUp('GapFillSettings');
 		const pid = await project(u, 'Gaps');
 		const spec = { interpolateMaxDays: 5, donor: 'flow_logger_m3s', donorMaxDays: 60, donorMinOverlapDays: 365 };
 		const patch = (flowGapFill: unknown) => u.call('PATCH', `/projects/${pid}`, { settings: { flowGapFill } });
-		const ok = await patch({ flow_observed_m3s: spec, useFilledDays: true });
+		const ok = await patch({ flow_observed_m3s: spec });
 		expect(ok.status).toBe(200);
-		expect(ok.body.project.settings.flowGapFill).toEqual({ flow_observed_m3s: spec, flow_logger_m3s: null, useFilledDays: true });
+		expect(ok.body.project.settings.flowGapFill).toEqual({ flow_observed_m3s: spec, flow_logger_m3s: null });
+		// Retired: whether filled days are scored is qualityFlags.infilled, one control.
+		expect((await patch({ useFilledDays: true })).status).toBe(400);
 		expect((await patch({ flow_logger_m3s: { ...spec } })).status).toBe(400);
 		expect((await patch({ flow_observed_m3s: { ...spec, interpolateMaxDays: 31 } })).status).toBe(400);
 		expect((await patch({ flow_observed_m3s: { ...spec, donorMinOverlapDays: 10 } })).status).toBe(400);

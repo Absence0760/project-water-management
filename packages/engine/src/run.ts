@@ -83,7 +83,7 @@ import {
 } from './project';
 import { ENGINE_VERSION } from './version';
 import { damFigures } from './network/damLevel';
-import { alignFlow, alignSeries, monthly, prepareRun } from './prepare';
+import { alignFlow, alignSeries, monthly, prepareRun, type PreparedRun } from './prepare';
 import { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 import { makeSnapshot, ModelStateMismatchError, openSnapshot, type ModelState, type ModelStateSnapshot } from './warmstart/snapshot';
 
@@ -784,7 +784,8 @@ function runNetwork(
 		ewrShort,
 		reserve: ewrAssurance.map((a) => a.report),
 		outflow: topo.outflow,
-		upstream: topo.upstream
+		upstream: topo.upstream,
+		flowFill
 	});
 	if (checked) warnings.push(...checked.warnings);
 
@@ -939,6 +940,8 @@ function runPlausibility(r: {
 	outflow: number;
 	/** The nodes draining directly into each node (topology). */
 	upstream: readonly ArrayLike<number>[];
+	/** The gap-filled observed records (PreparedRun.flowFill, engine ≥ 1.23.0): their days are flagged infilled. */
+	flowFill?: PreparedRun['flowFill'];
 }) {
 	const { input, settings, start, days, plan, sim } = r;
 	const series = input.series ?? {};
@@ -974,7 +977,7 @@ function runPlausibility(r: {
 	const kind = r.observedKind;
 	const flowFlagged = kind
 		? flaggedDayMask(
-				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(series[kind], start, days), dataQuality: settings.dataQuality })
+				flowDayFlags({ kind, series: series[kind], start, days, rating: ratingOf(settings.qualityFlags, kind), infilled: observedInfillMask(r.flowFill?.[kind]), dataQuality: settings.dataQuality })
 			)
 		: null;
 	const catchment = r.aligned('rain_catchment_mm');

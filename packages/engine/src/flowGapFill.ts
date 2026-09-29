@@ -23,12 +23,13 @@
 //
 // Filled values never touch the stored series. The result carries a per-day
 // method code (FLOW_FILL_CODE), which the run exports as its own column and
-// the per-day quality flags (CR-18) read as "infilled". By default no
-// statistic reads a filled day (settings.flowGapFill.useFilledDays false):
-// the calibration statistics, the fit, the EWR test on the observed record
-// and the plausibility checks read the measured days only, as before, and
-// the filled days are shown, exported and warned about. With useFilledDays
-// they read the filled record.
+// the per-day quality flags (CR-18, ./calibrate/dayFlags.ts
+// observedInfillMask) read as `infilled`. Whether a filled day is scored is
+// the quality flags' one control, settings.qualityFlags.infilled: 'exclude'
+// (the default) leaves filled days out of the fit and, since they are not
+// readings, out of the run's calibration statistics, the EWR test on the
+// observed record and the plausibility checks too; 'include' scores them
+// everywhere. Filled days are always shown, exported and warned about.
 import { toEpochDay } from './calendar';
 import type { DailySeries, SeriesKind } from './project';
 
@@ -51,17 +52,15 @@ export interface FlowGapFillSpec {
 	donorMinOverlapDays: number;
 }
 
-/** settings.flowGapFill: a spec per record (null = not filled), and whether statistics read filled days. */
+/**
+ * settings.flowGapFill: a spec per record (null = not filled). Whether filled
+ * days are scored is settings.qualityFlags.infilled, not a field here (the
+ * `useFilledDays` switch it replaced was never deployed; a stored one is
+ * ignored with a warning).
+ */
 export interface FlowGapFillSettings {
 	flow_observed_m3s: FlowGapFillSpec | null;
 	flow_logger_m3s: FlowGapFillSpec | null;
-	/**
-	 * Read filled days wherever the record is read (calibration statistics,
-	 * the fit, the EWR test on the observed record, the plausibility checks).
-	 * Default false: filled days are shown, exported and warned about, and no
-	 * statistic reads them.
-	 */
-	useFilledDays: boolean;
 }
 
 /** Per-day method codes (the run's `*_fill` columns): 0 = measured or still missing. */
@@ -69,7 +68,7 @@ export const FLOW_FILL_CODE = { none: 0, interpolated: 1, donor: 2 } as const;
 export type FlowFillCode = (typeof FLOW_FILL_CODE)[keyof typeof FLOW_FILL_CODE];
 
 export const DEFAULT_FLOW_GAP_SPEC: Readonly<FlowGapFillSpec> = Object.freeze({ interpolateMaxDays: 5, donor: null, donorMaxDays: 60, donorMinOverlapDays: 365 });
-export const defaultFlowGapFill = (): FlowGapFillSettings => ({ flow_observed_m3s: null, flow_logger_m3s: null, useFilledDays: false });
+export const defaultFlowGapFill = (): FlowGapFillSettings => ({ flow_observed_m3s: null, flow_logger_m3s: null });
 
 /** Bounds a spec is checked against (and the settings route's schema). */
 export const GAP_FILL_LIMITS = { interpolateMaxDays: 30, donorMaxDays: 366, donorMinOverlapDaysMin: 30, donorMinOverlapDaysMax: 36_600 } as const;
@@ -128,8 +127,10 @@ export function resolveFlowGapFill(raw: unknown, warnings: string[] = []): FlowG
 	}
 	const r = raw as Record<string, unknown>;
 	for (const k of GAP_FILL_KINDS) out[k] = resolveSpec(k, r[k], warnings);
-	if (r.useFilledDays !== undefined && typeof r.useFilledDays !== 'boolean') warnings.push('flow gap filling useFilledDays is not true or false; statistics leave filled days out');
-	out.useFilledDays = r.useFilledDays === true;
+	// Retired before any deploy: settings.qualityFlags.infilled is the one control now.
+	if (r.useFilledDays === true) {
+		warnings.push('flow gap filling useFilledDays is retired and ignored: whether filled days are scored is Settings → Calibration record → Quality flags, infilled days');
+	}
 	return out;
 }
 
@@ -334,7 +335,7 @@ export function fillSummaryInWindow(f: FlowFill, start: number, days: number): F
 }
 
 /** The run warning for one record's fill, or null when it filled nothing and refused nothing. */
-export function flowFillWarning(s: FlowFillSummary, useFilledDays: boolean): string | null {
+export function flowFillWarning(s: FlowFillSummary, scored: boolean): string | null {
 	const parts: string[] = [];
 	if (s.interpolatedDays) parts.push(`${s.interpolatedDays} days interpolated across gaps of up to ${s.spec.interpolateMaxDays} days`);
 	if (s.donorDays && s.donor)
@@ -344,9 +345,9 @@ export function flowFillWarning(s: FlowFillSummary, useFilledDays: boolean): str
 		);
 	const refused = s.donorRefused ? ` No gap was filled from the ${RECORD_LABEL[s.spec.donor!]}: ${s.donorRefused}.` : '';
 	if (!parts.length && !refused) return null;
-	const reads = useFilledDays
-		? ' The calibration statistics, the EWR test on the observed record and the plausibility checks read the filled days (Settings → Flow gaps).'
-		: ' No statistic reads the filled days: they are shown and exported only (Settings → Flow gaps).';
+	const reads = scored
+		? ' Infilled days are scored (quality flags): the fit, the calibration statistics, the EWR test on the observed record and the plausibility checks read the filled days.'
+		: ' Infilled days are left out (quality flags, the default): no statistic reads the filled days; they are shown and exported only.';
 	return `${RECORD_LABEL[s.kind]}: ${parts.length ? `gaps filled in the run, ${parts.join('; ')}.` : 'no gap filled in the run.'}${refused}${parts.length ? reads : ''} The stored record is unchanged.`;
 }
 

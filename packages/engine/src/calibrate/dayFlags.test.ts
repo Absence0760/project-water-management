@@ -77,16 +77,20 @@ describe('flowDayFlags (CR-18)', () => {
 		expect(names(flowDayFlags({ kind: 'flow_observed_m3s', series, start: d0, days: 60, rating: { gaugedMaxM3s: 10, gaugedMinM3s: null, source: 's' } }))[7]).toBe('aboveRating');
 	});
 
-	it('an infilled day wins over every class but missing', () => {
+	it('an infilled day wins over every class, missing included: a gap-filled day has no stored reading (engine ≥ 1.23.0)', () => {
 		const values: (number | null)[] = varying(60);
 		values[5] = 50;
 		values[6] = null;
+		values[7] = null;
 		const infilled = new Uint8Array(60);
 		infilled[5] = 1;
 		infilled[6] = 1;
 		const got = names(flowDayFlags({ kind: 'flow_observed_m3s', series: { startDate: start, values }, start: d0, days: 60, rating: { gaugedMaxM3s: 10, gaugedMinM3s: null, source: 's' }, infilled }));
 		expect(got[5]).toBe('infilled');
-		expect(got[6]).toBe('missing');
+		// The fill never writes the stored record, so the filled gap day is blank there: the mask says it was filled.
+		expect(got[6]).toBe('infilled');
+		// A gap the fill left open stays missing.
+		expect(got[7]).toBe('missing');
 	});
 
 	it('aligns a record that starts before or after the run, and marks days it doesn’t cover missing', () => {

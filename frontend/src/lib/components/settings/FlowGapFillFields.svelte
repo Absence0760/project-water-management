@@ -1,8 +1,8 @@
 <!--
 	settings.flowGapFill (engine ≥ 1.23.0, issue #66, docs/model.md §2.10i):
 	whether a run fills the gaps of the observed gauge and logger records, and
-	how, and whether statistics read the filled days. Off for every record by
-	default. Each number is kept inside the engine's bounds by its input, so
+	how. Off for every record by default; whether filled days are scored is
+	the quality flags' infilled treatment (settings.qualityFlags.infilled). Each number is kept inside the engine's bounds by its input, so
 	the section never blocks Save.
 -->
 <script lang="ts">
@@ -87,13 +87,10 @@
 			{/if}
 		</fieldset>
 	{/each}
-	<label class="check">
-		<input type="checkbox" disabled={readonly} bind:checked={value.useFilledDays} aria-describedby="gf-use-h" /> Statistics read filled days
-	</label>
-	<span class="hint" id="gf-use-h">
-		Off (the default): the calibration scores, the fit, the EWR test on the observed record and the plausibility checks use measured days
-		only, and filled days are shown and exported. On: they read the filled record.
-	</span>
+	<p class="hint" data-testid="gap-fill-scoring">
+		Whether a filled day is scored is <strong>Infilled days</strong> under the quality flags above, one control for the fit and the run’s
+		statistics: left out by default (they are shown and exported only), or scored as recorded.
+	</p>
 </div>
 
 <style>

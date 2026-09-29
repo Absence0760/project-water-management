@@ -52,7 +52,8 @@
 		const parts: string[] = [];
 		if (f.spec.interpolateMaxDays) parts.push(`interpolated up to ${f.spec.interpolateMaxDays} days`);
 		if (f.spec.donor) parts.push(`from the ${gapFillRecordLabel(f.spec.donor)} up to ${f.spec.donorMaxDays} days`);
-		return `${parts.join(', ') || 'none'}; filled days ${f.useFilledDays ? 'scored' : 'not scored'}`;
+		// Whether the fit scored the filled days is the quality-flag row's infilled treatment.
+		return parts.join(', ') || 'none';
 	};
 
 	const uid = $props.id();

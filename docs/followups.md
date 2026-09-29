@@ -158,11 +158,10 @@ collected as a checklist in issue #46; tick it there as they answer.
       donor ratio (or per month / per flow class); the donor refusal
       thresholds (r < 0.5, fewer than 365 shared days); clamping a donor day
       to the record's own maximum (or the weir's rated maximum); and never
-      scoring filled days by default. Hand-off: CR-18's per-day flags read
-      the fill's code (`PreparedRun.flowFill[kind].code`, `FLOW_FILL_CODE`)
-      as *infilled*, and CR-19's flag-aware objective replaces the
-      `useFilledDays` switch with per-flag weights (keep the switch's
-      default: filled days not scored).
+      scoring filled days by default (`qualityFlags.infilled` 'exclude').
+      The hand-off to CR-18/19 is done: the flags read the fill's code as
+      *infilled*, and the quality flags' infilled treatment replaced the
+      branch's own `useFilledDays` switch (never deployed).
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -963,10 +962,13 @@ the suggested order (the IDs carry the detail):
       gauging and leaves below-rating, suspect and infilled days out of the
       fit by default, with the fit on all days beside it and the settings in
       the fit record, and CR-22 is the Fit panel's data-quality panel. The
-      recession segments (CR-13) leave flagged days out. The infilled class
-      reads gap-filled observed flow's mask through `observedInfillMask`
-      once gap filling of observed flow (issue #66) lands; until then it is
-      empty. The defaults are open questions on issue #66.
+      recession segments (CR-13) leave flagged days out. **Infilled hook:
+      done (engine 1.23.0, issue #66, model.md §2.10i):** `observedInfillMask`
+      reads the gap fill's per-day code, so filled flow days are flagged
+      *infilled* in the fit, the panel and the recession mask, and
+      `qualityFlags.infilled` is the one control for scoring them (the run's
+      statistics, the EWR test and the plausibility checks follow it). The
+      defaults are open questions on issue #66.
 - [ ] **Show the per-day flow flags on the hydrograph (CR-18 follow-on).**
       The flags exist per day in the engine (`flowDayFlags`) and drive the
       fit and its panel, but a run doesn't store them, so the hydrograph and

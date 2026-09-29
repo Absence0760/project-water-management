@@ -383,7 +383,7 @@ export function prepareCalibration(input: ModelInput, exclusions: DateRange[] = 
 	// Per-day quality flags (CR-18/19, ./dayFlags.ts): which observed days the objective scores, and which it censors.
 	const qf = settings.qualityFlags;
 	const flagsOf = (k: CalibrationFlowKind) =>
-		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(input.series?.[k], d0, days), dataQuality: settings.dataQuality });
+		flowDayFlags({ kind: k, series: input.series?.[k], start: d0, days, rating: ratingOf(qf, k), infilled: observedInfillMask(run.flowFill?.[k]), dataQuality: settings.dataQuality });
 	const flags = flagsOf(kind);
 	const scoring = scoringDays(windowIdx, flags, qf, ratingOf(qf, kind), days);
 	const idx = scoring.idx;

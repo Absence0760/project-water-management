@@ -1,8 +1,9 @@
 // Gap filling of the observed flow records (engine ≥ 1.23.0, issue #66,
 // docs/model.md §2.10i): each method, the gap-length edges, the donor's fit
 // and its refusals, the clamp, the stored record untouched, a record without
-// gaps unchanged, and the run: off is the same run to the bit, on without
-// useFilledDays scores the same days, and with it scores the filled days too.
+// gaps unchanged, and the run: off is the same run to the bit, on with
+// infilled days left out (settings.qualityFlags) scores the same days, and
+// scored, the filled days too; and the fit's quality flags mark them infilled.
 import { describe, expect, it } from 'vitest';
 import { fromEpochDay, toEpochDay } from './calendar';
 import {
@@ -18,6 +19,8 @@ import {
 	type FlowGapFillSpec
 } from './flowGapFill';
 import { prepareRun } from './prepare';
+import { prepareCalibration } from './calibrate/calibrate';
+import { defaultQualityFlags, observedInfillMask } from './calibrate/dayFlags';
 import type { DailySeries, ModelInput } from './project';
 import { runModel } from './run';
 import { randomInput } from './testing/fuzz';
@@ -167,12 +170,20 @@ describe('resolveFlowGapFill', () => {
 
 	it('fills absent fields with the defaults and warns about invalid ones', () => {
 		const w: string[] = [];
-		const r = resolveFlowGapFill({ flow_observed_m3s: { interpolateMaxDays: 99, donor: 'flow_observed_m3s' }, flow_logger_m3s: 'yes', useFilledDays: 'no' }, w);
-		expect(r.flow_observed_m3s).toEqual({ ...DEFAULT_FLOW_GAP_SPEC, donor: null });
-		expect(r.flow_logger_m3s).toBeNull();
-		expect(r.useFilledDays).toBe(false);
-		expect(w).toHaveLength(4);
+		const r = resolveFlowGapFill({ flow_observed_m3s: { interpolateMaxDays: 99, donor: 'flow_observed_m3s' }, flow_logger_m3s: 'yes' }, w);
+		expect(r).toEqual({ flow_observed_m3s: { ...DEFAULT_FLOW_GAP_SPEC, donor: null }, flow_logger_m3s: null });
+		expect(w).toHaveLength(3);
 		expect(w.join(' ')).toMatch(/not another flow record/);
+	});
+
+	it('ignores the retired useFilledDays switch, saying where the one control is', () => {
+		const w: string[] = [];
+		expect(resolveFlowGapFill({ useFilledDays: true }, w)).toEqual(defaultFlowGapFill());
+		expect(w).toEqual([expect.stringMatching(/useFilledDays is retired and ignored: .*Quality flags, infilled days/)]);
+		// Off, it says nothing.
+		const quiet: string[] = [];
+		resolveFlowGapFill({ useFilledDays: false }, quiet);
+		expect(quiet).toEqual([]);
 	});
 });
 
@@ -206,7 +217,7 @@ describe('runModel with gap filling', () => {
 		expect(runModel(input).summary.flowGapFill).toBeUndefined();
 	});
 
-	it('on, without useFilledDays: the same scores and flows, plus the fill columns, summary and a warning', () => {
+	it('on, with infilled days left out (the default): the same scores and flows, plus the fill columns, summary and a warning', () => {
 		const off = runModel(input);
 		const on = runModel(withFill({ ...defaultFlowGapFill(), flow_observed_m3s: spec({ interpolateMaxDays: 5 }) }));
 		expect(on.summary.calibration).toEqual(off.summary.calibration);
@@ -221,15 +232,45 @@ describe('runModel with gap filling', () => {
 		// A filled value on exactly the filled days, NaN elsewhere.
 		code.forEach((c, t) => expect(Number.isNaN(filled[t]!)).toBe(c === 0));
 		expect(on.summary.flowGapFill![0]).toMatchObject({ kind: 'flow_observed_m3s', interpolatedDays: days });
-		expect(on.summary.warnings.some((w) => /observed gauge flow: gaps filled in the run/.test(w) && /No statistic reads the filled days/.test(w))).toBe(true);
+		expect(on.summary.warnings.some((w) => /observed gauge flow: gaps filled in the run/.test(w) && /Infilled days are left out \(quality flags, the default\)/.test(w))).toBe(true);
 	});
 
-	it('with useFilledDays, the statistics score the filled days too', () => {
+	const fill = { flow_observed_m3s: spec({ interpolateMaxDays: 5 }), flow_logger_m3s: null };
+	const withInfilled = (use: 'include' | 'exclude'): ModelInput => ({
+		...input,
+		settings: { ...input.settings, flowGapFill: fill, qualityFlags: { ...defaultQualityFlags(), infilled: use } }
+	});
+
+	it('with infilled days scored (settings.qualityFlags.infilled), the statistics score the filled days too', () => {
 		const off = runModel(input);
-		const on = runModel(withFill({ flow_observed_m3s: spec({ interpolateMaxDays: 5 }), flow_logger_m3s: null, useFilledDays: true }));
+		const on = runModel(withInfilled('include'));
 		const filled = on.summary.flowGapFill![0]!.interpolatedDays;
 		expect(on.summary.calibration!.days).toBe(off.summary.calibration!.days + filled);
-		expect(on.summary.warnings.some((w) => /read the filled days/.test(w))).toBe(true);
+		// The EWR test on the observed record follows the same rule.
+		expect(on.summary.catchment.ewrAgreement!.days).toBe(off.summary.catchment.ewrAgreement!.days + filled);
+		expect(on.summary.warnings.some((w) => /Infilled days are scored/.test(w))).toBe(true);
+		// Left out (the default, and said so), the run is the one without scoring.
+		expect(runModel(withInfilled('exclude')).summary.calibration).toEqual(off.summary.calibration);
+	});
+
+	it('flags each filled day infilled for the fit, and leaves it out unless the infilled treatment scores it', () => {
+		const filled = runModel(withInfilled('exclude')).summary.flowGapFill![0]!.interpolatedDays;
+		const left = prepareCalibration(withInfilled('exclude'));
+		const scored = prepareCalibration(withInfilled('include'));
+		const none = prepareCalibration(input);
+		expect(left.dayQuality!.flow.infilled).toBe(filled);
+		expect(scored.dayQuality!.flow.infilled).toBe(filled);
+		// Without a fill the gap days are missing, not infilled.
+		expect(none.dayQuality!.flow.infilled).toBe(0);
+		expect(none.dayQuality!.flow.missing - left.dayQuality!.flow.missing).toBe(filled);
+		// Left out: the fit scores the measured days only; scored: the filled ones too.
+		expect(left.scoredDays.length).toBe(none.scoredDays.length);
+		expect(scored.scoredDays.length).toBe(none.scoredDays.length + filled);
+		expect(left.dayQuality!.notes.some((n) => /of gap-filled flow are left out/.test(n))).toBe(true);
+		// The observedInfillMask the flags read is the fill's code, 1 on each filled day.
+		const mask = observedInfillMask(prepareRun(withInfilled('exclude')).flowFill!.flow_observed_m3s)!;
+		expect(mask.reduce((a, b) => a + b, 0)).toBe(filled);
+		expect(observedInfillMask(null)).toBeNull();
 	});
 
 	it('exposes the per-day mask on the prepared run (what the per-day quality flags read)', () => {
