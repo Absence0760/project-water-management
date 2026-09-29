@@ -1,5 +1,6 @@
 // preapply-check.sh against a fake `aws` on PATH (check-stubs/aws.mjs): every
-// check passes and fails where it should, the reservations are summed from
+// check passes and fails where it should (the CloudTrail trail the KMS key
+// alarm needs, classic and advanced selectors), the reservations are summed from
 // the real infra/variables.tf (overridden by a var file), and the script
 // makes only read-only calls. Needs bash and jq. No AWS account.
 import assert from 'node:assert/strict';
@@ -12,6 +13,23 @@ import { test } from 'node:test';
 const here = new URL('.', import.meta.url).pathname;
 const script = join(here, 'preapply-check.sh');
 const BUCKET = 'water-management-tfstate-000000000000';
+// An Organization trail from the management account, as a member account sees it.
+const ORG_TRAIL = 'arn:aws:cloudtrail:us-east-1:111111111111:trail/o-example/org-trail';
+const LOCAL_TRAIL = 'arn:aws:cloudtrail:af-south-1:000000000000:trail/local';
+
+// describe-trails / get-trail-status / get-event-selectors for the given trails.
+function trails(list) {
+	return {
+		'cloudtrail describe-trails': { trailList: list.map((t) => t.trail) },
+		'cloudtrail get-trail-status': { byArg: '--name', values: Object.fromEntries(list.map((t) => [t.trail.TrailARN, t.status ?? { IsLogging: true }])) },
+		'cloudtrail get-event-selectors': { byArg: '--trail-name', values: Object.fromEntries(list.map((t) => [t.trail.TrailARN, t.selectors])) },
+	};
+}
+const orgTrail = (over = {}) => ({
+	trail: { Name: 'org-trail', TrailARN: ORG_TRAIL, HomeRegion: 'us-east-1', IsMultiRegionTrail: true, IsOrganizationTrail: true },
+	selectors: { EventSelectors: [{ ReadWriteType: 'All', IncludeManagementEvents: true, DataResources: [] }] },
+	...over,
+});
 
 function healthy() {
 	return {
@@ -22,6 +40,7 @@ function healthy() {
 			ServiceNames: ['com.amazonaws.af-south-1.email'],
 			ServiceDetails: [{ ServiceName: 'com.amazonaws.af-south-1.email' }],
 		},
+		...trails([orgTrail()]),
 		'rds describe-orderable-db-instance-options': {
 			OrderableDBInstanceOptions: [
 				{ Engine: 'postgres', EngineVersion: '16.9', DBInstanceClass: 'db.t4g.micro' },
@@ -59,7 +78,7 @@ function run({ state = {}, args = ['--profile', 'water-management', '--region', 
 test('every check passes against a ready account, with read-only calls only', () => {
 	const r = run();
 	assert.equal(r.status, 0, r.stdout + r.stderr);
-	for (const name of ['lambda-quota', 'state-bucket', 'sops-key', 'ses-endpoint', 'rds-orderable']) {
+	for (const name of ['lambda-quota', 'state-bucket', 'sops-key', 'ses-endpoint', 'rds-orderable', 'cloudtrail']) {
 		assert.match(r.line(name), /^PASS/, `${name}:\n${r.stdout}`);
 	}
 	// The defaults in variables.tf: API 10 + migrate 1 + worker 8 + fetcher 2
@@ -82,6 +101,10 @@ test('every check passes against a ready account, with read-only calls only', ()
 	const rds = r.calls.find((c) => c.op === 'describe-orderable-db-instance-options').args;
 	assert.equal(rds['--engine'], 'postgres');
 	assert.equal(rds['--db-instance-class'], 'db.t4g.micro');
+	assert.match(r.line('cloudtrail'), new RegExp(`^PASS .*${ORG_TRAIL}.* in af-south-1`));
+	assert.equal(r.calls.find((c) => c.op === 'describe-trails').args['--include-shadow-trails'], true, 'an Organization trail shows in a member account only as a shadow trail');
+	assert.equal(region('describe-trails'), 'af-south-1');
+	assert.equal(r.calls.find((c) => c.op === 'get-event-selectors').args['--trail-name'], ORG_TRAIL, 'a shadow trail is named by its ARN');
 });
 
 test('a quota below the reservations + 10 fails; exactly enough passes', () => {
@@ -162,6 +185,62 @@ test('an instance class without the pinned PostgreSQL major fails', () => {
 	const r = run({ state: { 'rds describe-orderable-db-instance-options': { OrderableDBInstanceOptions: [{ EngineVersion: '16.9' }, { EngineVersion: '170.1' }] } } });
 	assert.equal(r.status, 1);
 	assert.match(r.line('rds-orderable'), /^FAIL .*offers no PostgreSQL 17 version/);
+});
+
+test('the key alarm needs a logging trail recording KMS write management events in the region', () => {
+	const fails = (state, why) => {
+		const r = run({ state });
+		assert.equal(r.status, 1, why);
+		assert.match(r.line('cloudtrail'), /^FAIL .*database KMS key alarm/, why);
+		return r;
+	};
+	const none = fails(trails([]), 'no trail at all');
+	assert.match(none.line('cloudtrail'), /no trail covers af-south-1.*Organization trail/);
+	// A single-region trail elsewhere doesn't cover af-south-1, and isn't queried.
+	const elsewhere = fails(trails([orgTrail({ trail: { TrailARN: ORG_TRAIL, HomeRegion: 'us-east-1', IsMultiRegionTrail: false } })]), 'single-region trail in another region');
+	assert.ok(!elsewhere.calls.some((c) => c.op === 'get-trail-status'));
+	const stopped = fails(trails([orgTrail({ status: { IsLogging: false } })]), 'trail not logging');
+	assert.match(stopped.line('cloudtrail'), /org-trail: not logging/);
+	fails(trails([orgTrail({ selectors: { EventSelectors: [{ ReadWriteType: 'ReadOnly', IncludeManagementEvents: true }] } })]), 'read-only management events');
+	fails(trails([orgTrail({ selectors: { EventSelectors: [{ ReadWriteType: 'All', IncludeManagementEvents: false }] } })]), 'data events only');
+	const noKms = fails(trails([orgTrail({ selectors: { EventSelectors: [{ ReadWriteType: 'All', IncludeManagementEvents: true, ExcludeManagementEventSources: ['kms.amazonaws.com'] }] } })]), 'KMS events excluded');
+	assert.match(noKms.line('cloudtrail'), /no selector records KMS write management events/);
+	const adv = (FieldSelectors) => trails([orgTrail({ selectors: { AdvancedEventSelectors: [{ Name: 'm', FieldSelectors }] } })]);
+	fails(adv([{ Field: 'eventCategory', Equals: ['Management'] }, { Field: 'readOnly', Equals: ['true'] }]), 'advanced: reads only');
+	fails(adv([{ Field: 'eventCategory', Equals: ['Management'] }, { Field: 'eventSource', NotEquals: ['kms.amazonaws.com'] }]), 'advanced: KMS excluded');
+	fails(adv([{ Field: 'eventCategory', Equals: ['Management'] }, { Field: 'eventName', Equals: ['CreateBucket'] }]), 'advanced: narrowed by eventName');
+	fails(adv([{ Field: 'eventCategory', Equals: ['Data'] }, { Field: 'resources.type', Equals: ['AWS::S3::Object'] }]), 'advanced: data events');
+	const denied = fails({ 'cloudtrail get-event-selectors': { error: '(AccessDeniedException) not authorized' }, 'cloudtrail describe-trails': trails([orgTrail()])['cloudtrail describe-trails'] }, 'selectors unreadable');
+	assert.match(denied.line('cloudtrail'), /get-event-selectors failed \(.*AccessDeniedException/);
+	const broken = fails({ 'cloudtrail describe-trails': { error: '(AccessDeniedException) not authorized' } }, 'describe-trails denied');
+	assert.match(broken.line('cloudtrail'), /describe-trails failed/);
+});
+
+test('any one covering trail passes: classic or advanced selectors, this account or the Organization', () => {
+	const passes = (state, why) => {
+		const r = run({ state });
+		assert.equal(r.status, 0, `${why}\n${r.stdout}`);
+		assert.match(r.line('cloudtrail'), /^PASS/, why);
+		return r;
+	};
+	passes(trails([orgTrail({ selectors: { EventSelectors: [{ ReadWriteType: 'WriteOnly', IncludeManagementEvents: true, ExcludeManagementEventSources: ['rdsdata.amazonaws.com'] }] } })]), 'write-only, another source excluded');
+	const adv = (FieldSelectors) => trails([orgTrail({ selectors: { AdvancedEventSelectors: [{ Name: 'data', FieldSelectors: [{ Field: 'eventCategory', Equals: ['Data'] }, { Field: 'resources.type', Equals: ['AWS::S3::Object'] }] }, { Name: 'm', FieldSelectors }] } })]);
+	passes(adv([{ Field: 'eventCategory', Equals: ['Management'] }]), 'advanced: all management events');
+	passes(adv([{ Field: 'eventCategory', Equals: ['Management'] }, { Field: 'readOnly', Equals: ['false'] }, { Field: 'eventSource', NotEquals: ['rdsdata.amazonaws.com'] }]), 'advanced: writes, another source excluded');
+	// A stopped Organization trail and a logging single-region trail in this account.
+	const local = {
+		trail: { Name: 'local', TrailARN: LOCAL_TRAIL, HomeRegion: 'af-south-1', IsMultiRegionTrail: false },
+		selectors: { EventSelectors: [{ ReadWriteType: 'All', IncludeManagementEvents: true }] },
+	};
+	const r = passes(trails([orgTrail({ status: { IsLogging: false } }), local]), 'the second trail covers');
+	assert.match(r.line('cloudtrail'), new RegExp(`^PASS .*${LOCAL_TRAIL}`));
+});
+
+test('the trail check is skipped when the database uses the AWS-managed key', () => {
+	const r = run({ varFile: 'rds_customer_managed_key = false\n', state: trails([]) });
+	assert.equal(r.status, 0, r.stdout);
+	assert.match(r.line('cloudtrail'), /^PASS .*not needed: rds_customer_managed_key = false/);
+	assert.ok(!r.calls.some((c) => c.service === 'cloudtrail'));
 });
 
 test('usage errors exit 2 before any AWS call', () => {

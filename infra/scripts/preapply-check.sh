@@ -21,6 +21,13 @@
 #                      exists (aws_vpc_endpoint.ses fails to create otherwise).
 #   5. rds-orderable   The region offers the DB instance class for the
 #                      PostgreSQL major version rds.tf pins.
+#   6. cloudtrail      A CloudTrail trail (this account's, or an Organization
+#                      trail) covering the region is logging and records
+#                      write management events from kms.amazonaws.com. The
+#                      database KMS key alarm (kms.tf) is an EventBridge rule
+#                      on CloudTrail events, which reach EventBridge only
+#                      through such a trail. Skipped (PASS) when the tfvars
+#                      set rds_customer_managed_key = false.
 #
 # The reservations: nothing is applied yet, so there is no Terraform output to
 # read them from. The script sums every `*_reserved_concurrency` variable in
@@ -229,6 +236,75 @@ elif out="$(aws_in "$region" rds describe-orderable-db-instance-options --engine
 	fi
 else
 	fail rds-orderable "describe-orderable-db-instance-options failed: $(aws_error)"
+fi
+
+# --- 6. CloudTrail trail for the KMS key alarm --------------------------------------
+
+# The key alarm (kms.tf aws_cloudwatch_event_rule.rds_kms_key_change) matches
+# "AWS API Call via CloudTrail" events, which EventBridge receives only while a
+# trail logging write management events covers the region. The stack doesn't
+# create a trail (an Organization trail covers every account; a second one
+# here would be a billed duplicate), so this proves one exists. A trail
+# counts when it is multi-region or homed in the region, IsLogging is true,
+# and its event selectors record management events that are Write or All and
+# not excluded for kms.amazonaws.com. Advanced selectors count only with
+# eventCategory = Management and nothing but readOnly / eventSource narrowing
+# them, in ways that keep KMS writes; anything else is not assumed to cover.
+cmk="$(var_value rds_customer_managed_key)"
+if [ "$cmk" = "false" ]; then
+	pass cloudtrail "not needed: rds_customer_managed_key = false (no database key alarm)"
+elif out="$(aws_in "$region" cloudtrail describe-trails --include-shadow-trails)"; then
+	trails="$(jq -r --arg r "$region" '.trailList[]? | select(.IsMultiRegionTrail == true or .HomeRegion == $r) | .TrailARN' <<<"$out")"
+	covered=""
+	seen=""
+	for t in $trails; do
+		if ! st="$(aws_in "$region" cloudtrail get-trail-status --name "$t")"; then
+			seen="$seen; ${t##*/}: get-trail-status failed ($(aws_error))"
+			continue
+		fi
+		if [ "$(jq -r '.IsLogging // false' <<<"$st")" != "true" ]; then
+			seen="$seen; ${t##*/}: not logging"
+			continue
+		fi
+		if ! sel="$(aws_in "$region" cloudtrail get-event-selectors --trail-name "$t")"; then
+			seen="$seen; ${t##*/}: get-event-selectors failed ($(aws_error))"
+			continue
+		fi
+		if jq -e '
+			def has($a; $x): any(($a // [])[]; . == $x);
+			def kms_ok($f):
+				($f.Equals == null or has($f.Equals; "kms.amazonaws.com"))
+				and (has($f.NotEquals; "kms.amazonaws.com") | not)
+				and all($f | keys[]; . == "Field" or . == "Equals" or . == "NotEquals");
+			def ro_ok($f):
+				($f.Equals == null or has($f.Equals; "false"))
+				and all($f | keys[]; . == "Field" or . == "Equals");
+			any(.EventSelectors[]?;
+				.IncludeManagementEvents == true
+				and (.ReadWriteType == "All" or .ReadWriteType == "WriteOnly")
+				and (has(.ExcludeManagementEventSources; "kms.amazonaws.com") | not))
+			or any(.AdvancedEventSelectors[]?;
+				.FieldSelectors as $fs
+				| any($fs[]; .Field == "eventCategory" and has(.Equals; "Management"))
+				and all($fs[];
+					(.Field == "eventCategory" and all(keys[]; . == "Field" or . == "Equals"))
+					or (.Field == "readOnly" and ro_ok(.))
+					or (.Field == "eventSource" and kms_ok(.))))
+		' <<<"$sel" >/dev/null; then
+			covered="$t"
+			break
+		fi
+		seen="$seen; ${t##*/}: logging, but no selector records KMS write management events"
+	done
+	if [ -n "$covered" ]; then
+		pass cloudtrail "$covered logs write management events (KMS included) in $region"
+	elif [ -z "$trails" ]; then
+		fail cloudtrail "no trail covers $region, so the database KMS key alarm (kms.tf) would never fire. Create an Organization trail from the management account (preferred) or a trail in this account (infra/README.md § Operator steps, step 7a)"
+	else
+		fail cloudtrail "no trail covering $region logs KMS write management events${seen:+ (${seen#; })}, so the database KMS key alarm (kms.tf) would never fire (infra/README.md § Operator steps, step 7a)"
+	fi
+else
+	fail cloudtrail "describe-trails failed: $(aws_error); can't confirm the trail the database KMS key alarm (kms.tf) needs"
 fi
 
 echo
