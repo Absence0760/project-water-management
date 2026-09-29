@@ -62,7 +62,7 @@ export const ModelBody = z.preprocess((v) => (v && typeof v === 'object' ? upgra
 				damReleaseM3Day: z.array(nonNeg).length(12).nullable().default(null),
 				damOutletCapacityM3Day: nonNeg.nullable().default(null),
 				damSeepageReturnPct: frac.default(1),
-				// Development over the run (engine ≥ 1.28.0, issue #67): the survey date and sediment rate, the
+				// Development over the run (engine ≥ 1.30.0, issue #67): the survey date and sediment rate, the
 				// in-service date (farms), the abstraction start (farms and users). Which kinds and a rate
 				// needing its survey date are model rules (developmentProblem, via modelRuleProblems).
 				damSurveyDate: isoDay.nullable().default(null),

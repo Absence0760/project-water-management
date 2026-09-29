@@ -1,4 +1,4 @@
-// Development over the run (engine 1.28.0, issue #67, docs/model.md §2.7g):
+// Development over the run (engine 1.30.0, issue #67, docs/model.md §2.7g):
 // a dam losing capacity to sediment, a dam in service from a date and
 // abstraction from a date, on hand-worked cases, the defaults leaving a run
 // unchanged, and the self-checks holding the engine to them.

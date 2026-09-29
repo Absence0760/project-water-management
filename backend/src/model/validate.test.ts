@@ -186,7 +186,7 @@ describe('dam storage (WP-3.5)', () => {
 	});
 });
 
-describe('development over the run (engine 1.28.0, issue #67)', () => {
+describe('development over the run (engine 1.30.0, issue #67)', () => {
 	const out = node('Gauge', null);
 	const farm = node('A', out.id, { damCapacityM3: 20_000 });
 	const town = node('Town', out.id, { kind: 'user', damCapacityM3: 0 });

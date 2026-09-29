@@ -119,7 +119,7 @@ export const NODE_FIELD_SPECS: Record<NodeSetField, FieldSpec> = {
 	damOutletCapacityM3Day: { label: 'Dam outlet capacity', spec: num('m³/day', { nullable: true, nullLabel: 'no limit' }) },
 	damSeepageReturnPct: { label: 'Share of dam seepage returning', spec: pct() },
 	damCurve: { label: 'Dam survey curve', spec: { t: 'curve' } },
-	// Development over the run (engine ≥ 1.28.0, issue #67, docs/model.md §2.7g).
+	// Development over the run (engine ≥ 1.30.0, issue #67, docs/model.md §2.7g).
 	damSurveyDate: { label: 'Dam survey date', spec: { t: 'date', nullLabel: 'not recorded' } },
 	damSedimentPctPerYear: { label: 'Dam capacity lost to sediment a year', spec: pct(true, 'none') },
 	damInServiceFrom: { label: 'Dam in service from', spec: { t: 'date', nullLabel: 'the whole run' } },

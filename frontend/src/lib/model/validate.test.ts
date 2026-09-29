@@ -190,7 +190,7 @@ describe('validateModel', () => {
 		]);
 	});
 
-	it('checks the development fields as the API does (engine 1.28.0, issue #67)', () => {
+	it('checks the development fields as the API does (engine 1.30.0, issue #67)', () => {
 		const g = node('g', 'Gauge', null);
 		const a = { ...node('a', 'A', 'g'), damCapacityM3: 20_000 };
 		const u = { ...node('u', 'Town', 'g'), kind: 'user' as const, damCapacityM3: 0 };

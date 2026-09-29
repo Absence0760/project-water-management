@@ -40,7 +40,7 @@ export interface DamState {
 	/** Storage ÷ capacity 30 days before dataUntil. */
 	pct30dAgo: number;
 	/**
-	 * Storage 30 days before dataUntil, m³ (engine ≥ 1.28.0): the 30-day change
+	 * Storage 30 days before dataUntil, m³ (engine ≥ 1.30.0): the 30-day change
 	 * when the capacity changed between the two days. Absent on a view
 	 * published before it.
 	 */
@@ -108,7 +108,7 @@ export interface RiverShare {
 export interface FarmProjection {
 	nodeId: string;
 	name: string;
-	/** The dam's capacity on the season's last day (engine ≥ 1.28.0: sediment, an in-service date); 0 without a dam then. */
+	/** The dam's capacity on the season's last day (engine ≥ 1.30.0: sediment, an in-service date); 0 without a dam then. */
 	damCapacityM3: number;
 	damMinPct: number;
 	irrigationEfficiency: number;

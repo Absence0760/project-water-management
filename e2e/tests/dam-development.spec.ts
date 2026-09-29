@@ -1,4 +1,4 @@
-// Development over the run (engine 1.28.0, issue #67, docs/model.md §2.7g):
+// Development over the run (engine 1.30.0, issue #67, docs/model.md §2.7g):
 // a farm dam's survey date, sediment rate and in-service date, and a unit's
 // abstraction start, in the one-node form. A rate without a survey date says
 // so beside the fields; the values save, survive a reload, pass axe, and the

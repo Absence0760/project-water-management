@@ -12,7 +12,7 @@ import { ALLOCATION_SERIES, matchAllocations, registeredOver, resolveAllocationM
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
 import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
-import { curveAreaAt, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
+import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -177,7 +177,7 @@ export function checkBalance(input: ModelInput, out: ModelOutput): string | null
 		const [F, G, W, H, I, J, Q, R, AA, Z, ABs] = ['demand', 'supplied', 'deficit', 'inflow_upstream', 'runoff', 'transfer', 'dam_storage', 'spill', 'ewr_shortfall', 'ewr_cumulative', 'ewr_shortfall_incremental'].map(g) as number[][];
 		// The engine keeps full precision (docs/engine-audit.md R1): no rounding here either.
 		const cap = n.damCapacityM3;
-		// A dam whose capacity changes (engine ≥ 1.28.0) starts at its share of the first day's capacity.
+		// A dam whose capacity changes (engine ≥ 1.30.0) starts at its share of the first day's capacity.
 		const ks = capacityScaleOf(n, toEpochDay(out.startDate), out.days, []);
 		let qPrev = n.damInitialPct * cap * (ks?.[0] ?? 1);
 		totIn += qPrev;
@@ -381,7 +381,7 @@ interface Rule {
 	on: Uint8Array;
 	/** The most it may move in a day, by calendar month (the month's rate × 86 400, capped by the daily cap). */
 	limit: Float64Array;
-	/** The share of the source dam's capacity (the day's, engine ≥ 1.28.0) it keeps. */
+	/** The share of the source dam's capacity (the day's, engine ≥ 1.30.0) it keeps. */
 	reserve: number;
 	priority: number;
 }
@@ -400,7 +400,8 @@ interface Rule {
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
  * - room at the destination (audit N4): a farm that sends nothing receives
  *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
- *   evaporation − seepage) + today's demand D);
+ *   evaporation − seepage) + today's demand D + a fixed release's floor,
+ *   engine ≥ 1.29.0);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ over its destinations
  *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
@@ -421,7 +422,7 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	}
 	const farms = input.model.nodes.filter((n) => n.kind === 'farm');
 	const d0 = toEpochDay(out.startDate);
-	// A dam whose capacity changes over the run (engine ≥ 1.28.0): its dam_capacity column, else the entered capacity.
+	// A dam whose capacity changes over the run (engine ≥ 1.30.0): its dam_capacity column, else the entered capacity.
 	const capOn = (id: string, t: number) => get.get(`${id}|${DAM_CAPACITY_SERIES.key}`)?.[t] ?? byId.get(id)!.damCapacityM3;
 	const storage = (id: string, t: number) => {
 		// The storage reset's step (engine ≥ 0.46.0) starts its day.
@@ -440,18 +441,25 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	const farmD = farms.map((f) => get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
+	const farmRelease = farms.map((f) => resolveRelease(f, []));
 	/**
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
 	 * + rain on the dam − evaporation − seepage) + today's demand D (engine ≥
-	 * 0.19.0 counts the dam's gains and losses, N2). The reported evaporation
+	 * 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
+	 * (engine ≥ 1.29.0: the release with no inflow and nothing transferred
+	 * in, fixedReleaseFloor). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
 	 * days that cap bites the room read here is smaller than the engine's but
 	 * still at least capacity + the volume that moved + D, so neither check
-	 * below can trip on it.
+	 * below can trip on it (the dam is then empty, and the floor 0 in both).
 	 */
 	const roomOf = (fi: number, t: number) => {
 		const [pd, e, sp] = farmLoss[fi]!.map((v) => v?.[t] ?? 0);
-		return capOn(farms[fi]!.id, t) - (storage(farms[fi]!.id, t) + pd! - e! - sp!) + farmD[fi]![t]!;
+		const f = farms[fi]!;
+		const cap = capOn(f.id, t);
+		const held = storage(f.id, t) + pd! - e! - sp!;
+		const rel = farmRelease[fi] ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * cap) : 0;
+		return cap - held + farmD[fi]![t]! + rel;
 	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
@@ -964,7 +972,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
-		// A dam whose capacity changes over the run (engine ≥ 1.28.0, ../network/development.ts): the
+		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ../network/development.ts): the
 		// day's factor k, as runModel resolves it, and the dam_capacity column it reports.
 		const ks = capacityScaleOf(n, day0, out.days, []);
 		const abstractFrom = abstractionStartDay(n, day0, out.days, []);
@@ -996,7 +1004,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// The dam-level triggers read the storage at the entered capacity's scale.
 			const qLevel = kd === 1 ? qPrev : kd > 0 ? qPrev / kd : 0;
 			if (CAPS && !near(CAPS[t]!, cap, cap0)) return `${where}: dam_capacity ${CAPS[t]} ≠ the capacity ${cap0} × ${kd}`;
-			// Nothing before the unit's abstraction date (engine ≥ 1.28.0).
+			// Nothing before the unit's abstraction date (engine ≥ 1.30.0).
 			const df = t < abstractFrom ? 0 : (factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (KF ? KF[t]! : 1);
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
 				return `${where}: crop requirement ${f} ≠ ${factor || KF ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor || KF ? ')' : ''}`;
@@ -1026,7 +1034,7 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 					? Math.min(evRaw, ((1 - seep) * qPrev) / b)
 					: evRaw;
 			const evWant = Math.min(limited, there);
-			// A dam with no capacity today (engine ≥ 1.28.0: filled with sediment, or not in service yet) holds
+			// A dam with no capacity today (engine ≥ 1.30.0: filled with sediment, or not in service yet) holds
 			// nothing to seep: yesterday's water spills.
 			const spWant = cap > 0 ? Math.min(seep * qPrev, there - evWant) : 0;
 			if (!near(pd, pdWant, qPrev) || !near(ev, evWant, qPrev) || !near(sp, spWant, qPrev))
@@ -1336,7 +1344,7 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 	const d = defaultProjectSettings();
 	const method = ['area', 'hiLo', 'manual'].includes(String(input.settings.flowShareMethod)) ? (input.settings.flowShareMethod as 'area' | 'hiLo' | 'manual') : d.flowShareMethod;
 	const share = flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((input.settings.hiLoSplit as object | undefined) ?? {}) }).share;
-	const q0 = lowFlowThreshold(natural);
+	const q0 = lowFlowThreshold(natural.slice(0, out.summary.historyDays ?? natural.length));
 	if (Math.abs(out.summary.landCover.lowFlowThresholdM3Day - q0) > tol(q0)) return `land-cover low-flow threshold ${out.summary.landCover.lowFlowThresholdM3Day} ≠ ${q0}`;
 	const sum = new Float64Array(out.days);
 	for (const [i, n] of input.model.nodes.entries()) {
@@ -1711,6 +1719,8 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  * - a full allocation ('fullAllocation'): the demand factor is one number per
  *   water year, and a scaled unit's demand over the run's days of a year adds
  *   up to the volume registered for it over them (none when it had no demand);
+ *   the year a forecast tail starts in (summary.historyDays, engine ≥
+ *   1.28.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
  * - RunSummary.allocations is there exactly when the input has allocations,
  *   with the mode the run used, and its per-source whole-year figures are
@@ -1763,20 +1773,32 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 			const D = g('demand');
 			const abstractFrom = abstractionStartDay(n, day0, out.days, []);
 			if (!D) return `${n.id}: demand series missing`;
+			// Before a forecast tail (engine ≥ 1.28.0): the year it starts in is fitted on its historical days.
+			const history = out.summary.historyDays ?? out.days;
+			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
+			const span = (a: number, b: number, wy: number, reg: number): string | null => {
+				let d = 0;
+				for (let k = a; k <= b; k++) {
+					if (KF[k] !== KF[a]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
+					d += D[k]!;
+				}
+				const want = KF[a]! > 0 ? reg : 0;
+				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run` : null;
+			};
 			for (let t = 0; t < out.days; ) {
 				const wy = waterYearOf(day0 + t);
 				const end = toEpochDay(`${wy + 1}-10-01`) - 1;
 				const last = Math.min(out.days - 1, end - day0);
-				let d = 0;
-				for (let k = t; k <= last; k++) {
-					if (KF[k] !== KF[t]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
-					d += D[k]!;
-				}
-				// Over the days the unit abstracts on (engine ≥ 1.28.0: from its abstraction date).
-				const a = Math.max(t, abstractFrom);
-				const reg = a > last ? 0 : registeredOver(allocs, wy, day0 + a, day0 + last);
-				const want = KF[t]! > 0 ? reg : 0;
-				if (Math.abs(d - want) > tol(Math.max(d, reg))) return `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run`;
+				// The volume registered over days x … y the unit abstracts on (engine ≥ 1.30.0: from its abstraction date).
+				const regOver = (x: number, y: number) => {
+					const s = Math.max(x, abstractFrom);
+					return s > y ? 0 : registeredOver(allocs, wy, day0 + s, day0 + y);
+				};
+				// Cut by the tail: the historical days add up on their own, and the tail days keep their factor.
+				let bad = t < history && last >= history ? span(t, history - 1, wy, regOver(t, history - 1)) : span(t, last, wy, regOver(t, last));
+				if (!bad && t < history && last >= history)
+					for (let k = history; k <= last && !bad; k++) if (KF[k] !== KF[t]) bad = `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
+				if (bad) return bad;
 				t = last + 1;
 			}
 		} else if (mode === 'fullAllocation' && allocs.length && (n.kind === 'farm' || n.kind === 'user')) {

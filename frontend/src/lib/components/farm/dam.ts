@@ -25,7 +25,7 @@ export interface DamPageVm {
 /** "up 32.4 ML", "down 5 000 m³", "no change": the storage change over 30 days. */
 export function storageChange(farm: FarmProjection, unit: VolumeUnit): string {
 	const d = farm.dam!;
-	// The two storages when the view has them (engine ≥ 1.28.0: exact when the dam's capacity changed); else from the levels.
+	// The two storages when the view has them (engine ≥ 1.30.0: exact when the dam's capacity changed); else from the levels.
 	const m3 = d.storage30dAgoM3 !== undefined ? d.storageM3 - d.storage30dAgoM3 : (d.pct - d.pct30dAgo) * farm.damCapacityM3;
 	// i18n-section: farm.damPage
 	if (Math.abs(m3) < 0.5) return t('no change');

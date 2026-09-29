@@ -1186,7 +1186,7 @@ const NODE_FIELDS: [keyof NetworkNode, string, Fmt][] = [
 	['damReleaseRule', 'dam release rule', (v) => (v === 'passInflow' ? 'pass inflow' : v === 'fixed' ? 'fixed' : 'none')],
 	['damOutletCapacityM3Day', 'dam outlet capacity', (v) => (v === null || v === undefined ? 'no limit' : `${fmtValue(v, 0)} m³/day`)],
 	['damSeepageReturnPct', 'share of dam seepage returning', pct],
-	// Development over the run (engine ≥ 1.28.0).
+	// Development over the run (engine ≥ 1.30.0).
 	['damSurveyDate', 'dam survey date', (v) => (v ? String(v) : 'none')],
 	['damSedimentPctPerYear', 'dam capacity lost to sediment a year', (v) => (typeof v === 'number' && v > 0 ? pct(v) : 'none')],
 	['damInServiceFrom', 'dam in service from', (v) => (v ? String(v) : 'the whole run')],

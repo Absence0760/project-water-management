@@ -183,7 +183,7 @@ export function bandStartStorage(
 	input: ModelInput,
 	band: StorageBand,
 	representative: TriggerRepresentative = 'lowerEdge',
-	/** The review date (epoch day): each dam's capacity is that day's (engine ≥ 1.28.0: sediment, an in-service date); absent = as entered. */
+	/** The review date (epoch day): each dam's capacity is that day's (engine ≥ 1.30.0: sediment, an in-service date); absent = as entered. */
 	day?: number
 ): { totalM3: number; storageM3ByDam: Record<string, number> } {
 	const dams = farmDams(input);
@@ -442,7 +442,7 @@ function checkReview(input: ModelInput, options: ReviewTriggerBandOptions): void
  */
 export function reviewTriggerBands(input: ModelInput, baseRun: OutlookBaseRun, options: ReviewTriggerBandOptions): ReviewTriggerBandPlan {
 	checkReview(input, options);
-	// The dams' capacity on the review date (engine ≥ 1.28.0: it can change over the run).
+	// The dams' capacity on the review date (engine ≥ 1.30.0: it can change over the run).
 	const reviewDay = toEpochDay(options.reviewDate);
 	const capacity = farmDams(input).reduce((a, n) => a + damCapacityOn(n, reviewDay), 0);
 	const representative = options.representative ?? 'lowerEdge';

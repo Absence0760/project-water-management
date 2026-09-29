@@ -61,7 +61,7 @@ describe('the dam page', () => {
 		expect(sp(storageChange(f, 'ML'))).toBe('down 20.1 ML');
 		f.dam!.pct30dAgo = f.dam!.pct;
 		expect(storageChange(f, 'ML')).toBe('no change');
-		// A view with both storages (engine ≥ 1.28.0) reads the change from them: exact when the capacity changed.
+		// A view with both storages (engine ≥ 1.30.0) reads the change from them: exact when the capacity changed.
 		f.dam!.storage30dAgoM3 = f.dam!.storageM3 - 5_000;
 		expect(sp(storageChange(f, 'm3'))).toBe('up 5 000 m³');
 		delete f.dam!.storage30dAgoM3;

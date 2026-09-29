@@ -141,7 +141,7 @@ const LAND = ['areaKm2', 'areaHiKm2', 'areaLoKm2', 'flowShareManual'] as const;
  * carry the enlarged dam's own surveyed curve, docs/scenarios.md § Dam capacity).
  */
 const DAM_STORAGE = ['damReleaseRule', 'damReleaseM3Day', 'damOutletCapacityM3Day', 'damSeepageReturnPct', 'damCurve'] as const;
-/** Development over the run (engine ≥ 1.28.0, docs/model.md §2.7g): a dam's sediment and in-service date, a unit's abstraction start. */
+/** Development over the run (engine ≥ 1.30.0, docs/model.md §2.7g): a dam's sediment and in-service date, a unit's abstraction start. */
 const DEVELOPMENT = ['damSurveyDate', 'damSedimentPctPerYear', 'damInServiceFrom'] as const;
 const BOREHOLES = ['boreholeCapacityM3Day', 'boreholeRule', 'boreholeTriggerPct', 'streamDepletionFrac', 'streamDepletionLagDays'] as const;
 const USER = ['userDemandM3Day', 'userReturnPct', 'userPriority'] as const;
@@ -173,7 +173,7 @@ export type NodeSetField = (typeof NODE_SET_FIELDS)[NodeKind][number];
  * node.set fields that are baseline assumptions even on the applicant's own
  * node (classifyOp): land and flow share split the catchment's natural
  * runoff, where the EWR is assessed is the Reserve's, and a dam's survey and
- * sediment rate (engine ≥ 1.28.0) describe the dam as it is, never a proposal.
+ * sediment rate (engine ≥ 1.30.0) describe the dam as it is, never a proposal.
  */
 export const BASELINE_NODE_FIELDS: readonly NodeSetField[] = [...LAND, 'ewrSite', 'damSurveyDate', 'damSedimentPctPerYear'];
 
@@ -661,7 +661,7 @@ const NODE_OPTIONAL = new Set<string>([
 	'damSeepagePerDay',
 	...SUPPLY,
 	...DAM_STORAGE,
-	// Development over the run (engine ≥ 1.28.0): the node's entered dam and demand throughout unless given.
+	// Development over the run (engine ≥ 1.30.0): the node's entered dam and demand throughout unless given.
 	...DEVELOPMENT,
 	'abstractionFrom',
 	...USER,

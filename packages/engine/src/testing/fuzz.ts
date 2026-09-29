@@ -368,7 +368,7 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	// Registered volumes and the allocation mode (engine ≥ 1.18.0), from their own stream, after everything else.
 	const allocations = randomAllocations(new Rng(seed ^ 0x510e527f), nodes, settings, start, days);
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
-	// Development over the run (engine ≥ 1.28.0), from its own stream, last of all.
+	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
 	return {
 		settings,
@@ -646,7 +646,7 @@ function randomDemandObjects(g: Rng, nodes: NetworkNode[]): DemandObject[] {
 }
 
 /**
- * Development over the run (engine ≥ 1.28.0, ../network/development.ts) in
+ * Development over the run (engine ≥ 1.30.0, ../network/development.ts) in
  * 20 % of seeds: on a farm dam, now and then a sediment rate with a survey
  * date anywhere from a run before the start to after the end, and an
  * in-service date inside the run; on a farm or water user, an abstraction

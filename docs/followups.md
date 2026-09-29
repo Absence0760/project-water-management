@@ -800,7 +800,7 @@ the reports):
   users) before a final calibration, because they are real modelled
   processes.
   - [x] **Gap:** development (dams, abstraction) can't vary over time within
-        a run. Done (engine 1.28.0, issue #67, model.md §2.7g): a dam in
+        a run. Done (engine 1.30.0, issue #67, model.md §2.7g): a dam in
         service from a date, abstraction from a date, and capacity lost to
         sediment from a survey date.
 - **Q4: pan and lake factors.** These are two separate settings. PET uses a
@@ -2152,19 +2152,19 @@ role and not before it.
 
 ## Features left half-way
 
-- [ ] **Make the model causal, then run forecast mode once** (engine-audit.md
-      K1, found building WP-2.12, 2026-09-26). The land-cover Q75, EWR rule
-      tables read against the record's flow-duration curve, and GR4J's
-      warm-up on a record shorter than it are record-wide, so days added at
-      the end move values at the start (about 1e-8 relative on long records).
-      Forecast mode works round it with a second run for the history, so the
-      join between history and forecast is continuous only up to that noise.
-      Durable fix: fit those statistics on a fixed window (the calibration
-      window, or the record to the last observed day), then prefix stability
-      holds for `runModel` itself and `runForecastChecked` can splice
-      nothing. An engine behaviour change, so the engine owner's call and an
-      `ENGINE_VERSION` bump. Trigger: the next change to any of those three,
-      or a user asking why a forecast run's first forecast day steps.
+- [x] **Make the model causal, then run forecast mode once** (engine-audit.md
+      K1, found building WP-2.12, 2026-09-26; done in engine 1.28.0, issue
+      #67). Every record-wide figure (GR4J's cycled warm-up, the land-cover
+      Q75, the Reserve's natural curves and the months it assesses, a full
+      allocation's yearly factor) reads only the days before a forecast tail
+      (`forecastTail.ts`), so a run with the tail has the same series as the run without it on every shared day, to the bit, and `runForecastChecked` takes
+      every series from it with no splice (model.md §2.4f). It still runs the
+      history twice: the summaries cover their whole run and the self-checks
+      recompute them from the series, so windowing them to the history would
+      touch every summary and every check, for no change in a figure. A
+      snapshot at `forecastFrom` would make the second run cover the tail
+      only (same series, less time); trigger: forecast runs' time showing up
+      in the job queue's budget.
 - [x] **Scheduled forecast runs** (WP-2.12 → WP-2.11 hand-off, 2026-09-26;
       [architecture.md § Background work](./architecture.md)). A forecast
       feed's (CHIRPS-GEFS) merge that changes days queues a `rerun` job with
@@ -2180,7 +2180,7 @@ role and not before it.
       Built: survey curves, releases, monthly lake factors, seepage
       destination (model.md §2.7a "Dam geometry, losses and releases").
       Still open:
-      - ~~*Capacity loss to sediment*~~: done (engine 1.28.0, issue #67,
+      - ~~*Capacity loss to sediment*~~: done (engine 1.30.0, issue #67,
         migration 110, model.md §2.7g): `damSurveyDate` and
         `damSedimentPctPerYear`, linear both ways from the survey; dead
         storage, the curve's volumes and the dam-level triggers scale with
@@ -2191,11 +2191,12 @@ role and not before it.
         and override mode records a table edit of the curve, after the
         capacity op when the dam is raised with it (scenarios.md § Dam
         capacity).
-      - *Transfer room ignores today's release*: a transfer into a dam with
-        a release rule is sized as if the dam kept what it releases, so it
-        can move less than it could (never more). Same conservative choice
-        as for today's inflow (§2.6). Fix with the release computed before
-        the transfer (needs Z at transfer time); trigger: a scheme with both.
+      - ~~*Transfer room ignores today's release*~~: done (engine 1.29.0,
+        issue #67): the room counts a fixed release's floor, the release
+        with no inflow and nothing transferred in (`fixedReleaseFloor`,
+        model.md §2.6). A pass-inflow release stays uncounted: it is at most
+        the day's inflow, which the room doesn't count either, and both are
+        only known after the transfers are settled.
       - ~~*Self-checks water-balance table*~~: done (76f24440): optional
         columns for groundwater, storage set, other use, depletion and
         seepage lost, shown only when a run has them; a release joins the

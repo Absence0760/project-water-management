@@ -30,7 +30,7 @@ describe('ModelEditor', () => {
 		expect(ed.savedNodeIds.has(outlet.id)).toBe(true);
 	});
 
-	it('starts a new node with no development over the run (engine 1.28.0): every field null, the model valid', () => {
+	it('starts a new node with no development over the run (engine 1.30.0): every field null, the model valid', () => {
 		const ed = new ModelEditor();
 		ed.load({ nodes: [], crops: [], cropAreas: [], transfers: [] });
 		ed.addNode();

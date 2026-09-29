@@ -16,30 +16,29 @@
 //   withoutForecastTail  the input with that tail cut off (the forecast series
 //                        ends the day before forecastFrom, and so does the
 //                        run): what an ordinary run uses;
-//   runForecastChecked   forecast mode: every summary, and every series up
-//                        to forecastFrom − 1, from the run without the tail;
-//                        the tail days' series from the run with it; and
+//   runForecastChecked   forecast mode: every series from the run with the
+//                        tail, every summary from the run without it, and
 //                        summary.forecast over the tail days.
 //
-// Why two runs and not one: the model is not causal. A few figures are
-// record-wide statistics, so a day at the end of the record changes values
-// at its start: the land-cover low-flow threshold (the natural flow's Q75,
-// network/landcover.ts), EWR rule tables read against the record's flow
-// duration curve, and GR4J's warm-up, which cycles the forcing when the
-// record is shorter than the warm-up. A forecast tail therefore moves
-// historical values by float noise (1e-8 relative is typical) and, in a
-// short record, by more. Taking the history from the run without the tail
-// makes the historical figures those of an ordinary run to the bit, by
-// construction; the forecast days carry on from the run with the tail, so
-// the join between the two is continuous only up to that noise.
+// The model is causal across a forecast tail (engine ≥ 1.28.0,
+// engine-audit.md K1): its record-wide statistics (GR4J's cycled warm-up,
+// the land-cover Q75, the Reserve's natural duration curves and the months
+// it assesses, a full allocation's demand factors) read only the days
+// before the tail (./forecastTail.ts), so the run with the tail has the
+// same series as the run without it on every shared day, to the bit, and the join
+// into the forecast days is exact. The run without the tail is still made
+// for the summaries: every one of them (the farms, curtailment, the EWR
+// days, calibration, the self-checks) covers the whole run, and a forecast
+// must not move them.
 //
-// Nothing here changes runModel: without a forecast tail runForecastChecked
-// is runModelChecked (checkForecastPrefix, testing/invariants.ts, asserts
-// both properties).
+// Without a forecast tail runForecastChecked is runModelChecked
+// (checkForecastPrefix, testing/forecastInvariants.ts, asserts both
+// properties).
 import { fromEpochDay, toEpochDay } from './calendar';
 import { damCapacityOn } from './network/development';
 import type { ModelInput, ModelOutput, RunSeries } from './project';
-import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN, rainSourceCodes } from './rainSourcePeriods';
+import { forecastTail } from './forecastTail';
+import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
 import { runModelChecked } from './run';
 import { prepareRun } from './prepare';
 
@@ -77,27 +76,14 @@ export interface ForecastSplit {
  */
 export function forecastSplit(input: ModelInput): ForecastSplit {
 	const prep = prepareRun(input);
-	const { days, start } = prep;
-	const source = prep.rainSource
-		? prep.rainSource.column
-		: rainSourceCodes(prep.aligned('rain_catchment_mm'), prep.aligned('rain_chirps_mm'), prep.aligned('rain_forecast_mm'));
-	let last = -1;
-	for (let t = 0; t < days; t++) if (!Number.isNaN(source[t]!) && source[t] !== RAIN_SOURCE_CODE.forecast) last = t;
-	let from = -1;
-	if (last >= 0) {
-		for (let t = last + 1; t < days; t++) {
-			if (source[t] === RAIN_SOURCE_CODE.forecast) {
-				from = t;
-				break;
-			}
-		}
-	}
+	const { start } = prep;
+	const tail = forecastTail(prep);
 	return {
 		startDate: fromEpochDay(start),
 		endDate: fromEpochDay(prep.end),
-		forecastFrom: from >= 0 ? fromEpochDay(start + from) : null,
-		lastObserved: last >= 0 ? fromEpochDay(start + last) : null,
-		source
+		forecastFrom: tail.from >= 0 ? fromEpochDay(start + tail.from) : null,
+		lastObserved: tail.lastObserved >= 0 ? fromEpochDay(start + tail.lastObserved) : null,
+		source: tail.source
 	};
 }
 
@@ -176,7 +162,7 @@ function forecastSummary(input: ModelInput, full: ModelOutput, split: ForecastSp
 			d += fin(demand?.[t]);
 			s += fin(supplied?.[t]);
 			if (fin(deficit?.[t]) > NOISE_M3) short++;
-			// Against the day's capacity (engine ≥ 1.28.0: sediment, an in-service date; none before it).
+			// Against the day's capacity (engine ≥ 1.30.0: sediment, an in-service date; none before it).
 			const capT = cap > 0 ? damCapacityOn(n, d0 + t) : 0;
 			if (capT > 0 && storage && fin(storage[t]) / capT < minPct) {
 				minPct = fin(storage[t]) / capT;
@@ -223,13 +209,11 @@ const fin = (v: number | null | undefined) => (typeof v === 'number' && Number.i
  *   water balance, self-checks, warnings) is that of the run without the
  *   tail (withoutForecastTail), so the historical figures are those of an
  *   ordinary run to the bit;
- * - every series is the run without the tail's up to forecastFrom − 1 and
- *   the run with it from forecastFrom on (the model isn't causal, so the
- *   two runs' shared days can differ by float noise: see the head of this
- *   file), except `rain_source`, which is the full run's whole (forecastSplit's
- *   source: before forecastFrom it equals the run without the tail's, which
- *   keeps forecast rain filling a gap), so every chart and export can mark
- *   the forecast days;
+ * - every series is the run with the tail's, whose days before
+ *   forecastFrom equal the run without it, to the bit (the model is causal
+ *   across the tail: see the head of this file), plus the `rain_source`
+ *   column when the run has none, so every chart and export can mark the
+ *   forecast days;
  * - summary.forecast covers the tail days, and summary.forecastRain is the
  *   full run's (it names the days that used forecast rain);
  * - a self-check the full run fails is added to the warnings, named as the
@@ -240,17 +224,10 @@ export function runForecastChecked(input: ModelInput): ModelOutput {
 	if (!split.forecastFrom || !split.lastObserved) return { ...runModelChecked(input), forecastFrom: null };
 	const hist = runModelChecked(withoutForecastTail(input, split));
 	const full = runModelChecked(input);
-	const cut = toEpochDay(split.forecastFrom) - toEpochDay(full.startDate);
-	const history = new Map(hist.series.map((x) => [`${x.nodeId ?? ''}|${x.key}`, x.values]));
-	const series: RunSeries[] = full.series.map((x) => {
-		const h = history.get(`${x.nodeId ?? ''}|${x.key}`);
-		return h ? { ...x, values: [...h.slice(0, cut), ...x.values.slice(cut)] } : x;
-	});
-	// The rain source is the full run's whole: before forecastFrom it equals the run without the tail's (both read the same rain), so nothing is spliced.
-	const at = series.findIndex((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key);
-	const sourceSeries = { nodeId: null, key: RAIN_SOURCE_COLUMN.key, label: RAIN_SOURCE_COLUMN.label, unit: RAIN_SOURCE_COLUMN.unit, values: Array.from(split.source) };
-	if (at >= 0) series[at] = sourceSeries;
-	else series.push(sourceSeries);
+	const series: RunSeries[] = [...full.series];
+	if (!series.some((s) => s.nodeId === null && s.key === RAIN_SOURCE_COLUMN.key)) {
+		series.push({ nodeId: null, key: RAIN_SOURCE_COLUMN.key, label: RAIN_SOURCE_COLUMN.label, unit: RAIN_SOURCE_COLUMN.unit, values: Array.from(split.source) });
+	}
 	const warnings = [...hist.summary.warnings];
 	for (const c of full.summary.verification?.checks ?? []) {
 		if (!c.passed) warnings.push(`self-check failed on the run with the forecast tail (${c.label}): ${c.detail}`);

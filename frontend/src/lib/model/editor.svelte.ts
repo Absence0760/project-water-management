@@ -39,7 +39,7 @@ export function newNode(sortOrder: number, downstreamNodeId: string | null): Net
 		...BOREHOLE_DEFAULTS,
 		// No survey curve, no release, all seepage returning (WP-3.5).
 		...DAM_STORAGE_DEFAULTS,
-		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.28.0).
+		// No sediment, in-service date or abstraction start: as entered for the whole run (engine 1.30.0).
 		...DEVELOPMENT_DEFAULTS,
 		// The dam only, no river pump (WP-3.8).
 		...SUPPLY_DEFAULTS,

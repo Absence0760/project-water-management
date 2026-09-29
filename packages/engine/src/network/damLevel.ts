@@ -28,7 +28,7 @@ export interface DamFigures {
  * One dam's figures from its daily storage (m³, day 0 = `startDate`), or null
  * when the dam has no capacity or the storage no finite value. `minFrac` is
  * the minimum operating level as a fraction of capacity (NetworkNode.damMinPct).
- * `capacityOn` (engine ≥ 1.28.0): the capacity on run day i when it changes
+ * `capacityOn` (engine ≥ 1.30.0): the capacity on run day i when it changes
  * over the run (sediment, an in-service date; network/development.ts), so
  * the minimum level is a share of the day's capacity.
  */

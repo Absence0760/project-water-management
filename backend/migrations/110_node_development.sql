@@ -1,6 +1,6 @@
 -- 110_node_development — development that changes during a run: a dam losing
 -- capacity to sediment, a dam in service from a date, and abstraction from a
--- date (engine 1.28.0, issue #67, docs/model.md §2.7g, docs/data-model.md
+-- date (engine 1.30.0, issue #67, docs/model.md §2.7g, docs/data-model.md
 -- § Nodes).
 --
 -- dam_survey_date: the day the dam's capacity (and its survey curve) was
@@ -29,7 +29,7 @@
 -- cover them; no foreign key, so no index. No view, function or trigger lists
 -- node's columns (the model store, backend/src/model/store.ts, is the one
 -- place that does). Expand only: every column is NULL on existing rows, which
--- is what every engine before 1.28.0 ran, so no stored result changes meaning.
+-- is what every engine before 1.30.0 ran, so no stored result changes meaning.
 
 ALTER TABLE node
 	ADD COLUMN dam_survey_date date,
@@ -41,10 +41,10 @@ ALTER TABLE node
 		CHECK (dam_sediment_pct_per_year IS NULL OR dam_sediment_pct_per_year = 0 OR dam_survey_date IS NOT NULL);
 
 COMMENT ON COLUMN node.dam_survey_date IS
-	'The day the dam capacity and survey curve were surveyed; NULL = not recorded. Needed by a sediment rate. Engine >= 1.28.0 (issue #67).';
+	'The day the dam capacity and survey curve were surveyed; NULL = not recorded. Needed by a sediment rate. Engine >= 1.30.0 (issue #67).';
 COMMENT ON COLUMN node.dam_sediment_pct_per_year IS
-	'Share (0-0.2) of the surveyed capacity lost to sediment a year, linear both ways from dam_survey_date; NULL or 0 = none. Engine >= 1.28.0.';
+	'Share (0-0.2) of the surveyed capacity lost to sediment a year, linear both ways from dam_survey_date; NULL or 0 = none. Engine >= 1.30.0.';
 COMMENT ON COLUMN node.dam_in_service_from IS
-	'First day the dam holds water; before it the farm has no dam. NULL = the whole run. Engine >= 1.28.0.';
+	'First day the dam holds water; before it the farm has no dam. NULL = the whole run. Engine >= 1.30.0.';
 COMMENT ON COLUMN node.abstraction_from IS
-	'First day the unit (farm or water user) abstracts; before it its demand is 0. NULL = the whole run. Engine >= 1.28.0.';
+	'First day the unit (farm or water user) abstracts; before it its demand is 0. NULL = the whole run. Engine >= 1.30.0.';

@@ -229,7 +229,7 @@ export const runRoutes = new Hono<AuthEnv>()
 			const node = r.node as { name: string; kind: 'farm' | 'gauge'; damCapacityM3?: number; damInitialPct?: number };
 			const storage = rows.find((x) => x.key === 'dam_storage');
 			// Storage at the end of the day before: the run's initial storage on its first day, a share of
-			// the capacity on that day (engine ≥ 1.28.0: sediment, an in-service date; network/development.ts).
+			// the capacity on that day (engine ≥ 1.30.0: sediment, an in-service date; network/development.ts).
 			const previousStorageM3 =
 				node.kind !== 'farm'
 					? null

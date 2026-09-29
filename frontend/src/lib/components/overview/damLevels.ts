@@ -8,7 +8,7 @@
 // On a forecast run the figures are the record's (issue #51): the summary's
 // are, and damLevel() stops the series at `forecastFrom`, so "at the end" is
 // the day before the forecast, never a forecast day.
-// Every level is a share of the dam's capacity on that day (engine ≥ 1.28.0,
+// Every level is a share of the dam's capacity on that day (engine ≥ 1.30.0,
 // issue #67): a dam losing capacity to sediment, or in service from a date,
 // holds a different volume on each day (damCapacityOn), so a long record
 // surveyed recently never reads above 100 %. A dam whose capacity doesn't
@@ -18,7 +18,7 @@ import { beforeForecast, damCapacityOn, fromEpochDay, toEpochDay, type DailySeri
 
 const addDays = (iso: string, n: number) => fromEpochDay(toEpochDay(iso) + n);
 
-/** A dam's fields that change its capacity over a run (engine ≥ 1.28.0, docs/model.md §2.7g). */
+/** A dam's fields that change its capacity over a run (engine ≥ 1.30.0, docs/model.md §2.7g). */
 export type DamDev = Pick<NetworkNode, 'damSurveyDate' | 'damSedimentPctPerYear' | 'damInServiceFrom'>;
 
 /** A dam as a run saw it: its entered capacity, minimum level (%) and, when set, what changes its capacity. */

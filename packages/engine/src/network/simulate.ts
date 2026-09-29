@@ -4,7 +4,7 @@
 // see ./README.md for the full mapping and the workbook quirks we mirror.
 // Unlike the workbook nothing is rounded: every split conserves water exactly
 // (docs/engine-audit.md R1).
-import { curveAreaAt, releaseToday, type DamCurve, type PlanRelease } from './dam';
+import { curveAreaAt, fixedReleaseFloor, releaseToday, type DamCurve, type PlanRelease } from './dam';
 import { landCoverReduction, lowFlowThreshold } from './landcover';
 import { groundwaterDay, startsWaterYear, type PlanBorehole } from './boreholes';
 import { pumpsRiverToday, riverRoom, surfaceSplit, type PlanSupply } from './supply';
@@ -43,7 +43,7 @@ export interface PlanNode {
 	/** Dam capacity (m³), as entered. */
 	damCapacityM3: number;
 	/**
-	 * The day's capacity ÷ damCapacityM3 (engine ≥ 1.28.0, ./development.ts:
+	 * The day's capacity ÷ damCapacityM3 (engine ≥ 1.30.0, ./development.ts:
 	 * sediment, an in-service date); absent = 1 every day. Dead storage, the
 	 * survey curve's volumes and the dam-level triggers scale with it.
 	 */
@@ -216,9 +216,14 @@ export interface NetworkPlan {
 	/**
 	 * The land-cover low-flow threshold to use (m³/day), pinned from the run a
 	 * snapshot was captured from (engine ≥ 1.1.0, ../warmstart); absent = the
-	 * natural flow's own Q75 over this run.
+	 * natural flow's own Q75 over this run's historical days.
 	 */
 	lowFlowThresholdM3Day?: number;
+	/**
+	 * The run's historical days, before a forecast tail (engine ≥ 1.28.0,
+	 * ../forecastTail.ts); absent = every day. The Q75 above reads only these.
+	 */
+	historyDays?: number;
 	/**
 	 * A run resumed part-way through a record (engine ≥ 1.1.0): the calendar
 	 * month of the day before its first day, so day 0 starts a water year (and
@@ -469,7 +474,7 @@ function damDay(node: PlanNode, qPrev: number, t: number, lakeEvapMmDay: Float64
 		// Survey curve (WP-3.5): area linear in volume between rows. The limiter
 		// above generalises to the curve's local exponent b = Q·A′/A: while it
 		// exceeds 1, evaporation is at most (1 − seepage) × A / A′. A dam whose
-		// capacity changes (engine ≥ 1.28.0) reads the curve with its volumes × k.
+		// capacity changes (engine ≥ 1.30.0) reads the curve with its volumes × k.
 		const c = curveAreaAt(node.damCurve, k === 1 ? qPrev : qPrev / k);
 		const A = c.area;
 		const slope = k === 1 ? c.slope : c.slope / k;
@@ -596,7 +601,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 	const freeBy = new Float64Array(nodes.length);
 
 	// Land cover (WP-1.35): the catchment's low-flow threshold, natural flow exceeded 75 % of the days.
-	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, days));
+	const qLow = !nodes.some((n) => n.landCover) ? 0 : plan.lowFlowThresholdM3Day !== undefined ? plan.lowFlowThresholdM3Day : lowFlowThreshold(naturalFlow.subarray(0, Math.min(days, plan.historyDays ?? days)));
 
 	for (let t = 0; t < days; t++) {
 		if (t === opts.captureAt) captured = capture(t);
@@ -613,7 +618,8 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 		//   v = MAX(0, MIN(source free, destination room, max daily))
 		// with source free = Q_src[t−1] − drawn today − reserve and destination
 		// room = cap_dst − (Q_dst[t−1] + rain on it − evaporation − seepage)
-		// + D_dst[t] − scheduled into it today, so a transfer never pumps into a
+		// + D_dst[t] + a fixed release's floor (engine ≥ 1.29.0) − scheduled
+		// into it today, so a transfer never pumps into a
 		// full dam only to spill, and one to a farm with no dam still serves its
 		// demand (audit N4). The dam's own gains and losses today (N2) count:
 		// they follow yesterday's storage alone, so they are known before the
@@ -650,7 +656,16 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 				const loss = damDay(dst, q, t, lakeEvapMmDay, damRainMm);
 				// Today's demand D: the crops' abstraction plus any demand objects' (engine ≥ 1.7.0).
 				const dstD = dst.objects ? dst.demand[t]! / dst.irrigationEfficiency + dst.objects.total[t]! : dst.demand[t]! / dst.irrigationEfficiency;
-				const room = Math.max(0, dst.damCapacityM3 * capacityK(dst, t) - (q + loss.Pd - loss.E - loss.Sp) + dstD - intoToday[tr.to]!);
+				const qStart = q + loss.Pd - loss.E - loss.Sp;
+				// A fixed release (WP-3.5) leaves the dam today whatever flows in (engine ≥ 1.29.0): the
+				// room counts it as it would be with no inflow and nothing transferred in. For a dam that
+				// only receives, that is a lower bound of the day's release. One that also sends later
+				// today can release less, but only when the release is cut to the water above dead
+				// storage, and then the dam ends at dead storage: either way it isn't overfilled.
+				// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date).
+				const kd = capacityK(dst, t);
+				const rel = dst.release && dst.release.rule === 2 ? fixedReleaseFloor(dst.release, month[t]!, qStart - drawnToday[tr.to]!, kd === 1 ? dst.deadStorageM3 : dst.deadStorageM3 * kd) : 0;
+				const room = Math.max(0, dst.damCapacityM3 * kd - qStart + dstD + rel - intoToday[tr.to]!);
 				if (total > room) want[k] = (want[k]! * room) / total;
 			}
 			// 3. Rules from one source share its free water, pro rata (the most a rule of this priority may leave it).
@@ -851,7 +866,7 @@ export function simulateNetwork(plan: NetworkPlan, opts: { workings?: boolean; c
 			// Evaporation takes at most what is there (yesterday's storage, the
 			// rain and today's net transfer, which was settled first), seepage at
 			// most what evaporation leaves, so storage stays ≥ 0.
-			// The day's capacity and dead storage (engine ≥ 1.28.0: sediment, an in-service date), and the
+			// The day's capacity and dead storage (engine ≥ 1.30.0: sediment, an in-service date), and the
 			// storage the dam-level triggers read, at the entered capacity's scale.
 			const k = capacityK(node, t);
 			const cap = node.damCapacityM3 * k;

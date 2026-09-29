@@ -103,7 +103,7 @@ export function modelRuleIssues(m: ProjectModel): Map<string, string> {
 			const bad = n.kind === 'farm' ? damCurveProblem(n.damCurve) : `only a farm has a dam`;
 			if (bad) add(`damCurve:${n.id}`, `"${n.name}": dam survey curve: ${bad}`);
 		}
-		// Development over the run (engine ≥ 1.28.0): the sediment rate, its survey date and the dates read.
+		// Development over the run (engine ≥ 1.30.0): the sediment rate, its survey date and the dates read.
 		const dev = developmentProblem(n);
 		if (dev) add(`development:${n.id}`, `"${n.name}": ${dev}`);
 	}

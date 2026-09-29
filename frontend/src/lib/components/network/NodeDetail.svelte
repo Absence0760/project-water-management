@@ -272,7 +272,7 @@
 		</fieldset>
 	{/if}
 
-	<!-- A dam's development fields (engine ≥ 1.28.0) also show on a node without a dam that still carries them, so they can be cleared. -->
+	<!-- A dam's development fields (engine ≥ 1.30.0) also show on a node without a dam that still carries them, so they can be cleared. -->
 	{#if hasDam(node) || hasDamDevelopment(node)}
 		<fieldset>
 			<legend>Dam survey and releases</legend>

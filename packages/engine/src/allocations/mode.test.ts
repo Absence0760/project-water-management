@@ -193,6 +193,32 @@ describe("allocationMode 'fullAllocation'", () => {
 		expect([...new Set(f.factor)]).toEqual([0]);
 		expect(f.unscaled).toEqual([2001, 2002]);
 	});
+
+	it('fits the year a forecast tail starts in on its historical days, and the tail keeps that factor (engine 1.28.0, K1)', () => {
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
+		const start = toEpochDay('2001-10-01');
+		// Demand 1 a day for the first 100 days, then 3 a day: the tail's days would pull the factor down.
+		const demand = Float64Array.from({ length: 365 }, (_, t) => (t < 100 ? 1 : 3));
+		const cut = fullAllocationFactors(a, demand, start, 365, undefined, 100);
+		// 100 historical days: 100 m³ registered over 100 m³ of demand.
+		expect(cut.factor[0]).toBeCloseTo(1, 12);
+		expect(cut.factor[364]).toBe(cut.factor[0]);
+		expect(cut.years).toEqual([{ waterYear: 2001, demandM3: 100 + 3 * 265, registeredM3: cut.factor[0]! * (100 + 3 * 265) }]);
+		// Positive control: the whole year fitted, as a run without a tail does.
+		const whole = fullAllocationFactors(a, demand, start, 365);
+		expect(whole.factor[0]).toBeCloseTo(365 / (100 + 3 * 265), 12);
+		expect(whole.years[0]!.registeredM3).toBeCloseTo(365, 9);
+	});
+
+	it('a year with no demand on its historical days takes nothing on its tail days either', () => {
+		const a: AllocationEntry[] = [{ id: 's', nodeId: 'a', waterSource: 'surface', volumeM3PerYear: 365 }];
+		const demand = Float64Array.from({ length: 365 }, (_, t) => (t < 100 ? 0 : 2));
+		const f = fullAllocationFactors(a, demand, toEpochDay('2001-10-01'), 365, undefined, 100);
+		// As the run without the tail: no demand in the year, factor 0, listed as unscaled; the tail keeps it.
+		expect([...new Set(f.factor)]).toEqual([0]);
+		expect(f.unscaled).toEqual([2001]);
+		expect(fullAllocationFactors(a, demand.subarray(0, 100), toEpochDay('2001-10-01'), 100).unscaled).toEqual([2001]);
+	});
 });
 
 describe('the allocations a run reads', () => {
