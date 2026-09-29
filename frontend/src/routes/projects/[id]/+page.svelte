@@ -150,6 +150,8 @@
 	guardUnsaved({ dirty: () => details.dirty, what: 'project details' });
 	// Shared with the Overview checklist, the Time series tab and the Runs tab.
 	let series = $state<SeriesMeta[] | null>(null);
+	// A daily A-pan series: runs use it before the monthly means, which the Crops demand preview shows (issue #173).
+	const apanDaily = $derived(series?.some((x) => x.kind === 'evap_apan_mm' && !x.siteNodeId) ?? false);
 	let runs = $state<RunMeta[] | null>(null);
 	let saveBarHeight = $state(0);
 	/** The save bar's optional "Reason for this change", kept with the change in the History tab. */
@@ -721,7 +723,7 @@
 				{:else if tab === 'crops'}
 					<IssueList issues={editor.issues} area="crops" />
 					<Lazy load={LOAD.crops}>
-						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} />{/snippet}
+						{#snippet children(CropsTab)}<CropsTab {editor} settings={project!.settings} readonly={!canEdit} onsave={saveModel} bind:reason={saveReason} {apanDaily} />{/snippet}
 					</Lazy>
 				{:else if tab === 'transfers'}
 					<IssueList issues={editor.issues} area="transfers" />
@@ -865,6 +867,7 @@
 							bind:reason={saveReason}
 							{projectId}
 							{runs}
+							{apanDaily}
 						/>
 					{/snippet}
 				</Lazy>

@@ -22,7 +22,7 @@
 	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import type { ModelEditor } from '$lib/model/editor.svelte';
 	import MonthlyBars from '$lib/components/settings/MonthlyBars.svelte';
-	import { catchmentDemand, cropStacks, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
+	import { catchmentDemand, cropStacks, DAILY_APAN_NO_MEANS, demandApanNote, farmDemands, highCropFactors, noPlantedAreaNote } from './demand';
 	import { cropAreaTotals, cropColouring, OTHER_COLOUR, rankCrops } from './cards';
 	import DemandTable from './DemandTable.svelte';
 
@@ -30,13 +30,16 @@
 		editor,
 		settings,
 		readonly,
-		sections
+		sections,
+		apanDaily = false
 	}: {
 		editor: ModelEditor;
 		settings: ProjectSettings;
 		readonly: boolean;
 		/** Only these sections (the grid modal shows one, lib/workspace/overlays.ts); all when absent. */
 		sections?: readonly ('factors' | 'areas' | 'demand')[];
+		/** The project has a daily A-pan series, which runs use instead of the monthly means on the days it covers (model.md §2.3a). */
+		apanDaily?: boolean;
 	} = $props();
 	const show = (s: 'factors' | 'areas' | 'demand') => !sections || sections.includes(s);
 
@@ -58,6 +61,8 @@
 
 	// Demand preview: saved A-pan × current (possibly unsaved) crops and areas.
 	const apanSet = $derived(settings.apanMm.some((v) => v > 0));
+	// The preview reads the monthly means only; a run reads a daily A-pan series first (issue #173).
+	const apanNote = $derived(demandApanNote(apanDaily));
 	const demand = $derived(
 		farmDemands(
 			editor.model,
@@ -80,7 +85,8 @@
 	const peakMonth = $derived(demandTotal.monthly.reduce((best, v, m, a) => (v > a[best]! ? m : best), 0));
 	const chartLabel = $derived(
 		`Catchment irrigation demand by month, stacked by crop (${stacks.map((s) => s.name).join(', ')}). ` +
-			`Peak in ${WATER_YEAR_MONTHS[peakMonth]} at ${fmtNum(demandTotal.monthly[peakMonth])} m³/day. The table below holds the values.`
+			`Peak in ${WATER_YEAR_MONTHS[peakMonth]} at ${fmtNum(demandTotal.monthly[peakMonth])} m³/day. The table below holds the values.` +
+			(apanNote ? ` ${apanNote}` : '')
 	);
 
 	function add() {
@@ -296,9 +302,15 @@
 	</div>
 	{#if !apanSet}
 		<div class="alert alert-info">
-			A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
-			(Settings & calibration, Demand).
+			{#if apanDaily}
+				{DAILY_APAN_NO_MEANS} <a href="?tab=settings">Enter the monthly A-pan values</a> (Settings & calibration, Demand) for the other days.
+			{:else}
+				A-pan evaporation isn't set yet, so demand is zero. <a href="?tab=settings">Enter the monthly A-pan values</a>
+				(Settings & calibration, Demand).
+			{/if}
 		</div>
+	{:else if apanNote}
+		<p class="small muted" data-testid="crops-demand-apan">{apanNote}</p>
 	{/if}
 	{#if farms.length === 0}
 		<p class="muted">No hydrological units yet.</p>
