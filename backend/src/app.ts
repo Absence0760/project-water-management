@@ -15,6 +15,7 @@ import { farmViewRoutes } from './farms/view.js';
 import { historyRoutes } from './history/routes.js';
 import { apiKeyRoutes, ingestRoutes } from './ingest/routes.js';
 import { handleError } from './http/errors.js';
+import { logEvent } from './logging/logEvent.js';
 import { refuseAmbiguousPaths } from './http/rawPath.js';
 import { projectInviteRoutes, teamInviteRoutes } from './invites/invites.js';
 import { feedRoutes } from './feeds/routes.js';
@@ -69,6 +70,10 @@ export function createApp() {
 			const provided = Buffer.from(c.req.header('x-cloudfront-shared-secret') ?? '');
 			const expected = Buffer.from(sharedSecret);
 			if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
+				// Counted by the origin-secret-rejected alarm (infra/alarms.tf):
+				// direct traffic to the Function URL, past the WAF. The reason only,
+				// never the path, the caller's address or what was sent.
+				logEvent('warn', { event: 'origin_secret_rejected', reason: provided.length === 0 ? 'missing' : 'mismatch' });
 				return c.json({ error: 'forbidden' }, 403);
 			}
 			// Only now may a route trust what CloudFront stamps (the viewer address, http/clientAddress.ts).

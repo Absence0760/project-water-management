@@ -2189,7 +2189,12 @@ key there would let any read-only principal forge any user's session.
     (it is already the default and the forged index satisfies it). If a
     cache-restoring job ever needs a secret, drop the cache from it
     instead.
-- **S3** blocks all public access. Only CloudFront (OAC) reads it.
+- **S3** blocks all public access. Only CloudFront (OAC) reads it. The
+  frontend bucket also lets that distribution `s3:ListBucket`, so a missing
+  key is `404` rather than `403`; no listing can be requested through
+  CloudFront (every path ending in `/` becomes `/index.html`, dot segments
+  get a 404, no query string reaches S3; infra/README.md, "Missing files are 404").
+  The reports bucket keeps `GetObject` only.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,
   [legal-status.md](./legal-status.md)) and the methods page (`/methods`) are static: it calls no API but `/auth/me` (the
@@ -2206,6 +2211,22 @@ key there would let any read-only principal forge any user's session.
   dev), so the Lambda entry point (`lambda.ts`, `assertEdgeSecret`) refuses to
   start without a secret of at least 32 characters: a deploy missing it fails
   loudly instead of opening the Function URL (`app.security.test.ts`).
+  A refused request still reached the Lambda past the WAF and held API
+  concurrency for a moment, so each refusal logs
+  `{"event":"origin_secret_rejected","reason":"missing"|"mismatch"}` (no path,
+  address or header value) and the `origin-secret-rejected` alarm fires above
+  20 in an hour (`infra/alarms.tf`). **Decision (issue #126): keep the shared
+  secret.** CloudFront OAC for Lambda would make the Function URL refuse
+  unsigned callers at AWS's edge instead, but it needs `AWS_IAM` auth on the
+  URL, the viewer to send a SHA-256 of every PUT/POST body
+  (`x-amz-content-sha256`), and the one-click unsubscribe (a mail client's
+  POST without that header) moved to a GET. **Revisit trigger:** the alarm
+  firing outside a secret rotation, or API throttles/concurrency the WAF's
+  metrics don't account for; then move to OAC (tracked in
+  [followups.md](./followups.md), § Infrastructure edge). The
+  CloudFront→Function URL hop is `https-only` (TLSv1.2), and the header's
+  value is the one the API's runtime secret carries
+  (`infra/tests/edge.tftest.hcl`).
 - **Production configuration fails closed** (`backend/src/config/production.ts`).
   Every setting falls back to the local stack when unset (`STORAGE=local`,
   `REPORT_DOWNLOADS=presigned`, `FEED_SOURCE=fixtures`, `MAIL_TRANSPORT=log`, `JOB_TRANSPORT=inprocess`,

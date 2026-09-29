@@ -507,6 +507,47 @@ locals {
   dlq_arrivals_note               = "(This alarm fires once per new arrival and clears after 15 minutes; the DLQ may still hold earlier messages: check its ApproximateNumberOfMessagesVisible.)"
 }
 
+# --- Direct Function URL traffic ---------------------------------------------
+# The Function URL is public by AWS design (auth type NONE); only the shared
+# secret CloudFront stamps (s3_cloudfront.tf) keeps a direct caller out, and
+# the app refuses one with 403 before any route runs. Those requests never
+# passed the WAF, and each still occupies API concurrency for a moment. The
+# decision (issue #126) is to keep the shared secret and revisit CloudFront
+# OAC for Lambda only if this alarm shows direct traffic; the trigger and
+# what OAC would need are in docs/security.md § Infrastructure. Each refusal
+# logs one line (backend/src/app.ts):
+#   {"event":"origin_secret_rejected","reason":"missing"}   (or "mismatch")
+# no path, address or header value. A secret rotation causes a few seconds
+# of "mismatch" while CloudFront and Lambda converge, hence the threshold.
+
+resource "aws_cloudwatch_log_metric_filter" "origin_secret_rejected" {
+  name           = "${local.project}-origin-secret-rejected"
+  log_group_name = aws_cloudwatch_log_group.lambda.name
+  pattern        = "{ $.message.event = \"origin_secret_rejected\" }"
+
+  metric_transformation {
+    name          = "OriginSecretRejected"
+    namespace     = "${local.project}/Application"
+    value         = "1"
+    default_value = "0"
+    unit          = "Count"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "origin_secret_rejected" {
+  alarm_name          = "${local.project}-origin-secret-rejected"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].name
+  namespace           = aws_cloudwatch_log_metric_filter.origin_secret_rejected.metric_transformation[0].namespace
+  period              = 3600
+  statistic           = "Sum"
+  threshold           = 20
+  alarm_description   = "More than 20 API requests in an hour arrived without CloudFront's shared secret: someone is calling the Lambda Function URL directly, past the WAF (or a secret rotation didn't converge). Logs Insights on the API log group: filter message.event = \"origin_secret_rejected\" | stats count() by message.reason, bin(5m). Sustained direct traffic is the trigger to move to CloudFront OAC for Lambda: docs/security.md § Infrastructure, docs/followups.md."
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+  treat_missing_data  = "notBreaching"
+}
+
 # --- Migrate Lambda --------------------------------------------------------
 # A failed migration also fails the deploy workflow loudly; this catches a
 # manual invocation (e.g. after a password rotation) that nobody watched.

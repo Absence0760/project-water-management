@@ -16,6 +16,26 @@ describe('CloudFront shared secret', () => {
 		expect((await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'short' } })).status).toBe(403);
 		expect((await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'a-long-test-secret-value' } })).status).toBe(200);
 	});
+
+	it('logs each refusal as origin_secret_rejected with a reason and nothing else, and logs nothing for the right secret', async () => {
+		vi.stubEnv('CLOUDFRONT_SHARED_SECRET', 'a-long-test-secret-value');
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const app = createApp();
+			await app.request('/projects/11111111-1111-1111-1111-111111111111?x=1', { headers: { 'x-viewer-address': '203.0.113.9' } });
+			await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'a-long-test-secret-valuX' } });
+			const lines = warn.mock.calls.map((args) => JSON.parse(String(args[0])));
+			expect(lines).toEqual([
+				{ event: 'origin_secret_rejected', reason: 'missing' },
+				{ event: 'origin_secret_rejected', reason: 'mismatch' }
+			]);
+			warn.mockClear();
+			await app.request('/health', { headers: { 'x-cloudfront-shared-secret': 'a-long-test-secret-value' } });
+			expect(warn.mock.calls.filter((args) => String(args[0]).includes('origin_secret_rejected'))).toEqual([]);
+		} finally {
+			warn.mockRestore();
+		}
+	});
 });
 
 describe('CORS', () => {

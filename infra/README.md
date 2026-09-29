@@ -53,8 +53,29 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   (`/projects/<id>`). There is deliberately **no** distribution-wide
   `custom_error_response`, because that would also turn the API's own 403/404
   JSON into `index.html`.
+- **Missing files are 404, not S3 XML.** A path *with* an extension reaches
+  S3 only where the build keeps files (`_app/`, the directories and files in
+  `frontend/static`, the HTML the build writes: `STATIC_DIRS` /
+  `STATIC_FILES` in `spa_rewrite`). Anything else (`/report.pdf`,
+  `/wp-login.php`, a dot segment) gets a small `404` page from the function
+  itself, without touching S3. A missing file inside those locations reaches
+  S3, and the bucket policy's `s3:ListBucket` for this distribution makes S3
+  answer `404` (NoSuchKey) rather than `403` (AccessDenied). That grant can't
+  list the bucket through CloudFront: a listing is a GET on the bucket root,
+  every path ending in `/` goes to `/index.html`, dot segments are refused,
+  and the default behaviour forwards no query string. The private reports
+  bucket keeps `GetObject` only, so a missing report stays `403`. A new
+  top-level file or directory in `frontend/static`, or a new prerendered
+  page, must be added to those lists:
+  `infra/scripts/cloudfront-functions.test.mjs` (`pnpm test:guards`) runs the
+  function and fails until it is. `tests/edge.tftest.hcl` pins the policy and
+  the behaviours' cache and origin-request policies.
 - **Private-only VPC.** Two private subnets with no internet gateway, no NAT
-  and no public subnet. Nothing needs the internet, and Lambda log delivery
+  and no public subnet. They go in the two lowest available **zone IDs**
+  (`afs1-az1`, `afs1-az2` in af-south-1), not the first two zone names: names
+  are shuffled per account and the list's order isn't a contract, while a
+  zone ID is the same physical zone everywhere. Opt-in zones (Local,
+  Wavelength) are excluded (`network.tf`, `tests/edge.tftest.hcl`). Nothing needs the internet, and Lambda log delivery
   doesn't go through the function's ENI. The VPC reaches exactly three AWS
   APIs, each through its own interface endpoint and security group: **SES**
   (`SendEmail` from the API and the worker, which sends report and alert

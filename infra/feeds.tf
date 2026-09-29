@@ -386,7 +386,7 @@ resource "aws_cloudwatch_metric_alarm" "feed_fetch_failed" {
   period              = 3600
   statistic           = "Sum"
   threshold           = 0
-  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter event = \"feed_fetch_failed\" | stats count() by source, reason. unavailable/timeout = the source is down or slow (wait for the next fetch); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
+  alarm_description   = "A data-feed fetch failed (the fetcher answered it as failed; the feed shows failing in the app, then stale). Logs Insights on the fetcher log group: filter message.event = \"feed_fetch_failed\" | stats count() by message.source, message.reason. unavailable/timeout = the source is down or slow (wait for the next fetch); format = the source changed its format (a code fix); invalid_request/internal = a bug. Runbook: docs/deployment.md § Data feeds."
   alarm_actions       = [aws_sns_topic.alerts.arn]
   treat_missing_data  = "notBreaching"
 }

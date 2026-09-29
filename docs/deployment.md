@@ -1015,7 +1015,7 @@ plan-only until the first deploy):
   app, and emails the owners and editors of a project with the `data_stale`
   or `feed_failing` alert on.
   - *Runbook: `feed-fetch-failed`.* Logs Insights on the fetcher's log group:
-    `filter event = "feed_fetch_failed" | stats count() by source, reason`.
+    `filter message.event = "feed_fetch_failed" | stats count() by message.source, message.reason`.
     `unavailable` or `timeout`: the source is down or slow; the feed retries
     on its own schedule (nothing to do unless it persists; DWS from outside
     South Africa answers 403, see Sources' terms below). `format`: the source
