@@ -159,7 +159,9 @@ describe('example catchments: showcase the current features', () => {
 			apanDailyChanged: false,
 			chirpsFactorsChanged: false,
 			observedOriginChanged: false,
-			flowFillChanged: false
+			flowFillChanged: false,
+			rulesChanged: false,
+			draftRules: false
 		});
 	});
 

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { dayQuality, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
+import { dayQuality, defaultCalibrationRules, defaultDataQualitySettings, defaultProjectSettings, PE_SOURCE_MAX, rainCheckLimits, resolveChirpsFitPeriod, resolveRainSource, RETIRED_CALIBRATION_KEYS, scoringDays } from '@water-management/engine';
 import { describe, expect, it } from 'vitest';
-import { dataQualityPatchError, mergeSettings, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
+import { autoFitRecordError, dataQualityPatchError, importedAutoFitError, mergeSettings, nextCalibrationRules, patchSettings, remapSettingNodeIds, SettingsPatch, FitRecord } from './settings.js';
 
 describe('SettingsPatch.dataQuality', () => {
 	const ok = (dataQuality: unknown) => SettingsPatch.safeParse({ dataQuality }).success;
@@ -754,6 +754,16 @@ describe('SettingsPatch.fitRecord', () => {
 		expect(ok({ ...full, qualityFlags: { ...settings, suspect: 'drop' } })).toBe(false);
 	});
 
+	it('accepts how automated calibration chose the fit (engine ≥ 1.25.0, issue #153), and refuses a kept case that wasn’t eligible', () => {
+		const kase = { label: 'wide', pan: 'project', bounds: 'wide', objective: 'kgePrime', score: 0.7, eligible: true, reasons: [], params: record.params };
+		const auto = { rules: defaultCalibrationRules(), ruleExclusions: [{ waterYear: 2013, reason: 'Rule (calibration rules, exclusions): …' }], chosen: 0, cases: [kase, { ...kase, bounds: 'typical', eligible: false, reasons: ['no score'], score: null }] };
+		expect(ok({ ...record, auto })).toBe(true);
+		expect(ok({ ...record, auto: { ...auto, chosen: 1 } })).toBe(false);
+		expect(ok({ ...record, auto: { ...auto, chosen: 2 } })).toBe(false);
+		expect(ok({ ...record, auto: { ...auto, rules: { ...auto.rules, forcing: { pan: ['nowhere'] } } } })).toBe(false);
+		expect(ok({ ...record, auto: { ...auto, extra: 1 } })).toBe(false);
+	});
+
 	it('accepts the low/high-flow objective (CR-3, engine ≥ 1.19.0) and its score, and refuses an unknown objective', () => {
 		const scored = { ...period, scores: { ...period.scores, kgeLowHigh: 0.55 } };
 		expect(ok({ ...record, objective: 'kgeLowHigh', fit: scored, before: scored })).toBe(true);
@@ -1147,5 +1157,106 @@ describe('SettingsPatch.qualityFlags (engine ≥ 1.22.0, CR-18/19)', () => {
 		const stored = { qualityFlags: { suspect: 'include', ratings: { flow_logger_m3s: rating } } };
 		const s = patchSettings(stored, { qualityFlags: { ratings: { flow_observed_m3s: rating } } });
 		expect(s.qualityFlags).toEqual({ ratings: { flow_observed_m3s: rating }, aboveRating: 'censor', belowRating: 'exclude', suspect: 'include', infilled: 'exclude' });
+	});
+});
+
+describe('settings.calibrationRules (engine ≥ 1.25.0, issue #153)', () => {
+	const ok = (calibrationRules: unknown) => SettingsPatch.safeParse({ calibrationRules }).success;
+	const rules = defaultCalibrationRules();
+	const signed = { by: 'A. Hydrologist', on: '2026-09-29' };
+
+	it('accepts the defaults, with or without a revision (the server sets it)', () => {
+		expect(ok(rules)).toBe(true);
+		const { revision: _r, ...noRevision } = rules;
+		expect(ok(noRevision)).toBe(true);
+		expect(ok({ ...rules, signedOff: signed })).toBe(true);
+	});
+
+	it('refuses an invalid rule set by the engine’s own check, and a partial or unknown group', () => {
+		for (const bad of [
+			{ ...rules, forcing: { pan: ['nowhere'] } },
+			{ ...rules, cases: { bounds: ['wide', 'typical'], objectives: ['kgePrime', 'nseLog', 'nseSqrt', 'kgeNp', 'kgeYearly'] } },
+			{ ...rules, exclusions: { maxFlaggedShare: 1.2 } },
+			{ ...rules, selection: { test: 'inSample', score: 'kgePrime' } },
+			{ ...rules, signedOff: { by: ' ', on: '2026-09-29' } },
+			{ ...rules, extra: 1 },
+			{ exclusions: rules.exclusions }
+		]) {
+			expect(ok(bad), JSON.stringify(bad)).toBe(false);
+		}
+	});
+
+	it('adds 1 to the revision when a rule changes, whatever revision the client sends', () => {
+		const changed = { ...rules, revision: 99, exclusions: { maxFlaggedShare: 0.1 } };
+		expect(nextCalibrationRules(undefined, changed)).toMatchObject({ revision: 2, exclusions: { maxFlaggedShare: 0.1 } });
+		expect(patchSettings({ calibrationRules: { ...rules, revision: 5 } }, { calibrationRules: changed }).calibrationRules.revision).toBe(6);
+		// Nothing changed: the same revision.
+		expect(nextCalibrationRules({ ...rules, revision: 5 }, { ...rules, revision: 1 }).revision).toBe(5);
+	});
+
+	it('clears the sign-off when a rule changes, unless the same save records a new one; a sign-off alone keeps the revision', () => {
+		const stored = { ...rules, revision: 3, signedOff: signed };
+		// The form sends the stored sign-off back with a changed rule: it no longer covers the rules.
+		expect(nextCalibrationRules(stored, { ...stored, selection: { test: 'split', score: 'kgePrime' } })).toMatchObject({ revision: 4, signedOff: null });
+		const again = { by: 'A. Hydrologist', on: '2026-10-02' };
+		expect(nextCalibrationRules(stored, { ...stored, selection: { test: 'split', score: 'kgePrime' }, signedOff: again })).toMatchObject({ revision: 4, signedOff: again });
+		expect(nextCalibrationRules({ ...rules, revision: 3 }, { ...rules, signedOff: signed })).toMatchObject({ revision: 3, signedOff: signed });
+	});
+
+	it('leaves the stored rules alone when a save doesn’t send them', () => {
+		expect(patchSettings({ calibrationRules: { ...rules, revision: 4 } }, { februaryDays: 29 }).calibrationRules.revision).toBe(4);
+	});
+
+	describe('autoFitRecordError', () => {
+		const base = defaultProjectSettings();
+		const params = { x1: 420, x2: 0, x3: 70, x4: 2.1 };
+		const fit = (ranUnder: typeof rules, kept = params) =>
+			({
+				fittedAt: '2026-09-29T10:00:00.000Z',
+				seed: 1,
+				free: ['x1', 'x3', 'x4'],
+				params,
+				auto: { rules: ranUnder, ruleExclusions: [], chosen: 0, cases: [{ eligible: true, params: kept }] }
+			}) as unknown as typeof base.fitRecord;
+		const storedRules = { ...rules, revision: 2 };
+		const stored = { ...base, calibrationRules: storedRules };
+
+		it('stores an automated fit that ran under the saved rules', () => {
+			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(storedRules) })).toBeNull();
+			// A fit a person chose is never refused.
+			expect(autoFitRecordError(stored, { ...stored, fitRecord: { ...fit(storedRules)!, auto: undefined } })).toBeNull();
+		});
+
+		it('refuses one that ran under another revision, and a rule change saved with the fit', () => {
+			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(rules) })).toBe(
+				'this automated fit ran under calibration rules revision 1, but the saved rules are revision 2: run it again under the saved rules'
+			);
+			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit({ ...storedRules, selection: { test: 'split', score: 'kgePrime' } }) })).toBe(
+				'this automated fit ran under other calibration rules than the saved revision 2 (their content or sign-off differs): run it again under the saved rules'
+			);
+			expect(
+				autoFitRecordError(stored, { ...stored, calibrationRules: { ...storedRules, revision: 3, exclusions: { maxFlaggedShare: 0.5 } }, fitRecord: fit(storedRules) })
+			).toContain('save the calibration rule change first');
+		});
+
+		it('refuses a record whose parameters aren’t the kept case’s', () => {
+			expect(autoFitRecordError(stored, { ...stored, fitRecord: fit(storedRules, { ...params, x1: 900 }) })).toBe(
+				'the fit record’s parameters are not those of the case the calibration rules kept'
+			);
+		});
+
+		it('checks an imported automated fit against the file’s own rules', () => {
+			expect(importedAutoFitError({ calibrationRules: storedRules, fitRecord: fit(storedRules) })).toBeNull();
+			expect(importedAutoFitError({ calibrationRules: { ...storedRules, revision: 3 }, fitRecord: fit(storedRules) })).toBe(
+				'this automated fit ran under calibration rules revision 2, but the file’s rules are revision 3: run it again under the file’s rules'
+			);
+			expect(importedAutoFitError({ calibrationRules: { ...storedRules, signedOff: { by: 'Someone', on: '2026-09-29' } }, fitRecord: fit(storedRules) })).toContain('sign-off differs');
+			expect(importedAutoFitError({ fitRecord: null })).toBeNull();
+		});
+
+		it('never refuses a stored fit a save leaves as it was, even after the rules moved on', () => {
+			const old = { ...stored, calibrationRules: { ...rules, revision: 3 }, fitRecord: fit(storedRules) };
+			expect(autoFitRecordError(old, { ...old })).toBeNull();
+		});
 	});
 });
