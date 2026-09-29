@@ -1,7 +1,7 @@
 // The seasonal outlook's project settings (issue #53 R5; docs/api.md
 // § Projects, docs/data-model.md § Projects, docs/ui.md § Seasonal outlook):
-// the season (decision date and season end, as a month and day) and the
-// planning share. Stored in project.settings.outlook, a sibling of
+// the season (decision date and season end, as a month and day), the
+// planning share, and the review date (a month and day inside the season, R6). Stored in project.settings.outlook, a sibling of
 // settings.outcomes (R4). Like those it is **no model input**: it says how an
 // outlook is set up, not how the model runs, so runs don't record it
 // (runs/execute.ts) and saving it alone leaves updated_at alone
@@ -9,9 +9,10 @@
 //
 // Both defaults are the engine's, confirmed by the client (issue #90): the
 // season DEFAULT_OUTLOOK_SEASON, 1 October – 30 April (O3), and the planning
-// share DEFAULT_PLANNING_SHARE, 80 % (O6). A null field uses the default; a
-// project may set its own.
-import { DEFAULT_OUTLOOK_SEASON, fromEpochDay, OUTLOOK_SEASON_MAX_DAYS, toEpochDay } from '@water-management/engine';
+// share DEFAULT_PLANNING_SHARE, 80 % (O6), and the review date
+// defaultReviewDate, 1 January for that season (O3). A null field uses the
+// default; a project may set its own.
+import { DEFAULT_OUTLOOK_SEASON, defaultReviewDate, fromEpochDay, OUTLOOK_SEASON_MAX_DAYS, toEpochDay } from '@water-management/engine';
 import { z } from 'zod';
 
 /** A season as a month and day each end: the decision date (the season's first day) and the season end (inclusive). */
@@ -27,9 +28,11 @@ export interface OutlookSettings {
 	season: OutlookSeasonSetting | null;
 	/** Share of analogue years the planning figure's level must meet the requirement in, (0, 1]; null = DEFAULT_PLANNING_SHARE (O6). */
 	planningShare: number | null;
+	/** The review date's month and day (issue #53 R6); null = the engine's defaultReviewDate for the season (O3: 1 January). */
+	review: { month: number; day: number } | null;
 }
 
-export const OUTLOOK_DEFAULTS: Readonly<OutlookSettings> = Object.freeze({ season: null, planningShare: null });
+export const OUTLOOK_DEFAULTS: Readonly<OutlookSettings> = Object.freeze({ season: null, planningShare: null, review: null });
 
 /** Days in a month of a common year: 29 February is not a setting (it would move every other year). */
 const DAYS_IN_MONTH = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -57,10 +60,17 @@ const SeasonSetting = z
 		const e = seasonError(s);
 		if (e) ctx.addIssue({ code: 'custom', message: e });
 	});
+const ReviewSetting = z
+	.object({ month: MonthDay, day: MonthDay })
+	.strict()
+	.superRefine((r, ctx) => {
+		const e = monthDayError(r.month, r.day);
+		if (e) ctx.addIssue({ code: 'custom', message: e });
+	});
 const Share = z.number().finite().gt(0, 'the planning share must be more than 0').max(1, 'the planning share is at most 1 (every year)');
 
 /** The settings patch's shape for `outlook` (projects/settings.ts): either field, each a value or null (the default). */
-export const OutlookPatch = z.object({ season: SeasonSetting.nullable(), planningShare: Share.nullable() }).partial().strict();
+export const OutlookPatch = z.object({ season: SeasonSetting.nullable(), planningShare: Share.nullable(), review: ReviewSetting.nullable() }).partial().strict();
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
@@ -69,7 +79,33 @@ export function resolveOutlook(settings: unknown): OutlookSettings {
 	const raw = isObj(settings) && isObj(settings.outlook) ? settings.outlook : {};
 	const s = SeasonSetting.safeParse(raw.season);
 	const p = Share.safeParse(raw.planningShare);
-	return { season: s.success ? s.data : null, planningShare: p.success ? p.data : null };
+	const r = ReviewSetting.safeParse(raw.review);
+	return { season: s.success ? s.data : null, planningShare: p.success ? p.data : null, review: r.success ? r.data : null };
+}
+
+/**
+ * The review date of a season (ISO): the setting's month and day, the first
+ * one after the decision date, which must fall on or before the season end;
+ * with no setting, the engine's defaultReviewDate. An error in words when the
+ * month and day aren't inside the season (checked when an outlook is asked
+ * for: the season may come from the request, not the setting).
+ */
+export function reviewDateFor(review: { month: number; day: number } | null, season: { decisionDate: string; seasonEnd: string }): { date: string } | { error: string } {
+	if (!review) {
+		try {
+			return { date: defaultReviewDate(season) };
+		} catch (err) {
+			return { error: (err as Error).message };
+		}
+	}
+	const from = toEpochDay(season.decisionDate);
+	let y = Number(season.decisionDate.slice(0, 4));
+	if (toEpochDay(iso(y, review.month, review.day)) <= from) y++;
+	const at = toEpochDay(iso(y, review.month, review.day));
+	if (at > toEpochDay(season.seasonEnd)) {
+		return { error: `the review date (${review.day}/${review.month}) is not inside the season ${season.decisionDate} to ${season.seasonEnd}: it must fall after the decision date and on or before the season end` };
+	}
+	return { date: fromEpochDay(at) };
 }
 
 const iso = (y: number, m: number, d: number) => `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;

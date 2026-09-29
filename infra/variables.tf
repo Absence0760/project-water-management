@@ -142,10 +142,22 @@ variable "budget_monthly_usd" {
   default     = 60
 }
 
+# The alert and report mailboxes are checked the same way: a plausible address
+# shape, and not at a name RFC 2606 / RFC 6761 reserve (example.com/.org/.net
+# and their subdomains, and the .example, .test, .invalid and .localhost
+# TLDs), matched case-insensitively. None of those can receive mail, so a
+# tfvars copied from terraform.tfvars.example unedited would page nobody.
 variable "budget_alert_email" {
-  description = "Email address that receives SNS budget + alarm notifications. Leave empty to skip the SNS subscription (alarms still fire visibly in the console but nobody is paged)."
+  description = "Email address that receives SNS budget + alarm notifications (both SNS topics). Required: without it an alarm or budget breach pages nobody. Must be a real mailbox, not a reserved example address."
   type        = string
-  default     = ""
+
+  validation {
+    condition = (
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s.]+$", var.budget_alert_email)) &&
+      !can(regex("(?i)(@([^@]+\\.)?example\\.(com|org|net)|\\.(example|test|invalid|localhost))$", var.budget_alert_email))
+    )
+    error_message = "budget_alert_email must be a real mailbox (name@domain.tld), not empty and not at a reserved domain (example.com/.org/.net, .example, .test, .invalid, .localhost)."
+  }
 }
 
 # --- Lambda ------------------------------------------------------------------
@@ -338,9 +350,17 @@ variable "dmarc_policy" {
 }
 
 variable "dmarc_report_email" {
-  description = "Mailbox for DMARC aggregate reports (rua=). Empty omits rua, which leaves the policy with no feedback — set it before tightening dmarc_policy."
+  description = "Mailbox for DMARC aggregate reports (rua=). Empty omits rua, which leaves the policy with no feedback — set it before tightening dmarc_policy. When set, the same rule as budget_alert_email applies."
   type        = string
   default     = ""
+
+  validation {
+    condition = var.dmarc_report_email == "" || (
+      can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s.]+$", var.dmarc_report_email)) &&
+      !can(regex("(?i)(@([^@]+\\.)?example\\.(com|org|net)|\\.(example|test|invalid|localhost))$", var.dmarc_report_email))
+    )
+    error_message = "dmarc_report_email must be empty (no rua) or a real mailbox (name@domain.tld), not at a reserved domain (example.com/.org/.net, .example, .test, .invalid, .localhost)."
+  }
 }
 
 variable "ses_tls_policy" {

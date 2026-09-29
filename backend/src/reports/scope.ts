@@ -18,8 +18,15 @@
 //
 //   GET /compare/runs?a=<baseline project>:<baseline run>&b=<project>:<run>
 //
-// It never reads the baseline's project or run directly: the comparison is
-// all the impact section shows (report/ImpactSection.svelte).
+// and, for the section's licence-impact board (issue #53 R7,
+// report/impactSeries.ts), two of the baseline run's catchment series, by key
+// and nothing else:
+//
+//   GET /projects/<baseline project>/runs/<baseline run>/series?key=natural_flow
+//   GET /projects/<baseline project>/runs/<baseline run>/series?key=ewr_shortfall
+//
+// It never reads the baseline's project, the run itself, its other series or
+// any node's series.
 //
 // Every other method, project, run or route answers 403: another project,
 // the run list, members, teams, compare, any write, and the run's other
@@ -51,6 +58,17 @@ function compareAllowed(scope: RenderScope, query: URLSearchParams): boolean {
 	return query.get('a')!.toLowerCase() === ref(scope.against.projectId, scope.against.runId) && query.get('b')!.toLowerCase() === ref(scope.projectId, scope.runId);
 }
 
+/** The baseline's catchment series the licence-impact board reads (report/impactSeries.ts). */
+const AGAINST_SERIES_KEYS: readonly string[] = ['natural_flow', 'ewr_shortfall'];
+
+/** An impact report's read of one of the baseline's AGAINST_SERIES_KEYS: `key` alone, no node. */
+function againstSeriesAllowed(scope: RenderScope, path: string, query: URLSearchParams): boolean {
+	if (!scope.against) return false;
+	if (path.toLowerCase() !== `/projects/${scope.against.projectId}/runs/${scope.against.runId}/series`.toLowerCase()) return false;
+	const keys = [...query.keys()];
+	return keys.length === 1 && keys[0] === 'key' && AGAINST_SERIES_KEYS.includes(query.get('key')!);
+}
+
 /** Whether a render session scoped to `scope` may make this request (`query`: its search parameters). */
 export function scopeAllows(scope: RenderScope, method: string, path: string, query: URLSearchParams = new URLSearchParams()): boolean {
 	if (method !== 'GET') return false;
@@ -60,6 +78,7 @@ export function scopeAllows(scope: RenderScope, method: string, path: string, qu
 	if (/%|\/\/|\/\.{1,2}(\/|$)/.test(path)) return false;
 	const m = PROJECT_READ.exec(path);
 	if (!m) return false;
+	if (againstSeriesAllowed(scope, path, query)) return true;
 	if (m[1]!.toLowerCase() !== scope.projectId.toLowerCase()) return false;
 	if (m[2] !== undefined) return m[2].toLowerCase() === scope.runId.toLowerCase();
 	return true;

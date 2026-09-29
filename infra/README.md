@@ -83,7 +83,9 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   `maximum_concurrency`, 4 × 2, or throttled messages burn receive counts into
   the DLQs), triggered by the SQS `jobs`, `ingest-results`, `render-results`
   and `mail-events` queues (partial batch failures reported, so one bad record
-  is retried alone) and an EventBridge tick every 5 minutes
+  is retried alone) and an EventBridge tick every 5 minutes (never retried,
+  by EventBridge or Lambda's async queue, and dropped after 300 s: the next
+  tick recovers)
   ([docs/deployment.md § Background jobs](../docs/deployment.md#background-jobs)).
   `water-management-fetcher` (`backend/src/lambda-fetcher.ts`, `feeds.tf`)
   downloads the data feeds' sources: no VPC, no database URL or secret, 512
@@ -99,6 +101,22 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
   under `reports/` in the reports bucket. It is created only once its first
   image is pushed (`renderer_image_tag`;
   [docs/deployment.md § Reports](../docs/deployment.md#reports)).
+  The image is pinned by content: its Playwright base by tag *and* digest
+  (`mcr.microsoft.com/playwright:v<version>-noble@sha256:…`, both `FROM`
+  lines), its npm packages (playwright-core, aws-lambda-ric) by
+  `backend/renderer-deps/package-lock.json`, installed with `npm ci`, and
+  its build stage's apt packages by exact version from one Ubuntu archive
+  snapshot (`APT_SNAPSHOT`; move the snapshot and the versions together,
+  read from the base with `apt-cache policy` as the Dockerfile shows).
+  Dependabot's `docker` entry for `/backend` opens the tag-and-digest PR;
+  it is never auto-merged (`pnpm check:workflows` keeps `docker` off the
+  auto-merge allowlist). Moving
+  Playwright moves every pin at once: the Dockerfile tag and digest
+  (`docker buildx imagetools inspect mcr.microsoft.com/playwright:v<version>-noble`),
+  playwright-core in `backend/renderer-deps/package.json` (then
+  `npm install --package-lock-only` there) and `backend/package.json`, and
+  e2e's `@playwright/test`. `pnpm check:pins` fails until they agree, and
+  `pnpm check:renderer-image` builds and smoke-tests the result.
   Its egress is open: its Chromium is confined to the site's origin by the
   app (Playwright routing plus Chromium's own resolver, proxy and WebRTC
   flags; [docs/security.md § Render tokens](../docs/security.md#render-tokens)),
@@ -135,14 +153,14 @@ browser ──HTTPS──► CloudFront + WAF (us-east-1 ACL)      water-managem
 | `s3_cloudfront.tf` | Frontend bucket, ACM cert (us-east-1), CF Functions, distribution, A/AAAA records |
 | `security_headers.tf` | Response-headers policies (site + API): CSP, HSTS, nosniff, framing, Referrer-, Permissions- and Cross-Origin-Opener-Policy |
 | `waf.tf` | Web ACL with 2 per-IP rate rules (`/api/auth/*`: 100/5 min; site-wide: `waf_rate_limit_per_ip`) |
-| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) + their alarms |
+| `alarms.tf` | SNS topics (regional + us-east-1), budget, Lambda/RDS/SES/CloudFront alarms, the backend's `self_check_failed` and `mail_send_failed` log metric filters (API and worker log groups) and `unhandled_error` filter (API log group) + their alarms |
 | `oidc.tf` | Looks up the bootstrap deploy role (and fails the plan if its trust policy isn't pinned to `environment:production`), attaches the per-resource deploy policy |
 | `outputs.tf` | Values pushed to GitHub by `export-tf-vars.sh` |
 | `scripts/package-lambdas.sh` | Builds + zips the API, migrate, worker and fetcher Lambdas and bundles the renderer's code for its image, all minified with names kept, source maps to `backend/dist/sourcemaps/` and not shipped (and, from esbuild's metafile, refuses a bundle that carries dotenv, an API/worker/fetcher bundle that carries playwright-core or imports it other than by a lazy `import()`, or a fetcher/renderer bundle that carries `pg`) (used by `deploy-backend.yml`; CI's `test` job runs it on every commit; [deployment.md § Lambda bundles](../docs/deployment.md#lambda-bundles)) |
 | `scripts/check-csp.mjs` | Refuses a frontend build whose inline scripts aren't all hashed in SvelteKit's meta CSP (used by `deploy-frontend.yml`) |
 | `certs/rds-global-bundle.pem` | RDS CA bundle shipped in every zip |
 | `prod.sops.yaml.example` | The key list for the private secrets file |
-| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (31 runs; see [Validating locally](#validating-locally)) |
+| `tests/guardrails.tftest.hcl` | Plan-only `terraform test` against mocked providers (38 runs; see [Validating locally](#validating-locally)) |
 
 ## Decisions
 
@@ -285,7 +303,7 @@ Idle to light use, on-demand, us-east-1:
 | WAF: ACL + 2 rules (+ $0.60 / 1M requests) | 7.00 |
 | Route 53 child zone (bootstrap-owned, billed here) | 0.50 |
 | KMS `alias/water-management-sops` (bootstrap-owned) | 1.00 |
-| CloudWatch: 31 alarms (incl. the self-check-failed, mail-send-failed and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.20 |
+| CloudWatch: 32 alarms (incl. the self-check-failed, mail-send-failed, unhandled-error and job-dead log metric filters, the jobs backlog, alert-storm and alert-mail-failure embedded metrics, worker throttles, the worker heartbeat and tick-delivery failures, the two feed DLQs and fetcher errors, the two render DLQs, renderer errors and duration, the mail-events DLQ), logs, RDS log export | ~3.20 |
 | CloudFront (PriceClass_All), CF Functions, S3, Lambda (incl. the fetcher: a daily CHIRPS feed is ~5 s at 512 MB; the renderer: ~5 s at 2 GB ≈ $0.0002 a PDF) | ~0 (free tiers; Lambda at 1 GB × 10k s ≈ $0.13) |
 | **Total** | **≈ $50** (the data feeds added ≈ $0.70, server-side reports ≈ $1.00–1.20) |
 
@@ -368,7 +386,8 @@ Claude does not run any of these, and none of them print a secret. Replace
 
    The first apply takes ~20 minutes (RDS plus CloudFront). Confirm **both**
    SNS email subscriptions afterwards: the regional topic and the us-east-1
-   topic.
+   topic. `budget_alert_email` is required and must be a real mailbox; plan
+   refuses an empty, malformed or reserved (`example.com` etc.) address.
 8a. **SES: verify, then leave the sandbox.** The DKIM, MAIL FROM and DMARC
    records are created by the apply; the identity turns `SUCCESS` once DNS
    propagates (minutes to an hour):
@@ -474,7 +493,9 @@ and regional DKIM domains), MAIL FROM, DMARC, TLS-required configuration set,
 the least-privilege `ses:SendEmail` policy and the VPC endpoint; the
 background-job stack (queue SSE, the DLQ after 5 receives, visibility ≥ 6×
 the worker timeout, the worker's runtime / size / concurrency / VPC / env and
-no owner credentials, the 5-minute tick and its invoke permission, the SQS
+no owner credentials, the 5-minute tick, its invoke permission and its
+zero-retry, 300-second-maximum-age delivery (EventBridge target and Lambda
+async config), the SQS
 event source, the SQS endpoint's policy naming only the two roles and the
 jobs queue, and the deploy role's right to update the worker); the data-feed
 stack (both queues' SSE, DLQs and visibility; the fetcher outside the VPC, its
@@ -484,7 +505,9 @@ API kept to the jobs queue through the endpoint; the deploy role's right to
 update the fetcher); every alarm
 wired to SNS, including the `self_check_failed` log metric filters (pattern
 and metric name, on both the API and worker log groups) and its alarm, and
-the `mail_send_failed` filters (both log groups) and alarm; the SES send
+the `mail_send_failed` filters (both log groups) and alarm, and the
+`unhandled_error` filter (the API's log group, the API's unhandled 500s the
+Lambda `Errors` metric can't see) and alarm; the SES send
 policy (`identity/*` in this account and region + the configuration set,
 single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
@@ -497,7 +520,14 @@ deploy role's trust postcondition, with negative runs for a branch subject, a
 immutable-claims subject). Three more negative runs check that a short
 `auth_jwt_secret`, a non-alphanumeric `db_app_password` and an invalid
 `dmarc_policy` fail the plan, and one that a `jobs_backlog_alarm_seconds`
-below two ticks does. Six more refuse an unreserved (`-1`) concurrency on each
+below two ticks does. Another six refuse an alert mailbox nobody reads:
+`budget_alert_email` is required, and an empty, malformed or reserved
+address fails the plan (example.com/.org/.net and their subdomains, and the
+`.example`, `.test`, `.invalid` and `.localhost` TLDs of RFC 2606 / RFC 6761,
+in any case); `dmarc_report_email` may be empty but is held to the same rule
+when set. A positive control (`accepts_real_alert_mailboxes`) accepts a
+domain that only contains "example". The suite's own address is at the
+site's domain, since the rule refuses every reserved one. Six more refuse an unreserved (`-1`) concurrency on each
 Lambda and a worker cap below the sum of its SQS triggers'
 `maximum_concurrency`; `worker_sqs_triggers` pins that sum against the planned
 mappings, `ReportBatchItemFailures` on every worker trigger and the worker

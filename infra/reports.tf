@@ -20,7 +20,8 @@
 # render-requests, send render-results and put objects under reports/ in the
 # bucket: no database, no secrets, no read of any PDF.
 #
-# The API hands out downloads as pre-signed GETs (an hour), so it alone may
+# The API hands out downloads as pre-signed GETs (60 s, one per click, behind
+# a 302 from GET /projects/:id/reports/:jobId/pdf), so it alone may
 # read reports/. The bucket is private (public access blocked, bucket-owner
 # objects, TLS only), SSE-S3 encrypted, and deletes every PDF after 7 days.
 #

@@ -5885,6 +5885,94 @@ every risk label at and beside its cut-offs, cut-off validation, the
 wording; and on random fuzz runs, every day below the EWR and every Reserve
 month of the classed years is counted exactly once.
 
+### 2.14a Licence impact by year class (issue #53 R7, engine and report)
+
+A derived view over two saved runs, not part of `runModel`: no run output
+changes, so `ENGINE_VERSION` doesn't move. Pure
+(`packages/engine/src/views/licenceImpact.ts`). The design is
+[design/planning-outputs.md §3.7](./design/planning-outputs.md#37-r7-licence-impact-by-year-class-m-inside-the-evidence-report)
+(sketch S4, finding 5); the board is on page 1 of the impact report
+([ui.md § Report](./ui.md#report)).
+
+`licenceImpactByYearClass({ background, application, siteNodeId?, yearClassMethod? })`
+compares a **background** run (what the impact is judged against: the
+impact report's baseline today, a full-allocation run once one exists) with
+the **application** run. Each run is `Pick<ModelOutput, 'startDate' | 'series' | 'summary'>`.
+
+- **Classes** come from the background run's natural flow (`classifyRunWaterYears`,
+  §2.14), so both runs are judged over the same years. A class counts only
+  the years both runs cover in full (a complete water-account row in each,
+  and the year in both runs' Reserve months or days); a warning counts the
+  years left out.
+- **Not enough years**: fewer than `OUTCOME_MIN_YEARS` = 3 years in a class
+  gives `enoughYears: false`, no waterfall, no counts and the verdict
+  `notEnoughYears`, the outcome matrix's rule.
+- **The waterfall**, mean m³ a year over the class's years, from each run's
+  water account (`summary.supplyAssurance.waterAccount`, §2.11b), at the
+  outlet:
+
+  | Step | What it is |
+  | --- | --- |
+  | natural | the background run's `naturalFlowM3` |
+  | existing use | the background run's consumptive use: `consumptiveIrrigationM3 + otherUseM3` (irrigation supplied less its return flow, plus other users' take less what they return) |
+  | proposed | the application's consumptive use − the background's (negative when it uses less) |
+  | other | natural − existing − proposed − left, broken down in `otherParts` |
+  | left | the application run's `outflowM3` (memo: the background's, `backgroundLeftM3`) |
+
+  Use is **consumptive**, not gross abstraction: it is what the river loses
+  to the users, so the waterfall ends at the outflow. The gross abstraction
+  (farms' and users' `supplied`) is larger by the return flows, which would
+  otherwise sit in "other" as a large negative. Groundwater pumped counts in
+  use (it is supplied); the river's loss to it is the stream depletion, and
+  the difference goes to "other".
+- **Other** is the rest of the application run's water account, so the
+  waterfall closes by construction and says what the gap is. `otherParts`
+  (Σ = other up to float noise): `damLossesM3` (dam evaporation + seepage lost
+  + off-take conveyance losses − rain on the dams), `storageChangeM3` (Δ dam
+  storage − storage set by a reset), `landCoverM3` (land cover + unallocated
+  natural flow), `groundwaterM3` (stream depletion − groundwater pumped),
+  `transfersM3` (− net transfers, ≈ 0), `naturalDifferenceM3` (background −
+  application natural flow, 0 unless the application changes the
+  rain-runoff) and `residualM3` (the account's float noise).
+- **Below the requirement**, per class: Reserve months not met at the site
+  (`summary.ewrAssurance`, §2.9c; the outlet, or a gauge by `siteNodeId`,
+  which then needs its table in both runs) summed over the years, background
+  and application, with the months assessed; without a rule table in both
+  runs, days below the pragmatic EWR at the outlet (`ewr_shortfall` < 0),
+  with a warning when only one run has the table. The counting is
+  `outcomeMatrix`'s (§2.14), with the two runs as its two levels.
+- **The verdict comes from the months** (or days), never from the annual
+  totals, since a waterfall can close with water to spare in a year that
+  failed every summer month (design §2 finding 5): application − background
+  > 0 is `moreBelow`, < 0 `fewerBelow`, 0 `noChange`.
+- **Wording** (`describeLicenceImpact(metric, class, names?)`) reports data,
+  never advice: "The Reserve was not met in 4 more months over 7 dry years
+  (9 in the baseline, 13 in this run)."; "The Reserve was met in every month
+  over 3 wet years in both runs."; "Only 2 wet years both runs cover: not
+  enough years to judge."
+- **Existing authorised use.** With an ordinary baseline as the background,
+  "existing use" is the use that run modelled, and the report labels it so.
+  When the baseline is a full-allocation run (`summary.allocations.mode` is
+  `fullAllocation`, `settings.allocationMode`, engine ≥ 1.18.0, §2.12a), its
+  use is every holder at their registered volume, and the board calls the
+  step *existing authorised use*. The view is the same either way; only the
+  label and the note change. A pair where only one run is at full
+  allocation gets a note: its "proposed" step then also counts the other
+  holders' change between modelled and registered use. Making that pair
+  (the baseline and the application both at full allocation) for an
+  assessor in one step is cumulative assessment (roadmap WP-3.11).
+- A run without a water account (engine < 0.32.0) throws; the report says to
+  run the model again.
+
+**Tests** (`licenceImpact.test.ts`, synthetic accounts; `licenceImpact.invariants.test.ts`,
+real runs): the classes, counts and verdicts for both metrics, the fallback
+and its warning, the 3-year rule, years one run doesn't cover, the gauge
+site, a skewed `TZ`, the verdict from months when the waterfalls are equal,
+the wording; on the outlook's synthetic test catchment (with a Reserve rule
+table) and on fuzz runs with every account term in play, the waterfall closes
+and Σ `otherParts` = other within 10⁻⁹ of the account's scale, the counts equal
+the runs' own Reserve months, and a run against itself changes nothing.
+
 ### 2.15 Seasonal outlook: an ESP ensemble from a decision date (issue #53 R5, engine core)
 
 "From the storage at the start of summer, how does the season go at 100,
@@ -6054,7 +6142,22 @@ isn't whole in floating point), ranking by demand, the metric choice and
 fallback, too few years, levels that aren't demand.scale, a monthly plan,
 the wording; `run.demandFactorFrom.test.ts` for the engine setting.
 
-### 2.15a Review triggers from the outlook (issue #53 R6, engine half)
+**Each farm's own figures** (engine ≥ 1.19.0, for the farmer view E3). A
+member also carries `farms`: every farm with demand in the season, its
+season demand and supply (Σ over farms = the member's `demandM3` and
+`suppliedM3`). Each level then has `demandMetByFarm`: a farm's own
+supplied ÷ demand across the years it had demand in, as the same
+percentiles (null below `OUTLOOK_MIN_YEARS` of them). `farmOutlookProjection`
+(`views/farmOutlook.ts`) picks one farm's figures at one level, its own
+only: the level, the season, `demandMet` and its dam's season-end storage
+as a share of its capacity. The WUA publishes a level and each farm page
+shows those (api.md § Seasonal outlooks). Tests: `outlook.test.ts` (the
+farms add up to the member; each farm's statistic is its own; a farm
+without demand has no row), `views/farmOutlook.test.ts` (no other farm's id
+or name; shares in 0–1; why there is no projection, an outlook from before
+1.19.0 included).
+
+### 2.15a Review triggers from the outlook (issue #53 R6)
 
 "Above x m³ on the review date → 100 %, between → 85 %, below → 70 %"
 (the client's sketch S3) **computed**, not asserted
@@ -6066,8 +6169,25 @@ planning figure. Pure, in `packages/engine/src/outlook/triggers.ts`
 (`runReviewTriggers`, and its parts `reviewStorageHistory`,
 `tercileEdges`, `storageBands`, `bandStartStorage`, `reviewTriggerTable`
 for a job that runs the members one by one, `describeTriggerRow`; per band
-`withDamStorage` on the review date's snapshot, §2.16). The
-backend job and the screen are not built yet (design §3.6).
+`withDamStorage` on the review date's snapshot, §2.16). `reviewTriggerBands`
+(engine 1.19.0) is runReviewTriggers' first half, the bands and each one's
+start storage before any member runs, so a job can run the members one by
+one and hand them to `reviewTriggerTable`; a test pins that path to
+`runReviewTriggers` to the bit.
+
+**The backend** (api.md § Seasonal outlooks). The `outlook` job draws the
+table after the outlook, for the season's review date (the project's
+`settings.outlook.review`, else `defaultReviewDate`). The outlook's season
+usually starts the day after the base run ends, so the run holds no state
+on its review date. The table therefore runs on the latest day with the
+review date's month and day that the record holds, to the season end's
+month and day after it: a rule by storage band **for that day of the
+year**, the non-dam state (soil, runoff stores, the Reserve's statistics)
+from that year of the record. The bands are the record's storage on that
+day in every year anyway, so only the non-dam state is one year's.
+**Judgement, pending the hydrologist**: the alternative, running from the
+outlook's own members' state on the review date, would tie the table to one
+analogue's first half.
 
 **Starting from a storage.** By default (engine ≥ 1.1.0) the base run's
 snapshot at the review date (§2.16) is copied per band with the band's
