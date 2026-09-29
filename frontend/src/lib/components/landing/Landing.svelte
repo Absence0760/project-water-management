@@ -22,6 +22,7 @@
 	import Story from './Story.svelte';
 	import Trust from './Trust.svelte';
 	import WhatIf from './WhatIf.svelte';
+	import { ART } from './art.generated';
 
 	// Absolute URLs for the link-preview tags, resolved against the page:
 	// `base` is relative ('.') while prerendering and absolute in the browser.
@@ -30,12 +31,11 @@
 	const description = $derived(
 		t('Model a catchment day by day, from rainfall to river: what each hydrological unit is supplied, what its dam holds, and whether the river keeps its ecological reserve.')
 	);
-	// The contour texture, set inline on each element that shows it: a url() in
-	// an inline style resolves against the page, where one passed through a
-	// custom property resolved against the stylesheet using it, so the
-	// prerendered page's relative base ('./landing/…') asked for
-	// /_app/immutable/assets/landing/contours.svg and got a 404 until hydration.
-	const contours = `url(${base}/landing/contours.svg)`;
+	// The contour texture, drawn as vector through <use>: as a CSS mask the
+	// page-sized box counted as an image and became the page's LCP
+	// (docs/design/landing-art.md § Quality bar). The href resolves against the
+	// page, so the prerendered relative base finds it before hydration.
+	const { width: cw, height: ch } = ART.contours;
 </script>
 
 <svelte:head>
@@ -67,7 +67,7 @@
 	</header>
 
 	<main class="page-body">
-		<div class="contours" aria-hidden="true" style:mask-image={contours} style:-webkit-mask-image={contours}></div>
+		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href="{base}/landing/contours.svg#contours" /></svg></div>
 		<div class="wrap">
 			<Hero />
 			<RiverDivider />
@@ -93,7 +93,7 @@
 	</main>
 
 	<footer class="foot">
-		<div class="contours" aria-hidden="true" style:mask-image={contours} style:-webkit-mask-image={contours}></div>
+		<div class="contours" aria-hidden="true"><svg viewBox="0 0 {cw} {ch}" width={cw} height={ch} focusable="false"><use href="{base}/landing/contours.svg#contours" /></svg></div>
 		<div class="wrap foot-row">
 			<span class="lockup small"><BrandMark size={24} /><span>Water Management</span></span>
 			<nav aria-label={t('Footer')}>
@@ -166,15 +166,19 @@
 		position: absolute;
 		inset: 0 0 auto;
 		height: min(100vh, 900px);
-		background: var(--text);
-		mask-position: center top;
-		mask-size: max(1500px, 100%) auto;
-		mask-repeat: no-repeat;
-		-webkit-mask-position: center top;
-		-webkit-mask-size: max(1500px, 100%) auto;
-		-webkit-mask-repeat: no-repeat;
+		overflow: hidden;
+		color: var(--text);
 		opacity: 0.05;
 		pointer-events: none;
+	}
+	/* At least 1500 px across (the file's own width), centred, from the top. */
+	.contours svg {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		width: max(1500px, 100%);
+		height: auto;
+		translate: -50% 0;
 	}
 	@media (prefers-reduced-motion: no-preference) {
 		.contours {
@@ -231,8 +235,10 @@
 	}
 	.foot .contours {
 		height: 100%;
-		mask-position: center bottom;
-		-webkit-mask-position: center bottom;
+	}
+	.foot .contours svg {
+		top: auto;
+		bottom: 0;
 	}
 	.foot-row {
 		display: flex;
