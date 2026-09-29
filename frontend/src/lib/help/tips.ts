@@ -848,7 +848,7 @@ export const TIPS: HelpTipText[] = [
 	{
 		id: 'plausibility-checks',
 		term: 'Plausibility checks',
-		short: 'Four checks a reviewing hydrologist makes on a run: they only warn, and never change a result.',
+		short: 'Five checks a reviewing hydrologist makes on a run (four before engine 1.19.0): they only warn, and never change a result.',
 		category: 'results'
 	},
 	{
