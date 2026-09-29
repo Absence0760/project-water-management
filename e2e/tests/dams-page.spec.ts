@@ -1,5 +1,6 @@
 // The Dams page (?tab=dams, issue #17 option A · Outcomes): a card per dam with how full it was at the end of the
-// latest run, the picked dam's storage chart (dam=<nodeId>), and the Dam levels table moved here from the Summary.
+// latest run, its lowest level and days at the minimum (the Dam levels table's columns, merged into the cards,
+// issue #175), and the picked dam's storage chart (dam=<nodeId>).
 // Synthetic data only: the seeded catchment's two farm dams, plus a third farm's dam with no minimum level.
 import type { Page } from '@playwright/test';
 import { expectNoViolations } from '../support/a11y.ts';
@@ -9,7 +10,6 @@ import { expect, test } from '../support/fixtures.ts';
 const cards = (page: Page) => page.getByRole('list', { name: 'Dams' }).getByRole('listitem');
 const card = (page: Page, name: string) => cards(page).filter({ has: page.getByText(name, { exact: true }) });
 const chart = (page: Page) => page.getByRole('region', { name: /^Storage/ });
-const table = (page: Page) => page.getByRole('region', { name: 'Dam levels' });
 const strip = (page: Page) => page.getByRole('navigation', { name: 'Project sections' });
 
 /** The seeded catchment with a third farm dam, Middle farm, with no minimum level; and a capacity on the gauge, which the engine ignores. */
@@ -30,7 +30,7 @@ async function openDams(page: Page, projectId: string, query = '') {
 
 const chartReady = (page: Page) => expect(chart(page).locator('figure.chart')).toHaveAttribute('data-ready', 'true');
 
-test('a card per dam, emptiest first, with % full, its change and a sparkline; the table below agrees', async ({ page, owner }) => {
+test('a card per dam, emptiest first, with % full, its change, a sparkline and its days at the minimum', async ({ page, owner }) => {
 	void owner;
 	await page.setViewportSize({ width: 1440, height: 960 });
 	const project = await seedThreeDams(page, 'Dams cards');
@@ -42,7 +42,7 @@ test('a card per dam, emptiest first, with % full, its change and a sparkline; t
 	await expect(cards(page)).toHaveCount(3);
 	await chartReady(page);
 
-	// Emptiest first, each with % full, its change over 30 days and its sparkline; the same order and % as the table.
+	// Emptiest first, each with % full, its change over 30 days and its sparkline.
 	const pcts = await cards(page).evaluateAll((lis) => lis.map((li) => parseFloat(li.querySelector('.level .v')!.textContent!)));
 	expect(pcts.every((v) => v >= 0 && v <= 100)).toBe(true);
 	expect([...pcts].sort((a, b) => a - b)).toEqual(pcts);
@@ -50,26 +50,14 @@ test('a card per dam, emptiest first, with % full, its change and a sparkline; t
 		await expect(li).toContainText(/(up|down) \d+ pp in 30 days|no change in 30 days/);
 		await expect(li.getByRole('img', { name: /: % full over the run's last year\. .* \d+% at the end; low \d+% on / })).toBeVisible();
 	}
-	const rows = table(page).getByRole('row').filter({ has: page.getByRole('rowheader') });
-	await expect(rows).toHaveCount(3);
 	const names = await cards(page).locator('.name').allInnerTexts();
-	await expect(rows.getByRole('rowheader')).toContainText(names);
-	const tablePcts = await rows.evaluateAll((trs) => trs.map((tr) => parseFloat(tr.querySelectorAll('td')[0]!.textContent!)));
-	expect(tablePcts.map(Math.round)).toEqual(pcts.map(Math.round));
-	// Every column and note of the Summary's old table.
-	await expect(table(page).getByRole('columnheader')).toHaveText(['Dam', 'At the end of the run', 'Lowest in its last year', 'Days at minimum']);
-	await expect(table(page)).toContainText("The tick on a bar is the dam's minimum operating level.");
-	await expect(table(page).getByRole('link', { name: 'Open in Runs' })).toHaveAttribute('href', `?tab=runs&run=${run}`);
-	// Middle farm has no minimum level: a dash, and no tick. The gauge's capacity isn't a dam (the engine ignores it).
+	// The Dam levels table and the capacity-weighted "All dams together" line are gone (issue #175): the cards carry it all.
+	await expect(page.getByRole('region', { name: 'Dam levels' })).toHaveCount(0);
+	await expect(page.getByTestId('dams-total')).toHaveCount(0);
+	// Middle farm has no minimum level, so no days-at-minimum line. The gauge's capacity isn't a dam (the engine ignores it).
 	await expect(cards(page).filter({ hasText: 'Outflow gauge' })).toHaveCount(0);
-	await expect(rows.filter({ hasText: 'Middle farm' }).locator('td').nth(2)).toHaveText('–');
-	await expect(rows.filter({ hasText: 'Middle farm' }).locator('.min')).toHaveCount(0);
-
-	// All dams together, weighted by capacity (the Summary's Dams today).
-	const caps: Record<string, number> = { 'Upper farm': 150_000, 'Lower farm': 90_000, 'Middle farm': 20_000 };
-	const weighted = names.reduce((s, n, i) => s + pcts[i]! * caps[n]!, 0) / 260_000;
-	const shown = parseFloat((await page.getByTestId('dams-total').locator('strong').textContent())!);
-	expect(Math.abs(shown - weighted)).toBeLessThanOrEqual(1);
+	await expect(card(page, 'Middle farm').getByTestId('dam-days-at-min')).toHaveCount(0);
+	for (const n of ['Upper farm', 'Lower farm']) await expect(card(page, n).getByTestId('dam-days-at-min')).toHaveText(/^\d+ days? at its minimum \(10%\) in its last year$/);
 
 	// The first card is the one charted, and the chart says how full it is; a farm's minimum level (10 %) is counted.
 	await expect(card(page, names[0]!).getByRole('link', { name: names[0]!, exact: true })).toHaveAttribute('aria-current', 'true');
@@ -79,6 +67,9 @@ test('a card per dam, emptiest first, with % full, its change and a sparkline; t
 	const facts = (await page.getByTestId('dam-facts').textContent())!.replace(/[ \t\r\n]+/g, ' ').trim();
 	expect(facts).toMatch(/^\d+% full on 28 Jan 2022 \([\d\u202f]+ of 150\u202f000 m³\) · lowest in its last year \d+% on \d{1,2} [A-Z][a-z]{2} 202[12] · \d+ days? at its minimum level \(10%\)$/);
 	await expect(chart(page).getByRole('img', { name: 'Upper farm storage: line chart of Storage, Capacity, Minimum level' })).toBeVisible();
+	// The card's days at the minimum are the chart's facts line's, to the day.
+	const days = facts.match(/ (\d+) days? at its minimum level/)![1];
+	await expect(card(page, 'Upper farm').getByTestId('dam-days-at-min')).toHaveText(new RegExp(`^${days} days? at its minimum \\(10%\\) in its last year$`));
 });
 
 test('picking a dam puts it in the URL, and Back returns to the one before; the range and unit switches', async ({ page, owner }) => {
@@ -156,7 +147,7 @@ test('before a run the cards show capacity with a prompt to run; with no dams it
 	await expect(card(page, 'Upper farm')).toContainText('150\u202f000 m³');
 	await expect(card(page, 'Upper farm')).toContainText('No run yet');
 	await expect(chart(page)).toHaveCount(0);
-	await expect(table(page)).toHaveCount(0);
+	await expect(card(page, 'Upper farm').getByTestId('dam-days-at-min')).toHaveCount(0);
 	await expectNoViolations(page);
 
 	const bare = await createProject(page.request, 'Dams none');
@@ -191,10 +182,10 @@ test('a viewer sees the Dams page and its data, with no prompt to run', async ({
 	await v.reload();
 	await chartReady(v);
 	await expect(cards(v)).toHaveCount(2);
-	await expect(table(v).getByRole('rowheader')).toHaveCount(2);
+	await expect(cards(v).getByTestId('dam-days-at-min')).toHaveCount(2);
 });
 
-/** The seeded catchment plus `extra` farm dams with long names (a big case: the cards fold, the table's rows too). */
+/** The seeded catchment plus `extra` farm dams with long names (a big case: the cards fold). */
 async function seedManyDams(page: Page, name: string, extra: number): Promise<{ id: string; model: Model }> {
 	const project = await seedRunnableProject(page.request, name);
 	const model = project.model;
@@ -228,7 +219,6 @@ test.describe('flows in the window’s scroll, with nothing scrolling inside a c
 			await createRun(page.request, project.id, 'Baseline');
 			await openDams(page, project.id);
 			await chartReady(page);
-			await expect(table(page).getByRole('rowheader')).toHaveCount(3);
 			const list = (await page.getByRole('list', { name: 'Dams' }).boundingBox())!;
 			const box = (await chart(page).boundingBox())!;
 			// Three dams: every card shows, no fold.
@@ -236,12 +226,10 @@ test.describe('flows in the window’s scroll, with nothing scrolling inside a c
 			await expect(page.getByRole('button', { name: /^Show all \d+ dams$/ })).toHaveCount(0);
 			if (label === 'desktop') {
 				// The cards in a column beside the chart, both on the first screen; the chart no longer stretches to the
-				// window's foot (it was sized to it until 2026-09-29), and the Dam levels table starts below them.
+				// window's foot (it was sized to it until 2026-09-29).
 				expect(box.x).toBeGreaterThan(list.x + list.width);
 				expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 				expect(box.height).toBeGreaterThan(400);
-				const t = (await table(page).boundingBox())!;
-				expect(t.y).toBeGreaterThan(Math.max(box.y + box.height, list.y + list.height));
 			} else {
 				// Stacked: the cards, then the chart; nothing wider than the screen.
 				expect(box.y).toBeGreaterThan(list.y + list.height - 1);
@@ -296,13 +284,6 @@ test('many dams: the emptiest few show, the rest open in place under “Show all
 	await page.reload();
 	await expect(cards(page)).toHaveCount(4);
 	await expect(cards(page).last().locator('a.name')).toHaveAttribute('aria-current', 'true');
-
-	// The Dam levels table: eight rows, then all of them, growing with the page rather than scrolling in its box.
-	await expect(table(page).getByRole('rowheader')).toHaveCount(8);
-	await table(page).getByRole('button', { name: 'Show all 14 rows' }).click();
-	await expect(table(page).getByRole('rowheader')).toHaveCount(14);
-	await expect(table(page).getByRole('button', { name: 'Show the 8 emptiest rows' })).toHaveAttribute('aria-expanded', 'true');
-	expect(await innerScrollers(page)).toEqual([]);
 
 	// On a phone: four cards (two rows) before the chart, still no inner scroll and no sideways scroll.
 	await page.setViewportSize({ width: 390, height: 844 });

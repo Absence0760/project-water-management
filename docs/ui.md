@@ -857,7 +857,8 @@ put the results first; its first screen follows board A1 of the redesign
   says what the bars measure ("Share of each unit's irrigation demand
   supplied, latest run"). Its own chunk (it waits for the run's record
   anyway).
-- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17):
+- **Dam levels** moved to the [Dams](#dams) page (2026-09-26, issue #17),
+  and its columns into the Dams cards (2026-09-29, issue #175):
   the Summary keeps only the **Dams today** card (which links there) and the
   one-line link below the first screen. `OverviewTab` reads the card's
   levels from the run summary (`FarmSummary.dam*`, engine ≥ 1.2.0, issue
@@ -979,17 +980,26 @@ for every workspace tab. Its own chunk.
   the first and last day; the compact chart pattern, `charts/Sparkline.svelte`):
   captioned "% full over the run's last year", the window's first and last
   day under its ends, and between them the low with its day ("low 15% ·
-  19 Dec 2023", the Dam levels table's *Lowest in its last year* to the day),
+  19 Dec 2023", the chart's facts line's *lowest in its last year* to the day),
   marked by a dot; pointing at the line reads out that day instead, and so
   do the keys on its focused slider (from the low; End is the last day). In a
   narrow card (a phone's two columns) the low takes its own line under the
   dates. The line sits above the card's stretched link, and a click on it
-  picks the dam as the rest of the card does. Then links
+  picks the dam as the rest of the card does. A dam with a minimum operating
+  level says how many days of its last year it sat at or below it ("12 days at
+  its minimum (10%) in its last year", `DamLevel.daysAtMin`; none for a dam
+  without one). While the levels load, each card says "Loading dam levels
+  (N of M)…". Then links
   **On the Network** (`?tab=network&node=<id>`, the node picked on the map)
   and **Planted areas** (the [farm drawer](#farm-drawer), `farm=<id>`, over
   this page). A coloured edge repeats the band (accent, amber below 30 %, red
-  at the minimum; grey without a level). Above them, **All dams together**
-  (`damsToday`, capacity-weighted: the Summary's Dams today figure).
+  at the minimum; grey without a level).
+- **Removed 2026-09-29 (issue #175):** the **Dam levels** table under the
+  cards (`dams/DamLevels.svelte`: every column was already on the cards, their
+  sparklines or the picked dam's facts line, in the same order; the cards took
+  its *Days at minimum*), and the **All dams together: X% full** line above
+  the cards (capacity-weighted, so the biggest dam hid the empty ones, and it
+  repeated the Summary's Dams today card, which keeps it).
 - **Picking a dam**: the name is a link (`dam=<nodeId>`, `withParam`) stretched
   over the card, so a click anywhere on it picks the dam, the URL can be
   shared, and Back returns to the one before. Without `dam=` (or with one
@@ -1013,32 +1023,20 @@ for every workspace tab. Its own chunk.
   420 px (about level with the three cards) and the chart panel sticky
   (`top: --header-h + 0.75rem`), so it stays in view while an opened list is
   read down in the window's scroll. Narrower, the cards are two to a row on
-  a phone, then the chart (260 px). The Dam levels table below starts under
-  both, its top in view at 1440×960.
-- **Dam levels** (`dams/DamLevels.svelte`, moved here unchanged from the
-  Summary) below: every dam in the run, emptiest first, with its capacity,
-  its storage at the end of the run as a bar and a % (a tick marks its
-  minimum operating level, and "below 30%" or "at its minimum level" is
-  written beside the %, so colour is never the only cue), the lowest it
-  reached in the run's last 365 days with the first day of that low, and the
-  days in that year at or below the minimum. The model keeps the minimum as a
-  fraction of capacity (`damMinPct` 0.1 = 10 %) and only a farm's dam has
-  one, so `damsInRun` turns it into a % (until 2026-09-26 it passed the
-  fraction through, so a 10 % minimum was drawn and counted as 0.1 %). The
-  first 8 rows show, with **Show all N rows** (**Show the 8 emptiest rows**
-  back; "rows" since 2026-09-29, so it isn't named like the cards' button),
-  and **Open in Runs**. The table grows with its rows rather than scrolling
-  inside the global `.table-wrap` 70vh cap (only sideways on a narrow
-  screen). The page
-  keeps fetching every dam's series even though the run summary carries the
-  table's figures (engine ≥ 1.2.0, issue #55), because each card's sparkline
-  and the storage chart draw them.
+  a phone, then the chart (260 px).
+- **Minimum level**: the model keeps the minimum as a fraction of capacity
+  (`damMinPct` 0.1 = 10 %) and only a farm's dam has one, so `damsInRun`
+  turns it into a % (until 2026-09-26 it passed the fraction through, so a
+  10 % minimum was drawn and counted as 0.1 %). The page fetches every dam's
+  series even though the run summary carries the level figures (engine ≥
+  1.2.0, issue #55), because each card's sparkline and the storage chart draw
+  them.
 - **Empty states**: no dams in the model says how to add one, with **Open the
   Network** and **Node table** (the grid modal over this page, where a node's
   dam capacity is set or a node added; a new dam shows as a card at once).
   No run yet: the cards show each dam's capacity only, under a note linking
   to Runs & results to run the model (a viewer is told an editor has to run
-  it), with no chart or table.
+  it), with no chart.
 
 ## Project
 

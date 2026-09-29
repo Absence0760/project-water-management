@@ -152,7 +152,7 @@ export const GUIDES: Guide[] = [
 					},
 					{
 						type: 'p',
-						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). The emptiest dams come first; with many dams, **Show all** under the cards lists the rest. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. Each card also opens the dam’s node on the Network (**On the Network**) and the hydrological unit’s **Planted areas**, and the **Dam levels** table below lists every dam’s lowest level in the last year and its days at the minimum level. Before the first run the cards show each dam’s capacity only.'
+						text: '**Dams** has a card for each hydrological unit’s dam: how full it was at the end of the latest run, its change over the last 30 days and its last year as a small line (% full, with its first and last day and its lowest level marked; point at it to read a day). The emptiest dams come first; with many dams, **Show all** under the cards lists the rest. Pick a card to chart that dam’s storage (as % full or m³, over 30 days, a year or the whole run); the link can be shared. A dam with a minimum operating level also shows how many days of its last year it sat at that minimum. Each card also opens the dam’s node on the Network (**On the Network**) and the hydrological unit’s **Planted areas**. Before the first run the cards show each dam’s capacity only.'
 					},
 					{
 						type: 'p',

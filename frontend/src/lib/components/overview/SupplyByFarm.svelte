@@ -24,7 +24,7 @@
 		more?: { href: string; label: string } | null;
 	} = $props();
 
-	/** Rows shown before "Show all" (the Dams page's Dam levels shows as many). */
+	/** Rows shown before "Show all". */
 	const FIRST = 8;
 	let showAll = $state(false);
 
