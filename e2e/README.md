@@ -32,8 +32,10 @@ pnpm -C e2e e2e:list      # list the tests without running them
    is `$env/static/public`), written to `frontend/build-e2e/` (with
    `frontend/.svelte-kit-e2e/` as SvelteKit's working directory, both
    gitignored) so the production output in `frontend/build/` is never touched,
-   then served by `support/static-server.mjs` with the SPA fallback the way
-   CloudFront serves it. The build adds about 20 s to the start of a run.
+   then served by `support/static-server.ts` (`support/site.ts`), which routes
+   every request through CloudFront's own `spa_rewrite` function, loaded from
+   `infra/s3_cloudfront.tf`, so e2e gets production's answers: the SPA fallback
+   for an extension-less path, and a 404 for a file the build doesn't have. The build adds about 20 s to the start of a run.
    It never reuses an existing server, so a stray process on those ports fails
    the run loudly instead of testing the wrong build. `pnpm dev` (:7777 /
    :3001, database `water`) can keep running alongside.
@@ -133,7 +135,7 @@ measure what fits; don't widen a margin until it passes on one machine.
 | `support/global-setup.ts` | Rebuilds the checkout's e2e database |
 | `support/api.ts` | API helpers for arranging state (users, projects, model, series, runs) plus a small synthetic catchment |
 | `support/db.ts` | Plants reset / verify / invite link tokens straight into the e2e database (as the owner). Mail goes to the backend log in e2e (`MAIL_TRANSPORT=log`) and the database keeps only token hashes, so a spec that follows an emailed link plants one whose plaintext it knows. `plantLegacyRun` turns a run into a stored legacy-runoff run (engine < 1.0.0), which the API can no longer make |
-| `support/static-server.mjs` | Serves the e2e frontend build on the site port: files as they are, `/welcome` from the prerendered `welcome.html`, `index.html` for any other path (the SPA fallback), as CloudFront does. No dependencies |
+| `support/static-server.ts`, `support/site.ts` | Serves the e2e frontend build on the site port, routed by CloudFront's `spa_rewrite` function itself (run from `infra/s3_cloudfront.tf` through `infra/scripts/cloudfront-functions.mjs`, so the two can't drift): `index.html` for an extension-less path (the SPA fallback), `/welcome` and the other prerendered pages from their HTML, the build's files as they are, the function's 404 page for a path with an extension outside the build's file locations (`/nope.pdf`), and a plain 404, as S3 answers, for a missing file inside them. `support/site.test.ts` (`pnpm -C e2e test`) pins each case. No dependencies |
 | `support/a11y.ts` | The shared axe scan every spec uses (`expectNoViolations(page, { tags?, rules?, include? })`, WCAG 2.0–2.2 A/AA tags by default; don't call `AxeBuilder` directly). It runs `axe.run()` in the page (legacy mode) and keeps node details for violations only: the default `runPartial` mode opens a blank page per scan and ships every passing node across the protocol, 2–3× slower (the glossary 5.5 s → 2.3 s). Legacy mode skips cross-origin frames, and the app has none, so the scan refuses a page with a frame |
 | `support/fixtures.ts` | `owner` (a fresh user signed in to `page`) and `signIn(name)` (another user in their own browser context) |
 | `fixtures/*.csv` | Synthetic daily rainfall and observed flow: a 92-day pair (ISO dates; DD/MM/YYYY with one gap) and a two-water-year pair for the golden path, with a two-year daily A-pan (`apan-2y.csv`) beside it; `farmers.csv`, a synthetic bulk farmer invite (`email,farm,language`) with a two-farm address, an unknown farm and a bad address |

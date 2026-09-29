@@ -1442,8 +1442,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "80" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "An $80 monthly budget exists by default (above af-south-1's ~$58–63 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "90" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $90 monthly budget exists by default (above af-south-1's ~$59–64 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1458,9 +1458,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "6"
+      aws_budgets_budget.daily[0].limit_amount == "7"
     )
-    error_message = "A $6/day budget (ceil(80 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $7/day budget (ceil(90 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1482,9 +1482,11 @@ run "alarms" {
   }
   assert {
     condition = (
-      # Two statements: CloudWatch alarms (here) and RDS events (AllowRdsEvents,
-      # pinned in data.tftest.hcl's db_events run).
-      length(data.aws_iam_policy_document.alerts_publish.statement) == 2 &&
+      # Three statements: CloudWatch alarms (here), RDS events (AllowRdsEvents,
+      # pinned in data.tftest.hcl's db_events run) and the database KMS key
+      # alarm's EventBridge rule (AllowEventBridgeKmsKeyAlarm, pinned in
+      # kms.tftest.hcl; only with rds_customer_managed_key, the default).
+      length(data.aws_iam_policy_document.alerts_publish.statement) == 3 &&
       data.aws_iam_policy_document.alerts_publish.statement[1].sid == "AllowRdsEvents" &&
       one(data.aws_iam_policy_document.alerts_publish.statement[0].principals).identifiers == toset(["cloudwatch.amazonaws.com"]) &&
       toset([for c in data.aws_iam_policy_document.alerts_publish.statement[0].condition : "${c.test}|${c.variable}|${join(",", c.values)}"]) == toset([
@@ -1492,7 +1494,7 @@ run "alarms" {
         "ArnLike|aws:SourceArn|arn:aws:cloudwatch:af-south-1:000000000000:alarm:*",
       ])
     )
-    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn) and this instance's RDS events; Budgets no longer publish there."
+    error_message = "The regional topic admits only this account's CloudWatch alarms in this region (aws:SourceAccount + aws:SourceArn), this instance's RDS events and the KMS key alarm's rule; Budgets no longer publish there."
   }
   assert {
     condition = {
@@ -1574,7 +1576,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "90"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1651,7 +1653,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 80
+    budget_daily_usd = 90
   }
   expect_failures = [var.budget_daily_usd]
 }
@@ -1734,11 +1736,13 @@ run "background_jobs" {
   assert {
     condition = (
       startswith(local.runtime_secrets.worker.DATABASE_URL, "postgresql://water_app:") &&
-      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full") &&
-      aws_lambda_function.worker.environment[0].variables["JOB_TRANSPORT"] == "sqs" &&
-      aws_lambda_function.worker.environment[0].variables["JOBS_QUEUE_URL"] == aws_sqs_queue.jobs.url
+      strcontains(local.runtime_secrets.worker.DATABASE_URL, "sslmode=verify-full")
     )
-    error_message = "The worker connects as the RLS-bound water_app over verified TLS, with the sqs transport."
+    error_message = "The worker connects as the RLS-bound water_app over verified TLS."
+  }
+  assert {
+    condition     = length(setintersection(keys(aws_lambda_function.worker.environment[0].variables), ["JOB_TRANSPORT", "JOBS_QUEUE_URL"])) == 0
+    error_message = "The worker never wakes itself (it may not send to the jobs queue): only the API gets JOB_TRANSPORT and JOBS_QUEUE_URL."
   }
   assert {
     condition     = !contains(keys(aws_lambda_function.worker.environment[0].variables), "MASTER_SECRET_ARN")

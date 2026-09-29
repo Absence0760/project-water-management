@@ -68,14 +68,39 @@ The checklist for these is issue #62; the history scrub is #63.
       raised, and `-1` (unreserved) is now refused by the variables'
       validation. In af-south-1 request at least the sum of the reservations
       + 10 (33 at the defaults; ask for 1000) and wait for the grant:
-      infra/README.md § Operator steps, step 3.
+      infra/README.md § Operator steps, step 3. Then run
+      `infra/scripts/preapply-check.sh` (step 7a: the quota, the us-east-1
+      state bucket and sops key, the SES endpoint service, the RDS class,
+      the CloudTrail trail the KMS key alarm needs) and
+      plan only once it passes.
+- [ ] **After the first apply and first release, run
+      `infra/scripts/postapply-check.sh` (#126, 2026-09-29)** and clear
+      every FAIL: unconfirmed alert subscriptions, the RDS event
+      subscription, the ECR policy, the site's 404s and bucket listing, the
+      Function URL's 403 (infra/README.md § Operator steps, step 8). At the
+      first deploy, before client data, prove RDS events reach the alerts
+      topic with the reboot and `--rds-event-test` (step 10c): the topic
+      policy's `aws:SourceArn` condition can't be proven by a plan.
+- [ ] **Confirm the database's KMS key before the first apply (#126,
+      2026-09-29).** `rds_customer_managed_key` defaults to `true`: a
+      customer-managed key (`infra/kms.tf`) that keeps cross-account snapshot
+      sharing and AWS Backup cross-account copies possible, for $1–3 a month.
+      Keep it, or set `false` for the AWS-managed `aws/rds` key, in
+      `terraform.tfvars`. It can't be changed once the instance exists
+      (deployment.md § Decide before the first apply). Disabling the key,
+      scheduling its deletion, changing its policy or revoking a grant
+      alarms (`kms.tf`), but only through CloudTrail: **make sure a trail
+      logging write management events (KMS not excluded) covers the region
+      before the first apply**, preferably the Organization trail from the
+      management account; `preapply-check.sh`'s `cloudtrail` check FAILs
+      until one does (infra/README.md § Operator steps, step 7a).
 - [ ] **SES production access.** Report links (#26), invites and password
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $80** (`infra/variables.tf`
-      `budget_monthly_usd`; was $60, #126), sized for af-south-1's ~$58–63
-      idle, plus a derived $6/day budget (deployment.md § Budget alerts).
+- [ ] **AWS budget default is now $90** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, then $80, #126), sized for af-south-1's ~$59–64
+      idle with the database's KMS key, plus a derived $7/day budget (deployment.md § Budget alerts).
       Set ~60 in tfvars for us-east-1. Cost Anomaly Detection is off by
       default so the first apply can't fail on an existing monitor: turn it
       on after the first apply (infra/README.md § Operator steps, step 11).
@@ -140,7 +165,7 @@ The checklist for these is issue #62; the history scrub is #63.
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
+      `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
 ## Hydrologist
 
@@ -1177,7 +1202,7 @@ the suggested order (the IDs carry the detail):
       imported module" against the Vite dev server (:7801). Done 2026-09-24:
       e2e now runs against a production build of the frontend
       (`vite build` into `frontend/build-e2e/` with the e2e API URL baked in,
-      served with the SPA fallback by `e2e/support/static-server.mjs`), which
+      served with the SPA fallback by `e2e/support/static-server.ts`), which
       also matches production. Measured with `tests/repeated-loads.spec.ts`
       (six `page.goto(…?tab=settings)` in a row, `--workers=1
       --repeat-each`): dev server 3 of 3 failed at the fourth load; built site

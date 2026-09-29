@@ -113,7 +113,7 @@ What was checked (September 2026):
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 80` allows for them), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 90` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -416,6 +416,17 @@ bootstrap printed), `bootstrap_slug = "water-management"`, the region, the budge
 email and the DMARC report mailbox. Both files are gitignored (the estate
 keeps the canonical tfvars in `infra-secrets/water-management/prod.tfvars`).
 
+Before the first plan, run the read-only pre-apply check (the Lambda
+concurrency quota against the reservations, the state bucket and sops key in
+us-east-1, the SES endpoint service, the RDS instance class, and a logging
+CloudTrail trail recording KMS write management events in the region, which
+the database KMS key alarm needs; PASS/FAIL per check, exit 1 on any FAIL;
+infra/README.md § Operator steps, step 7a):
+
+```bash
+cd infra && ./scripts/preapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
+```
+
 ```bash
 cd infra && terraform init -backend-config=backend.config && ./scripts/tf.sh plan
 ```
@@ -425,12 +436,87 @@ is not pinned to this repo's `production` environment (a postcondition in
 `oidc.tf`), or if a sops secret is malformed or missing (the variables'
 validations in `variables.tf`, and `tf.sh`, which names a missing key).
 
+### Decide before the first apply
+
+**The database's KMS key: `rds_customer_managed_key` (default `true`).**
+Confirm it, or set `false` in `terraform.tfvars`, before the first apply.
+It can't be changed on a live instance.
+
+- `true`: a customer-managed key (CMK) encrypts the database, its logs,
+  automated backups and snapshots (`infra/kms.tf`, `alias/water-management-rds`).
+- `false`: RDS's AWS-managed `aws/rds` key, as before.
+
+Why it's decided up front: RDS fixes an instance's key at creation. Changing
+it later means a manual snapshot, a copy of it under the new key, and a
+restore to a new instance with a new endpoint, plus downtime and a cut-over
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html),
+[re:Post: change the key](https://repost.aws/knowledge-center/update-encryption-key-rds)).
+Flipping the variable on a live stack would force that replacement, and the
+instance's `prevent_destroy` refuses it at plan time.
+
+Recommendation: **keep `true`.** This account is a sub-account in an AWS
+Organization and holds personal information (farm names, contacts, sign-in
+data). A CMK keeps these options open for about $1–3 a month:
+
+| | CMK (`true`, default) | `aws/rds` (`false`) |
+| --- | --- | --- |
+| Cost | $1/month, +$1 at each of the first two yearly rotations (so $3 from year 3); RDS's key requests stay inside KMS's 20,000/month free tier ([KMS pricing](https://aws.amazon.com/kms/pricing/)) | free |
+| Share a snapshot with another account (a restore test in another account, or handing the stack to the client's own AWS account) | yes, after adding that account to the key policy | no: "You can't share a snapshot that has been encrypted using the AWS managed key" ([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)); you'd first copy the snapshot under a CMK |
+| AWS Backup cross-account copy (a backup vault in another Organization account, the defence against this account being compromised or closed) | yes, once the key is shared with the destination account | no: RDS needs a CMK "because AWS managed key policies are immutable and cannot be shared cross-account" ([AWS Backup: cross-account copies](https://docs.aws.amazon.com/aws-backup/latest/devguide/create-cross-account-backup.html)) |
+| Audit and control | key policy limits use to RDS in this region and account (`kms:ViaService`, [RDS key management](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.Keys.html)); every use in CloudTrail; can be revoked | AWS controls the policy |
+| Rotation | automatic, yearly (`enable_key_rotation`) | automatic, managed by AWS |
+| Performance Insights (off today) | would use the same key; the PI key can't be changed once PI is on ([PI key policy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_PerfInsights.access-control.cmk-policy.html)) | `aws/rds` |
+
+**The risk a CMK adds is the key itself.** If the key is disabled, RDS stops
+the instance about 2 hours later (`inaccessible-encryption-credentials-recoverable`).
+Re-enabling the key and starting the instance within 7 days recovers it.
+After that the instance is terminal, and a restore needs the key enabled
+again. If the key is deleted, the database, every automated backup and every
+snapshot are unrecoverable
+([Encrypting Amazon RDS resources](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Overview.Encryption.html)).
+Guards in `kms.tf`: `prevent_destroy` on the key, the maximum 30-day
+deletion window (`aws kms cancel-key-deletion` undoes a scheduled deletion
+in that window), and no principal but RDS can use the key. `DisableKey`,
+`ScheduleKeyDeletion`, `PutKeyPolicy` and `RevokeGrant` on the key page the
+alerts topic (an EventBridge rule on CloudTrail events, `kms.tf`; § Runbooks
+says what to do). That rule hears nothing unless a CloudTrail trail logging
+write management events covers the region: the stack relies on the
+Organization's trail rather than creating a duplicate, and
+`preapply-check.sh` FAILs until one exists (infra/README.md § Operator
+steps, step 7a).
+
+What the key covers and what it doesn't: only the RDS instance and what RDS
+derives from it (storage, logs on the instance, backups, snapshots). The RDS
+master secret and the runtime secrets stay on `aws/secretsmanager`, so the
+Lambdas' roles need no `kms:Decrypt`, and a restore re-creates the master
+secret anyway (§ Restoring the database). The report and frontend buckets
+stay on SSE-S3 ([security.md § Accepted IaC findings](./security.md#accepted-iac-findings)).
+One key with one job means a mistake with it affects only the database.
+
+A cross-account backup copy isn't built. When it is, add a statement to
+`data.aws_iam_policy_document.rds_kms` that grants the destination account
+`kms:Decrypt`, `kms:DescribeKey` and `kms:CreateGrant`. Also add an AWS Backup
+plan and vault, and turn on cross-account backup in the Organization's
+management account.
+
 Only apply (`./scripts/tf.sh apply`) after the plan has been reviewed and the operator has
 said go. Then push the outputs to the repository's GitHub Actions variables
 and secrets:
 
 ```bash
 ~/github/templates/scripts/export-tf-vars.sh infra/
+```
+
+After the apply (and again after the first frontend release, when the
+site's edge checks can pass), run the read-only post-apply check: both alert
+topics' email subscriptions confirmed, the RDS event subscription active,
+SES production access (a warning while in the sandbox), the renderer's ECR
+policy, the site's 404s and no S3 bucket listing, and the Function URL's 403
+without the shared secret (infra/README.md § Operator steps, steps 8, 10a
+and 10c; `--rds-event-test` proves RDS events reach the topic):
+
+```bash
+cd infra && ./scripts/postapply-check.sh --profile water-management --var-file ../../infra-secrets/water-management/prod.tfvars
 ```
 
 They are **repository-level** values (`gh variable set` / `gh secret set`
@@ -503,7 +589,10 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
   low storage, availability, failover, recovery, restoration, deletion,
   maintenance and patching, RDS notices; not the routine daily-backup events,
   and RDS publishes no "backup failed" event, so the restore rehearsal in
-  § Restoring the database is what proves the backups), SES
+  § Restoring the database is what proves the backups), the database KMS
+  key being disabled, scheduled for deletion, re-policied or its grant
+  revoked (an EventBridge rule on CloudTrail events, `kms.tf`, free; needs a
+  CloudTrail trail, § Runbooks 13), SES
   bounce and complaint rates, CloudFront 5xx, a log metric filter + alarm
   on the backend's `self_check_failed` structured log line in both the API's
   and the worker's log group (a saved run failing one of the engine's own
@@ -903,6 +992,13 @@ plan-only until the first deploy):
   dropped (counted by `worker-tick-failed` or `worker-throttles`) instead of
   queueing for up to 24 hours (EventBridge's default) or 6 hours (Lambda's)
   and piling stale ticks onto a struggling worker; the next tick recovers.
+- **Only the API wakes the worker.** The worker has no `sqs:SendMessage` on
+  the `jobs` queue and no `JOB_TRANSPORT` / `JOBS_QUEUE_URL` (the production
+  settings check asks them of the API alone): a job that queues follow-up
+  work leaves it to the tick. `backend/src/lambda-worker.test.ts` fails if
+  anything the worker bundles reaches `jobs/wake.ts` or a routes module, and
+  `infra/tests/guardrails.tftest.hcl` if the worker's environment gets either
+  setting back.
 - **Worker Lambda** (`backend/src/lambda-worker.ts`, handler
   `lambda-worker.handler`): in the private VPC, 1024 MB, 300 s, reserved
   concurrency 8 (`worker_reserved_concurrency`: at least the sum of its four
@@ -1170,7 +1266,8 @@ plan-only until the first deploy):
   queue.
   **After that apply, and again after the second backend release** (the
   first to move an existing renderer), confirm the repository policy still
-  holds only Terraform's statement:
+  holds only Terraform's statement (`infra/scripts/postapply-check.sh`,
+  its `ecr-policy` line, or by hand):
   `aws ecr get-repository-policy --repository-name water-management-renderer --region <region> --profile water-management --query policyText --output text`
   (step 10a says what to look for). The renderer's role pulls the image
   with its own grant, and the repository policy carries the statement
@@ -1458,6 +1555,42 @@ Every step is an ordinary app action by an owner unless it says "operator".
        `WAF_CAPTCHA_API_KEY`), and deploy the web again: the script URL and
        key are baked into the build.
     5. Switch back to `CAPTCHA` once fixed, and record it in the operator log.
+13. **The database's KMS key** (an email "`<event>` on the database's KMS
+    key", operator; `kms.tf`, only with `rds_customer_managed_key`). Act the
+    same hour: a disabled key stops the instance about 2 hours later.
+    1. **Read the email:** the call (`DisableKey`, `ScheduleKeyDeletion`,
+       `PutKeyPolicy`, `RevokeGrant`), who made it and whether it failed
+       (an error code such as `AccessDenied` means an attempt, not a change:
+       treat it as a possible compromise:
+       [security.md § Incident playbook](./security.md#incident-playbook)).
+       If it was your own reviewed apply that changed the key policy, record it and stop.
+    2. **Check the key** (its state, deletion date and ARN; the commands
+       below take the ARN, since `EnableKey`, `CancelKeyDeletion`,
+       `GetKeyPolicy` and `ListGrants` don't accept an alias):
+       `aws kms describe-key --key-id alias/water-management-rds --region <region> --profile water-management --query 'KeyMetadata.[KeyState,DeletionDate,Arn]'`.
+    3. **`PendingDeletion`:** cancel it, then enable the key (cancelling
+       leaves it `Disabled`):
+       `aws kms cancel-key-deletion --key-id <key-arn> --region <region> --profile water-management && aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       Possible any time within the 30-day window; after it, the database
+       and every backup are gone.
+    4. **`Disabled`:** `aws kms enable-key --key-id <key-arn> --region <region> --profile water-management`.
+       If RDS already stopped the instance (status
+       `inaccessible-encryption-credentials-recoverable`), start it within 7
+       days: `aws rds start-db-instance --db-instance-identifier water-management --region <region> --profile water-management`.
+    5. **`PutKeyPolicy`:** compare the live policy
+       (`aws kms get-key-policy --key-id <key-arn> --policy-name default --region <region> --profile water-management`)
+       with `data.aws_iam_policy_document.rds_kms`; a plan shows the drift,
+       and an apply of the reviewed code puts it back.
+    6. **`RevokeGrant`:** if it revoked RDS's grant, the instance loses the
+       key as if it were disabled, and only RDS can create its grant again
+       (the key policy's `kms:GrantIsForAWSResource`). List the grants
+       (`aws kms list-grants --key-id <key-arn> --region <region> --profile water-management`)
+       and watch the instance status; if it goes
+       `inaccessible-encryption-credentials-recoverable`, start it as in 4
+       (not yet rehearsed: if it doesn't come back, restore to a new
+       instance, § Restoring the database, and open an AWS Support case).
+    7. Find out who and why in CloudTrail (the email names the caller), and
+       record it in the operator log.
 
 ## Rollback
 
@@ -1613,8 +1746,9 @@ CloudFront, S3, Lambda and SES sending are cents. WAF is ~$8/month. The DB is
 the main cost: RDS t4g.micro at ~$14/month. The VPC Lambdas' three interface
 endpoints (Secrets Manager, SES API, SQS) cost ~$7.30/month each per AZ, which is
 still cheaper than a NAT (~$33/month plus data); the data feeds' fetcher and
-the report renderer run outside the VPC for the same reason. Total ≈ $51/month in
-us-east-1, ≈ $58–63 in af-south-1; the breakdown is in
+the report renderer run outside the VPC for the same reason. The database's
+customer-managed KMS key (§ Decide before the first apply) adds $1–3. Total ≈ $52/month in
+us-east-1, ≈ $59–64 in af-south-1; the breakdown is in
 [infra/README.md § Cost](../infra/README.md#cost). CloudFront and WAF
 request charges have no ceiling; the `cloudfront-requests` alarm (us-east-1)
 fires within 5 minutes of a flood, long before the budgets' billing data
@@ -1629,11 +1763,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $6/day on $80, about 3× the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $7/day on $90, about 3.5× the
   ~$2/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($64 on the default $80, just above the
+- **Monthly, ACTUAL 80%** ($72 on the default $90, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent

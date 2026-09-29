@@ -202,8 +202,10 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 
 	// --- Background jobs -------------------------------------------------------------------
-	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs'), worker: oneOf('sqs') } },
-	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps, worker: publicHttps } },
+	// The API only: wakeWorker (jobs/wake.ts) is the one reader, and the worker
+	// never wakes itself (no send on the jobs queue, infra/jobs.tf; lambda-worker.test.ts).
+	JOB_TRANSPORT: { why: 'inprocess (the default) wakes no Lambda worker.', checks: { api: oneOf('sqs') } },
+	JOBS_QUEUE_URL: { why: 'The wake-up queue.', checks: { api: publicHttps } },
 	JOB_LEASE_SECONDS: { why: 'Tick tuning; the code default is safe.' },
 	JOB_MAX_PER_TICK: { why: 'Tick tuning; the code default is safe.' },
 	RUNS_KEPT_PER_PROJECT: { why: 'Run retention; the code default is safe.' },
