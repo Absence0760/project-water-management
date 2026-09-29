@@ -21,6 +21,7 @@
 	import FarmersPanel from './FarmersPanel.svelte';
 	import ImportReportPanel from './ImportReportPanel.svelte';
 	import { projectAnchor } from './links';
+	import { modelFacts, otherNodesLine } from './modelFacts';
 	import MembersPanel from './MembersPanel.svelte';
 	import { DEFAULT_TIME_ZONE, projectContext } from './project';
 	import RecentChanges from './RecentChanges.svelte';
@@ -74,23 +75,8 @@
 	const seriesCount = $derived(series?.length ?? null);
 	const runCount = $derived(runs?.length ?? null);
 
-	const stats = $derived.by(() => {
-		const m = editor.model;
-		const farms = m.nodes.filter((n) => n.kind === 'farm');
-		const outlet = m.nodes.find((n) => n.downstreamNodeId === null);
-		return {
-			farms: farms.length,
-			gauges: m.nodes.length - farms.length,
-			areaKm2: m.nodes.reduce((s, n) => s + (n.areaKm2 || 0), 0),
-			// Only a farm has a dam in the engine; a capacity on a gauge is inert (as the Dams page counts them).
-			damM3: farms.reduce((s, n) => s + (n.damCapacityM3 || 0), 0),
-			dams: farms.filter((n) => n.damCapacityM3 > 0).length,
-			crops: m.crops.length,
-			irrigatedHa: m.cropAreas.reduce((s, a) => s + (a.areaM2 || 0), 0) / 10_000,
-			transfers: m.transfers.filter((t) => t.enabled).length,
-			outlet: outlet?.name ?? null
-		};
-	});
+	// Counted as the Network and Dams pages count them (modelFacts.ts, issue #177).
+	const stats = $derived(modelFacts(editor.model));
 
 	// Anyone who can open the project can take a copy of it (viewers included).
 	const projectDownloads = $derived([
@@ -141,7 +127,7 @@
 	<!-- Each fact links to the tab where it is edited or looked at; the link is
 	     stretched over the whole tile, so the tile is the click target. -->
 	<dl class="stats">
-		<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>+ {stats.gauges} gauge{stats.gauges === 1 ? '' : 's'}</small></dd></div>
+		<div class="stat"><dt><a href="?tab=network">Hydrological units</a></dt><dd>{fmtNum(stats.farms)}<small>{otherNodesLine(stats)}</small></dd></div>
 		<div class="stat"><dt><a href="?tab=network">Catchment area</a></dt><dd>{fmtNum(stats.areaKm2, 2)}<small>km²</small></dd></div>
 		<div class="stat"><dt><a href="?tab=network">Dam capacity ({stats.dams} dam{stats.dams === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.damM3)}<small>m³</small></dd></div>
 		<div class="stat"><dt><a href="?tab=crops">Irrigated area ({stats.crops} crop{stats.crops === 1 ? '' : 's'})</a></dt><dd>{fmtNum(stats.irrigatedHa, 1)}<small>ha</small></dd></div>

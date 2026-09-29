@@ -1058,10 +1058,14 @@ it scrolls, and isn't fitted to the window.
   **Download** (Download project (JSON): the model, settings and input
   series; every member, viewers included), both through `fillHeader`. The
   download menu was in the Project details panel's head.
-- **The model**: eight headline facts (units and gauges, catchment area, dam
-  capacity and farm dams, irrigated area and crops, active transfers, time
-  series, model runs, the outflow gauge), counted from the page's lists and
-  the model as edited, so an upload or a run shows at once.
+- **The model**: eight headline facts (units, gauges and other water users,
+  catchment area, dam capacity and farm dams, irrigated area and crops,
+  active transfers, time series, model runs, the outflow gauge), counted from
+  the page's lists and the model as edited, so an upload or a run shows at
+  once. They count as the tab they link to does (`project/modelFacts.ts`,
+  issue #177): gauges and other water users apart, as the Network's header
+  line splits them, and the Dams page's dams (`modelDams`: a farm with at
+  least 1 m³).
 - **Fragments**: `?tab=project#members-h` (any id in `PROJECT_ANCHORS`)
   waits for that panel's heading, scrolls it to the top and holds it while
   the page settles (`holdAnchor`), with focus on the heading. History's
