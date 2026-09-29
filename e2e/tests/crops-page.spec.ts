@@ -8,7 +8,7 @@
 // there are. The full grids open from the Grids menu; nothing on the old tab
 // is lost.
 import type { Page } from '@playwright/test';
-import { addMember, putModel, seedRunnableProject } from '../support/api.ts';
+import { addMember, putModel, putSeries, seedRunnableProject, updateSettings } from '../support/api.ts';
 import { expectNoViolations } from '../support/a11y.ts';
 import { openCropGrid, openCropSheet } from '../support/crops.ts';
 import { API_URL } from '../support/env.ts';
@@ -217,6 +217,39 @@ test('with no crops the header and an Add crop prompt show', async ({ page, owne
 	await expect(page.getByTestId('crops-summary')).toHaveText('0 crops · nothing planted yet · water year October to September');
 	await expect(page.getByRole('region', { name: 'No crops yet' }).getByRole('button', { name: 'Add crop', exact: true })).toBeVisible();
 	await expect(page.locator('details.grids-menu')).toBeVisible();
+});
+
+test('with a daily A-pan series the demand chart says it shows the monthly means, which runs replace (issue #173)', async ({ page, owner }) => {
+	void owner;
+	const project = await seed(page, 'Crops page daily A-pan');
+	await page.goto(`/projects/${project.id}?tab=crops`);
+	const chart = page.getByRole('img', { name: /^Catchment irrigation demand by month/ });
+	await expect(chart).toBeVisible();
+	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);
+
+	await putSeries(page.request, project.id, { kind: 'evap_apan_mm', unit: 'mm', startDate: '2020-01-01', values: [5, 6, 7] });
+	await page.reload();
+	const note =
+		'Shows the monthly A-pan means. Runs use the daily A-pan series (Data tab) on the days it has a value and these means only on the other days, so their demand differs.';
+	await expect(page.getByTestId('crops-demand-apan')).toHaveText(note);
+	// Screen readers hear it with the chart.
+	await expect(chart).toHaveAccessibleName(/Show table holds the values\. Shows the monthly A-pan means\. .* so their demand differs\.$/);
+	await expectNoViolations(page);
+
+	// The grid modal's demand preview says the same.
+	const grid = await openCropGrid(page, 'demand');
+	await expect(grid.getByTestId('crops-demand-apan')).toHaveText(note);
+	await closeModal(page);
+
+	// With no monthly means the preview shows no demand, but the alert says runs still take the daily series.
+	await updateSettings(page.request, project.id, { apanMm: new Array(12).fill(0) });
+	await page.reload();
+	const alert = page.getByRole('region', { name: /^Irrigation demand by month/ }).locator('.alert');
+	await expect(alert).toHaveText(
+		"The monthly A-pan means aren't set, so this preview shows no demand. Runs use the daily A-pan series (Data tab) on the days it has a value. Enter the monthly A-pan values (Settings & calibration, Demand) for the other days."
+	);
+	await expect(alert.getByRole('link', { name: 'Enter the monthly A-pan values' })).toHaveAttribute('href', '?tab=settings');
+	await expect(page.getByTestId('crops-demand-apan')).toHaveCount(0);
 });
 
 test.describe('phone', () => {
