@@ -1299,6 +1299,11 @@
 //             with its store) and their Afrikaans words in the af
 //             catalogue. The members, farmers and team panels lost their
 //             added-at-once branches. No new dependency. Headroom ~3 KB.
+// 2026-09-29  calibration worker 36 → 38 KB (issue #67: measured 37 with
+//             main @ 0a9cc278 merged; total unchanged). The
+//             worker bundles the engine, and the engine now runs causally
+//             across a forecast tail (engine 1.28.0), so the run it fits
+//             with grew ~1 KB. No new dependency. Headroom ~1 KB worker.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1312,7 +1317,7 @@ export const BUDGET = Object.freeze({
 	totalCodeKb: 1194,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
-	largestWorkerKb: 36,
+	largestWorkerKb: 38,
 	largestSpreadsheetWorkerKb: 32,
 	largestAssetKb: 100,
 	landingKb: 25,

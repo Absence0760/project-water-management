@@ -114,7 +114,7 @@ describe('with record-wide statistics in play (land cover, a Reserve rule table)
 	const warm = runSeasonalOutlook(x, opts);
 	const cold = runSeasonalOutlook(x, { ...opts, warmStart: false });
 
-	it('a member reads the base run’s statistics, where a re-run member refits them on history + analogue', () => {
+	it('a member reads the base run’s statistics, where a re-run member refits them on its history before the decision date', () => {
 		const a = outlookAnalogue(resolveSeason(SEASON), 2005);
 		const snap = captureModelState(x, SEASON.decisionDate);
 		const w = runModelFrom(snap, outlookSeasonInput(x, xBase, SEASON, a, scale(0.85)).input);
@@ -140,9 +140,12 @@ describe('with record-wide statistics in play (land cover, a Reserve rule table)
 			}
 		}
 		expect(months).toBe(4 * 12 * 7);
-		// 9 of the 336 level-year-months (2026-09-26): the pinned curves read a month's natural volume differently.
-		expect(moved).toBe(9);
+		// 16 of the 336 level-year-months: the pinned curves rank the base run's whole record, a
+		// re-run member's the history before the decision date (engine ≥ 1.28.0: the analogue
+		// season is a forecast tail, which no record-wide statistic reads; 9 before, when the
+		// re-run member's curves took in the season too).
+		expect(moved).toBe(16);
 		expect(warm.levels.map((l) => l.yearsEwrMet)).toEqual([4, 5, 5, 4]);
-		expect(cold.levels.map((l) => l.yearsEwrMet)).toEqual([7, 7, 7, 6]);
+		expect(cold.levels.map((l) => l.yearsEwrMet)).toEqual([10, 8, 8, 8]);
 	});
 });

@@ -111,6 +111,12 @@ export interface RunContext {
 	 * that way, instead of the initial fill and the warm-up.
 	 */
 	warm?: { captureAt?: number; resume?: readonly number[] };
+	/**
+	 * The run's historical days, before its forecast tail (../forecastTail.ts;
+	 * absent = every day). A warm-up that cycles the forcing cycles only
+	 * these (engine ≥ 1.28.0), so a forecast tail can't change it.
+	 */
+	historyDays?: number;
 }
 
 /** Produces a run's natural flow. */
