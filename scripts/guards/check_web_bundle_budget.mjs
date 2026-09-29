@@ -1193,6 +1193,16 @@
 //             farm page's "This season" card with its Afrikaans (E3). Every
 //             piece already sits in a lazy chunk, so a further split would
 //             only move bytes. No new dependency. Headroom ~3 KB.
+// 2026-09-28  total 1137 → 1144 KB (measured 1141 with main @ 347ca24 merged
+//             in; main measured 1134). Issue #66's gap filling and series
+//             source (engine 1.20.0): the engine's flowGapFill module (fill,
+//             donor fit, warning), which prepareRun reads, in the pages'
+//             engine chunk (the calibration worker grew 0.1 KB); the fit
+//             record and run comparison's source and fill lines; the Data
+//             tab's fill shading and source editor; Settings' Flow gaps
+//             fields; two help entries (tips and articles). No new
+//             dependency. Largest chunk, tab chunk and worker unchanged (41,
+//             57, 34 KB). Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1203,7 +1213,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1137,
+	totalCodeKb: 1144,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 34,
