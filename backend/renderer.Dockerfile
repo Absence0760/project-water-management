@@ -49,7 +49,7 @@ FROM mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b7
 # for a fix in one of them); `pnpm check:pins` refuses an unpinned package.
 ARG APT_SNAPSHOT=20260928T000000Z
 RUN apt-get update --snapshot "$APT_SNAPSHOT" \
-	&& apt-get install --snapshot "$APT_SNAPSHOT" -y --no-install-recommends \
+	&& apt-get install -y --no-install-recommends --snapshot "$APT_SNAPSHOT" \
 		g++=4:13.2.0-7ubuntu1 \
 		make=4.3-4.1build2 \
 		cmake=3.28.3-1build7 \
