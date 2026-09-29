@@ -10,8 +10,19 @@
 #   - RDS never initiates connections;
 #   - the migrate Lambda additionally needs Secrets Manager (to read the
 #     RDS-managed master credentials), reached through ONE interface endpoint;
-#   - the worker Lambda (jobs.tf) talks to Postgres, to SQS and, for report
-#     emails, to SES (reports.tf).
+#   - the worker Lambda (jobs.tf) talks to Postgres, to SQS through the same
+#     SQS interface endpoint (its jobs, fetch, ingest, render and mail-event
+#     queues; jobs.tf), and to SES through the same SES API endpoint for
+#     report and alert emails (the rules are in reports.tf).
+#
+# The two Lambdas that do need the internet run OUTSIDE the VPC, with no
+# database access: the data feeds' fetcher (feeds.tf) and the report
+# renderer (reports.tf).
+#
+# Security groups: API, migrate and worker Lambdas; RDS (5432 from those
+# three only); one per interface endpoint (Secrets Manager here, SQS in
+# jobs.tf, SES in ses.tf). tests/guardrails.tftest.hcl (run "network")
+# pins all of this, and every security group's description.
 #
 # A NAT gateway would be ~$33/month + data before any traffic; an interface
 # endpoint is ~$7.30/month per AZ. If a future feature needs outbound calls
@@ -66,11 +77,18 @@ resource "aws_default_security_group" "default" {
 # ----------------------------------------------------------------------------
 # Security groups. Rules are separate resources (not inline) so the
 # Lambda ↔ RDS ↔ endpoint references can't form a dependency cycle.
+#
+# A security group's `description` can't be changed in place: editing it
+# replaces the group, and AWS won't delete a group while a Lambda ENI still
+# uses it, which can stall an apply for 20+ minutes. Keep each description
+# accurate before the first apply (AWS allows only a-zA-Z0-9. _-:/()#,@[]+=&;{}!$*
+# there: no apostrophes or em dashes). The network test pins them verbatim,
+# so a change is deliberate. Rule descriptions update in place.
 # ----------------------------------------------------------------------------
 
 resource "aws_security_group" "api_lambda" {
   name        = "${local.project}-api-lambda"
-  description = "API Lambda ENIs: egress to Postgres and the SES API endpoint only."
+  description = "API Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-api-lambda" }
 }
@@ -84,7 +102,7 @@ resource "aws_security_group" "migrate_lambda" {
 
 resource "aws_security_group" "rds" {
   name        = "${local.project}-rds"
-  description = "RDS Postgres: ingress 5432 from the two Lambda SGs only; no egress."
+  description = "RDS Postgres: ingress 5432 from the API, migrate and worker Lambda SGs only; no egress."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-rds" }
 }

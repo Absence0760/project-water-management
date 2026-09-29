@@ -276,7 +276,7 @@ resource "aws_lambda_permission" "worker_tick" {
 
 resource "aws_security_group" "worker_lambda" {
   name        = "${local.project}-worker-lambda"
-  description = "Worker Lambda ENIs: egress to Postgres and the SQS endpoint only."
+  description = "Worker Lambda ENIs: egress to Postgres and the SQS and SES API endpoints only."
   vpc_id      = aws_vpc.main.id
   tags        = { Name = "${local.project}-worker-lambda" }
 }
