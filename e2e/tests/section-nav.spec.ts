@@ -98,9 +98,8 @@ test('Runs & results: at 1440 and 1280 px every link is on the bar, in at most t
 		await expect(menu.getByRole('link', { name: 'Explore outputs' })).toBeVisible();
 		expect(await barRows(menu)).toBeLessThanOrEqual(2);
 		expect((await menu.boundingBox())!.height).toBeLessThan(TWO_ROWS);
-		// Its group names fit within the two rows, so they show.
-		expect(await menu.locator('.groups .grp-h').count()).toBeGreaterThan(1);
-		await expectNamedGroups(menu, await menu.locator('.groups .grp-h').allTextContents());
+		// Its group names would push links into More (they did in CI's fonts), so it has none and spaces its links evenly.
+		await expectEvenGaps(menu);
 	}
 });
 
@@ -193,9 +192,8 @@ test('River & reserve has the menu: every panel, a jump that lands below it, and
 	const menu = page.getByRole('navigation', { name: 'River sections' });
 	await expect(menu.getByRole('link')).toHaveText(['Flow vs reserve', 'Days below, by year', 'EWR by month', 'Uncertainty', 'Outcome matrix', 'Seasonal outlook', 'Water account']);
 	await expect(menu.getByRole('list', { name: 'How sure, and what if' }).getByRole('link')).toHaveText(['Uncertainty', 'Outcome matrix', 'Seasonal outlook']);
-	// The group names show on the bar, each just before its first link, so the gaps between groups read as groups (issue #162).
-	await expectNamedGroups(menu, ['The reserve', 'How sure, and what if', 'Water balance']);
-	await expect(menu.locator('.groups .grp-h').first().locator('+ a')).toHaveText('Flow vs reserve');
+	// Its group names would take it to a second row at 1440, so it has none and spaces its links evenly (issue #162).
+	await expectEvenGaps(menu);
 	await expect(menu.getByRole('link', { name: 'Flow vs reserve' })).toHaveAttribute('aria-current', 'location');
 	// One row at 1440, so the first screen, which fits the window below it, loses little.
 	expect(await barRows(menu)).toBe(1);

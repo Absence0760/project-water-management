@@ -10,7 +10,7 @@
 	// page scrolling. It gives up height only when it has to: on a wide screen
 	// the sign-up card (AuthCard `fit`) lets it grow to its full height when the
 	// window has room, and shrinks it to fit when it hasn't, never below the
-	// heading and two lines of points; on a phone it is at
+	// heading and one line of points; on a phone it is at
 	// most 12rem. While the points overflow, the box is a focusable, named group
 	// (the app's scroll-region watcher, $lib/a11y/scrollRegions), so the arrow
 	// keys scroll it; a fade at its foot says there is more below, and a
@@ -30,7 +30,7 @@
 	} = $props();
 
 	let scroller: HTMLDivElement | undefined = $state();
-	/** The heading row's height (one line, or two where the link wraps under it): the box's floor is it plus two lines of points. */
+	/** The heading row's height (one line, or two where the link wraps under it): the box's floor is it plus one line of points. */
 	let headHeight = $state(0);
 	/** Points below the box's foot: shows the fade. */
 	let more = $state(false);
@@ -60,7 +60,7 @@
 	class:fit-shrink={contained}
 	aria-labelledby="{id}-h"
 	data-terms-summary
-	style:min-height={contained && headHeight ? `calc(${headHeight}px + 4.9rem)` : null}
+	style:min-height={contained && headHeight ? `calc(${headHeight}px + 3.4rem)` : null}
 >
 	{#if contained}
 		<div class="head" bind:clientHeight={headHeight}>
@@ -111,8 +111,8 @@
 	.contained {
 		display: flex;
 		flex-direction: column;
-		/* Never shorter than the heading and two lines of points (set from the heading's height once it is on the page; this until then). */
-		min-height: 7.5rem;
+		/* Never shorter than the heading and one line of points (set from the heading's height once it is on the page; this until then). */
+		min-height: 6rem;
 	}
 	.head {
 		flex: none;

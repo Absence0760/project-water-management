@@ -200,7 +200,7 @@ test('the password field’s Show / Hide button is named for what it does, and t
 // Issue #162: on a laptop's window (1440×900, 1280×800) the sign-up page doesn't
 // scroll, in English and Afrikaans, with or without a dead invitation's warning.
 // The Terms' main points, which made it 1146 px tall, are their own scroll box
-// above the tick and the button: named by its heading, never under two lines of
+// above the tick and the button: named by its heading, never under one line of
 // points, reached with Tab and scrolled with the keyboard, with a fade while
 // there is more below and "Read the full terms" beside the heading. On a phone
 // the page scrolls and the box stays contained.
@@ -221,9 +221,9 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 800
 				const agree = page.getByRole('checkbox');
 				const button = page.getByRole('button', { name: w('Create account') });
 				for (const el of [heading, box, agree, page.locator('label[for="agree"]'), button]) await expect(el).toBeInViewport({ ratio: 1 });
-				// At least two lines of the points show.
+				// At least one line of the points shows, the fade and the link saying there is more.
 				const lines = await box.evaluate((el) => el.clientHeight / parseFloat(getComputedStyle(el.querySelector('li')!).lineHeight));
-				expect(lines, 'lines of points in view').toBeGreaterThanOrEqual(2);
+				expect(lines, 'lines of points in view').toBeGreaterThanOrEqual(1);
 				// "Read the full terms", beside the heading (by place: its words may not be translated yet).
 				await expect(page.locator('[data-terms-summary]').getByRole('link')).toHaveAttribute('href', /\/terms$/);
 				await expect(box).toHaveAttribute('tabindex', '0');

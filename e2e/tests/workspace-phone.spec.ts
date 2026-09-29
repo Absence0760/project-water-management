@@ -232,6 +232,8 @@ test.describe('desktop', () => {
 			await page.goto(`/projects/${p.id}?tab=${tab}`);
 			const h = header(page);
 			await expect(h.getByRole('button', { name: 'Add data' })).toBeVisible();
+			// Allocations adds Download CSV once its volumes load, which moves the row: measure the settled header.
+			if (tab === 'allocations') await expect(h.getByRole('link', { name: 'Download CSV' })).toBeVisible();
 			const title = (await h.getByRole('heading', { level: 1 }).boundingBox())!;
 			const pill = (await h.locator('summary', { hasText: 'Rain up to' }).boundingBox())!;
 			const add = (await h.getByRole('button', { name: 'Add data' }).boundingBox())!;

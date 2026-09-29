@@ -242,7 +242,7 @@
 	<!-- In-page menu (common/SectionNav, as on Settings and Runs): the page runs to seven panels
 	     under its first screen. Above the first screen, which fits the window below it. Its group
 	     names show on the bar (issue #162), so the gaps between the groups read as groups. -->
-	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" groupNames />{/if}
+	{#if shown && summary}<SectionNav groups={riverNavGroups(!!summary.ewrAssurance?.length)} label="River sections" />{/if}
 	<div class="first" class:fit bind:this={firstEl} style:--first-top="{firstTop}px">
 		<div class="top">
 		<LoadState loading={loading && !shown} error={shown ? null : error} {retry}>

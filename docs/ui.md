@@ -205,8 +205,10 @@ height until the form fits, so the page doesn't scroll at 1440×900 or
 1280×800 (in English and Afrikaans, a dead invitation's warning included)
 and the box, the tick and the button are on screen together. It shows the
 whole list whenever the window has room, and never less than its heading and
-two lines of points (the floor follows the heading's height, one line or two
-where the link wraps under it); below that the page scrolls after all. On a
+one line of points, the fade and the link saying there is more (the floor
+follows the heading's height, one line or two where the link wraps under it;
+it was two lines of points until CI's wider fonts overflowed Afrikaans with a
+dead invitation at 1280×800 by 9 px); below that the page scrolls after all. On a
 phone the page scrolls and the box is at most 12rem. While the points overflow
 the box is a focusable group named by its heading (the scroll-region watcher,
 `lib/a11y/scrollRegions.ts`), so Tab reaches it and the arrow keys scroll it,
@@ -2213,9 +2215,11 @@ sections"); each group is a list named for screen readers. With
 group's first link, in the same item, so the two wrap together and the fit
 counts both, and a wider gap before it. Without it the links are evenly
 spaced: a wider gap with no name on it read as a spacing bug (issue #162).
-River & reserve, Runs & results, Hydrological units and Data show their
-names; Settings & calibration doesn't, since with them its seventeen links
-no longer fit two rows at 1280 px, so its links are evenly spaced. The dashboards that fit the window (Summary, Network, Crops,
+Hydrological units and Data show their names. Settings & calibration, Runs
+& results and River & reserve don't, and space their links evenly: with the
+names, Settings' seventeen links no longer fit two rows at 1280 px, Runs'
+last links went into More and River's bar took a second row at 1440 px (in
+CI's fonts, which set text a little wider than a dev laptop's). The dashboards that fit the window (Summary, Network, Crops,
 Dams, Transfers, Scenarios) and the pages with at most two panels past their
 first screen at 1440×960 (Allocations, Project, Compare runs, Applications)
 have none (surveyed 2026-09-27 with the example catchments); History is left
@@ -3326,10 +3330,9 @@ viewers); an applicant and a farmer get their own views, as for every tab.
   compliance** (with a rule table), **EWR by month**, **Uncertainty**,
   **Outcome matrix**, **Seasonal outlook** and **Water account**, by the ids
   above (`river/river.ts`, `riverNavGroups`), in three groups: The reserve;
-  How sure, and what if; Water balance. The group names show on the bar,
-  each just before its group's first link (`SectionNav` `groupNames`, issue
-  #162: named for screen readers only, the wider gaps between the groups
-  read as spacing bugs).
+  How sure, and what if; Water balance, named for screen readers, its links
+  evenly spaced (issue #162: the wider gaps between unnamed groups read as
+  spacing bugs, and the names on the bar take it to a second row at 1440 px).
 - **Links in.** A `#res-…` fragment scrolls to its panel once the run is in
   and holds it there (`holdAnchor`), with focus on the panel's heading, waiting
   for a lazy panel's heading to arrive. An old link to one of these panels on

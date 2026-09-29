@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -42,9 +42,10 @@ describe('glossary links: one page per topic (issue #162)', () => {
 		const root = fileURLToPath(new URL('../..', import.meta.url)); // frontend/src
 		const offenders: string[] = [];
 		const walk = (dir: string) => {
-			for (const name of readdirSync(dir)) {
+			for (const d of readdirSync(dir, { withFileTypes: true })) {
+				const name = d.name;
 				const p = join(dir, name);
-				if (statSync(p).isDirectory()) walk(p);
+				if (d.isDirectory()) walk(p);
 				else if (/\.(svelte|ts)$/.test(name) && !name.endsWith('.test.ts')) {
 					const src = readFileSync(p, 'utf8');
 					if (
