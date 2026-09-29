@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { forecastSplit } from '../forecast';
+import { withForecastTail } from '../testing/forecastInvariants';
 import { fromEpochDay, toEpochDay } from '../calendar';
 import type { ModelInput, NetworkNode } from '../project';
 import { Rng } from '../random';
@@ -122,6 +124,25 @@ describe('prepareCalibration scores what runModel produces', () => {
 			checked++;
 		}
 		expect(checked).toBeGreaterThanOrEqual(20);
+	});
+
+	it('with a forecast tail too (engine 1.27.0: the warm-up and the land-cover threshold read the historical days, as runModel does)', () => {
+		let checked = 0;
+		for (let seed = 1; seed <= 150 && checked < 15; seed++) {
+			const input = withForecastTail(randomInput(seed), seed, 20);
+			if (forecastSplit(input).forecastFrom === null) continue;
+			let pb;
+			try {
+				pb = prepareCalibration(input);
+			} catch {
+				continue;
+			}
+			const want = runModel(input).series.find((s) => s.nodeId === null && s.key === 'simulated_outflow')!.values;
+			const got = pb.simulate(pb.startParams);
+			for (const t of pb.scoredDays) expect(got[t], `seed ${seed} day ${t}`).toBe(want[t]);
+			checked++;
+		}
+		expect(checked).toBeGreaterThanOrEqual(10);
 	});
 });
 

@@ -1288,7 +1288,7 @@ export function checkLandCover(input: ModelInput, out: ModelOutput): string | nu
 	const d = defaultProjectSettings();
 	const method = ['area', 'hiLo', 'manual'].includes(String(input.settings.flowShareMethod)) ? (input.settings.flowShareMethod as 'area' | 'hiLo' | 'manual') : d.flowShareMethod;
 	const share = flowShares(input.model.nodes, method, { ...d.hiLoSplit, ...((input.settings.hiLoSplit as object | undefined) ?? {}) }).share;
-	const q0 = lowFlowThreshold(natural);
+	const q0 = lowFlowThreshold(natural.slice(0, out.summary.historyDays ?? natural.length));
 	if (Math.abs(out.summary.landCover.lowFlowThresholdM3Day - q0) > tol(q0)) return `land-cover low-flow threshold ${out.summary.landCover.lowFlowThresholdM3Day} ≠ ${q0}`;
 	const sum = new Float64Array(out.days);
 	for (const [i, n] of input.model.nodes.entries()) {
@@ -1663,6 +1663,8 @@ export function checkInvariants(input: ModelInput, out: ModelOutput): string | n
  * - a full allocation ('fullAllocation'): the demand factor is one number per
  *   water year, and a scaled unit's demand over the run's days of a year adds
  *   up to the volume registered for it over them (none when it had no demand);
+ *   the year a forecast tail starts in (summary.historyDays, engine ≥
+ *   1.27.0) over its historical days, its tail days keeping that factor;
  * - no mode column in a run of another mode;
  * - RunSummary.allocations is there exactly when the input has allocations,
  *   with the mode the run used, and its per-source whole-year figures are
@@ -1714,18 +1716,28 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
 		if (mode === 'fullAllocation' && KF) {
 			const D = g('demand');
 			if (!D) return `${n.id}: demand series missing`;
+			// Before a forecast tail (engine ≥ 1.27.0): the year it starts in is fitted on its historical days.
+			const history = out.summary.historyDays ?? out.days;
+			/** Days a..b have one factor; with it their demand adds up to the volume registered over `reg` (none without demand). */
+			const span = (a: number, b: number, wy: number, reg: number): string | null => {
+				let d = 0;
+				for (let k = a; k <= b; k++) {
+					if (KF[k] !== KF[a]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
+					d += D[k]!;
+				}
+				const want = KF[a]! > 0 ? reg : 0;
+				return Math.abs(d - want) > tol(Math.max(d, reg)) ? `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run` : null;
+			};
 			for (let t = 0; t < out.days; ) {
 				const wy = waterYearOf(day0 + t);
 				const end = toEpochDay(`${wy + 1}-10-01`) - 1;
 				const last = Math.min(out.days - 1, end - day0);
-				let d = 0;
-				for (let k = t; k <= last; k++) {
-					if (KF[k] !== KF[t]) return `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
-					d += D[k]!;
-				}
-				const reg = registeredOver(allocs, wy, day0 + t, day0 + last);
-				const want = KF[t]! > 0 ? reg : 0;
-				if (Math.abs(d - want) > tol(Math.max(d, reg))) return `${n.id}: demand over water year ${wy} is ${d}, not the ${want} registered for its days in the run`;
+				const whole = registeredOver(allocs, wy, day0 + t, day0 + last);
+				// Cut by the tail: the historical days add up on their own, and the tail days keep their factor.
+				let bad = t < history && last >= history ? span(t, history - 1, wy, registeredOver(allocs, wy, day0 + t, day0 + history - 1)) : span(t, last, wy, whole);
+				if (!bad && t < history && last >= history)
+					for (let k = history; k <= last && !bad; k++) if (KF[k] !== KF[t]) bad = `${n.id} day ${k}: the full-allocation demand factor changes inside water year ${wy}`;
+				if (bad) return bad;
 				t = last + 1;
 			}
 		} else if (mode === 'fullAllocation' && allocs.length && (n.kind === 'farm' || n.kind === 'user')) {

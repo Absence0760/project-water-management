@@ -17,8 +17,10 @@
 //
 // The older path (`warmStart: false`, outlookMemberInput + a full run per
 // member) re-runs the history in every member and refits those statistics
-// on each member's own record (history + analogue season); it is kept, for
-// the backend job that runs members one at a time and for comparison.
+// on each member's own history, up to the decision date (engine ≥ 1.27.0:
+// the analogue season is the run's forecast tail, which no record-wide
+// statistic reads; before, they took in the season too); it is kept for
+// comparison, and the backend reads its input problems.
 //
 // Per demand level, across the analogue years: season-end dam storage, the
 // share of demand met, and the river's requirement (Reserve months met with

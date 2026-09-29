@@ -461,7 +461,18 @@ export function assessSite(
 	 * (baseflowHistoryAt, carried in the snapshot; engine ≥ 1.6.0): the
 	 * record a month's base-flow window reaches back into.
 	 */
-	history: ArrayLike<number> = []
+	history: ArrayLike<number> = [],
+	/**
+	 * The run's historical days, before a forecast tail (engine ≥ 1.27.0,
+	 * engine-audit.md K1; default every day). A month that straddles the
+	 * last of them isn't assessed (the history alone doesn't complete it),
+	 * and the natural duration curves rank the historical months only, so a
+	 * tail never changes a historical month's requirement. A month wholly in
+	 * the tail is assessed on those curves (the outlook's season, an
+	 * analogue year run as forecast rain); on its water-year month's own
+	 * months when the history has none of that calendar month.
+	 */
+	historyDays: number = days
 ): { report: EwrAssuranceSite; requiredM3Day: Float64Array } {
 	const { table } = site;
 	const unit = table.unit;
@@ -480,7 +491,7 @@ export function assessSite(
 		}
 		return monthBaseflowSum(w, len);
 	};
-	const inRun = completeMonths(startDate, days);
+	const inRun = completeMonths(startDate, days).filter((b) => b.from + b.days <= historyDays || b.from >= historyDays);
 	const requiredM3Day = new Float64Array(days).fill(NaN);
 	const d0 = toEpochDay(startDate);
 	// The month the run starts inside, whole with the days carried from before it (from < 0).
@@ -509,7 +520,11 @@ export function assessSite(
 		};
 	});
 
-	const byW = Array.from({ length: 12 }, (_, w) => rows.filter((r) => r.w === w));
+	const byW = Array.from({ length: 12 }, (_, w) => {
+		const all = rows.filter((r) => r.w === w);
+		const past = all.filter((r) => r.from + r.days <= historyDays);
+		return past.length ? past : all;
+	});
 	const curves = byW.map((list, w) => {
 		const ewr = table.ewr[w]!.map((v) => v * table.scale);
 		const low = table.lowFlow ? table.lowFlow[w]!.map((v) => v * table.scale) : null;

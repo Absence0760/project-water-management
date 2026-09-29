@@ -2403,6 +2403,14 @@ export interface GroundwaterAnnualUse {
 }
 
 export interface RunSummary {
+	/**
+	 * The run's historical days, those before its forecast tail, when it has
+	 * one (engine ≥ 1.27.0, docs/model.md §2.4f): the record-wide figures
+	 * (the land-cover threshold, the Reserve's curves, a full allocation's
+	 * factors) read only these. Absent = every day. A saved run never has a
+	 * tail of its own (forecast mode's summaries are the run without it).
+	 */
+	historyDays?: number;
 	farms: FarmSummary[];
 	/** Other water users (engine ≥ 0.22.0, WP-1.33); absent when the network has none. */
 	users?: UserSummary[];
