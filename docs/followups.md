@@ -2213,11 +2213,12 @@ role and not before it.
         and override mode records a table edit of the curve, after the
         capacity op when the dam is raised with it (scenarios.md § Dam
         capacity).
-      - *Transfer room ignores today's release*: a transfer into a dam with
-        a release rule is sized as if the dam kept what it releases, so it
-        can move less than it could (never more). Same conservative choice
-        as for today's inflow (§2.6). Fix with the release computed before
-        the transfer (needs Z at transfer time); trigger: a scheme with both.
+      - ~~*Transfer room ignores today's release*~~: done (engine 1.29.0,
+        issue #67): the room counts a fixed release's floor, the release
+        with no inflow and nothing transferred in (`fixedReleaseFloor`,
+        model.md §2.6). A pass-inflow release stays uncounted: it is at most
+        the day's inflow, which the room doesn't count either, and both are
+        only known after the transfers are settled.
       - ~~*Self-checks water-balance table*~~: done (76f24440): optional
         columns for groundwater, storage set, other use, depletion and
         seepage lost, shown only when a run has them; a release joins the

@@ -11,7 +11,7 @@ import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations
 import { ALLOCATION_SERIES, matchAllocations, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { curveAreaAt, resolveDamCurve, resolveRelease } from '../network/dam';
+import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease } from '../network/dam';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
 import { EWR_BINDING_SERIES } from '../network/bindingSeries';
@@ -384,7 +384,8 @@ interface Rule {
  *   dam's capacity × MAX(the rule's minimum, the dam's minimum operating level);
  * - room at the destination (audit N4): a farm that sends nothing receives
  *   at most MAX(0, capacity − (yesterday's storage + rain on the dam −
- *   evaporation − seepage) + today's demand D);
+ *   evaporation − seepage) + today's demand D + a fixed release's floor,
+ *   engine ≥ 1.29.0);
  * - no water left on the table: for a source whose rules all go to farms fed
  *   only by it, the volume that left is at least MIN(Σ over its destinations
  *   of MIN(Σ limits into it, its room), yesterday's storage − the highest
@@ -422,18 +423,24 @@ export function checkTransferLimits(input: ModelInput, out: ModelOutput): string
 	const farmIndex = new Map(farms.map((f, i) => [f.id, i]));
 	const farmD = farms.map((f) => get.get(`${f.id}|demand`)!);
 	const farmLoss = farms.map((f) => ['rain_on_dam', 'dam_evaporation', 'dam_seepage'].map((k) => get.get(`${f.id}|${k}`)));
+	const farmRelease = farms.map((f) => resolveRelease(f, []));
 	/**
 	 * A destination's room that day (audit N4): capacity − (yesterday's storage
 	 * + rain on the dam − evaporation − seepage) + today's demand D (engine ≥
-	 * 0.19.0 counts the dam's gains and losses, N2). The reported evaporation
+	 * 0.19.0 counts the dam's gains and losses, N2) + a fixed release's floor
+	 * (engine ≥ 1.29.0: the release with no inflow and nothing transferred
+	 * in, fixedReleaseFloor). The reported evaporation
 	 * and seepage are capped at what the dam held with the transfer in; on the
 	 * days that cap bites the room read here is smaller than the engine's but
 	 * still at least capacity + the volume that moved + D, so neither check
-	 * below can trip on it.
+	 * below can trip on it (the dam is then empty, and the floor 0 in both).
 	 */
 	const roomOf = (fi: number, t: number) => {
 		const [pd, e, sp] = farmLoss[fi]!.map((v) => v?.[t] ?? 0);
-		return farms[fi]!.damCapacityM3 - (storage(farms[fi]!.id, t) + pd! - e! - sp!) + farmD[fi]![t]!;
+		const f = farms[fi]!;
+		const held = storage(f.id, t) + pd! - e! - sp!;
+		const rel = farmRelease[fi] ? fixedReleaseFloor(farmRelease[fi]!, monthOfEpochDay(d0 + t), held, f.damMinPct * f.damCapacityM3) : 0;
+		return f.damCapacityM3 - held + farmD[fi]![t]! + rel;
 	};
 	for (let t = 0; t < out.days; t++) {
 		const month = monthOfEpochDay(d0 + t);
