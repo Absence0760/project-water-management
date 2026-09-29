@@ -858,7 +858,7 @@ email show them by the project role they give, viewer / editor / owner
   `400` (`backend/src/teams/settings.ts`; the 055 CHECK holds the same shape
   in the database). Every member reads them; only an admin changes them.
 - `TeamMember = { userId, email, displayName, role }`
-- `409 a team must keep at least one admin` when removing or demoting the last
+- `409 a team must keep at least one owner` when removing or demoting the last
   admin (including the last admin leaving). A team you aren't in is `404`.
 
 ### Portfolio

@@ -469,10 +469,10 @@ describe('teams client', () => {
 	});
 
 	it('surfaces the last-admin 409 message', async () => {
-		const f = mockFetch(409, { error: 'a team must keep at least one admin' });
+		const f = mockFetch(409, { error: 'a team must keep at least one owner' });
 		const err = await createApi('', f).teams.removeMember('t', 'u').catch((e) => e);
 		expect(err.status).toBe(409);
-		expect(err.message).toBe('a team must keep at least one admin');
+		expect(err.message).toBe('a team must keep at least one owner');
 	});
 
 	it('imports a project file: the document is the body, teamId and run go in the query', async () => {
