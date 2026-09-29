@@ -15,14 +15,14 @@ test('a gauged range needs its source, and saves with it', async ({ page, owner 
 	await flags.getByLabel(/^Gauge record: highest gauging/).fill('0.3');
 	await expect(flags.getByRole('alert')).toHaveText('Gauge record gauged range: A gauged range needs its source.');
 	await expect(page.getByRole('button', { name: 'Save settings' })).toBeDisabled();
-	await flags.getByLabel('Source').fill('Synthetic rating table');
+	await flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true }).fill('Synthetic rating table');
 	await expect(flags.getByRole('alert')).toHaveCount(0);
 	await flags.getByLabel('Suspect days').selectOption({ label: 'Score as recorded' });
 	await page.getByRole('button', { name: 'Save settings' }).click();
 	await expect(page.getByRole('status').filter({ hasText: 'Settings saved.' })).toBeVisible();
 	await page.reload();
 	await expect(flags.getByLabel(/^Gauge record: highest gauging/)).toHaveValue('0.3');
-	await expect(flags.getByLabel('Source')).toHaveValue('Synthetic rating table');
+	await expect(flags.getByRole('textbox', { name: 'Source of the gauge record gauged range', exact: true })).toHaveValue('Synthetic rating table');
 	await expect(flags.getByLabel('Suspect days')).toHaveValue('include');
 	await expect(flags.getByLabel('Days above the highest gauging')).toHaveValue('censor');
 });

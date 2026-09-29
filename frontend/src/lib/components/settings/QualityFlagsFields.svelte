@@ -48,11 +48,11 @@
 				<NumberInput id="{uid}-{kind}-max" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMaxM3s, (v) => set(kind, { gaugedMaxM3s: v })} placeholder="not known" />
 			</div>
 			<div class="field">
-				<label for="{uid}-{kind}-min">Lowest gauging <span class="u">(m³/s)</span></label>
+				<label for="{uid}-{kind}-min"><span class="visually-hidden">{RECORD_NAME[kind]}: </span>Lowest gauging <span class="u">(m³/s)</span></label>
 				<NumberInput id="{uid}-{kind}-min" nullable min={0} step="any" disabled={readonly} bind:value={() => r.gaugedMinM3s, (v) => set(kind, { gaugedMinM3s: v })} placeholder="not known" />
 			</div>
 			<div class="field source">
-				<label for="{uid}-{kind}-src">Source</label>
+				<label for="{uid}-{kind}-src">Source<span class="visually-hidden"> of the {RECORD_NAME[kind].toLowerCase()} gauged range</span></label>
 				<input
 					id="{uid}-{kind}-src"
 					type="text"
