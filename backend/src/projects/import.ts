@@ -97,10 +97,26 @@ export async function insertProjectFile(db: Db, data: ProjectFile, opts: InsertO
 	await saveModel(db, id, model);
 	for (const s of data.series) {
 		await db.query(
-			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-			// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
-			[id, s.kind, s.name, s.unit, s.startDate, s.values, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null, s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null]
+			`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, day_boundary, site_node_id,
+				source, source_unit, source_unit_factor)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			[
+				id,
+				s.kind,
+				s.name,
+				s.unit,
+				s.startDate,
+				s.values,
+				s.product ?? null,
+				s.productVersion ?? null,
+				s.dayBoundary ?? null,
+				// The site follows its gauge to the fresh id (projectFileProblems checked it is one of the file's).
+				s.siteNodeId ? (ids.get(s.siteNodeId) ?? null) : null,
+				s.source ?? null,
+				// The unit the values were first given in (107): the file's record of it, else the file's own unit.
+				s.sourceUnit ?? s.givenUnit,
+				s.sourceUnitFactor ?? s.unitFactor
+			]
 		);
 	}
 	// The project's history starts with the imported state (030_history.sql).

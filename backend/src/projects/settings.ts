@@ -45,6 +45,9 @@ import {
 	wr2012ReferenceIssues,
 	rainSourceError,
 	ZERO_RAIN_MODES,
+	GAP_FILL_DONORS,
+	GAP_FILL_LIMITS,
+	sourceError,
 	type ProjectSettings
 } from '@water-management/engine';
 import { z } from 'zod';
@@ -406,6 +409,29 @@ const ScoredPeriod = z
 			.optional()
 	})
 	.strict();
+/**
+ * One observed record's gap filling (engine flowGapFill.ts, engine ≥ 1.20.0),
+ * replaced whole; null = not filled. The donor must be another record: the
+ * patch schema checks it against the key it sits under.
+ */
+const GapFillSpec = z
+	.object({
+		interpolateMaxDays: z.number().int().min(0).max(GAP_FILL_LIMITS.interpolateMaxDays),
+		donor: z.enum(GAP_FILL_DONORS).nullable(),
+		donorMaxDays: z.number().int().min(1).max(GAP_FILL_LIMITS.donorMaxDays),
+		donorMinOverlapDays: z.number().int().min(GAP_FILL_LIMITS.donorMinOverlapDaysMin).max(GAP_FILL_LIMITS.donorMinOverlapDaysMax)
+	})
+	.strict();
+const notOwnDonor = (kind: string) => (s: z.infer<typeof GapFillSpec> | null) => s === null || s.donor !== kind;
+const FlowGapFill = z
+	.object({
+		flow_observed_m3s: GapFillSpec.nullable().refine(notOwnDonor('flow_observed_m3s'), 'a record cannot fill its own gaps: pick another record as the donor'),
+		flow_logger_m3s: GapFillSpec.nullable().refine(notOwnDonor('flow_logger_m3s'), 'a record cannot fill its own gaps: pick another record as the donor'),
+		useFilledDays: z.boolean()
+	})
+	.partial()
+	.strict();
+
 const params = z.record(z.string().max(40), z.number().finite()).refine((o) => Object.keys(o).length <= 30, 'too many parameters');
 const ValidationTest = z.object({ params, calibration: ScoredPeriod, validation: ScoredPeriod });
 const flowKind = z.enum(CALIBRATION_FLOW_KINDS);
@@ -538,7 +564,19 @@ export const FitRecord = z
 					.optional()
 			})
 			.strict()
-			.optional()
+			.optional(),
+		// Engine ≥ 1.20.0 (issue #66): the fitted record's source and given unit (107_series_source.sql; null = not recorded),
+		// and its gap filling. Optional: a record made before them has neither.
+		observedOrigin: z
+			.object({
+				source: z.string().refine((v) => sourceError(v) === null, 'not a valid source').nullable(),
+				unit: z.string().min(1).max(20).nullable(),
+				factor: z.number().finite().positive().nullable()
+			})
+			.strict()
+			.nullable()
+			.optional(),
+		flowGapFill: z.object({ spec: GapFillSpec.nullable(), useFilledDays: z.boolean() }).strict().optional()
 	})
 	.strict();
 
@@ -634,6 +672,8 @@ export const SettingsPatch = z
 		calibrationEnd: isoDate.nullable(),
 		calibrationFlowKind: z.enum(CALIBRATION_FLOW_KINDS).nullable(),
 		calibrationExclusions: ExclusionList,
+		// Gap filling of the observed flow records (engine flowGapFill.ts, issue #66): either record's spec (replaced whole) or the switch.
+		flowGapFill: FlowGapFill,
 		fitRecord: FitRecord.nullable(),
 		// Gauge-vs-logger thresholds (engine resolveDataQuality). Each bound is
 		// checked on its own (min ≤ 1 ≤ max), so any subset can be patched.

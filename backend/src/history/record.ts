@@ -277,12 +277,17 @@ export interface SeriesRow {
 	productVersion?: string | null;
 	/** How sub-daily readings were added up into days (033_series_day_boundary.sql); null = daily values. Absent = null. */
 	dayBoundary?: string | null;
+	/** Where the values came from and the unit they were given in (107_series_source.sql); null = not recorded. Absent = null. */
+	source?: string | null;
+	sourceUnit?: string | null;
+	sourceUnitFactor?: number | null;
 }
 
 /** The series (kind, name) of a project, locked for the change about to be made; null when there is none. */
 export async function lockSeries(db: Db, projectId: string, kind: string, name: string): Promise<SeriesRow | null> {
 	const { rows } = await db.query<SeriesRow>(
-		`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary"
+		`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
+			source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor"
 		 FROM time_series WHERE project_id = $1 AND kind = $2 AND name = $3 FOR UPDATE`,
 		[projectId, kind, name]
 	);
@@ -303,10 +308,27 @@ export async function recordSeriesRevision(
 	// and so does a flow record's site (085), read from the row as it stands before the change.
 	const { rows } = await db.query<{ id: string }>(
 		`INSERT INTO series_revision (project_id, series_id, kind, name, unit, start_date, "values", values_sha256, created_by, reason, product, product_version, day_boundary,
-			site_node_id)
+			site_node_id, source, source_unit, source_unit_factor)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7::float8[], $8, app_current_user_id(), $9, $10, $11, $12,
-			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2)) RETURNING id`,
-		[projectId, s.id, s.kind, s.name, s.unit, s.startDate, s.values, valuesSha256(s.values), reason, s.product ?? null, s.productVersion ?? null, s.dayBoundary ?? null]
+			(SELECT site_node_id FROM time_series WHERE project_id = $1 AND id = $2), $13, $14, $15) RETURNING id`,
+		[
+			projectId,
+			s.id,
+			s.kind,
+			s.name,
+			s.unit,
+			s.startDate,
+			s.values,
+			valuesSha256(s.values),
+			reason,
+			s.product ?? null,
+			s.productVersion ?? null,
+			s.dayBoundary ?? null,
+			// The source and unit too (107): they describe these values.
+			s.source ?? null,
+			s.sourceUnit ?? null,
+			s.sourceUnitFactor ?? null
+		]
 	);
 	return String(rows[0]!.id);
 }

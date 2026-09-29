@@ -9,6 +9,7 @@ import {
 	groundwaterAnnualLines,
 	ewrSiteLines,
 	zeroRainLines,
+	flowGapFillLines,
 	rainSourceCsvLines,
 	accumulationLines,
 	doubleMassLines,
@@ -417,6 +418,37 @@ describe('catchment rain treated as missing block (CR-20)', () => {
 		]);
 		expect([...zeroRainLines(null)][1]).toBe('No catchment rain series');
 		expect([...zeroRainLines(undefined)][1]).toMatch(/before engine 0\.15\.0/);
+	});
+});
+
+describe('flowGapFillLines (engine ≥ 1.20.0, issue #66)', () => {
+	it('lists each filled record, and nothing at all when none is', () => {
+		const spec = { interpolateMaxDays: 5, donor: 'flow_logger_m3s' as const, donorMaxDays: 60, donorMinOverlapDays: 365 };
+		const rows = [
+			...flowGapFillLines([
+				{
+					kind: 'flow_observed_m3s',
+					spec,
+					interpolatedDays: 7,
+					interpolatedGaps: 3,
+					donorDays: 20,
+					donorGaps: 1,
+					clampedDays: 1,
+					clampM3s: 40,
+					donor: { kind: 'flow_logger_m3s', ratio: 0.9, overlapDays: 800, correlation: 0.95 },
+					donorRefused: null,
+					openGaps: 1,
+					openDays: 90
+				}
+			])
+		];
+		expect(rows).toEqual([
+			'Gaps filled in the observed flow records (in the run only; the stored records are unchanged)',
+			'Record,Interpolated up to (days),Days interpolated,Donor record,Donor ratio,Shared days,Correlation r,Days from the donor,Days clamped to the record maximum,Donor refused because,Gaps left open,Days left open',
+			'observed gauge flow,5,7,logger flow,0.9,800,0.95,20,1,,1,90'
+		]);
+		expect([...flowGapFillLines(undefined)]).toEqual([]);
+		expect([...flowGapFillLines([])]).toEqual([]);
 	});
 });
 

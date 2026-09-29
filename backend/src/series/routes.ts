@@ -5,16 +5,19 @@ import { withUser } from '../db/tx.js';
 import { lockSeries, recordAudit, recordSeriesRevision, seriesSubject, valuesSha256, type SeriesRow } from '../history/record.js';
 import { ApiError, mustChange } from '../http/errors.js';
 import { requireRole, UUID } from '../projects/access.js';
-import { CALIBRATION_FLOW_KINDS, provenanceLabel, sameProvenance, type SeriesProvenance } from '@water-management/engine';
+import { CALIBRATION_FLOW_KINDS, originLabel, provenanceLabel, sameOrigin, sameProvenance, type SeriesOrigin, type SeriesProvenance } from '@water-management/engine';
 import { z } from 'zod';
 import {
 	assertRoomForSeries,
+	bodyOrigin,
 	bodyProvenance,
 	checkProvenance,
 	mergeInto,
 	ProvenanceFields,
+	rowOrigin,
 	rowProvenance,
 	SERIES_META as META,
+	SourceField,
 	SeriesBody as PutBody,
 	setDayBoundary,
 	type SeriesMetaRow
@@ -36,6 +39,10 @@ const sameValues = (a: SeriesRow, unit: string, startDate: string, values: reado
 const provenanceChange = (before: SeriesProvenance | null, after: SeriesProvenance | null) =>
 	sameProvenance(before, after) ? {} : { provenance: { from: provenanceLabel(before), to: provenanceLabel(after) } };
 
+/** A source or unit change as the audit subject records it (107_series_source.sql): `{ origin: { from, to } }` labels, or nothing. */
+const originChange = (before: SeriesOrigin | null, after: SeriesOrigin | null) =>
+	sameOrigin(before, after) ? {} : { origin: { from: originLabel(before), to: originLabel(after) } };
+
 /**
  * Replace a series whole, keeping its previous values as a series revision
  * first (the history's restore point), so a replace, and a restore too, can
@@ -51,26 +58,44 @@ const provenanceChange = (before: SeriesProvenance | null, after: SeriesProvenan
 export async function replaceSeries(
 	db: Db,
 	projectId: string,
-	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null },
+	body: { kind: string; name: string; unit: string; startDate: string; values: (number | null)[]; provenance?: SeriesProvenance | null; origin?: SeriesOrigin | null },
 	opts: { restoredFrom?: string; revisionReason?: 'replace' | 'feed_replace'; audit?: Record<string, unknown>; feedId?: string } = {}
 ): Promise<{ meta: SeriesMetaRow; daysChanged: number }> {
 	const existing = await lockSeries(db, projectId, body.kind, body.name);
 	if (!existing) await assertRoomForSeries(db, projectId);
 	const provenance = body.provenance ?? null;
+	// Where the values came from and the unit they were given in (107): a replace records exactly what it was, or clears it.
+	const origin = body.origin ?? null;
 	const { rows } = await db.query<SeriesMetaRow>(
 		// A person's replace (or restore) makes the whole series the user's: a
 		// data feed writing it keeps every day from here on (feed_id NULL clears
 		// feed_days, 031_feed_days). A data feed's confirmed replacement
 		// (opts.feedId, feeds/ingest.ts) makes it the feed's: every day of the
 		// new record is one it wrote, so its later re-reads still revise them.
-		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days)
+		`INSERT INTO time_series (project_id, kind, name, unit, start_date, "values", product, product_version, feed_id, feed_days,
+			source, source_unit, source_unit_factor)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::uuid,
-			CASE WHEN $9::uuid IS NULL THEN NULL ELSE datemultirange(daterange($5::date, $5::date + cardinality($6::float8[]))) END)
+			CASE WHEN $9::uuid IS NULL THEN NULL ELSE datemultirange(daterange($5::date, $5::date + cardinality($6::float8[]))) END,
+			$10, $11, $12)
 		 ON CONFLICT (project_id, kind, name) DO UPDATE SET unit = EXCLUDED.unit,
 			start_date = EXCLUDED.start_date, "values" = EXCLUDED."values", product = EXCLUDED.product,
-			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days
+			product_version = EXCLUDED.product_version, updated_at = now(), feed_id = EXCLUDED.feed_id, feed_days = EXCLUDED.feed_days,
+			source = EXCLUDED.source, source_unit = EXCLUDED.source_unit, source_unit_factor = EXCLUDED.source_unit_factor
 		 RETURNING ${META}`,
-		[projectId, body.kind, body.name, body.unit, body.startDate, body.values, provenance?.product ?? null, provenance?.version ?? null, opts.feedId ?? null]
+		[
+			projectId,
+			body.kind,
+			body.name,
+			body.unit,
+			body.startDate,
+			body.values,
+			provenance?.product ?? null,
+			provenance?.version ?? null,
+			opts.feedId ?? null,
+			origin?.source ?? null,
+			origin?.unit ?? null,
+			origin?.factor ?? null
+		]
 	);
 	const meta = rows[0]!;
 	// Nor is any day an API key's now (series_key_days, 053: what the ingest hold leaves out of a key's limit).
@@ -82,9 +107,16 @@ export async function replaceSeries(
 		return { meta, daysChanged: subject.daysChanged as number };
 	}
 	const held = rowProvenance({ product: existing.product ?? null, productVersion: existing.productVersion ?? null });
-	if (!sameValues(existing, body.unit, body.startDate, body.values) || !sameProvenance(held, provenance)) {
+	const heldOrigin = rowOrigin(existing);
+	if (!sameValues(existing, body.unit, body.startDate, body.values) || !sameProvenance(held, provenance) || !sameOrigin(heldOrigin, origin)) {
 		const revisionId = await recordSeriesRevision(db, projectId, existing, opts.revisionReason ?? 'replace');
-		const subject = seriesSubject(meta, existing, body, { revisionId, ...restore, ...provenanceChange(held, provenance), ...opts.audit });
+		const subject = seriesSubject(meta, existing, body, {
+			revisionId,
+			...restore,
+			...provenanceChange(held, provenance),
+			...originChange(heldOrigin, origin),
+			...opts.audit
+		});
 		await recordAudit(db, projectId, restore ? 'restore' : 'series.replaced', subject);
 		return { meta, daysChanged: subject.daysChanged as number };
 	}
@@ -106,10 +138,30 @@ export async function wakeForRerun(queued: QueuedRerun | null): Promise<void> {
  * the network, null = the outlet), without touching its values.
  */
 const LabelBody = z
-	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional() })
+	.object({ ...ProvenanceFields, siteNodeId: z.string().uuid().nullable().optional(), source: SourceField })
 	.strict()
 	.superRefine(checkProvenance)
-	.refine((b) => b.product !== undefined || b.siteNodeId !== undefined, 'give product and productVersion (both null: not recorded), or siteNodeId');
+	.refine(
+		(b) => b.product !== undefined || b.siteNodeId !== undefined || b.source !== undefined,
+		'give product and productVersion (both null: not recorded), siteNodeId, or source (null: not recorded)'
+	);
+
+/**
+ * Say where a series' values came from (107_series_source.sql), without
+ * touching them or the unit they were given in (that is the upload's, never
+ * a person's to restate). Logged as series.labelled with the change.
+ */
+async function setSource(db: Db, projectId: string, seriesId: string, source: string | null): Promise<SeriesMetaRow> {
+	const { rows: cur } = await db.query<{ kind: string; name: string; source: string | null; sourceUnit: string | null; sourceUnitFactor: number | null }>(
+		`SELECT kind, name, source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
+		[projectId, seriesId]
+	);
+	if (!cur[0]) throw new ApiError(404, 'not found');
+	const { rows } = await db.query<SeriesMetaRow>(`UPDATE time_series SET source = $3 WHERE project_id = $1 AND id = $2 RETURNING ${META}`, [projectId, seriesId, source]);
+	const change = originChange(rowOrigin(cur[0]), rowOrigin({ ...cur[0], source }));
+	if ('origin' in change) await recordAudit(db, projectId, 'series.labelled', { seriesId, kind: cur[0].kind, name: cur[0].name, ...change });
+	return rows[0]!;
+}
 
 /**
  * Move a flow record to a site: a gauge node of the project's model that is
@@ -190,7 +242,7 @@ export const seriesRoutes = new Hono<AuthEnv>()
 		const { meta, queued } = await withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
 			// A replace says how its days were built (a sub-daily upload's day boundary), or clears it.
-			const r = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null });
+			const r = await replaceSeries(db, id, { ...body, provenance: bodyProvenance(body) ?? null, origin: bodyOrigin(body) });
 			// The new-data hook (series/newData.ts): a replace that changed days is new data too.
 			const queued = await queueRerunFor(db, id, { seriesId: r.meta.id, kind: r.meta.kind, name: r.meta.name, daysChanged: r.daysChanged, via: 'user' });
 			return { meta: await setDayBoundary(db, id, r.meta, body.dayBoundary ?? null), queued };
@@ -211,7 +263,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
 			const sited = body.siteNodeId !== undefined ? await setSite(db, id, seriesId, body.siteNodeId) : null;
-			if (body.product === undefined) return c.json(sited!);
+			const sourced = body.source !== undefined ? await setSource(db, id, seriesId, body.source) : null;
+			if (body.product === undefined) return c.json((sourced ?? sited)!);
 			const { rows: cur } = await db.query<{ product: string | null; productVersion: string | null }>(
 				`SELECT product, product_version AS "productVersion" FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]
@@ -254,7 +307,8 @@ export const seriesRoutes = new Hono<AuthEnv>()
 			await requireRole(db, id, 'editor');
 			if (!UUID.test(seriesId)) throw new ApiError(404, 'not found');
 			const { rows } = await db.query<SeriesRow>(
-				`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary"
+				`SELECT id, kind, name, unit, start_date AS "startDate", "values", product, product_version AS "productVersion", day_boundary AS "dayBoundary",
+					source, source_unit AS "sourceUnit", source_unit_factor AS "sourceUnitFactor"
 				 FROM time_series WHERE project_id = $1 AND id = $2 FOR UPDATE`,
 				[id, seriesId]
 			);

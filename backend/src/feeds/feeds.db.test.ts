@@ -1108,7 +1108,13 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		expect(await series(owner, pid, 'rain_chirps_mm')).toMatchObject({ startDate: first, values: [1, 2, 3] });
 		expect(await chirpsLabel(pid)).toEqual({ product: 'CHIRPS', product_version: '2.0' });
 		const during = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
-		expect(during.series.rain_chirps_mm).toEqual({ startDate: first, values: [1, 2, 3], provenance: { product: 'CHIRPS', version: '2.0' } });
+		expect(during.series.rain_chirps_mm).toEqual({
+			startDate: first,
+			values: [1, 2, 3],
+			provenance: { product: 'CHIRPS', version: '2.0' },
+			// The upload's source and given unit (107): none said, in mm.
+			origin: { source: null, unit: 'mm', factor: 1 }
+		});
 		const [stage] = await asOwner(`SELECT to_char(start_date, 'YYYY-MM-DD') AS start, cardinality("values") AS n, product, product_version FROM feed_stage WHERE feed_id = $1`, [id]);
 		expect(stage).toEqual({ start: first, n: 120, product: 'CHIRPS sat', product_version: '3.0' });
 		// Progress is visible, on the feed and on the series, and says it is rebuilding, not "old data".
@@ -1156,6 +1162,8 @@ describe('the CHIRPS version guard (032_series_provenance)', () => {
 		// The refit: the live input carries the new label, which fitRecordStatus compares with the one a fit recorded.
 		const live = (await owner.call('GET', `/projects/${pid}/model-input`)).body.input;
 		expect(live.series.rain_chirps_mm.provenance).toEqual({ product: 'CHIRPS sat', version: '3.0' });
+		// And the feed as the replaced record's source (107_series_source.sql).
+		expect(live.series.rain_chirps_mm.origin).toEqual({ source: 'CHIRPS daily rainfall data feed', unit: 'mm', factor: 1 });
 		// Only the fields fitRecordStatus reads: a fit made under these settings, on the v2.0 series.
 		const fit = {
 			model: 'gr4j',
