@@ -513,8 +513,8 @@ Written and tested (plan-only, mocked providers), **nothing applied**:
 Still manual (operator): everything in infra/README.md § Operator steps, in
 particular the region choice and opt-in, the Lambda concurrency quota,
 billing access for the budget, the SES sandbox exit, and the `production`
-environment's required reviewer (the release preflight refuses to deploy
-without it; see [§ Releasing](#releasing)).
+environment's required reviewer and its branch and tag policy (the release
+preflight refuses to deploy without them; see [§ Releasing](#releasing)).
 
 ## 4. CI/CD
 
@@ -523,6 +523,14 @@ Every workflow pins its actions to a commit SHA, grants least-privilege
 `permissions:` per job, and reaches AWS only through GitHub OIDC; there are
 no static AWS keys anywhere. `pnpm check:workflows` enforces those rules
 (`scripts/guards/check_workflows.mjs`, plus actionlint when it is installed).
+Among them: a job that grants `id-token: write` (or `write-all`) must be gated
+on `environment: production` (rule `oidc-gate`; the only exception,
+`OIDC_ALLOWLIST`, is Scorecard's `analysis` job, which signs its result for
+scorecard.dev and may run no `run:` step), and a workflow triggered by
+`pull_request_target` may never check out or fetch the PR's head (rule
+`prt-head`: `ref:`/`repository:` from `github.event.pull_request.head.*`,
+`github.head_ref` or `refs/pull/*`, `gh pr checkout`, or the head passed
+through an env var), since that trigger runs with this repo's token.
 
 ### What runs on every push to `main` and every pull request
 
@@ -756,10 +764,20 @@ nothing. Step by step:
    - the release is published, not a draft. Prereleases (`-rc.1`, or the
      prerelease box) are skipped and never reach production;
    - the tagged commit is on `main` and its `CI gate` passed (it waits up to
-     30 minutes while CI is still running);
+     30 minutes while CI is still running). Only a `CI gate` posted by the
+     GitHub Actions app (`github-actions`, id 15368) from a run of
+     `.github/workflows/ci.yml` on a push or manual run of that exact commit
+     counts: any app with `checks: write` can post a check by that name, and a
+     `pull_request` run executes the merge ref's `ci.yml`, which the PR can
+     rewrite. Other runs by that name are listed as ignored in the error;
    - the `production` environment exists **and has a required reviewer**. A
      job that names a missing environment creates it unprotected, so the
      preflight fails instead;
+   - that environment's deployment policy allows exactly branch `main` and
+     tags `backend@*` and `web@*`, and an active tag ruleset applies
+     `creation`, `update` and `deletion` to `refs/tags/backend@*` and
+     `refs/tags/web@*` ([§ The production environment's branch and tag
+     policy](#the-production-environments-branch-and-tag-policy));
    - every AWS variable and secret the deploy reads is set (the backend's
      include `RENDERER_FUNCTION_NAME` and `RENDERER_ECR_REPOSITORY`, from
      `export-tf-vars.sh`). Until the account
@@ -776,6 +794,56 @@ nothing. Step by step:
    `-migrate.zip`, `-worker.zip` and `-fetcher.zip`, or
    `web-X.Y.Z-build.zip`). The renderer image is not attached: it stays in
    ECR, tagged with the version.
+
+### The production environment's branch and tag policy
+
+The required reviewer decides *whether* a run deploys; these two settings
+decide *what* it can deploy. Without them, a reviewer approving a run from a
+side branch, or a release tag moved after its checks passed, ships code the
+preflight never looked at. The preflight refuses every release until both are
+in place. Set them once, as the operator (repo admin), each command on one
+line:
+
+1. Restrict the environment to custom branch and tag policies. This `PUT`
+   rewrites the environment, so it re-sends you as the required reviewer
+   (self-review allowed: there is one operator):
+
+   ```bash
+   gh api -X PUT repos/Absence0760/project-water-management/environments/production -F "reviewers[][type]=User" -F "reviewers[][id]=$(gh api user --jq .id)" -F prevent_self_review=false -F "deployment_branch_policy[protected_branches]=false" -F "deployment_branch_policy[custom_branch_policies]=true"
+   ```
+
+2. Allow exactly `main` and the two release tag patterns (a manual rollback
+   run is dispatched from `main`; a release event runs on its tag):
+
+   ```bash
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name=main -f type=branch
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='backend@*' -f type=tag
+   gh api -X POST repos/Absence0760/project-water-management/environments/production/deployment-branch-policies -f name='web@*' -f type=tag
+   ```
+
+3. Protect the release tags: only a repository admin (you, bypassing through
+   `gh release create`) can create them, and nobody can move or delete one:
+
+   ```bash
+   gh api -X POST repos/Absence0760/project-water-management/rulesets --input - <<< '{"name":"Release tags","target":"tag","enforcement":"active","bypass_actors":[{"actor_id":5,"actor_type":"RepositoryRole","bypass_mode":"always"}],"conditions":{"ref_name":{"include":["refs/tags/backend@*","refs/tags/web@*"],"exclude":[]}},"rules":[{"type":"creation"},{"type":"update"},{"type":"deletion"}]}'
+   ```
+
+4. Check. The first should print `{"custom_branch_policies":true,"protected_branches":false}`
+   and a reviewer, the second exactly the three policies, the third the
+   ruleset as `active`:
+
+   ```bash
+   gh api repos/Absence0760/project-water-management/environments/production --jq '{p: .deployment_branch_policy, r: [.protection_rules[] | select(.type == "required_reviewers") | .reviewers[].reviewer.login]}'
+   gh api repos/Absence0760/project-water-management/environments/production/deployment-branch-policies --jq '.branch_policies[] | "\(.type) \(.name)"'
+   gh api repos/Absence0760/project-water-management/rulesets --jq '.[] | select(.target == "tag") | "\(.name) \(.enforcement)"'
+   ```
+
+The preflight reads these with the workflow's own token (`actions: read` for
+the environment and its policies; rulesets need only repository metadata), so
+a missing, broadened or disabled setting fails the release with the step to
+fix. An extra deployment policy (say `*`) is refused too: the list must be
+exactly those three. `templates/scripts/backfill-prod-environment.sh` sets
+only the reviewer; the same steps belong in it for every estate repo.
 
 ## Getting a catchment into production
 

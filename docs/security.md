@@ -2136,7 +2136,15 @@ key there would let any read-only principal forge any user's session.
 - **CI/CD uses GitHub OIDC.** There are no long-lived AWS keys. The deploy
   role's trust policy is pinned to `repo:<owner>/<repo>:environment:production`,
   and that environment has a required reviewer. A workflow can only assume the
-  role after a human approves the run.
+  role after a human approves the run. The environment deploys only from
+  `main` and the `backend@*`/`web@*` tags, and a tag ruleset stops those tags
+  being created, moved or deleted by anyone but an admin, so an approved run
+  can only ship a commit the preflight checked (the release preflight refuses
+  to deploy until both are set; [deployment.md § The production environment's
+  branch and tag policy](./deployment.md#the-production-environments-branch-and-tag-policy)).
+  The workflow guard refuses any job that grants `id-token: write` outside
+  `environment: production` (one allowlisted exception, Scorecard's signing
+  job) and any `pull_request_target` workflow that checks out the PR's head.
 - **S3** blocks all public access. Only CloudFront (OAC) reads it.
 - **The public landing page** (`/`, signed out, and the prerendered
   `/welcome`, issue #57), the legal pages (`/privacy`, `/terms`,
