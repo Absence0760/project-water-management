@@ -29,11 +29,11 @@ interface BulkResponse {
 	offset: number;
 	count: number;
 	next: number | null;
-	series: { header: string; unit: string | null; values: (number | null)[] }[];
+	series: { key: string; header: string; unit: string | null; values: (number | null)[] }[];
 }
 
 /** GET with the session cookie; throw a DownloadError carrying the server's message, as the CSV downloads do. */
-async function get(fetchFn: typeof fetch, url: string): Promise<Response> {
+export async function get(fetchFn: typeof fetch, url: string): Promise<Response> {
 	let res: Response;
 	try {
 		res = await fetchFn(url, { credentials: 'include' });
@@ -56,7 +56,7 @@ async function get(fetchFn: typeof fetch, url: string): Promise<Response> {
 }
 
 /** One node's (or the catchment's) every series, following `next` until the last page. */
-async function fetchTable(fetchFn: typeof fetch, urls: ReturnType<typeof exportUrls>, req: WorkbookRequest, nodeId: string | null): Promise<DailyTable> {
+export async function fetchTable(fetchFn: typeof fetch, urls: ReturnType<typeof exportUrls>, req: WorkbookRequest, nodeId: string | null): Promise<DailyTable> {
 	let offset: number | null = 0;
 	let first: BulkResponse | null = null;
 	let columns: (number | null)[][] = [];
@@ -76,7 +76,7 @@ async function fetchTable(fetchFn: typeof fetch, urls: ReturnType<typeof exportU
 	return {
 		name: nodeId ? first!.name : 'Catchment',
 		startDate: first!.startDate,
-		columns: first!.series.map((s, c) => ({ header: s.header, unit: s.unit, values: columns[c]! }))
+		columns: first!.series.map((s, c) => ({ key: s.key, header: s.header, unit: s.unit, values: columns[c]! }))
 	};
 }
 

@@ -11,8 +11,7 @@ import { compareAllocations, DEFAULT_ALLOCATION_TOLERANCE } from '../allocations
 import { ALLOCATION_SERIES, matchAllocations, registeredOver, resolveAllocationMode, yearBudgets } from '../allocations/mode';
 import { excludedDayMask, exclusionRanges, sanitizeExclusions } from '../calibrate/provenance';
 import { boreholeOf, boreholesByNode, type PlanBorehole } from '../network/boreholes';
-import { demandFactorOf, demandFactorStart, modelFarmEfficiency } from '../demand';
-import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease, seepageReturnOf } from '../network/dam';
+import { curveAreaAt, fixedReleaseFloor, resolveDamCurve, resolveRelease } from '../network/dam';
 import { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES } from '../network/development';
 import { landCoverReduction, lowFlowThreshold, resolveLandCover } from '../network/landcover';
 import { flowShares } from '../network/shares';
@@ -24,7 +23,8 @@ import { cmpStr } from '../order';
 import { supplyOf, type PlanSupply } from '../network/supply';
 import { demandObjectsByNode, objectDemandKey, objectMonthlyM3Day, objectReturnShare, objectSuppliedKey, PRIORITY_TIER } from '../network/demandObjects';
 import { scheduleFactors } from '../network/demandSchedule';
-import { DAM_AREA_EXPONENT, defaultProjectSettings, ESTIMATED_DAM_DEPTH_M, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
+import { dailyDemandFactor, damWorkings, lakeEvaporationMmDay, runEfficiency } from './workings';
+import { defaultProjectSettings, type CurtailmentFarm, type EwrComplianceGrid, type ModelInput, type ModelOutput, type NetworkNode, type Transfer } from '../project';
 import { RAIN_SOURCE_CODE, RAIN_SOURCE_COLUMN } from '../rainSourcePeriods';
 
 const tol = (x: number) => 1e-6 + 1e-9 * Math.abs(x);
@@ -53,17 +53,6 @@ const seriesMap = (out: ModelOutput): SeriesMap => new Map(out.series.map((s) =>
 // rain_areal (engine ≥ 1.13.0) is rain_final × the areal factor, so NaN where rain_final is.
 // rain_source (every run with rain from engine 1.27.0) is NaN where no source has a value, as rain_final is.
 const GAPPY_SERIES = new Set(['observed_flow', 'observed_flow_other', 'rain_final', 'rain_areal', 'rain_source', 'rain_chirps', 'rain_chirps_corrected', 'chirps_factor', 'ewr_rule', 'ewr_binding_site']);
-
-/**
- * The irrigation efficiency runModel used for farm `n` (run.ts irrigation):
- * its own, 1 when that is outside (0, 1], combined with its crops' own
- * efficiencies (engine ≥ 0.43.0, ../demand.ts farmIrrigationEfficiency).
- */
-function runEfficiency(input: ModelInput, n: NetworkNode): number {
-	const e = n.irrigationEfficiency > 0 && n.irrigationEfficiency <= 1 ? n.irrigationEfficiency : 1;
-	const apan = input.settings?.apanMm;
-	return modelFarmEfficiency(e, n.id, input.model.crops, input.model.cropAreas, Array.isArray(apan) ? apan : []);
-}
 
 /**
  * A unit's enabled demand objects (engine ≥ 1.7.0) as the run stored them:
@@ -892,26 +881,8 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 	const bores = boreholesByNode(input.model, []);
 	const get = seriesMap(out);
 	// Open-water evaporation depth per day and the day's rain on a dam (audit N2), from the run's own settings and rain.
-	const d0 = defaultProjectSettings();
-	const st = input.settings ?? {};
-	const lakeK = typeof st.lakeEvapFactor === 'number' && Number.isFinite(st.lakeEvapFactor) && st.lakeEvapFactor >= 0 ? st.lakeEvapFactor : d0.lakeEvapFactor;
-	// Monthly lake factors (WP-3.5): used only when all twelve are numbers ≥ 0, as runModel does.
-	const lakeM = st.lakeEvapFactorMonthly;
-	const lakeMonthly = Array.isArray(lakeM) && lakeM.length === 12 && lakeM.every((x) => typeof x === 'number' && Number.isFinite(x) && x >= 0) ? lakeM : null;
-	const feb = typeof st.februaryDays === 'number' ? st.februaryDays : d0.februaryDays;
-	const apan = Array.isArray(st.apanMm) ? st.apanMm.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)) : [...d0.apanMm];
-	const monthLen = [31, 30, 31, 31, feb, 31, 30, 31, 30, 31, 31, 30];
 	const day0 = toEpochDay(out.startDate);
-	// A daily A-pan series (engine ≥ 0.38.0, issue #45) sets the day's A-pan wherever it has a number ≥ 0.
-	const apanSeries = input.series?.evap_apan_mm;
-	const apanOffset = apanSeries ? day0 - toEpochDay(apanSeries.startDate) : 0;
-	const evapMmDay = Array.from({ length: out.days }, (_, t) => {
-		const wy = (monthOfEpochDay(day0 + t) + 2) % 12;
-		const k = lakeMonthly ? lakeMonthly[wy]! : lakeK;
-		const a = apanSeries && t + apanOffset >= 0 ? apanSeries.values[t + apanOffset] : undefined;
-		if (typeof a === 'number' && Number.isFinite(a) && a >= 0) return k * a;
-		return (k * (apan[wy] ?? 0)) / monthLen[wy]!;
-	});
+	const evapMmDay = lakeEvaporationMmDay(input, out.startDate, out.days);
 	const rainFinal = get.get('null|rain_final');
 	const damRain = (t: number) => {
 		const v = rainFinal?.[t];
@@ -940,14 +911,12 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		if (!!GD !== !!bore?.units.some((u) => u.toDam)) return `${n.id}: groundwater_to_dam ${GD ? 'without' : 'missing for'} a borehole that pumps into the dam`;
 		if (ZS && upZS.some((a) => !a)) return `${n.id}: an upstream node has no senior_requirement series`;
 		// The dam's area–storage relation, as runModel resolves it (audit N2).
-		const areaFull = n.damCapacityM3 > 0 ? (n.damAreaFullM2 ?? n.damCapacityM3 / ESTIMATED_DAM_DEPTH_M) : 0;
+		const { areaFull, b, seep, seepReturn: seepRet } = damWorkings(n);
 		// Survey curve, release and seepage destination (WP-3.5).
 		const curve = n.damCapacityM3 > 0 ? resolveDamCurve(n) : null;
 		const rel = resolveRelease(n, []);
 		const REL = g('dam_release');
 		const SPL = g('dam_seepage_lost');
-		// A farm without a dam has no seepage to split (runModel ignores the share there).
-		const seepRet = n.damCapacityM3 > 0 ? seepageReturnOf(n) : 1;
 		if (!!rel !== !!REL) return `${n.id}: dam_release column ${REL ? 'without' : 'missing for'} a release rule`;
 		// Supply rule and river pump (WP-3.8).
 		const sup = supplyOf(n, []).supply;
@@ -956,26 +925,20 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 		let onRiver = false;
 		if ((seepRet < 1) !== !!SPL) return `${n.id}: dam_seepage_lost column ${SPL ? 'with all seepage returning' : 'missing'}`;
 		const Zc = g('ewr_cumulative')!;
-		const b = n.damAreaExponent > 0 && n.damAreaExponent <= 3 ? n.damAreaExponent : DAM_AREA_EXPONENT;
-		const seep = Math.min(Math.max(Number.isFinite(n.damSeepagePerDay) ? n.damSeepagePerDay : 0, 0), 1);
 		const e = runEfficiency(input, n);
-		// The demand factor (engine ≥ 0.41.0, the demand.scale scenario op) scales F after the soil-water store.
-		const factor = demandFactorOf(n, []);
-		// From settings.demandFactorFrom on (engine ≥ 0.44.0), as runModel resolves it (an invalid date: every day).
-		const dff = input.settings?.demandFactorFrom;
-		const factorFrom = typeof dff === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dff) && !Number.isNaN(Date.parse(`${dff}T00:00:00Z`)) ? demandFactorStart(dff, day0, out.days) : 0;
 		const returnPerSupplied = n.lossReturnFraction * (1 - e);
 		// Registered volumes (engine ≥ 1.18.0): a full allocation's factor on the demand, a cap's room per source.
 		const KF = g(ALLOCATION_SERIES.demandFactor.key);
 		const RS = g(ALLOCATION_SERIES.surfaceRoom.key);
 		const RG = g(ALLOCATION_SERIES.groundwaterRoom.key);
+		// The demand factor on F each day (the demand.scale scenario op from settings.demandFactorFrom, × a full allocation's).
+		const { perDay: DF, scaled } = dailyDemandFactor(input.settings, n, day0, out.days, KF);
 		// Demand objects (engine ≥ 1.7.0): their demand adds to F / e, and G splits between crops and objects.
 		const objs = objectColumns(input, n, get, out);
 		if (typeof objs === 'string') return objs;
 		// A dam whose capacity changes over the run (engine ≥ 1.30.0, ../network/development.ts): the
 		// day's factor k, as runModel resolves it, and the dam_capacity column it reports.
 		const ks = capacityScaleOf(n, day0, out.days, []);
-		const abstractFrom = abstractionStartDay(n, day0, out.days, []);
 		const CAPS = g(DAM_CAPACITY_SERIES.key);
 		if (!!ks !== !!CAPS) return `${n.id}: ${CAPS ? 'a dam_capacity column for a dam whose capacity doesn\'t change' : 'no dam_capacity column for a dam whose capacity changes'}`;
 		const cap0 = n.damCapacityM3;
@@ -1004,10 +967,9 @@ export function checkWorkings(input: ModelInput, out: ModelOutput): string | nul
 			// The dam-level triggers read the storage at the entered capacity's scale.
 			const qLevel = kd === 1 ? qPrev : kd > 0 ? qPrev / kd : 0;
 			if (CAPS && !near(CAPS[t]!, cap, cap0)) return `${where}: dam_capacity ${CAPS[t]} ≠ the capacity ${cap0} × ${kd}`;
-			// Nothing before the unit's abstraction date (engine ≥ 1.30.0).
-			const df = t < abstractFrom ? 0 : (factor && t >= factorFrom ? factor[(monthOfEpochDay(day0 + t) + 2) % 12]! : 1) * (KF ? KF[t]! : 1);
+			const df = DF[t]!;
 			if (!near(f, df * (Math.max(0, gr) - ef), df * Math.max(Math.abs(gr), Math.abs(ef))) || f < 0)
-				return `${where}: crop requirement ${f} ≠ ${factor || KF ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${factor || KF ? ')' : ''}`;
+				return `${where}: crop requirement ${f} ≠ ${scaled ? `demand factor ${df} × (` : ''}MAX(0, gross ${gr}) − effective rain used ${ef}${scaled ? ')' : ''}`;
 			if (objs) {
 				const bad = checkObjectsDay(objs, t, (monthOfEpochDay(day0 + t) + 2) % 12, df, f / e, gg, where);
 				if (bad) return bad;

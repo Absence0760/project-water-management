@@ -27,6 +27,8 @@ export interface WorkbookRequest {
 	apiBase: string;
 	projectId: string;
 	runId: string;
+	/** Build this farm's audit workbook instead of the run's ($lib/spreadsheet/audit, issue #68). */
+	auditNodeId?: string;
 }
 
 /** The all-farms tables the run menu offers (farms.csv?key=…), and what a preview of one needs. */
@@ -96,13 +98,14 @@ export function farmTableItems(urls: ExportUrls, projectId: string, runId: strin
  * Menu entries for one run: the whole-run workbook, the summary sheet, the
  * catchment table, the workbook's two fragmentation sheets (only when the run has farms; with
  * `onPreview`, each also offers an in-page preview), then one daily table per
- * node (in the order given — pass them in network order).
+ * node (in the order given — pass them in network order), each farm's
+ * followed by its audit workbook (the formulas that recompute it, issue #68).
  */
 export function runDownloadItems(
 	urls: ExportUrls,
 	projectId: string,
 	runId: string,
-	nodes: readonly { id: string; name: string }[] = [],
+	nodes: readonly { id: string; name: string; kind?: string }[] = [],
 	farms: { onPreview?: (item: FarmTableItem) => void } | null = null
 ): DownloadItem[] {
 	return [
@@ -120,7 +123,19 @@ export function runDownloadItems(
 					return { label: f.label, url: f.url, hint: f.hint, ...(onPreview ? { preview: () => onPreview(f) } : {}) };
 				})
 			: []),
-		...nodes.map((n) => ({ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) }))
+		...nodes.flatMap((n): DownloadItem[] => [
+			{ label: `Daily series — ${n.name} (CSV)`, url: urls.runDaily(projectId, runId, n.id) },
+			...(n.kind === 'farm'
+				? [
+						{
+							label: `Audit workbook — ${n.name} (.xlsx)`,
+							url: `audit:${urls.runDaily(projectId, runId, n.id)}`,
+							hint: 'Its daily water balance as live Excel formulas beside the model’s numbers, to recompute it independently',
+							workbook: { apiBase: urls.apiBase, projectId, runId, auditNodeId: n.id }
+						}
+					]
+				: [])
+		])
 	];
 }
 

@@ -3,6 +3,8 @@
 // summary CSV. The test downloads it, parses it with SheetJS here in Node,
 // and checks every value against the CSV exports of the same run, as text:
 // a number cell must print exactly as the CSV wrote it (full precision).
+// A farm's audit workbook (issue #68) is built the same way: live formulas
+// beside the model's numbers.
 import { readFile } from 'node:fs/promises';
 import type { APIRequestContext, Page } from '@playwright/test';
 import * as XLSX from 'xlsx';
@@ -175,6 +177,39 @@ test('the run workbook downloads and every value equals the CSV exports', async 
 	expect(sheetText(wb.Sheets['Inputs']!).some((r) => r[0] === "'=Upper farm")).toBe(true);
 	// The disclaimer sheet carries the Terms URL in full, on the site's own address.
 	expect(sheetText(wb.Sheets['Read this first']!).some((r) => r[0]?.endsWith(`Terms of use: ${new URL(page.url()).origin}/terms.`))).toBe(true);
+});
+
+test("a farm's audit workbook recomputes it with live formulas beside the model's numbers (issue #68)", async ({ page, owner }) => {
+	void owner;
+	const { id, runId } = await seeded(page.request);
+	const { status } = await openRunDownloads(page, id, runId);
+	const download = page.waitForEvent('download');
+	await page.getByRole('button', { name: /^Audit workbook — Lower farm \(\.xlsx\)/ }).click();
+	const file = await download;
+	expect(file.suggestedFilename()).toBe('baseline_lower_farm_audit.xlsx');
+	await expect(status).toHaveText('Downloaded baseline_lower_farm_audit.xlsx');
+
+	const wb = XLSX.read(await readFile((await file.path())!), { type: 'buffer' });
+	expect(wb.SheetNames).toEqual(['Read this first', 'About', 'Parameters', 'Audit', 'Model']);
+	const cell = (sheet: string, ref: string) => wb.Sheets[sheet]![ref] as XLSX.CellObject;
+	const header = sheetText(wb.Sheets['Audit']!)[0]!;
+	expect(header.length).toBeGreaterThan(30);
+	const col = (h: string) => {
+		expect(header).toContain(h);
+		return XLSX.utils.encode_col(header.indexOf(h));
+	};
+	const storage = col('Dam storage [Q] (m³)');
+	const area = col('Dam surface area (m²)');
+	const supplied = col('Irrigation supplied [G] (m³/day)');
+	// Day one starts from the storage parameter; every later day from the row above.
+	expect(cell('Audit', `${storage}2`).f).toMatch(/^MIN\(/);
+	expect(cell('Audit', `${area}2`).f).toContain('Parameters!$B$');
+	expect(cell('Audit', `${area}3`).f).toContain(`${storage}2`);
+	// Inputs are values; each formula's value equals the model's to float noise, over the whole run.
+	expect(cell('Audit', `${col('From the run: Inflow from upstream [H] (m³/day)')}2`).f).toBeUndefined();
+	for (let r = 2; r <= 121; r++) expect(Math.abs(Number(cell('Audit', `${supplied}${r}`).v) - Number(cell('Model', `${supplied}${r}`).v))).toBeLessThan(1e-6);
+	expect(cell('About', 'B6').f).toMatch(/^MAX\(Audit!/);
+	expect(Number(cell('About', 'B6').v)).toBeLessThan(1e-6);
 });
 
 test('the workbook shows progress per node and Cancel stops it', async ({ page, owner }) => {

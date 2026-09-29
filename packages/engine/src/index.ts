@@ -48,6 +48,7 @@ export * from './modelRules';
 export * from './scenario';
 export * from './verify/columns';
 export { verifyRun } from './verify/verify';
+export * from './verify/audit';
 export { buildTopology, ewrSiteNodes, isEwrSite, type Topology } from './network/topology';
 export { EWR_BINDING_SERIES } from './network/bindingSeries';
 export { parseTransferRuleKey, TRANSFER_RULE_SERIES, transferRuleKey } from './network/transferSeries';
