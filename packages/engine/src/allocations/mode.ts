@@ -126,6 +126,10 @@ export function yearBudgets(allocs: readonly AllocationEntry[], source: Allocati
  * (engine-audit.md K1); its registered volume is then factor × demand, as a
  * pinned year's. So a year with no demand on its historical days takes
  * nothing on its tail days either, as the run without the tail has it.
+ * A unit that abstracts only from run day `from` (NetworkNode.abstractionFrom,
+ * engine ≥ 1.30.0) is scaled to the volume over its days from then: a year
+ * it starts in asks for that part of the year's volume, a year wholly before
+ * it for none (and isn't unscaled).
  */
 export function fullAllocationFactors(
 	allocs: readonly AllocationEntry[],
@@ -135,7 +139,9 @@ export function fullAllocationFactors(
 	/** A resumed run (../warmstart): the factor its first water year keeps from the run it was captured from. */
 	pinnedFirst?: number,
 	/** The run's historical days (before a forecast tail); default every day. */
-	historyDays: number = days
+	historyDays: number = days,
+	/** The first run day the unit abstracts on (engine ≥ 1.30.0); 0 = every day. */
+	from = 0
 ): { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[]; unscaled: number[] } {
 	const factor = new Float64Array(days);
 	const years: { waterYear: number; demandM3: number; registeredM3: number }[] = [];
@@ -143,12 +149,14 @@ export function fullAllocationFactors(
 	for (let t = 0; t < days; ) {
 		const wy = waterYearOf(start + t);
 		const last = Math.min(days - 1, wyStart(wy + 1) - 1 - start);
-		// A year the forecast tail starts inside is fitted on its historical days.
+		// A year the forecast tail starts inside is fitted on its historical days, and a unit with an
+		// abstraction date (engine ≥ 1.30.0) on its days from then.
 		const fit = t < historyDays && last >= historyDays ? historyDays - 1 : last;
+		const a = Math.max(t, from);
 		let d = 0;
-		for (let k = t; k <= fit; k++) d += demand[k]!;
+		for (let k = a; k <= fit; k++) d += demand[k]!;
 		const pinned = t === 0 && pinnedFirst !== undefined;
-		const reg = registeredOver(allocs, wy, start + t, start + fit);
+		const reg = a > fit ? 0 : registeredOver(allocs, wy, start + a, start + fit);
 		const f = pinned ? pinnedFirst : d > 0 ? reg / d : 0;
 		if (!pinned && !(d > 0) && reg > 0) unscaled.push(wy);
 		for (let k = t; k <= last; k++) factor[k] = f;
@@ -182,6 +190,8 @@ export interface AllocationPlan {
 	scaled: Map<number, { factor: Float64Array; years: { waterYear: number; demandM3: number; registeredM3: number }[] }>;
 	/** The run's historical days, when a forecast tail follows them (engine ≥ 1.28.0): full allocation fits its factors on these. */
 	historyDays?: number;
+	/** Node index → the first run day it abstracts on, for units with an abstraction date (engine ≥ 1.30.0). */
+	abstractFrom?: Map<number, number>;
 	/**
 	 * 'fullAllocation' in a run resumed from a snapshot (../warmstart): node
 	 * index → the factor of the water year in progress in the run it was
@@ -223,7 +233,7 @@ export function matchAllocations(
 export function scaleDemandToAllocation(plan: AllocationPlan, i: number, D: Float64Array, start: number, days: number, name: string, warnings: string[]): Float64Array | null {
 	const allocs = plan.byNode.get(i);
 	if (plan.mode !== 'fullAllocation' || !allocs || days <= 0) return null;
-	const f = fullAllocationFactors(allocs, D, start, days, plan.pinned?.get(i), plan.historyDays ?? days);
+	const f = fullAllocationFactors(allocs, D, start, days, plan.pinned?.get(i), plan.historyDays ?? days, plan.abstractFrom?.get(i) ?? 0);
 	for (let t = 0; t < days; t++) D[t]! *= f.factor[t]!;
 	plan.scaled.set(i, { factor: f.factor, years: f.years });
 	if (f.unscaled.length) warnings.push(`full allocation: "${name}" has no demand in water year${f.unscaled.length === 1 ? '' : 's'} ${f.unscaled.join(', ')}, so it takes none of its registered volume there`);

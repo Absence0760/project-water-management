@@ -57,6 +57,7 @@ export { DEMAND_OBJECT_SERIES, objectDemandKey, objectMonthlyM3Day, objectSuppli
 export { DEMAND_SCHEDULE_MAX_EASTER_OFFSET, DEMAND_SCHEDULE_MAX_FACTOR, DEMAND_SCHEDULE_MAX_WINDOWS, easterSunday, isoWeekday, scheduleFactors, scheduleWindowProblem } from './network/demandSchedule';
 export { curveAreaAt, resolveDamCurve, type DamCurve } from './network/dam';
 export { DAM_AGO_DAYS, DAM_YEAR_DAYS, damFigures, type DamFigures } from './network/damLevel';
+export { abstractionStartDay, capacityScaleOf, DAM_CAPACITY_SERIES, DAM_SEDIMENT_MAX_PER_YEAR, damCapacityFactor, damCapacityOn, developmentProblem, SEDIMENT_YEAR_DAYS } from './network/development';
 export { DAM_CURVE_CAPACITY_TOLERANCE, damCurveProblem } from './network/damCurve';
 export { flowShares, inputFlowShares, overAllocationError, SHARE_TOLERANCE, type FlowShares } from './network/shares';
 export { calibrationStats, type CalibrationWindow } from './network/stats';

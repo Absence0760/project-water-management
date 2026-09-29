@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { importProjectData } from '../../scripts/import-project.js';
 import { app, asOwner, makeStoredLegacyRun, monthly, node, signUp } from '../__tests__/helpers.js';
-import { CSV_DISCLAIMER_COMMENT } from '@water-management/engine';
+import { CSV_DISCLAIMER_COMMENT, damCapacityOn, toEpochDay, type NetworkNode } from '@water-management/engine';
 import { LEGACY_RUN_CSV_COMMENT, runProvenanceComment } from './csv.js';
 import { SERIES_CHANGED_COMMENT } from './routes.js';
 import { flowDurationTable } from './fdc.js';
@@ -293,6 +293,38 @@ describe('run summary export', () => {
 		const naturalM3Day = daily.slice(1).map((r) => (r.split(',')[1] === '' ? null : Number(r.split(',')[1])));
 		const expected = flowDurationTable([{ key: 'natural_flow', values: naturalM3Day }]).wholeRun[0]!;
 		expect(fdc[0]!.split(',').slice(2).map(Number)).toEqual([expected.q10, expected.q50, expected.q90, expected.q95, expected.n]);
+	});
+
+	it("adds each changing dam's capacity on the last day (issue #67), and no column when none changes", async () => {
+		const summary = async () => afterDisclaimer((await download(viewer, `/projects/${projectId}/runs/${runId}/export/summary.csv`)).text);
+		const headerOf = (rows: string[]) => rows.find((r) => r.startsWith('Farm,Flow share (%),'))!;
+		// Positive control: this run's dams don't change, so the sheet has no such column.
+		expect(headerOf(await summary())).not.toContain('Dam capacity on the last day');
+		// Test state only: give the stored run's model a sediment rate on Farm 2 (surveyed a year after the run, so
+		// it held more than its entered 50 000 m³) and an in-service date after the run on the upper farm (no dam yet).
+		const [{ inputs }] = (await asOwner(`SELECT inputs FROM model_run WHERE id = $1`, [runId])) as [{ inputs: { model: { nodes: Record<string, unknown>[] } } }];
+		const patched = structuredClone(inputs);
+		for (const n of patched.model.nodes) {
+			if (n.id === farm2.id) Object.assign(n, { damSurveyDate: '2025-03-15', damSedimentPctPerYear: 0.1 });
+			if (n.id === farm.id) Object.assign(n, { damInServiceFrom: '2024-04-01' });
+		}
+		await asOwner(`UPDATE model_run SET inputs = $2 WHERE id = $1`, [runId, patched]);
+		try {
+			const rows = await summary();
+			const cols = headerOf(rows).split(',');
+			const size = cols.indexOf('Dam capacity (m³)');
+			const onEnd = cols.indexOf('Dam capacity on the last day (m³)');
+			expect(onEnd).toBe(size + 1);
+			const lower = rows.find((r) => r.startsWith('Farm 2,'))!.split(',');
+			expect(lower[size]).toBe('50000');
+			expect(Number(lower[onEnd])).toBeCloseTo(damCapacityOn({ ...(farm2 as unknown as NetworkNode), damSurveyDate: '2025-03-15', damSedimentPctPerYear: 0.1 }, toEpochDay('2024-03-15')), 6);
+			expect(Number(lower[onEnd])).toBeGreaterThan(50_000);
+			const upper = rows.find((r) => r.startsWith('"Farm, ""upper""",'))!.split(',');
+			expect(upper[size + 1]).toBe('200000'); // + 1: the name's comma
+			expect(upper[onEnd + 1]).toBe('0');
+		} finally {
+			await asOwner(`UPDATE model_run SET inputs = $2 WHERE id = $1`, [runId, inputs]);
+		}
 	});
 
 	it('dates the file name by the project’s time zone, not UTC (issue #45)', async () => {

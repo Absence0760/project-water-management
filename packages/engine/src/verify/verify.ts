@@ -5,6 +5,7 @@
 // - waterBalance: where the water went, per water year and over the run.
 // Pure: it reads only the model input and the output's own series.
 import { fromEpochDay, toEpochDay } from '../calendar';
+import { capacityScaleOf } from '../network/development';
 import {
 	upgradeLegacyModel,
 	type ModelInput,
@@ -145,7 +146,8 @@ function waterBalance(input: ModelInput, out: ModelOutput, areaKm2: number | nul
 	// River off-takes (engine ≥ 1.14.0): what they took less what arrived is lost on the way (conveyance losses).
 	const hasOfftakes = farms.some((n) => series.has(`${n.id}|offtake_out`));
 	const [fOtOut, fOtIn] = hasOfftakes ? (['offtake_out', 'offtake_in'].map(totals) as Float64Array[]) : [null, null];
-	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3, 0);
+	// A dam whose capacity changes (engine ≥ 1.30.0) starts at its share of the first day's capacity.
+	const initialStorage = farms.reduce((s, n) => s + n.damInitialPct * n.damCapacityM3 * (capacityScaleOf(n, toEpochDay(out.startDate), out.days, [])?.[0] ?? 1), 0);
 	const farmStorage = (t: number) => (t < 0 ? initialStorage : fStorage![t]!);
 
 	const row = (waterYear: number | null, from: number, to: number): WaterBalanceRow => {

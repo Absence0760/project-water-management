@@ -53,6 +53,13 @@ export const KNOWN_LIMITATIONS: readonly Limitation[] = [
 		"status": "Warned, engine 0.18.0 (CR-20)"
 	},
 	{
+		"id": "S1",
+		"source": "finding",
+		"severity": "Medium (dams with a sediment rate over a long record; units coming in part-way through one)",
+		"title": "A dam's capacity and a unit's abstraction now change over a run, on judgement calls the hydrologist hasn't made",
+		"status": "Built, pending the hydrologist (issue #90)"
+	},
+	{
 		"id": "C2",
 		"source": "finding",
 		"severity": "Medium (fits on records with suspect days, or a gauged range entered)",

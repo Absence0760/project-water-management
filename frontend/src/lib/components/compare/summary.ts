@@ -7,6 +7,8 @@
 import { EWR_NOT_MET } from '$lib/components/ewr/notMet';
 import { SUPPLY_TARGET, type FarmSummary, type InputChange, type InputChangeArea, type MetricDelta, type RunComparison } from '@water-management/engine';
 import { fmtNum, fmtPct } from '$lib/format/number';
+import { capacityOnDate, damDevOf } from '$lib/components/overview/damLevels';
+import { historyEnd } from '$lib/components/overview/latestRun';
 import type { MetricSpec } from './delta';
 
 /** Days in an average year, for the takeaways' "days a year below the EWR" from the share of days. */
@@ -64,7 +66,7 @@ function farmRows(comparisons: readonly RunComparison[]): OutcomeRow[] {
 }
 
 /** A run's own model nodes, as far as the dam figures need them. */
-type DamNode = { id: string; damCapacityM3?: unknown };
+type DamNode = { id: string; kind?: unknown; damCapacityM3?: unknown; damSurveyDate?: unknown; damSedimentPctPerYear?: unknown; damInServiceFrom?: unknown };
 
 /**
  * All of a run's farm dams at the end of the run, as a share of their
@@ -72,28 +74,44 @@ type DamNode = { id: string; damCapacityM3?: unknown };
  * (overview/damLevels.ts damsToday), from the run summary's dam figures
  * (FarmSummary.damEndM3, engine ≥ 1.2.0, issue #55) and the capacities in the
  * run's own model. null when the run has no dam, or was saved before the
- * figures (a dam without them): unknown, never 0.
+ * figures (a dam without them): unknown, never 0. A dam whose capacity
+ * changes over the run (sediment, an in-service date; issue #67) counts its
+ * capacity on `endDate`, the summary's last day (the entered one when absent).
  */
-export function damStorageShare(farms: readonly FarmSummary[] | undefined, nodes: readonly DamNode[] | undefined): number | null {
-	const cap = new Map((nodes ?? []).map((n) => [n.id, typeof n.damCapacityM3 === 'number' && Number.isFinite(n.damCapacityM3) ? n.damCapacityM3 : 0]));
+export function damStorageShare(farms: readonly FarmSummary[] | undefined, nodes: readonly DamNode[] | undefined, endDate?: string): number | null {
+	const cap = new Map(
+		(nodes ?? []).map((n) => {
+			const c = typeof n.damCapacityM3 === 'number' && Number.isFinite(n.damCapacityM3) ? n.damCapacityM3 : 0;
+			const dev = endDate && c >= 1 ? damDevOf(n) : undefined;
+			return [n.id, { size: c, onEnd: dev ? capacityOnDate({ capacityM3: c, dev }, endDate!) : c }];
+		})
+	);
 	let stored = 0;
 	let capacity = 0;
 	for (const f of farms ?? []) {
-		const c = cap.get(f.nodeId) ?? 0;
-		if (!(c >= 1)) continue;
+		const c = cap.get(f.nodeId);
+		if (!c || !(c.size >= 1)) continue;
 		if (f.damEndM3 === undefined) return null;
 		stored += f.damEndM3;
-		capacity += c;
+		capacity += c.onEnd;
 	}
 	return capacity > 0 ? stored / capacity : null;
 }
 
 /** One side of GET /compare/runs, as far as the dam figures need it. */
-type DamSide = { run: { summary: { farms?: readonly FarmSummary[] }; inputs?: { model?: { nodes?: readonly DamNode[] } } } };
+type DamSide = {
+	run: {
+		startDate?: string;
+		endDate?: string;
+		summary: { farms?: readonly FarmSummary[]; forecast?: { from: string } | null };
+		inputs?: { model?: { nodes?: readonly DamNode[] } };
+	};
+};
 
 /** The dam storage at the end of the run of the baseline (`a`) and a what-if (`b`), each from its own summary and model. */
 export function compareDamStorage(d: { a: DamSide; b: DamSide }): MetricDelta {
-	const share = (s: DamSide) => damStorageShare(s.run.summary.farms, s.run.inputs?.model?.nodes);
+	const end = (r: DamSide['run']) => (r.startDate && r.endDate ? historyEnd({ startDate: r.startDate, endDate: r.endDate, forecastFrom: r.summary.forecast?.from ?? null }) : undefined);
+	const share = (s: DamSide) => damStorageShare(s.run.summary.farms, s.run.inputs?.model?.nodes, end(s.run));
 	const a = share(d.a);
 	const b = share(d.b);
 	return { a, b, delta: a === null || b === null ? null : b - a };

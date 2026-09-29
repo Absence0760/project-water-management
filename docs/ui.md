@@ -979,6 +979,18 @@ for every workspace tab. Its own chunk.
   and the chart. On a forecast run the levels, the cards and their sparklines
   are the record's, up to the day before the forecast, like the Summary's
   (issue #51); the chart shows the forecast days in their band.
+- **Levels are shares of the day's capacity** (issue #67): a dam losing
+  capacity to sediment or in service from a date (engine ≥ 1.30.0,
+  [model.md §2.7g](./model.md)) holds a different volume each day, so every
+  % full, minimum level, days-at-minimum count, sparkline point and
+  capacity-weighted total here, on the Summary's Dams today, the Network's
+  colour by dam level and node card, and
+  Compare's dam storage divides by the capacity on that day
+  (`damLevels.ts` `capacityOnDay`, the engine's `damCapacityOn`; 0 %, or no
+  point on a chart, before the dam is in service). The chart's capacity and
+  minimum lines follow it in m³. The capacity shown beside a dam's name, and
+  every total of dam sizes, stays the entered capacity. A dam whose fields
+  change nothing reads exactly as before.
 - **Cards** (`damCards`), emptiest first (the levels' order), then any dam
   without a level in node order: the name, capacity, % full at the end of the
   run, "below 30%" / "at its minimum level" in words, the change over the
@@ -1809,6 +1821,19 @@ note's link on the Summary, `notes.ts` `noteHref`).
   controls). The dam hint about a missing area is dropped when a curve gives
   it. Settings: **Vary it by month** under the dam evaporation factor opens a
   monthly row of factors (started from the single one).
+- **Development over the run** (engine ≥ 1.30.0, issue #67, [model.md §2.7g](./model.md)),
+  one-node form only (`DevelopmentFields.svelte`): under the dam survey and
+  releases, **Capacity over time** with **Survey date**, **Sediment** (% of
+  the capacity a year, 0–20 %, empty = none) and **In service from**; and
+  **Abstraction starts** in a farm's Irrigation group and under "Other water
+  user". Each is a date input (empty = null: the whole run, or not recorded)
+  with its help tip and field-history line. The client check
+  (`developmentIssue` in `model/validate.ts`, the engine's
+  `developmentProblem`) mirrors the API and shows its message beside the
+  fields: a rate needs a survey date, the dam fields only on a farm, no
+  abstraction start on a gauge. A node without a dam, or turned into a user or
+  gauge, that still carries them shows them so they can be cleared
+  (`hasDamDevelopment` in `fields.ts`). Not in the table.
 - **Supply** (engine ≥ 0.42.0, WP-3.8, issue #54 item 2c, [model.md §2.7e](./model.md)),
   one-node form, farms (`SupplyFields.svelte`, `supply.ts`): **Supply rule**
   in run comparison's and the scenario form's words (dam only / river first /

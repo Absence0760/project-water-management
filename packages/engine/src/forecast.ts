@@ -35,6 +35,7 @@
 // (checkForecastPrefix, testing/forecastInvariants.ts, asserts both
 // properties).
 import { fromEpochDay, toEpochDay } from './calendar';
+import { damCapacityOn } from './network/development';
 import type { ModelInput, ModelOutput, RunSeries } from './project';
 import { forecastTail } from './forecastTail';
 import { RAIN_SOURCE_COLUMN } from './rainSourcePeriods';
@@ -161,8 +162,10 @@ function forecastSummary(input: ModelInput, full: ModelOutput, split: ForecastSp
 			d += fin(demand?.[t]);
 			s += fin(supplied?.[t]);
 			if (fin(deficit?.[t]) > NOISE_M3) short++;
-			if (cap > 0 && storage && fin(storage[t]) / cap < minPct) {
-				minPct = fin(storage[t]) / cap;
+			// Against the day's capacity (engine ≥ 1.30.0: sediment, an in-service date; none before it).
+			const capT = cap > 0 ? damCapacityOn(n, d0 + t) : 0;
+			if (capT > 0 && storage && fin(storage[t]) / capT < minPct) {
+				minPct = fin(storage[t]) / capT;
 				minAt = t;
 			}
 		}
