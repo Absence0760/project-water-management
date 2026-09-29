@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { helpFor } from './content';
 import { SHOTS } from './pictures';
+import { TOUR } from './tour';
 import {
 	DIAGRAM_IDS,
 	GUIDE_KIND_TITLES,
@@ -14,7 +15,8 @@ import {
 	plainText,
 	searchGuides,
 	sectionId,
-	type GuideBlock
+	type GuideBlock,
+	type PictureStop
 } from './guides';
 
 const texts = (b: GuideBlock): string[] => {
@@ -31,6 +33,21 @@ const texts = (b: GuideBlock): string[] => {
 	}
 };
 const allText = GUIDES.flatMap((g) => [g.summary, ...g.sections.flatMap((s) => s.blocks.flatMap(texts))]);
+
+/** Everything shown through RichText (inline()): guide text, captions and every picture stop, the /help tour's too. Formulas are shown as written. */
+const stopTexts = (st: PictureStop): string[] => [st.text, ...(st.more?.points ?? [])];
+const renderedText = [
+	...GUIDES.flatMap((g) =>
+		g.sections.flatMap((s) =>
+			s.blocks.flatMap((b) => {
+				if (b.type === 'formula') return [];
+				if (b.type === 'picture') return [b.caption, ...b.stops.flatMap(stopTexts)];
+				return texts(b);
+			})
+		)
+	),
+	...TOUR.flatMap(stopTexts)
+];
 
 describe('guides', () => {
 	it('have unique, url-safe ids and known kinds and tabs', () => {
@@ -77,6 +94,16 @@ describe('guides', () => {
 		for (const t of allText) {
 			const plain = plainText(t);
 			expect(plain, t).not.toMatch(/\*\*|\[\[|\]\]/);
+		}
+	});
+
+	it('leave no asterisk in any rendered text or caption (bold and italic markup both parse)', () => {
+		expect(renderedText.length).toBeGreaterThan(allText.length / 2);
+		for (const t of renderedText) {
+			const shown = inline(t)
+				.map((p) => p.text)
+				.join('');
+			expect(shown, t).not.toContain('*');
 		}
 	});
 
@@ -142,6 +169,20 @@ describe('inline', () => {
 		expect(inSentence('GR4J')).toBe('GR4J');
 		expect(inSentence('A-pan evaporation')).toBe('A-pan evaporation');
 		expect(inSentence('NSE (Nash–Sutcliffe efficiency)')).toBe('NSE (Nash–Sutcliffe efficiency)');
+	});
+
+	it('splits italics from bold, and leaves a lone or spaced asterisk as text', () => {
+		expect(inline('under *Review*, then **Save**')).toEqual([
+			{ kind: 'text', text: 'under ' },
+			{ kind: 'em', text: 'Review' },
+			{ kind: 'text', text: ', then ' },
+			{ kind: 'strong', text: 'Save' }
+		]);
+		expect(inline('*Build the model* first')).toEqual([
+			{ kind: 'em', text: 'Build the model' },
+			{ kind: 'text', text: ' first' }
+		]);
+		expect(inline('2 * 3 * 4')).toEqual([{ kind: 'text', text: '2 * 3 * 4' }]);
 	});
 
 	it('leaves plain text alone', () => {

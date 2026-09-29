@@ -696,9 +696,10 @@ as before and stores no report:
 
 **`GET /projects/:id/import-report`** (viewer or above) → `200 { report }`,
 the newest import's report: the fields above plus `importedAt` (ISO time) and
-`importedBy` (the importer's display name). `404 { error: "no import report" }`
-when the project wasn't imported through the dialog (made by hand, copied, or
-imported with no report); `404 not found` for a project you can't see.
+`importedBy` (the importer's display name). `200 { report: null }` when the
+project wasn't imported through the dialog (made by hand, copied, or imported
+with no report): the Project page asks on every visit, so "none" is an answer,
+not an error. `404 not found` for a project you can't see.
 
 **Not in `export.json`.** The export is the project's inputs, the document
 that imports back into a project. An import report describes one import of a

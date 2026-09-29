@@ -3,7 +3,7 @@
 	// tokens so it follows the light and dark themes, in a box that scrolls
 	// sideways on a phone rather than shrinking the text to nothing. Each SVG
 	// is role="img" with a full text description as its aria-label; the
-	// caption is visible to everyone.
+	// caption is visible to everyone, with the guide's inline markup.
 	//
 	// The shared vocabulary below (box, t, s, m, wire, head, …) is the only
 	// styling the diagrams use, so a diagram needs no style block of its own.
@@ -17,6 +17,7 @@
 	import RainSources from './diagrams/RainSources.svelte';
 	import Validation from './diagrams/Validation.svelte';
 	import Workflow from './diagrams/Workflow.svelte';
+	import RichText from './RichText.svelte';
 
 	const DIAGRAMS: Record<DiagramId, Component> = {
 		workflow: Workflow,
@@ -68,7 +69,7 @@
 	>
 		<Body />
 	</div>
-	{#if caption}<figcaption>{caption}</figcaption>{/if}
+	{#if caption}<figcaption><RichText text={caption} /></figcaption>{/if}
 </figure>
 
 <style>
