@@ -3460,9 +3460,11 @@ read it before.
   tile and on the cards ("Short on 2 of the 7 days to 31 Dec 2024";
   `weekText`, [Data age and stale wording](#data-age-and-stale-wording)).
 - **Tiles.** *Irrigation supplied* (% of demand over the whole record, the
-  Summary card's figure and its change from the previous run, from
-  `overview/latestRun.ts` `headlines`); *Hydrological units below 95 %* (N of M, every unit
-  under `SUPPLY_TARGET`, the Summary's count); *Short this week* (units with a
+  Summary card's figure, its sub-line "2 of 8 hydrological units below 95%"
+  (every unit under `SUPPLY_TARGET`; "all hydrological units ≥ 95%") and its
+  change from the previous run, all from `overview/latestRun.ts`
+  `headlines`; the units below were a tile of their own until 2026-09-29,
+  issue #175); *Short this week* (units with a
   deficit above float noise on any of the 7 days to the run's last day of
   recorded rain (on a forecast run, the 7 days before the forecast, issue
   #51), the reporting window's *Last 7 days* and the publication's own rule,

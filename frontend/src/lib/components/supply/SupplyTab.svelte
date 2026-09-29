@@ -1,8 +1,8 @@
 <script lang="ts">
 	// Units & supply (issue #17, option A · Outcomes): how much of each unit's
-	// irrigation demand one run supplied. Four tiles (irrigation supplied with
-	// its change from the previous run, units below the target, units short
-	// this week, the total shortfall), a card per unit, worst supplied first
+	// irrigation demand one run supplied. Three tiles (irrigation supplied with
+	// the units below the target and its change from the previous run, as the
+	// Summary's card has it; units short this week; the total shortfall), a card per unit, worst supplied first
 	// (% supplied in the Summary's and the Network's supply bands, shortfall,
 	// days short, this week, the curtailment cut; links to its node on the
 	// Network and its planted areas), beside the picked unit's supply against
@@ -31,7 +31,7 @@
 	import { cachedSeries, detailCache } from '$lib/components/runs/cache';
 	import ReportWindowPanel from '$lib/components/runs/ReportWindowPanel.svelte';
 	import AssurancePanel from '$lib/components/reliability/AssurancePanel.svelte';
-	import { runDamCapacity, SUPPLY_TARGET } from '$lib/components/runs/results';
+	import { runDamCapacity } from '$lib/components/runs/results';
 	import { runYears } from '$lib/components/runs/runList';
 	import { dataEndOf } from '$lib/format/age';
 	import { fmtDate, fmtNum, fmtPct, fmtQty, localIsoDate } from '$lib/format/number';
@@ -187,7 +187,6 @@
 	const modelUnits = $derived(modelFarmIds.size);
 	const runText = $derived(meta ? `run “${runName(meta)}”, ran ${ranAgo(meta.createdAt)}` : null);
 	const headerLine = $derived(supplySummary(totals, modelUnits, runText, weekEnd));
-	const target = fmtPct(SUPPLY_TARGET, 0);
 	const farmNames = $derived(Object.fromEntries(editor.model.nodes.map((n) => [n.id, n.name])));
 
 	// --- picking a unit: a link (`unit=<id>`, so it can be shared and Back returns); stacked, the chart comes into view ---
@@ -318,12 +317,9 @@
 							<dt>Irrigation supplied <HelpTip key="summary.fractionSupplied" /></dt>
 							<dd class="value">{supplied?.value ?? '–'}<small>of demand</small></dd>
 							<dd class="sub">over the whole record</dd>
+							<!-- The units below the target, in the Summary card's words (it was a tile of its own until issue #175). -->
+							{#each supplied?.sub ?? [] as line, i (i)}<dd class="sub" data-testid="supply-below">{line}</dd>{/each}
 							{#if supplied?.delta}<dd class="sub change"><Delta m={supplied.delta} spec={supplied.spec} /> vs previous run</dd>{/if}
-						</div>
-						<div class="stat" class:flagged={totals.below > 0} data-kpi="below">
-							<dt>Hydrological units below {target}</dt>
-							<dd class="value">{fmtNum(totals.below)}<small>of {fmtNum(totals.units)}</small></dd>
-							<dd class="sub">{totals.below ? `got under ${target} of their demand` : `all got ${target} or more`}</dd>
 						</div>
 						<div class="stat linked" class:flagged={(totals.weekShort ?? 0) > 0} data-kpi="week">
 							<dt><a href={supplyHref(run.id, { window: 'last7', hash: 'res-curtailment' })}>Short {weekText(weekEnd)}</a></dt>
@@ -441,15 +437,18 @@
 		justify-content: center;
 		gap: 0.5rem;
 	}
-	/* Four tiles: one row, then 2 × 2 (the Summary's). */
+	/* Three tiles: one row, then two over one (the shortfall across the row). */
 	.kpis {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
+		grid-template-columns: repeat(3, minmax(0, 1fr));
 		margin-bottom: 1rem;
 	}
 	@container supply-page (max-width: 44rem) {
 		.kpis {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: 0.5rem;
+		}
+		.kpis > :last-child {
+			grid-column: 1 / -1;
 		}
 	}
 	.stat {
