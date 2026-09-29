@@ -1265,14 +1265,25 @@
 //             visible chip group names, one role-name map, and the
 //             register page's scrolling terms box, on main @ 12cde4ae, with
 //             #126's sign-in CAPTCHA). No new dependency. Headroom ~3 KB.
-// 2026-09-29  total 1176 → 1186 KB (issue #153, automated calibration with
-//             pre-declared rules; measured 1183 merged onto main @ f675b6e3,
-//             which measures 1173). The server runs the rules, so the
-//             calibration worker stays at 36 KB. The page gains the
-//             Calibration rules fields and the Automated calibration panel
-//             (each its own lazy chunk, loaded only with Settings → Fit
-//             automatically), the glossary article, and the rule helpers run
-//             comparison and the fit record read. Headroom ~3 KB.
+// 2026-09-29  total 1176 → 1199 KB, calibration worker 36 → 44 KB (issue
+//             #153, automated calibration with pre-declared rules; measured
+//             1185 / 43 against main @ 12cde4a's 1162 / 36, and 1196 / 43 once
+//             merged with #162's 1173). The worker runs
+//             the engine's autoCalibrate: its orchestration, the filters and
+//             selection and the rule-set resolver are ~5 KB gzipped on their
+//             own (auto.ts 2.1, rulesSettings.ts 2.0, rules.ts 1.0); the rest
+//             of the worker's growth is chunk boundaries. Outside the worker:
+//             the Automated calibration panel (4.4 KB) and the Calibration
+//             rules fields (2.8 KB), each its own lazy chunk that loads only
+//             with Settings → Fit automatically; the glossary article; and the
+//             rule helpers run comparison and the fit record read. Headroom
+//             ~3 KB total, ~1 KB worker.
+// 2026-09-29  total 1199 → 1186 KB (down), calibration worker 44 → 36 KB
+//             (down; issue #153's follow-ups: measured 1183 / 36 on main @
+//             89482bf0). The server now runs the calibration rules, one
+//             background job per fit, so the worker no longer carries
+//             autoCalibrate, the filters or the rule resolver; the panel
+//             follows the server's run instead. Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
