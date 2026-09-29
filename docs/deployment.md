@@ -449,7 +449,9 @@ becomes a required check on `main`.
 Scheduled: `audit.yml` (weekly `pnpm audit` against the lockfile, with no
 install and no cache; opens an issue),
 `gitleaks-sweep.yml` (weekly full-history secret scan, opens a `secret-scan`
-issue when it fails), and weekly runs of `security.yml` and `scorecard.yml`.
+issue when it fails), `renderer-apt-snapshot.yml` (weekly age check of the
+renderer image's apt snapshot; opens a `renderer-apt-snapshot` issue past 90
+days, § Reports), and weekly runs of `security.yml` and `scorecard.yml`.
 Also present: `claude.yml` (Claude Code on issue and PR comments, for the
 operator only; the model may edit files and read git and GitHub, but runs no
 `pnpm` command, so it can't execute code it wrote, and its checkout keeps no
@@ -464,7 +466,13 @@ resolve a registry version younger than that. `dependabot-auto-merge.yml`
 approves and queues minor and patch bumps for npm, pip, docker-compose and
 Terraform only, gated on the PR's author being Dependabot. GitHub Actions
 bumps are never auto-merged: an action runs inside the deploy job while it
-holds the AWS session, so a person reads what the new SHA pin points at. A
+holds the AWS session, so a person reads what the new SHA pin points at.
+Nor is anything that goes into the report renderer's image: its base image
+(`docker`) and its npm packages (the `/backend/renderer-deps` npm entry,
+aws-lambda-ric, a native module compiled in the image's build stage), which
+the workflow excludes by fetch-metadata's `directory` and, as a backstop, by
+the PR's branch name. `pnpm check:workflows` (auto-merge rule) fails if any
+of these exclusions is dropped. A
 security fix that can't wait the week goes under
 `minimumReleaseAgeExclude` with a comment, removed once the week is up.
 
@@ -859,12 +867,29 @@ plan-only until the first deploy):
   its build stage's apt packages are pinned to exact versions from one
   Ubuntu archive snapshot, `APT_SNAPSHOT`, which `check:pins` also
   enforces, and Dependabot's `docker` entry proposes new tags and digests
-  but never auto-merges them), x86_64,
+  but never auto-merges them; see **Moving the apt snapshot** below), x86_64,
   **no VPC**, 2048 MB, 120 s (the render's own cap is 100 s), 1 GB of `/tmp`,
   reserved concurrency `renderer_reserved_concurrency` (2). It opens
   `https://<domain>/projects/:id/report?run=…` through CloudFront and the WAF,
   signs in with the render token (`POST /api/auth/render-session`), prints
   the PDF and puts it in the reports bucket. Its role can do nothing else.
+- **Moving the apt snapshot.** The build stage's packages (the compilers
+  and libraries aws-lambda-ric compiles with) get no Ubuntu security update
+  until `APT_SNAPSHOT` moves, and nothing moves it by itself: Dependabot
+  moves the base image's tag and digest, never an apt pin. `pnpm
+  gen:renderer-apt [<YYYYMMDDTHHMMSSZ>]` does (`scripts/guards/renderer_apt_snapshot.mjs`):
+  it sets the snapshot (default today, 00:00 UTC) and rewrites each pinned
+  package to its candidate in that snapshot, read with `apt-cache --snapshot
+  <id> policy` inside the Dockerfile's digest-pinned base (docker run, no
+  build; a bare `apt-cache policy` would read the live lists and report
+  today's versions). Then `pnpm check:pins && pnpm check:renderer-image`.
+  Run it **on every Dependabot `docker` PR** (digest-only bumps included, so
+  the snapshot moves with the base), and when the weekly
+  `.github/workflows/renderer-apt-snapshot.yml` opens its
+  `renderer-apt-snapshot` issue: it reads the snapshot's age every Monday,
+  opens one issue (updated, never duplicated) once it is over 90 days old,
+  with this procedure in the body, and closes it once a newer snapshot lands
+  on `main`. `pnpm check:apt-snapshot` prints the age locally.
 - **The image**: `deploy-backend.yml`'s build job (no AWS credentials) builds
   it, smoke-tests it as Lambda runs it (`infra/scripts/smoke-renderer-image.sh`:
   a uid with no passwd entry and a read-only filesystem; Chromium prints a PDF
