@@ -152,6 +152,18 @@ test('many hydrological units: the ones to look into first, folded, with nothing
 	await expect(allRows).toHaveAttribute('aria-controls', 'alloc-all-years');
 	await allRows.click();
 	await expect(yearRows).toHaveCount(36 * 3);
+	// What the table carries, and which a fold must keep (issue #175): every unit's name, source and water year, the
+	// figures, and the band note.
+	await expect(page.getByTestId('allocation-compare-table').getByRole('columnheader')).toHaveText([
+		'Hydrological unit or user',
+		'Source',
+		'Water year',
+		'Registered (m³)',
+		/^Modelled use \(m³\)/,
+		'Modelled ÷ registered',
+		'Comparison'
+	]);
+	await expect(page.getByText(/^“Within band” is within ±\d+ % of the registered volume\./)).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Show the first 12 rows' })).toHaveAttribute('aria-expanded', 'true');
 	// Every list open, still nothing scrolls inside itself, and no two buttons share a name.
 	expect(await innerScrollers(page)).toEqual([]);
