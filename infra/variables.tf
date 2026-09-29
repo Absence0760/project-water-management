@@ -228,8 +228,8 @@ variable "waf_site_rate_limit_per_ip" {
 # just under it goes unseen, so the ceiling is set by what that costs: every
 # allowed request is billed by WAF ($0.60/M) and CloudFront ($1.00/M at
 # US/EU edges, ~$2.20/M at Africa's), $1.60–2.80/M in all. At the 20,000
-# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 12–20%
-# of the $80 budget a day; above it the alarm stops being a cost control.
+# ceiling that is 66.7 req/s = 5.76M/day = $9.22–16.13 a day unseen, 10–18%
+# of the $90 budget a day; above it the alarm stops being a cost control.
 # The 1,000 floor is one person at the WAF's per-IP limit, which must not
 # page. The default's arithmetic is at the alarm in alarms.tf.
 variable "cloudfront_requests_alarm_per_5min" {
@@ -285,9 +285,9 @@ variable "login_failed_alarm_per_15min" {
 }
 
 variable "budget_monthly_usd" {
-  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 80 sits above af-south-1's ~$58–63 idle (infra/README.md § Cost), so ACTUAL 80% ($64) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
+  description = "Monthly AWS spend ceiling in USD. Notifications (to the us-east-1 alerts topic): ACTUAL 80%, ACTUAL 100% and FORECASTED 100%. The default 90 sits above af-south-1's ~$59–64 idle (infra/README.md § Cost), so ACTUAL 80% ($72) doesn't fire at idle; ~60 fits us-east-1 (~$49 idle), ~170 the full tier (docs/deployment-tiers.md). Set to 0 to skip both budgets until billing access is enabled (NOT for prod)."
   type        = number
-  default     = 80
+  default     = 90
 
   validation {
     condition     = var.budget_monthly_usd >= 0
@@ -298,7 +298,7 @@ variable "budget_monthly_usd" {
 # The daily budget is the first-month guard: the monthly FORECASTED alert needs
 # ~5 weeks of history, and daily budgets support ACTUAL notifications only.
 variable "budget_daily_usd" {
-  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $6 on $80, ~3× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
+  description = "Daily AWS spend ceiling in USD (ACTUAL 100% → the us-east-1 alerts topic, at most one mail a day). null (default) derives it from the monthly: ceil(budget_monthly_usd × 2.25 / 30), i.e. $7 on $90, ~3.5× af-south-1's ~$2/day idle. 0 skips only the daily budget. Must be below budget_monthly_usd."
   type        = number
   default     = null
 

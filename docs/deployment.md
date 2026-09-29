@@ -113,7 +113,7 @@ What was checked (September 2026):
 | SES sending reputation | Separate per region; a new account starts in the sandbox anywhere | same | same |
 
 Tradeoffs of af-south-1 to accept: ~25–35% higher prices on RDS, endpoints
-and storage (the default `budget_monthly_usd = 80` allows for them), the opt-in step, and a
+and storage (the default `budget_monthly_usd = 90` allows for them), the opt-in step, and a
 somewhat smaller service catalogue (everything this stack uses is there).
 Choose eu-west-1 only if the client explicitly accepts the transfer and the
 ~$8/month saving matters more than latency.
@@ -1763,11 +1763,11 @@ Detection monitor (`alarms.tf`, all free), mailed through the **us-east-1**
 alerts topic to `budget_alert_email`:
 
 - **Daily budget, ACTUAL 100%** (`budget_daily_usd`, default
-  `ceil(budget_monthly_usd × 2.25 / 30)` = $6/day on $80, about 3× the
+  `ceil(budget_monthly_usd × 2.25 / 30)` = $7/day on $90, about 3.5× the
   ~$2/day af-south-1 idle): a single day cost more than that. This is the
   one that works in the **first month**, when the monthly forecast has no
   history. Daily budgets support ACTUAL notifications only.
-- **Monthly, ACTUAL 80%** ($64 on the default $80, just above the
+- **Monthly, ACTUAL 80%** ($72 on the default $90, above the
   af-south-1 idle): spend is heading for the budget.
 - **Monthly, ACTUAL 100%**: the budget is spent.
 - **Monthly, FORECASTED 100%**: AWS expects the month to overrun. Silent

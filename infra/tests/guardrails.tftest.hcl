@@ -1442,8 +1442,8 @@ run "alarms" {
   }
   # --- Budgets, anomaly detection and the alert topic policies -------------
   assert {
-    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "80" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
-    error_message = "An $80 monthly budget exists by default (above af-south-1's ~$58–63 idle)."
+    condition     = length(aws_budgets_budget.monthly) == 1 && aws_budgets_budget.monthly[0].limit_amount == "90" && aws_budgets_budget.monthly[0].time_unit == "MONTHLY"
+    error_message = "A $90 monthly budget exists by default (above af-south-1's ~$59–64 idle)."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.monthly[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1458,9 +1458,9 @@ run "alarms" {
       length(aws_budgets_budget.daily) == 1 &&
       aws_budgets_budget.daily[0].time_unit == "DAILY" &&
       aws_budgets_budget.daily[0].budget_type == "COST" &&
-      aws_budgets_budget.daily[0].limit_amount == "6"
+      aws_budgets_budget.daily[0].limit_amount == "7"
     )
-    error_message = "A $6/day budget (ceil(80 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
+    error_message = "A $7/day budget (ceil(90 × 2.25 / 30)) exists by default: the first-month guard while the monthly forecast has no history."
   }
   assert {
     condition = toset([for n in aws_budgets_budget.daily[0].notification : "${n.notification_type}:${n.threshold}:${n.threshold_type}:${n.comparison_operator}"]) == toset([
@@ -1576,7 +1576,7 @@ run "daily_budget_explicit" {
     budget_daily_usd = 4.5
   }
   assert {
-    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "80"
+    condition     = aws_budgets_budget.daily[0].limit_amount == "4.5" && aws_budgets_budget.monthly[0].limit_amount == "90"
     error_message = "An explicit budget_daily_usd is used as given."
   }
 }
@@ -1653,7 +1653,7 @@ run "no_budgets_before_billing_access" {
 run "rejects_daily_budget_not_below_monthly" {
   command = plan
   variables {
-    budget_daily_usd = 80
+    budget_daily_usd = 90
   }
   expect_failures = [var.budget_daily_usd]
 }

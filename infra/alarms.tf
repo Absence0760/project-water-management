@@ -123,12 +123,12 @@ resource "aws_sns_topic_policy" "alerts" {
 #
 # - Monthly: FORECASTED 100% once AWS has ~5 weeks of cost history (it is
 #   inert before that, i.e. through the first deploy), ACTUAL 80% as the
-#   early warning (above the af-south-1 idle of ~$58–63 on the $80 default,
+#   early warning (above the af-south-1 idle of ~$59–64 on the $90 default,
 #   so it doesn't fire every month) and ACTUAL 100%.
 # - Daily: ACTUAL only (daily budgets don't support FORECASTED). This is the
 #   first-month guard: from day one, a day costing more than
-#   budget_daily_usd (default monthly × 2.25 / 30, rounded up: $6 on $80,
-#   ~3× the ~$2/day af-south-1 idle) pages when billing data next refreshes
+#   budget_daily_usd (default monthly × 2.25 / 30, rounded up: $7 on $90,
+#   ~3.5× the ~$2/day af-south-1 idle) pages when billing data next refreshes
 #   (at least daily), so a runaway is caught in about a day, not after it has
 #   burned half the month.
 #
@@ -886,7 +886,7 @@ resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx" {
 # (var.cloudfront_requests_alarm_per_5min), is 20x that, and five people each
 # at the WAF's per-IP limit (1,000).
 #   Unseen: a flood just under it is 16.7 req/s = 1.44M/day
-#     = $2.30-4.03/day, 3-5% of the $80 monthly budget per day.
+#     = $2.30-4.03/day, 3-4% of the $90 monthly budget per day.
 #   Seen: the infra audit's 1,000 req/s flood is 300,000 per 5 minutes, 60x
 #     the threshold, so the first period fires, ~$0.48-0.84 in.
 # The budget's ACTUAL notifications lag 8-24 h; this is the prompt signal.

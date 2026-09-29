@@ -500,7 +500,7 @@ CloudFront flat-rate plans), so it is alarmed instead, in us-east-1:
 `cloudfront-requests` fires on the first 5 minutes over
 `cloudfront_requests_alarm_per_5min` (default 5,000, ~20× a busy 5 minutes
 for a handful of users: ~250 requests). A flood just under it is 16.7 req/s =
-1.44M a day = $2.30–4.03 a day unseen, 3–5% of the $80 budget; a 1,000 req/s
+1.44M a day = $2.30–4.03 a day unseen, 3–4% of the $90 budget; a 1,000 req/s
 flood is 60× the threshold and fires in the first period. The variable is held
 to 1,000–20,000 (at 20,000 an unseen flood costs $9–16 a day).
 `waf-blocked-requests` fires on more than 100 blocks in each of three
@@ -510,8 +510,8 @@ Runbooks](../docs/deployment.md#runbooks), Request flood.
 
 **af-south-1** has higher RDS, endpoint and storage rates (roughly +25–35%),
 which comes to **≈ $59–64/month** (with the database's KMS key). Check the AWS pricing calculator before
-you commit to it. The default `budget_monthly_usd = 80` is set for
-af-south-1: its ACTUAL 80% alert ($64) sits at the top of that idle, so it
+you commit to it. The default `budget_monthly_usd = 90` is set for
+af-south-1: its ACTUAL 80% alert ($72) sits above that idle, so it
 shouldn't fire every month (in us-east-1, ~60 is enough). See
 [§ Budget alerts](#budget-alerts). Main levers: the three endpoint AZ counts
 (`secretsmanager_endpoint_az_count`, `ses_endpoint_az_count`,
@@ -536,8 +536,8 @@ alarms are what bound and report a runaway while it happens.
 
 | Alert | Fires when | Notes |
 | --- | --- | --- |
-| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$6** on $80, ~3× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
-| Monthly, ACTUAL 80% | the month's spend passes $64 (on $80) | Early warning, set above the idle so it doesn't fire every month. |
+| Daily budget, ACTUAL 100% | a single day costs more than `budget_daily_usd` (default `ceil(budget_monthly_usd × 2.25 / 30)` = **$7** on $90, ~3.5× af-south-1's ~$2/day idle) | The first-month guard: works from day one. Daily budgets support ACTUAL only, no FORECASTED. At most one mail a day. |
+| Monthly, ACTUAL 80% | the month's spend passes $72 (on $90) | Early warning, set above the idle so it doesn't fire every month. |
 | Monthly, ACTUAL 100% | the month's spend passes the budget | |
 | Monthly, FORECASTED 100% | AWS forecasts the month past the budget | Needs ~5 weeks of cost history, so it is silent through the first month. |
 | Cost Anomaly Detection | one service's spend jumps, total impact ≥ `cost_anomaly_threshold_usd` (off by default; set $10 after the first apply, [§ Operator steps](#operator-steps) step 11) | AWS-services monitor, free, needs ~10 days of history. Off for the first apply because an account holds one services monitor and AWS may have made it already. |
@@ -987,8 +987,8 @@ single statement, `ses:FromAddress` pinned); the RDS parameter group logging
 no bind values (`log_parameter_max_length(_on_error) = 0`), TLS forced and
 `log_statement = none`; the worker heartbeat (< 1 invocation in
 15 minutes, missing data breaching) and the tick rule's `FailedInvocations`
-alarm; the budgets (monthly $80 with FORECASTED 100% / ACTUAL 80% / ACTUAL
-100%, the derived $6 daily ACTUAL 100%, all to the us-east-1 topic), the
+alarm; the budgets (monthly $90 with FORECASTED 100% / ACTUAL 80% / ACTUAL
+100%, the derived $7 daily ACTUAL 100%, all to the us-east-1 topic), the
 Cost Anomaly Detection monitor and subscription (off by default,
 `anomaly_detection_off_by_default`; on at a threshold, `anomaly_detection_on`), and both alert topics'
 policies (one service per statement, each pinned by `aws:SourceAccount`,

@@ -98,9 +98,9 @@ The checklist for these is issue #62; the history scrub is #63.
       resets reach only verified addresses while SES is in the sandbox.
       Request production access in the chosen region before any client uses
       email.
-- [ ] **AWS budget default is now $80** (`infra/variables.tf`
-      `budget_monthly_usd`; was $60, #126), sized for af-south-1's ~$58–63
-      idle, plus a derived $6/day budget (deployment.md § Budget alerts).
+- [ ] **AWS budget default is now $90** (`infra/variables.tf`
+      `budget_monthly_usd`; was $60, then $80, #126), sized for af-south-1's ~$59–64
+      idle with the database's KMS key, plus a derived $7/day budget (deployment.md § Budget alerts).
       Set ~60 in tfvars for us-east-1. Cost Anomaly Detection is off by
       default so the first apply can't fail on an existing monitor: turn it
       on after the first apply (infra/README.md § Operator steps, step 11).
@@ -165,7 +165,7 @@ The checklist for these is issue #62; the history scrub is #63.
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
       recommendation](./deployment.md)). If that's the choice, raise
-      `budget_monthly_usd` to about 80 and set `dmarc_report_email`.
+      `budget_monthly_usd` to about 90 and set `dmarc_report_email`.
 
 ## Hydrologist
 

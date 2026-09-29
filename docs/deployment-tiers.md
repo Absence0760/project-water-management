@@ -24,7 +24,7 @@ commit, especially for af-south-1.
 | Backups / PITR | 7 days | 14 days |
 | Database failure | ~10 min recovery, by AWS, on a new host | ~1–2 min automatic failover |
 | AZ outage | API down until the AZ recovers | API keeps serving |
-| Suggested `budget_monthly_usd` (daily budget derived: `ceil(× 2.25 / 30)`) | 60 (us-east-1) / 80 (af-south-1, the default): $5 / $6 a day | 130 (us-east-1) / 170 (af-south-1): $10 / $13 a day |
+| Suggested `budget_monthly_usd` (daily budget derived: `ceil(× 2.25 / 30)`) | 60 (us-east-1) / 90 (af-south-1, the default): $5 / $7 a day | 130 (us-east-1) / 170 (af-south-1): $10 / $13 a day |
 
 **Recommendation:** start on **minimal** in af-south-1. It is a complete,
 secure production deployment, not a demo: every feature, WAF, private
@@ -61,7 +61,7 @@ Terraform defaults.
 
 ```hcl
 aws_region         = "af-south-1"
-budget_monthly_usd = 80   # the default; 60 in us-east-1
+budget_monthly_usd = 90   # the default; 60 in us-east-1
 # Everything else on defaults. Set renderer_image_tag after the first
 # backend deploy (deployment.md § Reports).
 ```
