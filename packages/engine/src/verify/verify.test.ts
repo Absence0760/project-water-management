@@ -192,7 +192,7 @@ describe('verification (engine 0.12.0)', () => {
 	});
 });
 
-describe('the assurance self-check (engine 1.33.0, issue #192)', () => {
+describe('the assurance self-check (engine 1.34.0, issue #192)', () => {
 	// A random network with two demand nodes whose sums differ, so a swap between them shows.
 	const pick = () => {
 		for (let seed = 1; seed < 60; seed++) {

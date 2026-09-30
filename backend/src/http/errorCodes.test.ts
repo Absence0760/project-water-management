@@ -33,6 +33,10 @@ const UNCODED: Record<string, string> = {
 	'alerts/routes.ts: your role doesn’t get': 'the alert page offers only the kinds the role gets',
 	'alerts/routes.ts: only a farmer’s dam alerts are per farm': 'the alert page never sends it',
 	'alerts/routes.ts: not found': 'a farm no longer linked: the generic "isn’t there any more"',
+	'share/routes.ts: only a submitted or decided scenario': 'the Share dialog, in the workspace (English); the /share page never makes a link',
+	'share/routes.ts: only the assessors or the applicant': 'the Share dialog, in the workspace (English); the /share page never makes a link',
+	'share/routes.ts: only an application can be shared': 'the Share dialog, in the workspace (English); the /share page never makes a link',
+	'share/routes.ts: requires owner role': 'revoking a link: the workspace (English); the /share page never revokes one',
 	'share/routes.ts: not found': 'the /share page words a 404 itself (its dead-link state, share/load.ts); the owner-side 404s are the workspace’s',
 	'alerts/routes.ts: no token': 'the unsubscribe page shows its own dead-link state for any 400/404'
 };

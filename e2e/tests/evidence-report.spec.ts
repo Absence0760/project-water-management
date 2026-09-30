@@ -101,15 +101,34 @@ test('an application on the nominated run gives the full evidence report, draft 
 	await expect(page.getByTestId('evidence-banner')).toContainText('No baseline assumption changed.');
 	await expect(page.getByTestId('evidence-published')).toContainText('Nothing is published for this project');
 	const table = page.getByTestId('evidence-change-table');
-	for (const label of ['Reserve months met', 'Days below the EWR', 'Volume short of the EWR, whole run', 'Mean annual outflow at the outlet', 'The applicant’s own supply', 'Registered vs modelled use'])
-		await expect(table.getByRole('rowheader', { name: new RegExp(`^${label}`) })).toBeVisible();
-	const days = table.getByRole('row', { name: /^Days below the EWR/ });
+	for (const label of [
+		'Reserve months met',
+		'Days below the EWR',
+		'Volume short of the EWR, whole run',
+		'No-flow days at the outlet',
+		'Days below the EWR, first site below the works',
+		'Mean annual outflow at the outlet',
+		'The applicant’s own supply',
+		'Registered vs modelled use'
+	])
+		await expect(table.getByRole('rowheader', { name: new RegExp(`^${label}`) }).first()).toBeVisible();
+	// The outlet's row comes before the works' row, which starts the same way.
+	const days = table.getByRole('row', { name: /^Days below the EWR/ }).first();
 	await expect(days.getByRole('cell').nth(3)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
-	await expect(table.getByRole('row', { name: /^The applicant’s own supply/ })).toContainText('no band: the ensemble doesn’t carry this measure yet');
+	// The engine-1.33.0 measures carry the paired band and "worse in" (ER4): no-flow days and the applicant's own supply.
+	for (const label of [/^No-flow days at the outlet/, /^The applicant’s own supply/])
+		await expect(table.getByRole('row', { name: label }).getByRole('cell').nth(3)).toHaveText(/^\d+ of \d+ sets \(\d+ %\)$/);
+	// The upper farm's dam has no EWR site between it and the outlet: said, with the assessor's question.
+	await expect(table.getByRole('row', { name: /^Days below the EWR, first site below the works/ })).toContainText('Not assessed: no EWR site between the works and the outlet');
 	await expect(page.getByTestId('evidence-rules')).toContainText('R2 · Paired rule');
 	// § 5 and its row: the project has no registered volumes, so both say so (G6); evidence-allocations.spec.ts has the assessed case.
 	await expect(table.getByRole('row', { name: /^Registered vs modelled use/ })).toContainText('Not assessed: the runs carry no registered volumes');
 	await expect(page.getByTestId('evidence-allocations-na')).toContainText('Not assessed: the runs carry no registered volumes');
+
+	// § 1: the FDC check carries the baseline's band (ER5). § 4: each unit's change is banded, and the users served in full while the outlet fails.
+	await expect(report.getByTestId('fdc-band-a').first()).toBeVisible();
+	await expect(page.getByTestId('evidence-users').getByRole('row', { name: /^Lower farm/ })).toContainText(/\d+ of \d+ sets/);
+	await expect(page.getByTestId('evidence-served').first().getByRole('rowheader', { name: /^Upper farm \(the applicant’s\)/ })).toBeVisible();
 
 	// The other application, summed on page 1 and listed in § 4 (a sum of runs, not one combined run).
 	const others = table.getByRole('row', { name: /^Other applications on this baseline, summed/ });

@@ -1,4 +1,4 @@
-// The assurance of supply as it was before issue #192 (engine 1.32.x, origin/main
+// The assurance of supply as it was before issue #192 (engine 1.33.x, origin/main
 // before 47e1ddb1), kept only as the reference reliability.bitIdentity.test.ts
 // compares network/reliability.ts against: the workaround for the V8 miscompile
 // (docs/engine-audit.md V1) must give the same figures to the bit. Never import

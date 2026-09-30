@@ -233,6 +233,8 @@ is a WAF or CloudFront block, and is retried with the other passing failures
 | `note_farm_visibility` | 400 | a farm-visible note on something that isn't a farm |
 | `note_author_only` | 403 | editing someone else's note |
 | `note_delete_denied` | 403 | deleting someone else's note without the editor role |
+| `note_comment_closed` | 403 | a public comment on a scenario that isn't open for comment (WP-3.15) |
+| `note_audience_denied` | 403 | a scenario note with an audience the caller may not post to, or a farmer commenting on a scenario (WP-3.15) |
 | `unsubscribe_link_gone` | 404 | an alert email's unsubscribe link that no longer works |
 | `export_throttled` | 429 | `GET /auth/me/export` within a minute of the last; `params.seconds` (also `Retry-After`) |
 | `alerts_resume_throttled` | 429 | `POST /me/alerts/resume` a second time within a day, after the address was refused again |
@@ -1714,7 +1716,7 @@ engine's `runModelChecked` (`runModel` plus its self-checks, [model.md § Verifi
   run ([model.md § Verification](./model.md#verification)):
   `{ passed, checks: { id, label, passed, detail }[], maxResidual: { valueM3Day, nodeId, name, date } | null }`,
   with `id` one of `balance`, `workings`, `soilWater` (engine ≥ 0.14.0), `runoff`, `transfers`, `reports`,
-  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.33.0:
+  `ewrAttribution` (engine ≥ 0.17.0), `groundwater`, `landCover`, `allocations`, `operatingRules` (engine ≥ 1.32.0) and `assurance` (engine ≥ 1.34.0:
   the assurance of supply and stress grids against each farm's and user's own daily demand and supply, issue #192), and
   `detail` the first broken property (farm names and dates) or `null`.
 - `summary.waterBalance` (engine ≥ 0.12.0) is `{ areaKm2, years: WaterBalanceRow[], total: WaterBalanceRow }`,
@@ -1818,14 +1820,19 @@ the result is stored only after the server has checked it.
 | GET | `/projects/:id/runs/:runId/uncertainty` | – | `{ ensembles: Ensemble[] }`, newest first, **every** ensemble started for the run (abandoned starts included), without `result` | viewer |
 | GET | `/projects/:id/runs/:runId/uncertainty/:uid` | – | `{ ensemble: Ensemble & { result } }`: `result` = `{ engineVersion, header, members, coverage }` (an ensemble) or `{ engineVersion, header, members: { index, metrics }[] }` (paired) | viewer |
 | POST | `/projects/:id/runs/:runId/uncertainty` | `{ request: { members?, bounds?, free?, panOffset?, rainSources?, records?, thresholds?: { objective?, minSkill?, wr2012MaxLevel?, maxLowFlowBiasPct? } } }` or `{ baselineId }` | `201 { ensemble, notes }`, status `started`: the resolved options (`ResolvedEnsembleOptions`, the model is the run's own) with the seed the database drew. `baselineId` (a complete ensemble of **another** run of this project, same runoff model and period) starts a paired band: its options and seed are the baseline's. `400` with the engine's reason for options the run can't use (fewer than 30 members, a rain source it lacks, no observed record, two models, two periods, or from engine 0.31.0 a baseline that varied the pan coefficient paired with a GR4J run on a monthly PE row, which doesn't use it). On a GR4J run with a monthly PE row the pan coefficient isn't varied (`panOffset` 0) and `notes` says so; `409` from `model-input`, or at 50 ensembles for the run | editor |
-| POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }` | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
+| POST | `/projects/:id/runs/:runId/uncertainty/:uid/result` | `{ members: MemberResult[], coverage: RecordCoverage[] }`, or for a paired row `{ members: { index, metrics }[] }`. From engine 1.33.0 a member's `metrics` must carry `noFlowDays`, `ewrSiteDaysNotMet`, `unitDemandM3Day`, `unitSuppliedM3Day` and `reserveFdc` (`400` without them: a result is stored only on the engine it was started on, which always computes them) | `200 { ensemble }`, status `complete`, with the `summary` the server built. `422 { error: "the posted ensemble does not reproduce", details }` when the sample isn't the one the seed and options generate, or member 0 or one of the members the server re-runs (three, picked at random) differs; `403` for anyone but whoever started it; `409` when already stored (a row completes once) or started on another engine version | editor |
 
 - `Ensemble = { id, runId, baselineId, baselineRunId, runoffModel, engineVersion, method, seed, members, options, status, accepted, summary, createdAt, createdBy, createdById, completedAt }`.
   `summary` is `EnsembleSummary` (`total`, `accepted`, `gated`,
   `referenceAccepted`, `rejected` by reason, `bands`, `coverage`,
   `coverageWarning`, `decisionRule`, `notes`) or, for a paired row,
   `PairedSummary` (difference bands, `ewrDaysNotMetWorse`, `shortfallWorse`,
-  `unpaired`, `decisionRule`); `null` until complete. A band is
+  `unpaired`, `decisionRule`; from engine 1.33.0 also `noFlowDays` with
+  `noFlowDaysWorse`, `ewrSites[]` and `supply[]` each with `worse`,
+  `reserveFdc[]` and `carriesMeasures`, model.md §2.10e); `null` until
+  complete. From engine 1.33.0 an `EnsembleSummary`'s `bands` also has
+  `noFlowDays`, `ewrSites`, `supply` and `reserveFdc`; one stored before
+  lacks them. A band is
   `{ n, p5, p50, p95, min, max }`, the percentiles `null` below 30 members.
 - Nothing about a stored ensemble can change and none can be deleted
   ([data-model.md](./data-model.md), "Uncertainty bands").
@@ -1944,7 +1951,7 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
 
 | Method | Path | Body | Returns | Role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-3`: § 5 registered water use, `allocations` (evidence-2); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (evidence-3)) | viewer |
+| GET | `/projects/:id/runs/:runId/evidence-report` | – | `{ report: EvidenceReport }` (engine `packages/engine/src/evidence/types.ts`, version `evidence-4`: § 5 registered water use, `allocations` (`evidence-2`); each Reserve site's driest month, `river[].fdcDriestMonth`, and the other applications on the baseline, `cumulative` with its page-1 row `otherApplications` (`evidence-3`); the page-1 rows `noFlowDays` and `ewrBelowWorks`, supply bands (`users[].change`), `servedWhileFailing` and `river[].fdcBands` (`evidence-4`, engine 1.33.0)) | viewer |
 
 - **Which report.** An application run (a scenario run) is reported against
   the base run its snapshot recorded (`inputs.scenario.baseRunId`); any other
@@ -1956,7 +1963,9 @@ mode"; design [design/evidence-report.md](./design/evidence-report.md), layout
   series hashes, notes), the nomination history, the current and previous
   publications, every ensemble started on the baseline and every paired one on
   the application (a paired band's summary recomputed from both rows' stored
-  members, so `reserve[].worse` is there for bands stored before it existed),
+  members, with the scenario's own units for the applicant's supply band
+  (`ownSupply`), so `reserve[].worse` is there for bands stored before it
+  existed),
   the input diff (`diffInputs` with stored values, as compare), the revisions
   since the previous publication, up to 50 other scenario runs on the same
   baseline, the other applications on the baseline (below), and the engine's
@@ -2222,15 +2231,21 @@ never a farm's row, name or id.
 
 | Method | Path | Body | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/share-links` | – | `{ links: ShareLink[] }`, newest first, revoked and expired ones included | owner |
-| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole) }` | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>`: the **only** time the token is sent; it isn't stored, so it can't be shown again | owner |
-| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too; another project's link `404`). A link is never deleted | owner |
+| GET | `/projects/:id/share-links` | `?scenarioId=` (optional) | `{ links: ShareLink[] }`, newest first, revoked and expired ones included. Without `scenarioId`: the baseline links (owner). With it: the links to that scenario the caller manages, every one to an assessor (an editor who reads it) or the owner, the ones they made to an applicant; a scenario they can't read is `404` | owner; contributor with `scenarioId` |
+| POST | `/projects/:id/share-links` | `{ label: 1–100 chars, expiresInDays: 1–365 (whole), targetKind?: 'scenario', targetId?: uuid }` (both target fields or neither, `400`) | `201 { link: ShareLink & { url } }`. `url` is `${SITE_URL}/share#t=<token>` (a scenario link adds `&k=scenario`): the **only** time the token is sent; it isn't stored, so it can't be shown again. A baseline link: owner. A scenario link (WP-3.15): an editor on a scenario they read, or the applicant on their own; `404` for a scenario the caller can't read, `403` for one they read but may not share (someone the applicant shared it with, a viewer), `409` unless it is an application (not a team scenario) that is submitted or decided | owner; contributor for a scenario link |
+| DELETE | `/projects/:id/share-links/:linkId` | – | `204`: sets `revokedAt` / `revokedBy` (already revoked is `204` too). The owner revokes any link (another project's is `404`); an assessor a link to a scenario they read, an applicant a link they made; anyone else `403`. A link is never deleted | contributor (RLS decides) |
 | POST | `/share/view` *(public)* | `{ token }` | `ShareView` (below), `Cache-Control: no-store` | – |
 | POST | `/share/series` *(public)* | `{ token, key }` | `ShareSeries` (below), `Cache-Control: no-store` | – |
+| POST | `/share/scenario` *(public)* | `{ token }` | `ShareScenario` (below), `Cache-Control: no-store` | – |
 
-- `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt }`
+- `ShareLink = { id, label, createdAt, createdBy, expiresAt, revokedAt, revokedBy, lastUsedAt, targetKind, targetId, mine }`
   (`createdBy` / `revokedBy` are display names, `null` once that account is
-  gone). `lastUsedAt` moves at most once an hour, on a `/share/view`.
+  gone; `targetKind` `null` = the baseline, `'scenario'` with `targetId` its
+  scenario; `mine` = the caller made it). `lastUsedAt` moves at most once an
+  hour, on a `/share/view` or `/share/scenario`.
+- A link opens **only its own target**: a scenario link answers `404` on
+  `/share/view` and `/share/series`, a baseline link `404` on
+  `/share/scenario`.
 - `ShareView = { project: { name }, publication: { publishedAt, publishedBy, catchmentView, restriction: { level, pct, notice }, nextExpectedOn } }`.
   `catchmentView = { runStart, dataUntil, runDays, season, last30, farmCount, sites }`,
   the publication's [`catchmentView`](#publication) cut to an allowlist
@@ -2251,29 +2266,55 @@ never a farm's row, name or id.
   answers the same `404` for a key off the allowlist (every farm key), a key
   the run doesn't have (`observed_flow` without observed data), and below
   `k` holders. A body without `token` (or `key`) is `400`.
+- `ShareScenario` (WP-3.15, `app_share_scenario`, a redacted projection):
+  `{ project: { id, name }, scenario: { id, name, description, origin, status, submittedAt, decidedAt, outcome, decisionNote, ops, opsSha256, ownedNodeIds, opNames, classified }, results, base, run, comments }`.
+  It answers only while the scenario is `submitted` or `decided` (withdrawn
+  or back to draft: `404`, until it is submitted again). `opNames` names the
+  scenario's own nodes only; `classified` is each op's class (`proposal` |
+  `baseline`) as the shown run applied it (`null` without one). `base` and
+  `run` are the base run and the scenario's newest run of its current ops
+  whose stamp verifies (of its newest five),
+  each `{ engineVersion, startDate, endDate, createdAt, ewrDaysNotMet, ewrFractionDaysNotMet, volumes, ewrSites }`:
+  `ewrSites` is each EWR site's Reserve compliance (`{ name, isOutlet, months, met, rate, longestNotMetRun, deficitM3, byMonth: { month, years, met, rate }[] }`,
+  the outlet's `name` `null`), and `volumes`
+  (`{ meanNaturalFlowM3Day, meanSimulatedOutflowM3Day, farms: { count, demandM3Day, suppliedM3Day, belowTarget } }`)
+  and every `deficitM3` are `null` below 5 farm holders (the `k` rule
+  above), and on both runs when any change is a baseline assumption (on
+  another unit, it would make baseline minus application that unit's
+  figures). `results`: `ready` (both runs' stamps verify, [security.md § Run
+  stamps](./security.md#run-stamps)), `none` (no run of its current ops:
+  `base` and `run` `null`) or `unverified` (no candidate run's stamp verifies, or the base's fails: `base`, `run` and
+  `classified` `null`). `comments` are the notes on it with `public_participation`
+  visibility (the newest 500), oldest first, `{ body, author, createdAt, editedAt }` (the
+  author's display name: posting a public comment says so). No other farm's
+  name, id or figures, no member list, no e-mail, no allocation holder.
 - No session and no rate limit of its own: the WAF's per-IP limit on `/api/*`
-  covers both reads, and a 256-bit token can't be guessed.
+  covers the reads, and a 256-bit token can't be guessed.
 - Creating and revoking are recorded on the row (`createdBy`, `revokedAt`,
   `revokedBy`), not yet as audit events (WP-2.4,
   [followups.md](./followups.md)).
 
 ## Notes
 
-Plain-text notes and comments on a node, a run, a settings group or the
-project (WP-2.7; [data-model.md § Notes](./data-model.md#notes-037_notessql)).
-The min role is **farmer** on every route, and RLS does the scoping: a farmer
-reads and writes only `farm` notes on their linked farms, and never sees a
-`team` note.
+Plain-text notes and comments on a node, a run, a settings group, a
+scenario or the project (WP-2.7, WP-3.15;
+[data-model.md § Notes](./data-model.md#notes-037_notessql)). The min role is
+**farmer** on every route, and RLS does the scoping: a farmer reads and
+writes only `farm` notes on their linked farms, and never sees a `team`
+note. A scenario's notes have three more audiences, `assessors`, `parties`
+and `public_participation`; who reads and writes each is the matrix in
+data-model.md.
 
 | Method | Path | Body / query | Response | Min role |
 | --- | --- | --- | --- | --- |
-| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&target=project\|node\|run\|setting&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
-| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
-| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey?, visibility?: 'team' \| 'farm' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404` | farmer |
+| GET | `/projects/:id/notes` | `?nodeId=&runId=&settingKey=&scenarioId=&target=project\|node\|run\|setting\|scenario&limit=1..500` (default 100) | `{ notes: Note[] }`, newest first; deleted notes are never listed. `settingKey` matches the key and its sub-keys by whole segment (`flow` → `flow`, `flow.a`, not `flowshare`) | farmer |
+| GET | `/projects/:id/notes/counts` | – | `{ project, nodes: { [nodeId]: n }, runs: { [runId]: n }, settings: { [key]: n }, scenarios: { [scenarioId]: n } }`: the notes the caller can see, per target (the count badges) | farmer |
+| POST | `/projects/:id/notes` | `{ body: 1–4000 chars (trimmed), nodeId? \| runId? \| settingKey? \| scenarioId?, visibility?: 'team' \| 'farm' \| 'assessors' \| 'parties' \| 'public_participation' }` | `201 { note }`. At most one target (`400`). `visibility` defaults to `team`, or `farm` for a farmer; `farm` needs a farm node, the last three a scenario (`400`). A farmer may add only a `farm` note on their own farm (`403`); an unknown or invisible node or run is `404`. On a scenario (contributor and above): its default is the caller's natural audience (an assessor: `assessors`; one of its parties: `parties`; anyone else: `public_participation`); a scenario the caller can neither read nor comment on is `404`, an audience they may not post to `403` (`public_participation` needs the scenario open for comment, for everyone: a live scenario link, or decided after it was ever shared; codes `note_comment_closed` and `note_audience_denied`) | farmer |
 | PATCH | `/projects/:id/notes/:noteId` | `{ body }` | `{ note }` with `editedAt` set. Author only (`403`) | farmer |
 | DELETE | `/projects/:id/notes/:noteId` | – | `204`: a soft delete, recorded as `note.deleted`. The author or an editor (`403`); a deleted or unknown note is `404` | farmer |
+| GET | `/projects/:id/notes/:noteId/revisions` | – | `{ note, revisions: { body, writtenAt, editedAt }[] }`: each earlier text of a scenario note, oldest first (what it said from `writtenAt` until an edit replaced it at `editedAt`); read as the note is, so a note the caller can't read (or a deleted one) is `404`. Other notes keep no history (`[]`) | farmer |
 
-- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting', nodeId, nodeName, runId, settingKey, visibility, mine, canDelete }`.
+- `Note = { id, body, author, createdAt, editedAt, target: 'project' | 'node' | 'run' | 'setting' | 'scenario', nodeId, nodeName, runId, settingKey, scenarioId, visibility, mine, canDelete }`.
   `author` is a display name (`null` once that account is gone); `nodeName`
   is the node's name when the caller can see it; `mine` = the caller wrote
   it (and may edit it); `canDelete` = the author or an editor.

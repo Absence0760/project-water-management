@@ -675,6 +675,76 @@ result without signing in, until it expires or its owner revokes it.
   control) and `routes.test.ts` (the two reads on the public allowlist,
   answering `400` rather than `401`).
 
+### Scenario links (WP-3.15, 115_scenario_share_notes.sql)
+
+A link to **one** submitted or decided scenario (an application), so an NGO
+or a catchment forum can read it during a comment period. The same token
+model as above (32 bytes, SHA-256 at rest, in the fragment, now with
+`&k=scenario` beside it so the page asks the right read), with these
+differences:
+
+- **Who makes one.** An editor on a scenario they read (the assessors), or
+  the applicant on their own, only for an **application** (a team
+  scenario's ops name the real farms by id with their values, which no
+  projection hides, so it is refused) and only while it is `submitted` or
+  `decided` (a draft is still changing). Not someone the applicant shared it with,
+  not a viewer, not a farmer. Enforced by the insert policy
+  (`app_share_link_creatable`), with the route answering `404` / `403` /
+  `409` first. The assessors list and revoke every link to a scenario they
+  read; an applicant only the links they made (`app_share_link_visible`).
+  Baseline links stay the owner's alone.
+- **One target.** The target is fixed at creation (no UPDATE grant) and
+  checked to be a scenario of the link's project (a trigger). A scenario
+  link answers nothing on `/share/view` or `/share/series`, a baseline link
+  nothing on `/share/scenario`, and a link to scenario A never reads
+  scenario B. A withdrawn scenario's link is dead until it is submitted
+  again; a deleted scenario's is dead for good.
+- **What it reveals.** Only through `SECURITY DEFINER app_share_scenario`,
+  rebuilt from an allowlist in SQL and again field by field in TypeScript
+  (`share/links.ts toShareScenario`), so a column or summary field added
+  later reaches no one until it is added to both: the scenario's name,
+  description, status and decision (the assessor's reasons are the public
+  record of a decision), its ops and their hash, its own node ids and those
+  nodes' names only (every other node stays an id, as in the applicant
+  projection, D2), each op's class; for the base run and its newest run of
+  the current ops, dates, engine version, EWR days not met and each EWR
+  site's Reserve compliance (the outlet unnamed); and the public comments
+  with their authors' display names. Flow volumes, farm totals and site
+  deficits only at 5 or more farm holders (the k rule above). Never a farm's
+  row or figures, a member list, an e-mail, an allocation or its holder
+  (`user_display`), or a `parties` / `assessors` / `team` note.
+- **Only results the backend stored.** The function returns each run's
+  stamp and digest (`app_run_digest_body`, not callable by water_app), and
+  the API shows results only when both stamps verify
+  ([Run stamps](#run-stamps)): a run written past the API is shown to no
+  one as evidence (`results: 'unverified'`).
+- **Comments** need an account (step-3 D5 (a)): a member of the project
+  posts a `public_participation` note, allowed only while the scenario is
+  open for comment (a live scenario link, or decided after it was ever
+  shared). **Known gap:** the roadmap has an NGO join as a `viewer`, which
+  reads far more than commenting needs (every farm's figures, team notes,
+  decided applications); a comment-only role is a follow-up
+  ([followups.md](./followups.md#applicants-wp-33)). A linkless
+  contributor can comment and reads almost nothing.
+- **Only the run the backend stored, and its labels.** The function returns
+  the newest five runs of the current ops; the API shows the newest whose
+  stamp verifies, and takes each change's proposal / baseline class from
+  that run only, so a row written past the API neither hides the stored run
+  nor relabels a baseline assumption. Volumes only when every change was a
+  proposal (the applicant's own units): a baseline assumption on another
+  unit (its demand set to 0) would otherwise make baseline minus
+  application that unit's figures. Posting one says the author's display name is shown on the
+  link. Editors moderate by soft delete, which removes it from the link. An
+  application that drew public comments can't be deleted
+  (`scenario_comments_kept`), so the record doesn't cascade away.
+- **Tests:** `share/scenario-share.db.test.ts` (who makes, lists and revokes
+  a scenario link, each with its control; one target only, both ways, and
+  the baseline link unchanged; revoked, expired and withdrawn against a live
+  token; the string scan for other farms' names and ids, members, e-mails,
+  the holder and non-public notes; unverified results hidden; the k rule),
+  `share/links.test.ts` (the TypeScript allowlist against a row with
+  planted extras) and `routes.test.ts` (`POST /share/scenario` public).
+
 ## API keys
 
 Per-project keys for the ingest endpoint (WP-2.9; `039_api_keys.sql`,
@@ -1236,6 +1306,16 @@ In short:
   someone else's name ([data-model.md § Notes](./data-model.md#notes-037_notessql)). Tests:
   `notes/notes.db.test.ts`, with positive controls; `role-ladder.db.test.ts`
   lists the note routes among the farmer-allowed ones (`BELOW_VIEWER`).
+  **Scenario notes (WP-3.15, 115):** three more audiences, `assessors`,
+  `parties` and `public_participation`, each read and written as the matrix
+  in [data-model.md § Notes](./data-model.md#notes-037_notessql) says,
+  through `SECURITY DEFINER` helpers; the viewer policy (`note_select`) now
+  reads only `team` and `farm` notes and only on a scenario it reads, so a
+  viewer never reads the applicant's `parties` exchange. A farmer reads none.
+  Every edit of a scenario note keeps the text it replaced (`note_revision`,
+  written only by a trigger, read as the note is). Tests:
+  `share/scenario-share.db.test.ts` (the matrix, reads and writes, each with
+  a positive control; the revisions).
 - **Same-project triggers** reject references to another project's nodes or
   crops, even when the UUID is known. `land_cover` (013, WP-1.35) has the
   model tables' viewer/editor policies and a same-project trigger on its
@@ -2017,6 +2097,8 @@ PDF someone else asked for kept the person as a recipient
 | Pending invites: an address, its language, a farmer invite's farms | `invite`, `invite_node` | 7 days live, then 90 days as expired, then purged by the job tick (048) | Deleted if they sent it; an invite *to* their address lapses and is purged | Deleted |
 | A farm's figures, personal once linked to a named farmer | `publication_farm`, `run_series` (farm keys), `model_run` | The newest 12 publications and 20 manual runs; published runs kept while published | Stay (the farm's, not the person's; the link goes) | Deleted |
 | Notes: body, author | `note` | For the life of the project; a deleted note's body stays for editors *(confirm)* | Author cleared; body stays | Deleted |
+| A scenario note's earlier texts, and who edited (115, WP-3.15): a participation record | `note_revision` | With its note (for the life of the project) *(confirm with the client's legal adviser, as for a public-participation record)* | Who edited cleared; texts stay, as the note's body does | Deleted |
+| A public comment's author's display name, shown on the scenario's share link (115) | `note` (`public_participation`), read by `app_share_scenario` | While the comment and a live link stand | The comment shows "a former member" | Deleted |
 | Audit log: actor name, names and masked addresses in subjects | `audit_event` | For the life of the project (the regulator's audit trail) | Pseudonymised: "Deleted user" as actor and subject (D12, 048) | Deleted |
 | Model and series revisions: who saved | `model_revision`, `series_revision` | Model revisions for the life of the project; series revisions 180 days / 5 versions | Who cleared | Deleted |
 | API keys, share links, publications: who made, revoked, published | `api_key`, `share_link`, `run_publication` | Kept after revocation (the audit record) | Who cleared; a key keeps working, its automatic re-runs are skipped | Deleted |

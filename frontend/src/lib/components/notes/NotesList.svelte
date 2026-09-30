@@ -10,12 +10,15 @@
 	farm card passes the catalogue's, so this list never imports it.
 	`formFirst` puts the add form above the notes (the notes drawer, where a
 	long list would push it a screen down).
+	A scenario's comments (WP-3.15) have an audience picker (the target's
+	`audiences`, which the server enforces), a badge with each note's
+	audience, and "edited" opens the note's earlier texts (note_revision).
 -->
 <script lang="ts">
 	import { confirmDialog } from '$lib/components/common/confirm.svelte';
-	import { api, NOTE_MAX, type Note } from '$lib/api';
+	import { api, NOTE_MAX, type Note, type NoteRevision, type NoteVisibility } from '$lib/api';
 	import { fmtDate } from '$lib/format/number';
-	import { bodyProblem, createBody, normaliseBody, targetQuery, type NoteTarget } from './notes';
+	import { AUDIENCE_BADGE, AUDIENCE_LABEL, bodyProblem, createBody, normaliseBody, targetQuery, type NoteTarget } from './notes';
 	import { NOTES_EN, type NotesWords } from './words';
 
 	let {
@@ -50,6 +53,30 @@
 	let error = $state<string | null>(null);
 	let editing = $state<string | null>(null);
 	let editDraft = $state('');
+	/** A scenario comment's audience (its target's first by default). */
+	let audience = $state<NoteVisibility | null>(null);
+	const audiences = $derived(target.kind === 'scenario' ? target.audiences : []);
+	const chosen = $derived<NoteVisibility>(audience && audiences.includes(audience) ? audience : (audiences[0] ?? 'team'));
+	/** The note whose earlier texts are open, and them. */
+	let historyOf = $state<string | null>(null);
+	let history = $state<NoteRevision[] | null>(null);
+	let historyError = $state<string | null>(null);
+
+	async function toggleHistory(n: Note) {
+		if (historyOf === n.id) {
+			historyOf = null;
+			return;
+		}
+		historyOf = n.id;
+		history = null;
+		historyError = null;
+		try {
+			const r = await api.notes.revisions(projectId, n.id);
+			if (historyOf === n.id) history = r.revisions;
+		} catch (err) {
+			if (historyOf === n.id) historyError = message(err);
+		}
+	}
 
 	const shown = $derived(notes && farmOnly ? notes.filter((n) => n.visibility === 'farm') : notes);
 	const showShare = $derived(!farmer && target.kind === 'node' && target.isFarm);
@@ -82,7 +109,7 @@
 		busy = true;
 		error = null;
 		try {
-			const note = await api.notes.create(projectId, createBody(target, draft, farmer || shareWithFarm ? 'farm' : 'team'));
+			const note = await api.notes.create(projectId, createBody(target, draft, target.kind === 'scenario' ? chosen : farmer || shareWithFarm ? 'farm' : 'team'));
 			notes = [note, ...(notes ?? [])];
 			draft = '';
 			onChanged?.();
@@ -141,9 +168,17 @@
 		<form class="add" onsubmit={add}>
 			<label for="{uid}-new">{words.add}</label>
 			<textarea id="{uid}-new" rows="3" bind:value={draft} aria-describedby="{uid}-help" aria-invalid={draftLength > NOTE_MAX}></textarea>
+			{#if target.kind === 'scenario' && audiences.length > 1}
+				<div class="audience">
+					<label for="{uid}-aud">Who reads it</label>
+					<select id="{uid}-aud" value={chosen} onchange={(e) => (audience = e.currentTarget.value as NoteVisibility)} data-testid="note-audience">
+						{#each audiences as a (a)}<option value={a}>{AUDIENCE_LABEL[a]}</option>{/each}
+					</select>
+				</div>
+			{/if}
 			<p id="{uid}-help" class="muted small">
 				{words.plainText}
-				{#if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this hydrological unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
+				{#if target.kind === 'scenario'}{audiences.length > 1 ? '' : `${AUDIENCE_LABEL[chosen]}.`} Every edit is kept in its history.{:else if farmer}{words.farmerAudience}{:else if target.kind === 'node' && target.isFarm}Read by the project team{shareWithFarm ? ' and this hydrological unit’s farmers' : ''}.{:else}Read by the project team; farmers never see it.{/if}
 				<span class:over={draftLength > NOTE_MAX}>{draftLength} / {NOTE_MAX}</span>
 			</p>
 			{#if showShare}
@@ -185,13 +220,38 @@
 					<p class="meta muted">
 						<span>{n.mine ? words.you : (n.author ?? words.formerMember)}</span>
 						· <time datetime={n.createdAt}>{fmtDate(n.createdAt, true)}</time>
-						{#if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
+						{#if n.editedAt && n.scenarioId}
+							· <button type="button" class="btn btn-ghost btn-sm" aria-expanded={historyOf === n.id} onclick={() => toggleHistory(n)} title={words.editedAt(fmtDate(n.editedAt, true))}
+								>{words.edited}: history<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button
+							>
+						{:else if n.editedAt}<span title={words.editedAt(fmtDate(n.editedAt, true))}>· {words.edited}</span>{/if}
 						{#if n.visibility === 'farm' && !farmer}<span class="badge">Shown to its farmers</span>{/if}
+						{#if n.scenarioId}<span class="badge" data-testid="note-audience-badge">{AUDIENCE_BADGE[n.visibility]}</span>{/if}
 						{#if canWrite && editing !== n.id}
 							{#if n.mine}<button type="button" class="btn btn-ghost btn-sm" disabled={busy} onclick={() => startEdit(n)}>{words.edit}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
 							{#if n.canDelete}<button type="button" class="btn btn-ghost btn-sm btn-danger" disabled={busy} onclick={() => remove(n)}>{words.delete}<span class="visually-hidden">{words.noteFrom(fmtDate(n.createdAt, true))}</span></button>{/if}
 						{/if}
 					</p>
+					{#if historyOf === n.id}
+						<div class="history" data-testid="note-history">
+							{#if historyError}
+								<p class="alert alert-error" role="alert">{historyError}</p>
+							{:else if history === null}
+								<p class="muted small" aria-busy="true">Loading its history…</p>
+							{:else if history.length === 0}
+								<p class="muted small">No earlier text.</p>
+							{:else}
+								<ol aria-label="Earlier texts, oldest first">
+									{#each history as r, i (i)}
+										<li>
+											<p class="body">{r.body}</p>
+											<p class="muted small">Written <time datetime={r.writtenAt}>{fmtDate(r.writtenAt, true)}</time>, replaced <time datetime={r.editedAt}>{fmtDate(r.editedAt, true)}</time></p>
+										</li>
+									{/each}
+								</ol>
+							{/if}
+						</div>
+					{/if}
 				</li>
 			{/each}
 		</ul>
@@ -266,5 +326,25 @@
 	.over {
 		color: var(--danger);
 		font-weight: 500;
+	}
+	.audience {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		margin: 0.4rem 0 0.2rem;
+	}
+	.audience select {
+		min-height: var(--tap, 44px);
+		max-width: 100%;
+	}
+	.history {
+		margin: 0.3rem 0 0.2rem;
+		padding-left: 0.6rem;
+		border-left: 2px dashed var(--border);
+	}
+	.history ol {
+		margin: 0;
+		padding-left: 1.1rem;
 	}
 </style>

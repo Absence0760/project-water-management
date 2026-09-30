@@ -30,6 +30,10 @@ const PUBLIC = new Set([
 	// (share/share.db.test.ts).
 	'POST /share/view',
 	'POST /share/series',
+	// A link to one submitted or decided scenario (WP-3.15): the same token
+	// model, read only through app_share_scenario's redacted projection; a
+	// link opens only its own target (share/scenario-share.db.test.ts).
+	'POST /share/scenario',
 	// One-click unsubscribe from alert emails (WP-2.13): the token is the
 	// credential, and it can only turn off the one subscription it names,
 	// through app_alert_unsubscribe (alerts/alerts.db.test.ts). The only
@@ -279,7 +283,8 @@ describe('route auth inventory', () => {
 			'GET /projects/:id/notes/counts',
 			'POST /projects/:id/notes',
 			'PATCH /projects/:id/notes/:noteId',
-			'DELETE /projects/:id/notes/:noteId'
+			'DELETE /projects/:id/notes/:noteId',
+			'GET /projects/:id/notes/:noteId/revisions'
 		];
 		for (const r of notes) {
 			expect(routes).toContain(r);
@@ -315,6 +320,8 @@ describe('route auth inventory', () => {
 		}
 		expect(routes).toContain('POST /share/view');
 		expect(routes).toContain('POST /share/series');
+		expect(routes).toContain('POST /share/scenario');
+		expect(PUBLIC.has('POST /share/scenario')).toBe(true);
 	});
 
 	// API keys (WP-2.9): the owner's routes need a session; the ingest routes

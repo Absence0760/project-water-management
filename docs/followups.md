@@ -1175,7 +1175,7 @@ the suggested order (the IDs carry the detail):
   ui.md § Self-checks).
 - [x] **A farm's assurance of supply carried another farm's figures**
       (issue #192, [engine-audit.md V1](./engine-audit.md#findings), engine
-      1.33.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
+      1.34.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
       code re-entered on later calls). Worked around by moving the loop into
       `tallyWindow`, which takes the series as parameters (bit-identical;
       0 of 88 stressed runs failed, against 34 of 64 before). It is guarded
@@ -1195,7 +1195,7 @@ the suggested order (the IDs carry the detail):
       that is this bug in another place: look for another long per-node
       loop read through an object argument.
 - [x] **The water account's EWR rows are redone by a per-run check**
-      (issue #192, engine 1.33.0): `checkSupplyAssurance` holds each
+      (issue #192, engine 1.34.0): `checkSupplyAssurance` holds each
       site's required, met and days not met, per water year and over the
       run, to the site's own series: the pragmatic EWR (`ewr` at the
       outlet, `ewr_cumulative` at a gauge) or a rule-table site's
@@ -3420,9 +3420,54 @@ Applicant view and the Applications tab. Left:
       more (which rule, or "the catchment's flow shares would pass 100 %").
       The refusal itself stays: a model breaking a save rule can't run.
       Trigger: the client's answer on issue #90.
-- [ ] **Packs from the Applications list** (WP-3.14) and **comments / NGO
-      access** (WP-3.15) link from the list and the Application panel.
-      Trigger: those WPs.
+- [x] **Comments / NGO access** (WP-3.15, scenario half, issue #71): done in
+      `115_scenario_share_notes`. A submitted or decided application gets
+      read-only share links (the Application panel's Share dialog: an
+      assessor or its applicant; `POST /share/scenario`, a redacted
+      projection with the EWR per site first, results only when the stamps
+      verify), and comments (the notes drawer on the Application panel and
+      each Applications row) with the `assessors`, `parties` and
+      `public_participation` audiences, the read/write matrix in
+      [data-model.md § Notes](./data-model.md#notes-037_notessql), and every
+      edit of one kept in `note_revision`. An NGO joins as a viewer, opens the
+      link, signs in from it and comments (`e2e/tests/scenario-share.spec.ts`).
+- [ ] **Pack targets for share links and notes** (WP-3.15, the pack half).
+      Add `'pack'` to `share_link.target_kind` (its CHECK and
+      `share_link_target_check`), `app_share_pack(p_hash)` (the pack summary
+      and PDF key, redacted as `app_share_scenario` is, answering only an
+      issued pack), `app_share_link_creatable` / `_visible` for packs (an
+      editor for any issued pack, the applicant for their own), a nullable
+      `note.pack_id` (same-project trigger through `assert_same_project`,
+      covering index, `note_one_target` and `note_participation_on_scenario`
+      widened to it, `note_write_revision` for pack notes), the notes helpers
+      taking a pack, `POST /share/pack` on the public allowlist,
+      `GET|POST …/notes?packId=`, and a pack view in `/share`. **Trigger:
+      `evidence_pack` lands** (WP-3.14, migration 112, being built beside
+      this).
+- [ ] **Packs from the Applications list** (WP-3.14) link from the list and
+      the Application panel. Trigger: that WP.
+- [ ] **A comment-only role for NGOs** (WP-3.15). The roadmap has an NGO join
+      as a `viewer` to comment, and the e2e does so; but a viewer reads every
+      farm's figures, every team note and every decided application, far
+      more than commenting needs and everything the share link redacts. A
+      member contributor with no farm links can already post
+      `public_participation` and reads almost nothing (045). Durable fix: a
+      comment-only role or scope (or invite NGOs as linkless contributors,
+      if the client accepts that they could then file applications).
+      Trigger: the first real NGO invited to comment (client decision,
+      step-3 D5).
+- [ ] **The owner's inventory of every public link.** The Project page's
+      Share links list shows the baseline links only; scenario links are
+      listed per application (its Share dialog), made by assessors and
+      applicants. Durable fix: list every live link for the owner with its
+      target, and revoke from there. Trigger: before the first scenario
+      link is used with a real catchment.
+- [ ] **Afrikaans for the shared application page** (WP-3.15): the
+      `share.scenario` strings are on the translation sheet
+      (docs/i18n/af-translation-sheet.md). If they are not translated in the
+      same change, the Afrikaans catalogue is incomplete and `/share` falls
+      back to English words. Trigger: this PR's translation round (see its
+      description).
 - [ ] **The catchment series k (≥ 5 farm holders) for contributors** is the
       share links' rule, applied conservatively; the hydrologist and the
       client may prefer catchment flows always visible to applicants (they
@@ -3677,17 +3722,20 @@ Left, from the design and the persona review (§11), each with its trigger.
       the same baseline as labelled alternatives ("smaller dam", "winter
       abstraction only"), each a page-1 column with its paired change.
       Trigger: before the pilot, or the first applicant asks.
-- [ ] **EWR rows below each storage or abstraction op** (environmentalist).
-      The Reserve is assessed at the rule-table sites only, which may be far
-      from where the works act. Durable fix: for each proposal op on a dam
-      or off-take, a row at the first EWR site downstream, and *Not
-      assessed* with the reason where there is none. Trigger: before the
-      pilot.
-- [ ] **A no-flow-days row** (environmentalist; the benchmark report's key
-      impact is zero-flow time). Durable fix: days with outlet flow below a
-      stated threshold, baseline and application, with a paired band once
-      the ensemble carries it (a `MemberMetrics` field, `ENGINE_VERSION`
-      bump). Trigger: before the pilot.
+- [x] **EWR rows below each storage or abstraction op** (environmentalist).
+      Built (engine 1.33.0, report `evidence-4`): for each proposal op that
+      builds or raises storage or abstraction at a node, a page-1 row at the
+      first EWR site downstream that isn't the outlet (days its daily EWR is
+      not met, the paired band, the Reserve's months met when it has a
+      table); works with no site between them and the outlet share one *Not
+      assessed* row and an assessor's question
+      ([design/evidence-report.md §4.2](./design/evidence-report.md#42-sections)).
+- [x] **A no-flow-days row** (environmentalist; the benchmark report's key
+      impact is zero-flow time). Built (engine 1.33.0): days the outlet's
+      simulated outflow is below 1 L/s (`summary.catchment.noFlow`,
+      [model.md §2.9e](./model.md#29e-no-flow-days-and-users-served-in-full-while-an-ewr-site-fails-engine--1320-issue-71)),
+      both runs, the longest spell, and the paired band with "worse in"
+      (`MemberMetrics.noFlowDays`).
 - [x] **A flag for flows below the rule table's lowest point** (G16). A
       natural flow drier than the table's driest point gets a requirement
       scaled down with the flow (model.md §2.9c), below the table's driest
@@ -3699,6 +3747,11 @@ Left, from the design and the persona review (§11), each with its trigger.
       requirement shrinks with the flow), with the share expected by
       construction when the percentile is from the run. The scaling rule
       itself stays pending the hydrologist (model.md §2.9c).
+- [x] **Days a user is served in full while the site fails** (environmentalist).
+      Built (engine 1.33.0): per EWR site, not only the outlet, the days each
+      unit upstream got its whole demand while the site's EWR failed
+      (`summary.servedWhileEwrFails`), in a § 4 table and a "read these
+      first" count naming them.
 - [x] **The Reserve method's open choices are not in the known-limitations
       list.** Done 2026-09-29: engine-audit rows A1–A7 (below the driest
       point, interpolation, the percentile's source and the ±15 % MAR
@@ -3714,9 +3767,6 @@ Left, from the design and the persona review (§11), each with its trigger.
       fix: a **Needs hydrologist** row in engine-audit.md for §2.9c's open
       choices, then `pnpm gen:liability`. Trigger: the next change to the
       engine-audit tables, or before the pilot, whichever is first.
-- [ ] **Days a user is served in full while the site fails** (environmentalist).
-      Durable fix: per unit, days fully supplied on days the outlet is below
-      the EWR, in § 4 and as a count flag. Trigger: before the pilot.
 - [x] **The driest month's FDC beside the largest-change month.** Built
       (evidence-3): `EvidenceSite.fdcDriestMonth`, the calendar month with
       the lowest mean natural flow over its complete months in the baseline
@@ -3754,11 +3804,13 @@ Left, from the design and the persona review (§11), each with its trigger.
       issued* watermark (`position: fixed` in `@media print`, repeated on
       every printed page by Chromium), `aria-hidden` beside the section heads'
       text stamps, until a pack issues the report.
-- [ ] **Paired bands on each unit's supply (ER4 rest).** Rows 5 and 6 and
-      § 4 carry the run's own difference only. Durable fix: a per-unit
-      supplied fraction in `MemberMetrics`, banded in `summarisePaired` with
-      its worse-share (`ENGINE_VERSION` bump; old ensembles print *no band*).
-      Trigger: before the pilot.
+- [x] **Paired bands on each unit's supply (ER4 rest).** Built (engine
+      1.33.0): each unit's mean demand and supply in `MemberMetrics`; the
+      paired summary bands each unit's share supplied and, with the
+      application's own units, their group's, each with its worse-share. The
+      applicant's own supply, the other users' rows and § 4's Change column
+      carry them; an ensemble stored before 1.33.0 prints *no band* with the
+      reason.
 - [x] **REC per rule table (ER9).** The site strip prints REC *Not given*.
       Durable fix: `category` and `reference` on `EwrRuleTable` (a settings
       field, a baseline assumption in the diff). **Done:** an optional
@@ -3768,10 +3820,19 @@ Left, from the design and the persona review (§11), each with its trigger.
       label: no result changes, no `ENGINE_VERSION` bump. No separate
       `reference`: the table's required `source` is the gazette notice.
       The values themselves still wait on ER-D2.
-- [ ] **Banded FDC (ER5).** The FDC chart has no band: the ensemble's FDC
-      bands are daily against the pragmatic EWR. Durable fix: a banded
-      monthly FDC check against the rule table per member. Trigger: an
-      assessor asks for the FDC's uncertainty.
+- [x] **Banded FDC (ER5).** Built (engine 1.33.0): each member carries the
+      Reserve's FDC check curve per site and month at the table's points
+      (`MemberMetrics.reserveFdc`); § 1's chart shades the baseline's 5–95 %
+      band (R1) and hatches the application's own curve's (R2), or says why
+      there is none.
+- [ ] **The paired change of the FDC check curve** (engine review of ER5).
+      § 1's chart bands each run's own curve (R1 shaded, R2 hatched); the two
+      come from the same parameter sets, so they overlap even when every
+      pair shifts the curve the same way, and the caption says so. Durable
+      fix: band the per-pair difference of the impacted curve at each table
+      point with its worse-share in `summarisePaired`, printed as a small
+      table under the chart. Trigger: an assessor reads the FDC chart for
+      the application's effect, or the next change to § 1.
 - [ ] **The WR2012 five-statistic table's bands (ER6/CR-28)** stay labelled
       indicative until checked in WRC TT 689/690: tracked in
       [§ Calibration research](#calibration-research-2026-09-24) (issue

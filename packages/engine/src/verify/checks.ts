@@ -1945,7 +1945,7 @@ export function checkAllocations(input: ModelInput, out: ModelOutput): string | 
  * The assurance of supply (RunSummary.supplyAssurance, engine ≥ 0.32.0,
  * ../network/reliability.ts) against each demand node's own daily columns,
  * read here from the output's series, not from the path that built it
- * (engine ≥ 1.33.0, issue #192, docs/engine-audit.md V1):
+ * (engine ≥ 1.34.0, issue #192, docs/engine-audit.md V1):
  * - its reliability lists every farm and water user once, with its kind;
  * - each node's Σ demand, Σ supplied and demand days over the reporting
  *   window, overall and per water-year month, and the met days and ratios
@@ -2099,7 +2099,7 @@ export function checkSupplyAssurance(input: ModelInput, out: ModelOutput): strin
  * pragmatic EWR on the others; the shortfall is `ewr_shortfall`, or
  * `ewr_charge_shortfall` for a rule-table site. Required = Σ requirement,
  * met = Σ (requirement + MIN(shortfall, 0)), days not met = days with a
- * shortfall below 0 (engine ≥ 1.33.0, issue #192).
+ * shortfall below 0 (engine ≥ 1.34.0, issue #192).
  */
 function checkAccountEwr(wa: NonNullable<ModelOutput['summary']['supplyAssurance']>['waterAccount'], get: SeriesMap, days: number): string | null {
 	const sites = wa.total.ewr;

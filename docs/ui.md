@@ -5243,6 +5243,19 @@ mode ("Your applications"; `?scenario=<id>` selects one):
   `check.renamed`), and likewise a new item given the id of one the
   applicant can't see (`check.reIds`, "their transfer … is …-2"); the
   applicant never does.
+- **Comments and share links** (WP-3.15), at the top of the panel: the
+  application's **Notes** button (the notes drawer on the scenario, titled
+  "Comments on “name”"; [§ Notes](#notes)) and, for its applicant and the
+  assessors, **Share link…**, which opens the **Share dialog** (a side sheet,
+  `ShareLinksPanel.svelte` with a `scenario`): what the viewer will see (its
+  changes, the EWR at each site against the baseline, the catchment's totals
+  at five or more units, the public comments; never another unit, a member
+  or a registered volume), "Who it's for" and "Works for" (1 week to 1
+  year), **Make link** and the link shown once to copy, then the links to it
+  (live first, who made it, when it ends, last opened) with **Withdraw**. A
+  draft or withdrawn application says it must be submitted first and offers
+  no form. The assessors list and withdraw every link to it; the applicant
+  their own.
 
 The assessors (owners and editors) get an **Applications** tab
 (`?tab=applications`, issue #17 option A): every submitted, withdrawn or
@@ -5264,7 +5277,9 @@ decided application (drafts stay with the applicant). A viewer never sees it.
   with N" under it), status as a pill in words (Awaiting a decision;
   Approved, Approved with conditions or Refused in the band colours, with
   "decided <date>" under it; Withdrawn), submitted (date and time, and
-  "waiting N days" while it awaits a decision), changes and runs.
+  "waiting N days" while it awaits a decision), changes and runs, and the
+  application's comments (the compact notes button, WP-3.15; its share
+  links are in its Application panel).
 - **Fit:** from 1100 × 620 the card fills the window and the rows scroll
   inside it under a sticky header; below a 640 px column each application is
   a card (name, status, applicant, submitted, "1 change · 0 runs") and the
@@ -5431,6 +5446,19 @@ March") is kept against what it is about.
   hidden from everyone, kept for the audit trail). On a farm, *Also show to
   this farm's farmers* makes a note farm-visible, marked *Shown to its farmers*;
   everything else is read by the project team only.
+- **On a scenario** (WP-3.15, the Application panel and each Applications
+  row): the drawer is "Comments on “name”", with a **Who reads it** picker
+  of the audiences the caller may post to, their natural one first (an
+  assessor: *The assessors only*, *The assessors and the applicant's party*,
+  *Public participation: shown with your name on the shared link*, *The
+  project team*; one of the application's parties: the parties, the
+  assessors, public participation; anyone else, only public participation,
+  shown as a line instead of a picker). Each comment carries its audience as
+  a badge (Assessors, Parties, Public, Team), and an edited one says
+  *edited: history*, a button that opens its earlier texts inline, oldest
+  first, with when each was written and replaced (`GET …/revisions`). The
+  server holds the matrix (data-model.md § Notes); the picker only offers
+  what it allows.
 - **Farmer view.** *Notes about your hydrological unit* (`farm/FarmNotes.svelte`) lists
   the farmer's own notes and the WUA's farm-visible ones on that farm, and
   adds a note, always shown to the farm. The WUA previewing the page sees the
@@ -5758,7 +5786,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     before caution before counts, each saying which way it pushes the
     numbers), the change table (fixed rows, each with its basis: Reserve
     months met per rule-table site, days below the pragmatic EWR, shortfall
-    volume, outflow MAR with % of natural MAR, the applicant's own supply,
+    volume, *No-flow days at the outlet* (below 1 L/s, with the longest
+    spell), *Days below the EWR, first site below the works* (one row per EWR
+    site that is the first below one of the application's storage or
+    abstraction works, or *Not assessed* naming the works with no site
+    between them and the outlet), outflow MAR with % of natural MAR, the
+    applicant's own supply,
     *Registered vs modelled use* (unit-years above a registered volume,
     summed, no band; *Not assessed* without volumes), other users' supply,
     and *Other applications on this baseline, summed* (the other submitted
@@ -5784,7 +5817,9 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     shaded by the share of the requirement delivered, failures the heavier
     mark, lost and gained months outlined, the number in each cell), the
     paired extra days below the EWR by month (`IntervalPlot`, outlet only),
-    the FDC check against the EWR curve (`FdcPlot`) of the month the report
+    the FDC check against the EWR curve (`FdcPlot`: from engine 1.33.0 the
+    baseline's 5–95 % band shaded behind its line and the application's
+    hatched, or the caption says why there is none) of the month the report
     ranks first (the largest drop in months met, else the one met least
     often) and, beside it, of the river's driest month (the lowest mean
     natural flow in the baseline, `fdcDriestMonth`; one plot, captioned as
@@ -5801,7 +5836,12 @@ Viewer role and up; a contributor or farmer is told it needs the viewer role.
     *Not assessed* without a stored fit), WR2012, the validation statement,
     and the nomination history.
   - **4 Other users** (baseline: *Every user's supply*): each unit's supply,
-    days and years fully met, baseline and application. Then **Other
+    days and years fully met, baseline and application, the change with its
+    paired band and "worse in"; then *Served in full while an EWR site below
+    fails*: per EWR site, the days each unit upstream got its whole demand on
+    the site's failing days (`data-testid="evidence-served"`), and a "read
+    these first" count naming them.
+    Then **Other
     applications on this baseline** (`evidence-cumulative`): each other
     submitted or approved application, its status and its own change in days
     below the pragmatic EWR and in Reserve months met at the outlet, the sum
@@ -6621,6 +6661,34 @@ signed in or out, for someone outside the project, on a phone first.
   Try again. Every string is in `lib/components/share/share.ts`, the chart
   in `share/chart.ts`, the loading rules in `share/load.ts`, all
   unit-tested.
+- **A scenario link** (WP-3.15, `/share#t=…&k=scenario`,
+  `share/ScenarioView.svelte`, words in `share/scenario.ts`, the
+  `share.scenario` section): the same shell, header and states, reading
+  `POST /share/scenario`. Top to bottom: the application's name, "An
+  application in *catchment*, shared read-only", where it stands
+  ("Submitted on *date*, awaiting a decision" or the decision and its date),
+  the caveat; then in the left column **The river's ecological reserve
+  first**: for each EWR site (the outlet unnamed) the months the Reserve is
+  met on the baseline beside the application, and the change in words
+  ("2 months more below the Reserve with this application", in red when
+  worse), and the days below the EWR at the outlet; or why there are no
+  results (not run on its current changes; or not stored by the model run
+  itself, so not shown). Then **What the application changes**: each change
+  in words, the applicant's own unit by name and any other as "another
+  hydrological unit", marked *Proposal* or, in red, *Baseline assumption*
+  (with a line saying what that means), and the description. In the right
+  column: the decision's reasons (once decided), **The catchment's totals**
+  (flow out, water supplied, units short of 95 % of demand, baseline and
+  application; only at five or more units), **Public comments** (oldest
+  first, author and date, *edited*), and **About this page**. A signed-in
+  member gets **Add a comment** (posted for public participation, "Shown
+  with your name to everyone this application is shared with"); anyone else
+  gets **Sign in to comment**, which keeps the link in this tab's
+  `sessionStorage` (never the address bar) so the page opens it again after
+  the sign-in. A server `404` says only members can comment, a `403` that
+  it isn't open for comment. Same two-column layout from 860 px, one
+  column on a phone. `scenario-share.spec.ts` pins the flow (link, phone,
+  sign in, comment, the assessor's view) with axe.
 
 ## Viewers
 

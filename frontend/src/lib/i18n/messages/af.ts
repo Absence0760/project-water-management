@@ -979,6 +979,62 @@ export const af: Catalogue = {
 	'4702e852': 'Gemiddelde vloei by die uitloop en die ekologiese reserwe elke maand, in m³ per dag',
 	// Flow
 	'3df462b5': 'Vloei',
+	// Your comment is posted.
+	'8883bbbe': 'Jou kommentaar is geplaas.',
+	// Sign in to comment.
+	'eb271459': 'Teken in om kommentaar te lewer.',
+	// Only members of this project can comment. Ask its owner to invite you.
+	'6ffb150a': 'Net lede van hierdie projek kan kommentaar lewer. Vra sy eienaar om jou uit te nooi.',
+	// An application in {project}, shared read-only
+	'47a825ae': '’n Aansoek in {project}, leesalleen gedeel',
+	// The river’s ecological reserve
+	'd593593a': 'Die rivier se ekologiese reserwe',
+	// Months the Reserve is met at each EWR site: the published baseline beside this application.
+	'8727e404': 'Maande waarin die Reserwe by elke EWR-punt behou word: die gepubliseerde basislyn en hierdie aansoek langs mekaar.',
+	// Baseline
+	'fda19a62': 'Basislyn',
+	// With this application
+	'd5c802a1': 'Met hierdie aansoek',
+	// No EWR site has a Reserve rule table in this catchment.
+	'07fce436': 'Geen EWR-punt in hierdie opvanggebied het ’n reëltabel vir die Reserwe nie.',
+	// What the application changes
+	'590d8af3': 'Wat die aansoek verander',
+	// A baseline assumption changes the shared baseline itself, not only the applicant’s own proposal.
+	'5f76a417': '’n Basislynaanname verander die gedeelde basislyn self, nie net die aansoeker se eie voorstel nie.',
+	// No changes.
+	'23de827f': 'Geen veranderinge nie.',
+	// The decision
+	'479ef2ba': 'Die besluit',
+	// The catchment’s totals
+	'd14cdcfe': 'Die opvanggebied se totale',
+	// Figure
+	'a7ba4f29': 'Syfer',
+	// Public comments
+	'd7603e02': 'Openbare kommentaar',
+	// a former member
+	'51eae74d': '’n voormalige lid',
+	// No comments yet.
+	'ea48a91c': 'Nog geen kommentaar nie.',
+	// Add a comment
+	'b34ab8fe': 'Lewer kommentaar',
+	// Shown with your name to everyone this application is shared with. Plain text; every edit is kept.
+	'c476d7ee': 'Jou kommentaar word met jou naam gewys aan almal met wie hierdie aansoek gedeel is. Gewone teks; elke wysiging word bewaar.',
+	// Posting…
+	'44539655': 'Plaas tans…',
+	// Post comment
+	'11065b5e': 'Plaas kommentaar',
+	// Sign in to comment
+	'954cf5cd': 'Teken in om kommentaar te lewer',
+	// Commenting needs an account in this project, so every comment has a name.
+	'e87f8a59': 'Om kommentaar te lewer, het jy ’n rekening in hierdie projek nodig, sodat elke kommentaar ’n naam het.',
+	// About this page
+	'254af6c5': 'Oor hierdie bladsy',
+	// An application to use water in this catchment, modelled on its published baseline. It is read-only, and it names no other hydrological unit.
+	'243c85d3': '’n Aansoek om water in hierdie opvanggebied te gebruik, gemodelleer op grond van die opvanggebied se gepubliseerde basislyn. Dit is leesalleen, en dit noem geen ander hidrologiese eenheid nie.',
+	// This link works until it expires or is withdrawn, while the application is submitted or decided.
+	'ebfe1809': 'Hierdie skakel werk totdat dit verval of ingetrek word, solank die aansoek ingedien is of daaroor besluit is.',
+	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
+	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// No flows to show.
 	'be1887a5': 'Geen vloei om te wys nie.',
 	// The mean flow was above the reserve in every month.
@@ -991,14 +1047,88 @@ export const af: Catalogue = {
 	'8ca58fb8': 'Riviervloei by die opvanggebied se uitloop elke maand teenoor sy ekologiese reserwe, {from} tot {to}. {verdict} Die syfers is in die tabel hieronder.',
 	// {from} to {to}. Monthly means of the modelled daily flow.
 	'ac863279': '{from} tot {to}. Maandgemiddeldes van die daaglikse vloei, deur die model bereken.',
-	// Published by {name} on {date}. Data up to {until}.
-	'0a953858': 'Op {date} deur {name} gepubliseer. Data tot {until}.',
-	// a former member
-	'51eae74d': '’n voormalige lid',
+	// Not assessed
+	'a0119bb9': 'Nie beoordeel nie',
+	// Met in {met} of {months} ({pct})
+	'34e32294': 'In {met} van {months} behou ({pct})',
 	// At the catchment outlet
 	'82aa7d85': 'By die opvanggebied se uitloop',
 	// At {place}
 	'60d1632f': 'By {place}',
+	// {months} more below the Reserve with this application.
+	'91cd012d': '{months} meer onder die Reserwe met hierdie aansoek.',
+	// {months} fewer below the Reserve with this application.
+	'352c8acd': '{months} minder onder die Reserwe met hierdie aansoek.',
+	// No change in the months the Reserve is met.
+	'30121f7a': 'Geen verandering in die maande waarin die Reserwe behou word nie.',
+	// Days below the EWR at the outlet: {base} on the baseline, {app} with this application.
+	'74849620': 'Dae onder die EWR by die uitloop: {base} op die basislyn, {app} met hierdie aansoek.',
+	// another hydrological unit
+	'87154595': '’n ander hidrologiese eenheid',
+	// Proposal
+	'947893bf': 'Voorstel',
+	// Baseline assumption
+	'067b4d39': 'Basislynaanname',
+	// {unit}: {field} set to {value}
+	'527b5d2b': '{unit}: {field} op {value} gestel',
+	// A new hydrological unit or site, “{name}”
+	'd9b6e187': '’n Nuwe hidrologiese eenheid of punt, “{name}”',
+	// {unit} removed
+	'27cd2827': '{unit} verwyder',
+	// {unit}: a crop’s area set to {ha} ha
+	'a8fa584c': '{unit}: ’n gewas se oppervlakte op {ha} ha gestel',
+	// A new crop, “{name}”
+	'687a8dd0': '’n Nuwe gewas, “{name}”',
+	// A new transfer from {from} to {to}
+	'9c9dcc15': '’n Nuwe oordrag van {from} na {to}',
+	// A transfer changed: {field}
+	'373a044d': '’n Oordrag verander: {field}',
+	// A transfer removed
+	'64ca7fcb': '’n Oordrag verwyder',
+	// Land cover added on {unit}
+	'9b56dc88': 'Grondbedekking by {unit} bygevoeg',
+	// Land cover removed
+	'a3afaf73': 'Grondbedekking verwyder',
+	// A new borehole on {unit}
+	'e0cd6bd7': '’n Nuwe boorgat by {unit}',
+	// A borehole removed
+	'202eea90': '’n Boorgat verwyder',
+	// A catchment setting changed: {path}
+	'8c9825dc': '’n Instelling van die opvanggebied verander: {path}',
+	// The {kind} record scaled by {factor}
+	'7bf8e335': 'Die {kind}-rekord met {factor} vermenigvuldig',
+	// Demand scaled by {factor}
+	'43783ca2': 'Waterbehoefte met {factor} vermenigvuldig',
+	// The Reserve’s rule table replaced at {site}
+	'bbfcbbe8': 'Die Reserwe se reëltabel by {site} vervang',
+	// the catchment outlet
+	'bb27ae88': 'die opvanggebied se uitloop',
+	// Mean flow out of the catchment
+	'1c38859d': 'Gemiddelde vloei uit die opvanggebied',
+	// Mean water supplied to the hydrological units
+	'caff1997': 'Gemiddelde lewering aan die hidrologiese eenhede',
+	// Hydrological units short of 95 % of their demand
+	'f0f6ca6b': 'Hidrologiese eenhede wat minder as 95 % van hul waterbehoefte kry',
+	// Approved
+	'c699109a': 'Goedgekeur',
+	// Approved with conditions
+	'8451eca8': 'Goedgekeur met voorwaardes',
+	// Refused
+	'9155ad83': 'Geweier',
+	// Decided
+	'99f42a3f': 'Besluit',
+	// {outcome} on {date}.
+	'c7501bf8': '{outcome} op {date}.',
+	// Submitted on {date}, awaiting a decision.
+	'73dcdec0': 'Op {date} ingedien, wag op ’n besluit.',
+	// Submitted, awaiting a decision.
+	'75c9f53b': 'Ingedien, wag op ’n besluit.',
+	// This application has not been run on its current changes yet, so there are no results to show.
+	'3c30a84b': 'Hierdie aansoek se huidige veranderinge is nog nie deur die model bereken nie, so daar is nog geen resultate om te wys nie.',
+	// Its results aren’t shown: they weren’t stored by the model run itself, so they can’t be relied on.
+	'9e6cdbe5': 'Die aansoek se resultate word nie gewys nie: dit is nie deur die modellopie self gestoor nie, so jy kan nie daarop staatmaak nie.',
+	// Published by {name} on {date}. Data up to {until}.
+	'0a953858': 'Op {date} deur {name} gepubliseer. Data tot {until}.',
 	// Kept its reserve on every one of the {days} to {date}.
 	'7479d547': 'Het sy reserwe op elkeen van die {days} tot {date} behou.',
 	// Below its reserve on all of the {days} to {date}.
@@ -1059,6 +1189,10 @@ export const af: Catalogue = {
 	'7d1f4730': 'Net die persoon wat ’n nota geskryf het, kan dit verander.',
 	// Only the person who wrote a note, or the WUA, can delete it.
 	'b1f091c0': 'Net die persoon wat ’n nota geskryf het, of die WGV, kan dit uitvee.',
+	// This application isn’t open for comment right now.
+	'97a7286a': 'Hierdie aansoek is nie nou oop vir kommentaar nie.',
+	// You can’t post a comment here.
+	'0aac72bd': 'Jy kan nie hier kommentaar plaas nie.',
 	// This link doesn’t work any more.
 	'8db26af3': 'Hierdie skakel werk nie meer nie.',
 	// You downloaded your data a moment ago. Try again in {wait}.
@@ -1429,8 +1563,12 @@ export const af: Catalogue = {
 	'5b46b440': 'Terug na jou projekte',
 	// Back to sign in
 	'5b7ba2af': 'Terug na inteken',
+	// {name} · Shared application
+	'b850cd64': '{name} · Gedeelde aansoek',
 	// {name} · Shared catchment view
 	'd520e65e': '{name} · Gedeelde aansig van die opvanggebied',
+	// Shared application
+	'28c82702': 'Gedeelde aansoek',
 	// Shared catchment view
 	'7c6df5c8': 'Gedeelde aansig van die opvanggebied',
 	// Shared view
@@ -1447,20 +1585,14 @@ export const af: Catalogue = {
 	'79725e4a': 'Kon dit nie nou laai nie. Kyk jou verbinding na en probeer weer.',
 	// Catchment water balance, shared read-only
 	'bc8ea99f': 'Waterbalans van die opvanggebied, leesalleen gedeel',
-	// The river’s ecological reserve
-	'd593593a': 'Die rivier se ekologiese reserwe',
 	// Couldn’t load the flow chart just now.
 	'c1e6e998': 'Kon nie die vloeigrafiek nou laai nie.',
 	// The flow chart isn’t shown for this catchment: with so few hydrological units, the river’s flows could reveal a hydrological unit’s water use.
 	'fb551752': 'Die vloeigrafiek word nie vir hierdie opvanggebied gewys nie: met so min hidrologiese eenhede kan die rivier se vloei ’n hidrologiese eenheid se watergebruik verklap.',
-	// About this page
-	'254af6c5': 'Oor hierdie bladsy',
 	// This is the catchment’s published result from its water balance model: whether the river kept its ecological reserve (the flow it needs to stay healthy) and the Water User Association’s notice. It is read-only, and it shows no hydrological unit’s figures.
 	'e1a168eb': 'Dit is die opvanggebied se gepubliseerde uitslag van sy waterbalansmodel: of die rivier sy ekologiese reserwe behou het (die vloei wat dit nodig het om gesond te bly) en die Watergebruikersvereniging se kennisgewing. Dit is net om te lees, en dit wys geen hidrologiese eenheid se syfers nie.',
 	// This link works until it expires or is withdrawn.
 	'99d07c95': 'Hierdie skakel werk totdat dit verval of teruggetrek word.',
-	// It is not a water-use authorisation, licence, allocation or restriction under the National Water Act: only the responsible authority and the Water User Association’s own notices decide those. Don’t rely on it alone for a decision.
-	'7a517563': 'Dit is nie ’n magtiging vir watergebruik, ’n lisensie, ’n toekenning of ’n beperking kragtens die Nasionale Waterwet nie: net die verantwoordelike owerheid en die Watergebruikersvereniging se eie kennisgewings besluit daaroor. Moenie net hierop staatmaak vir ’n besluit nie.',
 	// We’ve sent a new link to {email}.
 	'c77d6547': 'Ons het ’n nuwe skakel na {email} gestuur.',
 	// your address

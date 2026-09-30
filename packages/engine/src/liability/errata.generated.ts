@@ -97,7 +97,7 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"id": "ER-10",
 		"keyedOn": "run",
 		"firstAffected": "0.32.0",
-		"fixedIn": "1.33.0",
+		"fixedIn": "1.34.0",
 		"severity": "High",
 		"appliesWhen": "Rarely (the rarity is here, not in the severity: when it hits, the figures are another farm's), when the JavaScript engine's optimising compiler timed a run a certain way (seen once, on a busy test machine), on a run with two or more farms or water users",
 		"summary": "A V8 miscompile could give a farm or water user another one's assurance of supply (reliability, annual reliability, failure runs) under its own name; its daily series and every other summary were right, and the run's self-checks didn't look at it",

@@ -90,6 +90,7 @@ const duplicateName = (application: boolean) => (err: unknown): never => {
 const PG_RESTRICT = '23001';
 const signedKept = () =>
 	new ApiError(409, 'this scenario has a signed-off run or an evidence pack, so it is kept: the run stays the scenario run that was signed or packed');
+const commentsKept = () => new ApiError(409, 'this application drew public comments, so it is kept: they are the record of its public participation');
 const frozen = (s: ScenarioRow) => new ApiError(409, `this scenario is ${s.status}, so its ops, owned nodes and base run can't change`);
 const isApplication = (s: ScenarioRow) => s.origin === 'applicant';
 
@@ -291,8 +292,11 @@ export const scenarioRoutes = new Hono<AuthEnv>()
 				[sid]
 			);
 			if (signed.rowCount) throw signedKept();
-			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string }) => {
-				throw err.code === PG_RESTRICT ? signedKept() : err;
+			// Public comments are a participation record: the scenario_comments_kept trigger (115) refuses too.
+			const { rows: commented } = await db.query<{ yes: boolean }>('SELECT app_scenario_has_public_comments($1, $2) AS yes', [id, sid]);
+			if (commented[0]?.yes) throw commentsKept();
+			await db.query('DELETE FROM scenario WHERE project_id = $1 AND id = $2', [id, sid]).then(mustChange, (err: { code?: string; message?: string }) => {
+				throw err.code === PG_RESTRICT ? (err.message?.includes('public comments') ? commentsKept() : signedKept()) : err;
 			});
 			await recordAudit(db, id, 'scenario.deleted', subject(s));
 			return c.body(null, 204);
