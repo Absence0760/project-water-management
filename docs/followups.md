@@ -3939,7 +3939,11 @@ verify lookup; 2026-09-30: the reproduction bundle,
       the re-run on the stored bundle and records the outcome and engine on
       the pack (shown on the pack page, not on verify, since it is the
       app's own claim). Trigger: with the pack view, or the first pack whose
-      runs don't reproduce.
+      runs don't reproduce. The same job is where the bundle's build would
+      move if a catchment's issue ever nears the API's 30 s (it is built in
+      the issue's transaction today, estimated 5–10 s at 300 outputs × 30
+      years a run; [evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)):
+      trigger for that part, an issue slower than 15 s in the API's logs.
 - [ ] **Errata found after issue on verify.** Verify lists the errata the
       manifest recorded when the pack was drafted; one found later, for the
       same engine version, isn't shown. Durable fix: the verify route adds

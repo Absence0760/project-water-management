@@ -20,10 +20,11 @@ import {
 	type PackManifest
 } from '@water-management/engine';
 import { createHash } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { anon, app, asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { minioUp } from '../__tests__/minio.js';
 import { withUser } from '../db/tx.js';
+import { packBundleKey, putPackBundle, resetStorageClient } from '../reports/storage.js';
 import { trimRuns } from '../runs/execute.js';
 
 type User = Awaited<ReturnType<typeof signUp>>;
@@ -444,8 +445,10 @@ describe.skipIf(!minio)('issuing, superseding and withdrawing', () => {
 });
 
 describe.skipIf(!minio)('an application pack’s bundle', () => {
+	let first: Awaited<ReturnType<typeof draft>>;
+
 	it('carries the scenario and both runs, and reproduces both with the input changes the manifest lists', async () => {
-		const p = await draft(editor, appRun);
+		const p = (first = await draft(editor, appRun));
 		await sign(editor, p.id);
 		const res = await issue(editor, p.id);
 		expect(res.status, JSON.stringify(res.body)).toBe(200);
@@ -458,8 +461,58 @@ describe.skipIf(!minio)('an application pack’s bundle', () => {
 			expect.arrayContaining(['changes', 'scenario', 'reproduce:baseline', 'reproduce:application'])
 		);
 		expect(checked.ok).toBe(true);
+	});
+
+	it('issues nothing when the bundle can’t be stored; issued again with the store back, it is (positive control)', async () => {
+		const v2 = await draft(editor, appRun, first.id);
+		await sign(editor, v2.id);
+		const state = async () => {
+			const [row] = await asOwner('SELECT status, bundle_key, bundle_sha256, issued_at FROM evidence_pack WHERE id = $1', [v2.id]);
+			const [pred] = await asOwner('SELECT status, superseded_by_pack_id FROM evidence_pack WHERE id = $1', [first.id]);
+			const audit = await asOwner(`SELECT kind FROM audit_event WHERE project_id = $1 AND kind IN ('pack.issued', 'pack.superseded') AND subject->>'packId' IN ($2, $3)`, [projectId, v2.id, first.id]);
+			const jobs = await asOwner(`SELECT kind FROM job WHERE project_id = $1 AND payload->>'packId' = $2`, [projectId, v2.id]);
+			return { row, pred, audit: audit.map((a) => a.kind), jobs: jobs.map((j) => j.kind) };
+		};
+		const issuedBefore = (await asOwner(`SELECT count(*)::int AS n FROM audit_event WHERE project_id = $1 AND kind = 'pack.issued' AND subject->>'packId' = $2`, [projectId, first.id]))[0]!.n;
+		// A store that answers nothing (a closed port), so the put fails inside the issue's transaction.
+		vi.stubEnv('S3_ENDPOINT', 'http://127.0.0.1:9');
+		resetStorageClient();
+		try {
+			const res = await issue(editor, v2.id);
+			expect(res.status).toBeGreaterThanOrEqual(500);
+			expect(JSON.stringify(res.body)).not.toMatch(/ECONNREFUSED|127\.0\.0\.1|water-packs/);
+		} finally {
+			vi.unstubAllEnvs();
+			resetStorageClient();
+		}
+		const after = await state();
+		expect(after.row).toEqual({ status: 'draft', bundle_key: null, bundle_sha256: null, issued_at: null });
+		expect(after.pred).toEqual({ status: 'issued', superseded_by_pack_id: null });
+		expect(after.audit.filter((k) => k === 'pack.issued')).toHaveLength(issuedBefore);
+		expect(after.audit).not.toContain('pack.superseded');
+		expect(after.jobs).toEqual([]);
+
+		// The store back: the same draft issues, supersedes the first, and records its bundle.
+		const res = await issue(editor, v2.id);
+		expect(res.status, JSON.stringify(res.body)).toBe(200);
+		const done = await state();
+		expect(done.row).toMatchObject({ status: 'issued', bundle_sha256: res.body.pack.bundleSha256 });
+		expect(done.pred).toEqual({ status: 'superseded', superseded_by_pack_id: v2.id });
+		expect(done.audit).toEqual(expect.arrayContaining(['pack.issued', 'pack.superseded']));
 		// Withdrawn again, so the tests below find only baseline packs issued.
-		expect((await editor.call('POST', `${packPath(p.id)}/withdraw`, { reason: 'test application pack' })).status).toBe(200);
+		expect((await editor.call('POST', `${packPath(v2.id)}/withdraw`, { reason: 'test application pack' })).status).toBe(200);
+	});
+
+	it('stores a key once: a second put of the same bytes (an issue that rolled back after its put) is taken as stored', async () => {
+		const bytes = new TextEncoder().encode(`bundle ${crypto.randomUUID()}`);
+		const sha = bytesSha256(bytes);
+		const key = packBundleKey(projectId, crypto.randomUUID(), sha);
+		await putPackBundle(key, bytes, sha);
+		// If-None-Match: '*' refuses the overwrite (412), which putPackBundle takes as stored.
+		await expect(putPackBundle(key, bytes, sha)).resolves.toBeUndefined();
+		// Positive control: bytes that aren't the hash are refused by the store, conditional write or not.
+		const other = packBundleKey(projectId, crypto.randomUUID(), sha);
+		await expect(putPackBundle(other, new TextEncoder().encode('not those bytes'), sha)).rejects.toThrow();
 	});
 });
 

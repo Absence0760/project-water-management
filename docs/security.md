@@ -2648,7 +2648,11 @@ nothing else.
   (every file, the manifest's hash, the inputs and stored results against
   the manifest), stores it with its SHA-256 as the upload's checksum
   (checking the checksum the store answers with before recording it), and
-  records it, all in the issue's transaction: no bundle, no issue
+  records it, all in the issue's transaction: no bundle, no issue. A put
+  followed by a rollback leaves an object nothing records, which the bucket's
+  Object Lock holds for the retention period: it is named by its own hash,
+  so it never stands in for a recorded bundle, and the put is conditional
+  (`If-None-Match: *`), so issuing again writes no second version
   ([evidence-pack.md § Reproduction](./evidence-pack.md#reproduction)).
 - **The bundle is for the project's readers.** `GET …/packs/:packId/bundle`
   answers a viewer who reads the pack (RLS), with a one-minute signed URL,

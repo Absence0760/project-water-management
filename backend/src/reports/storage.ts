@@ -221,10 +221,26 @@ export async function putPackBundle(key: string, body: Uint8Array, sha256: strin
 	await ensureBucket(packsBucket());
 	const { s3: c, sdk } = await s3();
 	const checksum = Buffer.from(sha256, 'hex').toString('base64');
-	const stored = await c.send(
-		new sdk.PutObjectCommand({ Bucket: packsBucket(), Key: key, Body: body, ContentType: 'application/zip', ChecksumSHA256: checksum })
-	);
+	let stored;
+	try {
+		// If-None-Match: never a second version of a key (Object Lock keeps every version for the retention period).
+		stored = await c.send(
+			new sdk.PutObjectCommand({ Bucket: packsBucket(), Key: key, Body: body, ContentType: 'application/zip', ChecksumSHA256: checksum, IfNoneMatch: '*' })
+		);
+	} catch (err) {
+		// 412: the key is taken, by these very bytes: it names their SHA-256, and every put under it
+		// carried that checksum, which the store checks (an issue that rolled back after its put, then
+		// issued again). S3 and MinIO both honour conditional writes (packs.db.test.ts).
+		if (isPreconditionFailed(err)) return;
+		throw err;
+	}
 	assertStoredChecksum(key, checksum, stored.ChecksumSHA256);
+}
+
+/** A conditional write refused because the object exists (HTTP 412). */
+export function isPreconditionFailed(err: unknown): boolean {
+	const e = err as { name?: string; $metadata?: { httpStatusCode?: number } } | null;
+	return e?.name === 'PreconditionFailed' || e?.$metadata?.httpStatusCode === 412;
 }
 
 /**

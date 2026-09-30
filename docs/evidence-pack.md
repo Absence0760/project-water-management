@@ -227,10 +227,25 @@ it as `reproduce:pack --no-run` would, stores it in the packs bucket under
 checksum (the store refuses other bytes, and the route checks the checksum
 the store answers with is that one), and records it through `app_record_pack_bundle` (120), which only
 the transaction that issues the pack may call. All of it or none: a bundle
-that can't be stored fails the issue. The upload comes before the commit, so
-an issue that fails after it leaves an object nothing records: named by its
-own hash, it never takes the place of a recorded one, and issuing again
-stores the same bytes under the same key (the build is deterministic). It is built then, not on download,
+that can't be stored fails the issue (`packs.db.test.ts` pins it: the pack
+stays a draft, its predecessor issued, no bundle, audit row or job). The
+upload comes before the commit, so an issue that fails after it leaves an
+object nothing records, held by the bucket's Object Lock for the retention
+period like any other: named by its own hash, it never takes the place of a
+recorded one. Issuing again builds the same bytes (the build is
+deterministic) under the same key; the put is conditional
+(`If-None-Match: *`), so it never writes a second version, and a `412` is
+taken as stored (the key is the bytes' hash, and every put under it carried
+that checksum).
+
+**Cost at issue.** Building reads both runs' stored daily outputs and hashes
+each, so it grows with outputs × days. Measured 2026-09-30 on the dev laptop
+at 300 outputs × 30 years a run (a large catchment), both digests took
+~0.6 s and zipping the input series ~0.4 s, with ~20 MB of heap; on the API
+Lambda (1 024 MB, ~0.58 vCPU, 30 s timeout) with the database read and the
+check that is an estimated 5–10 s, inside the timeout. A catchment far past
+that would need the build moved to a job (the durable fix in
+[followups.md](./followups.md#evidence-report-issue-71)). It is built then, not on download,
 because it must be what was stored when the pack was issued (a daily output
 follows its node, so a later build could miss one) and its hash is published
 by verify. Locally the store is MinIO (`pnpm dev:s3:up`; the backend creates
