@@ -201,6 +201,18 @@ collected as a checklist in issue #46; tick it there as they answer.
       The hand-off to CR-18/19 is done: the flags read the fill's code as
       *infilled*, and the quality flags' infilled treatment replaced the
       branch's own `useFilledDays` switch (never deployed).
+- [ ] **A full allocation and the basic-needs floor** ([engine-audit W1](./engine-audit.md),
+      engine 1.44.0, issue #123; to put to the hydrologist through #90).
+      A restriction what-if holds a domestic or municipal object's floor
+      (25 l a person a day), on a full-allocation run too, but a full
+      allocation alone rescales the object, floor included, to the unit's
+      registered volume (0 in a year with nothing registered), and the
+      results then never show it below basic needs. Domestic use and basic
+      human needs aren't licensed uses. Decide: (a) hold the floor after the
+      allocation factor on every day, or (b) keep the rescale and report the
+      floor from the demand before it, so those days show as below basic
+      needs. Either is a change to `allocations/mode.ts` `planAllocations`
+      or the floor reporting, an `ENGINE_VERSION` bump, and W1 closed.
 - [ ] **Human impacts (WP-1.33–1.35) to confirm** ([model.md §2.7c](./model.md)).
       Built 2026-09-25, off by default, on the engineering decisions below,
       not client sign-off. Put each to the hydrologist as "confirm or change":
@@ -3233,19 +3245,19 @@ from the WP:
       report. Trigger: the evidence report (or a WUA screen) needing to
       grade demands by source, or the first catchment with objects from
       more than one source.
-- [ ] **Restrictions: the basic-needs floor** (decided, not built; issue
-      #54 Q13, agreed by the client in issue #90). A restriction never cuts
-      domestic supply below 25 litres per person per day; cuts follow DWS's
-      % restrictions; a municipality's own restriction levels are an
-      optional display only. Nothing applies a floor today: a curtailment or
-      `demand.scale` cut reaches a domestic object like any other demand.
-      Durable fix: a per-object floor (population × 25 l/p/d, from a
-      `perUnit` object's count, or entered) that the drought restriction
-      rule (WP-3.8) and the restriction what-ifs respect, with the floor's
-      shortfall reported apart, and an optional municipal-level label on the
-      share-the-pain board. Trigger: building WP-3.8's drought restriction
-      rule, or the first catchment with a domestic object under a
-      restriction.
+- [x] **Restrictions: the basic-needs floor** (2026-09-30, engine 1.44.0,
+      issue #123, migration 127; agreed in issue #90 Q13). A domestic or
+      municipal demand object has a floor of population × 25 l a day (its
+      `population`, or a per-person object's count); a `demand.scale`
+      restriction never cuts it below that, the curtailment report and the
+      share-the-pain board never leave its unit less than its floor once the
+      EWR is met (what the floor keeps is shown), and the results, the
+      summary CSV and the demand-objects table report the days and volume
+      below the floor apart from the shortfall, with the l/person/day
+      supplied as the municipal level ([model.md §2.7f](./model.md)). Cuts
+      stay one % for every category (#53 O4). Still to do when it is built:
+      WP-3.8's drought restriction rule (a cut by dam level) has to hold the
+      same floor; it doesn't exist yet, so there is nothing to wire.
 - [ ] **A scenario op for demand objects.** Scenarios can't add, change or
       remove one (`demand.scale` on a unit scales its crops and objects
       together); override mode says an object edit can't be recorded. Durable

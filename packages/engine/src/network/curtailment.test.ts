@@ -236,3 +236,45 @@ describe('resolveReportWindow', () => {
 		}
 	});
 });
+
+describe('computeCurtailment — the basic-needs floor (engine 1.44.0, issue #123)', () => {
+	// A: demand 100, supplied 100, a heavy EWR charge; B: demand 100, supplied 20.
+	// Σ supplied / Σ demand = 0.6, so M_A = 60; A's supply cut −80 leaves MAX(60 − 80, 0) = 0.
+	const a = (basicNeeds?: number[]): CurtailmentInput => ({ ...farm('A', [100, 100], [100, 100], [-80, -80]), ...(basicNeeds ? { basicNeeds } : {}) });
+	const b = farm('B', [100, 100], [20, 20], [0, 0]);
+
+	it('never leaves a unit less than its floor: U = MAX(M − ΔG, 0, floor), S = MAX(N − ΔG, floor − I)', () => {
+		const without = computeCurtailment([a(), b], win(0, 1)).farms[0]!;
+		expect(without.volumeLeftM3Day).toBe(0);
+		expect(without.basicNeedsM3Day).toBeUndefined();
+		expect(without.basicNeedsHeldM3Day).toBeUndefined();
+		const out = computeCurtailment([a([20, 30]), b], win(0, 1));
+		const row = out.farms[0]!;
+		expect(row.basicNeedsM3Day).toBe(25);
+		expect(row.volumeLeftM3Day).toBe(25);
+		expect(row.basicNeedsHeldM3Day).toBe(25);
+		// N − ΔG = −40 − 80 = −120; floor − I = 25 − 100 = −75: the floor holds the cut to 75.
+		expect(without.totalChangeM3Day).toBe(-120);
+		expect(row.totalChangeM3Day).toBe(-75);
+		expect(row.fractionOfDemandLeft).toBe(0.25);
+		// The EWR charge and its supply cut stay as they were: the floor holds water back, it doesn't hide the charge.
+		expect(row.ewrSupplyCutM3Day).toBe(without.ewrSupplyCutM3Day);
+		expect(row.ewrCutBeyondShareM3Day).toBe(without.ewrCutBeyondShareM3Day);
+		expect(out.totals.basicNeedsM3Day).toBe(25);
+		expect(out.totals.basicNeedsHeldM3Day).toBe(25);
+	});
+
+	it('holds nothing back when the volume left is above the floor already', () => {
+		const out = computeCurtailment([a([20, 30]), { ...b, basicNeeds: [5, 5] }], win(0, 1));
+		const rowB = out.farms[1]!;
+		expect(rowB.volumeLeftM3Day).toBe(rowB.targetM3Day);
+		expect(rowB.basicNeedsHeldM3Day).toBe(0);
+		expect(rowB.totalChangeM3Day).toBe(rowB.reduceGainM3Day);
+	});
+
+	it('adds no totals without a floor anywhere', () => {
+		const out = computeCurtailment([a(), b], win(0, 1));
+		expect(out.totals.basicNeedsM3Day).toBeUndefined();
+		expect('basicNeedsHeldM3Day' in out.totals).toBe(false);
+	});
+});

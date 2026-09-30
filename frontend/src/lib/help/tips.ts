@@ -231,6 +231,14 @@ export const TIPS: HelpTipText[] = [
 		fields: ['demandObject.schedule']
 	},
 	{
+		id: 'basic-needs-floor',
+		term: 'Basic-needs floor',
+		short: 'The 25 litres a person a day a restriction never cuts a domestic or municipal demand object below: people served × 25 l.',
+		units: 'm³/day',
+		category: 'network',
+		fields: ['demandObject.population']
+	},
+	{
 		id: 'supply-rule',
 		term: 'Supply rule and river pump',
 		short: 'Where a hydrological unit’s irrigation comes from: its dam (the default), a river pump first, the dam until it runs low, or the river alone.',

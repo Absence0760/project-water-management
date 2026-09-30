@@ -140,6 +140,14 @@ describe('shareThePain: farms', () => {
 		expect(row!.ewrNotes).toEqual(['EWR cut exceeds its equitable share by 5 m³/day']);
 	});
 
+	it('notes what the basic-needs floor keeps of the cut (engine 1.44.0), and nothing when it keeps nothing', () => {
+		const [row] = shareThePain(summary([farm({ targetM3Day: 20, volumeLeftM3Day: 25, basicNeedsM3Day: 25, basicNeedsHeldM3Day: 25 })], 0.2)).farms;
+		expect(row!.ewr).toMatchObject({ volumeM3Day: 25, pct: '25%' });
+		expect(row!.ewrNotes).toEqual(['basic needs keep 25 m³/day of the cut (floor 25 m³/day, 25 litres a person a day)']);
+		const [held0] = shareThePain(summary([farm({ targetM3Day: 20, volumeLeftM3Day: 20, basicNeedsM3Day: 5, basicNeedsHeldM3Day: 0 })], 0.2)).farms;
+		expect(held0!.ewrNotes).toEqual([]);
+	});
+
 	it('has no share, not "no demand", when farm demand is 0 but the engine still gave a fraction', () => {
 		const b = shareThePain(summary([farm({ demandM3Day: 0, suppliedM3Day: 0, targetM3Day: 0, volumeLeftM3Day: 0 })], 0.5));
 		expect(b.sharePct).toBeNull();
