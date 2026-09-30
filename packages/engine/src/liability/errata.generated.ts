@@ -112,5 +112,15 @@ export const ENGINE_ERRATA: readonly Erratum[] = [
 		"appliesWhen": "Two or more transfer rules of one priority from one dam at different reserves (counting a rule active that month at rate 0)",
 		"summary": "The rules shared the free water above the lowest reserve among them, so the higher-reserve rules together could take the dam below their own reserves (a rule moving nothing lowered the floor for the rest)",
 		"source": "engine-audit.md N6; model.md §2.6"
+	},
+	{
+		"id": "ER-12",
+		"keyedOn": "run",
+		"firstAffected": "1.8.0",
+		"fixedIn": "1.57.0",
+		"severity": "Low",
+		"appliesWhen": "A primary or emergency borehole pumping into a farm's dam, on a day its crop requirement came out as float noise (the soil-water store's rain an ulp short of the need) or off-take water arrived an ulp short of the demand",
+		"summary": "A demand of 10⁻¹² m³ or less counted as the dam being drawn for demand, so the borehole topped the dam up by up to a day's capacity (495 and 1 590 m³ in the cases found), using its annual cap and depleting the river",
+		"source": "model.md §2.3, §2.7d; found by verify/ phase 2a"
 	}
 ];

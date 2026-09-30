@@ -174,10 +174,20 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    ```
    Pe        = croppedArea × effRain / 1000 × rainUsed[t]          (m³)
    available = W[t−1] + Pe                   (not capped yet)
-   used      = MIN(available, MAX(0, grossFarm))
-   netDemand = MAX(0, grossFarm) − used
-   W[t]      = MIN(Smax, available − used)   Smax = croppedArea × effectiveRainStoreMm / 1000
+   need      = MAX(0, grossFarm)
+   used      = need        when need − available ≤ 10⁻¹² × need   (rain covers it; engine ≥ 1.57.0)
+             = available   otherwise
+   netDemand = need − used
+   W[t]      = MIN(Smax, MAX(0, available − used))   Smax = croppedArea × effectiveRainStoreMm / 1000
    ```
+
+   Rain that falls short of the need by no more than 10⁻¹² of it covers it
+   (engine ≥ 1.57.0): the store's running sum carries float noise, and before
+   1.57.0 a sum an ulp short left a crop requirement of 1.4 × 10⁻¹⁴ m³ beside
+   a 35 m³ need. At an efficiency of 0.01 that was a demand of 1.4 × 10⁻¹² m³,
+   which switched on an emergency dam-target borehole (§2.7d; 495 m³ pumped
+   into an empty dam, verify random seed 1343) and counted as a short day in
+   `limitBound` (§2.12a, seed 145). The same test applies with no store.
 
    The store starts empty. Adding the day's rain *before* capping means a big
    rain still covers that day's demand first, however small the store, as the
@@ -185,7 +195,8 @@ Sheets `[Crop demand]` → `[Farm demand]` → `[Irrigation Demand]`.
    store's size is lost to drainage and runoff (the catchment runoff model
    already counts that water, so nothing is double-counted). With
    `effectiveRainStoreMm = 0`, W is 0 every day and net demand is **bit for
-   bit** the workbook's `MAX(0, gross − Pe)` (tested). Demand stays
+   bit** the workbook's `MAX(0, gross − Pe)` (tested), but for rain within
+   10⁻¹² of the gross, which covers it. Demand stays
    precomputed, independent of supply, so the network simulation is
    unchanged. The farm's `effective_rain` working column is now the effective
    rain *used* that day (from the day's rain or the store), and `soil_water`
@@ -3068,7 +3079,12 @@ storage up to it first, since the water can't be drawn otherwise.
 
 *Only on a day the dam is drawn for demand (engine ≥ 1.8.0).* A primary or
 emergency dam-target borehole pumps only while Dr > 0 (to within 10⁻¹² × D,
-the float noise of several primary units adding up to D). Before 1.8.0 they
+the float noise of several primary units, or of off-take water, adding up to
+D). D here is the day's full demand, the off-take water used included (engine
+≥ 1.57.0): before, a day with off-take water judged the rest against itself,
+so off-take water that arrived an ulp short of the demand (980.5862268744551
+of 980.5862268744552 m³) left 1.1 × 10⁻¹³ m³ that switched an emergency
+borehole on and pumped 1 590 m³ into its dam (verify dense seed 86). Before 1.8.0 they
 pumped whenever the dam had room, demand or not: in a winter-rainfall
 catchment a primary 200 m³/day borehole filled an empty dam from groundwater
 over a dry winter with nothing to irrigate, and the rain that came later
@@ -6879,10 +6895,12 @@ bits whatever order they came in).
   names them). What the unit is then supplied is the model's, as always. The
   run stores *k* as `allocation_demand_factor`, and `RunSummary.allocations`
   lists per unit and year the demand before and the volume it was scaled to
-  (`scaled`). A year with no demand lists the volume registered over its
-  run days, except the year a forecast tail starts in, which lists k × its
-  demand, 0 (verify/ probe `scaled-no-demand-tail-year`; the two readings
-  disagree, followups.md § Verification).
+  (`scaled`). A year with no demand on the days it is scaled on lists the
+  volume registered over those days, what it would have asked for: its run
+  days, and for the year a forecast tail starts in its historical days
+  (engine ≥ 1.57.0; before, that year listed k × its demand, 0; verify/ probe
+  `scaled-no-demand-tail-year`). A tail that starts on 1 October starts a
+  year with no historical days, a part year of its own over its tail days.
 
 **Licence conditions** (the months of use, a maximum rate, conditions in
 words; migration 103) ride on the input. From engine 1.37.0 (issue #72) the
@@ -6928,9 +6946,10 @@ to its rate all season or dry outside its months, so each capped source also
 carries, per water year, the days the limit bound (`limitBound`: `days`,
 split into `volumeDays`, `rateDays` and `monthsDays`, only years with such a
 day). A day counts when the source took all its room (use ≥ room − 10⁻⁹ of
-it) and the unit still went short (deficit > 10⁻⁹ of its demand), so a day
-with no demand, or one the river or dam couldn't fill anyway without the
-room being used, doesn't count. The day goes to `volumeDays` when what was
+it, or of 1 m³ for a smaller room) and the unit still went short (deficit >
+10⁻⁹ of its demand, or of 1 m³ for a demand under 1 m³: a deficit of 10⁻⁹ m³
+or less is float noise), so a day with no demand, or one the river or dam
+couldn't fill anyway without the room being used, doesn't count. The day goes to `volumeDays` when what was
 left of the year's volume was no more than the limit (a year whose volume is
 used up counts as volume in every month), else to `monthsDays` on a day
 outside the months of use (some allocation of the source in force, none of
@@ -6944,7 +6963,8 @@ left). The count says which limit set the room on a day the unit went short,
 not that the limit alone caused the shortfall: a day the river or dam had
 exactly the room left counts too, and outside the months every short day
 does. What is left is compared with the limit within 10⁻⁹ of the year's
-budget, so a volume used up to summing noise counts as volume. The days are
+budget (or of 1 m³ for a smaller budget), so a volume used up to summing
+noise counts as volume. The days are
 the run's own: a run resumed inside a water year counts that year's days
 from the snapshot on (its `capReached` counts the use before it, as the cap
 does), and the whole run, a forecast tail included, is counted.
@@ -8042,8 +8062,9 @@ objects and the basic-needs floor, river off-takes and canal seepage, other
 water users, supply rules and the river pump, dam survey curves and releases,
 and hands-off flows. On engine 1.36.0 it found no departure from this
 document; on 1.53.0 one, on a few random networks: a float-noise demand
-switches on a primary or emergency dam-target borehole (§2.7d), and drops a
-day from `limitBound` (§2.12a) (followups.md § Verification). What it doesn't
+switched on a primary or emergency dam-target borehole (§2.7d), fixed in
+1.57.0 (§2.3, §2.7d; erratum ER-12), and a noise-level day in `limitBound`
+that §2.12a now settles. What it doesn't
 cover yet (rule tables, forecast mode, calibration, land cover, time-varying
 development, drought restrictions, `demand.scale` by part and the other
 optional inputs) is its phase 2b ([followups.md](./followups.md) §

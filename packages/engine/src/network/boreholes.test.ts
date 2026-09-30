@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { GA538_ALLUVIAL_DEPLETION_FRAC, GA538_GROUNDWATER_LIMIT_M3_YEAR, GA538_GROUNDWATER_RATES, ga538VolumeM3, type Borehole, type ModelInput, type NetworkNode } from '../project';
 import { fromEpochDay, toEpochDay } from '../calendar';
-import { ga538Warnings, groundwaterAnnualUse, twelveMonthsStart, type PlanBorehole } from './boreholes';
+import { damDrawnFor, ga538Warnings, groundwaterAnnualUse, groundwaterDay, twelveMonthsStart, type PlanBorehole } from './boreholes';
 import { runModelWith, withVerification } from '../run';
 import { checkGroundwater, checkInvariants } from '../verify/checks';
 import { randomInput } from '../testing/fuzz';
@@ -388,6 +388,29 @@ describe('individual boreholes (WP-3.9)', () => {
 			ok(o);
 			expect(col(o, 'A', 'groundwater_to_dam'), mode).toEqual([200, 200, 200]);
 			expect(col(o, 'A', 'dam_storage'), mode).toEqual([150, 300, 450]);
+		}
+	});
+
+	it('an ulp of demand left after off-take water does not switch on a primary or emergency dam-target borehole (engine 1.57.0)', () => {
+		// Verify dense seed 86: off-take water arrived at 980.5862268744551 m³ against a demand of
+		// 980.5862268744552 m³. The rest, 1.1e-13 m³, was judged against itself, so an emergency unit
+		// filled its dam (1 590 m³). It is judged against the day's full demand now, as §2.7d says.
+		const D = 980.5862268744552;
+		const rest = D - 980.5862268744551;
+		expect(rest).toBeGreaterThan(0);
+		expect(damDrawnFor(rest, D)).toBe(false);
+		expect(damDrawnFor(rest, rest)).toBe(true);
+		for (const mode of [1, 2] as const) {
+			const b: PlanBorehole = { units: [{ id: 'b', name: 'BH', capacityM3Day: 2000, annualCapM3: Infinity, mode, triggerM3: 1000, toDam: true, depletionFrac: 0 }], depletionAlpha: 1 };
+			const pumped = [new Float64Array(1)];
+			// A 3189 m³ dam holding 1599 m³ (below the emergency trigger), dead storage 0.
+			const [Gs, gw, gd] = groundwaterDay(b, new Float64Array(1), pumped, 0, rest, 500, 1599, 0, 3189, 0, 1, Infinity, Infinity, D);
+			expect(gd, `mode ${mode}`).toBe(0);
+			expect(gw).toBe(0);
+			expect(Gs).toBe(rest);
+			// Positive control: a real rest (1 m³ of the 980) still tops the dam up.
+			const real = groundwaterDay(b, new Float64Array(1), [new Float64Array(1)], 0, 1, 500, 1599, 0, 3189, 0, 1, Infinity, Infinity, D);
+			expect(real[2], `mode ${mode}`).toBe(1590);
 		}
 	});
 
