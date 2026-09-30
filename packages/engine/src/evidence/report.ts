@@ -21,11 +21,14 @@ import {
 	type EvidenceAllocationUnit,
 	type EvidenceAllocationYear,
 	type EvidenceCheck,
+	type EvidenceCumulative,
+	type EvidenceCumulativeApplication,
 	type EvidenceEnsembleInput,
 	type EvidenceEnsembleRef,
 	type EvidenceFlag,
 	type EvidenceInput,
 	type EvidenceMonthChange,
+	type EvidenceOtherApplicationInput,
 	type EvidenceReport,
 	type EvidenceRow,
 	type EvidenceRunInput,
@@ -292,6 +295,8 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 
 	const river = sites(b, a);
 	const users = userRows(b, a);
+	const cumulative = cumulativeOf(b, a, input.otherApplications, input.otherApplicationsTruncated);
+	if (a) rows.push(cumulativeRow(cumulative));
 	const errata = dedupe([
 		...errataFor(b.engineVersion, input.liability.errata, fitVersion(b)),
 		...(a ? errataFor(a.engineVersion, input.liability.errata, fitVersion(a)) : [])
@@ -362,6 +367,7 @@ export function evidenceReport(input: EvidenceInput): EvidenceReport {
 		},
 		credibility: { nominations: input.nominations.map((n) => ({ ...n })) },
 		users,
+		cumulative,
 		allocations,
 		appendix: {
 			baselineInputs: b.inputs,
@@ -680,6 +686,7 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			let rate = Infinity;
 			for (const x of site.byMonth) if (x.rate !== null && x.rate < rate) ((rate = x.rate), (fdcMonth = x.month));
 		}
+		const fdcDriestMonth = driestMonth(site);
 		return {
 			key: site.nodeId ?? 'outlet',
 			name: site.name,
@@ -704,14 +711,116 @@ function sites(b: EvidenceRunInput, a: EvidenceRunInput | null): EvidenceSite[] 
 			belowTableB: a ? belowTable(other) : null,
 			belowTableExpectedPct: site.naturalSource === 'run' && site.points.length ? 100 - site.points[site.points.length - 1]! : null,
 			byMonth,
-			fdcMonth
+			fdcMonth,
+			fdcDriestMonth
 		};
 	});
+}
+
+/**
+ * The calendar month with the lowest mean natural flow over its complete
+ * months in the baseline (table unit), ties to the first in water-year
+ * order. Natural flow, not the simulated flow or its ratio to the
+ * requirement: the driest month is a property of the river, so neither the
+ * requirement's shape nor the application can move which month it is.
+ */
+export function driestMonth(site: Pick<EwrAssuranceSite, 'months' | 'byMonth'>): number | null {
+	const sum = new Map<number, { total: number; n: number }>();
+	for (const m of site.months) {
+		if (!Number.isFinite(m.natural)) continue;
+		const x = sum.get(m.month) ?? { total: 0, n: 0 };
+		x.total += m.natural;
+		x.n += 1;
+		sum.set(m.month, x);
+	}
+	let best: number | null = null;
+	let low = Infinity;
+	// byMonth is in water-year order (Oct … Sep): the first of equal means wins.
+	for (const { month } of site.byMonth) {
+		const x = sum.get(month);
+		if (!x || !x.n) continue;
+		const mean = x.total / x.n;
+		if (mean < low) ((low = mean), (best = month));
+	}
+	return best;
 }
 
 // ---------------------------------------------------------------------------
 // § 4 Other users
 // ---------------------------------------------------------------------------
+
+/** What the cumulative row and table say they are (licensing authority: never read a sum as a combined run). */
+export const CUMULATIVE_BASIS = 'Days below the pragmatic EWR at the outlet: other applications’ own changes, added up; not one combined run (WP-3.11)';
+export const CUMULATIVE_NONE = 'None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.';
+/** Page 1 names at most this many; § 4 lists every one, so the row stays one row high (G6). */
+const CUMULATIVE_NAMED = 3;
+export const CUMULATIVE_TRUNCATED = (n: number) =>
+	`Not assessed: more than ${n} other applications have runs on this baseline; § 4 lists the newest ${n}, and a sum of part of them would understate it.`;
+export const CUMULATIVE_NO_BAND = 'no band: a sum of other runs’ own differences';
+
+/** Other applications on the baseline, each one's own change, and their sum (§ 4, and page 1's row). */
+function cumulativeOf(b: EvidenceRunInput, a: EvidenceRunInput | null, others: readonly EvidenceOtherApplicationInput[], truncated: boolean): EvidenceCumulative {
+	const outlet = (b.summary.ewrAssurance ?? []).find((s) => s.isOutlet) ?? null;
+	const baseRate = outlet?.overall.rate ?? null;
+	const baseDays = b.summary.catchment.ewrDaysNotMet;
+	const pp = (rate: number | null | undefined) => (rate === null || rate === undefined || baseRate === null ? null : (rate - baseRate) * 100);
+	const applications: EvidenceCumulativeApplication[] = [...others]
+		.sort((x, y) => (x.runCreatedAt < y.runCreatedAt ? -1 : x.runCreatedAt > y.runCreatedAt ? 1 : x.scenarioId < y.scenarioId ? -1 : 1))
+		.map((o) => {
+			const reason =
+				o.engineVersion !== b.engineVersion
+					? `not counted: run by engine ${o.engineVersion}, the baseline by ${b.engineVersion}`
+					: o.startDate !== b.startDate || o.endDate !== b.endDate
+						? 'not counted: another period than the baseline’s'
+						: o.runoffModel !== b.runoffModel
+							? 'not counted: another runoff model than the baseline’s'
+							: null;
+			return {
+				scenarioId: o.scenarioId,
+				scenarioName: o.scenarioName,
+				status: o.status,
+				outcome: o.outcome,
+				runId: o.runId,
+				runCreatedAt: o.runCreatedAt,
+				comparable: reason === null,
+				reason,
+				ewrDays: diff(baseDays, o.ewrDaysNotMet),
+				reservePp: pp(o.reserveOutlet?.rate)
+			};
+		});
+	const counted = applications.filter((x) => x.comparable);
+	const sumOf = (vals: (number | null)[]) => (vals.some((v) => v !== null) ? vals.reduce<number>((t, v) => t + (v ?? 0), 0) : null);
+	const total = { ewrDays: sumOf(counted.map((x) => x.ewrDays)), reservePp: sumOf(counted.map((x) => x.reservePp)) };
+	let withThis: EvidenceCumulative['withThis'] = null;
+	if (a) {
+		const own = { ewrDays: diff(baseDays, a.summary.catchment.ewrDaysNotMet), reservePp: pp(outlet ? matchSite(a.summary.ewrAssurance ?? [], outlet)?.overall.rate : null) };
+		withThis = { ewrDays: sumOf([total.ewrDays, own.ewrDays]), reservePp: sumOf([total.reservePp, own.reservePp]) };
+	}
+	if (truncated) return { applications, counted: counted.length, truncated, total: { ewrDays: null, reservePp: null }, withThis: a ? { ewrDays: null, reservePp: null } : null };
+	return { applications, counted: counted.length, truncated, total, withThis };
+}
+
+/** Page 1's row over the other applications (application reports only). */
+function cumulativeRow(c: EvidenceCumulative): EvidenceRow {
+	const all = c.applications.filter((x) => x.comparable).map((x) => `“${x.scenarioName}”`);
+	const names = all.length > CUMULATIVE_NAMED ? [...all.slice(0, CUMULATIVE_NAMED), `${all.length - CUMULATIVE_NAMED} more in § 4`] : all;
+	const left = c.applications.length - c.counted;
+	return {
+		id: 'otherApplications',
+		label: 'Other applications on this baseline, summed',
+		basis: CUMULATIVE_BASIS,
+		subject: null,
+		unit: 'days',
+		higherIsWorse: true,
+		baseline: null,
+		application: null,
+		change: c.counted && !c.truncated ? { run: c.total.ewrDays, band: null, bandNote: CUMULATIVE_NO_BAND, worse: null } : null,
+		notAssessed: c.truncated ? CUMULATIVE_TRUNCATED(c.applications.length) : !c.applications.length ? CUMULATIVE_NONE : !c.counted ? `Not assessed: none of the ${c.applications.length} other applications ran on this baseline’s engine, period and runoff model (§ 4).` : null,
+		note: c.counted && !c.truncated
+			? `${c.counted} application${c.counted === 1 ? '' : 's'}: ${names.join(', ')}${left ? `; ${left} more not counted (§ 4)` : ''}.${c.withThis?.ewrDays != null ? ` With this one: ${signed(fixed(c.withThis.ewrDays, 0))} days.` : ''}`
+			: null
+	};
+}
 
 function userRows(b: EvidenceRunInput, a: EvidenceInput['application']): EvidenceUser[] {
 	const owned = new Set(a?.scenario.ownedNodeIds ?? []);

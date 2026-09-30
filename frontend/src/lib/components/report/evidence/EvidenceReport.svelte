@@ -6,7 +6,10 @@
 	// the engine built (evidenceReport); this component only lays it out.
 	// Its own chunk: loaded only for an evidence report.
 	import { ALLOCATION_MODE_LABEL, declaredRuleText, describeFitRecord, type EvidenceReport, type EwrAssuranceSite, type ModelInput } from '@water-management/engine';
-	import type { SignoffList } from '$lib/api';
+	import type { OutcomeSettings, SignoffList } from '$lib/api';
+	import { chooseSite, matrixSites } from '$lib/components/outcomes/matrix';
+	import type { ImpactSeries } from '../impactSeries';
+	import { buildLicenceImpactBoard } from '../licenceImpact';
 	import CalibrationPanel from '$lib/components/calibration/CalibrationPanel.svelte';
 	import FitProvenance from '$lib/components/calibration/FitProvenance.svelte';
 	import Disclaimer from '$lib/components/liability/Disclaimer.svelte';
@@ -24,6 +27,7 @@
 	import { SOURCE_LABEL, STATUS_LABEL, waterYearLabel } from '$lib/components/allocations/allocations';
 	import { bandText as useBandText, countsText, m3, partNote, ratioText, unitSourceLabel, useRows } from './registeredUse';
 	import ReserveGrids from './ReserveGrids.svelte';
+	import { fdcMonths } from './grid';
 	import { bandRange, bandText, pct, signed, worseText } from './format';
 	import { evidenceSections, sectionHeading } from './sections';
 
@@ -31,6 +35,8 @@
 		report,
 		projectId,
 		stamp,
+		impactSeries = null,
+		outcomes = null,
 		verify = null,
 		signoffs = null,
 		signoffRunId = null,
@@ -40,6 +46,10 @@
 		projectId: string;
 		/** "Draft · not issued" until a pack issues it (G12). */
 		stamp: string;
+		/** The daily series page 1's licence impact by year class reads (loadImpactSeries); null when not fetched, and the board says what is missing. */
+		impactSeries?: ImpactSeries | null;
+		/** The project's settings.outcomes (year-class method, Reserve site), as the impact report reads them: a run doesn't record them. */
+		outcomes?: Partial<OutcomeSettings> | null;
 		/** The issued pack's short verification code and link; null for a draft. */
 		verify?: string | null;
 		/** The sign-offs of the run the report is about (B.2); null when not loaded (a frozen pack prints its own). */
@@ -73,10 +83,36 @@
 		return (a?.fdc ?? []).map((p, i) => ({ point: p.point, required: p.required, a: p.impacted, b: b?.fdc[i]?.impacted ?? null, natural: p.natural ?? null }));
 	}
 
+	/**
+	 * Page 1's licence impact by year class (issue #53 R7): the impact report's
+	 * board, the baseline as the background and the application beside it.
+	 * Application reports only. The application's period is the baseline's (a
+	 * report on another period is refused), so the baseline's first day serves both.
+	 */
+	const board = $derived.by(() => {
+		const appSummary = report.summaries.application;
+		if (!app || !appSummary || !id.application) return null;
+		const rules = (base.settings as { ewrRules?: { siteNodeId: string | null }[] }).ewrRules ?? [];
+		const site = chooseSite(outcomes?.siteNodeId, matrixSites(base.model.nodes, rules)).site;
+		return buildLicenceImpactBoard({
+			data: {
+				a: { run: { label: id.baseline.label, startDate: id.baseline.startDate, summary: report.summaries.baseline } },
+				b: { run: { label: id.application.label, startDate: id.baseline.startDate, summary: appSummary } }
+			},
+			series: impactSeries ?? { background: { natural: null, ewrShortfall: null }, application: { ewrShortfall: null } },
+			method: outcomes?.yearClassMethod ?? 'auto',
+			site,
+			applicationName: 'the application'
+		});
+	});
+
 	const cov = $derived(report.uncertainty.baseline?.coverage ?? []);
 	const bandsA = $derived(report.uncertainty.baseline?.bands ?? null);
 	const paired = $derived(report.uncertainty.paired);
 	const al = $derived(report.allocations);
+	const cum = $derived(report.cumulative);
+	const OUTCOME: Record<string, string> = { approved: 'approved', approved_with_conditions: 'approved with conditions' };
+	const statusText = (o: EvidenceReport['cumulative']['applications'][number]) => (o.status === 'decided' ? `decided: ${OUTCOME[o.outcome ?? ''] ?? o.outcome}` : 'submitted');
 	const use = $derived(useRows(al));
 	/** Page 1's row says why nothing is judged when every year is a part year. */
 	const useJudged = $derived(report.rows.find((r) => r.id === 'registeredUse')?.notAssessed ?? null);
@@ -85,6 +121,10 @@
 </script>
 
 <article class="evidence" data-testid="evidence-report" data-evidence-mode={report.mode}>
+	{#if stamp}
+		<!-- G12: a diagonal stamp on every printed page (position: fixed repeats on each page in print); the text stamp in each section head stays the accessible one. -->
+		<div class="watermark" aria-hidden="true" data-testid="evidence-watermark">{stamp}</div>
+	{/if}
 	{#each sections as s (s.id)}
 		<section class="ev-sec" id="ev-{s.id}" aria-labelledby="ev-{s.id}-h">
 			<div class="run-head">
@@ -101,7 +141,7 @@
 			</div>
 
 			{#if s.id === 'summary'}
-				<EvidenceSummary {report} signoffs={signoffs?.signoffs ?? []} {verify} />
+				<EvidenceSummary {report} {board} signoffs={signoffs?.signoffs ?? []} {verify} />
 			{:else if s.id === 'river'}
 				{#if !report.river.length}
 					<p class="na">Not assessed: no EWR site has a Reserve rule table, so Reserve compliance can’t be assessed (G16). Only the pragmatic EWR (page 1) is.</p>
@@ -130,14 +170,16 @@
 									unit="days"
 								/>
 							{/if}
-							{#if site.fdcMonth !== null}
-								<FdcPlot
-									title="{monthName(site.fdcMonth)} flow-duration curve at {site.name} against the EWR curve"
-									unit={site.unit}
-									caption="{monthName(site.fdcMonth)}: {app ? 'the month the application loses most months met in, or else' : ''} the month met least often. The simulated curve should lie on or above the EWR curve."
-									points={fdcPoints(site.key, site.fdcMonth)}
-								/>
-							{/if}
+							{#each fdcMonths(site, app) as f (f.month)}
+								<div data-testid="evidence-fdc-{f.kind}">
+									<FdcPlot
+										title="{monthName(f.month)} flow-duration curve at {site.name} against the EWR curve"
+										unit={site.unit}
+										caption="{monthName(f.month)}: {f.why} The simulated curve should lie on or above the EWR curve."
+										points={fdcPoints(site.key, f.month)}
+									/>
+								</div>
+							{/each}
 						</div>
 						<div class="table-wrap">
 							<table class="data compact">
@@ -194,7 +236,7 @@
 									<tr>
 										<th scope="row">{e.id.slice(0, 8)}{e.cited ? ' (cited)' : ''}</th>
 										<td>{fmtDate(e.createdAt)}{e.createdBy ? `, ${e.createdBy}` : ''}</td>
-										<td>{e.status === 'complete' ? 'complete' : 'started, never completed'}</td>
+										<td>{e.status === 'complete' ? 'complete' : 'started, not completed: no result stored'}</td>
 										<td class="num">{e.accepted === null ? '–' : `${fmtNum(e.accepted)} of ${fmtNum(e.members + 1)}`}</td>
 										<td>{!report.uncertainty.declared ? 'no rule declared' : e.departsFromDeclared.length ? e.departsFromDeclared.map((d) => `${d.label}: ${d.b} (rule ${d.a})`).join('; ') : 'follows it'}</td>
 									</tr>
@@ -202,6 +244,12 @@
 							</tbody>
 						</table>
 					</div>
+					{#if report.uncertainty.ledger.some((e) => e.status === 'started')}
+						<p class="small muted" data-testid="evidence-ledger-started">
+							A start not completed was cancelled, abandoned or is still running. The app keeps nothing of it but who started it, when, and its rule: the
+							browser runs the ensemble and stores the result only when every set has run, so what a cancelled start had shown can’t be printed.
+						</p>
+					{/if}
 				{:else}
 					<p class="na">No ensemble has been started on the baseline.</p>
 				{/if}
@@ -337,6 +385,62 @@
 					</table>
 				</div>
 				<p class="small muted">Supply is the share of demand supplied over the whole run; days and years fully met are over the reporting window (assurance of supply, model.md §2.11a). No change here carries a band: the ensemble doesn’t carry supply per unit yet.</p>
+				<h3>Other applications on this baseline</h3>
+				<p class="small">
+					Each other application that is submitted, or decided with approval, with its newest run of its ops on this baseline: its own change against
+					the baseline at the outlet, and their sum. A sum of separate runs, not one combined run: two applications drawing on the same water can
+					together take less than the sum says, or push the river further. A combined run of every application is WP-3.11. The sum counts the runs on
+					the baseline’s engine, period and runoff model; any other difference is the application’s own changes. Listed as the reader
+					can see them: a submitted application is visible to the project’s editors only. Drafts are never listed.
+				</p>
+				{#if cum.applications.length}
+					{#if cum.truncated}
+						<p class="na" data-testid="evidence-cumulative-cut">
+							More than {cum.applications.length} other applications have runs on this baseline: the newest {cum.applications.length} are listed, and nothing
+							is summed, since a sum of part of them would understate it.
+						</p>
+					{/if}
+					<div class="table-wrap">
+						<table class="data compact" data-testid="evidence-cumulative">
+							<thead>
+								<tr>
+									<th scope="col">Application</th>
+									<th scope="col">Status</th>
+									<th scope="col" class="num">Days below the pragmatic EWR, change</th>
+									<th scope="col" class="num">Reserve months met at the outlet, change</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each cum.applications as o (o.scenarioId)}
+									<tr>
+										<th scope="row">“{o.scenarioName}”<span class="sub">run {fmtDate(o.runCreatedAt)}</span></th>
+										<td>{statusText(o)}{#if o.reason}<span class="sub">{o.reason}</span>{/if}</td>
+										<td class="num">{o.ewrDays === null ? '–' : `${signed(o.ewrDays, 0)} days`}</td>
+										<td class="num">{o.reservePp === null ? '–' : `${signed(o.reservePp, 1)} pp`}</td>
+									</tr>
+								{/each}
+							</tbody>
+							<tfoot>
+								<tr class="total">
+									<th scope="row">{cum.truncated ? 'Not summed: the list is cut' : `Sum of the ${cum.counted} counted`}</th>
+									<td></td>
+									<td class="num">{cum.total.ewrDays === null ? '–' : `${signed(cum.total.ewrDays, 0)} days`}</td>
+									<td class="num">{cum.total.reservePp === null ? '–' : `${signed(cum.total.reservePp, 1)} pp`}</td>
+								</tr>
+								{#if cum.withThis}
+									<tr class="total">
+										<th scope="row">With this application</th>
+										<td></td>
+										<td class="num">{cum.withThis.ewrDays === null ? '–' : `${signed(cum.withThis.ewrDays, 0)} days`}</td>
+										<td class="num">{cum.withThis.reservePp === null ? '–' : `${signed(cum.withThis.reservePp, 1)} pp`}</td>
+									</tr>
+								{/if}
+							</tfoot>
+						</table>
+					</div>
+				{:else}
+					<p class="na" data-testid="evidence-cumulative-none">None: no other submitted or approved application has a run of its ops on this baseline visible to the account that built this report.</p>
+				{/if}
 			{:else if s.id === 'allocations'}
 				{#if al.notAssessed}
 					<p class="na" data-testid="evidence-allocations-na">{al.notAssessed}</p>
@@ -547,6 +651,8 @@
 <style>
 	.evidence {
 		display: grid;
+		/* minmax(0, …): one long cell must not widen the whole report past the window. */
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1.25rem;
 	}
 	.ev-sec {
@@ -683,7 +789,47 @@
 		border-left: 3px solid var(--border-strong);
 		padding-left: 0.75rem;
 	}
+	.watermark {
+		display: none;
+	}
+	tr.total th,
+	tr.total td {
+		font-weight: 600;
+	}
+	tfoot tr:first-child > * {
+		border-top: 2px solid var(--border-strong);
+	}
+	/* The sums stay in view while a long list scrolls in its card. */
+	tfoot :is(th, td) {
+		position: sticky;
+		bottom: 0;
+		background: var(--surface);
+	}
 	@media print {
+		tfoot :is(th, td) {
+			position: static;
+		}
+		/* Printed once, after the list, not at the foot of every page. */
+		tfoot {
+			display: table-row-group;
+		}
+		.watermark {
+			display: block;
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%) rotate(-35deg);
+			white-space: nowrap;
+			font-size: 54pt;
+			font-weight: 700;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			color: rgb(0 0 0 / 0.08);
+			border: 4pt solid rgb(0 0 0 / 0.08);
+			padding: 0.1em 0.4em;
+			pointer-events: none;
+			z-index: 10;
+		}
 		.evidence {
 			display: block;
 		}
@@ -693,7 +839,7 @@
 			padding: 0;
 			background: none;
 		}
-		.ev-sec:first-child {
+		.ev-sec:first-of-type {
 			break-before: auto;
 		}
 		.stamp {

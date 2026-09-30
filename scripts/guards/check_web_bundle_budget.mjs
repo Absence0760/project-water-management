@@ -1382,6 +1382,20 @@
 // 2026-09-30  total 1238 → 1241 KB (issue #71: measured 1238 with #217's
 //             branch merged, against its 1235). The Allocations tab's
 //             over/under-use chart. No new dependency. Headroom ~3 KB.
+// 2026-09-29  total 1238 → 1241 KB (issue #71 follow-ups: measured 1238 against
+//             1235 on its base 0ba47067). The evidence report's chunk
+//             18.6 → 20.2 KB: § 4's other applications on the baseline, § 1's
+//             second FDC (the driest month), the ledger's note on starts not
+//             completed, the print-only diagonal draft stamp, and page 1's
+//             licence impact by year class. That board (LicenceImpactBoard,
+//             licenceImpact.ts, 4.8 KB) left the impact report's chunk
+//             (5.7 → 1.5 KB) for a chunk the two reports share, lazy in both:
+//             +0.6 KB of split overhead, but no second copy. The evidence
+//             page +0.1 KB (it fetches the board's three series). No new
+//             dependency. Headroom ~3 KB.
+// 2026-09-30  total 1241 → 1246 KB (issue #71: measured 1243 with main @
+//             e8ebaf18 merged). #222's allocations chart now in main.
+//             Headroom ~3 KB.
 // Run:  pnpm build:frontend && pnpm check:bundle
 // CI:    ci.yml, job `test`, after `pnpm build`.
 // Tests: node --test scripts/guards/check_web_bundle_budget.test.mjs
@@ -1392,7 +1406,7 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
 export const BUDGET = Object.freeze({
-	totalCodeKb: 1241,
+	totalCodeKb: 1246,
 	largestChunkKb: 42,
 	largestTabChunkKb: 60,
 	largestWorkerKb: 38,
