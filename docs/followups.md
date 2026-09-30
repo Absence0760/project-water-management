@@ -46,15 +46,19 @@ The checklist for these is issue #62; the history scrub is #63.
       the AWS bootstrap below, re-run
       `~/github/templates/scripts/export-tf-vars.sh infra/` and check all four
       appear under the repo's Settings → Variables.
-- [ ] **`production` environment branch/tag policy and the release-tag
+- [x] **`production` environment branch/tag policy and the release-tag
       ruleset (#126, 2026-09-29).** The release preflight now refuses every
       release until the `production` environment deploys only from `main`
       and the `backend@*`/`web@*` tags, and an active tag ruleset stops those
       tags being created (except by an admin), moved or deleted. Run the
       one-line `gh api` commands in deployment.md § The production
       environment's branch and tag policy (steps 1–3), then its step 4 check.
-      Also propose the same steps for the templates repo's
-      `backfill-prod-environment.sh`, which sets only the reviewer today.
+      — *Done 2026-09-29: steps 1–3 applied, step 4 shows the three policies
+      (`main`, `backend@*`, `web@*`) and the "Release tags" ruleset active.*
+- [ ] **Propose the branch/tag policy for the templates repo (#126).** The
+      templates repo's `backfill-prod-environment.sh` sets only the
+      reviewer; propose deployment.md's steps 1–3 for its `base` branch so
+      every estate repo gets them.
 - [ ] **Renderer Lambda needs a two-step first deploy (#26, closed; now #62).** Lambda can't be
       created before its image is in ECR: apply without it, cut the first
       `backend@X.Y.Z` release (which builds and pushes
@@ -158,9 +162,10 @@ The checklist for these is issue #62; the history scrub is #63.
       issues; delete it once nothing is needed from it). The calibration and
       rainfall issues are re-filed without the names as #1 and #2 (originals
       archived in `infra-secrets/water-management/`).
-- [ ] **`production` environment:** run
+- [x] **`production` environment:** run
       `templates/scripts/backfill-prod-environment.sh --apply`, with the
-      operator as required reviewer.
+      operator as required reviewer. — *Done: `Absence0760` is the required
+      reviewer (checked 2026-09-29).*
 - [ ] **AWS bootstrap:** follow `infra/README.md` steps 1–9a, then
       `export-tf-vars.sh`. Pick the region; the recommendation is af-south-1
       for everything, SES included ([deployment.md § Region
