@@ -1053,7 +1053,8 @@ change, and compares a stored run without the setting as the default.
 **Where the CHIRPS and forecast series come from.** Uploaded, or from a data
 feed (Settings → Data feeds, [architecture.md § Data feeds](./architecture.md#data-feeds)):
 a CHIRPS feed writes CHIRPS v3 **as published**, the weighted mean of the
-configured 0.05° cells, into `rain_chirps_mm` (preliminary days first, then
+configured 0.05° cells (or the area-weighted mean of the cells a bounding box
+overlaps), into `rain_chirps_mm` (preliminary days first, then
 their final values once published), and a CHIRPS-GEFS feed writes the 16-day
 forecast into `rain_forecast_mm`. Neither changes the priority above: rain
 used is catchment rain, else CHIRPS (bias-corrected here, unless the mode is

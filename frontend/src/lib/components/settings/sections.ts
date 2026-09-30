@@ -1,7 +1,7 @@
 // The Settings & calibration page's in-page menu, one link per group in page
 // order, and the list of what blocks Save, each pointing at its group. The ids
 // are set on the panels in SettingsTab.svelte (and around Wr2012Section and EwrRulesSection,
-// and on DataFeedsPanel, ApiKeysPanel and ReportSchedulesPanel, which follow the form).
+// on DataFeedsPanel's wrapper (the panel is lazy), and on ApiKeysPanel and ReportSchedulesPanel, which follow the form).
 
 export const SETTINGS_SECTIONS = [
 	{ id: 'set-demand', label: 'Demand' },
