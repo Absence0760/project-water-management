@@ -261,7 +261,7 @@ export const packRoutes = new Hono<AuthEnv>()
 		return withUser(
 			c.get('userId'),
 			async (db) => {
-				await requireRole(db, id, 'viewer');
+				const role = await requireRole(db, id, 'viewer');
 				const pack = await loadPack(db, id, packId);
 				const { manifest, matches } = await storedManifest(db, packId);
 				const { rows: signoffs } = await db.query<SignoffRow>(`${SIGNOFF_SELECT} WHERE project_id = $1 AND pack_id = $2 ORDER BY signed_at, id`, [id, packId]);
@@ -271,7 +271,8 @@ export const packRoutes = new Hono<AuthEnv>()
 					// False only if the stored manifest was altered past the guard (the owner, by hand).
 					manifestMatches: matches,
 					signoffs,
-					issue: pack.status === 'draft' ? await issueChecks(db, id, pack, manifest) : null
+					// Only editors issue, so only they get the checklist (it reads both runs, which a viewer may not see).
+					issue: pack.status === 'draft' && rank[role] >= rank.editor ? await issueChecks(db, id, pack, manifest) : null
 				});
 			},
 			{ readOnly: true }
@@ -281,11 +282,12 @@ export const packRoutes = new Hono<AuthEnv>()
 		const { id, packId } = c.req.param();
 		return withUser(c.get('userId'), async (db) => {
 			await requireRole(db, id, 'editor');
+			// Its runs stop being cited and may be trimmed: under the project's run lock, as a trim is. Taken
+			// before the pack's row lock, in the same order as drafting (no deadlock with a draft that supersedes).
+			await lockProjectRuns(db, id);
 			const pack = await loadPack(db, id, packId, true);
 			if (pack.status !== 'draft') throw new ApiError(409, `an ${pack.status} pack is never deleted; withdraw it instead`);
 			if (pack.signoffs > 0) throw new ApiError(409, 'a signed draft is kept with its sign-off; withdraw it instead');
-			// Its runs stop being cited and may be trimmed: under the project's run lock, as a trim is.
-			await lockProjectRuns(db, id);
 			mustChange(await db.query(`DELETE FROM evidence_pack WHERE project_id = $1 AND id = $2 AND status = 'draft'`, [id, packId]));
 			await recordAudit(db, id, 'pack.deleted', audit(pack));
 			return c.body(null, 204);
@@ -350,6 +352,16 @@ export const packRoutes = new Hono<AuthEnv>()
 			const pred = pack.supersedesId ? await loadPack(db, id, pack.supersedesId, true) : null;
 			if (pred && pred.status !== 'issued')
 				throw new ApiError(409, `the pack this version replaces is ${pred.status} now, so this version can’t supersede it; start a new pack`);
+			// One issued pack per application (or per project's baseline evidence): a later one supersedes it (evidence_pack_one_issued).
+			const { rows: current } = await db.query<{ version: number }>(
+				`SELECT version FROM evidence_pack WHERE project_id = $1 AND status = 'issued' AND scenario_id IS NOT DISTINCT FROM $2 AND id IS DISTINCT FROM $3 LIMIT 1`,
+				[id, pack.scenarioId, pred?.id ?? null]
+			);
+			if (current[0])
+				throw new ApiError(
+					409,
+					`version ${current[0].version} of this ${pack.scenarioId ? 'application' : 'baseline evidence'} is issued; draft a new version of it (supersedesId) instead of a second pack`
+				);
 			mustChange(await db.query(`UPDATE evidence_pack SET status = 'issued' WHERE project_id = $1 AND id = $2`, [id, packId]));
 			if (pred) {
 				mustChange(

@@ -114,7 +114,7 @@ async function plantedPack() {
 	const id = crypto.randomUUID();
 	await asOwner(
 		`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
-		 VALUES ($1, $2, $3, 1, '{"planted":true}'::jsonb, md5(random()::text) || md5(random()::text), 'evidence-1', '0.0.0', $4)`,
+		 VALUES ($1::uuid, $2::uuid, $3, 1, jsonb_build_object('pack', jsonb_build_object('id', $1::text, 'version', 1), 'project', jsonb_build_object('id', $2::text), 'engine', jsonb_build_object('version', '0.0.0'), 'report', jsonb_build_object('version', 'evidence-1')), md5(random()::text) || md5(random()::text), 'evidence-1', '0.0.0', $4)`,
 		[id, ctx.projectId, ctx.runId, ctx.owner.id]
 	);
 	return id;

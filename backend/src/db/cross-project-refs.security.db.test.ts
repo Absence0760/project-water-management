@@ -300,7 +300,7 @@ interface Case {
 const u = () => dual.id;
 /** A draft evidence pack: id, project, baseline run, version, predecessor, scenario, scenario run, creator. */
 const packInsert = `INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, supersedes_pack_id, scenario_id, scenario_run_id, manifest, manifest_sha256, report_version, engine_version, created_by)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, '{}', md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $8)`;
+	VALUES ($1::uuid, $2::uuid, $3, $4::int, $5, $6, $7, jsonb_build_object('pack', jsonb_build_object('id', $1::text, 'version', $4::int), 'project', jsonb_build_object('id', $2::text), 'engine', jsonb_build_object('version', 'x'), 'report', jsonb_build_object('version', 'evidence-1')), md5(random()::text) || md5(random()::text), 'evidence-1', 'x', $8)`;
 const nonce = () => randomBytes(32);
 
 /** Keyed `table.column`: one per non-composite foreign key of the inventory. */

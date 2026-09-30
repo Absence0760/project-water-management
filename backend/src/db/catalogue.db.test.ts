@@ -52,7 +52,8 @@ const COLUMN_ONLY_UPDATE: Record<string, string[]> = {
 		'updated_by'
 	],
 	// An evidence pack's manifest, hash, runs and version are frozen; only its lifecycle, set once each, moves (112_evidence_pack.sql, evidence_pack_guard).
-	evidence_pack: ['bundle_key', 'bundle_sha256', 'pdf_key', 'pdf_pages', 'pdf_sha256', 'status', 'status_reason', 'superseded_by_pack_id'],
+	// The PDF and bundle hashes aren't granted: they are verified publicly, so only a SECURITY DEFINER setter will write them.
+	evidence_pack: ['status', 'status_reason', 'superseded_by_pack_id'],
 	// A share link is withdrawn, never edited: who revoked it and when (025_share_links.sql).
 	share_link: ['revoked_at', 'revoked_by'],
 	// An API key likewise: never its hash, scopes or series, only its revocation (039_api_keys.sql).

@@ -16,7 +16,8 @@
 --      writes: a pack is inserted as a draft only; from then on the
 --      manifest, its hash, the runs, the scenario, the version and its
 --      predecessor, the engine and report versions and the creation are
---      frozen. Only these move, each once and only forward: the status; the
+--      frozen, and the manifest must name the row's own id, version,
+--      project, engine and report versions. Only these move, each once and only forward: the status; the
 --      issue stamp (issued_at, issued_by: set by the trigger on the move to
 --      issued, never by the caller); status_reason (with the move to
 --      withdrawn); superseded_by_pack_id (with the move to superseded, naming
@@ -37,6 +38,9 @@
 --      and model_run_cited (below) cites both runs, so trimRuns, the unpin
 --      and the run DELETE keep them. scenario_signed_run_guard (072) now
 --      refuses deleting a scenario a pack cites as well.
+--
+--      evidence_pack_one_issued: one issued pack per application (and one
+--      for baseline evidence) at a time, checked at commit.
 --
 --      RLS: editors and owners read every pack of the project; viewers read
 --      a baseline pack, and an application pack when they read its scenario
@@ -157,6 +161,14 @@ CREATE INDEX evidence_pack_created_by_idx ON evidence_pack (created_by);
 CREATE INDEX evidence_pack_issued_by_idx ON evidence_pack (issued_by);
 -- The short code (GET /verify/:code) finds one pack.
 CREATE UNIQUE INDEX evidence_pack_short_code_idx ON evidence_pack (left(manifest_sha256, 12));
+-- One issued pack per application, and one for the project's baseline
+-- evidence: a later version supersedes it, so the chain never forks. Deferred
+-- to commit, because issuing a new version and superseding its predecessor
+-- are two updates of one transaction (the successor first: the guard wants
+-- it issued when the predecessor names it).
+ALTER TABLE evidence_pack ADD CONSTRAINT evidence_pack_one_issued
+	EXCLUDE USING btree (project_id WITH =, (coalesce(scenario_id, project_id)) WITH =) WHERE (status = 'issued')
+	DEFERRABLE INITIALLY DEFERRED;
 
 CREATE TRIGGER evidence_pack_same_project BEFORE INSERT OR UPDATE ON evidence_pack
 	FOR EACH ROW EXECUTE FUNCTION assert_same_project('scenario_id', 'baseline_run_id', 'scenario_run_id', 'supersedes_pack_id', 'superseded_by_pack_id');
@@ -184,10 +196,21 @@ CREATE FUNCTION evidence_pack_guard() RETURNS trigger
 				AND NOT EXISTS (SELECT 1 FROM model_run WHERE id = NEW.scenario_run_id AND scenario_id = NEW.scenario_id) THEN
 				RAISE EXCEPTION 'an evidence pack''s application run is a run of its scenario' USING ERRCODE = 'check_violation';
 			END IF;
+			-- The manifest is this row's: its pack id and version, project, engine and report versions are the columns'.
+			-- (Its SHA-256 is the backend's to check: SQL has no RFC 8785.)
+			IF NEW.manifest->'pack'->>'id' IS DISTINCT FROM NEW.id::text
+				OR NEW.manifest->'pack'->>'version' IS DISTINCT FROM NEW.version::text
+				OR NEW.manifest->'project'->>'id' IS DISTINCT FROM NEW.project_id::text
+				OR NEW.manifest->'engine'->>'version' IS DISTINCT FROM NEW.engine_version
+				OR NEW.manifest->'report'->>'version' IS DISTINCT FROM NEW.report_version THEN
+				RAISE EXCEPTION 'an evidence pack''s manifest names another pack, version, project or engine' USING ERRCODE = 'check_violation';
+			END IF;
 			IF NEW.supersedes_pack_id IS NOT NULL THEN
-				SELECT version, status INTO pred FROM evidence_pack WHERE id = NEW.supersedes_pack_id;
-				IF NOT FOUND OR pred.status <> 'issued' OR NEW.version <> pred.version + 1 THEN
-					RAISE EXCEPTION 'a new version of an evidence pack supersedes an issued pack, as its version + 1' USING ERRCODE = 'check_violation';
+				SELECT version, status, scenario_id INTO pred FROM evidence_pack WHERE id = NEW.supersedes_pack_id;
+				IF NOT FOUND OR pred.status <> 'issued' OR NEW.version <> pred.version + 1
+					OR pred.scenario_id IS DISTINCT FROM NEW.scenario_id THEN
+					RAISE EXCEPTION 'a new version of an evidence pack supersedes an issued pack of the same application (or baseline evidence), as its version + 1'
+						USING ERRCODE = 'check_violation';
 				END IF;
 			END IF;
 			RETURN NEW;
@@ -273,8 +296,10 @@ CREATE POLICY evidence_pack_delete ON evidence_pack FOR DELETE
 -- The frozen columns can't even be named in an UPDATE by water_app; the guard
 -- covers the owner and the lifecycle's own rules.
 GRANT SELECT, INSERT, DELETE ON evidence_pack TO water_app;
-GRANT UPDATE (status, status_reason, superseded_by_pack_id, pdf_key, pdf_sha256, pdf_pages, bundle_key, bundle_sha256)
-	ON evidence_pack TO water_app;
+-- The PDF and bundle columns are not granted: their hashes are printed and
+-- verified publicly, so the renderer will set them through a SECURITY DEFINER
+-- setter when they are built, never an editor's UPDATE.
+GRANT UPDATE (status, status_reason, superseded_by_pack_id) ON evidence_pack TO water_app;
 
 -- A project with a pack past draft is kept (operator decision, 2026-09-29).
 -- SECURITY DEFINER so it sees every pack whatever the deleter reads.
@@ -319,7 +344,7 @@ CREATE FUNCTION signoff_pack_draft() RETURNS trigger
 		RETURN NEW;
 	END
 	$$;
-CREATE TRIGGER signoff_pack_draft BEFORE INSERT ON signoff
+CREATE TRIGGER signoff_pack_draft BEFORE INSERT OR UPDATE OF pack_id ON signoff
 	FOR EACH ROW EXECUTE FUNCTION signoff_pack_draft();
 
 -- signoff_select, from 045_contributor_scope.sql: a sign-off of a pack shows

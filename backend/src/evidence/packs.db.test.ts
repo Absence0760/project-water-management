@@ -143,7 +143,9 @@ describe('drafting a pack', () => {
 		expect(manifest.pack).toEqual({ id: p.id, version: 1, supersedes: null });
 		expect(manifest.report.identity.baseline.runId).toBe(baseRun);
 		expect(read.body.manifestMatches).toBe(true);
-		expect(read.body.issue).toEqual({ issuable: true, signed: false, runsVerified: true });
+		// The issue checklist is an editor's (only editors issue); a viewer gets null.
+		expect(read.body.issue).toBeNull();
+		expect((await editor.call('GET', packPath(p.id))).body.issue).toEqual({ issuable: true, signed: false, runsVerified: true });
 	});
 
 	it('drafts an application pack on the scenario run, naming its scenario', async () => {
@@ -403,6 +405,41 @@ describe('an account deletion', () => {
 		const after = (await asOwner('SELECT * FROM evidence_pack WHERE id = $1', [p.id]))[0]!;
 		expect(after).toEqual({ ...before, created_by: null, issued_by: null });
 	});
+
+	it('refuses a manifest that names another pack, and a new version of another subject (the guard)', async () => {
+		const issued = (await asOwner(`SELECT id, version FROM evidence_pack WHERE project_id = $1 AND status = 'issued' AND scenario_id IS NULL LIMIT 1`, [projectId]))[0]!;
+		const sid = (await asOwner('SELECT scenario_id FROM model_run WHERE id = $1', [appRun]))[0]!.scenario_id as string;
+		const plant = (o: { manifestId?: string; version: number; supersedes: string | null; scenario: boolean }) => {
+			const id = crypto.randomUUID();
+			const manifest = { pack: { id: o.manifestId ?? id, version: o.version }, project: { id: projectId }, engine: { version: 'x' }, report: { version: 'evidence-1' } };
+			return withUser(owner.id, (db) =>
+				db.query(
+					`INSERT INTO evidence_pack (id, project_id, baseline_run_id, scenario_id, scenario_run_id, version, supersedes_pack_id, manifest, manifest_sha256, report_version, engine_version, created_by)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, md5(random()::text) || md5(random()::text), 'evidence-1', 'x', app_current_user_id())`,
+					[id, projectId, baseRun, o.scenario ? sid : null, o.scenario ? appRun : null, o.version, o.supersedes, JSON.stringify(manifest)]
+				)
+			);
+		};
+		await expect(plant({ manifestId: crypto.randomUUID(), version: 1, supersedes: null, scenario: false })).rejects.toMatchObject({ code: '23514' });
+		await expect(plant({ version: issued.version + 1, supersedes: issued.id, scenario: true })).rejects.toMatchObject({ code: '23514' });
+		// Positive control: a well-formed baseline draft goes in (deleted again below).
+		const ok = await plant({ version: issued.version + 1, supersedes: issued.id, scenario: false });
+		expect(ok.rowCount).toBe(1);
+		await asOwner(`DELETE FROM evidence_pack WHERE supersedes_pack_id = $1 AND status = 'draft' AND engine_version = 'x'`, [issued.id]);
+		// Nor may an editor record a PDF hash (verify prints it): no grant.
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE evidence_pack SET pdf_key = 'k', pdf_sha256 = $2 WHERE id = $1`, [issued.id, 'a'.repeat(64)]))).rejects.toMatchObject({ code: '42501' });
+	});
+
+	it('allows one issued pack per application or baseline: a second is refused, a new version is the way (positive control)', async () => {
+		const second = await draft(owner, baseRun);
+		await sign(owner, second.id);
+		const res = await issue(owner, second.id);
+		expect(res.status).toBe(409);
+		expect(res.body.error).toMatch(/is issued; draft a new version/);
+		// The database holds it too, whoever writes (checked at commit).
+		await expect(withUser(owner.id, (db) => db.query(`UPDATE evidence_pack SET status = 'issued' WHERE id = $1`, [second.id]))).rejects.toMatchObject({ code: '23P01' });
+		expect((await owner.call('POST', `${packPath(second.id)}/withdraw`, { reason: 'a second pack in error' })).status).toBe(200);
+	});
 });
 
 describe('deleting a project with packs', () => {
@@ -420,7 +457,7 @@ describe('deleting a project with packs', () => {
 		const hash = sha256(packId);
 		await asOwner(
 			`INSERT INTO evidence_pack (id, project_id, baseline_run_id, version, manifest, manifest_sha256, report_version, engine_version, created_by)
-			 VALUES ($1, $2, $3, 1, '{"planted":true}'::jsonb, $4, 'evidence-1', '0.0.0', $5)`,
+			 VALUES ($1::uuid, $2::uuid, $3, 1, jsonb_build_object('pack', jsonb_build_object('id', $1::text, 'version', 1), 'project', jsonb_build_object('id', $2::text), 'engine', jsonb_build_object('version', '0.0.0'), 'report', jsonb_build_object('version', 'evidence-1')), $4, 'evidence-1', '0.0.0', $5)`,
 			[packId, id, run.body.run.id, hash, owner.id]
 		);
 		return { id, packId, runId: run.body.run.id as string };
