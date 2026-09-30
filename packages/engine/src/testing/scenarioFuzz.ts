@@ -52,6 +52,11 @@ function nodeValue(g: Rng, field: NodeSetField, n: NetworkNode): unknown {
 			return g.pick(SUPPLY_RULES);
 		case 'pumpCapacityM3Day':
 			return g.pick([null, 0, g.logFloat(1, 1e5)]);
+		case 'handsOffM3Day':
+		case 'divertMonthlyM3Day':
+			return g.bool(0.3) ? null : monthly(g, () => (g.bool(0.2) ? 0 : g.logFloat(1, 1e5)));
+		case 'handsOffEwr':
+			return g.bool(0.5);
 		case 'damCurve': {
 			// None (the power law), a curve topping out near the capacity, or now and then one row (a model-rule problem).
 			if (g.bool(0.2)) return null;

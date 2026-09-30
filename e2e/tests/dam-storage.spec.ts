@@ -50,6 +50,10 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	await expect(again.getByRole('img', { name: /Area against volume for Upper farm: from 0 m² at 0 m³ to 55 000 m² at 150 000 m³/ })).toBeVisible();
 	await expect(again.getByLabel('Release rule')).toHaveValue('fixed');
 	await expect(again.getByLabel('Dam release of Upper farm in Sep, m³/day')).toHaveValue('120');
+	// Each release field carries its field-history line (the twelve months read as their range).
+	const rel = page.getByRole('group', { name: 'Dam survey and releases' }).getByTestId('field-history');
+	await expect(rel.filter({ hasText: 'none → fixed' })).toHaveCount(1);
+	await expect(rel.filter({ hasText: '120 m³/day every month' })).toHaveCount(1);
 	await expect(page.getByRole('group', { name: 'Dam' }).getByLabel('Seepage returning (%)')).toHaveValue('40');
 	await expectNoViolations(page, { include: `[data-testid^="dam-storage-"]` });
 
@@ -64,7 +68,7 @@ test('paste a dam survey curve, set a release, save, reload and run', async ({ p
 	// The engine's self-checks pass with the curve, the release and the lost seepage.
 	await page.getByRole('navigation', { name: 'Result sections' }).getByRole('link', { name: 'Self-checks' }).click();
 	const checks = page.getByRole('region', { name: /^Self-checks/ });
-	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 10 self-checks passed.');
+	await expect(checks.getByRole('status').filter({ hasText: 'self-checks' })).toHaveText('All 11 self-checks passed.');
 	// The seepage lost from the catchment is a loss in the balance: its own column, and named in the equation.
 	const balance = page.getByRole('region', { name: 'Water balance by water year' });
 	await expect(balance.getByRole('columnheader', { name: 'Seepage lost', exact: true })).toBeVisible();

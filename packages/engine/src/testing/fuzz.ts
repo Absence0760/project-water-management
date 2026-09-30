@@ -370,6 +370,8 @@ export function randomInput(seed: number, opts: GenOptions = {}): ModelInput {
 	if (opts.allocationModes === false && settings.allocationMode) settings.allocationMode = 'none';
 	// Development over the run (engine ≥ 1.30.0), from its own stream, last of all.
 	addDevelopment(new Rng(seed ^ 0x1f83d9ad), nodes, start, days);
+	// Hands-off flows and River to dam by month (engine ≥ 1.32.0), from their own stream, last of all.
+	addOperating(new Rng(seed ^ 0x2b3c4d5e), nodes);
 	return {
 		settings,
 		model: {
@@ -537,6 +539,33 @@ function addSupply(g: Rng, nodes: NetworkNode[]): void {
 		n.supplyTriggerPct = g.frac(0.1, 0.1);
 		n.supplyStopPct = g.bool(0.9) ? g.float(n.supplyTriggerPct, 1) : g.frac();
 		if (rule === 'runOfRiver' && g.bool(0.8)) n.damCapacityM3 = 0;
+	}
+}
+
+/**
+ * Hands-off flows and River to dam by month (engine ≥ 1.32.0, issue #204) in
+ * 25 % of seeds, on each farm half the time: a hands-off flow by month (some
+ * months 0, from a trickle to more than any flow, now and then 0 in every
+ * month, which is none), the EWR kept or not, and River to dam by month (some
+ * months off, winter-only now and then, from a trickle to more than any flow).
+ * With or without a river pump (addSupply ran before), so both the pump and
+ * the diversion meet the rule.
+ */
+function addOperating(g: Rng, nodes: NetworkNode[]): void {
+	if (!g.bool(0.25)) return;
+	for (const n of nodes) {
+		if (n.kind !== 'farm' || !g.bool(0.5)) continue;
+		if (g.bool(0.7)) {
+			const scale = g.pick([0, g.logFloat(0.1, 1e3), g.logFloat(1, 1e5), 1e9]);
+			n.handsOffM3Day = Array.from({ length: 12 }, () => (g.bool(0.2) ? 0 : g.float(0, scale)));
+		}
+		n.handsOffEwr = g.bool(0.4);
+		if (g.bool(0.4)) {
+			const scale = g.pick([g.logFloat(0.5, 1e5), 1e9]);
+			// Winter only (April–September: water-year months 7–12) now and then, otherwise any months off.
+			const winter = g.bool(0.3);
+			n.divertMonthlyM3Day = Array.from({ length: 12 }, (_, k) => (winter ? (k >= 6 ? g.float(0, scale) : 0) : g.bool(0.2) ? 0 : g.float(0, scale)));
+		}
 	}
 }
 

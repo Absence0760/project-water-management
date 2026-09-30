@@ -1,4 +1,4 @@
-import { OFFTAKE_DEFAULTS, type ProjectModel } from '@water-management/engine';
+import { OFFTAKE_DEFAULTS, OPERATING_DEFAULTS, type ProjectModel } from '@water-management/engine';
 import type { Db } from '../db/tx.js';
 import { ApiError } from '../http/errors.js';
 
@@ -29,7 +29,9 @@ const MODEL_JSON = `json_build_object(
 			to_char(dam_survey_date, 'YYYY-MM-DD') AS "damSurveyDate", dam_sediment_pct_per_year AS "damSedimentPctPerYear",
 			to_char(dam_in_service_from, 'YYYY-MM-DD') AS "damInServiceFrom", to_char(abstraction_from, 'YYYY-MM-DD') AS "abstractionFrom",
 			supply_rule AS "supplyRule", pump_capacity_m3_day AS "pumpCapacityM3Day",
-			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct", ewr_site AS "ewrSite",
+			supply_trigger_pct AS "supplyTriggerPct", supply_stop_pct AS "supplyStopPct",
+			hands_off_m3_day AS "handsOffM3Day", hands_off_ewr AS "handsOffEwr", divert_monthly_m3_day AS "divertMonthlyM3Day",
+			ewr_site AS "ewrSite",
 			ga_property_area_ha AS "gaPropertyAreaHa", ga_rate_m3_ha_year AS "gaRateM3HaYear"
 		FROM node WHERE project_id = $1) r), '[]'),
 	'crops', coalesce((SELECT json_agg(json_strip_nulls(row_to_json(r)) ORDER BY r."sortOrder", r.name) FROM (
@@ -138,7 +140,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
-			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
+			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year)
 		 SELECT id, $1, name, kind, sort_order, area_km2, area_hi_km2, area_lo_km2,
 			flow_share_manual, pct_upstream_to_dam, pct_runoff_to_dam, dam_capacity_m3, dam_initial_pct,
 			dam_min_pct, divert_capacity_m3_day, irrigation_efficiency, loss_return_fraction,
@@ -146,7 +149,8 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			borehole_capacity_m3_day, borehole_rule, borehole_trigger_pct, stream_depletion_frac, stream_depletion_lag_days,
 			dam_curve, dam_release_rule, dam_release_m3_day, dam_outlet_capacity_m3_day, dam_seepage_return_pct,
 			dam_survey_date, dam_sediment_pct_per_year, dam_in_service_from, abstraction_from,
-			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
+			supply_rule, pump_capacity_m3_day, supply_trigger_pct, supply_stop_pct,
+			hands_off_m3_day, hands_off_ewr, divert_monthly_m3_day, ewr_site, ga_property_area_ha, ga_rate_m3_ha_year
 		 FROM jsonb_populate_recordset(NULL::node, $2::jsonb)
 		 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, kind = EXCLUDED.kind, sort_order = EXCLUDED.sort_order,
 			area_km2 = EXCLUDED.area_km2, area_hi_km2 = EXCLUDED.area_hi_km2, area_lo_km2 = EXCLUDED.area_lo_km2,
@@ -167,7 +171,9 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			dam_in_service_from = EXCLUDED.dam_in_service_from, abstraction_from = EXCLUDED.abstraction_from,
 			supply_rule = EXCLUDED.supply_rule,
 			pump_capacity_m3_day = EXCLUDED.pump_capacity_m3_day, supply_trigger_pct = EXCLUDED.supply_trigger_pct,
-			supply_stop_pct = EXCLUDED.supply_stop_pct, ewr_site = EXCLUDED.ewr_site,
+			supply_stop_pct = EXCLUDED.supply_stop_pct, hands_off_m3_day = EXCLUDED.hands_off_m3_day,
+			hands_off_ewr = EXCLUDED.hands_off_ewr, divert_monthly_m3_day = EXCLUDED.divert_monthly_m3_day,
+			ewr_site = EXCLUDED.ewr_site,
 			ga_property_area_ha = EXCLUDED.ga_property_area_ha, ga_rate_m3_ha_year = EXCLUDED.ga_rate_m3_ha_year
 		 WHERE node.project_id = EXCLUDED.project_id`,
 		m.nodes.map((n) => ({
@@ -211,6 +217,10 @@ export async function saveModel(db: Db, projectId: string, m: ProjectModel): Pro
 			pump_capacity_m3_day: n.pumpCapacityM3Day ?? null,
 			supply_trigger_pct: n.supplyTriggerPct ?? 0.4,
 			supply_stop_pct: n.supplyStopPct ?? 0.6,
+			// Hands-off flow and River to dam by month (engine ≥ 1.32.0, migration 114); absent = off.
+			hands_off_m3_day: n.handsOffM3Day ?? OPERATING_DEFAULTS.handsOffM3Day,
+			hands_off_ewr: n.handsOffEwr ?? OPERATING_DEFAULTS.handsOffEwr,
+			divert_monthly_m3_day: n.divertMonthlyM3Day ?? OPERATING_DEFAULTS.divertMonthlyM3Day,
 			ewr_site: n.ewrSite ?? true,
 			ga_property_area_ha: n.gaPropertyAreaHa ?? null,
 			ga_rate_m3_ha_year: n.gaRateM3HaYear ?? null

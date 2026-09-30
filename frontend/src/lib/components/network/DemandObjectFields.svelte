@@ -21,8 +21,9 @@
 	import NumberInput from '$lib/components/common/NumberInput.svelte';
 	import DemandScheduleFields from './DemandScheduleFields.svelte';
 	import HelpTip from '$lib/components/help/HelpTip.svelte';
-	import { WATER_YEAR_MONTHS } from '$lib/format/months';
 	import { fmtNum } from '$lib/format/number';
+	import MonthFields from './MonthFields.svelte';
+	import { monthsOf } from './monthFields';
 
 	let {
 		node,
@@ -58,7 +59,7 @@
 
 	function setSizing(o: DemandObject, sizing: DemandObject['sizing']) {
 		o.sizing = sizing;
-		if (sizing === 'monthly') o.monthlyM3Day ??= new Array(12).fill(0);
+		if (sizing === 'monthly') o.monthlyM3Day ??= monthsOf(0);
 		else {
 			o.count ??= 0;
 			o.litresPerUnitDay ??= o.category === 'livestock' ? DEMAND_NORMS.litresPerCattleDay : DEMAND_NORMS.litresPerPersonDay;
@@ -68,15 +69,6 @@
 		o.destination = d;
 		// Nothing returns from water piped out (the save refuses a return share there).
 		if (d === 'external') o.returnPct = 0;
-	}
-	function setMonth(o: DemandObject, key: 'monthlyM3Day' | 'monthlyFactor', i: number, v: number | null) {
-		const fill = key === 'monthlyFactor' ? 1 : 0;
-		const next = [...(o[key] ?? new Array(12).fill(fill))];
-		next[i] = v ?? fill;
-		o[key] = next;
-	}
-	function fillAll(o: DemandObject) {
-		o.monthlyM3Day = new Array(12).fill(o.monthlyM3Day?.[0] ?? 0);
 	}
 </script>
 
@@ -143,27 +135,26 @@
 							<label><input type="checkbox" disabled={readonly} bind:checked={o.enabled} /> Modelled</label>
 						</div>
 					</div>
-					<table class="data compact months">
-						<caption>
-							{o.sizing === 'monthly' ? 'Demand, m³/day, per month' : 'Monthly profile (× the daily use; blank = 1)'}
-						</caption>
-						<thead>
-							<tr>{#each WATER_YEAR_MONTHS as m (m)}<th scope="col" class="num">{m}</th>{/each}</tr>
-						</thead>
-						<tbody>
-							<tr>
-								{#each WATER_YEAR_MONTHS as m, k (m)}
-									<td>
-										{#if o.sizing === 'monthly'}
-											<NumberInput label="Demand of {o.name} in {m}, m³/day" min={0} grouped={readonly} disabled={readonly} value={o.monthlyM3Day?.[k] ?? 0} onchange={(v) => setMonth(o, 'monthlyM3Day', k, v)} />
-										{:else}
-											<NumberInput label="Profile of {o.name} in {m}" min={0} disabled={readonly} value={o.monthlyFactor?.[k] ?? 1} onchange={(v) => setMonth(o, 'monthlyFactor', k, v)} />
-										{/if}
-									</td>
-								{/each}
-							</tr>
-						</tbody>
-					</table>
+					{#if o.sizing === 'monthly'}
+						<MonthFields
+							values={o.monthlyM3Day}
+							label={(m) => `Demand of ${o.name} in ${m}, m³/day`}
+							caption="Demand, m³/day, per month"
+							fillLabel="Use October’s demand for every month"
+							{readonly}
+							onchange={(next) => (o.monthlyM3Day = next)}
+						/>
+					{:else}
+						<MonthFields
+							values={o.monthlyFactor}
+							label={(m) => `Profile of ${o.name} in ${m}`}
+							caption="Monthly profile (× the daily use; blank = 1)"
+							blank={1}
+							grouped={false}
+							{readonly}
+							onchange={(next) => (o.monthlyFactor = next)}
+						/>
+					{/if}
 					<DemandScheduleFields object={o} {readonly} />
 					<div class="field">
 						<label for="do-note-{o.id}">Where the number comes from</label>
@@ -174,7 +165,6 @@
 					</p>
 					{#if !readonly}
 						<div class="row-actions">
-							{#if o.sizing === 'monthly'}<button type="button" class="btn btn-sm" onclick={() => fillAll(o)}>Use October’s demand for every month</button>{/if}
 							{#if onremove}<button type="button" class="btn btn-sm" onclick={() => onremove(o.id)}>Remove demand object {i + 1}</button>{/if}
 						</div>
 					{/if}
@@ -222,26 +212,6 @@
 		font-weight: 500;
 		font-size: 0.85rem;
 		color: var(--text-2);
-	}
-	.months {
-		display: block;
-		overflow-x: auto;
-		margin: 0.5rem 0;
-	}
-	.months caption {
-		text-align: left;
-		font-size: 0.85rem;
-		font-weight: 500;
-		color: var(--text-2);
-		padding-bottom: 0.25rem;
-	}
-	.months td {
-		min-width: 76px;
-	}
-	.months td :global(input) {
-		width: 100%;
-		text-align: right;
-		font-variant-numeric: tabular-nums;
 	}
 	.row-actions,
 	.add {
