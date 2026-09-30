@@ -146,6 +146,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	['POST /projects/:id/scenarios', { min: 'contributor', why: 'a contributor makes an application on the published run' }],
 	['GET /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application its applicant or a sharer reads; any other 404s' }],
 	['GET /projects/:id/scenarios/:sid/base', { min: 'contributor', why: "the published base run's inputs, through app_published_run_input" }],
+	['GET /projects/:id/scenarios/:sid/results', { min: 'contributor', why: "an application run's results as its applicant sees them, through app_application_run_results (118)" }],
 	['PATCH /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
 	['DELETE /projects/:id/scenarios/:sid', { min: 'contributor', why: 'an application by its applicant, a team scenario by an editor' }],
 	['POST /projects/:id/scenarios/:sid/runs', { min: 'contributor', why: 'an application by its readers, a team scenario by an editor' }],
@@ -159,6 +160,7 @@ const BELOW_VIEWER = new Map<string, { min: 'farmer' | 'contributor'; why: strin
 	// Yield (WP-3.6, 096_contributor_yield): an applicant on a dam of their own application; RLS shows them only their own jobs and results.
 	['POST /projects/:id/yield', { min: 'contributor', why: "an applicant queues a yield of a dam of their own application (yieldInputFor); a viewer queues none" }],
 	['GET /projects/:id/yield', { min: 'contributor', why: 'stored results RLS lets the caller read (a contributor: their own)' }],
+	['GET /projects/:id/jobs', { min: 'contributor', why: 'the job status list RLS lets the caller read (a contributor: their own yield jobs, 096), so the Yield panel follows one' }],
 	['GET /projects/:id/yield/jobs', { min: 'contributor', why: 'pending yield jobs RLS lets the caller read (a contributor: their own)' }],
 	['POST /projects/:id/yield/:jobId/cancel', { min: 'contributor', why: 'cancels only a yield job the caller queued, or any as an editor (app_cancel_job)' }]
 ]);

@@ -6,7 +6,10 @@ import { defineConfig } from 'vitest/config';
 //          globalSetup rebuilds the water_test database from migrations first.
 //   perf — timing budgets (`*.perf.test.ts`), run serially with a
 //          median-of-several sampling so a loaded machine doesn't produce a
-//          flake (`pnpm test:perf`, root `pnpm test:backend:perf`).
+//          flake (`pnpm test:perf`, root `pnpm test:backend:perf`). Also the
+//          V8 deopt stress run of the assurance of supply
+//          (model/assurance-jit.perf.test.ts, issue #192), which needs the
+//          machine to itself for the same reason.
 //   perf-db — timing budgets against Postgres (`*.db.perf.test.ts`), with the
 //          db project's setup and global setup (a fresh water_test…), serial
 //          (`pnpm test:perf:db`, root `pnpm test:backend:perf:db`). It rebuilds

@@ -16,7 +16,7 @@ and never run the suites one after another. Measured on the 20-core dev laptop
 | `pnpm test:backend` | backend unit | ~15 s |
 | `pnpm test:backend:db` | API + RLS against Postgres (serial) | ~1.5 min |
 | `pnpm test:e2e <spec…>` | Playwright, one or a few specs | 15–60 s + build |
-| `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database | seconds |
+| `pnpm test:engine:perf` / `pnpm test:backend:perf` | wall-clock budgets, no database; the backend's also the V8 deopt stress run of the assurance of supply (`model/assurance-jit.perf.test.ts`, issue #192: 8 child processes under `node --deopt-every-n-times`, timing-dependent, so alone) | seconds; the stress run ~1–5 min |
 | `pnpm test:backend:perf:db` | wall-clock budgets against Postgres (`*.db.perf.test.ts`, the `perf-db` project): the team portfolio for 10 catchments × 60 farms under 500 ms, median of 7 (measured 41 ms); the RLS role check in a session with no user costs under 20 bare function calls (094_role_check_no_user; measured ~4); the Step 2 load checks (`runs/load.db.perf.test.ts`, WP-2.16): a 60-farm ten-year manual run and auto re-run under 10 s, measured and scaled to the Lambda's 0.58 vCPU, and 30 simulated feed days keeping `run_series` flat | ~4 min, most of it the 30 simulated days |
 
 ## Performance budgets
@@ -35,6 +35,16 @@ the role functions every RLS policy calls (`app_project_role`,
 `storeRun`, the `rerun` job; the load checks). A
 budget should sit well above the measured time (the portfolio's is ~12×),
 so it catches a change in the query's shape, not machine noise.
+
+The backend `perf` project also holds one test that isn't a budget:
+`model/assurance-jit.perf.test.ts` (issue #192, engine-audit.md V1) runs the
+Sandspruit example in child processes under `node --deopt-every-n-times=N`
+and requires every run's `supplyAssurance` to match an unstressed child's,
+with the `assurance` self-check passing. A V8 miscompile once broke that
+only under JIT timing, so the stress is timing-dependent and can make V8
+thrash: like the budgets, it runs alone. Run it when you touch
+`network/reliability.ts` and on every Node version bump. Its unstressed half,
+`model/assurance-jit.test.ts`, is in `pnpm test`.
 
 ## The loop
 

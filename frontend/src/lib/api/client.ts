@@ -59,6 +59,10 @@ import type {
 	SeriesRevisionMeta,
 	Signoff,
 	SignoffList,
+	Pack,
+	PackDetail,
+	PackSignoffList,
+	PackVerification,
 	SignoffRequest,
 	Member,
 	MyInvite,
@@ -89,6 +93,8 @@ import type {
 	Scenario,
 	ScenarioCheck,
 	ScenarioBase,
+	ApplicantResults,
+	ApplicantResultsRun,
 	ScenarioOutcome,
 	ScenarioStatus,
 	ScenarioWithCheck,
@@ -565,6 +571,30 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 			create: (id: string, runId: string, body: SignoffRequest) =>
 				request<{ signoff: Signoff }>('POST', `${p(id)}/runs/${enc(runId)}/signoffs`, body).then((r) => r.signoff)
 		},
+		/** Evidence packs (WP-3.14, issue #71, docs/api.md § Evidence packs): a report frozen, hashed, signed and issued. */
+		packs: {
+			/** The project's packs, newest first (viewer; no manifest). */
+			list: (id: string) => request<{ packs: Pack[] }>('GET', `${p(id)}/packs`).then((r) => r.packs),
+			/** One pack with its frozen manifest, its sign-offs and, for an editor's draft, what stands before its issue (viewer). */
+			get: (id: string, packId: string) => request<PackDetail>('GET', `${p(id)}/packs/${enc(packId)}`),
+			/** Draft a pack from a report that may be issued (editor); `supersedesId` makes it a new version of an issued pack. */
+			create: (id: string, runId: string, supersedesId?: string) =>
+				request<{ pack: Pack }>('POST', `${p(id)}/packs`, supersedesId ? { runId, supersedesId } : { runId }).then((r) => r.pack),
+			/** Delete an unsigned draft (editor). */
+			remove: (id: string, packId: string) => request<void>('DELETE', `${p(id)}/packs/${enc(packId)}`),
+			/** Issue a signed draft (editor): 409 with the reason when something stands in the way. */
+			issue: (id: string, packId: string) => request<{ pack: Pack }>('POST', `${p(id)}/packs/${enc(packId)}/issue`, {}).then((r) => r.pack),
+			/** Withdraw a pack, with a reason shown publicly on its verify page (editor). */
+			withdraw: (id: string, packId: string, reason: string) =>
+				request<{ pack: Pack }>('POST', `${p(id)}/packs/${enc(packId)}/withdraw`, { reason }).then((r) => r.pack),
+			/** The pack statement (with its hash), whether the caller may sign, and its sign-offs (viewer). */
+			signoffs: (id: string, packId: string) => request<PackSignoffList>('GET', `${p(id)}/packs/${enc(packId)}/signoffs`),
+			/** Sign a draft pack off (editor): 409 when the statement changed since it was shown. */
+			sign: (id: string, packId: string, body: SignoffRequest) =>
+				request<{ signoff: Signoff }>('POST', `${p(id)}/packs/${enc(packId)}/signoffs`, body).then((r) => r.signoff)
+		},
+		/** Public, no session: what an issued pack prints, by its short code or full hash; 404 for anything else. */
+		verify: (code: string) => request<{ pack: PackVerification }>('GET', `/verify/${enc(code)}`).then((r) => r.pack),
 		publication: {
 			/** The current publication (null when nothing is published) and the history, newest first (at most 12). */
 			get: (id: string) => request<{ current: Publication | null; history: PublicationMeta[] }>('GET', `${p(id)}/publication`),
@@ -698,6 +728,12 @@ export function createApi(baseUrl: string, fetchFn: FetchFn = (...a) => fetch(..
 				request<{ scenario: Scenario } & ScenarioCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/rebase`, { baseRunId, dryRun }),
 			/** The base's model and settings as you may see them (an applicant's is anonymised past their own farms). */
 			base: (id: string, sid: string) => request<ScenarioBase>('GET', `${p(id)}/scenarios/${enc(sid)}/base`),
+			/** An application run's results as its applicant sees them (the newest run unless runId); both null before any run. */
+			results: (id: string, sid: string, runId?: string) =>
+				request<{ run: ApplicantResultsRun | null; results: ApplicantResults | null }>(
+					'GET',
+					`${p(id)}/scenarios/${enc(sid)}/results${runId ? `?runId=${enc(runId)}` : ''}`
+				),
 			/** The application workflow (WP-3.3): submit freezes the ops; a submit whose ops don't all apply answers 422 with `problems`. */
 			submit: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/submit`),
 			withdraw: (id: string, sid: string) => request<ScenarioWithCheck>('POST', `${p(id)}/scenarios/${enc(sid)}/withdraw`),

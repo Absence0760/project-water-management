@@ -16,9 +16,13 @@ and the trust boundaries in [security.md § Evidence packs](./security.md#eviden
 
 **Built so far (2026-09-30):** the table, the manifest and its hash, the pack
 sign-off, drafting, issue, supersede, withdraw, delete of drafts, the public
-verify lookup, and the reproduction bundle with `pnpm reproduce:pack`
-([§ Reproduction](#reproduction)). **Not built yet:** the pack's own page and
-the verify page, and the server-rendered PDF (each tracked in
+verify lookup, their screens (the pack's own page, its actions and
+sign-off, the pack lists on the evidence report and the Applications tab and
+panel, and the public verify page with its in-browser file check:
+[ui.md § Evidence pack](./ui.md#evidence-pack),
+[§ Verify page](./ui.md#verify-page)), and the reproduction bundle with
+`pnpm reproduce:pack` ([§ Reproduction](#reproduction)). **Not built yet:**
+the server-rendered PDF (tracked in
 [followups.md § Evidence report](./followups.md#evidence-report-issue-71)).
 
 ## What a pack holds
@@ -38,6 +42,14 @@ The report goes through JSON before it is hashed, as the API serves it and
 as `jsonb` stores it: a `NaN` becomes `null` and an undefined member is
 dropped. So the hash taken when the draft is made is the hash of what is
 stored, and the server checks that on the draft and again on issue.
+
+The report's page 1 also shows the licence impact by year class, which the
+browser builds from the two runs' daily series and the project's
+year-class settings (`settings.outcomes`). A `pack-1` manifest carries
+neither, so the pack's page leaves the board out and says so, rather than
+show something its hash doesn't cover. Moving the board into the engine's
+report, and so into the manifest, is tracked in
+[followups.md § Evidence report](./followups.md#evidence-report-issue-71).
 
 Beside the manifest, the row holds its lifecycle (status, issue stamp, reason,
 successor), the report and engine versions, the reproduction bundle's key and
@@ -171,9 +183,12 @@ builds exactly that object; the route adds only `shortCode`.
 **What verification proves.** That a pack with this manifest hash was issued
 by this app, who signed it, and whether it still stands. To check a copy's
 content, hash its manifest, its bundle (or, once built, its PDF) and compare
-with the hashes verify returns; the verify page will do that in the browser.
-Whether the results follow from the inputs is the bundle's job
-([§ Reproduction](#reproduction)).
+with the hashes verify returns. The verify page does that in the browser
+([ui.md § Verify page](./ui.md#verify-page)): the file is hashed with
+WebCrypto and never uploaded, and a JSON file is compared in its canonical
+form too, so a manifest saved pretty-printed still matches. The pack's page
+downloads the manifest as those canonical bytes. Whether the results follow
+from the inputs is the bundle's job ([§ Reproduction](#reproduction)).
 
 ## Reproduction
 
@@ -209,7 +224,7 @@ both runs as the issuer (their stored inputs through `loadRunInput`, every
 series re-hashed, and their stored daily outputs), builds the bundle, checks
 it as `reproduce:pack --no-run` would, stores it in the packs bucket under
 `packs/<project>/<pack>/<sha256>.zip` with its SHA-256 as the upload's
-checksum, and records it through `app_record_pack_bundle` (117), which only
+checksum, and records it through `app_record_pack_bundle` (120), which only
 the transaction that issues the pack may call. All of it or none: a bundle
 that can't be stored fails the issue. The upload comes before the commit, so
 an issue that fails after it leaves an object nothing records: named by its
@@ -254,7 +269,7 @@ both a baseline and an application pack; the setter's refusals).
 
 ## Guards
 
-- `app_record_pack_bundle` (117) is the only writer of the bundle columns:
+- `app_record_pack_bundle` (120) is the only writer of the bundle columns:
   an editor, in the transaction that issues the pack, once, under the key it
   derives.
 - `evidence_pack_guard` (112) keeps the manifest, its hash, the runs, the

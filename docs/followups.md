@@ -1173,6 +1173,35 @@ the suggested order (the IDs carry the detail):
   FarmTemplate letter order; the results have a Self-checks panel with a
   water balance per water year and "Trace a day" (model.md § Verification,
   ui.md § Self-checks).
+- [x] **A farm's assurance of supply carried another farm's figures**
+      (issue #192, [engine-audit.md V1](./engine-audit.md#findings), engine
+      1.34.0): a V8 miscompile of `nodeReliability`'s day loop (Maglev OSR
+      code re-entered on later calls). Worked around by moving the loop into
+      `tallyWindow`, which takes the series as parameters (bit-identical;
+      0 of 88 stressed runs failed, against 34 of 64 before). It is guarded
+      on every saved run by the `assurance` self-check, and in the opt-in
+      stress test `backend/src/model/assurance-jit.perf.test.ts`
+      (`pnpm test:backend:perf`).
+- [ ] **Report the V8 miscompile upstream** (issue #192; tracked in #232): reduce it to a
+      standalone script for crbug.com/v8 (the Sandspruit stress reproduces
+      it; a harness calling `supplyAssurance` alone never did, at 51
+      deopt periods) and file it against Node 24's V8. The durable fix is
+      V8's. Trigger: before the next Node major bump, and again after it,
+      run `pnpm test:backend:perf` alone, and the old form of the loop
+      (git show 47e1ddb1^:packages/engine/src/network/reliability.ts)
+      under `node --deopt-every-n-times=2900`, to learn whether the new V8
+      still has the bug. Keep `tallyWindow` either way. If the fault
+      turns up in a saved run's `assurance` check on a new Node version,
+      that is this bug in another place: look for another long per-node
+      loop read through an object argument.
+- [x] **The water account's EWR rows are redone by a per-run check**
+      (issue #192, engine 1.34.0): `checkSupplyAssurance` holds each
+      site's required, met and days not met, per water year and over the
+      run, to the site's own series: the pragmatic EWR (`ewr` at the
+      outlet, `ewr_cumulative` at a gauge) or a rule-table site's
+      `ewr_rule` (the pragmatic EWR on days without one), and
+      `ewr_shortfall` or `ewr_charge_shortfall`. Its loop has V1's
+      workaround (`ewrOver`).
 - ✅ The engine rejects networks with more than one outflow node.
 - [x] **Client catchment regression on real data:** done 2026-09-27: the
       workbook regression in `run.test.ts` passes against the re-extracted
@@ -3286,8 +3315,12 @@ from the WP:
       `JobHandler.alsoRole`, so the job dies once they lose the role or the
       dam. Tests: `yield/contributor.db.test.ts` (positive controls and
       fail-closed), `jobs/trust.security.db.test.ts` (the `alsoRole`
-      allowlist). Left for the applicant's view of results below: a Yield
-      panel on the Applicant view (the API is ready).
+      allowlist). The Yield panel on the Applicant view followed in #73
+      (`applications.spec.ts`): it offers the applicant only their own units
+      and the ones their ops add, only the owner queues, and it follows the
+      job on `GET …/jobs`, which now lists a contributor their own yield jobs
+      (RLS, 096) where it had refused them, so the panel had never left
+      "Queued" nor cancelled one (`yield/contributor.db.test.ts`).
 - [ ] **In-browser preview.** WP-3.6 also asks for a single yield in the
       browser for an instant preview, through WP-1.17's preview worker
       (`lib/preview/engine.worker.ts`). Not built: that worker doesn't exist
@@ -3323,18 +3356,29 @@ The first slice (migrations 044/045, [scenarios.md § Applications](./scenarios.
 built the role, its RLS, applications and their workflow, sharing, the
 Applicant view and the Applications tab. Left:
 
-- [ ] **The applicant's view of results.** An applicant runs their
-      application but sees no result: `/compare/runs` refuses a contributor
-      (it returns `inputs`, every farm), and the scenario run answers with
-      metadata only. Durable fix: a contributor projection of a scenario run
-      against its base (the roadmap's D2 default: catchment series, their own
-      nodes, every EWR site, anonymised per-farm deltas downstream, "Farm 3
-      downstream: supply −4 %"), built from the run and base server-side like
-      `applicant.ts`, with the WP-2.1 string scan on its output. It must
-      also show an item the application's ops added under a hidden item's id
-      by the id the applicant gave it (the check's `reIds` map it back; the
-      run holds it under a fresh one). Trigger: the next WP-3.3 slice, before
-      an applicant uses it for real.
+- [x] **The applicant's view of results** (issue #73). An applicant ran
+      their application but saw no result: `/compare/runs` refuses a
+      contributor (it returns `inputs`), and the scenario run answered with
+      metadata only. Done in `118_applicant_results` and
+      `GET …/scenarios/:sid/results`: the server reads the run and its base
+      past RLS (`app_application_run_results`, for whoever reads the
+      application), rebuilds the check that made the run (its `reIds`), and
+      projects them (`scenarios/applicantResults.ts`, D2's default): every
+      EWR site, the catchment's flows and outlet series at five or more farm
+      holders, their own units and those their ops add in full, every other
+      unit downstream only as "Farm 3" and a whole percentage, and what ran
+      on their units, an item added under a hidden item's id shown by the id
+      they gave. A run with a baseline assumption shows the EWR only (the
+      share link's rule: such an op on a hidden farm makes the difference
+      from the base that farm's figures), and RLS now hands a contributor
+      none of that run's series (it had let them read both the catchment's
+      and their own units'). The Applicant view shows it as **Your results
+      against the baseline**. Tests: `scenarios/applicantResults.test.ts`,
+      `scenarios/results.db.test.ts` (the string scan, who may ask, RLS,
+      each with its positive control), e2e `applications.spec.ts`
+      ([scenarios.md § Applications](./scenarios.md#applications-wp-33)).
+      Whether an applicant may see more (the catchment below five holders,
+      or results with a baseline assumption) is D2, below.
 - [x] **A contributor can `SELECT` their own application runs' rows**, whose
       `inputs` snapshot holds the whole base (every farm's parameters); the
       API never returns them (RLS can't hide a column). Done in
@@ -3348,7 +3392,9 @@ Applicant view and the Applications tab. Left:
       on a readable row, or drop the assessors' exact input. The results
       slice above builds its projection server-side the same way.
 - [ ] **D1, D2, D3 are open decisions** ([issue #90](https://github.com/Absence0760/project-water-management/issues/90); step-3 § 11), built on the
-      recommended defaults: D2's anonymised baseline and the outcome words
+      recommended defaults: D2's anonymised baseline and results (downstream
+      units as a whole percentage, nothing but the EWR for a run with a
+      baseline assumption) and the outcome words
       (`approved`, `approved_with_conditions`, `refused`) are **pending the
       client and the licensing authority**. Trigger: the client's answers.
 - [x] **Oracles.** Closed by `049_applicant_oracles` and the engine's
@@ -3816,7 +3862,8 @@ Left, from the design and the persona review (§11), each with its trigger.
       computed in the browser, not in the engine's document, so an issued
       pack can't freeze it yet; it moves into `evidenceReport` with the pack's
       manifest. Tracked under *The server-rendered evidence PDF* below
-      (WP-3.14).
+      (WP-3.14). Until then the pack's page leaves the board out and says
+      it isn't part of the pack (ui.md § Evidence pack).
 - [ ] **The server-rendered evidence PDF.** Browser print only: no running
       footer, no "page x of y". Durable fix: `POST …/reports { runId,
       evidence: true }` and a render scope that reads the baseline (ER1),
@@ -3832,13 +3879,16 @@ its hash, the pack sign-off, draft, issue, supersede, withdraw and the public
 verify lookup; 2026-09-30: the reproduction bundle,
 [evidence-pack.md](./evidence-pack.md)). Left:
 
-- [ ] **The pack view and the verify page** (`routes/projects/[id]/packs/[packId]`,
-      rendering the evidence components from the frozen manifest; `/verify/[code]`
-      with the in-browser PDF and manifest check; the Draft, Sign, Issue,
-      Supersede and Withdraw actions; axe on both). The pack sign-off dialog
-      must say the signer's name and registration are printed on the pack
-      and shown by the public verify lookup. Trigger: next (the second
-      PR of issue #71).
+- [x] **The pack view and the verify page.** Built 2026-09-30
+      ([ui.md § Evidence pack](./ui.md#evidence-pack),
+      [§ Verify page](./ui.md#verify-page)): `routes/projects/[id]/packs/[packId]`
+      renders the evidence report from the frozen manifest with the stamp and
+      verify line in every section and the footer; `/verify/[[code]]` with the
+      in-browser manifest (and, once recorded, PDF) check; Create, Sign,
+      Issue, New version, Withdraw and Delete draft; the pack lists on the
+      evidence report and the Applications tab and panel; the sign-off dialog
+      says the signer's name and registration are public. Axe on both
+      (`e2e/tests/evidence-pack.spec.ts`).
 - [ ] **The server-rendered pack PDF and its hash** (`pdf_key`,
       `pdf_sha256`, `pdf_pages` exist, unset): render the pack route with
       WP-2.15 Phase B's renderer (a render scope over the pack's two runs,

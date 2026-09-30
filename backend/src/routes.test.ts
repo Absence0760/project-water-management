@@ -193,6 +193,7 @@ describe('route auth inventory', () => {
 		const applications = [
 			'GET /projects/:id/applications',
 			'GET /projects/:id/scenarios/:sid/base',
+			'GET /projects/:id/scenarios/:sid/results',
 			'POST /projects/:id/scenarios/:sid/submit',
 			'POST /projects/:id/scenarios/:sid/withdraw',
 			'POST /projects/:id/scenarios/:sid/reopen',
