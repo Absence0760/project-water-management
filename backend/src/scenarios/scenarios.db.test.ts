@@ -14,7 +14,7 @@
 //  - a scenario can't cite another project's run; viewers can't write;
 //    farmers can't read; a cited base is kept until its scenario goes;
 //  - a submitted scenario is frozen.
-import { applyScenario, canonicalJson, runModelChecked, type ScenarioOp } from '@water-management/engine';
+import { applyScenario, canonicalJson, runModelChecked, type NetworkNode, type ScenarioOp } from '@water-management/engine';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { asOwner, monthly, node, signUp } from '../__tests__/helpers.js';
 import { withUser } from '../db/tx.js';
@@ -269,6 +269,46 @@ describe('scenario ops', () => {
 		for (const id of [c.farm.id, c.other.id]) expect(stored[0]!.inputs.model.nodes.find((n) => n.id === id)!.demandFactor).toEqual(new Array(12).fill(0.85));
 	});
 
+	it('runs the later ops (engine ≥ 1.34.0): a move, an inserted weir dam, a crop edit, a registered volume, each classed, stored and run as the engine applies them', async () => {
+		const u = await signUp('Reshaper');
+		const c = await catchment(u);
+		const base = await run(u, c.projectId, 'Baseline');
+		const weir = node('Weir dam', c.outlet.id, { damCapacityM3: 40_000, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0 });
+		const volume = { id: crypto.randomUUID(), nodeId: c.farm.id, waterSource: 'surface' as const, volumeM3PerYear: 20_000, months: [1, 2] };
+		const ops: ScenarioOp[] = [
+			{ op: 'node.insert', node: weir as unknown as NetworkNode, upstreamNodeIds: [c.farm.id] },
+			{ op: 'node.move', nodeId: c.other.id, downstreamNodeId: c.farm.id },
+			{ op: 'crop.set', cropId: c.crop.id, field: 'irrigationEfficiency', value: 0.9 },
+			{ op: 'allocation.set', allocation: volume }
+		];
+		const sid = await create(u, c.projectId, { name: 'A weir dam and a licence', baseRunId: base, ops, ownedNodeIds: [c.farm.id] });
+		const checked = await u.call('GET', `/projects/${c.projectId}/scenarios/${sid}`);
+		expect(checked.body.check.problems).toEqual([]);
+		// The inserted dam is the proposal (a new structure with no land); moving another party's farm and a crop's efficiency redraw the
+		// baseline; the volume on the proposer's own farm is theirs to ask for.
+		expect(checked.body.check.classified).toEqual(['proposal', 'baseline', 'baseline', 'proposal']);
+		expect(checked.body.check.applied[0].notes).toEqual(['"Rooikloof" now drains into "Weir dam"']);
+		// Names kept for every node and crop of the base the ops name (047): the gauge the dam drains into and the farms it re-points too.
+		expect(checked.body.scenario.opNames.map((n: { name: string }) => n.name).sort()).toEqual(['Citrus', 'Gauge', 'Kalkoenkrans', 'Rooikloof']);
+
+		const body = await runScenario(u, c.projectId, sid);
+		const stored = await rowsAs<{ inputs: { model: { nodes: { id: string; downstreamNodeId: string | null }[]; crops: { id: string; irrigationEfficiency?: number }[]; allocations?: unknown[] } } }>(
+			u,
+			'SELECT inputs FROM model_run WHERE id = $1',
+			[body.run.id]
+		);
+		const m = stored[0]!.inputs.model;
+		const down = (id: string) => m.nodes.find((n) => n.id === id)!.downstreamNodeId;
+		expect([down(weir.id), down(c.farm.id), down(c.other.id)]).toEqual([c.outlet.id, weir.id, c.farm.id]);
+		expect(m.crops[0]!.irrigationEfficiency).toBe(0.9);
+		expect(m.allocations).toEqual([volume]);
+		const expected = await withUser(u.id, async (db) => runModelChecked(applyScenario(await loadRunInput(db, base), ops).input));
+		expect(canon(body.run.summary)).toBe(canon(expected.summary));
+		// The catchment's own model is untouched.
+		const live = await u.call('GET', `/projects/${c.projectId}/model`);
+		expect(live.body.nodes.map((n: { id: string; downstreamNodeId: string | null }) => n.downstreamNodeId)).toEqual([null, c.outlet.id, c.outlet.id]);
+	});
+
 	it('checks consecutive node.set ops on one farm as one edit: skipped whole with one problem, counted per op in the 422; complete, it runs', async () => {
 		const u = await signUp('Grouper');
 		const c = await catchment(u);
@@ -311,7 +351,7 @@ describe('scenario ops', () => {
 			ops: [{ op: 'node.set', nodeId: c.farm.id, field: 'damInitialPct', value: 1.5 }, { op: 'node.remove', nodeId: 'farm-a' }, { op: 'nope' }]
 		});
 		expect(bad.status).toBe(400);
-		expect(bad.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].value: must be at most 1', 'ops[2].op: must be one of node.set, node.add, node.remove, cropArea.set, crop.add, transfer.add, transfer.set, transfer.remove, landCover.add, landCover.remove, borehole.add, borehole.remove, settings.set, series.scale, demand.scale, ewrRule.set']);
+		expect(bad.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].value: must be at most 1', 'ops[2].op: must be one of node.set, node.add, node.remove, node.move, node.insert, cropArea.set, crop.add, crop.set, crop.remove, transfer.add, transfer.set, transfer.remove, landCover.add, landCover.remove, landCover.set, borehole.add, borehole.remove, settings.set, series.scale, demand.scale, ewrRule.set, ewrRule.remove, allocation.set, allocation.remove']);
 		const notUuid = await u.call('POST', `/projects/${c.projectId}/scenarios`, { name: 'Bad', baseRunId: base, ops: [{ op: 'node.remove', nodeId: 'farm-a' }] });
 		expect(notUuid.status).toBe(400);
 		expect(notUuid.body.details.map((d: { message: string }) => d.message)).toEqual(['ops[0].nodeId: must be a UUID']);

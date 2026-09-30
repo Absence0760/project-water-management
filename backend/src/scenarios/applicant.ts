@@ -87,8 +87,8 @@ export function projectBaseForApplicant(input: ModelInput, ownNodeIds: Iterable<
 /**
  * What an application's ops must not meet (applyScenario's `mask`): every
  * node the projection anonymises, under the anonymous name the applicant
- * sees ("Farm 3"), and every crop, transfer, land-cover patch and borehole it
- * leaves out, which the engine puts under an opaque id (and name) while the
+ * sees ("Farm 3"), and every crop, transfer, land-cover patch, borehole and
+ * registered volume it leaves out, which the engine puts under an opaque id (and name) while the
  * ops apply. With these the engine's messages quote only names the
  * applicant sees, a hidden item's id or name answers exactly as a free one,
  * and nothing counts or quotes what they can't see
@@ -108,6 +108,8 @@ export function applicationMask(input: ModelInput, ownNodeIds: Iterable<string>)
 		crops: outside(m.crops, shown.crops),
 		transfers: outside(m.transfers, shown.transfers),
 		landCover: outside(m.landCover, shown.landCover),
-		boreholes: outside(m.boreholes, shown.boreholes)
+		boreholes: outside(m.boreholes, shown.boreholes),
+		// Registered volumes on units they can't see (engine ≥ 1.34.0, allocation.set / .remove).
+		allocations: outside(m.allocations, shown.allocations)
 	};
 }

@@ -44,6 +44,37 @@ describe('checkOps', () => {
 		expect(checkOps([{ op: 'ewrRule.set', table }, { op: 'ewrRule.set', table: { ...table, siteNodeId: a } }]).errors).toEqual([]);
 	});
 
+	it('names the ids of the later ops (engine ≥ 1.34.0): a move, an insert and its upstream nodes, a crop, a patch, a site, a volume', () => {
+		const n = { id: 'n', name: 'New dam', kind: 'farm', downstreamNodeId: a, areaKm2: 0, areaHiKm2: 0, areaLoKm2: 0, flowShareManual: null, pctUpstreamToDam: 0, pctRunoffToDam: 0, damCapacityM3: 1, damInitialPct: 0, damMinPct: 0, divertCapacityM3Day: 0, irrigationEfficiency: 1, lossReturnFraction: 0 };
+		const al = { id: 'al', nodeId: 'farm', waterSource: 'surface', volumeM3PerYear: 1 };
+		expect(
+			checkOps([
+				{ op: 'node.move', nodeId: 'x', downstreamNodeId: 'y' },
+				{ op: 'node.insert', node: n, upstreamNodeIds: [b, 'z'] },
+				{ op: 'crop.set', cropId: 'c', field: 'name', value: 'X' },
+				{ op: 'crop.remove', cropId: 'c' },
+				{ op: 'landCover.set', patchId: 'p', field: 'areaKm2', value: 1 },
+				{ op: 'ewrRule.remove', siteNodeId: 'weir' },
+				{ op: 'allocation.set', allocation: al },
+				{ op: 'allocation.remove', allocationId: 'al' }
+			]).errors
+		).toEqual([
+			'ops[0].nodeId: must be a UUID',
+			'ops[0].downstreamNodeId: must be a UUID',
+			'ops[1].node.id: must be a UUID',
+			'ops[1].upstreamNodeIds[1]: must be a UUID',
+			'ops[2].cropId: must be a UUID',
+			'ops[3].cropId: must be a UUID',
+			'ops[4].patchId: must be a UUID',
+			'ops[5].siteNodeId: must be a UUID',
+			'ops[6].allocation.id: must be a UUID',
+			'ops[6].allocation.nodeId: must be a UUID',
+			'ops[7].allocationId: must be a UUID'
+		]);
+		// The outlet's table (null) names no id.
+		expect(checkOps([{ op: 'ewrRule.remove', siteNodeId: null }, { op: 'allocation.set', allocation: { ...al, id: t, nodeId: a } }, { op: 'node.move', nodeId: a, downstreamNodeId: b }]).errors).toEqual([]);
+	});
+
 	it("reports the engine validator's errors first, unchanged", () => {
 		expect(checkOps('nope').errors).toEqual(['ops: must be a list']);
 		expect(checkOps([{ op: 'node.set', nodeId: a, field: 'damMinPct', value: 2 }]).errors).toEqual(['ops[0].value: must be at most 1']);

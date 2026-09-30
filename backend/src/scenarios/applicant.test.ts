@@ -150,6 +150,8 @@ describe('applicationMask', () => {
 		expect(mask.transfers).toEqual(['t2']);
 		expect(mask.landCover).toEqual(['p2']);
 		expect(mask.boreholes).toEqual(['b2']);
+		// Registered volumes (engine ≥ 1.34.0): a neighbour's, and one on no unit, are hidden too.
+		expect(mask.allocations).toEqual(['a2', 'a3']);
 	});
 
 	it('answers an op on a hidden item’s id exactly as on a free one, and reuse of one moves the new item (assessor only)', () => {
@@ -157,12 +159,14 @@ describe('applicationMask', () => {
 		for (const [hidden, op] of [
 			['t2', (id: string) => ({ op: 'transfer.remove' as const, transferId: id })],
 			['p2', (id: string) => ({ op: 'landCover.remove' as const, patchId: id })],
-			['b2', (id: string) => ({ op: 'borehole.remove' as const, boreholeId: id })]
+			['b2', (id: string) => ({ op: 'borehole.remove' as const, boreholeId: id })],
+			['a2', (id: string) => ({ op: 'allocation.remove' as const, allocationId: id })],
+			['a3', (id: string) => ({ op: 'allocation.remove' as const, allocationId: id })]
 		] as const) {
 			expect(apply([op(hidden)]).problems).toEqual([expect.stringMatching(/not found$/)]);
 			expect(told(apply([op(hidden)]), hidden)).toBe(told(apply([op('free')]), 'free'));
 			// Positive control: their own item of the same kind is found.
-			expect(apply([op(({ t2: 't1', p2: 'p1', b2: 'b1' } as const)[hidden])]).problems).toEqual([]);
+			expect(apply([op(({ t2: 't1', p2: 'p1', b2: 'b1', a2: 'a1', a3: 'a1' } as const)[hidden])]).problems).toEqual([]);
 		}
 		const addHole = (id: string) => ({
 			op: 'borehole.add' as const,

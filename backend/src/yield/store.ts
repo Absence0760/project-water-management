@@ -109,7 +109,7 @@ export async function yieldInputFor(db: Db, projectId: string, role: Role, userI
 	const check = checkScenario(base, scenario);
 	if (check.problems.length) throw new ApiError(422, "an op of this scenario doesn't apply to its base run", { problems: check.problems });
 	const baseIds = new Set(base.model.nodes.map((n) => n.id));
-	const added = scenario.ops.flatMap((o) => (o.op === 'node.add' && !baseIds.has(o.node.id) ? [o.node.id] : []));
+	const added = scenario.ops.flatMap((o) => ((o.op === 'node.add' || o.op === 'node.insert') && !baseIds.has(o.node.id) ? [o.node.id] : []));
 	if (!scenario.ownedNodeIds.includes(r.nodeId) && !added.includes(r.nodeId)) throw new ApiError(400, 'that node is not in this run or scenario');
 	checkYieldNode(check.input, r.nodeId, r.kind);
 	return check.input;
