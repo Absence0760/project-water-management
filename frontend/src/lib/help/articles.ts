@@ -306,7 +306,7 @@ export const ARTICLES: Record<string, HelpArticle> = {
 		source: 'docs/model.md §2.7g; issue #67'
 	},
 	'diversion': {
-		long: 'Each day up to this volume is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. b023 enters it in m³/s; the app stores m³/day.\n\nIt runs on every day the river has water below the dam: there is no season and no river level below which it stops. The dam’s spill takes what doesn’t fit.\n\nThe river pump under Supply is a separate limit, for irrigation. If one pump both fills the dam and irrigates, the run treats it as two pumps, so split its capacity between River to dam and the river pump capacity.',
+		long: 'Each day up to this volume is taken from the water passing below the dam (upstream inflow and runoff that bypass it) and put into storage. b023 enters it in m³/s; the app stores m³/day.\n\nIt takes up to this every day of the year, with no season. The only water it leaves in the river is what senior other water users downstream need: the farm diverts less first when they would be short. It doesn’t leave the EWR (a hands-off flow isn’t built yet). A run-of-river unit has no dam, so it diverts nothing. The dam’s spill takes what doesn’t fit.\n\nThe river pump under Supply is a separate limit, for irrigation. If one pump both fills the dam and irrigates, the run treats it as two pumps, so split its capacity between River to dam and the river pump capacity.',
 		aliases: ['downstream diversion', 'divert capacity', 'diversion capacity', 'river to dam', 'pump back'],
 		related: ['upstream-to-dam', 'runoff-to-dam'],
 		source: 'b023 Farm spec'
