@@ -1294,25 +1294,52 @@ on demand (hovering or focusing a button starts it); if that download fails,
 the list says so and offers **Reload page**
 ([architecture.md § Code splitting](./architecture.md#code-splitting-frontend)).
 
-**Figures.** Each row carries the [portfolio](#portfolio-teamsidportfolio)'s
+**Figures.** Each row carries the team portfolio's
 figures for its project, from `GET /projects/outcomes` ([api.md §
 Projects](./api.md#projects)), which covers personal and shared projects as
 well as team ones and loads beside the list (the rows show first, with
 "Loading…" in the figure cells; a failed request says "Figures unavailable"
 and the list still works). The wording comes from the portfolio's helpers
-(`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same on
-both pages. Columns: **Catchment** (the name, then owner/team for *Shared
+(`portfolio/portfolio.ts`, `StatusPill`), so a catchment reads the same here,
+on the teams list and on the team page. Columns: **Catchment** (the name, then owner/team for *Shared
 with me*, your role and "edited <date>", when the project itself last
 changed, and the description on one line), **EWR, last 30 days** (the pill
 in words and colour, and *Published* or *Latest run* with the figures' age,
 "to 31 Dec 2024 (20 months ago)"; the header names the date instead once the
 figures are stale), **Hydrological units short** ("2 of 8 units
 short this week", or "… in the week to 31 Dec 2024" on stale figures, a link to that run's curtailment on Hydrological units;
-*Not published* until a run is published), **Lowest dam**, **Data** (the
-rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in the figures*, the feeds' health)
-and **Last run** (its age, then the date or when it was published). A
+*Not published* until a run is published; under it the count over 30 days,
+"1 in the last 30 days"), **Lowest dam** (with the published restriction
+under it, "Restriction: Advisory · 15 %" or "Restriction: None"; nothing
+without a publication, where the dam already says *Not published*), **Data**
+(the rain badge, "Rain to 31 Dec 2024 (20 months ago)", *Newer rain not in
+the figures*, the feeds' health), **Last run** (its age, then the date or
+when it was published) and **Alerts** (the alerts firing now, "None" or a
+"2 firing" badge, from `alertsFiring`, [§ Alerts](#alerts)). A
 project where your role is farmer or applicant has no figures ("Not shown
 to your role").
+
+The header's line adds what the portfolio's tiles counted, when there is
+any: "… · 1 alert firing · 2 with stale figures" (figures over 7 days old;
+`portfolioTotals`). The portfolio's stacked bar went: the line already says
+the counts in words.
+
+**A team's portfolio** (issue #176) is the team's chip (`?owner=team:<id>`):
+a note under the chips states the rule the statuses were judged by ("EWR
+status is the outlet over the 30 days to the figures' last day (the
+published run, or the latest when none is): green when it was not met on
+under 5 % of them, amber under 20 %, red otherwise") and whose it is (the
+team's `portfolioThresholds` from `GET /teams`: *These are the team's own
+thresholds* or *the default thresholds, still to be confirmed by the
+hydrologist*), then *Change them on the team page* (admins, the settings
+sheet) or "A team owner can change them on the team page". The rows'
+statuses are judged by each project's own team's thresholds
+(`GET /projects/outcomes`), so the note and the rows agree. *New project*
+preselects the team, the empty state offers *New project in <team>* to
+members, the tab title names the team, and a team that isn't yours (a
+stale link) says "This team doesn't exist or you're not a member" with links
+to your teams and all projects. The Teams list, the team page and the
+settings sheet link here as **Project list** (`?owner=team:<id>&sort=status`).
 
 **Needs attention** (`projects/NeedsAttention.svelte`, rules in
 `projects/outcomes.ts` `attention`): the catchments in view to look at
@@ -1330,14 +1357,18 @@ that hasn't run is not flagged.
 **Manage teams**), or a select when the page is 600 px or narrower. Search
 matches name, description and team (`?q=`). Sort (`?sort=`): *Recently
 updated* (the default), *Needs attention first*, *EWR status* (worst
-first), *Hydrological units short*, *Lowest dam*, *Last run* (newest first), *Name*,
-from the Sort select or a column heading (`aria-sort`); an outcome sort puts
-rows without figures last. Old links (`?owner=`, `?sort=name`, `?new=1`)
-still work. With *All projects* the list is grouped (Personal, each team
-with its **Portfolio** and **Team members & settings** links, Shared with
-me), one table per group with the same fixed columns.
+first), *Hydrological units short*, *Lowest dam*, *Figures age* (oldest
+first; the Data heading), *Last run* (newest first), *Name*, from the Sort
+select or a column heading (`aria-sort`). A second click on the sorted
+heading turns it round (`?dir=desc`: best or oldest first, Z–A), as the
+portfolio's did; the Sort select starts a key its own way round. An outcome
+sort puts unknown values and rows without figures last either way. Old links
+(`?owner=`, `?sort=name`, `?new=1`, `/teams/:id/portfolio`) still work. With
+*All projects* the list is grouped (Personal, each team with its **Only this
+team** and **Team members & settings** links, Shared with me), one table per
+group with the same fixed columns; the headings wrap inside their columns.
 
-**Fits the window** from 900 × 620 up, like the portfolio: the list's card
+**Fits the window** from 900 × 620 up: the list's card
 takes at most the height left below the strip (its top and what sits below
 it, measured by a `ResizeObserver` on `body` and the page's `<main>`; below
 is measured to the end of `<main>`, not the document's height, which counts
@@ -1350,10 +1381,14 @@ scrolled the whole page, ui-playbook § 2). On a phone the page scrolls.
 
 **Layout answers to the space it has, not the window** (container queries).
 Each table (`ProjectTable.svelte`, container on its wrapper) folds Lowest
-dam and Last run into a line under the name at 1100 px or narrower (a
+dam (with the restriction), Last run and Alerts (a "2 alerts firing" badge,
+only when some are) into lines under the name at 1100 px or narrower (a
 1280 px window beside the app sidebar), and at 730 px every figure: the
-pill, units short, the freshness badge, the last run and the lowest dam
-stack under the name, with Add data and ⋯ stacked on the right. The rain
+pill, units short, the freshness badge, the last run, the lowest dam and the
+alerts stack under the name, with Add data and ⋯ stacked on the right.
+`portfolio.spec.ts` pins the team filter with thirty catchments at 1440×960
+(every column, the name column at least 200 px, no heading past its
+column) and 1280×800 (the folded lines). The rain
 badge wraps inside its cell at any width (until 2026-09-29 it stayed on one
 line and ran under Last run; `projects.spec.ts` checks it at 1440, 1024 and
 320 px).
@@ -1523,8 +1558,9 @@ panel says team members keep their team role on the project. Below,
 **`/teams`** shows each team as a card: its name (opens the team) and your
 role, then **Projects** and **Members**, a stacked **EWR, last 30 days**
 bar with the counts in words ("1 red, 4 green"), and the projects worst first with their status
-pills (five, ten when it's your only team; the rest are "N more projects on
-the portfolio"). *Open team* and *Portfolio* sit at the card's foot. The
+pills (five, ten when it's your only team; the rest are "N more projects in
+the project list"). *Open team* and *Project list* (the list filtered to the
+team, worst first) sit at the card's foot. The
 numbers come from each team's portfolio (`GET /teams/:id/portfolio`, one
 request per team after the list loads; no new endpoint), so a card shows
 its project and member counts at once and fills in the rest; if a
@@ -1535,12 +1571,12 @@ roles. *New team* stays in the header, and the empty state explains teams.
 
 **`/teams/:id`** leads with outcomes. The header has the team's name and
 your role, a summary line ("5 projects (1 red, 4 green) · 4 members ·
-created 26 Sep 2026") and the actions: **Portfolio**, **Team settings**,
+created 26 Sep 2026") and the actions: **Project list**, **Team settings**,
 **Add member** (admins; focuses the add form) and **New project** (members
 and admins; opens the New project dialog with the team preselected). The
 main column is **Projects**: two tiles (EWR bar, alerts firing), then each project worst first with its source
 ("Published run"…), EWR pill, figures age and *Stale* flag, farms short
-(linking to the run's curtailment, as on the portfolio), lowest dam and
+(linking to the run's curtailment, as on the project list), lowest dam and
 alerts; a footnote states the traffic-light rule with a link to the
 settings. **Members** is the side column (below on a narrow page): name
 with the email under it, role, Remove; the add-by-email form, pending
@@ -1555,15 +1591,16 @@ personal copy (the Copy dialog says so).
 
 **Team settings** (`?settings=1`, a side sheet,
 `lib/components/teams/TeamSettings.svelte`) holds what used to sit in the
-reading path: **Team name** (admins; *Rename*), **Portfolio traffic lights**
+reading path: **Team name** (admins; *Rename*), **EWR traffic lights**
 (below), and **Leave or delete** (*Leave team* for everyone, the only admin
 told "You are the only owner…" and to hand over first; *Delete team* for admins, which closes the sheet
-and asks in a confirmation dialog). The URL opens it (the portfolio's
-"Change them on the team page" links there), and closing it drops the
+and asks in a confirmation dialog). The URL opens it (the project list's
+team note, "Change them on the team page", links there), and closing it drops the
 parameter in place, so Back closes it.
 
-**Portfolio traffic lights** (in the settings sheet, decision D11):
-every member reads the rule the portfolio judges by, "green when it was not
+**EWR traffic lights** (in the settings sheet, decision D11; "Portfolio
+traffic lights" until issue #176): every member reads the rule the team's
+statuses are judged by (linking to the project list), "green when it was not
 met on under 5 % of them, amber under 20 %, red otherwise", and whose it is:
 *These are the team's own thresholds* or *These are the default thresholds,
 still to be confirmed by the hydrologist*. Admins get two number inputs,
@@ -1576,67 +1613,17 @@ can change them." A change shows in each team project's History tab
 
 ### Portfolio (`/teams/:id/portfolio`)
 
-The WUA's one screen for all of a team's catchments (roadmap WP-2.14,
-`routes/teams/[id]/portfolio/`, wording and sorting in
-`lib/components/portfolio/portfolio.ts`). Linked from the team page and
-from each team group's heading on the project list. One row per catchment
-the user can see, from `GET /teams/:id/portfolio` ([api.md §
-Portfolio](./api.md#portfolio)):
-
-- **Catchment**: the name (opens the project's Summary) and where the
-  figures come from: *Published run*, *Published run (a newer run is not
-  published)*, *Latest run, not published* or *Not run yet*, with a hint
-  for editors to run or publish.
-- **EWR, last 30 days**: the status as words **and** colour, never colour
-  alone: "Red: EWR not met 9 of 30 days", "Green: EWR met all 30 days", or
-  "Unknown: no run yet / no EWR set in the run / the run has no EWR record;
-  run it again" (dashed outline). Under it, how old the figures are
-  ("Figures to 29 Dec 2023 (2 years ago)", `dateAge`) and a *Stale* flag past 7 days.
-  The column's and the total's label is "EWR, last 30 days" only while the
-  figures are current ([Data age and stale wording](#data-age-and-stale-wording)).
-- **Hydrological units short**: "2 of 8 hydrological units short this week", or
-  "… in the week to 31 Dec 2024" once the figures are stale (a link to the
-  Curtailment panel of that run on [Hydrological units](#hydrological-units), over the
-  last 7 days, `?tab=supply&run=<id>&window=last7#res-curtailment`; the page
-  scrolls there once the run's results render and moves focus to the table's
-  heading; the old Runs tab link still lands there) and the count over 30 days; "Unknown
-  until a run is published" without a publication.
-- **Lowest dam**, **Restriction** (the WUA's level and %), and **Data**:
-  recorded rain to … with its age ("Rain to 31 Dec 2024 (20 months ago)"), a *Newer data not in the figures* flag, and the feeds'
-  health.
-- **Alerts**: the alerts firing now, "None" or "2 firing" (a warning badge),
-  from `alertsFiring` ([§ Alerts](#alerts)).
-
-Wide screens get a sortable table (column-heading buttons with `aria-sort`);
-under 760 px the same rows become stacked cards with a *Sort by* select.
-Sorts: EWR status worst first (red, amber, unknown, green; more days not met
-first within a colour; the default), name, figures age, farms short, lowest
-dam; unknown values sort last either way. The sort lives in the URL
-(`?sort=`, `?dir=desc`). States: loading, error with retry, an empty team
-("No catchments in this team yet", with *New project in this team* for
-members and admins), and not-found for a team you aren't in. A farmer who
-opens the address is sent to their farm view (`/farm`), as the project list
-does. The intro states the thresholds the statuses were judged by (the API's
-`thresholds`, the team's or the defaults) and whose they are; an admin gets
-a link to change them in the team page's settings sheet (§ Teams,
-`?settings=1`), anyone else is told a team owner can.
-
-A dashboard (issue #17). The header carries *Team page* and, for members
-and admins, *New project in this team*; under it three tiles: **EWR, last 30
-days** (the "5 catchments: 1 red, 4 green" line, a live status, over the
-stacked bar), **Alerts firing** and **Stale figures** ("4 of 5") (the totals come from
-`portfolioTotals` in `portfolio.ts`; the pill and bar are
-`portfolio/StatusPill.svelte` and `StatusBar.svelte`, shared with the teams
-list and the team page). On a wide screen the page fits the window like the
-Network map: the table's box is the height left below the tiles, measured
-(its top and what sits below it on the page, re-measured by a
-`ResizeObserver` on `body`), never a fixed viewport height; the table
-scrolls inside it with its header row stuck, and the page keeps a 1 rem
-bottom margin and doesn't scroll. On a phone it's the cards, and the page
-scrolls. (The cards used to show under the table on a wide screen too: a
-plain `.cards { display: grid }` beat `.phone-only { display: none }`; the
-wide-screen rule now hides them.) `portfolio.spec.ts` pins the fit at
-1440×960 and 1280×800.
+The team portfolio (roadmap WP-2.14) is the [project list](#project-list)
+filtered to the team since issue #176: the list's rows already carried the
+same figures from the same helpers, so the page only added its Restriction and
+Alerts columns and its tiles, which the list now has (§ Project list, *A
+team's portfolio*). The old address still works: `/teams/:id/portfolio`
+(`routes/teams/[id]/portfolio/+page.svelte`) replaces itself with
+`/?owner=team:<id>&sort=status`, keeping `?sort=` and `?dir=desc` (the
+portfolio's keys, `status`, `name`, `age`, `farms` and `dam`, are all list
+sorts; `projects/grouping.ts` `portfolioListHref`). `GET /teams/:id/portfolio`
+stays: the teams list and the team page read their tiles and traffic lights
+from it.
 
 ## Network
 
