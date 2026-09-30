@@ -643,8 +643,12 @@ result without signing in, until it expires or its owner revokes it.
   `?token=`), and POSTs it in a JSON body. The page sets `noindex` and
   `no-referrer`. A link pasted into a chat app is still readable by whoever
   sees the message: that is what a link is.
-- **Owner-only.** `share_link` RLS: SELECT, INSERT (as yourself) and UPDATE
-  for `app_has_role(project_id, 'owner')`; nobody else sees a row. `water_app`
+- **Owner-only for a baseline link.** `share_link` RLS: SELECT, INSERT (as
+  yourself) and UPDATE for `app_has_role(project_id, 'owner')`; nobody else
+  sees a baseline link's row. Targeted links widen this for their own
+  target only: an application's to its assessors and applicant
+  ([Scenario links](#scenario-links-wp-315-115_scenario_share_notessql)),
+  a pack's to the project's editors ([Pack links](#pack-links-wp-315-128_pack_share_notessql)). `water_app`
   may update only `revoked_at` / `revoked_by` and may not `DELETE` (the
   catalogue test pins both): a revoked link stays as the record of who made
   and withdrew it. An insert trigger stamps `created_by` and `created_at`.
